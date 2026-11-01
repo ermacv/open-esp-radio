@@ -1,6 +1,7 @@
 //! The image's PC sampler: `oer_esp32s31_compose::sampler` on TIMG1 T0 at
 //! P4, above every other level, reporting through the image's observer
-//! into one [`Thinning`] buffer of [`CAPACITY`] samples in SRAM.
+//! into one [`Thinning`] buffer of [`CAPACITY`] samples in SRAM, each with
+//! the interrupted `ra` the staged runtime's interrupt entry recorded.
 //!
 //! The load server starts it at a sampled run's window start and asks it
 //! to stop at the window's end; once the handler handed the session back,
@@ -10,8 +11,9 @@
 use oer_services_load::{MAX_PAGE_SAMPLES, Sample, Samples};
 use oer_trace::profile::Thinning;
 
-/// The samples one run keeps: 16 KiB of SRAM, which the sampler's handler
-/// writes while a session runs.
+/// The samples one run keeps: 24 KiB of SRAM (pc, tick and level, and the
+/// return address), which the sampler's handler writes while a session
+/// runs.
 pub(crate) const CAPACITY: usize = 2048;
 const _: () = {
     if CAPACITY > u16::MAX as usize {
@@ -39,20 +41,21 @@ pub(crate) fn page(
         stray,
         cut,
         samples: (from..to)
-            .filter_map(|slot| buffer.get(slot))
-            .map(|sample| Sample {
+            .filter_map(|slot| Some((buffer.get(slot)?, buffer.return_address(slot))))
+            .map(|(sample, ra)| Sample {
                 tick: sample.tick(),
                 pc: sample.pc(),
                 level: sample.level(),
+                ra,
             })
             .collect(),
     }
 }
 
-#[cfg(all(target_arch = "riscv32", oer_trace))]
-pub(crate) use chip::record;
 #[cfg(target_arch = "riscv32")]
 pub(crate) use chip::{Profiler, init, interrupt};
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) use chip::{record, record_return};
 
 #[cfg(target_arch = "riscv32")]
 mod chip {
@@ -107,6 +110,12 @@ mod chip {
     #[cfg(oer_trace)]
     pub(crate) fn record(sample: oer_trace::profile::PcSample) {
         let _ = SAMPLES.lend(|buffer| buffer.record(sample));
+    }
+
+    /// The observer's end: give the sample kept last its return address.
+    #[cfg(oer_trace)]
+    pub(crate) fn record_return(ret: oer_trace::profile::ReturnSample) {
+        let _ = SAMPLES.lend(|buffer| buffer.record_return(ret));
     }
 
     /// The load server's end of the sampler.
@@ -177,7 +186,7 @@ mod chip {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_trace::profile::PcSample;
+    use oer_trace::profile::{PcSample, ReturnSample};
 
     #[test]
     fn pages_cover_every_kept_sample_once_and_stop_at_the_end() {
@@ -186,6 +195,9 @@ mod tests {
         let ticks = CAPACITY as u32 * 3;
         for tick in 0..ticks {
             buffer.record(PcSample::new(tick, 0x4000_0000 + tick, 1).unwrap());
+            if tick.is_multiple_of(2) {
+                buffer.record_return(ReturnSample::new(tick, 0x4200_0000 + tick).unwrap());
+            }
         }
         buffer.normalize();
         let mut seen = Vec::new();
@@ -200,6 +212,10 @@ mod tests {
                 break;
             }
             assert!(page.samples.len() <= MAX_PAGE_SAMPLES);
+            for sample in &page.samples {
+                let ra = sample.tick.is_multiple_of(2).then_some(0x4200_0000 + sample.tick);
+                assert_eq!(sample.ra, ra, "tick {}", sample.tick);
+            }
             seen.extend(page.samples.iter().map(|sample| sample.tick));
             from += page.samples.len() as u16;
         }

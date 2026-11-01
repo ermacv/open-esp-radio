@@ -58,12 +58,16 @@ fn every_tick_is_due_a_whole_period_after_the_last_whatever_the_latency() {
     sampler.start(1000, unmasked).unwrap();
     assert!(!sampler.available());
     let samples: Vec<_> = (0..3)
-        .map(|pc| handler.tick(shared, true, 0x4000_0000 + pc, 3).unwrap())
+        .map(|pc| {
+            handler
+                .tick(shared, true, 0x4000_0000 + pc, 3, None)
+                .unwrap()
+        })
         .collect();
     assert_eq!(
         samples
             .iter()
-            .map(|sample| (sample.tick(), sample.pc(), sample.level()))
+            .map(|tick| (tick.sample.tick(), tick.sample.pc(), tick.sample.level()))
             .collect::<Vec<_>>(),
         [
             (0, 0x4000_0000, 3),
@@ -87,14 +91,14 @@ fn a_stop_takes_no_sample_and_hands_the_stopped_session_back() {
     let fake = Fake::default();
     let (mut sampler, mut handler, shared) = sampler(fake.clone());
     sampler.start(500, unmasked).unwrap();
-    assert!(handler.tick(shared, true, 1, 0).is_some());
+    assert!(handler.tick(shared, true, 1, 0, None).is_some());
     sampler.request_stop();
     assert_eq!(
         sampler.take_back(),
         None,
         "the handler keeps it until its tick"
     );
-    assert_eq!(handler.tick(shared, true, 2, 0), None);
+    assert_eq!(handler.tick(shared, true, 2, 0, None), None);
     assert_eq!(fake.calls.borrow().last(), Some(&Call::Disarm));
     assert_eq!(
         sampler.take_back(),
@@ -106,15 +110,36 @@ fn a_stop_takes_no_sample_and_hands_the_stopped_session_back() {
     assert!(sampler.available());
     // The next session counts from zero again.
     sampler.start(500, unmasked).unwrap();
-    assert_eq!(handler.tick(shared, true, 3, 0).unwrap().tick(), 0);
+    assert_eq!(
+        handler
+            .tick(shared, true, 3, 0, None)
+            .unwrap()
+            .sample
+            .tick(),
+        0
+    );
+}
+
+#[test]
+fn a_known_return_address_is_reported_with_its_tick() {
+    let (mut sampler, mut handler, shared) = sampler(Fake::default());
+    sampler.start(1000, unmasked).unwrap();
+    let first = handler
+        .tick(shared, true, 0x4000_0010, 0, Some(0x4000_2004))
+        .unwrap();
+    assert_eq!(first.sample.tick(), 0);
+    let ret = first.ret.unwrap();
+    assert_eq!((ret.tick(), ret.ra()), (0, 0x4000_2004));
+    let second = handler.tick(shared, true, 0x4000_0010, 0, None).unwrap();
+    assert_eq!((second.sample.tick(), second.ret), (1, None));
 }
 
 #[test]
 fn a_tick_without_a_session_or_pending_event_reports_nothing() {
     let (_sampler, mut handler, shared) = sampler(Fake::default());
-    assert_eq!(handler.tick(shared, false, 1, 0), None);
+    assert_eq!(handler.tick(shared, false, 1, 0, None), None);
     assert_eq!(shared.stray(), 0);
-    assert_eq!(handler.tick(shared, true, 1, 0), None);
+    assert_eq!(handler.tick(shared, true, 1, 0, None), None);
     assert_eq!(shared.stray(), 1);
 }
 
@@ -126,9 +151,9 @@ fn a_refused_target_cuts_the_session_and_hands_it_back() {
     };
     let (mut sampler, mut handler, shared) = sampler(fake.clone());
     sampler.start(1000, unmasked).unwrap();
-    assert!(handler.tick(shared, true, 1, 0).is_some());
+    assert!(handler.tick(shared, true, 1, 0, None).is_some());
     assert!(
-        handler.tick(shared, true, 2, 0).is_some(),
+        handler.tick(shared, true, 2, 0, None).is_some(),
         "the due tick is still reported"
     );
     assert_eq!(

@@ -49,11 +49,16 @@ Cargo feature of a library; `oer-test-layers` checks feature names.
 `profile::PcSample` is one tick of a program-counter sampler: its number
 from the window's first (below 2^24), the interrupted program counter and
 the interrupted raw level, encoded as the event's two words.
-`profile::Thinning<N>` keeps a window of any length in `N` samples: it keeps
-every `stride`-th tick, doubles the stride when full and overwrites, one
-per kept tick, the samples the new stride drops. `normalize` at the
-window's end keeps only one stride's ticks, so equal parts of the window
-keep equal samples.
+`profile::ReturnSample` (same channel) is the same tick's interrupted return
+address register, where the platform records it: a sampler reports it
+right after the tick's `PcSample`, and it names the caller of a leaf
+function such as a memory copy. `profile::Thinning<N>` keeps a window of
+any length in `N` samples: it keeps every `stride`-th tick, doubles the
+stride when full and overwrites, one per kept tick, the samples the new
+stride drops. `record_return` gives the sample `record` kept last its
+return address when the ticks match, so a dropped tick drops both;
+`return_address` reads it back. `normalize` at the window's end keeps only
+one stride's ticks, so equal parts of the window keep equal samples.
 
 ## Checks
 

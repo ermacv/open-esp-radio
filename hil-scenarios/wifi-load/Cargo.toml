@@ -13,6 +13,7 @@ oer-hil-agent = { path = "../../protocols/hil/agent" }
 oer-analysis-elf = { path = "../../tools/analysis/elf" }
 oer-hil-harness = { path = "../../tools/hil/harness" }
 oer-image-build = { path = "../../tools/image/build" }
+oer-image-checks = { path = "../../tools/image/checks" }
 oer-os-process = { path = "../../tools/os/process" }
 oer-lab-model = { path = "../../tools/lab/model" }
 oer-services-load = { path = "../services/load" }

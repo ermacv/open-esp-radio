@@ -2,9 +2,12 @@
 //!
 //! A sampler interrupts a hart on a fixed schedule and reports, for each
 //! scheduled tick, a [`PcSample`]: the tick's number from the window's
-//! first, the interrupted program counter and the interrupted level. An
-//! image's observer keeps them in a [`Thinning`] buffer, which covers a
-//! window of any length with its fixed number of samples.
+//! first, the interrupted program counter and the interrupted level; and,
+//! where the platform records it, a [`ReturnSample`] of the same tick: the
+//! interrupted return address register, which names the caller of a leaf
+//! function such as a memory copy. An image's observer keeps them in a
+//! [`Thinning`] buffer, which covers a window of any length with its fixed
+//! number of samples.
 
 use crate::event::{Channel, Domain, Event, Kind};
 
@@ -66,12 +69,60 @@ impl Event for PcSample {
     }
 }
 
+/// The interrupted return address register of one sampler tick, reported
+/// right after the tick's [`PcSample`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReturnSample {
+    tick: u32,
+    ra: u32,
+}
+
+impl ReturnSample {
+    /// The return address `ra` of tick `tick`; `None` past
+    /// [`PcSample::MAX_TICK`].
+    pub const fn new(tick: u32, ra: u32) -> Option<Self> {
+        if tick > PcSample::MAX_TICK {
+            return None;
+        }
+        Some(Self { tick, ra })
+    }
+
+    pub const fn tick(&self) -> u32 {
+        self.tick
+    }
+
+    pub const fn ra(&self) -> u32 {
+        self.ra
+    }
+}
+
+impl Event for ReturnSample {
+    const KIND: Kind = Kind::new(Domain::Platform, 44);
+    /// The profile channel, as [`PcSample`].
+    const CHANNEL: Channel = PcSample::CHANNEL;
+
+    fn encode(&self) -> [u32; 2] {
+        // `new` bounds the tick to the word's upper 24 bits; the low byte
+        // stays zero.
+        [self.ra, self.tick.wrapping_shl(8)]
+    }
+
+    fn decode([ra, mark]: [u32; 2]) -> Option<Self> {
+        let [low, ..] = mark.to_le_bytes();
+        (low == 0).then_some(Self {
+            tick: tick_of(mark),
+            ra,
+        })
+    }
+}
+
 /// The tick an encoded sample's second word holds.
 const fn tick_of(mark: u32) -> u32 {
     mark.wrapping_shr(8)
 }
 
-/// A window's samples in `N` slots by stride doubling.
+/// A window's samples in `N` slots by stride doubling, each with its tick's
+/// return address when one was recorded.
 ///
 /// The buffer keeps every `stride`-th tick from the window's first. Once
 /// full, the stride doubles and each new kept tick overwrites the next
@@ -81,6 +132,10 @@ const fn tick_of(mark: u32) -> u32 {
 /// it drops, the buffer mixes both strides, so [`normalize`](Self::normalize)
 /// runs once the window ended: it keeps only the ticks of one stride, which
 /// then cover the window evenly.
+///
+/// A [`ReturnSample`] belongs to the sample [`record`](Self::record) kept
+/// last, when its tick is that sample's: the sampler reports both of one
+/// tick together, so a tick the stride drops drops both.
 pub struct Thinning<const N: usize> {
     period_us: u32,
     ticks: u32,
@@ -91,7 +146,10 @@ pub struct Thinning<const N: usize> {
     /// and how many the stride still drops.
     cursor: usize,
     dropped: usize,
-    samples: [[u32; 2]; N],
+    /// The slot `record` wrote last, until the next `record`.
+    last: Option<usize>,
+    /// Each slot's encoded sample and its return address, 0 for none.
+    samples: [[u32; 3]; N],
 }
 
 impl<const N: usize> Thinning<N> {
@@ -113,7 +171,8 @@ impl<const N: usize> Thinning<N> {
             kept: 0,
             cursor: 0,
             dropped: 0,
-            samples: [[0; 2]; N],
+            last: None,
+            samples: [[0; 3]; N],
         }
     }
 
@@ -125,11 +184,14 @@ impl<const N: usize> Thinning<N> {
         self.kept = 0;
         self.cursor = 0;
         self.dropped = 0;
+        self.last = None;
     }
 
-    /// Keep `sample` when its tick is one of the stride's.
+    /// Keep `sample` when its tick is one of the stride's, without a
+    /// return address until [`record_return`](Self::record_return).
     pub fn record(&mut self, sample: PcSample) {
         self.ticks = self.ticks.max(sample.tick.saturating_add(1));
+        self.last = None;
         if sample.tick.checked_rem(self.stride) != Some(0) {
             return;
         }
@@ -146,7 +208,9 @@ impl<const N: usize> Thinning<N> {
             slot
         };
         if let Some(stored) = self.samples.get_mut(slot) {
-            *stored = sample.encode();
+            let [pc, mark] = sample.encode();
+            *stored = [pc, mark, 0];
+            self.last = Some(slot);
         }
         if self.kept == N && self.dropped == 0 {
             // Full of every stride-th tick: half of them are every new
@@ -157,6 +221,19 @@ impl<const N: usize> Thinning<N> {
         }
     }
 
+    /// Give the sample kept last its return address, when `ret` is of its
+    /// tick; otherwise (its tick was dropped) forget `ret`.
+    pub fn record_return(&mut self, ret: ReturnSample) {
+        let Some(slot) = self.last.take() else {
+            return;
+        };
+        if let Some([_, mark, ra]) = self.samples.get_mut(slot)
+            && tick_of(*mark) == ret.tick
+        {
+            *ra = ret.ra;
+        }
+    }
+
     /// The first slot from the cursor whose tick the stride drops.
     fn next_dropped(&self) -> Option<usize> {
         let stride = self.stride;
@@ -164,7 +241,7 @@ impl<const N: usize> Thinning<N> {
             .samples
             .get(self.cursor..)?
             .iter()
-            .position(|&[_, mark]| tick_of(mark).checked_rem(stride) != Some(0))?;
+            .position(|&[_, mark, _]| tick_of(mark).checked_rem(stride) != Some(0))?;
         self.cursor.checked_add(offset)
     }
 
@@ -185,7 +262,7 @@ impl<const N: usize> Thinning<N> {
                 let Some(&sample) = self.samples.get(read) else {
                     break;
                 };
-                let [_, mark] = sample;
+                let [_, mark, _] = sample;
                 if tick_of(mark).checked_rem(stride) == Some(0) {
                     if let Some(slot) = self.samples.get_mut(kept) {
                         *slot = sample;
@@ -197,6 +274,7 @@ impl<const N: usize> Thinning<N> {
         }
         self.cursor = 0;
         self.dropped = 0;
+        self.last = None;
     }
 
     /// The sampling period.
@@ -228,7 +306,19 @@ impl<const N: usize> Thinning<N> {
         if slot >= self.kept {
             return None;
         }
-        PcSample::decode(*self.samples.get(slot)?)
+        let &[pc, mark, _] = self.samples.get(slot)?;
+        PcSample::decode([pc, mark])
+    }
+
+    /// The return address of the kept sample in slot `slot`; `None` when
+    /// none was recorded (a zero `ra`, to which no code returns, reads as
+    /// none).
+    pub fn return_address(&self, slot: usize) -> Option<u32> {
+        if slot >= self.kept {
+            return None;
+        }
+        let &[_, _, ra] = self.samples.get(slot)?;
+        (ra != 0).then_some(ra)
     }
 }
 
@@ -333,6 +423,57 @@ mod tests {
             assert_eq!(sample.pc(), 0x4000_0000 + sample.tick() * 4);
             assert_eq!(u32::from(sample.level()), sample.tick() % 3);
         }
+    }
+
+    #[test]
+    fn a_return_sample_round_trips_and_refuses_a_foreign_low_byte() {
+        let ret = ReturnSample::new(PcSample::MAX_TICK, u32::MAX).unwrap();
+        assert_eq!(ReturnSample::decode(ret.encode()), Some(ret));
+        assert_eq!(ReturnSample::new(PcSample::MAX_TICK + 1, 0), None);
+        assert_eq!(ReturnSample::decode([4, 0x0000_0105]), None);
+        assert_eq!(ReturnSample::CHANNEL, PcSample::CHANNEL);
+        assert_ne!(ReturnSample::KIND, PcSample::KIND);
+    }
+
+    #[test]
+    fn a_return_address_follows_its_sample_through_thinning() {
+        let mut buffer = Box::new(Thinning::<N>::new());
+        buffer.restart(1000);
+        let ticks = N as u32 * 3 + 5;
+        for tick in 0..ticks {
+            buffer.record(PcSample::new(tick, 0x4000_0000 + tick * 4, 0).unwrap());
+            // Every third tick has no return address; a return of another
+            // tick is no sample's.
+            if !tick.is_multiple_of(3) {
+                buffer.record_return(ReturnSample::new(tick, 0x4200_0000 + tick).unwrap());
+            } else {
+                buffer.record_return(ReturnSample::new(tick + 1, 0x4300_0000).unwrap());
+            }
+        }
+        buffer.normalize();
+        assert!(buffer.stride() > 1);
+        for slot in 0..buffer.len() {
+            let tick = buffer.get(slot).unwrap().tick();
+            let expected = (!tick.is_multiple_of(3)).then_some(0x4200_0000 + tick);
+            assert_eq!(buffer.return_address(slot), expected, "tick {tick}");
+        }
+        assert_eq!(buffer.return_address(buffer.len()), None);
+    }
+
+    #[test]
+    fn a_return_sample_without_its_sample_is_dropped() {
+        let mut buffer = Box::new(Thinning::<N>::new());
+        buffer.restart(1000);
+        buffer.record_return(ReturnSample::new(0, 0x4200_0000).unwrap());
+        buffer.record(PcSample::new(0, 0x4000_0000, 0).unwrap());
+        assert_eq!(buffer.return_address(0), None);
+        buffer.record_return(ReturnSample::new(0, 0x4200_0004).unwrap());
+        // Only once: the next return of the same tick finds no sample.
+        buffer.record_return(ReturnSample::new(0, 0x4200_0008).unwrap());
+        assert_eq!(buffer.return_address(0), Some(0x4200_0004));
+        buffer.restart(1000);
+        buffer.record(PcSample::new(0, 0x4000_0000, 0).unwrap());
+        assert_eq!(buffer.return_address(0), None);
     }
 
     #[test]

@@ -42,8 +42,12 @@ and `stop` the timer runs an absolute schedule: tick `k` is due
 tick moves the alarm one period on without a reload, so handler latency
 shifts no later tick; a tick due under masked interrupts fires where they
 open. Each scheduled tick reports one sample of the interrupted `mepc` and
-`mcause.mpil`; a tick that finds a stop request reports none, stops the
-timer and hands the session back. Starting hands the timer's program part
+`mcause.mpil` and, in an `oer_trace` build, right after it an
+`oer_trace::profile::ReturnSample` of the interrupted `ra` that the staged
+runtime's interrupt entry recorded (`stacks::interrupted_ra`; the sampler's
+level is the hart's highest, so no entry runs between); in a leaf function
+such as a memory copy it names the caller. A tick that finds a stop request
+reports none, stops the timer and hands the session back. Starting hands the timer's program part
 and binding to the handler through a one-slot queue with the hart's
 interrupts masked; the task and the handler share only the queues, a stop
 flag and a stray count. Idle, the timer is stopped and masked.

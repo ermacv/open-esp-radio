@@ -113,9 +113,11 @@ without a profile answers `NotSampled`.
   starts `oer_esp32s31_compose::sampler` on TIMG1 T0 at the window's start
   and asks it to stop at the window's end, before the end's readings. Its
   P4 handler reports each scheduled tick's interrupted `mepc` and
-  `mcause.mpil` (0 for task code) through the image's observer into one
-  `oer_trace::profile::Thinning` of 2048 samples (16 KiB of SRAM), which is
-  normalized to one stride once the session is back. The load server waits
+  `mcause.mpil` (0 for task code), and the interrupted `ra` its interrupt
+  entry recorded (`oer_espressif_staged_runtime::stacks::interrupted_ra`),
+  through the image's observer into one `oer_trace::profile::Thinning` of
+  2048 samples (24 KiB of SRAM), which is normalized to one stride once the
+  session is back; each page sample carries its `ra`. The load server waits
   at most four periods and 10 ms for it; a handler that keeps it leaves the
   sampler gone for the image's run (`NoSampler`), as does a build without
   `oer_trace`. A disarmed sampler's timer is stopped and masked.

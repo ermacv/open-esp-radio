@@ -1,7 +1,9 @@
 //! The image's PC samples of a level's window (`OER_WIFI_LOAD_PROFILE_US`):
 //! collected page by page, named with the image's runtime ELF's DWARF
 //! (`oer_analysis_elf::dwarf::Symbolizer`), and reported as function
-//! histograms beside the raw samples.
+//! histograms beside the raw samples. A sample inside a memory copy entry
+//! (`memcpy`, `memmove`) with its interrupted `ra` is named after the
+//! caller `ra` returns into: `memcpy ← caller`.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -85,21 +87,40 @@ pub(crate) struct Place {
     pub inlined: String,
 }
 
-/// Name every distinct address of `samples` with `elf`'s DWARF.
+/// Name every distinct address of `samples` with `elf`'s DWARF, and the
+/// call before the return address of each sample in a copy entry.
 pub(crate) fn symbolize(elf: &Path, samples: &[Sample]) -> Result<HashMap<u32, Place>, String> {
     let symbolizer =
         oer_analysis_elf::dwarf::Symbolizer::read(elf).map_err(|error| error.to_string())?;
     let mut places = HashMap::new();
-    for sample in samples {
-        if places.contains_key(&sample.pc) {
-            continue;
+    let name = |address: u32, places: &mut HashMap<u32, Place>| -> Result<(), String> {
+        if let std::collections::hash_map::Entry::Vacant(entry) = places.entry(address) {
+            let frames = symbolizer
+                .frames(u64::from(address))
+                .map_err(|error| error.to_string())?;
+            entry.insert(place(&frames));
         }
-        let frames = symbolizer
-            .frames(u64::from(sample.pc))
-            .map_err(|error| error.to_string())?;
-        places.insert(sample.pc, place(&frames));
+        Ok(())
+    };
+    for sample in samples {
+        name(sample.pc, &mut places)?;
+    }
+    for sample in samples {
+        if let Some(call) = call_of(sample, &places) {
+            name(call, &mut places)?;
+        }
     }
     Ok(places)
+}
+
+/// For a sample in a copy entry with its `ra`, an address of the call
+/// `ra` returns from: the byte before `ra`, inside the call instruction.
+fn call_of(sample: &Sample, places: &HashMap<u32, Place>) -> Option<u32> {
+    let place = places.get(&sample.pc)?;
+    if !oer_image_checks::copies::copy_entry(&place.function) {
+        return None;
+    }
+    sample.ra?.checked_sub(1)
 }
 
 /// The frames at one address run from the innermost inlined function out
@@ -119,8 +140,8 @@ fn place(frames: &[oer_analysis_elf::dwarf::Frame]) -> Place {
 
 /// The run's profile: its counts, the samples by level, the [`TOP`]
 /// functions and innermost inlined functions by samples, and every raw
-/// sample as `[tick, pc, level]`. `symbols` is the naming or why there is
-/// none.
+/// sample as `[tick, pc, level, ra]` (`ra` null when the image recorded
+/// none). `symbols` is the naming or why there is none.
 pub(crate) fn report(
     collected: &Collected,
     elf: &Path,
@@ -147,7 +168,9 @@ pub(crate) fn report(
         "elf": elf.display().to_string(),
         "samples": samples
             .iter()
-            .map(|sample| [sample.tick, sample.pc, u32::from(sample.level)])
+            .map(|sample| {
+                serde_json::json!([sample.tick, sample.pc, sample.level, sample.ra])
+            })
             .collect::<Vec<_>>(),
     });
     let named = match symbols {
@@ -164,20 +187,25 @@ pub(crate) fn report(
 }
 
 /// The [`TOP`] names of `samples` by count, with their share, most first.
+/// A sample in a copy entry with its `ra` is named `name ← caller's name`.
 fn histogram(
     samples: &[Sample],
     places: &HashMap<u32, Place>,
     name: impl Fn(&Place) -> &String,
 ) -> Vec<serde_json::Value> {
-    let mut counts = HashMap::<&str, u64>::new();
+    let mut counts = HashMap::<String, u64>::new();
     for sample in samples {
-        let key = places
+        let own = places
             .get(&sample.pc)
             .map_or("?", |place| name(place).as_str());
+        let key = match call_of(sample, places).and_then(|call| places.get(&call)) {
+            Some(caller) => format!("{own} ← {}", name(caller)),
+            None => own.to_owned(),
+        };
         *counts.entry(key).or_default() += 1;
     }
     let mut counts: Vec<_> = counts.into_iter().collect();
-    counts.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    counts.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     let total = samples.len().max(1) as f64;
     counts
         .into_iter()
@@ -205,7 +233,12 @@ mod tests {
     use super::*;
 
     fn sample(tick: u32, pc: u32, level: u8) -> Sample {
-        Sample { tick, pc, level }
+        Sample {
+            tick,
+            pc,
+            level,
+            ra: None,
+        }
     }
 
     #[test]
@@ -272,7 +305,7 @@ mod tests {
         assert_eq!(report["effective_period_us"], 2000);
         assert_eq!(report["levels"]["0"], 3);
         assert_eq!(report["levels"]["3"], 1);
-        assert_eq!(report["samples"][2], serde_json::json!([4, 0x20, 3]));
+        assert_eq!(report["samples"][2], serde_json::json!([4, 0x20, 3, null]));
         let functions = &report["symbols"]["functions"];
         assert_eq!(functions[0]["name"], "poll");
         assert_eq!(functions[0]["samples"], 2);
@@ -282,5 +315,49 @@ mod tests {
         assert_eq!(report["symbols"]["inlined"][0]["name"], "memcpy");
         let unnamed = super::report(&collected, Path::new("x"), &Err("no ELF".into()));
         assert_eq!(unnamed["symbols"]["error"], "no ELF");
+    }
+
+    #[test]
+    fn a_sample_in_a_copy_is_named_after_the_caller_its_ra_returns_into() {
+        let place = |function: &str, inlined: &str| Place {
+            function: function.into(),
+            inlined: inlined.into(),
+        };
+        let with_ra = |tick, pc, ra| Sample {
+            ra: Some(ra),
+            ..sample(tick, pc, 0)
+        };
+        let samples = vec![
+            with_ra(0, 0x100, 0x2004),
+            with_ra(1, 0x104, 0x2004),
+            // No `ra`, or `ra` outside a copy: the sample's own name.
+            sample(2, 0x100, 0),
+            with_ra(3, 0x2000, 0x3004),
+        ];
+        let places = HashMap::from([
+            (0x100, place("memcpy", "copy_forward")),
+            (0x104, place("memcpy", "copy_forward")),
+            (0x2000, place("poll_action", "poll_action")),
+            (0x2003, place("poll_action", "write_frame")),
+        ]);
+        assert_eq!(call_of(&samples[0], &places), Some(0x2003));
+        assert_eq!(call_of(&samples[2], &places), None);
+        assert_eq!(call_of(&samples[3], &places), None);
+        let functions = histogram(&samples, &places, |place| &place.function);
+        assert_eq!(functions[0]["name"], "memcpy ← poll_action");
+        assert_eq!(functions[0]["samples"], 2);
+        let inlined = histogram(&samples, &places, |place| &place.inlined);
+        assert_eq!(inlined[0]["name"], "copy_forward ← write_frame");
+        let names: Vec<_> = functions.iter().map(|row| row["name"].clone()).collect();
+        assert!(names.contains(&"memcpy".into()) && names.contains(&"poll_action".into()));
+        let collected = Collected {
+            summary: Samples::default(),
+            samples,
+        };
+        let report = report(&collected, Path::new("runtime.elf"), &Ok(places));
+        assert_eq!(
+            report["samples"][0],
+            serde_json::json!([0, 0x100, 0, 0x2004])
+        );
     }
 }

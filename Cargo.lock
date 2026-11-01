@@ -2440,6 +2440,7 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-harness",
  "oer-image-build",
+ "oer-image-checks",
  "oer-lab-model",
  "oer-os-process",
  "oer-services-load",

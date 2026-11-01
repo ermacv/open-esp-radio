@@ -39,7 +39,11 @@ stride and effective period, the samples by interrupted raw CLIC level
 (0 task code; with three level bits P1 `0x1f`, P2 `0x3f`, P3 `0x5f`, as
 the CPU report's executor levels), the 40
 functions and the 40 innermost inlined functions with the most samples, and
-every raw sample as `[tick, pc, level]`. Ticks are due every period on the
+every raw sample as `[tick, pc, level, ra]`: `ra` is the interrupted return
+address register the image's interrupt entry recorded (null when it
+recorded none). A sample inside `memcpy` or `memmove` with its `ra` counts
+in the tables as `memcpy ← caller`, the function (and innermost inlined
+function) of the call `ra` returns from. Ticks are due every period on the
 timer's own schedule; one due while the hart's interrupts were masked
 samples where they open. The functions are named from the DWARF of the
 runtime ELF the harness built (`target/fw/esp32s31-wifi-station/runtime.elf`,
