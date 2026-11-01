@@ -5,10 +5,13 @@
 //! RX and TX are named from the image's side. Every level of every mode is
 //! measured and reported (`target/hil/results/`): the measurements never
 //! decide a case, only a path or an exchange that does not work does.
+//! Each window also records what the link ran ([`link`]): the access
+//! point's view of the station and the image's rates each way.
 //! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
 //! image's hart spends its window ([`profile`]).
 #![forbid(unsafe_code)]
 
+mod link;
 mod profile;
 mod traffic;
 
@@ -22,9 +25,9 @@ use std::{
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_services_load::{
-    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectParts, Collected, Counters,
-    CountersCollected, DataBus, InstructionBus, Load, MAX_PARTS, PartWindow, PartsCollected,
-    Report, Start, Started, Transmit,
+    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts, Collected,
+    Counters, CountersCollected, DataBus, InstructionBus, Link, LinkCollected, Load, MAX_PARTS,
+    PartWindow, PartsCollected, Report, Start, Started, Transmit,
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
@@ -213,6 +216,7 @@ struct Ended {
     report: Report,
     parts: Vec<PartWindow>,
     counters: Counters,
+    link: Link,
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -243,14 +247,35 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             other => return Err(Failure::Fail(format!("the image's parts: {other:?}"))),
         }
     }
-    match cx.call(CollectCounters { run }, CALL)? {
-        CountersCollected::Report(counters) => Ok(Ended {
+    let counters = match cx.call(CollectCounters { run }, CALL)? {
+        CountersCollected::Report(counters) => counters,
+        other => return Err(Failure::Fail(format!("the image's counters: {other:?}"))),
+    };
+    match cx.call(CollectLink { run }, CALL)? {
+        LinkCollected::Report(link) => Ok(Ended {
             report,
             parts,
             counters,
+            link,
         }),
-        other => Err(Failure::Fail(format!("the image's counters: {other:?}"))),
+        other => Err(Failure::Fail(format!("the image's link: {other:?}"))),
     }
+}
+
+/// What the link ran over a window: the access point's view between
+/// `before` and `after`, `span` apart, and the image's counts in `ended`;
+/// its one-line summary is printed as `name`'s.
+fn link_measurement(
+    name: &str,
+    before: &link::Reading,
+    after: &link::Reading,
+    span: Duration,
+    ended: &Ended,
+) -> serde_json::Value {
+    let router = link::router_window(before, after, span);
+    let device = link::device(&ended.link);
+    println!("  link {name}: {}", link::summary(&router, &device));
+    serde_json::json!({ "router": router, "device": device })
 }
 
 /// The highest total a level may offer: far above any 2.4 GHz link, and
@@ -697,6 +722,9 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     )?;
     // The image's CPU with the station linked and no load: the baseline of
     // every level's CPU.
+    let station = mac(address);
+    let before = link::read(cx, &station);
+    let since = Instant::now();
     let idle = run_id();
     let started = cx.call(
         Start {
@@ -715,6 +743,8 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         format!("the image's idle run: {started:?}"),
     )?;
     std::thread::sleep(Duration::from_millis(u64::from(DURATION_MS)));
+    let after = link::read(cx, &station);
+    let span = since.elapsed();
     let idle = collect(cx, idle)?;
     let window = window_us(&idle.report);
     let mut cpu = utilisation(&idle.report.cpu_start, &idle.report.cpu_end);
@@ -727,6 +757,8 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         "cache geometry",
         cache_geometry(&idle.counters.cache_geometry),
     );
+    let link = link_measurement("idle", &before, &after, span, &idle);
+    cx.measure("idle link", link);
     Ok(())
 }
 
@@ -837,19 +869,23 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
 
 fn levels(cx: &mut Cx<'_>, mode: Mode) -> Result<(), Failure> {
     let device = device_address(cx)?;
+    let station = mac(status(cx)?.address);
     let host = host_route(device)?.source;
     for total in levels_mbps()? {
-        level(cx, mode, device, host, total)?;
+        level(cx, mode, device, &station, host, total)?;
     }
     Ok(())
 }
 
 /// One level: `total_mbps` offered, split over the mode's directions, for
-/// the window, with RTT probes from the start to the end of the drain.
+/// the window, with RTT probes from the start to the end of the drain. The
+/// access point's view of `station` is read before the run and after its
+/// drain.
 fn level(
     cx: &mut Cx<'_>,
     mode: Mode,
     device: Ipv4Addr,
+    station: &str,
     host: Ipv4Addr,
     total_mbps: u64,
 ) -> Result<(), Failure> {
@@ -869,6 +905,8 @@ fn level(
         .local_addr()
         .map(|local| local.port())
         .unwrap_or(0);
+    let before = link::read(cx, station);
+    let since = Instant::now();
     let transmit = (mode != Mode::Rx).then(|| Transmit {
         peer: host.octets(),
         peer_port: host_port,
@@ -913,6 +951,8 @@ fn level(
         std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
         (sent, probes)
     });
+    let after = link::read(cx, station);
+    let span = since.elapsed();
     let ended = collect(cx, run)?;
     let samples = match profile {
         Some(_) => Some(profile::collect(cx, run, CALL)?),
@@ -920,7 +960,12 @@ fn level(
     };
     let mut received = endpoint.close();
     received.echoes.sent = probes;
+    let name = format!("{} {total_mbps} Mbit/s", mode.name());
     let mut value = measurement(mode, total_mbps, &sent, &received, &ended);
+    if let Some(object) = value.as_object_mut() {
+        let link = link_measurement(&name, &before, &after, span, &ended);
+        object.insert("link".to_owned(), link);
+    }
     if let (Some(samples), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(IMAGE);
         let symbols = elf
@@ -937,7 +982,7 @@ fn level(
             profile::report(&samples, &elf, &symbols, &sites),
         );
     }
-    cx.measure(format!("{} {total_mbps} Mbit/s", mode.name()), value);
+    cx.measure(name, value);
     Ok(())
 }
 
@@ -1065,6 +1110,7 @@ mod tests {
             report,
             parts: Vec::new(),
             counters: Counters::default(),
+            link: Link::default(),
         };
         let value = measurement(Mode::Rx, 65, &sent, &traffic::Received::default(), &ended);
         assert_eq!(value["window_s"], 5.0);

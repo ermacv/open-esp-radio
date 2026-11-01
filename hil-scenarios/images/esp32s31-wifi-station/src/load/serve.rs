@@ -3,7 +3,8 @@
 //!
 //! The server shares hart 1's network task with the IP stack. A run
 //! receives and echoes from its start, sends within its window and reads
-//! the CPU, the named parts and the counters at the window's ends (the
+//! the CPU, the named parts, the counters and the link's rates at the
+//! window's ends (the
 //! cache's cleared just before its start),
 //! sampling the boot hart between them when it asks; after its drain it
 //! closes the socket and keeps what it read until the next run starts.
@@ -29,8 +30,8 @@ use oer_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_services_load::header::Header;
 use oer_services_load::tally::Tally;
 use oer_services_load::{
-    Collected, Counters, CountersCollected, Load, LoadError, PartsCollected, Report, Request,
-    SamplesCollected, Sent, Start, Started, Transmit,
+    Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, PartsCollected,
+    Report, Request, SamplesCollected, Sent, Start, Started, Transmit,
 };
 use oer_time::{CLOCK_EPOCH_OFFSET, Instant, Timer as _};
 use static_cell::ConstStaticCell;
@@ -223,6 +224,10 @@ pub(crate) async fn serve(mut requests: Receiver, network: &Network, hart0: &Cli
                         .publish(identity, relay::Answer::Counters(counters))
                         .await;
                 }
+                (Some((_, ended)), Kept::Link) => {
+                    let link = LinkCollected::Report(ended.link);
+                    hart0.publish(identity, relay::Answer::Link(link)).await;
+                }
                 (Some((_, ended)), Kept::Samples { from }) => match ended.sampled {
                     // The samples are in the boot hart's buffer: its relay
                     // publishes the page.
@@ -274,6 +279,7 @@ async fn publish(hart0: &Client, identity: RequestIdentity, answer: Answer) {
         Answer::Running(Kept::Report) => Published::Collected(Collected::Running),
         Answer::Running(Kept::Parts { .. }) => Published::Parts(PartsCollected::Running),
         Answer::Running(Kept::Counters) => Published::Counters(CountersCollected::Running),
+        Answer::Running(Kept::Link) => Published::Link(LinkCollected::Running),
         Answer::Running(Kept::Samples { .. }) => Published::Samples(SamplesCollected::Running),
         Answer::UnknownRun(Kept::Report) => Published::Collected(Collected::Refused(unknown)),
         Answer::UnknownRun(Kept::Parts { .. }) => {
@@ -282,6 +288,7 @@ async fn publish(hart0: &Client, identity: RequestIdentity, answer: Answer) {
         Answer::UnknownRun(Kept::Counters) => {
             Published::Counters(CountersCollected::Refused(unknown))
         }
+        Answer::UnknownRun(Kept::Link) => Published::Link(LinkCollected::Refused(unknown)),
         Answer::UnknownRun(Kept::Samples { .. }) => {
             Published::Samples(SamplesCollected::Refused(unknown))
         }
@@ -328,6 +335,7 @@ struct Ends {
     cpu_end: Load,
     parts: parts::Windows,
     counters: Counters,
+    link: Link,
     sampled: Option<Result<(), LoadError>>,
 }
 
@@ -337,6 +345,7 @@ struct Ended {
     report: Report,
     parts: parts::Windows,
     counters: Counters,
+    link: Link,
     sampled: Option<Result<(), LoadError>>,
 }
 
@@ -408,6 +417,7 @@ async fn run(
         report,
         parts: ends.parts,
         counters: ends.counters,
+        link: ends.link,
         sampled: ends.sampled,
     })
 }
@@ -498,6 +508,7 @@ async fn measure(
         cpu_end,
         parts: parts::window(&parts_start, &parts_end),
         counters: counters::window(&counters_start, &counters_end),
+        link: counters::link_window(&counters_start, &counters_end),
         sampled,
     }
 }

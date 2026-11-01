@@ -63,7 +63,9 @@ counters: its copied trace observations reach image-owned collectors, and its
 product events are immediate callbacks. Bridge timers, polling, protocol
 parameters, DMA geometry and rate-selection policy retain their values.
 The facade's own trace events (station activity, the station service's
-spans and the selected data rate) are its `observation` module, reported to
+spans, the selected data rate, each received data MPDU's rate and A-MPDU
+containment and each single data transmission's last rate, transmissions
+and end) are its `observation` module, reported to
 `Binding::Observer` and `Binding::DriverObserver`. The protocol's events go to `Binding::Sink`, which
 the station service lends its cores; `()` keeps none. The target used to
 correlate raw authentication/beacon observations and all diagnostic TX

@@ -92,9 +92,10 @@ nothing). The run's window opens `delay_ms` after the start and closes
 `duration_ms` later; the image reads its CPU, its parts and its counters at
 both ends, after opening and after closing, and keeps the times. It receives
 and echoes from the start until `drain_ms` after the window, then closes the
-socket and keeps the report, the parts' and the counters' window until the
-next run starts. `Collect`, `CollectParts` (twelve parts an answer, from the
-asked number), `CollectCounters` and `CollectSamples` (forty samples an
+socket and keeps the report, the parts', the counters' and the link's
+window until the next run starts. `Collect`, `CollectParts` (twelve parts
+an answer, from the asked number), `CollectCounters`, `CollectLink` and
+`CollectSamples` (forty samples an
 answer, from the asked number) of the running run answer `Running`, of the
 kept one what it kept, of any other `UnknownRun`; `CollectSamples` of a run
 without a profile answers `NotSampled`.
@@ -177,6 +178,17 @@ when it decided it.
   `TracedStationEvents` sink reports as `StationRx` events to the image's
   observer in the station service on the boot hart, where they count.
   Without `oer_trace` that sink is disabled and the service builds no event.
+  The link's counts (`CollectLink`) come from the same readings: the
+  facade reports each data MPDU addressed to the station's own address with
+  its PPDU's rate and A-MPDU containment from the receive metadata
+  (`RxData`, from the port's event hook), and each single data MPDU
+  transmission's end with its last transmission's rate and its
+  transmission count (`TxData`, from the rate selection's completion), to
+  the image's observer, which the binding also gives the rate selection.
+  They count by HT MCS 0 to 7, width and guard interval, other HT MCSs,
+  non-HT, HE and no rate. The receive metadata marks no A-MPDU boundary, so
+  the image counts no received A-MPDU; transmitted aggregates are not
+  counted yet. A build without `oer_trace` counts none of them.
 - **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
   starts `oer_esp32s31_compose::sampler` on TIMG1 T0 of the boot hart,
   which it samples, at the window's start and asks it to stop at the

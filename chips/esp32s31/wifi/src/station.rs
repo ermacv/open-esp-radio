@@ -59,6 +59,28 @@ fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
         oer_trace::observe!(observer, crate::observation::TxIndeterminate);
     }
 }
+/// Report a data MPDU addressed to `local`: its PPDU's rate and whether it
+/// came in an A-MPDU, as `meta` tells.
+#[cfg(oer_trace)]
+fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]) {
+    if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+        .is_some_and(|header| header.control().is_data() && header.receiver() == local)
+    {
+        let observer = W::DriverObserver::default();
+        oer_trace::observe!(
+            observer,
+            crate::observation::RxData {
+                rate: crate::observation::RateClass::of(match meta.rate {
+                    RxEvidence::HardwareObserved(rate) | RxEvidence::ProtocolValidated(rate) => {
+                        Some(rate)
+                    }
+                    RxEvidence::Unavailable => None,
+                }),
+                containment: crate::observation::Containment::of(meta.ampdu),
+            }
+        );
+    }
+}
 impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     type Backend = Backend<Id, W>;
     type SlotId = Id;
@@ -122,8 +144,11 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
             observe_terminal::<W, Id>(terminal);
         }
         #[cfg(oer_trace)]
-        if let LowerMacEvent::Received { frame, .. } = &event {
+        if let LowerMacEvent::Received { frame, meta } = &event {
             let bytes = frame.bytes();
+            if let Some((local, _)) = TARGET.get() {
+                observe_received_data::<W>(bytes, meta.common(), local);
+            }
             if let Some((local, Some(target))) = TARGET.get() {
                 if oer_ieee80211_wire::station::parse_open_authentication_response(
                     bytes, local, target,
@@ -231,6 +256,10 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
         ) {
             oer_trace::observe!(self.1, crate::observation::TxHardwareTimeout);
+        }
+        #[cfg(oer_trace)]
+        if frame == FrameRates::Data {
+            oer_trace::observe!(self.1, crate::observation::TxData::of(completion));
         }
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed(
             &mut self.0,

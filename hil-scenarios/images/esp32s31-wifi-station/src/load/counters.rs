@@ -2,13 +2,16 @@
 //! cycles and retired instructions, the L1 cache's access counts by bus,
 //! what the network bridge did with the station's frames, what the IP
 //! stack took, and the receive path's counts: the S31 driver's and the
-//! station service's receive decisions (the facade's `StationRx` events).
+//! station service's receive decisions (the facade's `StationRx` events),
+//! and the link's rates: the data MPDUs addressed to the station by their
+//! PPDU's rate and A-MPDU containment (`RxData`), and the station's single
+//! data transmissions by their last rate and end (`TxData`).
 //!
 //! The bridge reports each frame through `oer_trace::observe!`, so only an
 //! `oer_trace` build counts them; hart 1's network task is their one writer
 //! and the load server, in the same task, their reader. The station's
-//! receive decisions reach the image's observer from the station service,
-//! on the boot hart, and count there; the driver's counters are the
+//! receive decisions and the link's rates reach the image's observer from
+//! the station service, on the boot hart, and count there; the driver's counters are the
 //! radio's, on the boot hart too. The boot hart's relay, which owns the
 //! cache's counters, reads the boot hart's counters, the cache's and the
 //! receive path's there at the window's ends and sends them to the server;
@@ -17,7 +20,8 @@
 //! bus reports its overflow); the stack's saturate there.
 
 use oer_services_load::{
-    CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, InstructionBus, RxCounts, StationRx,
+    CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, InstructionBus, Link, RxCounts,
+    StationRx,
 };
 
 /// What the network bridge did with one frame from the station.
@@ -188,6 +192,150 @@ fn station_rx() -> StationRx {
 #[cfg(target_arch = "riscv32")]
 static STARTED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
+/// One rate histogram's buckets: HT MCS 0 to 7 by width and guard
+/// interval (20 MHz long, 20 MHz short, 40 MHz long, 40 MHz short), then
+/// the other HT MCSs, non-HT, HE and no rate.
+#[cfg(any(target_arch = "riscv32", test))]
+const RATE_BUCKETS: usize = 4 * 8 + 4;
+#[cfg(any(target_arch = "riscv32", test))]
+const HT_OTHER: usize = 32;
+#[cfg(any(target_arch = "riscv32", test))]
+const NON_HT: usize = 33;
+#[cfg(any(target_arch = "riscv32", test))]
+const HE: usize = 34;
+#[cfg(any(target_arch = "riscv32", test))]
+const UNKNOWN_RATE: usize = 35;
+
+/// The bucket of an HT rate of `mcs`, `width40` wide, with the short guard
+/// interval or the long one.
+#[cfg(any(target_arch = "riscv32", test))]
+const fn ht_bucket(mcs: u8, width40: bool, short_gi: bool) -> usize {
+    if mcs > 7 {
+        return HT_OTHER;
+    }
+    (width40 as usize * 2 + short_gi as usize) * 8 + mcs as usize
+}
+
+/// The wire's histogram of `buckets`.
+#[cfg(any(target_arch = "riscv32", test))]
+fn rates(buckets: &[u32; RATE_BUCKETS]) -> oer_services_load::Rates {
+    let at = |bucket: usize| buckets.get(bucket).copied().unwrap_or(0);
+    let mcs =
+        |width40, short_gi| core::array::from_fn(|mcs| at(ht_bucket(mcs as u8, width40, short_gi)));
+    oer_services_load::Rates {
+        ht20_long_gi: mcs(false, false),
+        ht20_short_gi: mcs(false, true),
+        ht40_long_gi: mcs(true, false),
+        ht40_short_gi: mcs(true, true),
+        ht_other: at(HT_OTHER),
+        non_ht: at(NON_HT),
+        he: at(HE),
+        unknown: at(UNKNOWN_RATE),
+    }
+}
+
+/// The received data MPDUs by rate and by containment (unknown, single,
+/// in an A-MPDU); the station's single data transmissions by rate, by end
+/// (delivered, ACK timeout, other, unsent) and their transmissions. The
+/// station service, on the boot hart, is their one writer.
+#[cfg(target_arch = "riscv32")]
+static RX_RATES: [core::sync::atomic::AtomicU32; RATE_BUCKETS] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; RATE_BUCKETS];
+#[cfg(target_arch = "riscv32")]
+static RX_CONTAINMENT: [core::sync::atomic::AtomicU32; 3] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; 3];
+#[cfg(target_arch = "riscv32")]
+static TX_RATES: [core::sync::atomic::AtomicU32; RATE_BUCKETS] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; RATE_BUCKETS];
+#[cfg(target_arch = "riscv32")]
+static TX_ENDS: [core::sync::atomic::AtomicU32; 4] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; 4];
+#[cfg(target_arch = "riscv32")]
+static TX_TRANSMISSIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Add `by` to `count`; only its one writer calls it.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+fn bump(count: Option<&core::sync::atomic::AtomicU32>, by: u32) {
+    use core::sync::atomic::Ordering;
+    if let Some(count) = count {
+        count.store(
+            count.load(Ordering::Relaxed).wrapping_add(by),
+            Ordering::Relaxed,
+        );
+    }
+}
+
+/// The bucket of `rate`.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+const fn rate_bucket(rate: oer_esp32s31_wifi::observation::RateClass) -> usize {
+    use oer_esp32s31_wifi::observation::RateClass;
+    match rate {
+        RateClass::Ht {
+            mcs,
+            width40,
+            short_gi,
+        } => ht_bucket(mcs, width40, short_gi),
+        RateClass::NonHt => NON_HT,
+        RateClass::He => HE,
+        RateClass::Unknown => UNKNOWN_RATE,
+    }
+}
+
+/// Count a received data MPDU; only the station service, on the boot hart,
+/// calls it.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) fn observe_rx_data(data: oer_esp32s31_wifi::observation::RxData) {
+    bump(RX_RATES.get(rate_bucket(data.rate)), 1);
+    bump(RX_CONTAINMENT.get(usize::from(data.containment as u8)), 1);
+}
+
+/// Count a single data transmission's end; only the station service, on
+/// the boot hart, calls it.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) fn observe_tx_data(data: oer_esp32s31_wifi::observation::TxData) {
+    use oer_esp32s31_wifi::observation::TxEnd;
+    bump(TX_RATES.get(rate_bucket(data.rate)), 1);
+    let end = match data.end {
+        TxEnd::Delivered => 0,
+        TxEnd::AckTimeout => 1,
+        TxEnd::Other => 2,
+        TxEnd::Unsent => 3,
+    };
+    bump(TX_ENDS.get(end), 1);
+    bump(Some(&TX_TRANSMISSIONS), u32::from(data.transmissions));
+}
+
+/// The link's counts now, as the wire names them.
+#[cfg(target_arch = "riscv32")]
+fn link() -> Link {
+    use core::sync::atomic::{AtomicU32, Ordering};
+    let read = |counts: &[AtomicU32; RATE_BUCKETS]| {
+        counts.each_ref().map(|count| count.load(Ordering::Relaxed))
+    };
+    let [unknown, single, in_ampdu] = RX_CONTAINMENT
+        .each_ref()
+        .map(|count| count.load(Ordering::Relaxed));
+    let [delivered, ack_timeouts, other_ends, unsent] = TX_ENDS
+        .each_ref()
+        .map(|count| count.load(Ordering::Relaxed));
+    Link {
+        rx: oer_services_load::RxLink {
+            mpdus: rates(&read(&RX_RATES)),
+            in_ampdu,
+            single,
+            containment_unknown: unknown,
+        },
+        tx: oer_services_load::TxLink {
+            mpdus: rates(&read(&TX_RATES)),
+            transmissions: TX_TRANSMISSIONS.load(Ordering::Relaxed),
+            delivered,
+            ack_timeouts,
+            other_ends,
+            unsent,
+        },
+    }
+}
+
 /// The driver's receive counters now, as the wire names them; unavailable
 /// before the receive path was bound or without a trace build.
 #[cfg(target_arch = "riscv32")]
@@ -238,6 +386,7 @@ pub(crate) struct Snapshot {
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
     pub rx: RxCounts,
+    pub link: Link,
 }
 
 /// The cache's counters of every bus.
@@ -246,8 +395,8 @@ pub(crate) type Cache = oer_esp32s31_hal::peripherals::cache_counters::CacheCoun
 
 /// What the boot hart's relay reads there for the load server: the boot
 /// hart's cycles and retired instructions, the cache's counts and
-/// geometry, and the receive path's counts, which only the boot hart
-/// writes.
+/// geometry, and the receive path's and the link's counts, which only the
+/// boot hart writes.
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Hart {
@@ -256,6 +405,7 @@ pub(crate) struct Hart {
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
     pub rx: RxCounts,
+    pub link: Link,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -283,6 +433,7 @@ impl Hart {
                 driver: driver_rx(),
                 station: station_rx(),
             },
+            link: link(),
         }
     }
 }
@@ -301,6 +452,7 @@ pub(crate) fn snapshot(hart: Hart, stack_received: u32) -> Snapshot {
         cache: hart.cache,
         cache_geometry: hart.cache_geometry,
         rx: hart.rx,
+        link: hart.link,
     }
 }
 
@@ -367,6 +519,11 @@ fn data_window(start: &DataBus, end: &DataBus) -> DataBus {
         next_level_writes: end.next_level_writes.wrapping_sub(start.next_level_writes),
         overflowed: start.overflowed || end.overflowed,
     }
+}
+
+/// The link's counts between the window's ends `start` and `end`.
+pub(crate) fn link_window(start: &Snapshot, end: &Snapshot) -> Link {
+    Link::window(&start.link, &end.link)
 }
 
 /// The counts between the window's ends `start` and `end`.
@@ -556,6 +713,50 @@ mod tests {
         assert_eq!(rx.driver.units, 15);
         assert_eq!(rx.station.released_by_timeout, 3);
         assert_eq!(rx.station.agreement_window, 16);
+    }
+
+    #[test]
+    fn each_rate_counts_in_its_own_bucket_of_the_wire_s_histogram() {
+        let mut buckets = [0; RATE_BUCKETS];
+        let mut count = |bucket: usize, by: u32| buckets[bucket] += by;
+        count(ht_bucket(7, true, true), 5);
+        count(ht_bucket(7, true, false), 4);
+        count(ht_bucket(0, false, false), 3);
+        count(ht_bucket(6, false, true), 2);
+        count(ht_bucket(8, true, true), 9);
+        count(ht_bucket(31, false, false), 1);
+        count(NON_HT, 6);
+        count(HE, 7);
+        count(UNKNOWN_RATE, 8);
+        let rates = rates(&buckets);
+        assert_eq!(rates.ht40_short_gi, [0, 0, 0, 0, 0, 0, 0, 5]);
+        assert_eq!(rates.ht40_long_gi, [0, 0, 0, 0, 0, 0, 0, 4]);
+        assert_eq!(rates.ht20_long_gi, [3, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(rates.ht20_short_gi, [0, 0, 0, 0, 0, 0, 2, 0]);
+        assert_eq!(
+            (rates.ht_other, rates.non_ht, rates.he, rates.unknown),
+            (10, 6, 7, 8)
+        );
+        let distinct: std::collections::BTreeSet<_> = (0..=7u8)
+            .flat_map(|mcs| {
+                [(false, false), (false, true), (true, false), (true, true)]
+                    .map(|(width40, short_gi)| ht_bucket(mcs, width40, short_gi))
+            })
+            .collect();
+        assert_eq!(distinct, (0..HT_OTHER).collect());
+    }
+
+    #[test]
+    fn a_link_window_is_the_wrapping_difference_of_its_ends() {
+        let mut start = Snapshot::default();
+        start.link.rx.mpdus.ht40_short_gi[7] = u32::MAX;
+        start.link.tx.transmissions = 7;
+        let mut end = start;
+        end.link.rx.mpdus.ht40_short_gi[7] = 99;
+        end.link.tx.transmissions = 20;
+        let link = link_window(&start, &end);
+        assert_eq!(link.rx.mpdus.ht40_short_gi[7], 100);
+        assert_eq!(link.tx.transmissions, 13);
     }
 
     #[test]

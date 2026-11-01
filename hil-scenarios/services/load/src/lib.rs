@@ -68,6 +68,8 @@ oer_hil_protocol::messages! {
     topic CountersCollected = "load/counters-report";
     endpoint CollectSamples = "load/samples" => SamplesCollected;
     topic SamplesCollected = "load/samples-report";
+    endpoint CollectLink = "load/link" => LinkCollected;
+    topic LinkCollected = "load/link-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -529,6 +531,130 @@ impl StationRx {
     }
 }
 
+/// What the station's link ran within run `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectLink {
+    pub run: u32,
+}
+
+/// The answer to [`CollectLink`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a wire message of a no_std crate without allocation: the counts go by value"
+)]
+pub enum LinkCollected {
+    Report(Link),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The rates the station's link ran at within one window, from the window's
+/// start and end readings, each direction from the image's side. Only a
+/// trace build counts them; others report zeros.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Link {
+    pub rx: RxLink,
+    pub tx: TxLink,
+}
+
+/// Counts by a PPDU's rate: HT MCS 0 to 7 by channel width and guard
+/// interval, the other formats each in one count.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Rates {
+    /// HT 20 MHz with the long and the short guard interval, by MCS.
+    pub ht20_long_gi: [u32; 8],
+    pub ht20_short_gi: [u32; 8],
+    /// HT 40 MHz with the long and the short guard interval, by MCS.
+    pub ht40_long_gi: [u32; 8],
+    pub ht40_short_gi: [u32; 8],
+    /// HT MCS 8 to 31: more than one spatial stream.
+    pub ht_other: u32,
+    /// DSSS, CCK and OFDM.
+    pub non_ht: u32,
+    pub he: u32,
+    /// Without a rate.
+    pub unknown: u32,
+}
+
+/// The data MPDUs addressed to the station's own address that reached its
+/// port, by their PPDU's rate and by whether their metadata says they came
+/// in an A-MPDU. The metadata carries no PPDU boundary: how many A-MPDUs
+/// carried them is not counted.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct RxLink {
+    pub mpdus: Rates,
+    pub in_ampdu: u32,
+    pub single: u32,
+    pub containment_unknown: u32,
+}
+
+/// The station's single data MPDU transmissions that ended: by the rate of
+/// each one's last transmission, the transmissions they took, and how they
+/// ended. Aggregates are not counted here.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TxLink {
+    /// Ended MPDUs by their last transmission's rate; one that reports no
+    /// transmission counts as unknown.
+    pub mpdus: Rates,
+    /// Their transmissions, retries included.
+    pub transmissions: u32,
+    pub delivered: u32,
+    pub ack_timeouts: u32,
+    /// A protection timeout, the contention limit or a coexistence denial.
+    pub other_ends: u32,
+    /// Expired, withdrawn, or without a known outcome.
+    pub unsent: u32,
+}
+
+impl Rates {
+    /// The counts between readings `start` and `end`, wrapping at 2^32.
+    pub fn window(start: &Self, end: &Self) -> Self {
+        let each = |start: &[u32; 8], end: &[u32; 8]| {
+            core::array::from_fn(|mcs| {
+                let at = |counts: &[u32; 8]| counts.get(mcs).copied().unwrap_or(0);
+                at(end).wrapping_sub(at(start))
+            })
+        };
+        Self {
+            ht20_long_gi: each(&start.ht20_long_gi, &end.ht20_long_gi),
+            ht20_short_gi: each(&start.ht20_short_gi, &end.ht20_short_gi),
+            ht40_long_gi: each(&start.ht40_long_gi, &end.ht40_long_gi),
+            ht40_short_gi: each(&start.ht40_short_gi, &end.ht40_short_gi),
+            ht_other: end.ht_other.wrapping_sub(start.ht_other),
+            non_ht: end.non_ht.wrapping_sub(start.non_ht),
+            he: end.he.wrapping_sub(start.he),
+            unknown: end.unknown.wrapping_sub(start.unknown),
+        }
+    }
+}
+
+impl Link {
+    /// The counts between readings `start` and `end`, wrapping at 2^32.
+    pub fn window(start: &Self, end: &Self) -> Self {
+        let (rx0, rx1, tx0, tx1) = (&start.rx, &end.rx, &start.tx, &end.tx);
+        Self {
+            rx: RxLink {
+                mpdus: Rates::window(&rx0.mpdus, &rx1.mpdus),
+                in_ampdu: rx1.in_ampdu.wrapping_sub(rx0.in_ampdu),
+                single: rx1.single.wrapping_sub(rx0.single),
+                containment_unknown: rx1
+                    .containment_unknown
+                    .wrapping_sub(rx0.containment_unknown),
+            },
+            tx: TxLink {
+                mpdus: Rates::window(&tx0.mpdus, &tx1.mpdus),
+                transmissions: tx1.transmissions.wrapping_sub(tx0.transmissions),
+                delivered: tx1.delivered.wrapping_sub(tx0.delivered),
+                ack_timeouts: tx1.ack_timeouts.wrapping_sub(tx0.ack_timeouts),
+                other_ends: tx1.other_ends.wrapping_sub(tx0.other_ends),
+                unsent: tx1.unsent.wrapping_sub(tx0.unsent),
+            },
+        }
+    }
+}
+
 /// The L1 cache's access counts within one window, by bus: the image
 /// clears each bus's counts at the window's start and reads them at its
 /// end. Instruction bus 0 carries hart 0's fetches and instruction bus 1
@@ -684,6 +810,7 @@ oer_hil_agent::service! {
         CollectParts(CollectParts) => parts,
         CollectCounters(CollectCounters) => counters,
         CollectSamples(CollectSamples) => samples,
+        CollectLink(CollectLink) => link,
     }
 }
 

@@ -236,7 +236,7 @@ async fn work(inputs: Inputs) -> Infallible {
         address,
         credentials,
         Callbacks(nonces),
-        oer_trace::Noop,
+        crate::load::parts::DriverObserver::default(),
         crate::load::parts::STATION_SINK,
     ) {
         Ok(profile) => profile,

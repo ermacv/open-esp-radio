@@ -1,8 +1,9 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_services_load::{
-    Collect, CollectCounters, CollectParts, CollectSamples, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS,
-    MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
+    Collect, CollectCounters, CollectLink, CollectParts, CollectSamples, LoadError, MAX_DELAY_MS,
+    MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start,
+    Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -33,7 +34,7 @@ pub(crate) enum Action {
 }
 
 /// What a run keeps once it ended: its report, its parts' window, its
-/// counters and its samples.
+/// counters, its link's rates and its samples.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Kept {
     Report,
@@ -42,6 +43,7 @@ pub(crate) enum Kept {
         from: u8,
     },
     Counters,
+    Link,
     /// The samples from the one numbered `from`.
     Samples {
         from: u16,
@@ -79,6 +81,7 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectSamples(CollectSamples { run, from })) => {
             collect(phase, run, Kept::Samples { from })
         }
+        (phase, Request::CollectLink(CollectLink { run })) => collect(phase, run, Kept::Link),
     }
 }
 
@@ -244,7 +247,7 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 4] = [
+        let requests: [(Kept, Asks); 5] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
@@ -255,6 +258,7 @@ mod tests {
             (Kept::Samples { from: 40 }, |run| {
                 Request::CollectSamples(CollectSamples { run, from: 40 })
             }),
+            (Kept::Link, |run| Request::CollectLink(CollectLink { run })),
         ];
         for (kind, collect) in requests {
             let unknown = Action::Answer(Answer::UnknownRun(kind));
