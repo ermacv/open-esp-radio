@@ -2333,12 +2333,18 @@ impl<
             // depth and the one on the air; the limit is the service's, for
             // every data source it runs.
             'data: loop {
-                // The window of the TID the next attempt takes, asked only
-                // when Data owes an MPDU.
-                let window_tid = self.data.attempt_tid();
-                let window = window_tid.and_then(|tid| {
-                    aggregate_window::<B, P, S, C, GROUPS>(&self.station, &self.rates, phase, tid)
-                });
+                // Without an owed MPDU and a free ticket Data has no
+                // attempt: the turn asks for neither window nor link.
+                let Some(window_tid) = self.data.attempt_tid() else {
+                    break 'data;
+                };
+                // The window of the TID the next attempt takes.
+                let window = aggregate_window::<B, P, S, C, GROUPS>(
+                    &self.station,
+                    &self.rates,
+                    phase,
+                    window_tid,
+                );
                 let spacing = self
                     .station
                     .tx_aggregate_limits()
@@ -2349,10 +2355,10 @@ impl<
                     let Some(link) = self.station.link() else {
                         break 'data;
                     };
-                    let Some(attempt) = self.data.poll_attempt(
-                        |tid| window.filter(|_| Some(tid) == window_tid),
-                        &mut self.events,
-                    ) else {
+                    let Some(attempt) = self
+                        .data
+                        .poll_attempt(|tid| window.filter(|_| tid == window_tid), &mut self.events)
+                    else {
                         break 'data;
                     };
                     progress = true;
