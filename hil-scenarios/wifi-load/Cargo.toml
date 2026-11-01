@@ -21,6 +21,9 @@ oer-services-wifi-station = { path = "../services/wifi-station" }
 heapless = "0.9.3"
 serde_json = "1.0"
 
+[dev-dependencies]
+tempfile = "=3.27.0"
+
 [lints]
 workspace = true
 

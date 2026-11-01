@@ -48,7 +48,15 @@ timer's own schedule; one due while the hart's interrupts were masked
 samples where they open. The functions are named from the DWARF of the
 runtime ELF the harness built (`target/fw/esp32s31-wifi-station/runtime.elf`,
 `oer_analysis_elf::dwarf::Symbolizer`); without it the profile records why
-and keeps the raw samples. The scenario holds the air exclusively. Executors' work spans and
+and keeps the raw samples. The profile's `copies` weights the memory copy
+call sites the image build found in that ELF (`runtime-copies.json` beside
+it, read with `oer_image_checks::copies::read`; without it `copies` records
+why): the samples in a copy entry, those whose `ra` is a site's return
+address (attributed), those without an `ra` and the rest; and the 40 sites
+with the most weight, each with its size where constant, caller, source
+chain, the roots that reach it, `in_copy` (samples in the copy that return
+to it) and `in_caller` (samples in its caller), with their shares of the
+samples. The scenario holds the air exclusively. Executors' work spans and
 parts' polls include preemption and overlap: only a hart's idle time gives
 its utilisation. The router forwards the load: its CPU can limit it.
 

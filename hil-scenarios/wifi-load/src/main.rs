@@ -760,10 +760,14 @@ fn level(
             .as_ref()
             .map_err(Clone::clone)
             .and_then(|elf| profile::symbolize(elf, &samples.samples));
+        let sites = elf
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|elf| profile::copy_sites(elf));
         let elf = elf.unwrap_or_default();
         object.insert(
             "profile".to_owned(),
-            profile::report(&samples, &elf, &symbols),
+            profile::report(&samples, &elf, &symbols, &sites),
         );
     }
     cx.measure(format!("{} {total_mbps} Mbit/s", mode.name()), value);

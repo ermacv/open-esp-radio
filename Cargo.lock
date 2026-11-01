@@ -2446,6 +2446,7 @@ dependencies = [
  "oer-services-load",
  "oer-services-wifi-station",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
