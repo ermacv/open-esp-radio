@@ -88,7 +88,11 @@ MFPC under management protection, MFPR and the H2E RSNXE under SAE), whose
 RSN element and RSNXE `oer-ieee80211-wire` encodes (`station::SelectedRsn::rsn`).
 The scan table keeps each observation's signal level (`None` when the
 receiver reported none, ranked below every known level) and reception time
-beside its decoded `ScanRecord` (`scan::BssObservation`).
+beside its decoded `ScanRecord` (`scan::BssObservation`). A connect's scan
+admits a BSS into its table (16 records) only when it names the profile's
+SSID, so other networks heard on earlier channels never crowd out its own;
+a held record is updated by any frame of its BSSID. A background scan
+records every BSS.
 
 SAE observations consume the exchange and return it only while it continues.
 Commit and confirm have checked absolute deadlines, including time waiting

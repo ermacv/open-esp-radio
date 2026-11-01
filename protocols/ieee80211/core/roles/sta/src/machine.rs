@@ -4796,7 +4796,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             State::Scan(scan)
                 if scan.step == ScanStep::Listen || scan.step == ScanStep::NeedProbe =>
             {
-                let observation = observe_scan(&mut (*self.scan), now, management, &meta);
+                // A connect's scan keeps its table for its own network.
+                let ssid = self
+                    .profile
+                    .as_ref()
+                    .map_or(&[][..], |profile| profile.ssid.as_slice());
+                let observation =
+                    observe_scan(&mut (*self.scan), now, management, &meta, Some(ssid));
                 report_scan(events, observation);
                 Change::Keep
             }
@@ -4999,7 +5005,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             Some(BackgroundStep::HomeProbe { .. } | BackgroundStep::HomeListen { .. })
         );
         if away || home {
-            let observation = observe_scan(&mut (*self.scan), now, management, meta);
+            let observation = observe_scan(&mut (*self.scan), now, management, meta, None);
             report_scan(events, observation);
             if away {
                 return Change::Keep;
