@@ -387,10 +387,11 @@ pub struct HolderStatus {
 }
 
 /// The width of the station profile's channel.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RouterChannelWidth {
     /// HT 20 MHz.
+    #[default]
     Ht20,
     /// HT 40 MHz, the secondary channel below the primary on channels 5 to
     /// 13 and above it on 1 to 4.
@@ -410,6 +411,8 @@ pub enum RouterOperation {
         ssid: String,
         passphrase: String,
         channel: u8,
+        /// Absent from a client older than the width: HT20.
+        #[serde(default)]
         width: RouterChannelWidth,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         forward_host: Option<Ipv4Addr>,

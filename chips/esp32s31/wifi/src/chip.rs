@@ -17,7 +17,7 @@ use oer_radio_regulatory::{Country, RegulatoryDomain};
 use oer_time::Duration;
 use oer_trace::Observer;
 
-pub const N: usize = 32;
+pub const N: usize = 96;
 pub const B: usize = crate::FRAME_CAPACITY;
 pub const S: usize = B;
 pub const Q: usize = 32;

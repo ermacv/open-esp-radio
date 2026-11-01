@@ -50,3 +50,16 @@ fn a_truncated_or_unknown_frame_is_an_error() {
     let short_data = [0, 0, 0, 3, DATA, 0, 0];
     assert!(Frame::read(&mut short_data.as_slice()).is_err());
 }
+
+#[test]
+fn a_station_profile_without_a_width_is_twenty_megahertz() {
+    let older = r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":13}"#;
+    let operation: RouterOperation = serde_json::from_str(older).unwrap();
+    assert!(matches!(
+        operation,
+        RouterOperation::ApplyStationProfile {
+            width: RouterChannelWidth::Ht20,
+            ..
+        }
+    ));
+}
