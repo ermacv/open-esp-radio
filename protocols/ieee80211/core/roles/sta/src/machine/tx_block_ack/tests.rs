@@ -169,6 +169,39 @@ fn a_request_that_did_not_leave_retries_after_the_interval() {
 }
 
 #[test]
+fn only_due_work_makes_the_agreements_owe() {
+    let mut tx = StaTxBlockAck::new(POLICY).unwrap();
+    tx.associate(true);
+    assert!(!tx.may_owe(at(0)), "a new association owes nothing");
+    tx.traffic(2, at(0));
+    assert!(tx.may_owe(at(0)), "queued data negotiates at once");
+    assert_eq!(
+        tx.poll(at(0), true),
+        Some(TxBlockAckOwed::Negotiate { tid: 2 })
+    );
+    tx.begin(2, SequenceNumber::ZERO, at(0)).unwrap();
+    assert!(!tx.may_owe(at(99)), "the response is awaited");
+    assert!(tx.may_owe(at(100)), "the response deadline is due");
+    assert_eq!(tx.poll(at(100), true), None);
+    assert!(!tx.may_owe(at(109)), "the next attempt waits its interval");
+    assert!(tx.may_owe(at(110)));
+    assert_eq!(tx.deadline(true), Some(at(110)));
+    assert_eq!(
+        tx.poll(at(110), true),
+        Some(TxBlockAckOwed::Negotiate { tid: 2 })
+    );
+    let request = tx.begin(2, SequenceNumber::ZERO, at(110)).unwrap();
+    assert!(tx.on_action(response(request.dialog_token, 2, 0, 32), at(111)));
+    tx.traffic(2, at(111));
+    assert!(
+        !tx.may_owe(at(112)),
+        "a live agreement with fresh data owes nothing"
+    );
+    assert_eq!(tx.deadline(true), Some(at(5_111)));
+    assert!(tx.may_owe(at(5_111)), "its inactivity end is due");
+}
+
+#[test]
 fn a_refusal_closes_the_tid_without_a_delba() {
     let mut tx = StaTxBlockAck::new(POLICY).unwrap();
     tx.associate(true);

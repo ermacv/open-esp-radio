@@ -84,6 +84,10 @@ pub struct StaTxBlockAck {
     /// `None` while none is set. Every change that may set an earlier one
     /// moves it earlier.
     timing: Option<Instant>,
+    /// When the earliest queued negotiation is due, as the originator holds
+    /// it: taken again after every change of its queue, so a turn with
+    /// nothing due scans no agreement.
+    pending: Option<Instant>,
 }
 
 impl StaTxBlockAck {
@@ -141,6 +145,7 @@ impl StaTxBlockAck {
             request: [None; TX_BLOCK_ACK_MAX_TIDS],
             admitted: false,
             timing: None,
+            pending: None,
         })
     }
 
@@ -156,9 +161,11 @@ impl StaTxBlockAck {
         self.retime();
     }
 
-    /// Take the timing again after a change of the agreements.
+    /// Take the timing and the queued negotiations again after a change of
+    /// the agreements.
     fn retime(&mut self) {
         self.timing = self.next_timing();
+        self.pending = self.originator.next_pending_deadline();
     }
 
     /// The earliest response deadline or inactivity end.
@@ -240,12 +247,26 @@ impl StaTxBlockAck {
             self.timing = Some(self.timing.map_or(idle, |at| at.min(idle)));
         }
         // A live, queued or closed TID refuses; that is its normal state.
-        let _queued: bool = self.originator.queue(tid, self.retry);
+        if self.originator.queue(tid, self.retry) {
+            self.pending = self.originator.next_pending_deadline();
+        }
     }
 
     /// How long an aggregate's missing member is retried.
     pub(crate) const fn retry_members(&self) -> crate::data::AggregateRetry {
         self.retry_members
+    }
+
+    /// Whether [`Self::poll`] at `now` may change the agreements or owe the
+    /// access point a frame: their timing is due, a BlockAckReq or a DELBA
+    /// is owed, or a negotiation is due. `false` is the common turn's cheap
+    /// answer: nothing to scan.
+    pub(crate) fn may_owe(&self, now: Instant) -> bool {
+        let due = |at: Option<Instant>| at.is_some_and(|at| now >= at);
+        due(self.timing)
+            || due(self.pending)
+            || self.delba != 0
+            || self.request.iter().any(Option::is_some)
     }
 
     /// The operational agreement of `tid`.
@@ -277,7 +298,7 @@ impl StaTxBlockAck {
                     self.delba |= bit;
                 }
             }
-            self.timing = self.next_timing();
+            self.retime();
         }
         if !can_send {
             return None;
@@ -296,9 +317,12 @@ impl StaTxBlockAck {
             let tid = self.delba.trailing_zeros() as u8;
             return Some(TxBlockAckOwed::Delba { tid });
         }
-        self.originator
-            .take_pending(now)
-            .map(|tid| TxBlockAckOwed::Negotiate { tid })
+        if !self.pending.is_some_and(|at| now >= at) {
+            return None;
+        }
+        let tid = self.originator.take_pending(now);
+        self.pending = self.originator.next_pending_deadline();
+        tid.map(|tid| TxBlockAckOwed::Negotiate { tid })
     }
 
     /// The DELBA of `tid` went to the port.
@@ -381,7 +405,7 @@ impl StaTxBlockAck {
         } else if self.delba != 0 || self.request.iter().any(Option::is_some) {
             Some(Instant::EPOCH)
         } else {
-            self.originator.next_pending_deadline()
+            self.pending
         };
         [self.timing, due].into_iter().flatten().min()
     }

@@ -5851,19 +5851,26 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 held => (*self.lease) = held,
             }
         }
-        if let Some(owed) = self
-            .owe_sa_query(connected, now, events)
-            .or_else(|| self.owe_tx_block_ack(connected, now, events))
-            .or_else(|| self.owe_duplicate_message4(connected, pairwise_purpose, events))
-            .or_else(|| self.owe_rekey(connected, pairwise_purpose, events))
-        {
-            return match owed {
-                Ok(owed) => (Change::Keep, ActionProgress::Action(owed)),
-                Err(reason) => (
-                    leave_connected(connected, reason, Some(reason_code::UNSPECIFIED)),
-                    ActionProgress::Transition,
-                ),
-            };
+        // Each source in its own place, in order: an empty one moves no
+        // action through the next.
+        let owed = |connected: &mut Connected<T, K>, owed| match owed {
+            Ok(owed) => (Change::Keep, ActionProgress::Action(owed)),
+            Err(reason) => (
+                leave_connected(connected, reason, Some(reason_code::UNSPECIFIED)),
+                ActionProgress::Transition,
+            ),
+        };
+        if let Some(action) = self.owe_sa_query(connected, now, events) {
+            return owed(connected, action);
+        }
+        if let Some(action) = self.owe_tx_block_ack(connected, now, events) {
+            return owed(connected, action);
+        }
+        if let Some(action) = self.owe_duplicate_message4(connected, pairwise_purpose, events) {
+            return owed(connected, action);
+        }
+        if let Some(action) = self.owe_rekey(connected, pairwise_purpose, events) {
+            return owed(connected, action);
         }
         match self.owe_background(connected, now, events) {
             Ok(progress) => (Change::Keep, progress),
@@ -5913,11 +5920,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
+        let tx = tx_agreements(&mut self.config.tx_block_ack, connected)?;
+        if !tx.may_owe(now) {
+            return None;
+        }
         let can_send = !connected.sending
             && data_link_up(connected, self.absence.is_some(), &(*self.keys))
             && !self.tickets.is_empty()
             && !self.buffers.is_empty();
-        let tx = tx_agreements(&mut self.config.tx_block_ack, connected)?;
         enum Body {
             Delba(
                 u8,
