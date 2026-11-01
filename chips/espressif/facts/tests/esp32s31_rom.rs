@@ -1,13 +1,19 @@
 //! The ROM exports are exactly the foreign functions declared by our S31
 //! code: the HAL's two ROM printf slot installers. Generated PACs and vendor
-//! research facts are not ABI consumers.
+//! research facts are not ABI consumers, and a declaration of a symbol our
+//! own `global_asm!` defines (a probe's thunk) names no ROM function.
 
 use std::{collections::BTreeSet, path::Path};
 
 use syn::visit::Visit;
 
 #[derive(Default)]
-struct Declarations(BTreeSet<String>);
+struct Declarations {
+    /// The C foreign functions our code declares.
+    foreign: BTreeSet<String>,
+    /// The symbols our `global_asm!` blocks make global.
+    assembled: BTreeSet<String>,
+}
 
 impl<'ast> Visit<'ast> for Declarations {
     fn visit_item_foreign_mod(&mut self, block: &'ast syn::ItemForeignMod) {
@@ -36,9 +42,42 @@ impl<'ast> Visit<'ast> for Declarations {
                     Some(_) => panic!("link_name has a value"),
                     None => function.sig.ident.to_string(),
                 };
-                self.0.insert(name);
+                self.foreign.insert(name);
             }
         }
+    }
+
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "global_asm")
+        {
+            for token in mac.tokens.clone() {
+                let proc_macro2::TokenTree::Literal(literal) = token else {
+                    continue;
+                };
+                let syn::Lit::Str(text) = syn::Lit::new(literal) else {
+                    continue;
+                };
+                for line in text.value().lines() {
+                    let mut words = line.split_whitespace();
+                    if let (Some(".global" | ".globl"), Some(symbol)) = (words.next(), words.next())
+                    {
+                        self.assembled.insert(symbol.to_owned());
+                    }
+                }
+            }
+        }
+        syn::visit::visit_macro(self, mac);
+    }
+}
+
+impl Declarations {
+    /// The declared functions our own assembly does not define: the ROM's.
+    fn rom(&self) -> BTreeSet<String> {
+        self.foreign.difference(&self.assembled).cloned().collect()
     }
 }
 
@@ -79,7 +118,11 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
         .iter()
         .map(|function| function.name.clone())
         .collect();
-    assert_eq!(declarations.0, exports, "missing or unconsumed ROM facts");
+    assert_eq!(
+        declarations.rom(),
+        exports,
+        "missing or unconsumed ROM facts"
+    );
 }
 
 #[test]
@@ -129,7 +172,33 @@ fn declarations_use_link_names_and_ignore_definitions_and_linker_data() {
     let mut declarations = Declarations::default();
     declarations.visit_file(&source);
     assert_eq!(
-        declarations.0,
+        declarations.rom(),
         BTreeSet::from(["rom_entry".to_string(), "delay".to_string()])
+    );
+}
+
+#[test]
+fn a_declaration_of_a_symbol_our_assembly_defines_is_no_rom_function() {
+    let source = syn::parse_file(
+        r##"
+        core::arch::global_asm!(r#"
+        .global probe_thunk
+        probe_thunk:
+        ret
+        "#);
+        global_asm!(".globl other_thunk\nother_thunk:\nret");
+        unsafe extern "C" {
+            fn probe_thunk();
+            fn other_thunk();
+            fn rom_entry();
+        }
+    "##,
+    )
+    .expect("fixture");
+    let mut declarations = Declarations::default();
+    declarations.visit_file(&source);
+    assert_eq!(
+        declarations.rom(),
+        BTreeSet::from(["rom_entry".to_string()])
     );
 }

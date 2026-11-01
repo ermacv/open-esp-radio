@@ -2007,6 +2007,7 @@ dependencies = [
 name = "oer-espressif-facts"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
  "serde",
  "syn 2.0.119",
  "tempfile",
