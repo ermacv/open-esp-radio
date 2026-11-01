@@ -8,8 +8,8 @@
 //! (`oer-ieee80211-core-upper-mac::airtime`).
 
 use oer_memory::{
-    DmaIndexReturn, PinnedDmaTxRadioLease, ReturningStableDmaBacking, StableDmaBacking,
-    TaggedStableDmaBacking,
+    DmaIndexReturn, DmaReadPrepare, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
+    StableDmaBacking, TaggedStableDmaBacking,
 };
 use oer_network_port::NetworkInterfaceId;
 
@@ -129,11 +129,19 @@ pub trait MaterializedTxFrame: StableDmaBacking {
     }
 }
 
-impl<R: DmaIndexReturn, const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
-    MaterializedTxFrame
+impl<
+    R: DmaIndexReturn,
+    const FRAME_CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    P: DmaReadPrepare,
+> MaterializedTxFrame
     for TaggedStableDmaBacking<
         NetworkInterfaceId,
-        ReturningStableDmaBacking<PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>, R>,
+        ReturningStableDmaBacking<
+            PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>,
+            R,
+        >,
     >
 {
     const MAX_ETHERNET_LENGTH: usize = FRAME_CAPACITY;

@@ -215,16 +215,22 @@ impl PlacementProjection {
         PlacedRegion::new(start, len).ok_or(ProjectionError::AddressWidth)
     }
 
-    pub(crate) fn pool_regions<const F: usize, const H: usize, const T: usize, const N: usize>(
-        placed: crate::memory::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
+    pub(crate) fn pool_regions<
+        const F: usize,
+        const H: usize,
+        const T: usize,
+        const N: usize,
+        P: oer_memory::DmaReadPrepare,
+    >(
+        placed: crate::memory::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N, P>>,
     ) -> Result<
         (
-            &'static mut oer_memory::PinnedDmaTxPool<F, H, T, N>,
+            &'static mut oer_memory::PinnedDmaTxPool<F, H, T, N, P>,
             [PlacedRegion; N],
         ),
         (
             ProjectionError,
-            crate::memory::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N>>,
+            crate::memory::dma_static::Placed<oer_memory::PinnedDmaTxPool<F, H, T, N, P>>,
         ),
     > {
         const {
