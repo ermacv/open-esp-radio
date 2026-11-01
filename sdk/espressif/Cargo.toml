@@ -1,0 +1,38 @@
+[package]
+name = "oer-espressif"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The Espressif family's application entry: peripherals, drivers and services with their tasks, interrupts and defaults, for one chip selected by feature"
+
+[features]
+## The ESP32-S31 implementation. Exactly one chip feature is selected.
+esp32s31 = []
+
+[dependencies]
+oer-crypto = { path = "../../portable/crypto" }
+oer-memory = { path = "../../portable/memory" }
+
+# The chip implementation runs on the chip target only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-diagnostics = { path = "../../portable/diagnostics" }
+oer-embassy-time = { path = "../../portable/embassy/time" }
+oer-time = { path = "../../portable/time" }
+oer-esp32s31-board = { path = "../../chips/esp32s31/board" }
+oer-esp32s31-compose = { path = "../../chips/esp32s31/compose", features = ["wifi-fault"] }
+oer-esp32s31-hal = { path = "../../chips/esp32s31/hal" }
+oer-espressif-executor = { path = "../../chips/espressif/executor", features = ["port-slots"] }
+oer-espressif-interrupt-table = { path = "../../chips/espressif/interrupt-table" }
+oer-espressif-staged-runtime = { path = "../../chips/espressif/staged-runtime" }
+oer-ieee80211-core-roles-sta = { path = "../../protocols/ieee80211/core/roles/sta" }
+
+[dev-dependencies]
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+oer-crypto = { path = "../../portable/crypto", features = ["test-support"] }
+oer-memory = { path = "../../portable/memory", features = ["host-context"] }
+
+[lints]
+workspace = true

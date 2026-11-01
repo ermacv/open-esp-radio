@@ -1908,6 +1908,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-espressif"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "oer-crypto",
+ "oer-diagnostics",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-compose",
+ "oer-esp32s31-hal",
+ "oer-espressif-executor",
+ "oer-espressif-interrupt-table",
+ "oer-espressif-staged-runtime",
+ "oer-ieee80211-core-roles-sta",
+ "oer-memory",
+ "oer-time",
+]
+
+[[package]]
 name = "oer-espressif-analog"
 version = "0.1.0"
 

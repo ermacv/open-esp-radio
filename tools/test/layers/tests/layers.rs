@@ -900,6 +900,9 @@ enum Role {
     Composition,
     /// A product facade over a protocol runtime and its chip backend.
     Facade,
+    /// A family's application entry: for the chip its feature selects, it
+    /// places drivers, services, facades and their tasks for an image.
+    Sdk,
     /// An instrumentation event vocabulary: values, no owner.
     ObservationContract,
     /// The HIL framing, envelope and message skeleton.
@@ -967,6 +970,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/layout", Role::Platform),
     ("chips/esp32s31/compose", Role::Composition),
     ("chips/esp32s31/wifi", Role::Facade),
+    ("sdk/espressif", Role::Sdk),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
@@ -1114,6 +1118,7 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         }
         Role::Composition => assembled,
         Role::Facade => assembled || to == Role::Composition,
+        Role::Sdk => assembled || matches!(to, Role::Composition | Role::Facade),
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
         // A bridge stands only on the codecs it joins.
