@@ -1914,6 +1914,7 @@ dependencies = [
  "aes",
  "oer-crypto",
  "oer-diagnostics",
+ "oer-embassy-net",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-compose",
@@ -1923,6 +1924,7 @@ dependencies = [
  "oer-espressif-staged-runtime",
  "oer-ieee80211-core-roles-sta",
  "oer-memory",
+ "oer-network-port",
  "oer-time",
 ]
 

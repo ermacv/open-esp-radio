@@ -14,7 +14,9 @@ esp32s31 = []
 
 [dependencies]
 oer-crypto = { path = "../../portable/crypto" }
+oer-embassy-net = { path = "../../portable/embassy/net" }
 oer-memory = { path = "../../portable/memory" }
+oer-network-port = { path = "../../protocols/network/port" }
 
 # The chip implementation runs on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]

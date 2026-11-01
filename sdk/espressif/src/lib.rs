@@ -17,9 +17,11 @@
 //! defaults. The library places their interrupts, executors and service
 //! tasks and applies the record-and-reset policy on the image's behalf.
 //!
-//! - [`aes`]: the shared AES service, one engine owner and many clients.
+//! - [`aes`]: the shared AES service, one engine owner and many clients;
+//! - [`net`]: waiting on the IP service for an address or a link loss.
 
 pub mod aes;
+pub mod net;
 mod print;
 
 #[cfg(all(target_arch = "riscv32", not(feature = "esp32s31")))]
