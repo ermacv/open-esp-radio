@@ -2,7 +2,7 @@
 
 use super::*;
 use atomic_words::AtomicWords;
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
     extensions::wmm::{WmmAcParameters, WmmParameterSet},
@@ -42,7 +42,7 @@ impl Byte {
 /// Why a published setting cannot be stored or used.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingFault {
-    /// The channel is not a 2.4 GHz HT20 channel, the only kind S31 tunes.
+    /// The channel is not a 2.4 GHz channel, the only band S31 tunes.
     UnsupportedChannel,
     /// No channel was published yet, or its byte names none.
     ChannelUnset,
@@ -52,27 +52,42 @@ pub enum SettingFault {
     BlockAckSequence,
 }
 
-/// One 2.4 GHz HT20 channel number; zero until the first publication.
-pub(super) struct ChannelSetting(Byte);
+/// One 2.4 GHz channel, 20 or 40 MHz wide: its number and its width in
+/// one word, so P2 never reads one without the other; zero until the first
+/// publication.
+pub(super) struct ChannelSetting(AtomicU16);
 impl ChannelSetting {
     const fn new() -> Self {
-        Self(Byte::new())
+        Self(AtomicU16::new(0))
     }
-    /// Store a 2.4 GHz HT20 channel; any other is refused unchanged.
+    /// Store a 2.4 GHz channel; any other is refused unchanged.
     pub(super) fn set(&self, channel: Channel) -> Result<(), SettingFault> {
-        if channel.band() != Band::Ghz2_4 || channel.width() != ChannelWidth::Mhz20 {
+        if channel.band() != Band::Ghz2_4 {
             return Err(SettingFault::UnsupportedChannel);
         }
-        self.0.set(channel.number());
+        let width = match channel.width() {
+            ChannelWidth::Mhz20 => 0,
+            ChannelWidth::Mhz40Above => 1,
+            ChannelWidth::Mhz40Below => 2,
+        };
+        self.0.store(
+            u16::from_le_bytes([channel.number(), width]),
+            Ordering::SeqCst,
+        );
         Ok(())
     }
     /// The last stored channel.
     pub(super) fn get(&self) -> Result<Channel, SettingFault> {
-        match self.0.get() {
+        let [number, width] = self.0.load(Ordering::SeqCst).to_le_bytes();
+        let width = match width {
+            0 => ChannelWidth::Mhz20,
+            1 => ChannelWidth::Mhz40Above,
+            2 => ChannelWidth::Mhz40Below,
+            _ => return Err(SettingFault::ChannelUnset),
+        };
+        match number {
             0 => Err(SettingFault::ChannelUnset),
-            number => {
-                Channel::ghz2_4(number, ChannelWidth::Mhz20).map_err(|_| SettingFault::ChannelUnset)
-            }
+            number => Channel::ghz2_4(number, width).map_err(|_| SettingFault::ChannelUnset),
         }
     }
 }
@@ -329,9 +344,23 @@ mod tests {
         let six = Channel::ghz2_4(6, ChannelWidth::Mhz20).expect("channel 6");
         assert_eq!(setting.set(six), Ok(()));
         // A refused channel leaves the stored one unchanged.
-        let wide = Channel::ghz2_4(6, ChannelWidth::Mhz40Above).expect("HT40 channel 6");
-        assert_eq!(setting.set(wide), Err(SettingFault::UnsupportedChannel));
+        let five_ghz = Channel::ghz5(36, ChannelWidth::Mhz20).expect("channel 36");
+        assert_eq!(setting.set(five_ghz), Err(SettingFault::UnsupportedChannel));
         assert_eq!(setting.get(), Ok(six));
+    }
+
+    #[test]
+    fn the_channel_setting_keeps_a_40_mhz_channel_with_its_secondary() {
+        let setting = ChannelSetting::new();
+        for (number, width) in [
+            (13, ChannelWidth::Mhz40Below),
+            (6, ChannelWidth::Mhz40Above),
+            (1, ChannelWidth::Mhz20),
+        ] {
+            let channel = Channel::ghz2_4(number, width).expect("2.4 GHz channel");
+            assert_eq!(setting.set(channel), Ok(()));
+            assert_eq!(setting.get(), Ok(channel));
+        }
     }
 
     #[test]

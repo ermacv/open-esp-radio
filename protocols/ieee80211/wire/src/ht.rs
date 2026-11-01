@@ -261,11 +261,21 @@ oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
     pub struct HtCapabilityInfo[2] (little) {
         pub width40, with_width40: bool = 1..2;
+        pub sm_power_save, with_sm_power_save: (u8) = 2..4;
         pub greenfield, with_greenfield: bool = 4..5;
         pub short_gi20, with_short_gi20: bool = 5..6;
         pub short_gi40, with_short_gi40: bool = 6..7;
     }
 }
+impl HtCapabilityInfo {
+    /// The SM Power Save value of a station that keeps all its receive
+    /// chains on: SM power save disabled.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field,
+    /// SM Power Save subfield: 0 static, 1 dynamic, 3 disabled).
+    pub const SM_POWER_SAVE_DISABLED: oer_wire::U8<2> = oer_wire::U8::constant::<3>();
+}
+
 oer_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
     pub struct HtAmpduParameters[1] (little) {
@@ -274,6 +284,17 @@ oer_wire::bitfield! {
     }
 }
 impl HtAmpduParameters {
+    /// The Maximum A-MPDU Length Exponent of the longest A-MPDU, 65 535
+    /// octets.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
+    pub const EXPONENT_65535_OCTETS: oer_wire::U8<2> = oer_wire::U8::constant::<3>();
+    /// The Minimum MPDU Start Spacing code of 4 us.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing
+    /// subfield: 5 is 4 us).
+    pub const SPACING_4_US: oer_wire::U8<3> = oer_wire::U8::constant::<5>();
+
     /// The Maximum A-MPDU Length the exponent names: `2^(13 + exponent) - 1`
     /// octets.
     ///

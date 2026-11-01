@@ -519,6 +519,7 @@ impl<'id> World<'id> {
             ),
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             channels,
+            wide_channels: heapless::Vec::new(),
             dwell: Duration::from_millis(10),
             skipped_absences,
             access_point_margin_db: 6,
@@ -3437,6 +3438,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
             access_point,
             erp: observation.erp,
             channel: world.station.config.channels[0],
+            phy: world.station.config.phy,
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
                     oer_ieee80211_wire::address::OwnAddress::new(
@@ -5417,4 +5419,80 @@ fn eapol_under_a_closed_voice_category_contends_as_video_in_tid_five() {
         assert_eq!(world.station.tickets.len(), 2);
         assert_eq!(world.station.buffers.len(), 2);
     });
+}
+
+/// A 2.4 GHz backend that also tunes 40 MHz.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct WideCaps;
+
+impl Ieee80211Capabilities for WideCaps {
+    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    const CAPS: LowerMacCapabilities = LowerMacCapabilities {
+        widths: WidthSet::MHZ20.union(WidthSet::MHZ40),
+        ..Caps::CAPS
+    };
+}
+
+fn wide(number: u8, width: ChannelWidth) -> SupportedChannel<WideCaps> {
+    SupportedChannel::new(
+        oer_radio_regulatory::TEST_DOMAIN
+            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                Channel::ghz2_4(number, width).unwrap(),
+            ))
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+/// An access point on channel 13 with HT Capabilities and an HT Operation
+/// of `operation_width`, or a legacy one without either.
+fn ht_access_point(operation_width: Option<ChannelWidth>) -> ScanRecord {
+    use oer_ieee80211_wire::ht::{HtLocalCapabilities, ht_capability_ie, ht_operation_ie};
+    let mut record = ScanRecord::new(
+        oer_ieee80211_wire::address::Bssid::new(
+            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        )
+        .unwrap(),
+    );
+    if let Some(width) = operation_width {
+        let channel = Channel::ghz2_4(13, width).unwrap();
+        let local = HtLocalCapabilities::new(0, 0, 0xff, 1);
+        let wide = Channel::ghz2_4(13, ChannelWidth::Mhz40Below).unwrap();
+        record.set_ht_capability_ie(Some(ht_capability_ie(local, wide)));
+        record.set_ht_operation_ie(Some(ht_operation_ie(channel, Default::default())));
+    }
+    record
+}
+
+#[test]
+fn an_ht40_join_tunes_the_secondary_the_access_point_names() {
+    let scanned = wide(13, ChannelWidth::Mhz20);
+    let below = wide(13, ChannelWidth::Mhz40Below);
+    let offered = ht_access_point(Some(ChannelWidth::Mhz40Below));
+    assert_eq!(
+        join_phy(PhyMode::Ht40, &[below], &offered, scanned),
+        (below, PhyMode::Ht40)
+    );
+    // Without the permitted 40 MHz channel of that secondary, or with an
+    // access point at 20 MHz, the join stays on the scanned channel at HT20.
+    let above = wide(9, ChannelWidth::Mhz40Above);
+    assert_eq!(
+        join_phy(PhyMode::Ht40, &[above], &offered, scanned),
+        (scanned, PhyMode::Ht20)
+    );
+    let narrow = ht_access_point(Some(ChannelWidth::Mhz20));
+    assert_eq!(
+        join_phy(PhyMode::Ht40, &[below], &narrow, scanned),
+        (scanned, PhyMode::Ht20)
+    );
+    // An access point without HT is legacy.
+    assert_eq!(
+        join_phy(PhyMode::Ht40, &[below], &ht_access_point(None), scanned),
+        (scanned, PhyMode::Legacy)
+    );
+    // A station configured for another mode keeps it and its channel.
+    assert_eq!(
+        join_phy(PhyMode::Ht20, &[below], &offered, scanned),
+        (scanned, PhyMode::Ht20)
+    );
 }

@@ -21,7 +21,7 @@ use oer_ieee80211_core_upper_mac::{
     rate_selection::{FrameRates, RateSelection},
 };
 use oer_ieee80211_wire::{
-    ht::{HtLocalCapabilities, ht_capability_ie},
+    ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
 use oer_memory::{Placed, StaticPlace};
@@ -269,9 +269,47 @@ const HT20: [u8; 28] = ht_capability_ie(
         Err(_) => panic!("HT20 advertisement geometry"),
     },
 );
+// IEEE 802.11 HT40, one spatial stream, MCS 0..7 with both short guard
+// intervals; the encoder sets the width and guard-interval bits from the
+// 40 MHz geometry. SM power save is disabled and the station receives
+// A-MPDUs of up to 65 535 octets with MPDUs at least 4 us apart: an AP's
+// 32-MPDU aggregate of 1 500-octet MSDUs needs the 65 535-octet limit.
+//
+// SOURCE: the vendor station's HT Capabilities beside its HE elements,
+// `libnet80211.a[ieee80211_ht.o]::ieee80211_add_htcap_body`: SM power save
+// disabled (bits 2..3 = 0b11), A-MPDU Parameters 0x17 (exponent 3, spacing
+// code 5). Recovered in open-esp-radio-rs da26f64c3
+// `crates/roles/esp32s31/ieee80211/sta/src/profile.rs` (SOURCE
+// HIL_VENDOR_HE20_NDPA_CBF_2026_07_24, frame 7624), where a static SM power
+// save HT40 request was observed to be dropped by a Linux HT40 AP.
+const HT40: [u8; 28] = ht_capability_ie(
+    HtLocalCapabilities::new(
+        u16::from_le_bytes(
+            HtCapabilityInfo::from_bytes([0; 2])
+                .with_sm_power_save(HtCapabilityInfo::SM_POWER_SAVE_DISABLED)
+                .to_bytes(),
+        ),
+        {
+            let [parameters] = HtAmpduParameters::from_bytes([0])
+                .with_exponent(HtAmpduParameters::EXPONENT_65535_OCTETS)
+                .with_spacing(HtAmpduParameters::SPACING_4_US)
+                .to_bytes();
+            parameters
+        },
+        0xff,
+        1,
+    ),
+    match Channel::ghz2_4(
+        13,
+        oer_ieee80211_wire::channel::WifiChannelWidth::Mhz40Below,
+    ) {
+        Ok(channel) => channel,
+        Err(_) => panic!("HT40 advertisement geometry"),
+    },
+);
 pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
     ht20: HT20,
-    ht40: [0; 28],
+    ht40: HT40,
     he20_ht: [0; 28],
     he20: [0; 24],
     he20_extended: [0; 14],
