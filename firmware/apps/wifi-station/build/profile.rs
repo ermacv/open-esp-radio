@@ -11,6 +11,21 @@ const FIELDS: [&str; 7] = [
     "echo_port",
 ];
 
+/// Whether a build's profile and its `station` feature agree: a profile
+/// builds the station, which takes the SDK's Wi-Fi (`--features station`),
+/// and a build without one is the NotConfigured image, which links none.
+pub fn composition(profile: bool, station: bool) -> Result<(), &'static str> {
+    match (profile, station) {
+        (true, false) => {
+            Err("OER_WIFI_STATION_PROFILE builds the station: add `--features station`")
+        }
+        (false, true) => {
+            Err("the `station` feature builds a profile's station: set OER_WIFI_STATION_PROFILE")
+        }
+        _ => Ok(()),
+    }
+}
+
 /// The profile's Rust constant; each reason names a field, never its value.
 pub fn parse(text: &str) -> Result<String, String> {
     let table: toml::Table = text

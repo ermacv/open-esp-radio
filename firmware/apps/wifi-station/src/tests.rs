@@ -1,4 +1,4 @@
-use super::profile_rules::parse;
+use super::profile_rules::{composition, parse};
 
 const OPEN: &str = "ssid = \"lab\"\nsecurity = \"open\"\ncountry = \"DE\"\nchannel = 1\ncap_dbm = 10\necho_port = 7\n";
 
@@ -57,5 +57,21 @@ fn a_country_without_a_supported_domain_fails_the_build() {
     assert!(
         !reason.contains("US"),
         "the reason names the field, not its value"
+    );
+}
+
+#[test]
+fn a_profile_and_the_station_feature_come_together() {
+    assert_eq!(composition(true, true), Ok(()));
+    assert_eq!(composition(false, false), Ok(()));
+    assert!(
+        composition(true, false)
+            .unwrap_err()
+            .contains("--features station")
+    );
+    assert!(
+        composition(false, true)
+            .unwrap_err()
+            .contains("OER_WIFI_STATION_PROFILE")
     );
 }

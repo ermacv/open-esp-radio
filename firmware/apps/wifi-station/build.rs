@@ -1,6 +1,7 @@
 //! The runtime's layout, and the station profile `OER_WIFI_STATION_PROFILE`
 //! names: a TOML file kept outside git. Unset builds the NotConfigured image,
-//! which starts no RF. A profile that does not validate fails the build; no
+//! which starts no RF and links no Wi-Fi; a profile needs the `station`
+//! feature, and the feature a profile. A profile that does not validate fails the build; no
 //! field has a default and nothing falls back to Open. The SSID and the
 //! passphrase are written only to `$OUT_DIR/profile.rs`: never into a rustc
 //! environment variable, a cargo message or an error.
@@ -20,6 +21,8 @@ fn main() -> Result<(), Error> {
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
         oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-wifi-station")?;
     }
+    let station = env::var_os("CARGO_FEATURE_STATION").is_some();
+    profile::composition(env::var_os(PROFILE).is_some(), station)?;
     let generated = match env::var_os(PROFILE) {
         None => String::new(),
         Some(path) => {
