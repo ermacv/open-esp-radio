@@ -367,9 +367,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .saturating_add(msdus.count_ones()),
             );
         }
-        held.terminal(owned::OwnedTerminal::TxCompleted(
+        let place = pending.operation.ticket().index();
+        held.tx_completed(
+            place,
             owned::OwnedTxCompleted::Single(pending.operation.complete(outcome)),
-        ));
+        );
     }
     // The retained barrier is also the withdrawal marker; no owner or result
     // is moved out of its AC while an earlier owner can still complete.
@@ -1021,7 +1023,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         Poll::Ready(Ok(None)) => {
                             let terminal = self.group(held, device, at, command)?;
                             if let Err(cause) = device.finish_rx_cut() {
-                                handoff::retain_terminal(held.failed_terminal, terminal);
+                                handoff::retain_terminal(held.failed_terminal, terminal.into());
                                 return Err(cause);
                             }
                             held.terminal(terminal);
@@ -1338,7 +1340,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         device: &mut D,
         at: Instant,
         command: GroupCommand<'id, Id>,
-    ) -> Result<owned::OwnedTerminal<'id, Id, D, B, O>, Fault> {
+    ) -> Result<owned::OwnedTerminal<'id, Id, D, B>, Fault> {
         match command {
             GroupCommand::InstallStation {
                 spp,

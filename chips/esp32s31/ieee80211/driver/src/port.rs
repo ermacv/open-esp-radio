@@ -472,6 +472,17 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
     }
 }
 
+/// The bytes of one event-queue message, and of a received frame's own
+/// fields, which every received frame moves through that queue.
+#[cfg(test)]
+pub(crate) const fn event_sizes<Id: SlotIdentity, D: Device<B>, const B: usize>() -> (usize, usize)
+{
+    (
+        size_of::<owned::OwnedEvent<'static, Id, D, B>>(),
+        size_of::<ReceiveBuffer<'static, Id, D::Receive>>() + size_of::<Esp32s31RxMeta>(),
+    )
+}
+
 #[cfg(test)]
 std::thread_local! {
     /// The cause the test thread's port published first: a frontend that

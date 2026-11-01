@@ -192,9 +192,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     .saturating_add(msdus.count_ones()),
             );
         }
-        held.terminal(owned::OwnedTerminal::TxCompleted(
+        let place = pending.operation.ticket().index();
+        held.tx_completed(
+            place,
             owned::OwnedTxCompleted::Aggregate(pending.operation.complete(outcome)),
-        ));
+        );
     }
 
     /// End a queued aggregate whose oldest subframe aged: the subframes that

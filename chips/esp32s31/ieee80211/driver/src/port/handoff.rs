@@ -13,11 +13,55 @@ pub(super) enum ClockUse {
 }
 
 type Cmd<'id, Id, D, const B: usize, O: Observations> = driver::Command<'id, Id, D, B, O>;
-type Msg<'id, Id, D, const B: usize, O: Observations> = owned::OwnedEvent<'id, Id, D, B, O>;
+type Msg<'id, Id, D, const B: usize> = owned::OwnedEvent<'id, Id, D, B>;
 type FailedCommand<'id, Id, D, const B: usize, O: Observations> =
     oer_memory::OnceValue<Cmd<'id, Id, D, B, O>>;
 type FailedTerminal<'id, Id, D, const B: usize, O: Observations> =
-    oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B, O>>;
+    oer_memory::OnceValue<owned::Retained<'id, Id, D, B, O>>;
+
+/// The transmissions' terminals, each at its ticket's place from P2's
+/// completion until P1 takes it, so only the place travels through the
+/// event queue. A ticket names one operation at a time: a place holds at
+/// most one terminal.
+pub(super) type Completions<'id, Id, D, const B: usize, O> =
+    oer_memory::ReturnBank<Option<owned::OwnedTxCompleted<'id, Id, D, B, O>>, TX_TICKETS>;
+
+/// The place of one parked transmission terminal. Only P2 makes one, when
+/// it parks the terminal; P1 consumes it once.
+pub(super) struct ParkedCompletion {
+    place: u8,
+}
+
+/// Take the terminal parked at `parked`'s place, leaving the place empty;
+/// `None` when it holds none.
+pub(super) fn take_completion<
+    'id,
+    Id: SlotIdentity,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+>(
+    completions: &Completions<'id, Id, D, B, O>,
+    parked: ParkedCompletion,
+) -> Option<owned::OwnedTxCompleted<'id, Id, D, B, O>> {
+    let (held, token) = completions.take(usize::from(parked.place))?;
+    token.return_value(None);
+    held
+}
+
+/// Whether no place holds a terminal. A place never seeded holds none.
+fn completions_vacant<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>(
+    completions: &Completions<'_, Id, D, B, O>,
+) -> bool {
+    (0..TX_TICKETS).all(|place| match completions.take(place) {
+        Some((held, token)) => {
+            let vacant = held.is_none();
+            token.return_value(held);
+            vacant
+        }
+        None => true,
+    })
+}
 
 // Keep the ownership-preserving failure path shared by P1 and P2 callers.
 // It never extracts the retained owner through a shared reference.
@@ -30,7 +74,7 @@ pub(super) fn retain_terminal<
     O: Observations,
 >(
     cell: &FailedTerminal<'id, Id, D, B, O>,
-    terminal: owned::OwnedTerminal<'id, Id, D, B, O>,
+    terminal: owned::Retained<'id, Id, D, B, O>,
 ) {
     // The first failed terminal already poisoned the installation; a later
     // one stays quarantined with it.
@@ -84,7 +128,7 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
         oer_memory::CompactSpscCursor,
     >,
     pub(super) events: oer_memory::AffineSpscQueue<
-        owned::OwnedEvent<'id, Id, D, B, O>,
+        owned::OwnedEvent<'id, Id, D, B>,
         { TERMINAL_CAPACITY + RX_HELD },
         oer_memory::CompactSpscCursor,
     >,
@@ -95,7 +139,8 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
         oer_memory::CompactSpscCursor,
     >,
     pub(super) failed_command: oer_memory::OnceValue<driver::Command<'id, Id, D, B, O>>,
-    pub(super) failed_terminal: oer_memory::OnceValue<owned::OwnedTerminal<'id, Id, D, B, O>>,
+    pub(super) failed_terminal: FailedTerminal<'id, Id, D, B, O>,
+    pub(super) completions: Completions<'id, Id, D, B, O>,
     pub(super) frontend_identity: Cell<u64>,
     pub(super) clock_replies: oer_memory::AffineSpscQueue<ClockAnswer, 1, CompactSpscCursor>,
     pub(super) clock_use: Cell<ClockUse>,
@@ -112,6 +157,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             rx_out: Cell::new(0),
             failed_command: oer_memory::OnceValue::new(),
             failed_terminal: oer_memory::OnceValue::new(),
+            completions: oer_memory::ReturnBank::new(),
             frontend_identity: Cell::new(1),
             clock_replies: oer_memory::AffineSpscQueue::new(),
             clock_use: Cell::new(ClockUse::Idle),
@@ -124,6 +170,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             && self.recycled.split().0.is_empty()
             && !self.failed_command.is_requested()
             && !self.failed_terminal.is_requested()
+            && completions_vacant(&self.completions)
     }
     /// The one caller checked `drained` before taking any resource.
     pub(super) fn prepare(
@@ -145,6 +192,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         });
         self.clock_use.set(ClockUse::Idle);
         self.rx_out.set(0);
+        // `drained` saw every place empty. A place this backing never used
+        // takes its first, empty value; one it used holds none already.
+        for place in 0..TX_TICKETS {
+            let used = self.completions.take(place).map(|(held, token)| {
+                let vacant = held.is_none();
+                token.return_value(held);
+                vacant
+            });
+            let ready = match used {
+                Some(vacant) => vacant,
+                None => self.completions.seed(place, None).is_ok(),
+            };
+            if !ready {
+                storage.poison(Fault::Capacity);
+            }
+        }
         storage.shared.network.reset();
         storage.shared.received.reset();
         let settings = &storage.shared.settings;
@@ -177,11 +240,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 pub(super) struct Held<'s, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) storage: &'static PortStorage<D, B>,
     pub(super) commands: Incoming<'s, Cmd<'id, Id, D, B, O>, COMMANDS>,
-    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B, O>, { TERMINAL_CAPACITY + RX_HELD }>,
+    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B>, { TERMINAL_CAPACITY + RX_HELD }>,
     pub(super) recycled: Incoming<'s, ReceiveBuffer<'id, Id, D::Receive>, RX_HELD>,
     pub(super) rx_out: &'s Cell<usize>,
     pub(super) gate: &'s GateIssuer<'id, Part<Id, 1>>,
     pub(super) failed_terminal: &'s FailedTerminal<'id, Id, D, B, O>,
+    pub(super) completions: &'s Completions<'id, Id, D, B, O>,
     pub(super) clock_replies: Outgoing<'s, ClockAnswer, 1>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> core::ops::Deref
@@ -203,17 +267,61 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         serial
     }
-    pub(super) fn terminal(&self, terminal: owned::OwnedTerminal<'id, Id, D, B, O>) {
+    pub(super) fn terminal(&self, terminal: owned::OwnedTerminal<'id, Id, D, B>) {
         if let Err(owned::OwnedEvent::Terminal(terminal)) =
             self.events.push(owned::OwnedEvent::Terminal(terminal))
         {
-            retain_terminal(self.failed_terminal, terminal);
+            retain_terminal(self.failed_terminal, terminal.into());
             self.storage.poison(Fault::Capacity);
         } else {
             #[cfg(all(oer_trace, oer_debug_control))]
             oer_espressif_staged_runtime::trace::emit(&trace::TerminalPosted);
         }
         self.storage.shared.wake_body();
+    }
+    /// Post a transmission's terminal: it waits at its ticket's `place` and
+    /// only the place enters the event queue. A place that holds a terminal
+    /// already, or a full queue, poisons the installation; the terminal
+    /// stays quarantined.
+    pub(super) fn tx_completed(
+        &self,
+        place: u8,
+        completed: owned::OwnedTxCompleted<'id, Id, D, B, O>,
+    ) {
+        let refused = match self.completions.take(usize::from(place)) {
+            Some((None, token)) => {
+                token.return_value(Some(completed));
+                None
+            }
+            Some((held, token)) => {
+                token.return_value(held);
+                Some(completed)
+            }
+            None => Some(completed),
+        };
+        let posted = match refused {
+            Some(completed) => {
+                retain_terminal(self.failed_terminal, completed.into());
+                false
+            }
+            // A full queue leaves the terminal at its place, which
+            // retirement checks.
+            None => self
+                .events
+                .push(owned::OwnedEvent::TxCompleted(ParkedCompletion { place }))
+                .is_ok(),
+        };
+        if posted {
+            #[cfg(all(oer_trace, oer_debug_control))]
+            oer_espressif_staged_runtime::trace::emit(&trace::TerminalPosted);
+        } else {
+            self.storage.poison(Fault::Capacity);
+        }
+        self.storage.shared.wake_body();
+    }
+    /// Whether no transmission terminal waits at its place.
+    pub(super) fn completions_vacant(&self) -> bool {
+        completions_vacant(self.completions)
     }
 }
 
@@ -223,7 +331,7 @@ pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, 
         LocalSpscSender<'p, Cmd<'static, Id, D, B, O>, COMMANDS, CompactSpscCursor>,
     pub(super) events: LocalSpscReceiver<
         'p,
-        Msg<'static, Id, D, B, O>,
+        Msg<'static, Id, D, B>,
         { TERMINAL_CAPACITY + RX_HELD },
         CompactSpscCursor,
     >,
@@ -231,6 +339,7 @@ pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, 
         LocalSpscSender<'p, ReceiveBuffer<'static, Id, D::Receive>, RX_HELD, CompactSpscCursor>,
     pub(super) failed_command: &'p FailedCommand<'static, Id, D, B, O>,
     pub(super) failed_terminal: &'p FailedTerminal<'static, Id, D, B, O>,
+    pub(super) completions: &'p Completions<'static, Id, D, B, O>,
     pub(super) gate: &'p GateIssuer<'static, Part<Id, 1>>,
     pub(super) tuned: &'p Cell<Channel>,
     pub(super) identity: &'p Cell<u64>,
