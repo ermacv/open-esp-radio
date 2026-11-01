@@ -27,7 +27,8 @@
 //! Each declared task exports its poll boundary ([`PollBoundary`]) as
 //! `__OER_TASK_POLL.<module path>` for the image checks, which find every
 //! task poll as a direct call of a recorded boundary and fail on an image
-//! whose executor polls without one.
+//! whose executor polls without one. [`Spawner::start`] takes the record,
+//! typed by the task's start, so a start keeps its own task's record.
 #![allow(
     unsafe_code,
     reason = "task slots hold their futures in static storage polled in place, and the \
@@ -213,13 +214,29 @@ impl<T: Tasks> Spawner<T> {
     /// another context than its polls, so `start`, which crosses to them, is
     /// `Send` ([`Admits`]); the future never leaves the executor's context.
     ///
+    /// `record` is the task's exported poll record (its declaration's
+    /// `POLL_BOUNDARY`, an instance of [`Task::BOUNDARY`]): every start keeps
+    /// it, so the image checks find every task the image can start and
+    /// therefore poll. The record is typed by the task's start `M`, which
+    /// selects the task's poll instance: another task's record names
+    /// another instance and does not compile here, and a task that shares
+    /// `M` shares the instance the record names. A declared task's start is
+    /// its own opaque type, so only its own record fits.
+    ///
     /// # Errors
     /// The task has started already.
-    pub fn start<M>(&self, task: &'static Task<M, T>, start: M) -> Result<(), AlreadyStarted>
+    pub fn start<M>(
+        &self,
+        task: &'static Task<M, T>,
+        record: &'static PollBoundary<M>,
+        start: M,
+    ) -> Result<(), AlreadyStarted>
     where
         M: MakeFuture,
         T::Mode: Admits<M>,
     {
+        // The reference keeps the record in every image that links a start.
+        core::hint::black_box(record);
         task.claim()?.publish(start);
         wake::<T::Binding>(TaskId {
             executor: const {
@@ -289,7 +306,7 @@ impl<M: MakeFuture, T: Tasks> Task<M, T> {
 
     /// The task's poll boundary, which its declaration exports for the
     /// image checks.
-    pub const BOUNDARY: PollBoundary = PollBoundary(poll_task::<M>);
+    pub const BOUNDARY: PollBoundary<M> = PollBoundary(poll_task::<M>, PhantomData);
 
     /// Take the empty slot for one start.
     fn claim(&'static self) -> Result<Claim<M, T>, AlreadyStarted> {
@@ -353,17 +370,23 @@ impl<M: MakeFuture, T> Claim<M, T> {
 /// A task's poll boundary: the instance of the executor's one poll of a
 /// task's future, [`poll_task`], for that task's future type.
 ///
-/// Each task declared by [`tasks!`](crate::tasks) exports its boundary,
-/// `#[used]`, as `__OER_TASK_POLL.<module path of the task's slot>`. The
-/// image checks read these records, not a function name: every direct call
-/// of a recorded boundary is a task poll and the boundary is the task's
-/// root; a recorded boundary without a direct call (inlined or never
-/// polled), or an image with the executor's waker and no record, fails the
-/// analysis.
-#[derive(Clone, Copy)]
-pub struct PollBoundary(
+/// Each task declared by [`tasks!`](crate::tasks) exports its boundary as
+/// `__OER_TASK_POLL.<module path of the task's slot>`. [`Spawner::start`]
+/// takes the record with the task and keeps it: an image holds the record
+/// exactly when it can start the task, and a task is polled only once
+/// started, so a task it never starts leaves no record. The image checks read these records, not a function name: every
+/// direct call of a recorded boundary is a task poll and the boundary is the
+/// task's root; a recorded boundary without a direct call (an inlined poll),
+/// or an image with the executor's waker and no record, fails the analysis.
+///
+/// The record is typed by the task's start `M`, whose instance of
+/// [`poll_task`] it names, so [`Spawner::start`] accepts only the record of
+/// the task it starts. The marker holds no `M`: the record is `Sync` for
+/// every start.
+pub struct PollBoundary<M>(
     #[allow(dead_code, reason = "the image checks read the record from the image")]
     unsafe fn(*mut (), bool, &mut Context<'_>) -> bool,
+    PhantomData<fn() -> M>,
 );
 
 /// The boundary between an executor and its tasks: one poll of a task's
@@ -728,7 +751,7 @@ macro_rules! tasks {
                     fn start($($argument: $type),*) -> $name::Start {
                         $crate::task::once(move || $body($($argument),*))
                     }
-                    spawner.start(&$name::TASK, start($($argument),*))
+                    spawner.start(&$name::TASK, &$name::POLL_BOUNDARY, start($($argument),*))
                 }
             )*
         }
@@ -749,11 +772,12 @@ macro_rules! tasks {
             pub(super) const TASK_INDEX: u8 = $index;
             pub(super) static TASK: $crate::task::Task<Start, super::$set> =
                 $crate::task::Task::new(TASK_INDEX);
-            /// The task's poll boundary, for the image checks. `#[used]`
-            /// keeps the record and the exported name lets the tools find it.
-            #[used]
+            /// The task's poll boundary, for the image checks. Its start
+            /// passes it to [`Spawner::start`], which keeps it in an image
+            /// that can start the task, and the exported name lets the tools
+            /// find it.
             #[unsafe(export_name = concat!("__OER_TASK_POLL.", module_path!()))]
-            static POLL_BOUNDARY: $crate::task::PollBoundary =
+            pub(super) static POLL_BOUNDARY: $crate::task::PollBoundary<Start> =
                 $crate::task::Task::<Start, super::$set>::BOUNDARY;
         }
         $crate::tasks!(@slots $set [$index + 1] $($rest)*);

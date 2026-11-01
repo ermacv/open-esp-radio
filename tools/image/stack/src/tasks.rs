@@ -1,6 +1,6 @@
 //! Executor task polls. Each task the executor (`oer-espressif-executor`)
-//! declares exports its poll boundary: a `#[used]` record named
-//! `__OER_TASK_POLL.<module path>` whose one word, relocated, is the address
+//! declares exports its poll boundary, when the image can start it: a record
+//! named `__OER_TASK_POLL.<module path>` whose one word, relocated, is the address
 //! of the task's instance of `task::poll_task`, the never-inlined function
 //! through which the executor polls the task (`task::PollBoundary`).
 //!
