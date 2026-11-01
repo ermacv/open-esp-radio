@@ -1,5 +1,5 @@
-//! The HIL AES scenario: the RPC image unwraps RFC 3394 key data with the
-//! product hardware engine; the host checks every answer against the RFC's
+//! The HIL AES scenario: the SDK RPC image unwraps RFC 3394 key data with
+//! the product hardware engine behind the library's AES service; the host checks every answer against the RFC's
 //! known answer and against its own reference wrap, which shares no code
 //! with the image's.
 #![forbid(unsafe_code)]
@@ -12,7 +12,11 @@ use oer_services_aes::{MAX_WRAPPED, UnwrapError, UnwrapKey, Unwrapped};
 
 mod reference;
 
-const SCENARIO: Scenario = Scenario::new("aes", "esp32s31-rpc", &[oer_services_aes::Request::KEYS]);
+const SCENARIO: Scenario = Scenario::new(
+    "aes",
+    "esp32s31-sdk-rpc",
+    &[oer_services_aes::Request::KEYS],
+);
 
 const CASES: [Case; 4] = [
     Case {

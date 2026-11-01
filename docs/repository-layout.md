@@ -42,7 +42,7 @@ portable/embassy/{net, time}/
 sdk/espressif/
 hil-scenarios/{aes, sdk-station, wifi-load, wifi-station}/
 hil-scenarios/hil-agent/espressif/
-hil-scenarios/images/{esp32s31-rpc, esp32s31-sdk-station}/
+hil-scenarios/images/{esp32s31-sdk-rpc, esp32s31-sdk-station}/
 hil-scenarios/services/{aes, fault, load, sdk-station, wifi-station}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
@@ -143,13 +143,12 @@ network contract on the codec.
   `protocols/radio/coex`; `chips/esp32s31/ieee80211/driver` depends on
   `chips/espressif/staged-runtime` for its trace recorder;
   `chips/esp32s31/ieee802154/driver` depends on `portable/mmio` for
-  `Placement`; the HIL RPC image depends directly on the HAL instead of a
-  facade.
+  `Placement`.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `bluetooth`, `boot`, `ieee80211` and `phy`, and
   `peripherals/entropy.rs`.
-- Direct normal dependencies on `embassy-sync` remain in
-  `protocols/hil/agent` and `hil-scenarios/images/esp32s31-rpc`.
+- A direct normal dependency on `embassy-sync` remains in
+  `protocols/hil/agent`.
 
 The layer tests enforce the normal and build dependency exceptions, the
 source-file inclusions and the HAL files in their own deviation lists. The

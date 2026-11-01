@@ -387,42 +387,13 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/compose/src/console.rs:crate::console::impl Binding::open:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/compose", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 "chips/esp32s31/compose/src/platform.rs:crate::platform::reset_request:terminal-reference:reset_request:1" = { owner = "chips/esp32s31/compose", classes = ["software-invariant", "cancellation"] }
 
-# hil-scenarios/images/esp32s31-rpc/src/entry.rs
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::fail:terminal-reference:fatal_halt:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::fail:terminal-reference:software_reset:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["rust-panic"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"hil-scenarios/images/esp32s31-rpc/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-
-# hil-scenarios/images/esp32s31-rpc/src/fatal.rs
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::FAILURE:retained-reason:FAILURE:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Console:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptControlBits:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptCount:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptHart:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptLevelBits:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptStack:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptStackGuard:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptTable:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::InterruptVectors:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::Layout:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::RootInitialization:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::RootTaken:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal::Failure:retained-reason:Failure::TaskAllocation:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot"] }
-"hil-scenarios/images/esp32s31-rpc/src/fatal.rs:crate::fatal:retained-slot:retained_static:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
-
-# hil-scenarios/images/esp32s31-rpc/src/transport.rs
-"hil-scenarios/images/esp32s31-rpc/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["software-invariant"] }
-"hil-scenarios/images/esp32s31-rpc/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "hil-scenarios/images/esp32s31-rpc", classes = ["software-invariant"] }
-
 # firmware/apps/wifi-station/src/entry.rs
 "firmware/apps/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/wifi-station", classes = ["rust-panic", "cpu-exception"] }
 # firmware/apps/wifi-station/src/not_configured.rs
 "firmware/apps/wifi-station/src/not_configured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/wifi-station", classes = ["rust-panic", "cpu-exception"] }
+# hil-scenarios/images/esp32s31-sdk-rpc/src/entry.rs
+"hil-scenarios/images/esp32s31-sdk-rpc/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil-scenarios/images/esp32s31-sdk-rpc", classes = ["rust-panic", "cpu-exception"] }
+
 # hil-scenarios/images/esp32s31-sdk-station/src/entry.rs
 "hil-scenarios/images/esp32s31-sdk-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil-scenarios/images/esp32s31-sdk-station", classes = ["rust-panic", "cpu-exception"] }
 # sdk/espressif/src/esp32s31.rs

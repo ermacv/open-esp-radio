@@ -165,7 +165,7 @@ fn the_boundary_is_named_by_package_or_domain() {
         "tools/os/durable",
         "tools/hil/link",
         "firmware/apps/boot-smoke",
-        "hil-scenarios/images/esp32s31-rpc",
+        "hil-scenarios/images/esp32s31-sdk-rpc",
         "tools/lab/fixture-install",
     ] {
         assert!(!below_the_boundary(package), "{package}");
@@ -978,7 +978,7 @@ const ROLES: &[(&str, Role)] = &[
     ("protocols/hil/agent", Role::HilAgent),
     ("hil-scenarios/hil-agent/espressif", Role::HilSdkAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
-    ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
+    ("hil-scenarios/images/esp32s31-sdk-rpc", Role::HilImage),
     ("hil-scenarios/images/esp32s31-sdk-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
     ("hil-scenarios/services/fault", Role::HilBinding),
@@ -1352,7 +1352,10 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         // A new chip package has no role until it is listed, whatever its
         // directory says.
         ("chips/esp32s31/new/driver", None),
-        ("hil-scenarios/images/esp32s31-rpc", Some(Role::HilImage)),
+        (
+            "hil-scenarios/images/esp32s31-sdk-rpc",
+            Some(Role::HilImage),
+        ),
         ("hil-scenarios/new", None),
         ("firmware/apps/boot-smoke", Some(Role::Image)),
         ("tools/hil/cli", Some(Role::Tool)),
@@ -2216,7 +2219,6 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         "embassy-sync" => false,
         "embassy-time" => {
             path == "portable/embassy/time"
-                || path == "hil-scenarios/images/esp32s31-rpc"
                 // The application entry re-exports the executors' clock.
                 || path == "sdk/espressif"
         }
@@ -2254,18 +2256,11 @@ fn external_crate_violations(members: &[Member]) -> Result<BTreeSet<Edge>, Strin
 }
 
 /// Remaining direct embassy-sync edges and the change that removes them.
-const EXTERNAL_ASYNC_CRATES: &[Deviation] = &[
-    (
-        "protocols/hil/agent",
-        "embassy-sync",
-        "console on owned queues and waiter slots (#848)",
-    ),
-    (
-        "hil-scenarios/images/esp32s31-rpc",
-        "embassy-sync",
-        "HIL image on SPSC and OnceValue (#848)",
-    ),
-];
+const EXTERNAL_ASYNC_CRATES: &[Deviation] = &[(
+    "protocols/hil/agent",
+    "embassy-sync",
+    "console on owned queues and waiter slots (#848)",
+)];
 
 #[test]
 fn external_embassy_crates_follow_the_role_table() {
@@ -2567,10 +2562,7 @@ serde = "1"
 #[test]
 fn external_crate_homes_and_futures_exclusions_are_explicit() {
     for (dependency, allowed) in [
-        (
-            "embassy-time",
-            vec!["portable/embassy/time", "hil-scenarios/images/esp32s31-rpc"],
-        ),
+        ("embassy-time", vec!["portable/embassy/time"]),
         ("embassy-time-driver", vec!["chips/espressif/executor"]),
         (
             "embassy-net",
@@ -3058,21 +3050,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "chips/espressif/analog",
         "analog-I2C model types out of the family driver (#848)",
     ),
-    (
-        "hil-scenarios/images/esp32s31-rpc",
-        "chips/esp32s31/hal",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "hil-scenarios/images/esp32s31-rpc",
-        "chips/espressif/usb-serial-jtag",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "hil-scenarios/images/esp32s31-rpc",
-        "portable/riscv",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
 ];
 
 #[test]
@@ -3266,7 +3243,11 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
                 (Role::Platform, "chips/espressif/executor", true),
                 (Role::Pac, "chips/esp32s31/pac", false),
                 (Role::HilAgent, "protocols/hil/agent", false),
-                (Role::HilImage, "hil-scenarios/images/esp32s31-rpc", false),
+                (
+                    Role::HilImage,
+                    "hil-scenarios/images/esp32s31-sdk-rpc",
+                    false,
+                ),
                 (Role::Image, "firmware/apps/radio-root", false),
             ],
         );
@@ -3484,7 +3465,7 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
             &["oer-espressif", "oer-esp32s31-compose"],
         ),
         member(
-            "hil-scenarios/images/esp32s31-rpc",
+            "hil-scenarios/images/esp32s31-sdk-rpc",
             "hand-built",
             true,
             &["oer-esp32s31-compose"],
@@ -3543,7 +3524,7 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
             &["oer-ieee80211-runtime", "oer-esp32s31-ieee80211-driver"],
         ),
         member(
-            "hil-scenarios/images/esp32s31-rpc",
+            "hil-scenarios/images/esp32s31-sdk-rpc",
             "oer-firmware-hil-esp32s31",
             true,
             &["oer-esp32s31-wifi", "oer-esp32s31-hal"],
@@ -3566,7 +3547,10 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
                 "chips/esp32s31/ieee80211/driver",
                 "protocols/ieee80211/runtime"
             ),
-            edge("hil-scenarios/images/esp32s31-rpc", "chips/esp32s31/hal"),
+            edge(
+                "hil-scenarios/images/esp32s31-sdk-rpc",
+                "chips/esp32s31/hal"
+            ),
         ])
     );
 }

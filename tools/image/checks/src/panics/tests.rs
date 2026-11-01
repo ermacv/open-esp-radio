@@ -422,8 +422,8 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             Path::new("firmware/apps/boot-smoke"),
         ),
         (
-            "oer-hil-scenarios-images-esp32s31-rpc",
-            Path::new("hil-scenarios/images/esp32s31-rpc"),
+            "oer-hil-scenarios-images-esp32s31-sdk-rpc",
+            Path::new("hil-scenarios/images/esp32s31-sdk-rpc"),
         ),
         ("oer-services-aes", Path::new("hil-scenarios/services/aes")),
         ("oer-image-checks", Path::new("tools/image/checks")),
@@ -447,7 +447,7 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ),
         ("oer_firmware_apps_boot_smoke::main", Layer::Firmware),
         (
-            "oer_hil_scenarios_images_esp32s31_rpc::main",
+            "oer_hil_scenarios_images_esp32s31_sdk_rpc::main",
             Layer::Firmware,
         ),
         ("oer_services_aes::Engine::unwrap_key", Layer::Protocols),

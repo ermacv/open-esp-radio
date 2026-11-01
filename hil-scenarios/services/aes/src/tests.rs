@@ -48,6 +48,20 @@ fn unwrap(handler: &mut Engine<BlockKeyUnwrap<Software>>, wrapped: &str) -> Unwr
 }
 
 #[test]
+fn an_engine_of_a_larger_capacity_unwraps_the_same_request() {
+    let mut handler: Engine<BlockKeyUnwrap<Software>, 512> =
+        Engine::new(BlockKeyUnwrap::new(Software));
+    let answer = embassy_futures::block_on(handler.unwrap_key(UnwrapKey {
+        kek: KEK,
+        wrapped: hex("1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5"),
+    }));
+    assert_eq!(
+        answer,
+        Unwrapped::Plaintext(hex("00112233445566778899aabbccddeeff"))
+    );
+}
+
+#[test]
 fn the_handler_unwraps_rfc3394_4_1_and_keeps_its_engine_for_the_next_request() {
     let mut handler = engine();
     for _ in 0..2 {
