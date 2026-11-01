@@ -639,6 +639,47 @@ mod seam {
         let _ = (HtMcs::new(0), HtRate::new);
     }
 
+    /// An HT40 peer, with or without the 40 MHz short guard interval.
+    fn ht40_peer(short_gi40: bool) -> RatePeer {
+        let mut element = [0_u8; 28];
+        // Supported Channel Width Set, SM power save disabled and the 20 MHz
+        // short guard interval; the 40 MHz one on request.
+        let info = if short_gi40 { 0x6e } else { 0x2e };
+        element[..6].copy_from_slice(&[45, 26, info, 0, 0x17, 0xff]);
+        RatePeer {
+            phy: PhyMode::Ht40,
+            ht_capabilities: ht_peer_capabilities(&element),
+            ..ht20_peer(true)
+        }
+    }
+
+    #[test]
+    fn an_ht40_association_reaches_mcs7_at_40_mhz_with_the_short_guard_interval_both_support() {
+        let fastest = |peer: &RatePeer| {
+            let decode = EspressifRateControl::for_peer((), peer, metric(60)).decode;
+            (0..14)
+                .filter_map(|index| {
+                    crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index)
+                })
+                .filter_map(|schedule| match decode.rate(schedule) {
+                    PhyRate::Ht(rate) => Some(rate),
+                    _ => None,
+                })
+                .inspect(|rate| assert_eq!(rate.bandwidth(), PpduBandwidth::Mhz40))
+                .max_by_key(|rate| PhyRate::Ht(*rate).nominal_kbps())
+                .expect("an HT schedule rate")
+        };
+        let short = fastest(&ht40_peer(true));
+        assert_eq!(short.mcs(), HtMcs::SINGLE_STREAM_MAX);
+        assert!(short.short_gi());
+        assert_eq!(PhyRate::Ht(short).nominal_kbps(), 150_000);
+        // A peer without the 40 MHz short guard interval gets the long one.
+        let long = fastest(&ht40_peer(false));
+        assert_eq!(long.mcs(), HtMcs::SINGLE_STREAM_MAX);
+        assert!(!long.short_gi());
+        assert_eq!(PhyRate::Ht(long).nominal_kbps(), 135_000);
+    }
+
     #[test]
     fn retry_pressure_lowers_the_rate() {
         let mut control = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60));
