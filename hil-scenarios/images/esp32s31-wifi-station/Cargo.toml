@@ -62,6 +62,9 @@ bootstrap = { unnamed = 0 }
 critical-section-hart = "boot"
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
+# The functions its RX profile samples most per byte, which the image linker
+# moves into SRAM (`cargo fw hot-code` writes the list).
+hot-code = "hot-code.toml"
 # The harts this image runs: hart 1 starts during boot and runs the
 # station's network end, its IP stack and the load server on its own
 # interrupt-mode executor with its own timer.

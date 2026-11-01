@@ -149,10 +149,13 @@ without another link or fallback to the maximum. Without the specification the l
 fails with the bin name and instructions to use `cargo fw build`,
 `cargo fw probe` or `cargo hil`. Links using another script ignore a supplied
 specification and produce no analysis fragment or placement record.
-`strict-text.x` is included inside `.isr.text`; an empty fragment preserves the
-first image. A cached runtime link is reused only when the SHA-256 fingerprint
+`strict-text.x` is included inside `.isr.text` and `hot-text.x`, the
+functions of the image's hot-code list (`hot-code = "<file>"` under its
+`[package.metadata.open-radio]`, a path beside its manifest), inside
+`.hot.text`; empty fragments preserve the first image. A cached runtime link is reused only when the SHA-256 fingerprint
 in `strict-placement.toml` matches the final ELF, image linker, specification
-and analysis inputs, and its fragment matches the placement record. Only a
+and analysis inputs (the hot-code list among them), and both fragments match
+the placement record. Only a
 mismatch invalidates the runtime package through Cargo and rebuilds it once;
 dependencies remain cached. A second mismatch fails the build. The bootstrap
 has no such invalidation or interrupt analysis; its cache-off placement audit

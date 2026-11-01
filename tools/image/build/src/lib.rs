@@ -26,6 +26,7 @@ pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
 mod harts;
+pub mod hot_code;
 pub mod images;
 pub mod instrumentation;
 mod large_values;

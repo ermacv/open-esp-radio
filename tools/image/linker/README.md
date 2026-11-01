@@ -80,8 +80,26 @@ proven frameless root links exactly its reserve. Images without the key keep
 `allocation_bytes`, else the chip stack policy's `default_task_stack_bytes`
 entry for that hart, else a declared template's `launch_bytes`.
 
+## Hot code
+
+An image may declare a hot-code list (`[package.metadata.open-radio]
+hot-code = "<file>"`, beside its manifest): demangled function names
+without crate hashes, densest first, and a byte budget. After the strict
+selection the linker moves each listed function's whole input section into
+`.hot.text`, which executes from SRAM, through the generated `hot-text.x`.
+It takes the entries in order while their sections fit the budget and the
+SRAM the strict selection leaves, less 512 bytes for the 64-byte alignment
+of the SRAM output sections that follow. An entry the link does not define,
+one already in SRAM, one the strict selection moves, one without a single
+defining input section and one that does not fit stay where they are; the
+placement record and `strict-placement.toml` list them with their reason.
+The list never fails a link and changes no strict selection, stack sizing or
+other placement. `cargo fw hot-code` writes the list from a PC profile
+(`tools/image/cli`).
+
 `strict-placement.toml` retains first-pass bounds, selected sizes and their
-sources, together with the final ELF/input fingerprint. `interrupt-stack.txt`
+sources, the hot-code selection, together with the final ELF/input
+fingerprint. `interrupt-stack.txt`
 reports final bounds, margins, guards, allocations and size sources per hart.
 The checks read actual storage from the ELF; `irq-stack-bytes` and placement
 `maximum-bytes` are ceilings. The chip contract's percentage supplies the IRQ margin. HIL compares observed

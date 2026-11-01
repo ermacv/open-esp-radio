@@ -39,6 +39,9 @@ pub struct Spec {
     /// templates (`StackPolicy::for_image`).
     #[serde(default)]
     pub harts: Vec<u32>,
+    /// The image's hot-code list ([`super::hot`]), when it declares one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hot_code: Option<PathBuf>,
 }
 
 impl Spec {
@@ -66,7 +69,7 @@ impl Spec {
 
 /// An executable input section and the symbols its object actually defines.
 #[derive(Clone, Debug)]
-pub(super) struct InputSection {
+pub(crate) struct InputSection {
     /// File, or `archive:member`, in LLD's input-file selector syntax.
     pub file: String,
     pub index: usize,
@@ -107,6 +110,12 @@ pub struct Placement {
     /// The per-hart task stacks of an image that declares it proven.
     #[serde(default)]
     pub task_stacks: Vec<super::task_stack::Allocation>,
+    /// Functions of the image's hot-code list moved into `.hot.text`.
+    #[serde(default)]
+    pub hot: Vec<PlacedFunction>,
+    /// Functions of the list the link left where they were.
+    #[serde(default)]
+    pub hot_skipped: Vec<super::hot::Skipped>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<Fingerprint>,
 }
@@ -195,6 +204,8 @@ impl Placement {
             functions,
             irq_stacks: Vec::new(),
             task_stacks: Vec::new(),
+            hot: Vec::new(),
+            hot_skipped: Vec::new(),
             fingerprint: None,
         })
     }
@@ -202,16 +213,12 @@ impl Placement {
     /// Empty when the first link needs no relocation. Exact file and section
     /// selectors cannot collect a similarly named section from another object.
     pub fn fragment(&self) -> String {
-        let sections: BTreeSet<_> = self
-            .functions
-            .iter()
-            .map(|function| (&function.file, &function.section))
-            .collect();
-        let mut text = String::new();
-        for (file, section) in sections {
-            let _ = writeln!(text, "\"{file}\"(\"{section}\");");
-        }
-        text
+        selectors(&self.functions)
+    }
+
+    /// The `.hot.text` fragment of the hot-code list's placed functions.
+    pub fn hot_fragment(&self) -> String {
+        selectors(&self.hot)
     }
 
     pub fn summary(&self) -> String {
@@ -227,6 +234,15 @@ impl Placement {
 
     pub fn render(&self) -> String {
         let mut text = self.summary();
+        if !self.hot.is_empty() || !self.hot_skipped.is_empty() {
+            let _ = writeln!(
+                text,
+                "hot code placed by the image linker: {} functions, {} section bytes; {} listed functions left in place",
+                self.hot.len(),
+                self.hot_section_bytes(),
+                self.hot_skipped.len()
+            );
+        }
         text.push_str("\nStrict code placed by the image linker (whole input sections)\nname\tinput file\tinput section\tsize\tsection bytes before relaxation\tother symbols of the section\n");
         for function in &self.functions {
             let _ = writeln!(
@@ -240,7 +256,34 @@ impl Placement {
                 function.other_symbols.join(", ")
             );
         }
+        if !self.hot.is_empty() || !self.hot_skipped.is_empty() {
+            text.push_str("\nHot code placed in .hot.text (whole input sections)\nname\tinput section\tsize\tsection bytes before relaxation\n");
+            for function in &self.hot {
+                let _ = writeln!(
+                    text,
+                    "{}\t{}\t{}\t{}",
+                    function.name, function.section, function.size, function.section_bytes
+                );
+            }
+            text.push_str("\nListed hot code left in place\nname\treason\tsection bytes\n");
+            for skipped in &self.hot_skipped {
+                let _ = writeln!(
+                    text,
+                    "{}\t{:?}\t{}",
+                    skipped.name, skipped.reason, skipped.section_bytes
+                );
+            }
+        }
         text
+    }
+
+    fn hot_section_bytes(&self) -> u64 {
+        self.hot
+            .iter()
+            .map(|function| ((&function.file, &function.section), function.section_bytes))
+            .collect::<std::collections::BTreeMap<_, _>>()
+            .values()
+            .sum()
     }
 
     /// Relaxation after relocation can change the final function sizes.
@@ -248,7 +291,7 @@ impl Placement {
         let bytes = std::fs::read(output)?;
         let elf = oer_analysis_elf::Elf::parse(&bytes)?;
         let functions = elf.functions()?;
-        for function in &mut self.functions {
+        for function in self.functions.iter_mut().chain(&mut self.hot) {
             function.size = u64::from(
                 functions
                     .iter()
@@ -266,7 +309,20 @@ impl Placement {
     }
 }
 
-fn script_name(name: &str, function: &str, file: bool) -> Result<()> {
+/// One exact file and section selector per moved input section.
+fn selectors(functions: &[PlacedFunction]) -> String {
+    let sections: BTreeSet<_> = functions
+        .iter()
+        .map(|function| (&function.file, &function.section))
+        .collect();
+    let mut text = String::new();
+    for (file, section) in sections {
+        let _ = writeln!(text, "\"{file}\"(\"{section}\");");
+    }
+    text
+}
+
+pub(super) fn script_name(name: &str, function: &str, file: bool) -> Result<()> {
     if name.is_empty()
         || !name.bytes().all(|byte| {
             byte.is_ascii_alphanumeric()
@@ -328,8 +384,43 @@ pub(super) fn analyze(
         })?;
         Ok(sum + u64::from(released))
     })?;
-    let mut placement = Placement::select(&requested, sections, placement.free_sram() + released)?;
+    let free = placement.free_sram() + released;
+    let mut placement = Placement::select(&requested, sections, free)?;
     placement.irq_stacks = irq_stacks;
+    if let Some(path) = &spec.hot_code {
+        let list = super::hot::HotCode::read(path, inputs)?;
+        let strict: BTreeSet<_> = placement
+            .functions
+            .iter()
+            .map(|function| (function.file.clone(), function.section.clone()))
+            .collect();
+        let strict_bytes = placement
+            .functions
+            .iter()
+            .map(|function| ((&function.file, &function.section), function.section_bytes))
+            .collect::<std::collections::BTreeMap<_, _>>()
+            .values()
+            .sum::<u64>();
+        let sram = stacks.contract.memory.sram;
+        let candidates: Vec<_> = image
+            .functions
+            .iter()
+            .filter_map(|function| {
+                Some(super::hot::Candidate {
+                    key: super::hot::key(&function.names)?,
+                    symbols: function.names.clone(),
+                    size: u64::from(function.size),
+                    in_sram: function.address >= sram.origin() && function.address < sram.end(),
+                })
+            })
+            .collect();
+        let room = free
+            .saturating_sub(strict_bytes)
+            .saturating_sub(super::hot::ALIGNMENT_RESERVE);
+        let selection = super::hot::select(&list, &candidates, sections, &strict, room);
+        placement.hot = selection.placed;
+        placement.hot_skipped = selection.skipped;
+    }
     if spec.task_stack_proven {
         let audit = StackAudit::of(&image, &policy, &policy.runtime_task_stacks())?;
         placement.task_stacks = super::task_stack::select(&audit, &policy)?;

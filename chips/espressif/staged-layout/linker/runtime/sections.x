@@ -85,12 +85,15 @@ SECTIONS
 
   /* Modules classify optional performance-sensitive code with semantic
      .hot.text.* input sections, which execute from internal SRAM; this linker
-     remains unaware of module names and Rust symbol mangling. */
+     remains unaware of module names and Rust symbol mangling. The image
+     linker adds the functions of an image's hot-code list through this
+     generated fragment. */
   .hot.text ALIGN(ADDR(.isr.text) + SIZEOF(.isr.text), 64) :
     AT(ALIGN(LOADADDR(.isr.text) + SIZEOF(.isr.text), 64))
   {
     __runtime_hot_text_start = ABSOLUTE(.);
     *(.hot.text .hot.text.*);
+    INCLUDE hot-text.x
     . = ALIGN(4);
     __runtime_hot_text_end = ABSOLUTE(.);
   } > INTERNAL_LOW

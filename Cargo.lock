@@ -3312,6 +3312,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "jiff",
+ "oer-analysis-elf",
  "oer-chip-profile",
  "oer-diagnostics",
  "oer-espressif-facts",

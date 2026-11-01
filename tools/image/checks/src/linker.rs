@@ -25,6 +25,7 @@ use std::{
     path::PathBuf,
 };
 
+pub mod hot;
 pub(crate) mod irq_stacks;
 pub mod strict;
 pub mod task_stack;
@@ -133,8 +134,9 @@ fn link(
         .parent()
         .ok_or("image linker specification has no directory")?;
     let output = output_file(arguments).ok_or("runtime link has no -o output ELF")?;
-    // A previous build's fragment must never affect the first pass.
+    // A previous build's fragments must never affect the first pass.
     std::fs::write(directory.join(strict::FRAGMENT), "")?;
+    std::fs::write(directory.join(hot::FRAGMENT), "")?;
     arguments.push("-L".into());
     arguments.push(directory.into());
     let code = run_linker(arguments);
@@ -143,10 +145,12 @@ fn link(
     }
     let placement = strict::analyze(&spec, &output, sections, &mut inputs)?;
     if !placement.functions.is_empty()
+        || !placement.hot.is_empty()
         || !placement.irq_stacks.is_empty()
         || !placement.task_stacks.is_empty()
     {
         std::fs::write(directory.join(strict::FRAGMENT), placement.fragment())?;
+        std::fs::write(directory.join(hot::FRAGMENT), placement.hot_fragment())?;
         for allocation in &placement.irq_stacks {
             set_defsym(
                 arguments,

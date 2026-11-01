@@ -144,6 +144,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         stack_policy: profile.stack_policy(),
         diagnostic: true,
         task_stack_proven: false,
+        hot_code: None,
         harts: Vec::new(),
     };
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
@@ -379,6 +380,11 @@ mod tests {
         };
         std::fs::write(root.join(PLACEMENT), toml::to_string(&placement).unwrap()).unwrap();
         std::fs::write(root.join(FRAGMENT), placement.fragment()).unwrap();
+        std::fs::write(
+            root.join(oer_image_checks::linker::hot::FRAGMENT),
+            placement.hot_fragment(),
+        )
+        .unwrap();
         for fresh in [false, true] {
             let messages = [
                 serde_json::json!({"reason":"compiler-artifact", "executable":null}),
