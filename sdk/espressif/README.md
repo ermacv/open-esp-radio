@@ -81,8 +81,10 @@ client. Its configuration names one channel (`wifi::Config::new`) or every
 ends with the result of that connection attempt: `Connected`, or a
 `ConnectError` with the station's own cause (`Failed(DisconnectReason)` names
 `NotFound`, `AuthenticationFailed`, `AssociationFailed`, `HandshakeFailed`
-and the others; none is reported as a wrong password). The station keeps
-the network and rejoins it after a lost association. `wifi::Net::start`
+and the others; none is reported as a wrong password). Once a connect
+linked, the station keeps the network and rejoins it after a lost
+association; a connect that ended without a link leaves the station idle
+for the application's next connect, with the same or another profile. `wifi::Net::start`
 runs the existing IP service (`oer-embassy-net`) over the station's device;
 `wait_ipv4` ends with the configuration over an up link and keeps waiting
 across a link loss, `wait_link_down` ends on a loss or a new link epoch,

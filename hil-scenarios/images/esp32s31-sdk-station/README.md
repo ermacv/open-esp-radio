@@ -20,8 +20,9 @@ identity is the library's (`oer_espressif::boot_id`).
   `connect`: `Linked`, or `Failed` with the code the
   [Wi-Fi station service](../../services/wifi-station/src/runtime.rs)
   numbers in its classes 1 to 3 (the disconnect reason, a refusal, a queue
-  that did not admit it). The station keeps the network and rejoins it
-  every second after a lost association.
+  that did not admit it). Once linked, the station keeps the network and
+  rejoins it every second after a lost association; a connect without a
+  link leaves it idle for the next one.
 - **WaitIpv4** and **WaitLinkDown** bound the IP service's waits by the
   request's timeout.
 - **Exchange** opens one TCP socket (128-byte buffers) on the IP stack,

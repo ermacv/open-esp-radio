@@ -451,8 +451,9 @@ impl Station {
     }
 
     /// Join the network `profile` names; the future ends with the result of
-    /// this connection attempt. The station keeps the network and rejoins
-    /// it after a lost association.
+    /// this connection attempt. Once linked, the station keeps the network
+    /// and rejoins it after a lost association; an attempt that ends without
+    /// a link leaves the station idle for the next connect.
     ///
     /// # Errors
     /// The station refused the request or the attempt failed, with its

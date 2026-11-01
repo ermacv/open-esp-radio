@@ -220,8 +220,10 @@ runtime. The facade configures reconnect with its own policy values; disabled
 is the default, which the HIL station image keeps: it joins once per boot.
 Each `Control::connect` carries its network's profile (SSID and security);
 only an idle station takes it, and it stays for later connections, so the
-policy never connects first and reconnects with the kept profile. Explicit
-Disconnect pauses reconnect and Connect resumes the configured policy.
+policy never connects first and reconnects with the kept profile. The
+policy becomes active when an application's connect links; one that ends
+without a link leaves the station idle and the retries to the application.
+Explicit Disconnect pauses reconnect.
 Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
 retires Runner. HIL retains command correlation and socket workload lifetime,
