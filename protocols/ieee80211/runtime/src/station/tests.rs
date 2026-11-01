@@ -68,10 +68,8 @@ struct ServiceContexts;
 
 impl oer_ieee80211_testing_model::ModelContext for ServiceContexts {
     type Body = core::convert::Infallible;
-    type OwnedContext<Id: SlotIdentity> =
-        TxOwnedContext<ModelCaps24, ModelLarge, oer_ieee80211_testing_model::ModelPool<Id, 4>>;
-    type Context<'p, Id: SlotIdentity + 'p> =
-        TxContext<'p, ModelCaps24, ModelLarge, oer_ieee80211_testing_model::ModelPool<Id, 4>>;
+    type OwnedContext<Id: SlotIdentity> = ();
+    type Context<'p, Id: SlotIdentity + 'p> = ();
     type OwnedStationConfigureContext<Id: SlotIdentity> = oer_radio_port::ContextChoice<
         (),
         oer_ieee80211_core_roles_sta::epoch::EpochContext<
@@ -101,6 +99,7 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
         Self: 'p,
         Id: 'p;
     type TerminalStorage<T> = TestTerminalStorage<T>;
+    type TxContextStorage<T> = [Option<T>; oer_ieee80211_testing_model::MODEL_TICKETS];
     type Small = ModelSmall;
     type Large = ModelLarge;
 
@@ -1348,6 +1347,14 @@ where
                 network,
             } = completed;
             assert_eq!(network, world.expected_drain.get());
+            // The contexts the service holds for tickets still in the port:
+            // one per admitted transmission, each taken once by its terminal.
+            let held_contexts = service
+                ._pending
+                .tx_contexts
+                .iter()
+                .filter(|context| context.is_some())
+                .count();
             match world.expected_stream_end.get() {
                 Some(
                     expected @ (ExpectedStreamEnd::Drained | ExpectedStreamEnd::SubmissionFailed),
@@ -1370,6 +1377,7 @@ where
                         matches!(expected, ExpectedStreamEnd::SubmissionFailed)
                     );
                     assert!(service._pending.admissions.first().is_none());
+                    assert_eq!(held_contexts, 0, "every terminal took its context back");
                     assert_eq!(
                         service.data.available(WmmAccessCategory::BestEffort),
                         u32::from(MODEL_TX_QUEUE_DEPTH.get())
@@ -1386,6 +1394,11 @@ where
                     };
                     assert!(matches!(missing, PendingTerminal::Transmit(_)));
                     assert_eq!(service._pending.admissions.first(), Some(*missing));
+                    // The unreturned ticket's context stays with the service.
+                    let PendingTerminal::Transmit(index) = *missing else {
+                        unreachable!()
+                    };
+                    assert!(service._pending.tx_contexts[usize::from(index)].is_some());
                     assert_eq!(world.air.disable_calls(), 0);
                 }
                 Some(ExpectedStreamEnd::Quarantined) => {
@@ -1396,13 +1409,24 @@ where
                             ..
                         }
                     ));
-                    assert!(matches!(
-                        service._pending.admissions.first(),
-                        Some(PendingTerminal::Transmit(_))
-                    ));
+                    let Some(PendingTerminal::Transmit(index)) =
+                        service._pending.admissions.first()
+                    else {
+                        panic!("the held transmission stays admitted")
+                    };
+                    assert!(service._pending.tx_contexts[usize::from(index)].is_some());
+                    assert!(held_contexts >= 1);
                     assert_eq!(world.air.disable_calls(), 0);
                 }
-                None => {}
+                // A poisoned port may keep a ticket: its context stays here.
+                None => assert_eq!(
+                    held_contexts == 0,
+                    !matches!(
+                        service._pending.admissions.first(),
+                        Some(PendingTerminal::Transmit(_))
+                    ),
+                    "a context waits exactly while a transmission is admitted"
+                ),
             }
             if world.expect_queued_command_on_poison.get() {
                 assert!(matches!(&end, ServiceEnd::Quarantined { .. }));

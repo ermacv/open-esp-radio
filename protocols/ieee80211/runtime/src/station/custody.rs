@@ -30,10 +30,12 @@ impl<T, const N: usize> TerminalStorage<T> for heapless::Deque<T, N> {
     }
 }
 
-/// A TX return whose context and memory class disagree. It still owns the
-/// original ticket, operation context and complete fresh or Sent MPDU.
+/// A TX return whose context and memory class disagree, or that no
+/// admitted context waited for. It still owns the original ticket, the
+/// operation context the service held for it, if any, and the complete
+/// fresh or Sent MPDU.
 pub struct UnroutedTx<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
-    pub context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
+    pub context: Option<StationTxContext<'id, B>>,
     pub ticket: Slot<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
@@ -48,7 +50,8 @@ pub struct UnroutedTx<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 /// that Data did not take back: subframes of a data aggregate already given
 /// back to their members' places wait in Data's bank.
 pub struct UnroutedAggregate<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
-    pub context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
+    /// The context the service held for the ticket, if any.
+    pub context: Option<StationTxContext<'id, B>>,
     pub ticket: Slot<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
@@ -66,6 +69,9 @@ pub enum RejectedTerminal<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> 
     Sealed(LowerMacTerminal<'id, B::Types<'id>>),
     Transmit(UnroutedTx<'id, B>),
     Aggregate(UnroutedAggregate<'id, B>),
+    /// A transmission's context the port took the ticket of, which found no
+    /// place at that ticket's index; the ticket stays with the port.
+    Context(StationTxContext<'id, B>),
 }
 
 pub(super) struct ContractFault<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {

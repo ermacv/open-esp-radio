@@ -50,8 +50,10 @@
 //!
 //! The tokens the machines hold are the port's: tickets and buffers of two
 //! classes, the small one for the station's frames and the large one for
-//! data. A completion carries `TxContext`, which routes its ticket and
-//! resources to the original machine and link. Buffer classes are used
+//! data. A transmission's `TxContext` stays with the service at its
+//! ticket's place while the ticket is in the port, which carries no context
+//! ([`TxContextStorage`]); the completion's ticket finds it, and it routes
+//! the ticket and resources to the original machine and link. Buffer classes are used
 //! only to recover their memory types; `StationTxBuffer` exhaustively
 //! represents both classes and both publication states at this boundary.
 //! Machines receive `ReturnedMpdu::Fresh` or `Sent` and decide when to renew.
@@ -173,12 +175,7 @@ pub trait StationPort: Sized {
             Fault = <Self::Backend as PortBackend<Self::SlotId>>::Fault,
             TxBody = core::convert::Infallible,
             LentRx = Self::LentRx,
-            Context = TxContext<
-                'id,
-                Self::Caps,
-                Self::Large,
-                <Self::Types<'id> as PhaseTypes<'id>>::EpochPath,
-            >,
+            Context = (),
             EpochPath: oer_radio_port::PoolPath<Identity = Self::SlotId>,
             TicketPath: oer_radio_port::PoolPath<Identity = Self::SlotId>,
         > + TxBufferPool<'id, Self::Small>
@@ -192,6 +189,9 @@ pub trait StationPort: Sized {
     type LentRx: oer_ieee80211_contracts_port::LentRxBuffer;
     /// Fixed terminal custody from the backend's capacity layout.
     type TerminalStorage<T>: TerminalStorage<T>;
+    /// The station's transmit contexts, one place per transmit ticket of
+    /// the backend's pool ([`TxContextStorage`]).
+    type TxContextStorage<T>: TxContextStorage<T>;
     /// Buffer class for station management traffic.
     type Small: TxBufferClass;
     /// Buffer class for connected data traffic.
@@ -262,8 +262,9 @@ pub enum StationTxBuffer<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     Large(PoolMpdu<'id, B::Types<'id>, B::Large>),
 }
 
-/// The composition's context for this service. Each variant owns the
-/// original machine operation; the backend treats the entire value as opaque.
+/// The service's context of one transmission. Each variant owns the
+/// original machine operation. It stays with the service, at its ticket's
+/// place, while the ticket is in the port ([`TxContextStorage`]).
 #[derive(Debug)]
 pub enum TxContext<
     'id,
@@ -287,62 +288,13 @@ pub enum TxContext<
     ),
 }
 
-/// Owned operation context selected before the service's body loan.
-/// Epoch fields remain opaque until their public projection restores that loan.
-pub type TxOwnedContext<K, C, Path> = oer_radio_port::ContextChoice<
-    oer_ieee80211_core_roles_sta::epoch::EpochContext<
-        Path,
-        oer_ieee80211_core_roles_sta::machine::StaTxPurpose,
-    >,
-    oer_radio_port::ContextChoice<
-        oer_ieee80211_core_roles_sta::epoch::EpochContext<
-            Path,
-            oer_ieee80211_core_roles_sta::data::DataTxInfo<
-                K,
-                C,
-                oer_ieee80211_core_roles_sta::data::AcPermit,
-            >,
-        >,
-        oer_ieee80211_core_roles_sta::epoch::EpochContext<
-            Path,
-            oer_ieee80211_core_roles_sta::data::DataAggregateInfo<
-                K,
-                C,
-                oer_ieee80211_core_roles_sta::data::AcPermit,
-            >,
-        >,
-    >,
+/// The context of one of the service's transmissions on the port `B`.
+pub type StationTxContext<'id, B> = TxContext<
+    'id,
+    <B as StationPort>::Caps,
+    <B as StationPort>::Large,
+    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
 >;
-
-impl<'p, K: 'p, C: 'p, Path: oer_radio_port::PoolPath + 'p>
-    oer_radio_port::LoanedContext<'p, Path::Identity> for TxContext<'p, K, C, Path>
-where
-    Path::Identity: 'p,
-{
-    type Owned = TxOwnedContext<K, C, Path>;
-    fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
-        match self {
-            Self::Station(context) => context.enclose().first(),
-            Self::Data(context) => context.enclose().first().second(),
-            Self::DataAggregate(context) => context.enclose().second().second(),
-        }
-    }
-    fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
-        match context.into_choice() {
-            oer_radio_port::ContextChoice::First(context) => {
-                Self::Station(StaTxContext::restore(context))
-            }
-            oer_radio_port::ContextChoice::Second(context) => match context.into_choice() {
-                oer_radio_port::ContextChoice::First(context) => {
-                    Self::Data(DataTxContext::restore(context))
-                }
-                oer_radio_port::ContextChoice::Second(context) => Self::DataAggregate(
-                    oer_ieee80211_core_roles_sta::data::DataAggregateContext::restore(context),
-                ),
-            },
-        }
-    }
-}
 
 /// A stretch of the service's own work, which it reports to its port at
 /// both ends ([`StationPort::span`]).
@@ -507,12 +459,14 @@ pub use rx_block_ack::{PortRxBlockAck, RxBlockAckStorage, RxBlockAckView};
 
 mod custody;
 mod key_unwrap;
+mod tx_contexts;
 use custody::{ContractFault, StepFailure};
 pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedAggregate,
     UnroutedTx,
 };
 pub use key_unwrap::KeyUnwrapSlot;
+pub use tx_contexts::TxContextStorage;
 
 /// What the application asks of the service.
 #[derive(Debug, Eq, PartialEq)]
@@ -600,6 +554,11 @@ pub enum BackendContractViolation {
     /// The pairwise installation terminal returned a key of another
     /// installation; the outstanding request stays retained.
     ForeignPairwiseKey,
+    /// A transmission's context found no place at its ticket's index when
+    /// the port took it, or none waited there when its terminal came: the
+    /// ticket pool is larger than the context storage, or a ticket came
+    /// back twice.
+    TxContextPlace(u8),
 }
 
 /// The original failure that ended this service. A poisoned disabled owner
@@ -1155,6 +1114,8 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     receive: RxBlockAckView<'id, B::Types<'id>>,
     commands: CommandCredits<'id, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
     admissions: Admissions,
+    /// Each transmission's context while its ticket is in the port.
+    tx_contexts: B::TxContextStorage<StationTxContext<'id, B>>,
     /// The network drain before the port retired, when it failed.
     network: Option<NetworkDrainFailure>,
     /// A retune whose disable/enable failed remains owned until retirement.
@@ -1258,6 +1219,7 @@ impl<
                     receive,
                     commands: CommandCredits::new(credits),
                     admissions: Admissions::default(),
+                    tx_contexts: TxContextStorage::empty(),
                     network: None,
                     retune: None,
                     group: None,
@@ -1315,7 +1277,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), network: None, retune: None, group: None, pairwise: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), network: None, retune: None, group: None, pairwise: None, unwrap: None },
                 }),
             })
         })
@@ -2486,12 +2448,19 @@ impl<
                             reason,
                         }),
                         Ok(source) => {
+                            let index = ticket.index();
                             self.pending
                                 .admissions
-                                .insert(PendingTerminal::Transmit(ticket.index()));
-                            let submitted = phase.station().submit(
+                                .insert(PendingTerminal::Transmit(index));
+                            let unplaced = tx_contexts::keep(
+                                &mut self.pending.tx_contexts,
+                                index,
+                                TxContext::Data(context),
+                            )
+                            .err();
+                            let result = phase.station().submit(
                                 (oer_ieee80211_contracts_port::Attempt {
-                                    context: TxContext::Data(context),
+                                    context: (),
                                     ticket,
                                     source,
                                     access_category,
@@ -2501,10 +2470,11 @@ impl<
                                 })
                                 .admit(),
                             );
-                            match submitted {
-                                Ok(()) => Ok(Follow::Nothing),
-                                Err(poisoned) => Err(ServiceFault::Submission(poisoned.cause)),
-                            }
+                            submitted::<B, GROUPS>(
+                                index,
+                                unplaced,
+                                result.map_err(|poisoned| poisoned.cause),
+                            )
                         }
                     }
                 };
@@ -2587,6 +2557,12 @@ impl<
                     reason: reason.into(),
                 });
                 self.returned(now, context, ticket, buffer, ReturnedTx::Refused(reason))?;
+            }
+            Follow::Unplaced { index, context } => {
+                return Err(ContractFault {
+                    reason: BackendContractViolation::TxContextPlace(index),
+                    terminal: RejectedTerminal::Context(context),
+                });
             }
         }
         Ok(())
@@ -3091,29 +3067,39 @@ impl<
         match terminal {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
                 let oer_ieee80211_contracts_port::TerminalParts {
-                    context,
+                    context: (),
                     ticket,
                     payload,
                     outcome,
                 } = terminal.into_parts(&mut self.terminal_access);
                 let (buffer, body) = payload.into_parts();
-                if !self
+                let index = ticket.index();
+                let admitted = self
                     .pending
                     .admissions
-                    .remove(PendingTerminal::Transmit(ticket.index()))
-                {
+                    .remove(PendingTerminal::Transmit(index));
+                let context = if admitted {
+                    tx_contexts::take(&mut self.pending.tx_contexts, index)
+                } else {
+                    None
+                };
+                let Some(context) = context else {
                     return Err(ContractFault {
-                        reason: BackendContractViolation::UnexpectedTerminal(
-                            PendingTerminal::Transmit(ticket.index()),
-                        ),
+                        reason: if admitted {
+                            BackendContractViolation::TxContextPlace(index)
+                        } else {
+                            BackendContractViolation::UnexpectedTerminal(PendingTerminal::Transmit(
+                                index,
+                            ))
+                        },
                         terminal: RejectedTerminal::Transmit(UnroutedTx {
-                            context,
+                            context: None,
                             ticket,
                             buffer: B::tx_buffer(buffer),
                             outcome: ReturnedTx::Completed(outcome),
                         }),
                     });
-                }
+                };
                 if let Some(body) = body {
                     match body {}
                 }
@@ -3323,19 +3309,25 @@ impl<
         terminal: oer_ieee80211_contracts_port::AggregateCompleted<'id, B::Types<'id>>,
     ) -> Result<(), ContractFault<'id, B>> {
         let oer_ieee80211_contracts_port::TerminalParts {
-            context,
+            context: (),
             ticket,
             payload,
             outcome,
         } = terminal.into_parts(&mut self.terminal_access);
+        let index = ticket.index();
         let admitted = self
             .pending
             .admissions
-            .remove(PendingTerminal::Transmit(ticket.index()));
+            .remove(PendingTerminal::Transmit(index));
+        let context = if admitted {
+            tx_contexts::take(&mut self.pending.tx_contexts, index)
+        } else {
+            None
+        };
         let mut rest = payload.into_iter();
         let mut stray = None;
         let context = match context {
-            TxContext::DataAggregate(context) if admitted => {
+            Some(TxContext::DataAggregate(context)) => {
                 // Each member's memory goes straight back to its place in
                 // Data's bank, in subframe order: no copy of the aggregate.
                 let mut returned = 0_usize;
@@ -3363,7 +3355,7 @@ impl<
                 if stray.is_none() && returned == context.len() {
                     Ok(context)
                 } else {
-                    Err(TxContext::DataAggregate(context))
+                    Err(Some(TxContext::DataAggregate(context)))
                 }
             }
             // Every subframe stays in the payload it came in.
@@ -3372,12 +3364,12 @@ impl<
         let context = match context {
             Ok(context) => context,
             Err(context) => {
-                let reason = if admitted {
-                    BackendContractViolation::AggregateMembers
-                } else {
-                    BackendContractViolation::UnexpectedTerminal(PendingTerminal::Transmit(
-                        ticket.index(),
-                    ))
+                let reason = match (&context, admitted) {
+                    (_, false) => BackendContractViolation::UnexpectedTerminal(
+                        PendingTerminal::Transmit(index),
+                    ),
+                    (None, true) => BackendContractViolation::TxContextPlace(index),
+                    (Some(_), true) => BackendContractViolation::AggregateMembers,
                 };
                 return Err(ContractFault {
                     reason,
@@ -3489,7 +3481,7 @@ impl<
             | (context @ TxContext::DataAggregate(_), buffer) => Err(ContractFault {
                 reason: BackendContractViolation::TxContextBufferMismatch,
                 terminal: RejectedTerminal::Transmit(UnroutedTx {
-                    context,
+                    context: Some(context),
                     ticket,
                     buffer,
                     outcome: end,
@@ -3522,6 +3514,30 @@ enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: 
     },
     /// The station left: the rates leave its peer.
     Notice(StaNotice),
+    /// A submission's ticket's place held another context or lies beyond
+    /// the storage: the context stays with the service's fault, the ticket
+    /// with the port.
+    Unplaced {
+        index: u8,
+        context: StationTxContext<'id, B>,
+    },
+}
+
+/// What follows a submission whose context the service placed at its
+/// ticket's `index` before the port took the ticket, `unplaced` when that
+/// place refused it. Even a poisoned port retains the ticket and may return
+/// its terminal, so the context waits whatever the submission's result; a
+/// context without its place is the stronger fault and stays retained.
+fn submitted<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: usize>(
+    index: u8,
+    unplaced: Option<StationTxContext<'id, B>>,
+    submitted: Result<(), <B::Backend as PortBackend<B::SlotId>>::Fault>,
+) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>> {
+    match (unplaced, submitted) {
+        (Some(context), _) => Ok(Follow::Unplaced { index, context }),
+        (None, Ok(())) => Ok(Follow::Nothing),
+        (None, Err(cause)) => Err(ServiceFault::Submission(cause)),
+    }
 }
 
 /// What the aggregate submission borrows of the service beside the link.
@@ -3795,14 +3811,19 @@ where
         }
         index = index.saturating_add(1);
     }
-    pending
-        .admissions
-        .insert(PendingTerminal::Transmit(ticket.index()));
-    phase
+    let index = ticket.index();
+    pending.admissions.insert(PendingTerminal::Transmit(index));
+    let unplaced = tx_contexts::keep(
+        &mut pending.tx_contexts,
+        index,
+        TxContext::DataAggregate(context),
+    )
+    .err();
+    let result = phase
         .station()
         .submit_ampdu(
             AggregateAttempt {
-                context: TxContext::DataAggregate(context),
+                context: (),
                 ticket,
                 aggregate: builder,
                 protection: DataContext::<'id, B>::PROTECTION,
@@ -3811,8 +3832,8 @@ where
             }
             .admit(),
         )
-        .map(|()| Follow::Nothing)
-        .map_err(|poisoned| ServiceFault::Submission(poisoned.cause))
+        .map_err(|poisoned| poisoned.cause);
+    submitted::<B, GROUPS>(index, unplaced, result)
 }
 
 type StationPreparation<'k, 'p, 'id, B> = Result<
@@ -3875,7 +3896,7 @@ where
 fn submit_station<'p, 'id: 'p, B, P, S, const GROUPS: usize>(
     phase: &mut P,
     rates: &S,
-    admissions: &mut Admissions,
+    pending: &mut PendingActions<'id, B>,
     key: Option<&StationPairwiseKey<'id, <B::Types<'id> as PhaseTypes<'id>>::StationKeys>>,
     transmit: StaTransmit<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
@@ -3938,10 +3959,13 @@ where
         }
     };
     let mut station = phase.station();
-    admissions.insert(PendingTerminal::Transmit(ticket.index()));
-    match station.submit(
+    let index = ticket.index();
+    pending.admissions.insert(PendingTerminal::Transmit(index));
+    let unplaced =
+        tx_contexts::keep(&mut pending.tx_contexts, index, TxContext::Station(context)).err();
+    let result = station.submit(
         (oer_ieee80211_contracts_port::Attempt {
-            context: TxContext::Station(context),
+            context: (),
             ticket,
             source,
             access_category,
@@ -3950,10 +3974,8 @@ where
             coex_operation: class.coex_operation(),
         })
         .admit(),
-    ) {
-        Ok(()) => Ok(Follow::Nothing),
-        Err(poisoned) => Err(ServiceFault::Submission(poisoned.cause)),
-    }
+    );
+    submitted::<B, GROUPS>(index, unplaced, result.map_err(|poisoned| poisoned.cause))
 }
 
 /// Carry out one action of the station; an arbiter's answer goes back to
@@ -4160,7 +4182,7 @@ where
             return submit_station::<B, P, S, GROUPS>(
                 phase,
                 rates,
-                &mut pending_actions.admissions,
+                pending_actions,
                 None,
                 transmit,
             );
@@ -4169,7 +4191,7 @@ where
             return submit_station::<B, P, S, GROUPS>(
                 phase,
                 rates,
-                &mut pending_actions.admissions,
+                pending_actions,
                 Some(key),
                 transmit,
             );
