@@ -83,8 +83,10 @@ const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 const DURATION_MS: u32 = 5000;
 const DELAY_MS: u32 = 300;
 const DRAIN_MS: u32 = 500;
-/// RTT probes during a level.
+/// RTT probes during a level. `OER_WIFI_LOAD_PROBES=off` sends none (`on`
+/// is the default), to measure a level without the probes' datagrams.
 const PROBE_PERIOD: Duration = Duration::from_millis(50);
+const PROBES_ENV: &str = "OER_WIFI_LOAD_PROBES";
 const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 const DHCP_TIMEOUT: Duration = Duration::from_secs(30);
 const CALL: Duration = Duration::from_secs(2);
@@ -272,6 +274,25 @@ fn parse_width(text: &str) -> Result<RouterChannelWidth, Failure> {
         "ht40" => Ok(RouterChannelWidth::Ht40),
         other => Err(Failure::Incomplete(format!(
             "{WIDTH_ENV}=`{other}` is neither `ht20` nor `ht40`"
+        ))),
+    }
+}
+
+/// Whether the levels send RTT probes: yes, unless `OER_WIFI_LOAD_PROBES`
+/// says `off`.
+fn probes() -> Result<bool, Failure> {
+    match std::env::var(PROBES_ENV) {
+        Err(_) => Ok(true),
+        Ok(text) => parse_probes(&text),
+    }
+}
+
+fn parse_probes(text: &str) -> Result<bool, Failure> {
+    match text.trim() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        other => Err(Failure::Incomplete(format!(
+            "{PROBES_ENV}=`{other}` is neither `on` nor `off`"
         ))),
     }
 }
@@ -839,6 +860,7 @@ fn level(
         .filter(|bps| u32::try_from(*bps).is_ok())
         .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
     let profile = profile::requested()?;
+    let probing = probes()?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -878,7 +900,8 @@ fn level(
         // The probes go within the window only; their late replies are
         // still read during the drain.
         std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
-        let probes = scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop));
+        let probes = probing
+            .then(|| scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop)));
         let sent = if mode == Mode::Tx {
             std::thread::sleep(window);
             traffic::Sent::default()
@@ -886,7 +909,7 @@ fn level(
             traffic::send(&endpoint, peer, run, PAYLOAD, each_bps, window)
         };
         stop.store(true, Ordering::Relaxed);
-        let probes = probes.join().unwrap_or(0);
+        let probes = probes.map_or(0, |probes| probes.join().unwrap_or(0));
         std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
         (sent, probes)
     });
@@ -1008,6 +1031,13 @@ mod tests {
         assert_eq!(parse_width("ht20").unwrap(), RouterChannelWidth::Ht20);
         assert_eq!(parse_width(" ht40 ").unwrap(), RouterChannelWidth::Ht40);
         assert!(parse_width("40").is_err());
+    }
+
+    #[test]
+    fn probes_are_on_or_off_and_nothing_else() {
+        assert!(parse_probes("on").unwrap());
+        assert!(!parse_probes(" off ").unwrap());
+        assert!(parse_probes("0").is_err());
     }
 
     #[test]
