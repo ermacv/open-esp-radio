@@ -3704,3 +3704,22 @@ fn every_service_span_is_found_by_its_number_and_no_other_number_is() {
     }
     assert_eq!(ServiceSpan::from_number(ServiceSpan::ALL.len() as u8), None);
 }
+
+#[test]
+fn a_step_is_skipped_only_after_a_direct_frame_before_its_deadline_and_within_the_event_bound() {
+    let now = Instant::from_micros(100);
+    let later = Some(Instant::from_micros(101));
+    let due = Some(now);
+    // After a direct frame, with no deadline or one still ahead.
+    assert!(super::skips_step(Some(None), 1, now));
+    assert!(super::skips_step(
+        Some(later),
+        MAX_WAITING_EVENT_STEPS - 1,
+        now
+    ));
+    // A deadline reached, any other input, and the end of a run of
+    // waiting events each run the step.
+    assert!(!super::skips_step(Some(due), 1, now));
+    assert!(!super::skips_step(None, 1, now));
+    assert!(!super::skips_step(Some(None), 0, now));
+}

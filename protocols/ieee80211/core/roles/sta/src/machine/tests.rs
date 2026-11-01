@@ -5193,6 +5193,64 @@ fn data_receive_requires_the_live_connection_epoch() {
 }
 
 #[test]
+fn a_data_frame_changes_nothing_the_station_owes_and_a_management_frame_is_an_input() {
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        assert!(
+            world
+                .station
+                .poll_action(at(40), &mut world.losses)
+                .is_none()
+        );
+        let deadline = world.station.poll_deadline();
+        let frame = downlink_amsdu(&[(LOCAL, 0x0800, b"one"), (LOCAL, 0x0800, b"two")]);
+        let mut delivered = 0;
+        assert_eq!(
+            world.station.receive(
+                at(41),
+                &frame,
+                meta(),
+                |_| delivered += 1,
+                &mut world.losses
+            ),
+            Ok(StaReceived::Data)
+        );
+        assert_eq!(delivered, 2);
+        // Data moves no deadline earlier and owes no action.
+        assert_eq!(world.station.poll_deadline(), deadline);
+        assert!(
+            world
+                .station
+                .poll_action(at(41), &mut world.losses)
+                .is_none()
+        );
+        assert_eq!(
+            world
+                .station
+                .receive(at(42), &beacon(), meta(), |_| {}, &mut world.losses),
+            Ok(StaReceived::Input)
+        );
+    });
+}
+
+#[test]
+fn a_key_exchange_message_among_data_is_an_input() {
+    use oer_ieee80211_core_security_rsn::frames::RsnTxFrame;
+    use oer_ieee80211_wire::security::rsn::Akm;
+    installed(|mint| {
+        let (mut world, _) = wpa2_associated::<2>(mint);
+        let m1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
+        let frame = downlink_amsdu(&[(LOCAL, 0x888e, m1.as_bytes())]);
+        assert_eq!(
+            world
+                .station
+                .receive(at(32), &frame, meta(), |_| {}, &mut world.losses),
+            Ok(StaReceived::Input)
+        );
+    });
+}
+
+#[test]
 fn confirming_returns_a_refused_absence_place_without_opening_the_link() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
