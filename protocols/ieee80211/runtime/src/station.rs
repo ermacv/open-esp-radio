@@ -1816,8 +1816,10 @@ impl<
         // cooperative yield lets the driver and application progress.
         let mut batch = 0_u8;
         loop {
+            // One clock read serves the turn's step and pending receives.
+            let turn = timer.now();
             B::span(ServiceSpan::Step, false);
-            let stepped = self.step(arbiter, timer.now(), phase, io);
+            let stepped = self.step(arbiter, turn, phase, io);
             B::span(ServiceSpan::Step, true);
             match stepped {
                 Next::Wait => {}
@@ -1832,7 +1834,7 @@ impl<
             // Releasing RX owners is a separate input source. Its receive
             // transition must not nest inside the control-action step frame.
             B::span(ServiceSpan::Pending, false);
-            let pending = self.receive_pending(arbiter, timer.now(), phase, io);
+            let pending = self.receive_pending(arbiter, turn, phase, io);
             B::span(ServiceSpan::Pending, true);
             match pending {
                 Ok(true) => continue,
@@ -1907,9 +1909,12 @@ impl<
                     };
                     io.control.policy_register(cx);
                     let alarm_ready = alarm.as_mut().poll(cx).is_ready();
-                    let policy_ready = accepting_commands && io.control.policy_ready(timer.now());
-                    let tick = alarm_ready
-                        && machine_deadline.is_some_and(|deadline| timer.now() >= deadline);
+                    // At most one clock read per poll of the sources.
+                    let mut read = None;
+                    let mut now = || *read.get_or_insert_with(|| timer.now());
+                    let policy_ready = accepting_commands && io.control.policy_ready(now());
+                    let tick =
+                        alarm_ready && machine_deadline.is_some_and(|deadline| now() >= deadline);
                     let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
                     let unwrapped = match unwrap.poll_done(cx) {
                         Poll::Ready(done) => Some(done),

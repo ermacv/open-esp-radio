@@ -3242,18 +3242,28 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 StaKeyContractViolation::IncompleteBank,
             ));
         }
+        // The step is written in place: an unchanged state's wait, the
+        // connected link's every turn, moves neither change nor action.
+        let mut step: ActionStep<'id, T, K> = (Change::Keep, ActionProgress::Wait);
         let owed = loop {
             self.complete_commands();
             if let Some(terminal) = self.commands.poll() {
                 return Some(StaAction::CommandCompleted(terminal));
             }
             let (mut context, state) = self.transition();
-            let (change, progress) = context.owe(state, now, events);
-            state.apply(change);
-            match progress {
-                ActionProgress::Action(owed) => break owed,
-                ActionProgress::Transition => continue,
+            context.owe_into(state, now, events, &mut step);
+            if !matches!(step.0, Change::Keep) {
+                state.apply(core::mem::replace(&mut step.0, Change::Keep));
+            }
+            match step.1 {
                 ActionProgress::Wait => return None,
+                ActionProgress::Transition => step.1 = ActionProgress::Wait,
+                ActionProgress::Action(_) => {
+                    match core::mem::replace(&mut step.1, ActionProgress::Wait) {
+                        ActionProgress::Action(owed) => break owed,
+                        ActionProgress::Transition | ActionProgress::Wait => return None,
+                    }
+                }
             }
         };
         Some(match owed {
@@ -5034,7 +5044,19 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     /// The action `state` owes, and the state that awaits its end.
+    /// [`Self::owe`] into `step`, the caller's place.
     #[inline(never)]
+    fn owe_into(
+        &mut self,
+        state: &mut State<T, K>,
+        now: Instant,
+        events: &mut impl EventSink<StaEvent>,
+        step: &mut ActionStep<'id, T, K>,
+    ) {
+        *step = self.owe(state, now, events);
+    }
+
+    #[inline(always)]
     fn owe(
         &mut self,
         state: &mut State<T, K>,
@@ -5859,6 +5881,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         // the next of the two deferred frames.
         loop {
             let rsn = connected.rsn.as_mut()?;
+            // Only these states owe anything; the others, the connected
+            // link's every turn, stay where they are.
+            if !matches!(
+                rsn.rekey,
+                Rekey::Unwrap(..) | Rekey::Install(..) | Rekey::Send(..)
+            ) {
+                return None;
+            }
             let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
                 Rekey::Unwrap(request, protection) if !self.key_unwrap.in_flight() => {
                     match request.key_unwrap() {
