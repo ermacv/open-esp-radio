@@ -27,7 +27,10 @@ use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
 pub use runtime::StopPolicy;
 pub use runtime::{ControlError, Operation, OperationEnd};
 
-pub const RX_DEPTH: usize = 8;
+/// The station's received MSDUs waiting for the network: two receive Block
+/// Ack windows, so one window's burst fits while the network takes the
+/// previous one (a queue of one window dropped a 16-MPDU aggregate's tail).
+pub const RX_DEPTH: usize = 32;
 pub const FRAME_CAPACITY: usize = 1664;
 #[cfg(target_arch = "riscv32")]
 type Caps = oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;

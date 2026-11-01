@@ -26,6 +26,9 @@ pub const S: usize = B;
 /// hardware, two Block Ack windows of margin, as in the archive.
 pub const Q: usize = 32;
 const _: () = {
+    if crate::RX_DEPTH < 2 * oer_esp32s31_ieee80211_driver::port::RX_HELD {
+        panic!("the network queue holds two receive windows");
+    }
     if Q >= N {
         panic!("the receive ring keeps descriptors armed beside the staged units");
     }
