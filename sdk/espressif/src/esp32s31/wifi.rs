@@ -38,7 +38,7 @@ use oer_espressif_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };
 use oer_espressif_interrupt_table::signal::{FromHandler, FromTask, IrqSignal};
-use oer_ieee80211_runtime::station::contract::CommandOutcome;
+use oer_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use static_cell::StaticCell;
 
 pub use embassy_net;
@@ -208,16 +208,21 @@ pub(crate) struct RadioBoot {
 /// The station's regulatory configuration, reconnect policy and stop
 /// deadline. The constructors give the defaults: a reconnect every second
 /// after a lost association ([`RECONNECT`]) and two seconds for the IP
-/// service to return its receive buffers at a stop after a failure
-/// ([`DRAIN`]); the `with_` methods override them.
+/// service to return its receive buffers at a stop ([`DRAIN`]), the
+/// application's [`Station::stop`] or one after a failure; the `with_`
+/// methods override them.
 #[derive(Clone, Copy)]
-pub struct Config(wifi::Config);
+pub struct Config {
+    chip: wifi::Config,
+    /// The stop deadline `chip` holds, for [`Station::stop`].
+    drain: oer_time::Duration,
+}
 
 /// The default interval of a reconnect after a lost association.
 pub const RECONNECT: embassy_time::Duration = embassy_time::Duration::from_secs(1);
 
-/// The default bound of a stop after a failure: how long the IP service
-/// may take to return the receive buffers it holds. The library's choice,
+/// The default bound of a stop: how long the IP service may take to return
+/// the receive buffers it holds. The library's choice,
 /// not a measured need.
 pub const DRAIN: embassy_time::Duration = embassy_time::Duration::from_secs(2);
 
@@ -265,14 +270,21 @@ impl Config {
         cap_dbm: i8,
         all_channels: bool,
     ) -> Result<Self, ConfigError> {
-        let config = wifi::Config::new(channel, country, cap_dbm, all_channels, stop(DRAIN)?)
-            .map_err(|error| match error {
-                wifi::InitializationError::Country | wifi::InitializationError::Domain => {
-                    ConfigError::Country
+        let drain = stop(DRAIN)?;
+        let config =
+            wifi::Config::new(channel, country, cap_dbm, all_channels, drain).map_err(|error| {
+                match error {
+                    wifi::InitializationError::Country | wifi::InitializationError::Domain => {
+                        ConfigError::Country
+                    }
+                    _ => ConfigError::Channel,
                 }
-                _ => ConfigError::Channel,
             })?;
-        Self(config).with_reconnect(RECONNECT)
+        Self {
+            chip: config,
+            drain: drain.drain,
+        }
+        .with_reconnect(RECONNECT)
     }
 
     /// Reconnect every `interval` after a lost association.
@@ -282,21 +294,30 @@ impl Config {
     pub fn with_reconnect(self, interval: embassy_time::Duration) -> Result<Self, ConfigError> {
         let policy = wifi::ReconnectPolicy::every(oer_duration(interval))
             .map_err(|wifi::ZeroReconnectInterval| ConfigError::Reconnect)?;
-        Ok(Self(self.0.with_reconnect(policy)))
+        Ok(Self {
+            chip: self.chip.with_reconnect(policy),
+            ..self
+        })
     }
 
     /// Stay idle after a lost association until the next connect.
     pub fn without_reconnect(self) -> Self {
-        Self(self.0.with_reconnect(wifi::ReconnectPolicy::DISABLED))
+        Self {
+            chip: self.chip.with_reconnect(wifi::ReconnectPolicy::DISABLED),
+            ..self
+        }
     }
 
-    /// Give the IP service `drain` to return its receive buffers at a stop
-    /// after a failure.
+    /// Give the IP service `drain` to return its receive buffers at a stop.
     ///
     /// # Errors
     /// [`ConfigError::Drain`] for a zero deadline.
     pub fn with_drain(self, drain: embassy_time::Duration) -> Result<Self, ConfigError> {
-        Ok(Self(self.0.with_stop(stop(drain)?)))
+        let policy = stop(drain)?;
+        Ok(Self {
+            chip: self.chip.with_stop(policy),
+            drain: policy.drain,
+        })
     }
 }
 
@@ -393,6 +414,16 @@ pub struct Station {
     control: wifi::Control<'static>,
     started: bool,
     address: [u8; 6],
+    /// How long a stop gives the network to return its receive buffers.
+    drain: oer_time::Duration,
+}
+
+/// Why a stop did not end with the station stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StopError {
+    /// The station ended by a failure, which the library records before it
+    /// resets the chip.
+    Failed,
 }
 
 /// The station's network device, which [`Net::start`] takes. Dropped
@@ -488,7 +519,7 @@ impl Station {
                 power: &POWER_SIGNAL,
                 dma,
             },
-            config.0,
+            config.chip,
         );
         if RadioTasks::radio_actor(&executor, actor).is_err()
             || RadioTasks::driver(&executor, runners.driver).is_err()
@@ -498,7 +529,7 @@ impl Station {
         boot.urgent = Some(urgent);
         boot.pending.station = Some(StationStart {
             runner: runners.station,
-            config: config.0,
+            config: config.chip,
             address,
             nonces,
         });
@@ -507,6 +538,7 @@ impl Station {
                 control,
                 started: false,
                 address,
+                drain: config.drain,
             },
             Device {
                 network: Some((network, stopper)),
@@ -560,9 +592,42 @@ impl Station {
         }
     }
 
+    /// Leave the network and stop the station for good: the IP service
+    /// stops and returns every receive buffer it holds within the
+    /// configuration's drain ([`Config::with_drain`]), then the radio
+    /// retires. The future ends once the station stopped; a later connect
+    /// answers [`ConnectError::Stopped`], and the IP service's waits end
+    /// with its stop. A second stop ends with the first one's result.
+    ///
+    /// # Errors
+    /// [`StopError::Failed`]: the station ended by a failure instead.
+    pub async fn stop(&mut self) -> Result<(), StopError> {
+        let deadline = {
+            use oer_time::Clock as _;
+            EmbassyClock.now().saturating_add(self.drain)
+        };
+        self.control.stop(deadline);
+        match self.control.wait_stopped().await {
+            Ok(wifi::StationExit::Stopped) => Ok(()),
+            Ok(_) | Err(wifi::RunnerLost) => Err(StopError::Failed),
+        }
+    }
+
     /// The link's state and epoch now.
     pub fn link(&self) -> LinkSnapshot {
         self.control.link()
+    }
+
+    /// The network the station is linked to now: its link is up and its last
+    /// notice was the connection.
+    pub fn linked(&self) -> Option<Connected> {
+        let status = self.control.status();
+        match (status.link.state, status.notice) {
+            (LinkState::Up, Some(Notice::Connected { bssid, channel })) => {
+                Some(Connected { bssid, channel })
+            }
+            _ => None,
+        }
     }
 
     /// The station's own MAC address.

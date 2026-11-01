@@ -38,7 +38,7 @@ use static_cell::{ConstStaticCell, StaticCell};
 
 use crate::fatal::Failure;
 use crate::load::parts::{Part, Polled};
-use crate::requests::{Action, Answer, Phase, action};
+use oer_services_wifi_station::phase::{Action, Answer, Phase, action};
 use crate::transport::CONSOLE;
 use future::Boundary;
 

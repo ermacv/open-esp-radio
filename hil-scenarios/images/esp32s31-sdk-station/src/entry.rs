@@ -1,23 +1,28 @@
 // The SDK station image: the boot of the library's station example with
 // the console added and every channel scanned, the HIL agent serving the
-// base module and the SDK station service, and one worker that answers the
-// service's requests in order.
+// base module, the SDK station and Wi-Fi station services, and one worker
+// that answers their requests in order.
 
 use oer_espressif::{
     Aes, AppResult, Boot, Console, Error, Peripherals, Started,
     time::{Duration, with_timeout},
     wifi::{
         self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, Station,
-        embassy_net,
+        StopError, embassy_net,
     },
 };
 use oer_hil_agent::base::Either;
 use oer_hil_agent_espressif::{Inbox, Mailbox, answer, answer_then_trap};
+use oer_hil_protocol::RequestIdentity;
 use oer_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, Ipv4, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
 };
-use oer_services_wifi_station::{StationError, runtime as codes};
+use oer_services_wifi_station::{
+    self as wifi_station, Joined, Left, StationError,
+    phase::{Action, Answer, Phase},
+    runtime as codes,
+};
 use static_cell::ConstStaticCell;
 
 /// The regulatory domain the station installs, every 2.4 GHz channel it
@@ -26,8 +31,9 @@ const COUNTRY: [u8; 2] = *b"DE";
 /// The owner's transmit power cap, below the domain's ceiling.
 const TX_CAP_DBM: i8 = 10;
 
-/// A request of the SDK station service or of the fault service.
-type Requests = Either<Request, oer_services_fault::Request>;
+/// A request of the SDK station service, of the Wi-Fi station service or of
+/// the fault service.
+type Requests = Either<Either<Request, wifi_station::Request>, oer_services_fault::Request>;
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 
@@ -50,6 +56,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let worker = Worker {
         station,
         net,
+        phase: Phase::Idle,
         requests: inbox,
     };
     Ok(boot.run(oer_hil_agent_espressif::serve(
@@ -61,10 +68,12 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     )))
 }
 
-/// Answers the service's requests one at a time.
+/// Answers the services' requests one at a time.
 struct Worker {
     station: Station,
     net: Net<RX, TX>,
+    /// Where the Wi-Fi station service's one join per boot is.
+    phase: Phase,
     requests: Inbox<'static, Requests>,
 }
 
@@ -73,19 +82,20 @@ impl Worker {
         loop {
             let (identity, request) = self.requests.next().await;
             match request {
-                Either::First(Request::Connect(connect)) => {
+                Either::First(Either::First(Request::Connect(connect))) => {
                     answer(identity, &self.connect(connect).await);
                 }
-                Either::First(Request::WaitIpv4(WaitIpv4 { timeout_ms })) => {
+                Either::First(Either::First(Request::WaitIpv4(WaitIpv4 { timeout_ms }))) => {
                     answer(identity, &self.wait_ipv4(timeout_ms).await);
                 }
-                Either::First(Request::Exchange(exchange)) => {
+                Either::First(Either::First(Request::Exchange(exchange))) => {
                     answer(identity, &self.exchange(exchange).await);
                 }
-                Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms })) => {
+                Either::First(Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms }))) => {
                     answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
-                Either::First(Request::GetStatus(_)) => answer(identity, &self.status()),
+                Either::First(Either::First(Request::GetStatus(_))) => answer(identity, &self.status()),
+                Either::First(Either::Second(request)) => self.station_request(identity, request).await,
                 // Traps once the answer is written; a write the console
                 // cannot confirm ends the application, which records it.
                 Either::Second(oer_services_fault::Request::RaiseException(_)) => {
@@ -101,22 +111,81 @@ impl Worker {
         else {
             return Connection::InvalidProfile;
         };
-        let failed = |error: StationError| match error {
-            StationError::Failed { code } => Connection::Failed { code },
-            _ => Connection::Stopped,
-        };
         match self.station.connect(profile).await {
             Ok(linked) => Connection::Linked {
                 bssid: linked.bssid,
                 channel: linked.channel,
             },
-            Err(ConnectError::Failed(reason)) => failed(codes::connect_failed(&reason)),
-            Err(ConnectError::Refused(refusal)) => failed(codes::refused(refusal)),
-            Err(ConnectError::Busy) => {
-                failed(StationError::failed(codes::class::NOT_ADMITTED, 0, 0))
-            }
             Err(ConnectError::Profile(_)) => Connection::InvalidProfile,
-            Err(ConnectError::Stopped) => Connection::Stopped,
+            Err(error) => match station_error(error) {
+                StationError::Failed { code } => Connection::Failed { code },
+                _ => Connection::Stopped,
+            },
+        }
+    }
+
+    /// A Wi-Fi station service request: one join per boot, a leave of the
+    /// joined station once ([`wifi_station::phase`]).
+    async fn station_request(&mut self, identity: RequestIdentity, request: wifi_station::Request) {
+        match wifi_station::phase::action(self.phase, request) {
+            Action::Answer(Answer::Joined(joined)) => answer(identity, &joined),
+            Action::Answer(Answer::Left(left)) => answer(identity, &left),
+            Action::Status => answer(identity, &self.station_status()),
+            Action::Join(join) => {
+                let joined = self.join(join).await;
+                answer(identity, &joined);
+            }
+            Action::Leave => {
+                let left = self.leave().await;
+                answer(identity, &left);
+            }
+        }
+    }
+
+    /// Connect to the join's network. The station scans every channel the
+    /// domain permits; the join's channel must be one of them, and the
+    /// host checks that the link came up on it. Settings the station
+    /// refuses leave the image idle for another join.
+    async fn join(&mut self, join: wifi_station::Join) -> Joined {
+        let profile = wifi::Profile::wpa2(join.ssid.as_bytes(), join.passphrase.as_bytes());
+        let (Ok(profile), Ok(_)) = (profile, wifi::Config::new(COUNTRY, join.channel, TX_CAP_DBM))
+        else {
+            return Joined::Refused(StationError::InvalidSettings);
+        };
+        self.phase = Phase::Joined;
+        match self.station.connect(profile).await {
+            Ok(linked) => Joined::Linked {
+                bssid: linked.bssid,
+                channel: linked.channel,
+            },
+            Err(error) => Joined::Refused(station_error(error)),
+        }
+    }
+
+    /// Stop the station: the IP service returns its receive buffers, then
+    /// the radio retires.
+    async fn leave(&mut self) -> Left {
+        self.phase = Phase::Leaving;
+        let left = match self.station.stop().await {
+            Ok(()) => Left::Down,
+            Err(StopError::Failed) => Left::Refused(StationError::Unavailable),
+        };
+        self.phase = Phase::Stopped;
+        left
+    }
+
+    fn station_status(&self) -> wifi_station::Status {
+        wifi_station::Status {
+            address: self.station.address(),
+            link: self.station.linked().map(|linked| wifi_station::Link {
+                bssid: linked.bssid,
+                channel: linked.channel,
+            }),
+            ipv4: leased(self.net.status().ipv4).map(|configuration| wifi_station::Ipv4 {
+                address: configuration.address,
+                prefix: configuration.prefix_length,
+                gateway: configuration.gateway,
+            }),
         }
     }
 
@@ -158,6 +227,18 @@ impl Worker {
             link_up: self.station.link().state == LinkState::Up,
             ipv4: leased(net.ipv4).map(ipv4),
         }
+    }
+}
+
+/// The Wi-Fi station service's error of a connect the station did not
+/// complete, numbered as its runtime numbers them.
+fn station_error(error: ConnectError) -> StationError {
+    match error {
+        ConnectError::Failed(reason) => codes::connect_failed(&reason),
+        ConnectError::Refused(refusal) => codes::refused(refusal),
+        ConnectError::Busy => StationError::failed(codes::class::NOT_ADMITTED, 0, 0),
+        ConnectError::Profile(_) => StationError::InvalidSettings,
+        ConnectError::Stopped => StationError::Unavailable,
     }
 }
 

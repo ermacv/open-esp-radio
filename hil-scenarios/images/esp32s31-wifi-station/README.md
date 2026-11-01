@@ -1,6 +1,6 @@
 # ESP32-S31 Wi-Fi station image
 
-The image the HIL Wi-Fi station scenarios of the ESP32-S31 share. It starts
+The image of the [Wi-Fi load scenario](../../wifi-load/README.md). It starts
 the shared staged platform, serves the HIL base module over the USB
 Serial/JTAG console and mounts two services:
 
