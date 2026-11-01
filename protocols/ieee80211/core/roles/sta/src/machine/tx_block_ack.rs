@@ -34,6 +34,8 @@ pub struct StaTxBlockAckPolicy {
     pub retry: TxBlockAckRetry,
     /// How long an agreement may carry no data before the station ends it.
     pub inactivity: Duration,
+    /// How long an aggregate's missing member is retried.
+    pub retry_members: crate::data::AggregateRetry,
 }
 
 /// Why a policy builds no originator.
@@ -45,6 +47,8 @@ pub enum StaTxBlockAckPolicyError {
     NoAttempts,
     /// An idle agreement would end at once.
     ZeroInactivity,
+    /// A missing aggregate member would never be retried.
+    NoMemberRetry,
 }
 
 /// What the station's agreements owe the access point now.
@@ -54,6 +58,11 @@ pub(crate) enum TxBlockAckOwed {
     Delba { tid: u8 },
     /// An ADDBA Request negotiating `tid`, which the caller begins.
     Negotiate { tid: u8 },
+    /// A BlockAckReq moving the recipient's window of `tid` to `start`.
+    Request {
+        tid: u8,
+        start: oer_ieee80211_wire::sequence::SequenceNumber,
+    },
 }
 
 /// The station's transmit Block Ack originator and its per-association state.
@@ -61,10 +70,13 @@ pub struct StaTxBlockAck {
     originator: TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS>,
     retry: TxBlockAckRetry,
     inactivity: Duration,
+    retry_members: crate::data::AggregateRetry,
     /// When data of each TID last came while the association admits agreements.
     traffic: [Option<Instant>; TX_BLOCK_ACK_MAX_TIDS],
     /// TIDs whose ended agreement owes the access point a DELBA, one bit each.
     delba: u8,
+    /// Where each TID's owed BlockAckReq moves the recipient's window.
+    request: [Option<oer_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
     /// The current association admits agreements: an HT access point of a QoS BSS.
     admitted: bool,
 }
@@ -82,6 +94,9 @@ impl StaTxBlockAck {
         }
         if policy.inactivity == Duration::ZERO {
             return Err(StaTxBlockAckPolicyError::ZeroInactivity);
+        }
+        if policy.retry_members.attempts == 0 || policy.retry_members.lifetime == Duration::ZERO {
+            return Err(StaTxBlockAckPolicyError::NoMemberRetry);
         }
         // Validate before building, so the error names the policy's field.
         TxBlockAckConfig {
@@ -115,8 +130,10 @@ impl StaTxBlockAck {
             originator,
             retry: policy.retry,
             inactivity: policy.inactivity,
+            retry_members: policy.retry_members,
             traffic: [None; TX_BLOCK_ACK_MAX_TIDS],
             delba: 0,
+            request: [None; TX_BLOCK_ACK_MAX_TIDS],
             admitted: false,
         })
     }
@@ -128,7 +145,59 @@ impl StaTxBlockAck {
         self.originator.stop_all();
         self.traffic = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.delba = 0;
+        self.request = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.admitted = admitted;
+    }
+
+    /// One terminal settled `marks` of a TID's sequence numbers: the
+    /// agreement's window moves over them, and when it passed a dropped one
+    /// the recipient owes a BlockAckReq to move its own. `receiver` and
+    /// `transmitter` name the agreement's peers.
+    pub(crate) fn settle(
+        &mut self,
+        marks: crate::data::BlockAckMarks,
+        receiver: [u8; 6],
+        transmitter: [u8; 6],
+    ) {
+        let tid = marks.tid.value();
+        if !self.admitted || self.originator.operational(tid).is_none() {
+            return;
+        }
+        let delivered = self
+            .originator
+            .on_delivered(tid, marks.start, marks.delivered, receiver, transmitter)
+            .is_some();
+        let expired = self
+            .originator
+            .on_expired(tid, marks.start, marks.expired, receiver, transmitter)
+            .is_some();
+        if (delivered || expired)
+            && let Some(agreement) = self.originator.operational(tid)
+            && let Some(request) = self.request.get_mut(usize::from(tid))
+        {
+            *request = Some(agreement.starting_sequence);
+        }
+    }
+
+    /// The BlockAckReq of `tid` went to the port.
+    pub(crate) fn request_sent(&mut self, tid: u8) {
+        if let Some(request) = self.request.get_mut(usize::from(tid)) {
+            *request = None;
+        }
+    }
+
+    /// The BlockAckReq of `tid` went unanswered: it is owed again at the
+    /// agreement's current head while the agreement lives.
+    pub(crate) fn request_unanswered(&mut self, tid: u8) {
+        let head = self
+            .originator
+            .operational(tid)
+            .map(|agreement| agreement.starting_sequence);
+        if let Some(request) = self.request.get_mut(usize::from(tid))
+            && request.is_none()
+        {
+            *request = head;
+        }
     }
 
     /// Data of `tid` came at `now`: an idle TID negotiates, a live one stays
@@ -143,6 +212,11 @@ impl StaTxBlockAck {
         *last = Some(now);
         // A live, queued or closed TID refuses; that is its normal state.
         let _queued: bool = self.originator.queue(tid, self.retry);
+    }
+
+    /// How long an aggregate's missing member is retried.
+    pub(crate) const fn retry_members(&self) -> crate::data::AggregateRetry {
+        self.retry_members
     }
 
     /// The operational agreement of `tid`.
@@ -175,6 +249,15 @@ impl StaTxBlockAck {
         }
         if !can_send {
             return None;
+        }
+        for tid in ALL_TIDS {
+            let start = self.request.get(usize::from(tid)).copied().flatten();
+            if let Some(start) = start {
+                if self.originator.operational(tid).is_some() {
+                    return Some(TxBlockAckOwed::Request { tid, start });
+                }
+                self.request_sent(tid);
+            }
         }
         if self.delba != 0 {
             // trailing_zeros of a nonzero u8 is below eight.
@@ -258,7 +341,7 @@ impl StaTxBlockAck {
             .min();
         let due = if !can_send {
             None
-        } else if self.delba != 0 {
+        } else if self.delba != 0 || self.request.iter().any(Option::is_some) {
             Some(Instant::EPOCH)
         } else {
             self.originator.next_pending_deadline()

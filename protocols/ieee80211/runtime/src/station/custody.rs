@@ -43,10 +43,32 @@ pub struct UnroutedTx<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     pub outcome: PortReturnedTx<'id, B>,
 }
 
+/// An aggregate terminal that cannot belong to the submitted aggregate. It
+/// still owns the ticket, the context and every subframe the port returned.
+pub struct UnroutedAggregate<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
+    pub context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
+    pub ticket: Slot<
+        'id,
+        <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
+        <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
+    >,
+    /// The data subframes taken, in order.
+    pub mpdus: heapless::Vec<
+        PoolMpdu<'id, B::Types<'id>, B::Large>,
+        { oer_ieee80211_core_roles_sta::data::MAX_AGGREGATE },
+    >,
+    /// A subframe of the station's class, or one beyond the aggregate's bound.
+    pub stray: Option<StationTxBuffer<'id, B>>,
+    /// The subframes not taken.
+    pub rest: <<B::Types<'id> as PhaseTypes<'id>>::TxAggregate as IntoIterator>::IntoIter,
+    pub outcome: oer_ieee80211_contracts_port::PhaseAggregateOutcome<'id, B::Types<'id>>,
+}
+
 /// The first offending return, with every resource still owned.
 pub enum RejectedTerminal<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     Sealed(LowerMacTerminal<'id, B::Types<'id>>),
     Transmit(UnroutedTx<'id, B>),
+    Aggregate(UnroutedAggregate<'id, B>),
 }
 
 pub(super) struct ContractFault<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {

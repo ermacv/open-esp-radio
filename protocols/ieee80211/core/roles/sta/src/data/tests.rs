@@ -1563,3 +1563,122 @@ fn a_changed_admission_applies_to_the_next_msdu_and_keeps_a_numbered_one() {
     assert_eq!(tid_and_sequence(memory(&sent[1].buffer)), (6, 0));
     assert_eq!(sent[1].context.access_category(), WmmAccessCategory::Voice);
 }
+
+fn window(start: u16, subframes: usize, max_length: u32) -> Option<AggregateWindow> {
+    Some(AggregateWindow {
+        start: SequenceNumber::new(start).unwrap(),
+        size: 32,
+        subframes,
+        max_length,
+    })
+}
+
+const RETRY: AggregateRetry = AggregateRetry {
+    lifetime: oer_time::Duration::from_secs(1),
+    attempts: 2,
+};
+
+fn block_ack(start: u16, bitmap: u64) -> oer_ieee80211_contracts_port::AggregateOutcome<(), ()> {
+    TxOutcome::Ended(oer_ieee80211_contracts_port::AggregateEnd::Delivered {
+        air: oer_ieee80211_contracts_port::Air {
+            transmissions: NonZeroU16::MIN,
+            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+        },
+        report: oer_ieee80211_contracts_port::BlockAckReport::new(
+            SequenceNumber::new(start).unwrap(),
+            bitmap,
+        ),
+        ack: (),
+    })
+}
+
+fn aggregate(
+    attempt: Option<DataAttempt<'static, Data<'static>, Caps>>,
+) -> DataAggregate<'static, Data<'static>, Caps> {
+    match attempt {
+        Some(DataAttempt::Aggregate(aggregate)) => aggregate,
+        _ => panic!("an aggregate"),
+    }
+}
+
+#[test]
+fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for _ in 0..5 {
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut link,
+            },
+            &mut events,
+        )
+        .unwrap();
+    }
+    // Without an agreement the first MPDU goes alone.
+    let alone = match data.poll_attempt(|_| None, &mut events) {
+        Some(DataAttempt::Single(single)) => single,
+        _ => panic!("a single MPDU"),
+    };
+    // Three subframes at most: 1, 2 and 3; 4 waits.
+    let first = aggregate(data.poll_attempt(|_| window(1, 3, u32::MAX), &mut events));
+    assert_eq!((first.context.len(), first.mpdus.len()), (3, 3));
+    assert_eq!(first.context.tid().value(), 0);
+    assert!(
+        data.poll_attempt(|_| window(1, 3, u32::MAX), &mut events)
+            .is_none(),
+        "both tickets are out"
+    );
+    // The BlockAck misses 2: it goes back, 1 and 3 retire.
+    let marks = data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            mpdus: first.mpdus,
+            completion: block_ack(1, 0b101),
+        },
+        oer_time::Instant::from_micros(2_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert_eq!(
+        marks,
+        Some(BlockAckMarks {
+            tid: WmmUserPriority::UP0,
+            start: SequenceNumber::new(1).unwrap(),
+            delivered: 0b101,
+            expired: 0,
+        })
+    );
+    // One subframe's octets: only 2 fits a length below two of them.
+    let short = aggregate(data.poll_attempt(|_| window(2, 8, 200), &mut events));
+    assert_eq!(short.context.len(), 1);
+    assert!(matches!(short.mpdus[0], ReturnedMpdu::Fresh(_)));
+    // 2 misses its second aggregate on the air: the policy drops it.
+    let marks = data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: short.context,
+            ticket: short.ticket,
+            mpdus: short.mpdus,
+            completion: block_ack(2, 0),
+        },
+        oer_time::Instant::from_micros(3_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert_eq!(marks.map(|marks| marks.expired), Some(0b1));
+    assert_eq!(losses(&events, DataLoss::RetryLimit), 1);
+    // A sequence number outside the window goes alone.
+    assert!(matches!(
+        data.poll_attempt(|_| window(100, 8, u32::MAX), &mut events),
+        Some(DataAttempt::Single(_))
+    ));
+    drop(alone);
+    assert_eq!(tokens_lost(&events), 0);
+}

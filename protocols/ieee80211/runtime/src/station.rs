@@ -275,6 +275,16 @@ pub enum TxContext<
     Station(StaTxContext<'id, Path>),
     /// An MSDU operation, including its original link, TID and queue order.
     Data(DataTxContext<'id, K, C, oer_ieee80211_core_roles_sta::data::AcPermit, Path>),
+    /// An aggregate of a TID's MSDUs, each member's description in order.
+    DataAggregate(
+        oer_ieee80211_core_roles_sta::data::DataAggregateContext<
+            'id,
+            K,
+            C,
+            oer_ieee80211_core_roles_sta::data::AcPermit,
+            Path,
+        >,
+    ),
 }
 
 /// Owned operation context selected before the service's body loan.
@@ -284,12 +294,22 @@ pub type TxOwnedContext<K, C, Path> = oer_radio_port::ContextChoice<
         Path,
         oer_ieee80211_core_roles_sta::machine::StaTxPurpose,
     >,
-    oer_ieee80211_core_roles_sta::epoch::EpochContext<
-        Path,
-        oer_ieee80211_core_roles_sta::data::DataTxInfo<
-            K,
-            C,
-            oer_ieee80211_core_roles_sta::data::AcPermit,
+    oer_radio_port::ContextChoice<
+        oer_ieee80211_core_roles_sta::epoch::EpochContext<
+            Path,
+            oer_ieee80211_core_roles_sta::data::DataTxInfo<
+                K,
+                C,
+                oer_ieee80211_core_roles_sta::data::AcPermit,
+            >,
+        >,
+        oer_ieee80211_core_roles_sta::epoch::EpochContext<
+            Path,
+            oer_ieee80211_core_roles_sta::data::DataAggregateInfo<
+                K,
+                C,
+                oer_ieee80211_core_roles_sta::data::AcPermit,
+            >,
         >,
     >,
 >;
@@ -303,7 +323,8 @@ where
     fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
         match self {
             Self::Station(context) => context.enclose().first(),
-            Self::Data(context) => context.enclose().second(),
+            Self::Data(context) => context.enclose().first().second(),
+            Self::DataAggregate(context) => context.enclose().second().second(),
         }
     }
     fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
@@ -311,9 +332,14 @@ where
             oer_radio_port::ContextChoice::First(context) => {
                 Self::Station(StaTxContext::restore(context))
             }
-            oer_radio_port::ContextChoice::Second(context) => {
-                Self::Data(DataTxContext::restore(context))
-            }
+            oer_radio_port::ContextChoice::Second(context) => match context.into_choice() {
+                oer_radio_port::ContextChoice::First(context) => {
+                    Self::Data(DataTxContext::restore(context))
+                }
+                oer_radio_port::ContextChoice::Second(context) => Self::DataAggregate(
+                    oer_ieee80211_core_roles_sta::data::DataAggregateContext::restore(context),
+                ),
+            },
         }
     }
 }
@@ -388,6 +414,9 @@ type DataContext<'id, B> = DataTxContext<
 pub type PortRxMeta<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::RxMeta;
 /// The ACK evidence of the port `B`.
 pub type PortAck<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::AckEvidence;
+/// The BlockAck evidence of the port `B`'s aggregates.
+pub type PortBlockAck<'id, B> =
+    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::BlockAckEvidence;
 
 /// The station of the service on the port `B`.
 pub type PortStation<'id, B, C, const GROUPS: usize = 2> = Station<
@@ -419,12 +448,16 @@ type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
     RetiredService<'id, B, C, S, GROUPS, O>,
 );
 
+/// The most data buffers a station service's data machine holds: two
+/// aggregates' worth of MPDUs, one on the air and one waiting.
+pub const DATA_BUFFERS: usize = 2 * oer_ieee80211_core_roles_sta::data::MAX_AGGREGATE;
+
 /// The data machine of the service on the port `B`.
 pub type PortData<'id, B> = StaData<
     'id,
     PortDataTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Large>,
     <B as StationPort>::Caps,
-    8,
+    DATA_BUFFERS,
 >;
 
 /// The arbiter of the service on the port `B`.
@@ -470,7 +503,8 @@ mod custody;
 mod key_unwrap;
 use custody::{ContractFault, StepFailure};
 pub use custody::{
-    QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
+    QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedAggregate,
+    UnroutedTx,
 };
 pub use key_unwrap::KeyUnwrapSlot;
 
@@ -542,7 +576,9 @@ pub type PortReturnedTx<'id, B> =
 /// A backend returned owners that cannot belong to the submitted operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendContractViolation {
-    UnexpectedAggregate,
+    /// An aggregate's terminal returned another number of subframes than
+    /// its members, a station's buffer among them, or no aggregate context.
+    AggregateMembers,
     UnexpectedTerminal(PendingTerminal),
     TerminalAfterEventEnd,
     UnexpectedAccessPointTerminal,
@@ -925,7 +961,7 @@ impl<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     C: StaCallbacks,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
     const GROUPS: usize,
     O: StationEvents,
 > StoppedService<'p, 'id, B, C, S, GROUPS, O>
@@ -1041,7 +1077,7 @@ pub struct RetiredService<
         'id,
         PortDataTokens<'id, B::Types<'id>, B::Large>,
         B::Caps,
-        8,
+        DATA_BUFFERS,
     >,
     pub rates: S,
     /// The composition's event sink, which a restart carries on.
@@ -1173,7 +1209,7 @@ impl<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     C: StaCallbacks,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
     const GROUPS: usize,
     O: StationEvents,
 > Runner<'id, B, C, S, GROUPS, O>
@@ -1472,7 +1508,7 @@ impl<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     C: StaCallbacks,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
     const GROUPS: usize,
     O: StationEvents,
 > ServiceState<'id, B, C, S, GROUPS, O>
@@ -2296,17 +2332,44 @@ impl<
             // station frame, submitted at once, waits for at most that
             // depth and the one on the air; the limit is the service's, for
             // every data source it runs.
-            loop {
+            'data: loop {
+                let windows =
+                    aggregate_windows::<B, P, S, C, GROUPS>(&self.station, &self.rates, phase);
+                let spacing = self
+                    .station
+                    .tx_aggregate_limits()
+                    .map_or(0, |(spacing, _)| spacing);
                 // This scope owns the short LinkView borrow. Only an owned
                 // follow-up leaves it; handling it may then borrow all of self.
-                let submitted = {
+                let submitted = 'submitted: {
                     let Some(link) = self.station.link() else {
-                        break;
+                        break 'data;
                     };
-                    let Some(transmit) = self.data.poll_action() else {
-                        break;
+                    let Some(attempt) = self
+                        .data
+                        .poll_attempt(|tid| *tid.select(&windows), &mut self.events)
+                    else {
+                        break 'data;
                     };
                     progress = true;
+                    let transmit = match attempt {
+                        data::DataAttempt::Single(transmit) => transmit,
+                        data::DataAttempt::Aggregate(aggregate) => {
+                            break 'submitted submit_aggregate::<B, P, S, O, GROUPS>(
+                                now,
+                                phase,
+                                &link,
+                                &self.rates,
+                                AggregateBanks {
+                                    data: &mut self.data,
+                                    pending: &mut self.pending,
+                                    events: &mut self.events,
+                                },
+                                spacing,
+                                aggregate,
+                            );
+                        }
+                    };
                     let data::DataTransmitParts {
                         context,
                         ticket,
@@ -2442,6 +2505,15 @@ impl<
                     self.data.leave(&mut self.events);
                 }
             }
+            Follow::DataRefused(reason, marks) => {
+                io.output.emit(ServiceOutput::TxRefused {
+                    operation: TxOperation::Data,
+                    reason: reason.into(),
+                });
+                if let Some(marks) = marks {
+                    self.station.tx_block_ack_settled(marks);
+                }
+            }
             Follow::Refused {
                 context,
                 ticket,
@@ -2450,7 +2522,7 @@ impl<
             } => {
                 let operation = match &context {
                     TxContext::Station(_) => TxOperation::Station,
-                    TxContext::Data(_) => TxOperation::Data,
+                    TxContext::Data(_) | TxContext::DataAggregate(_) => TxOperation::Data,
                 };
                 io.output.emit(ServiceOutput::TxRefused {
                     operation,
@@ -2921,11 +2993,8 @@ impl<
                 }
                 self.returned(now, context, ticket, buffer, ReturnedTx::Completed(outcome))?;
             }
-            terminal @ LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(_)) => {
-                return Err(ContractFault::sealed(
-                    BackendContractViolation::UnexpectedAggregate,
-                    terminal,
-                ));
+            LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(terminal)) => {
+                self.aggregate_terminal(now, terminal)?;
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
             LowerMacTerminal::Configured(oer_ieee80211_contracts_port::Configured::Station(
@@ -3118,6 +3187,102 @@ impl<
         Ok(())
     }
 
+    /// An aggregate's terminal: every subframe of the data class, as many
+    /// as its members, back to Data; what it settled to the TID's agreement
+    /// and its sample to the rate selection. Anything else is a contract
+    /// violation that retains every owner returned.
+    fn aggregate_terminal(
+        &mut self,
+        now: Instant,
+        terminal: oer_ieee80211_contracts_port::AggregateCompleted<'id, B::Types<'id>>,
+    ) -> Result<(), ContractFault<'id, B>> {
+        let oer_ieee80211_contracts_port::TerminalParts {
+            context,
+            ticket,
+            payload,
+            outcome,
+        } = terminal.into_parts(&mut self.terminal_access);
+        let admitted = self
+            .pending
+            .admissions
+            .remove(PendingTerminal::Transmit(ticket.index()));
+        let mut rest = payload.into_iter();
+        let mut mpdus = heapless::Vec::new();
+        let mut stray = None;
+        while stray.is_none() {
+            let Some(mpdu) = rest.next() else {
+                break;
+            };
+            let (buffer, body) = oer_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
+            if let Some(body) = body {
+                match body {}
+            }
+            match B::tx_buffer(buffer) {
+                StationTxBuffer::Large(mpdu) => {
+                    if let Err(mpdu) = mpdus.push(mpdu) {
+                        stray = Some(StationTxBuffer::Large(mpdu));
+                    }
+                }
+                small @ StationTxBuffer::Small(_) => stray = Some(small),
+            }
+        }
+        let context = match context {
+            TxContext::DataAggregate(context)
+                if admitted && stray.is_none() && context.len() == mpdus.len() =>
+            {
+                context
+            }
+            context => {
+                let reason = if admitted {
+                    BackendContractViolation::AggregateMembers
+                } else {
+                    BackendContractViolation::UnexpectedTerminal(PendingTerminal::Transmit(
+                        ticket.index(),
+                    ))
+                };
+                return Err(ContractFault {
+                    reason,
+                    terminal: RejectedTerminal::Aggregate(UnroutedAggregate {
+                        context,
+                        ticket,
+                        mpdus,
+                        stray,
+                        rest,
+                        outcome,
+                    }),
+                });
+            }
+        };
+        let current = self.data.aggregate_is_current(&context);
+        let attempted = u16::try_from(context.len())
+            .ok()
+            .and_then(core::num::NonZeroU16::new);
+        let marks = self.data.aggregate_returned(
+            oer_ieee80211_core_roles_sta::data::DataAggregateReturn::TxDone {
+                context,
+                ticket,
+                mpdus,
+                completion: outcome,
+            },
+            now,
+            self.station.tx_aggregate_retry(),
+            &mut self.events,
+        );
+        let acknowledged = marks.map_or(0, |marks| {
+            u16::try_from(marks.delivered.count_ones()).unwrap_or(u16::MAX)
+        });
+        if let Some(tally) = attempted.and_then(|attempted| {
+            oer_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(attempted, acknowledged)
+                .ok()
+        }) {
+            self.rates.learn_aggregate(now, current, tally, &outcome);
+        }
+        if let Some(marks) = marks {
+            self.station.tx_block_ack_settled(marks);
+        }
+        Ok(())
+    }
+
     /// The context identifies the operation. Class is checked exactly once
     /// against that identity; a mismatch violates the backend contract and
     /// takes the same fail-stop path as Poisoned. A shared AC queue erases
@@ -3177,21 +3342,22 @@ impl<
                         reason,
                     },
                 };
-                self.data.returned(input, &mut self.events);
+                if let Some(marks) = self.data.returned(input, &mut self.events) {
+                    self.station.tx_block_ack_settled(marks);
+                }
                 Ok(())
             }
             (context @ TxContext::Station(_), buffer @ StationTxBuffer::Large(_))
-            | (context @ TxContext::Data(_), buffer @ StationTxBuffer::Small(_)) => {
-                Err(ContractFault {
-                    reason: BackendContractViolation::TxContextBufferMismatch,
-                    terminal: RejectedTerminal::Transmit(UnroutedTx {
-                        context,
-                        ticket,
-                        buffer,
-                        outcome: end,
-                    }),
-                })
-            }
+            | (context @ TxContext::Data(_), buffer @ StationTxBuffer::Small(_))
+            | (context @ TxContext::DataAggregate(_), buffer) => Err(ContractFault {
+                reason: BackendContractViolation::TxContextBufferMismatch,
+                terminal: RejectedTerminal::Transmit(UnroutedTx {
+                    context,
+                    ticket,
+                    buffer,
+                    outcome: end,
+                }),
+            }),
         }
     }
 }
@@ -3207,6 +3373,9 @@ enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: 
     Input(StaInput<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>),
     /// The station associated: the rates start from its peer.
     Associated(Peer<PortRxMeta<'id, B>>),
+    /// A data aggregate did not go; its members ended, which its TID's
+    /// agreement hears.
+    DataRefused(TxRefusal, Option<data::BlockAckMarks>),
     /// A frame of the station did not go.
     Refused {
         context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
@@ -3216,6 +3385,305 @@ enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: 
     },
     /// The station left: the rates leave its peer.
     Notice(StaNotice),
+}
+
+/// What the aggregate submission borrows of the service beside the link.
+struct AggregateBanks<'s, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, O> {
+    data: &'s mut PortData<'id, B>,
+    pending: &'s mut PendingActions<'id, B>,
+    events: &'s mut O,
+}
+
+/// Where each TID may aggregate now: its operational agreement's window,
+/// within the access point's and the port's limits, while the aggregate
+/// rate selection has a rate the port aggregates at.
+fn aggregate_windows<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
+    station: &PortStation<'id, B, C, GROUPS>,
+    rates: &S,
+    phase: &mut P,
+) -> [Option<data::AggregateWindow>; 8]
+where
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
+    C: StaCallbacks,
+{
+    use oer_ieee80211_contracts_port::AmpduPhase;
+    let none = [None; 8];
+    // Only an operational agreement asks for the aggregate rate.
+    if station
+        .tx_aggregate_windows(data::MAX_AGGREGATE, u32::MAX)
+        .iter()
+        .all(Option::is_none)
+    {
+        return none;
+    }
+    let Some(rate) = rates
+        .plan(FrameRates::Aggregate, |rate| phase.rate(rate))
+        .map(|plan| plan.into_first().rate)
+    else {
+        return none;
+    };
+    if phase.station().ampdu_rate(rate).is_err() {
+        return none;
+    }
+    let capabilities = phase.station().ampdu_capabilities();
+    station.tx_aggregate_windows(
+        usize::from(capabilities.max_subframes),
+        capabilities.max_length,
+    )
+}
+
+/// Build one data aggregate through the station interface's builder and
+/// submit it. Members the builder refuses after the first go back to Data
+/// unchanged; a refusal of the first, or of the aggregate's link, rate or
+/// numbering, returns every member without a radio terminal.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one builder's typestate from its empty state to its submission"
+)]
+fn submit_aggregate<'p, 'id: 'p, B, P, S, O, const GROUPS: usize>(
+    now: Instant,
+    phase: &mut P,
+    link: &oer_ieee80211_core_roles_sta::machine::LinkView<
+        '_,
+        'id,
+        PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
+    >,
+    rates: &S,
+    banks: AggregateBanks<'_, 'id, B, O>,
+    spacing: u8,
+    aggregate: data::DataAggregate<'id, PortDataTokens<'id, B::Types<'id>, B::Large>, B::Caps>,
+) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
+where
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
+    O: EventSink<oer_ieee80211_core_roles_sta::events::StaEvent>,
+{
+    use oer_ieee80211_contracts_port::{
+        AggregateAttempt, AggregateRefused, AmpduPhase, CheckedAggregate, ClassSubframe,
+        LayoutRefused, MpduStartSpacing, SubframeSource, Tid, TxNumbering,
+    };
+    let AggregateBanks {
+        data,
+        pending,
+        events,
+    } = banks;
+    let data::DataAggregate {
+        mut context,
+        ticket,
+        mpdus,
+    } = aggregate;
+    // Every member back to Data, the ticket and permission with them.
+    macro_rules! refuse {
+        ($context:expr, $mpdus:expr, $reason:expr) => {{
+            let marks = data.aggregate_returned(
+                data::DataAggregateReturn::<'id, _, _, (), ()>::Refused {
+                    context: $context,
+                    ticket,
+                    mpdus: $mpdus,
+                },
+                now,
+                None,
+                &mut *events,
+            );
+            return Ok(Follow::DataRefused($reason, marks));
+        }};
+    }
+    let protection = match context.protection(link) {
+        Ok(protection) => protection,
+        Err(reason) => refuse!(context, mpdus, reason),
+    };
+    let Some(rate) = rates
+        .plan(FrameRates::Aggregate, |rate| phase.rate(rate))
+        .map(|plan| plan.into_first().rate)
+    else {
+        refuse!(context, mpdus, TxRefusal::NoRate);
+    };
+    let Ok(rate) = phase.station().ampdu_rate(rate) else {
+        refuse!(context, mpdus, TxRefusal::NoRate);
+    };
+    let (Some(receiver), Some(tid), Some(spacing)) = (
+        link.recipient(),
+        Tid::new(context.tid().value()),
+        MpduStartSpacing::new(spacing),
+    ) else {
+        refuse!(context, mpdus, TxRefusal::LinkChanged);
+    };
+    let builder_protection = match protection {
+        DataProtection::Open => Some(TxProtection::Open),
+        DataProtection::Ccmp(key) => key
+            .number()
+            .map(|numbered| TxProtection::Ccmp(numbered.key)),
+    };
+    let Some(builder_protection) = builder_protection else {
+        refuse!(context, mpdus, TxRefusal::PacketNumberExhausted);
+    };
+    // A fresh member's source: its class-checked description and the next
+    // packet number of the link's key. `Err` returns it unchanged.
+    let source = |mpdu: PoolMpdu<'id, B::Types<'id>, B::Large>,
+                  frame: Option<
+        oer_ieee80211_contracts_port::ClassSizedFrame<
+            B::Large,
+            oer_ieee80211_contracts_port::AckHeader,
+            B::Caps,
+        >,
+    >|
+     -> Result<
+        oer_ieee80211_contracts_port::PoolSubframe<'id, B::Types<'id>, B::Large, B::Caps>,
+        (PoolMpdu<'id, B::Types<'id>, B::Large>, TxRefusal),
+    > {
+        match mpdu {
+            ReturnedMpdu::Sent(sent) => Ok(SubframeSource::Sent(sent)),
+            ReturnedMpdu::Fresh(buffer) => {
+                let numbering = match protection {
+                    DataProtection::Open => Some(TxNumbering::Open),
+                    DataProtection::Ccmp(key) => key
+                        .number()
+                        .map(|numbered| TxNumbering::Ccmp(numbered.packet_number)),
+                };
+                let frame = frame.and_then(|frame| ClassSubframe::new(*frame.frame()).ok());
+                match (numbering, frame) {
+                    (Some(numbering), Some(frame)) => Ok(SubframeSource::Fresh {
+                        numbering,
+                        buffer,
+                        frame,
+                        body: None,
+                    }),
+                    (None, _) => Err((
+                        ReturnedMpdu::Fresh(buffer),
+                        TxRefusal::PacketNumberExhausted,
+                    )),
+                    (Some(_), None) => Err((
+                        ReturnedMpdu::Fresh(buffer),
+                        TxRefusal::Preparation(
+                            oer_ieee80211_contracts_port::PreparationError::AggregateFull,
+                        ),
+                    )),
+                }
+            }
+        }
+    };
+    let back = |subframe: oer_ieee80211_contracts_port::PoolSubframe<
+        'id,
+        B::Types<'id>,
+        B::Large,
+        B::Caps,
+    >| match subframe {
+        SubframeSource::Fresh { buffer, .. } => ReturnedMpdu::Fresh(buffer),
+        SubframeSource::Sent(sent) => ReturnedMpdu::Sent(sent),
+    };
+    let mut mpdus = mpdus.into_iter();
+    let mut tail = heapless::Vec::<_, { data::MAX_AGGREGATE }>::new();
+    let empty = phase
+        .station()
+        .aggregate(receiver, tid, rate, builder_protection);
+    let first = mpdus.next().ok_or(TxRefusal::LinkChanged).and_then(|mpdu| {
+        source(mpdu, context.frame_at(0)).map_err(|(mpdu, reason)| {
+            // Capacity is the aggregate's: every member fits.
+            let _kept = tail.push(mpdu).is_ok();
+            reason
+        })
+    });
+    let pushed = match first {
+        Ok(source) => match CheckedAggregate::new(empty, source) {
+            Ok(checked) => <B::Types<'id> as TxBufferPool<'id, B::Large>>::push_aggregate(checked)
+                .map_err(
+                    |AggregateRefused {
+                         reason,
+                         aggregate,
+                         subframe,
+                     }| {
+                        (aggregate, back(subframe), TxRefusal::Preparation(reason))
+                    },
+                ),
+            Err(LayoutRefused {
+                reason,
+                operation: (empty, subframe),
+            }) => Err((empty, back(subframe), TxRefusal::Layout(reason))),
+        },
+        Err(reason) => {
+            // The empty builder holds no subframe: cancelling it releases none.
+            let _cancelled = oer_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
+            let mut all = tail;
+            for mpdu in mpdus {
+                let _kept = all.push(mpdu).is_ok();
+            }
+            refuse!(context, all, reason);
+        }
+    };
+    let mut builder = match pushed {
+        Ok(builder) => builder,
+        Err((empty, mpdu, reason)) => {
+            let _cancelled = oer_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
+            let mut all = heapless::Vec::new();
+            let _kept = all.push(mpdu).is_ok();
+            for mpdu in mpdus {
+                let _kept = all.push(mpdu).is_ok();
+            }
+            refuse!(context, all, reason);
+        }
+    };
+    let mut index = 1_usize;
+    while let Some(mpdu) = mpdus.next() {
+        let refused = match source(mpdu, context.frame_at(index)) {
+            Err((mpdu, _)) => Some(mpdu),
+            Ok(source) => match CheckedAggregate::new(builder, source) {
+                Ok(checked) => {
+                    match <B::Types<'id> as TxBufferPool<'id, B::Large>>::push_aggregate(checked) {
+                        Ok(next) => {
+                            builder = next;
+                            None
+                        }
+                        Err(AggregateRefused {
+                            aggregate,
+                            subframe,
+                            ..
+                        }) => {
+                            builder = aggregate;
+                            Some(back(subframe))
+                        }
+                    }
+                }
+                Err(LayoutRefused {
+                    operation: (aggregate, subframe),
+                    ..
+                }) => {
+                    builder = aggregate;
+                    Some(back(subframe))
+                }
+            },
+        };
+        if let Some(mpdu) = refused {
+            // The rest goes back to Data, in order, for a later attempt.
+            let _kept = tail.push(mpdu).is_ok();
+            for mpdu in mpdus.by_ref() {
+                let _kept = tail.push(mpdu).is_ok();
+            }
+            data.unbuilt(&mut context, tail, &mut *events);
+            break;
+        }
+        index = index.saturating_add(1);
+    }
+    pending
+        .admissions
+        .insert(PendingTerminal::Transmit(ticket.index()));
+    phase
+        .station()
+        .submit_ampdu(
+            AggregateAttempt {
+                context: TxContext::DataAggregate(context),
+                ticket,
+                aggregate: builder,
+                protection: DataContext::<'id, B>::PROTECTION,
+                power: DataContext::<'id, B>::POWER,
+                min_mpdu_start_spacing: spacing,
+            }
+            .admit(),
+        )
+        .map(|()| Follow::Nothing)
+        .map_err(|poisoned| ServiceFault::Submission(poisoned.cause))
 }
 
 type StationPreparation<'k, 'p, 'id, B> = Result<
@@ -3285,7 +3753,7 @@ fn submit_station<'p, 'id: 'p, B, P, S, const GROUPS: usize>(
 where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
 {
     let StaTransmit {
         context,
@@ -3397,7 +3865,7 @@ fn station_action<
 where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
 {
     let input = match action {
         StaAction::BlockAck(request) => {

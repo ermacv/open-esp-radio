@@ -249,6 +249,21 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack> for Rates<W> {
             oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
         }
     }
+    fn completed_aggregate<D>(
+        &mut self,
+        now: Instant,
+        tally: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        completion: &oer_ieee80211_contracts_port::AggregateOutcome<port::Ack, D>,
+    ) {
+        <EspressifRateSelection<Caps> as RateSelection<M, port::Ack>>::completed_aggregate(
+            &mut self.0,
+            now,
+            tally,
+            completion,
+        );
+        #[cfg(oer_trace)]
+        oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
+    }
 }
 
 #[cfg(oer_trace)]

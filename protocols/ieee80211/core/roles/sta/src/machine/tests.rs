@@ -989,6 +989,8 @@ impl<'id, const G: usize> World<'id, G> {
         let length = match &transmit.frame {
             StaFrame::Individual(frame) => frame.frame().len().get(),
             StaFrame::Group(frame) => frame.frame().len().get(),
+            // The port encodes a BlockAckReq; the buffer holds no bytes of it.
+            StaFrame::BlockAckRequest { .. } => 0,
         };
         self.frames.push(frame[..length].to_vec());
         assert_eq!(

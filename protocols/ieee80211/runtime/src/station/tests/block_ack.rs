@@ -505,6 +505,10 @@ fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig 
                     interval: Duration::from_millis(50),
                 },
                 inactivity: Duration::from_secs(1),
+                retry_members: oer_ieee80211_core_roles_sta::data::AggregateRetry {
+                    lifetime: Duration::from_millis(1_500),
+                    attempts: 4,
+                },
             },
         )
         .unwrap(),
@@ -568,6 +572,106 @@ fn data_negotiates_a_transmit_agreement_that_ends_idle_with_a_delba() {
                 response(&world.sent(&mut seen, 0xd0).await),
                 BlockAckAction::AddbaRequest { tid: 0, .. }
             ));
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
+
+/// The Sequence Number and Retry bit of a sent QoS Data frame.
+fn sequence_and_retry(frame: &AirFrame) -> (u16, bool) {
+    let control = u16::from_le_bytes([frame.plaintext[22], frame.plaintext[23]]);
+    (control >> 4, frame.plaintext[1] & 0x08 != 0)
+}
+
+#[test]
+fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let BlockAckAction::AddbaRequest { dialog_token, .. } =
+                response(&world.sent(&mut seen, 0xd0).await)
+            else {
+                panic!("an ADDBA Request");
+            };
+            world
+                .air
+                .receive(&addba_response(dialog_token, 0, 32), meta());
+            assert!(world.delivered().await.is_empty());
+            // Sequence numbers 1 and 2 go at once; 3 and 4 wait for them.
+            world.air.hold(WmmAccessCategory::BestEffort, true);
+            for _ in 0..4 {
+                assert!(world.try_send_msdu(BSSID));
+                assert!(world.delivered().await.is_empty());
+            }
+            world
+                .air
+                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b1));
+            world
+                .air
+                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b1));
+            // The aggregate of 3 and 4 misses 4.
+            world
+                .air
+                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b01));
+            world.air.hold(WmmAccessCategory::BestEffort, false);
+            let retried = loop {
+                let frame = world.sent(&mut seen, 0x88).await;
+                if sequence_and_retry(&frame).1 {
+                    break frame;
+                }
+            };
+            // Bit 1 of the third answer is the second subframe of the third
+            // publication: 3 and 4 went as one aggregate, and only 4 again.
+            assert_eq!(sequence_and_retry(&retried), (4, true));
+            assert!(
+                world
+                    .air
+                    .sent()
+                    .iter()
+                    .filter(|frame| kind(frame) == 0x88)
+                    .all(|frame| sequence_and_retry(frame) != (3, true))
+            );
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
+
+#[test]
+fn a_member_missed_by_every_attempt_is_dropped_and_a_bar_moves_the_window() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let BlockAckAction::AddbaRequest { dialog_token, .. } =
+                response(&world.sent(&mut seen, 0xd0).await)
+            else {
+                panic!("an ADDBA Request");
+            };
+            world
+                .air
+                .receive(&addba_response(dialog_token, 0, 32), meta());
+            assert!(world.delivered().await.is_empty());
+            // The policy allows four aggregates on the air.
+            for _ in 0..4 {
+                world
+                    .air
+                    .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0));
+            }
+            world.send_msdu(BSSID);
+            let bar = world.sent(&mut seen, 0x84).await;
+            // Compressed BlockAckReq: its starting sequence after the dropped 1.
+            let control = u16::from_le_bytes([bar.plaintext[18], bar.plaintext[19]]);
+            assert_eq!(control >> 4, 2);
+            let tries = world
+                .air
+                .sent()
+                .iter()
+                .filter(|frame| kind(frame) == 0x88 && sequence_and_retry(frame).0 == 1)
+                .count();
+            assert_eq!(tries, 4);
             world.command(ControlCommand::Stop).await;
         })
     });

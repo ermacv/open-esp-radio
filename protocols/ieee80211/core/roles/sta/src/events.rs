@@ -44,6 +44,8 @@ pub enum DataLoss {
     Indeterminate,
     /// Its lifetime expired.
     Expired,
+    /// Its aggregates on the air missed it as often as the policy allows.
+    RetryLimit,
     /// Its contention budget ran out.
     ContentionLimited,
     /// A full queue could not hold it; its tokens came back.

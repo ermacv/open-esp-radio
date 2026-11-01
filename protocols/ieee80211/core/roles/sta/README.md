@@ -168,8 +168,23 @@ Module map:
   station's `LinkView` lends, and the BSS's data MPDUs into MSDUs. An owed
   MPDU holds only its buffer; a ticket, at most eight, belongs to an attempt
   and is taken when the MPDU goes to the port, so the buffers (up to the
-  machine's `CAP`) may outnumber the tickets. No A-MPDU, reorder, replay
-  check or power save yet. It owns the
+  machine's `CAP`, one queue for every TID in their order) may outnumber
+  the tickets. `data::aggregate`: under an operational transmit agreement
+  (`Station::tx_aggregate_windows`) a TID's owed MPDUs whose sequence
+  numbers follow one another inside the window go as one A-MPDU
+  (`StaData::poll_attempt`), at most the port's subframes and the lower of
+  the access point's and the port's Maximum A-MPDU Length; one ticket and
+  one admission permission serve the aggregate, whose context carries every
+  member's description. Its terminal (`StaData::aggregate_returned`) retires
+  acknowledged members and returns missing ones, published, to their queue
+  until their MSDU lifetime or the policy's attempts on the air run out
+  (`StaTxBlockAckPolicy::retry_members`). Each data terminal reports what it
+  settled as `BlockAckMarks`; `Station::tx_block_ack_settled` moves the
+  agreement's window and owes a BlockAckReq (`StaFrame::BlockAckRequest`,
+  encoded by the port) when the window passed a dropped member. The
+  per-aggregate vendor retry machine (`oer-ieee80211-core-upper-mac`
+  `ampdu`) is not used. No reorder, replay check or power save yet. It owns
+  the
   network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
   attempt's protection exchange, power and coexistence class;
 - `port`: the station's and data machine's tokens on a lower-MAC port
@@ -472,10 +487,11 @@ and returning fresh memory to its pool.
 
 `StaData::returned` consumes a complete terminal or preparation refusal and
 has no `Result`. The service exhaustively pairs `TxContext` with the closed
-Small/Large fresh-or-sent buffer enum. A mismatched pair or an aggregate
-terminal for this singles-only service is a backend contract violation:
-it takes the Poisoned fail-stop path without a stray-terminal counter or
-resource reuse. `Indeterminate` retires and counts the MSDU; Station treats
+Small/Large fresh-or-sent buffer enum. A mismatched pair, or an aggregate
+terminal without its aggregate context, with a station buffer or with
+another number of subframes than its members, is a backend contract
+violation: it takes the Poisoned fail-stop path without a stray-terminal
+counter or resource reuse. `Indeterminate` retires and counts the MSDU; Station treats
 it as unconfirmed. Neither it nor `ContentionLimit` trains rate selection.
 
 A gate withdrawal retains the MPDU at its original TID/order. Fresh memory

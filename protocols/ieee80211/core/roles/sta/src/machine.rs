@@ -696,6 +696,18 @@ pub enum StaFrame<K, C> {
     Individual(oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>),
     /// A group frame.
     Group(oer_ieee80211_contracts_port::ClassSizedFrame<C, HeaderSpec<GroupAddress>, K>),
+    /// A BlockAckReq of a transmit agreement, which the port encodes and
+    /// which solicits a BlockAck.
+    BlockAckRequest {
+        /// The agreement's recipient.
+        receiver: IndividualAddress,
+        /// The station's address.
+        transmitter: [u8; 6],
+        /// The agreement's TID.
+        tid: oer_ieee80211_contracts_port::Tid,
+        /// Where the recipient's window moves.
+        starting_sequence: SequenceNumber,
+    },
 }
 
 /// The rates a station frame goes at, which the service turns into the
@@ -729,9 +741,9 @@ impl StaRatePlan {
     /// The retry plan of an individual frame at this plan's rates, as
     /// `rates` select them; `carried` turns a rate into the phase's. `None`
     /// when no stage of the selection is carried.
-    pub fn individual<R, M: RxMetadata, A>(
+    pub fn individual<R, M: RxMetadata, A, BA>(
         self,
-        rates: &impl RateSelection<M, A>,
+        rates: &impl RateSelection<M, A, BA>,
         carried: impl Fn(oer_ieee80211_contracts_port::PhyRate) -> Option<R>,
     ) -> Option<oer_ieee80211_contracts_port::RetryPlan<R>> {
         match self {
@@ -744,8 +756,8 @@ impl StaRatePlan {
     }
 
     /// The one rate of a group frame: the first stage of the probe record.
-    pub fn group<R, M: RxMetadata, A>(
-        rates: &impl RateSelection<M, A>,
+    pub fn group<R, M: RxMetadata, A, BA>(
+        rates: &impl RateSelection<M, A, BA>,
         carried: impl Fn(oer_ieee80211_contracts_port::PhyRate) -> Option<R>,
     ) -> Option<R> {
         rates
@@ -754,14 +766,15 @@ impl StaRatePlan {
     }
 }
 
-impl<K: Ieee80211Capabilities, C> StaFrame<K, C> {
+impl<K: Ieee80211Capabilities, C: oer_ieee80211_contracts_port::TxBufferClass> StaFrame<K, C> {
     /// The frame on the phase's channel at the rates of `plan`, as `rates`
     /// select them; `carried` turns a rate into the phase's. `None` when no
-    /// stage of the selection is carried: the frame does not go.
-    pub fn rated<'p, 'id, M: RxMetadata, A>(
+    /// stage of the selection is carried: the frame does not go. A
+    /// BlockAckReq keeps only the plan's non-HT stages.
+    pub fn rated<'p, 'id, M: RxMetadata, A, BA>(
         self,
         plan: StaRatePlan,
-        rates: &impl RateSelection<M, A>,
+        rates: &impl RateSelection<M, A, BA>,
         carried: impl Fn(
             oer_ieee80211_contracts_port::PhyRate,
         ) -> Option<oer_ieee80211_contracts_port::PhaseRate<'p, 'id, K>>,
@@ -772,6 +785,26 @@ impl<K: Ieee80211Capabilities, C> StaFrame<K, C> {
                 .map(|plan| oer_ieee80211_contracts_port::ClassFrame::individual(frame, plan)),
             Self::Group(frame) => StaRatePlan::group(rates, carried)
                 .map(|rate| oer_ieee80211_contracts_port::ClassFrame::group(frame, rate)),
+            Self::BlockAckRequest {
+                receiver,
+                transmitter,
+                tid,
+                starting_sequence,
+            } => {
+                let plan = plan
+                    .individual(rates, carried)?
+                    .filter_map(|rate| rate.legacy().ok())?;
+                oer_ieee80211_contracts_port::ClassFrame::new(
+                    oer_ieee80211_contracts_port::TxFrame::BlockAckRequest {
+                        receiver,
+                        transmitter,
+                        tid,
+                        starting_sequence,
+                        plan,
+                    },
+                )
+                .ok()
+            }
         }
     }
 }
@@ -2068,6 +2101,8 @@ enum Sending {
     AddbaRequest { tid: u8 },
     /// A DELBA ending one of the station's transmit agreements.
     Delba,
+    /// A BlockAckReq moving the recipient's window of `tid`.
+    BlockAckRequest { tid: u8 },
 }
 
 /// The station's transmit agreements in `connected`'s association, started
@@ -3526,6 +3561,71 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         }
     }
 
+    /// A data terminal settled `marks` of a TID's sequence numbers: the
+    /// TID's transmit agreement moves its window over them and asks the
+    /// access point to move its own when it passed a dropped one.
+    pub fn tx_block_ack_settled(&mut self, marks: crate::data::BlockAckMarks) {
+        let address = self.config.address.get();
+        let State::Connected(connected) = &mut self.state else {
+            return;
+        };
+        let Some(connected) = connected.as_mut() else {
+            return;
+        };
+        let bssid = connected.bssid.get();
+        if let Some(tx) = tx_agreements(&mut self.config.tx_block_ack, connected) {
+            tx.settle(marks, bssid, address);
+        }
+    }
+
+    /// What the access point's HT Capabilities ask of the station's
+    /// aggregates: its Minimum MPDU Start Spacing code and its Maximum
+    /// A-MPDU Length in octets; `None` while no link is up.
+    pub fn tx_aggregate_limits(&self) -> Option<(u8, u32)> {
+        let State::Connected(connected) = &self.state else {
+            return None;
+        };
+        let parameters = oer_ieee80211_wire::ht::HtAmpduParameters::from_bytes([connected
+            .as_ref()?
+            .peer
+            .associated
+            .ht_ampdu_parameters]);
+        Some((parameters.spacing().get(), parameters.max_ampdu_length()))
+    }
+
+    /// How long the transmit agreements retry an aggregate's missing member;
+    /// `None` without an originator.
+    pub fn tx_aggregate_retry(&self) -> Option<crate::data::AggregateRetry> {
+        self.config
+            .tx_block_ack
+            .as_ref()
+            .map(StaTxBlockAck::retry_members)
+    }
+
+    /// Where each TID may aggregate now: its operational transmit
+    /// agreement's window, at most `subframes` and the lower of the access
+    /// point's Maximum A-MPDU Length and `max_length`.
+    pub fn tx_aggregate_windows(
+        &self,
+        subframes: usize,
+        max_length: u32,
+    ) -> [Option<crate::data::AggregateWindow>; 8] {
+        let Some((_, recipient_length)) = self.tx_aggregate_limits() else {
+            return [None; 8];
+        };
+        let subframes = subframes.min(crate::data::MAX_AGGREGATE);
+        let max_length = max_length.min(recipient_length);
+        WmmUserPriority::ALL.map(|tid| {
+            self.tx_block_ack(tid)
+                .map(|agreement| crate::data::AggregateWindow {
+                    start: agreement.starting_sequence,
+                    size: agreement.window,
+                    subframes,
+                    max_length,
+                })
+        })
+    }
+
     /// The operational transmit agreement of `tid` with the access point.
     pub fn tx_block_ack(
         &self,
@@ -4414,6 +4514,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         && let Some(tx) = self.config.tx_block_ack.as_mut()
                     {
                         tx.request_failed(tid, now);
+                    }
+                }
+                Sending::BlockAckRequest { tid } => {
+                    if outcome != NullOutcome::Delivered
+                        && let Some(tx) = self.config.tx_block_ack.as_mut()
+                    {
+                        tx.request_unanswered(tid);
                     }
                 }
                 Sending::Probe | Sending::SaQuery | Sending::BlockAck | Sending::Delba => {}
@@ -5824,6 +5931,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             ),
         }
         let body = match tx.poll(now, can_send)? {
+            TxBlockAckOwed::Request { tid, start } => {
+                return self.owe_block_ack_request(connected, tid, start, events);
+            }
             TxBlockAckOwed::Delba { tid } => {
                 let Ok(delba) = oer_ieee80211_wire::block_ack::frame::encode_delba(
                     tid,
@@ -5887,6 +5997,60 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 TxRefusal::LinkChanged,
             ))),
         }
+    }
+
+    /// A BlockAckReq of the agreement of `tid`, moving the recipient's
+    /// window to `start`, with the station's control credit.
+    fn owe_block_ack_request(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        tid: u8,
+        start: SequenceNumber,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
+        let (Some(receiver), Some(port_tid), Some(priority)) = (
+            IndividualAddress::new(connected.bssid.get()),
+            oer_ieee80211_contracts_port::Tid::new(tid),
+            WmmUserPriority::new(tid),
+        ) else {
+            return Some(Err(StaDisconnectReason::Encode));
+        };
+        let credit = match self.reserve_transmit(events) {
+            Ok(credit) => credit,
+            Err(Unsent::NoConnection) => {
+                return Some(Err(StaDisconnectReason::TransmitRefused(
+                    TxRefusal::LinkChanged,
+                )));
+            }
+            Err(Unsent::NoTokens | Unsent::Encode) => return None,
+        };
+        if let Some(tx) = self.config.tx_block_ack.as_mut() {
+            tx.request_sent(tid);
+        }
+        connected.sending = true;
+        let TxCredit {
+            epoch,
+            ticket,
+            buffer,
+        } = credit;
+        Some(Ok(Owed::Transmit(StaTransmit {
+            context: StaTxContext {
+                epoch,
+                purpose: TxPurpose::Connected(Sending::BlockAckRequest { tid }),
+            },
+            ticket,
+            buffer,
+            frame: StaFrame::BlockAckRequest {
+                receiver,
+                transmitter: self.config.address.get(),
+                tid: port_tid,
+                starting_sequence: start,
+            },
+            class: StaFrameClass::Normal,
+            plan: StaRatePlan::Management,
+            // The request contends with the data whose window it moves.
+            access_category: priority.access_category(),
+        })))
     }
 
     fn owe_duplicate_message4(

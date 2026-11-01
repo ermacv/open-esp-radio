@@ -9,12 +9,14 @@
 //! the Espressif one (`oer-espressif-ieee80211-policy::rate_selection`)
 //! sends as the vendor's station does.
 
-use oer_ieee80211_contracts_port::{Band, RetryPlan, RxMetadata, SingleOutcome};
+use oer_ieee80211_contracts_port::{
+    AggregateEnd, AggregateOutcome, Band, RetryPlan, RxMetadata, SingleOutcome, TxOutcome,
+};
 use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use oer_time::Instant;
 
 use crate::protection::BasicRates;
-use crate::rate_control::RatePeer;
+use crate::rate_control::{BlockAckTally, RatePeer};
 
 /// Lowest management/group rate admitted by the band and BSS basic set.
 ///
@@ -108,13 +110,17 @@ pub enum FrameRates {
     Control,
     /// A data MPDU of the network, sent alone.
     Data,
+    /// An A-MPDU of the network's data: one publication at the first
+    /// stage's rate.
+    Aggregate,
 }
 
 /// The rates of one interface's frames, on a port whose received frames
-/// carry the metadata `M` and whose solicited responses carry the evidence
-/// `A`: a selection that needs what `M` or `A` does not guarantee (a signal
-/// measurement, an ACK's SNR) is not one for that port.
-pub trait RateSelection<M: RxMetadata, A> {
+/// carry the metadata `M`, whose solicited responses carry the evidence `A`
+/// and whose aggregates' BlockAcks the evidence `BA`: a selection that needs
+/// what `M`, `A` or `BA` does not guarantee (a signal measurement, an ACK's
+/// SNR) is not one for that port.
+pub trait RateSelection<M: RxMetadata, A, BA = A> {
     /// Packet-number step of this transmit policy, retained by each installed key.
     fn packet_number_step(&self) -> crate::ccmp::CcmpPacketNumberStep;
 
@@ -155,6 +161,38 @@ pub trait RateSelection<M: RxMetadata, A> {
             self.completed(now, frame, completion);
         }
     }
+
+    /// An aggregate of the network's data ended at `now` with `completion`;
+    /// `tally` counts its subframes that went and those the BlockAck
+    /// acknowledged (none without a BlockAck).
+    fn completed_aggregate<D>(
+        &mut self,
+        now: Instant,
+        tally: BlockAckTally,
+        completion: &AggregateOutcome<BA, D>,
+    );
+
+    /// Route one aggregate terminal's sample: only a `current` link's
+    /// aggregate that went on the air teaches the selection.
+    fn learn_aggregate<D>(
+        &mut self,
+        now: Instant,
+        current: bool,
+        tally: BlockAckTally,
+        completion: &AggregateOutcome<BA, D>,
+    ) {
+        let aired = matches!(
+            completion,
+            TxOutcome::Ended(
+                AggregateEnd::Delivered { .. }
+                    | AggregateEnd::AckTimeout(_)
+                    | AggregateEnd::CtsTimeout(Some(_))
+            )
+        );
+        if current && aired {
+            self.completed_aggregate(now, tally, completion);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +223,33 @@ mod learn_tests {
         fn completed<D>(&mut self, _: Instant, frame: FrameRates, _: &SingleOutcome<(), D>) {
             self.0.push(frame);
         }
+
+        fn completed_aggregate<D>(
+            &mut self,
+            _: Instant,
+            _: BlockAckTally,
+            _: &AggregateOutcome<(), D>,
+        ) {
+            self.0.push(FrameRates::Aggregate);
+        }
+    }
+
+    #[test]
+    fn only_a_current_links_aired_aggregate_teaches_the_selection() {
+        let air = Air {
+            transmissions: NonZeroU16::MIN,
+            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+        };
+        let tally = BlockAckTally::new(NonZeroU16::MIN, 0).unwrap();
+        let unanswered: AggregateOutcome<(), ()> = TxOutcome::Ended(AggregateEnd::AckTimeout(air));
+        let unaired: AggregateOutcome<(), ()> =
+            TxOutcome::Ended(AggregateEnd::ContentionLimit(None));
+        let mut rates = Taught(Vec::new());
+        rates.learn_aggregate(Instant::EPOCH, false, tally, &unanswered);
+        rates.learn_aggregate(Instant::EPOCH, true, tally, &unaired);
+        assert!(rates.0.is_empty());
+        rates.learn_aggregate(Instant::EPOCH, true, tally, &unanswered);
+        assert_eq!(rates.0, [FrameRates::Aggregate]);
     }
 
     #[test]

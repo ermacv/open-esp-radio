@@ -325,7 +325,8 @@ its type, and lists the world's outcomes that stay. Compile-fail tests in
 ## Optional features
 
 Extension traits of the phase: `AmpduPhase` (one attempt sends one A-MPDU,
-each subframe in a buffer of its own), `BeaconTimingPhase` (an interface's
+each subframe in a buffer of its own; every phase's station interface
+implements it, so a station service always aggregates), `BeaconTimingPhase` (an interface's
 TSF, its samples and its TBTT plan with the wake lead and the beacon window
 the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities`,
 `TbttEvent`, `TsfSample`, `VifTsf`, `MonitorCapabilities`) are in
@@ -369,7 +370,7 @@ PN with the installed key ID.
 | --- | --- |
 | The retry plan of an MPDU and the rate control that chooses it | `oer-ieee80211-core-upper-mac` |
 | What a `BlockAckReport` acknowledges | `oer-ieee80211-core-upper-mac` `block_ack::acknowledges` |
-| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport`, the BlockAckReq, aging | `oer-ieee80211-core-upper-mac` `ampdu` |
+| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport`, the BlockAckReq, aging | the station's data machine and transmit agreements (`oer-ieee80211-core-roles-sta`); `oer-ieee80211-core-upper-mac` `ampdu` holds the vendor's per-aggregate machine |
 | RTS/CTS or CTS-to-self, the control-frame rate and the BSS basic rates | `oer-ieee80211-core-upper-mac` `protection` |
 | The retry counter a frame's class advances and the ladder step of its failures | `oer-ieee80211-core-upper-mac` `retry` |
 | The attempt budget of a management frame | `oer-ieee80211-core-upper-mac` `management` |

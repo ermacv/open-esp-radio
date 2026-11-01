@@ -138,13 +138,38 @@ impl<X, const N: usize> Fifo<X, N> {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &X> {
         self.items.iter().flatten()
     }
 
-    pub(crate) fn front(&self) -> Option<&X> {
-        self.items.first().and_then(Option::as_ref)
+    /// The first item `matches` takes.
+    pub(crate) fn first(&self, matches: impl Fn(&X) -> bool) -> Option<&X> {
+        self.iter().find(|item| matches(item))
+    }
+
+    /// Remove the first item `matches` takes, keeping the others' order.
+    pub(crate) fn remove_first(&mut self, matches: impl Fn(&X) -> bool) -> Option<X> {
+        let index = self
+            .items
+            .iter()
+            .position(|item| item.as_ref().is_some_and(&matches))?;
+        let (_, from) = self.items.split_at_mut_checked(index)?;
+        let (found, tail) = from.split_first_mut()?;
+        let item = found.take()?;
+        let mut vacant = found;
+        for next in tail {
+            *vacant = next.take();
+            vacant = next;
+        }
+        Some(item)
+    }
+
+    /// Initialize an empty queue in place.
+    #[cfg(feature = "placement")]
+    pub(crate) fn init_in_place(place: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        oer_memory::init_in_place!(place, Self {
+            items => |items| oer_memory::init_array(items, |_| None),
+        })
     }
 
     pub(crate) fn pop(&mut self) -> Option<X> {
