@@ -322,6 +322,29 @@ pub enum ConnectError {
     Profile(ProfileError),
 }
 
+/// A connect's cause as a diagnostic path, which [`println!`](crate::println)
+/// prints whole: `Failed(Sae(Protocol(Malformed)))`.
+impl oer_diagnostics::DiagnosticPath for ConnectError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        match self {
+            Self::Refused(refusal) => {
+                path.name("Refused");
+                oer_diagnostics::DiagnosticPath::push_path(refusal, path);
+            }
+            Self::Failed(reason) => {
+                path.name("Failed");
+                oer_diagnostics::DiagnosticPath::push_path(reason, path);
+            }
+            Self::Busy => path.name("Busy"),
+            Self::Stopped => path.name("Stopped"),
+            Self::Profile(error) => {
+                path.name("Profile");
+                oer_diagnostics::DiagnosticPath::push_path(error, path);
+            }
+        }
+    }
+}
+
 /// A started Wi-Fi station: its control.
 pub struct Station {
     control: wifi::Control<'static>,
@@ -520,7 +543,7 @@ const GENERAL: usize = 8;
 
 type Context = ThreadContext<0>;
 type IpResources = Resources<Context, RX, TX, GENERAL>;
-pub(crate) type IpService = Service<Context, RX, TX, wifi::Network<'static>>;
+pub(crate) type IpService = Service<Context, RX, TX, wifi::Network<'static>, { wifi::LENT_RX }>;
 
 /// What the IP service's task runs: the service, the station's stop
 /// request, and the service's control to stop it with.

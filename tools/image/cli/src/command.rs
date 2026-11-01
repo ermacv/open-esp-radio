@@ -438,6 +438,39 @@ mod tests {
     }
 
     #[test]
+    fn an_application_line_closes_the_run_with_its_verdict() {
+        let mut bytes = Vec::new();
+        oer_diagnostics::Console::new(|chunk: &[u8]| {
+            bytes.extend_from_slice(chunk);
+            Ok::<_, ()>(())
+        })
+        .note(&oer_diagnostics::typed_line!("OER-RESULT: pass wifi-station").note())
+        .unwrap();
+        let mut decoder = crate::diagnostics::Decoder::default();
+        // The console's lines as `lines` splits them; a frame starts on a
+        // line of its own.
+        let mut verdicts = Vec::new();
+        for line in bytes.split(|byte| *byte == b'\n') {
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            if let Some(text) = decoder.line(line).unwrap() {
+                let verdict = console_verdict(line, &text);
+                verdicts.push((text.into_owned(), verdict));
+            }
+        }
+        assert_eq!(
+            verdicts
+                .iter()
+                .find(|(text, _)| !text.is_empty())
+                .cloned()
+                .unwrap(),
+            (
+                "OER-RESULT: pass wifi-station".to_owned(),
+                Some(Verdict::Pass)
+            )
+        );
+    }
+
+    #[test]
     fn timestamps() {
         let time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_792_281_600 + 3_723);
         assert_eq!(timestamp(time), "20261018T010203Z");

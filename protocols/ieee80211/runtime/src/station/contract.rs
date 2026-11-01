@@ -606,6 +606,8 @@ impl From<oer_ieee80211_core_arbiter::SwitchMode> for SwitchMode {
     }
 }
 
+mod diagnostic_path;
+
 #[cfg(test)]
 mod tests {
     use super::*;

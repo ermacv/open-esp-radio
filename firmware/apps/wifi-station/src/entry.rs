@@ -5,7 +5,9 @@ mod profile;
 
 use core::future::Future;
 use oer_espressif::{
-    AppResult, Aes, Boot, Error, Peripherals, Started, println,
+    AppResult, Aes, Boot, Error, Peripherals, Started,
+    print::{DiagPath, DiagnosticPath, Ipv4},
+    println,
     time::{Duration, Timer, with_timeout},
     wifi::{self, Net, NetConfig, Station, embassy_net},
 };
@@ -30,7 +32,7 @@ async fn app(mut station: Station, net: Net) -> AppResult {
                 break;
             }
             Err(error) => {
-                println!("OER-WIFI connect-failed {error:?}");
+                println!("OER-WIFI connect-failed {}", error);
                 Timer::after(Duration::from_secs(2)).await;
             }
         }
@@ -44,12 +46,11 @@ async fn app(mut station: Station, net: Net) -> AppResult {
                 continue;
             }
         };
-        let [a, b, c, d] = ipv4.address;
-        println!("OER-WIFI ipv4 {a}.{b}.{c}.{d}/{}", ipv4.prefix_length);
+        println!("OER-WIFI ipv4 {}/{}", Ipv4(ipv4.address), ipv4.prefix_length);
         if let Some(gateway) = ipv4.gateway {
             let _ = match exchange(&net, gateway).await {
                 Ok(()) => println!("OER-RESULT: pass wifi-station"),
-                Err(error) => println!("OER-WIFI tcp-failed {error:?}"),
+                Err(error) => println!("OER-WIFI tcp-failed {}", error),
             };
         }
         net.wait_link_down().await?;
@@ -66,14 +67,40 @@ fn network() -> Result<wifi::Profile, Error> {
 }
 
 /// Why the line exchange failed.
-#[derive(Debug)]
-#[expect(dead_code, reason = "the causes are reported through Debug")]
 enum Exchange {
     Socket,
     Connect(embassy_net::tcp::ConnectError),
     Io(embassy_net::tcp::Error),
     Closed,
     Mismatch,
+}
+
+impl DiagnosticPath for Exchange {
+    fn push_path(&self, path: &mut DiagPath) {
+        use embassy_net::tcp::{ConnectError, Error};
+        match self {
+            Self::Socket => path.name("Socket"),
+            Self::Connect(error) => {
+                path.name("Connect");
+                path.name(match error {
+                    ConnectError::InvalidState => "InvalidState",
+                    ConnectError::Unaddressable => "Unaddressable",
+                    ConnectError::NoFreePorts => "NoFreePorts",
+                    ConnectError::InUse => "InUse",
+                    ConnectError::ConnectionReset => "ConnectionReset",
+                    ConnectError::TimedOut => "TimedOut",
+                });
+            }
+            Self::Io(error) => {
+                path.name("Io");
+                path.name(match error {
+                    Error::ConnectionReset => "ConnectionReset",
+                });
+            }
+            Self::Closed => path.name("Closed"),
+            Self::Mismatch => path.name("Mismatch"),
+        }
+    }
 }
 
 /// Send one line to the gateway's echo port and read it back.

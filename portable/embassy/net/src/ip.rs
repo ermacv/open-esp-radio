@@ -228,15 +228,15 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
 
     /// Build once. Errors retain final storage; the device is returned on
     /// construction refusal, without a second stack or fallback configuration.
-    pub fn start<D: NetDevice>(
+    pub fn start<D: NetDevice, const LENT: usize>(
         &'static mut self,
         device: D,
-        lent: Option<&'static dyn crate::ethernet::AdoptLent<crate::ethernet::Lent<D>>>,
+        lent: Option<&'static crate::ethernet::LentSlots<crate::ethernet::Lent<D>, LENT>>,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
         configuration: Configuration,
-    ) -> Result<(Control<'static>, Service<X, RX, TX, D>), StartRefused<D>> {
+    ) -> Result<(Control<'static>, Service<X, RX, TX, D, LENT>), StartRefused<D>> {
         match self.initialize(interface, address, seed, configuration) {
             Ok(Initialized {
                 state,
@@ -328,16 +328,28 @@ struct Initialized<X: ExecutionContext + 'static, const RX: usize, const TX: usi
 
 /// Permanent bridge and stack runner. Reconnect never reconstructs this value.
 /// After stop/error it remains terminal, retaining the stack and device owners.
-pub struct Service<X: ExecutionContext + 'static, const RX: usize, const TX: usize, D: NetDevice> {
+/// `LENT` counts the packet slots of the device's lent frames.
+pub struct Service<
+    X: ExecutionContext + 'static,
+    const RX: usize,
+    const TX: usize,
+    D: NetDevice,
+    const LENT: usize,
+> {
     iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
     runner: owned_embassy_net::Runner<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
-    bridge: EthernetBridge<'static, X, RX, TX, D>,
+    bridge: EthernetBridge<'static, X, RX, TX, D, LENT>,
     configuration: Configuration,
     state: &'static State,
 }
 
-impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, D: NetDevice>
-    Service<X, RX, TX, D>
+impl<
+    X: ExecutionContext + 'static,
+    const RX: usize,
+    const TX: usize,
+    D: NetDevice,
+    const LENT: usize,
+> Service<X, RX, TX, D, LENT>
 {
     pub fn stack(&self) -> Stack<'static, OwnedNetworkDevice<'static, X, RX, TX>> {
         self.iface.stack()
@@ -415,9 +427,15 @@ impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn drive<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>(
+async fn drive<
+    X: ExecutionContext,
+    const RX: usize,
+    const TX: usize,
+    D: NetDevice,
+    const LENT: usize,
+>(
     state: &State,
-    bridge: &mut EthernetBridge<'_, X, RX, TX, D>,
+    bridge: &mut EthernetBridge<'_, X, RX, TX, D, LENT>,
     iface: &impl Interface,
     configuration: Configuration,
     mut poll_stack: impl FnMut(&mut core::task::Context<'_>),
@@ -494,9 +512,15 @@ async fn drive<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevi
     .await
 }
 
-fn finish<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>(
+fn finish<
+    X: ExecutionContext,
+    const RX: usize,
+    const TX: usize,
+    D: NetDevice,
+    const LENT: usize,
+>(
     state: &State,
-    bridge: &mut EthernetBridge<'_, X, RX, TX, D>,
+    bridge: &mut EthernetBridge<'_, X, RX, TX, D, LENT>,
     iface: &impl Interface,
     result: Result<(), Error>,
     events: &mut impl FnMut(StatusChanged),

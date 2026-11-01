@@ -12,6 +12,7 @@ description = "ESP32-S31 station facade over the portable runtime and S31 backen
 embassy-futures = "0.1.2"
 zeroize = { version = "1.8.1", default-features = false }
 oer-sync = { path = "../../../portable/sync" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = { version = "0.9.3", features = ["zeroize"] }
 static_cell.workspace = true
 bytemuck = { version = "1.25.2", features = ["derive"] }
