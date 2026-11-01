@@ -342,7 +342,18 @@ fn sram_inventory_reads_placement_symbols_sections_and_the_boundary_source() {
     let elf = Elf::parse(&bytes).unwrap();
     let sram = Sram::of(&elf, &profile, region);
     assert_eq!(sram.placed, 0x520);
-    assert_eq!(sram.free(), u64::from(region.length()) - 0x520);
+    // The bootstrap's handoff margin at the top is never free.
+    let handoff = u64::from(
+        profile
+            .facts
+            .staged
+            .as_ref()
+            .unwrap()
+            .handoff_sram_margin_bytes,
+    );
+    assert!(handoff > 0);
+    assert_eq!(sram.handoff, handoff);
+    assert_eq!(sram.free(), u64::from(region.length()) - 0x520 - handoff);
     assert!(sram.ranges.iter().any(|range| range.name == ".text"));
     assert!(sram.source.contains("chips/esp32s31/platform/chip.toml"));
     assert!(sram.source.contains("[boot-chain] application-sram-end"));
@@ -365,6 +376,7 @@ fn summaries_and_full_report_headings_are_stable() {
             source: "ROM top excluded by the contract".into(),
             ranges: Vec::new(),
             placed: 1024,
+            handoff: 256,
         },
         code_summary: code_summary.clone(),
         strict_totals: stacks.code_placement.totals(),
@@ -372,7 +384,7 @@ fn summaries_and_full_report_headings_are_stable() {
             .code_placement
             .render_paths(|address| stacks.name(address)),
     };
-    let expected = "strict handler code in cached memory: 0 functions, 0 bytes; by level: none\nexecutor task code in PSRAM: 0 functions, 0 bytes; tasks: none\ncached handler data: 0 references to 0 objects, 0 bytes\nSRAM: usable 2048, placed 1024, free 1024 bytes\n";
+    let expected = "strict handler code in cached memory: 0 functions, 0 bytes; by level: none\nexecutor task code in PSRAM: 0 functions, 0 bytes; tasks: none\ncached handler data: 0 references to 0 objects, 0 bytes\nSRAM: usable 2048, placed 1024, handoff margin 256, free 768 bytes\n";
     assert_eq!(placement.summary(), expected);
     let full = stacks.render_with_placement(&placement);
     let original = stacks.render();

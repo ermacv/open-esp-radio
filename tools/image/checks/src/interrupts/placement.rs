@@ -75,6 +75,10 @@ struct Sram {
     source: String,
     ranges: Vec<SramRange>,
     placed: u64,
+    /// The top the runtime's SRAM sections leave to the bootstrap's stack
+    /// until stage two switches stacks (`[staged] handoff-sram-margin-bytes`,
+    /// the runtime linker script's `HANDOFF_SRAM_MARGIN_BYTES`): never free.
+    handoff: u64,
 }
 
 impl Sram {
@@ -114,6 +118,11 @@ impl Sram {
                 }),
         );
         let placed = union_bytes(region, &ranges);
+        let handoff = profile
+            .facts
+            .staged
+            .as_ref()
+            .map_or(0, |staged| u64::from(staged.handoff_sram_margin_bytes));
         Self {
             region,
             source: format!(
@@ -122,11 +131,14 @@ impl Sram {
             ),
             ranges,
             placed,
+            handoff,
         }
     }
 
     fn free(&self) -> u64 {
-        u64::from(self.region.length()) - self.placed
+        u64::from(self.region.length())
+            .saturating_sub(self.placed)
+            .saturating_sub(self.handoff)
     }
 }
 
@@ -207,13 +219,14 @@ impl InterruptPlacement {
     /// The code partition, data and SRAM lines following `handler code:`.
     pub fn summary(&self) -> String {
         format!(
-            "{}cached handler data: {} references to {} objects, {} bytes\nSRAM: usable {}, placed {}, free {} bytes\n",
+            "{}cached handler data: {} references to {} objects, {} bytes\nSRAM: usable {}, placed {}, handoff margin {}, free {} bytes\n",
             self.code_summary,
             self.references.len(),
             self.objects.len(),
             self.data_bytes(),
             self.sram.region.length(),
             self.sram.placed,
+            self.sram.handoff,
             self.sram.free(),
         )
     }

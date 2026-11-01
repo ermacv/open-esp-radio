@@ -89,7 +89,9 @@ selection the linker moves each listed function's whole input section into
 `.hot.text`, which executes from SRAM, through the generated `hot-text.x`.
 It takes the entries in order while their sections fit the budget and the
 SRAM the strict selection leaves, less 512 bytes for the 64-byte alignment
-of the SRAM output sections that follow. An entry the link does not define,
+of the SRAM output sections that follow. Free SRAM never counts the
+bootstrap's handoff margin at its top (`[staged] handoff-sram-margin-bytes`),
+which the runtime linker script keeps clear. An entry the link does not define,
 one already in SRAM, one the strict selection moves, one without a single
 defining input section and one that does not fit stay where they are; the
 placement record and `strict-placement.toml` list them with their reason.
