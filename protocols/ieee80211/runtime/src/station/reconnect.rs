@@ -28,6 +28,9 @@ impl ReconnectPolicy {
 pub(super) struct Policy {
     config: ReconnectPolicy,
     active: bool,
+    /// An application connect was admitted and its terminal decides
+    /// whether the policy is active.
+    awaiting: bool,
     retry: bool,
     ready: bool,
     next: Option<Instant>,
@@ -35,12 +38,15 @@ pub(super) struct Policy {
     disconnect_sent: bool,
 }
 impl Policy {
-    /// The policy reconnects only after an application connect named the
-    /// station's network: before that the station has no profile.
+    /// The policy reconnects only after an application connect linked the
+    /// station to its network: before that the station has no profile,
+    /// and a connect that ended without a link leaves the retries to the
+    /// application.
     pub const fn new(config: ReconnectPolicy) -> Self {
         Self {
             config,
             active: false,
+            awaiting: false,
             retry: false,
             ready: true,
             next: None,
@@ -51,12 +57,13 @@ impl Policy {
     pub fn admitted(&mut self, command: Command) {
         match command {
             Command::Connect => {
-                self.active = self.config.enabled;
+                self.awaiting = true;
                 self.retry = false;
                 self.ready = false;
             }
             Command::Disconnect => {
                 self.active = false;
+                self.awaiting = false;
                 self.retry = false;
             }
             Command::BackgroundScan => {}
@@ -65,16 +72,28 @@ impl Policy {
     pub fn observe<K>(&mut self, event: &ServiceOutput<K>, linked: bool) {
         match event {
             ServiceOutput::Notice(super::contract::Notice::Disconnected(_)) => {
-                self.retry = self.active
+                self.retry = self.active && !self.awaiting
             }
             ServiceOutput::CommandCompleted(terminal)
                 if terminal.request.command() == Command::Connect =>
             {
-                self.ready = true
+                self.ready = true;
+                // The application's connect activates the policy only
+                // with a link; a policy attempt's end leaves it as it is.
+                if self.awaiting {
+                    self.awaiting = false;
+                    self.active = self.config.enabled
+                        && matches!(
+                            terminal.outcome,
+                            super::contract::CommandOutcome::Connected { .. }
+                        );
+                }
             }
             ServiceOutput::CommandRefused(refused)
                 if refused.request.command() == Command::Connect =>
             {
+                // A refused application connect changed nothing.
+                self.awaiting = false;
                 self.ready = true;
                 self.retry = self.active && !linked;
             }

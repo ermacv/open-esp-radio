@@ -1,0 +1,22 @@
+[package]
+name = "oer-services-sdk-station"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The HIL SDK station service: connect, address, TCP exchange, link loss and status requests to an image's oer-espressif station, and their responses"
+
+[dependencies]
+oer-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
+heapless = { version = "0.9.3", features = ["serde"] }
+postcard-schema = { version = "0.2.5", default-features = false, features = ["derive", "heapless-v0_9"] }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+postcard = { version = "1.1.3", default-features = false }
+
+[lints]
+workspace = true

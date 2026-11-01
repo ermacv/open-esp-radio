@@ -452,24 +452,45 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
     let now = oer_time::Instant::from_micros(0);
     // Without a profile the policy never connects first.
     assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
-    // The application's connect fails: the policy retries it, with the
+    // The application's connect fails: the station stays idle for the
+    // application's next connect.
+    let failure = super::super::contract::DisconnectReason::AuthenticationFailed;
+    let failed = embassy_futures::block_on(control.connect(open_profile())).unwrap();
+    let Some(ServiceCommand::Station(failed_request)) = receiver.try_receive() else {
+        panic!("the application's connect is admitted")
+    };
+    assert!(runner.take_profile().is_some(), "the runner takes it");
+    events.emit(ServiceOutput::Notice(
+        super::super::contract::Notice::Disconnected(failure),
+    ));
+    events.emit(ServiceOutput::CommandCompleted(
+        super::super::CommandTerminal {
+            request: failed_request,
+            outcome: super::super::contract::CommandOutcome::ConnectFailed(failure),
+        },
+    ));
+    drop(failed);
+    assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
+    // The next one links; once the link is lost the policy retries with the
     // profile the station kept.
     let first = embassy_futures::block_on(control.connect(open_profile())).unwrap();
     let Some(ServiceCommand::Station(first_request)) = receiver.try_receive() else {
         panic!("the application's connect is admitted")
     };
     assert!(runner.take_profile().is_some(), "the runner takes it");
-    let failure = super::super::contract::DisconnectReason::AuthenticationFailed;
-    events.emit(ServiceOutput::Notice(
-        super::super::contract::Notice::Disconnected(failure),
-    ));
     events.emit(ServiceOutput::CommandCompleted(
         super::super::CommandTerminal {
             request: first_request,
-            outcome: super::super::contract::CommandOutcome::ConnectFailed(failure),
+            outcome: super::super::contract::CommandOutcome::Connected {
+                bssid: [2; 6],
+                channel: 6,
+            },
         },
     ));
     drop(first);
+    events.emit(ServiceOutput::Notice(
+        super::super::contract::Notice::Disconnected(failure),
+    ));
     let Ok(Some(ServiceCommand::Station(reconnect))) = runner.policy_command::<()>(now) else {
         panic!("the policy reconnects")
     };

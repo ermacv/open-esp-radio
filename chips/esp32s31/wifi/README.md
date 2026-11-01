@@ -79,10 +79,13 @@ requests, credit reuse, reconnect epochs, cooperative stop and retirement.
 ## Reconnect and lifecycle
 
 `Config::with_reconnect(ReconnectPolicy::every(interval)?)` enables automatic
-retries on the existing station runtime timer, after the image's first
-connect named the network; the policy never connects first. A zero
-interval is refused. The default is `ReconnectPolicy::DISABLED`. Explicit
-Disconnect pauses the policy; explicit Connect resumes it. A connect credit
+retries on the existing station runtime timer, after an image's connect
+linked the station to its network; the policy never connects first, and an
+image's connect that ends without a link leaves the station idle, its
+retries the image's own. A zero interval is refused. The default is
+`ReconnectPolicy::DISABLED`. Explicit Disconnect pauses the policy; an
+explicit Connect that links resumes it, one that is refused leaves it as
+it was. A connect credit
 stays with Runner until refusal or completion, including policy attempts.
 
 `Control::stop` requests graceful shutdown independently of command queue

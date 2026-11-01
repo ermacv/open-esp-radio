@@ -21,6 +21,8 @@
 //! - [`net`]: waiting on the IP service for an address or a link loss.
 
 pub mod aes;
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+mod boot;
 pub mod net;
 pub mod print;
 

@@ -130,6 +130,9 @@ pub(crate) fn run(
             station_wpa2::deauthenticate(execute(&router.ssh), &router.interface, mac(station)?)?;
             Ok(serde_json::Value::Null)
         }
+        RouterOperation::StationDhcp { serve } => Ok(serde_json::json!({
+            "serving": station::network::serve_dhcp(&mut router.ssh, *serve)?,
+        })),
         RouterOperation::PrepareNetwork => json(station::network::prepare(&mut router.ssh)?),
         RouterOperation::VerifyNetwork { before } => {
             station::network::verify(&mut router.ssh, &router.interface, before, None)?;

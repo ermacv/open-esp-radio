@@ -56,6 +56,47 @@ fn vacant_scan_slots_never_appear_as_observations() {
 }
 
 #[test]
+fn a_connects_scan_keeps_its_table_for_its_network_however_crowded_the_air() {
+    let beacon = |bssid: u8, ssid: &[u8]| {
+        let mut frame = std::vec![0_u8; 36];
+        frame[0] = 0x80;
+        frame[16..22].copy_from_slice(&[2, 0, 0, 0, 0, bssid]);
+        frame.extend_from_slice(&[0, ssid.len() as u8]);
+        frame.extend_from_slice(ssid);
+        frame
+    };
+    let mut table = ScanTable::<2>::new();
+    // Other networks heard first do not take the table's cells.
+    for bssid in 1..=4 {
+        assert_eq!(
+            table.observe_network(&beacon(bssid, b"other"), 1, Some(-30), None, b"lab"),
+            ScanObservation::Ignored
+        );
+    }
+    assert_eq!(
+        table.observe_network(&beacon(9, b"lab"), 13, Some(-60), None, b"lab"),
+        ScanObservation::Inserted { index: 0 }
+    );
+    // A held BSS is updated by its hidden beacon, keeping the SSID it had.
+    assert_eq!(
+        table.observe_network(&beacon(9, b""), 13, Some(-58), None, b"lab"),
+        ScanObservation::Updated { index: 0 }
+    );
+    assert!(best_matching_ssid(table.observations(), b"lab").is_some());
+    assert_eq!(table.summary().completeness, ScanCompleteness::Complete);
+    // Without the network, the same air fills the table and loses it.
+    let mut crowded = ScanTable::<2>::new();
+    for bssid in 1..=4 {
+        let _ = crowded.observe_management(&beacon(bssid, b"other"), 1, Some(-30), None);
+    }
+    assert_eq!(
+        crowded.observe_management(&beacon(9, b"lab"), 13, Some(-60), None),
+        ScanObservation::Dropped
+    );
+    assert!(best_matching_ssid(crowded.observations(), b"lab").is_none());
+}
+
+#[test]
 fn get_returns_the_record_an_observation_names() {
     let mut table = ScanTable::<2>::new();
     let mut frame = [0_u8; 42];

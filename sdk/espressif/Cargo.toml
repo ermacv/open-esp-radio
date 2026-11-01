@@ -13,6 +13,8 @@ description = "The Espressif family's application entry: peripherals, drivers an
 esp32s31 = []
 ## The Wi-Fi station and its IP service.
 wifi = []
+## The USB Serial/JTAG console as the application's byte stream.
+console = []
 
 [dependencies]
 heapless = "0.9.3"
