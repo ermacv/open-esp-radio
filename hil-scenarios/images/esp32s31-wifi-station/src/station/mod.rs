@@ -113,16 +113,17 @@ pub(crate) struct Inputs {
 pub(crate) type Work = impl core::future::Future<Output = ()>;
 static WORK: ConstStaticCell<StaticPlace<Work>> = ConstStaticCell::new(StaticPlace::new());
 
-/// The station work and the load server beside it, with its sampler,
-/// written in their own static place.
+/// The station work and the load server beside it, with its sampler and
+/// cache counters, written in their own static place.
 pub(crate) fn place(
     inputs: Inputs,
     load: crate::load::serve::Receiver,
     sampler: crate::load::sampler::Profiler,
+    cache: crate::load::counters::Cache,
 ) -> PlacedFuture<'static, Work> {
     WORK.try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage))
-        .future(|| work_future(inputs, load, sampler))
+        .future(|| work_future(inputs, load, sampler, cache))
 }
 
 #[define_opaque(Work)]
@@ -130,11 +131,12 @@ fn work_future(
     inputs: Inputs,
     load: crate::load::serve::Receiver,
     sampler: crate::load::sampler::Profiler,
+    cache: crate::load::counters::Cache,
 ) -> Work {
     async move {
         let network = crate::load::serve::Network::new();
         let station = core::pin::pin!(work(inputs, &network));
-        let load = core::pin::pin!(crate::load::serve::serve(load, &network, sampler));
+        let load = core::pin::pin!(crate::load::serve::serve(load, &network, sampler, cache));
         let load = Polled {
             part: Part::Load,
             future: Boundary(load),

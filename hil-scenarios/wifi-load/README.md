@@ -31,8 +31,30 @@ futures and the station service's spans: count, rate, share of the window
 with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
-frames, and the IP stack's received frames with the hart's instructions over
-them). The idle baseline records the parts and counters too. With
+frames, the IP stack's received frames with the hart's instructions over
+them, and the L1 cache's `cache` counts). The idle baseline records the
+parts and counters too.
+
+`cache` holds one entry per cache bus the image counts, cleared at the
+window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)
+and `ibus1` (hart 1's, which this image does not run), `dbus0` and `dbus1`
+(the two data buses of the one L1-DCache; ESP-IDF requests `dbus0` for
+every hart's data and never `dbus1`, and which hart's data each carries is
+not established). Each has `hits`, `misses`, `conflicts` and
+`next_level_reads` (the L1 cache's reads of the L2 cache its accesses
+caused), a data bus also `next_level_writes` (write-backs), and
+`overflowed`: a 32-bit count of the bus passed its range, the counts are
+not exact and every derived value is null. Derived: `miss_percent` (misses
+of hits and misses), and per 1000 of the serving hart's (hart 0's)
+retired instructions and per frame the IP stack took,
+`misses_per_1000_instructions`, `misses_per_stack_frame`,
+`next_level_reads_per_…` and a data bus's `next_level_writes_per_…`, to
+four decimals; null without the denominator. Only accesses that reach
+the L1 cache count. The `path` case also records the `cache geometry` the
+image read at its idle window's end: for `l1_icache`, `l1_dcache` and `l2`
+the configured `size_bytes` and `line_bytes` (null when the one-hot word
+selects no single size), the L1 caches' fixed `ways` (null for the L2,
+which no source states), and `l2_bypassed`. With
 `OER_WIFI_LOAD_PROFILE_US=1000` (250 to 10000) each level also samples the
 image's hart every period over the window and records a `profile`: ticks,
 stride and effective period, the samples by interrupted raw CLIC level

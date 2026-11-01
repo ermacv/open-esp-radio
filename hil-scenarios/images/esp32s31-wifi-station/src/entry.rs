@@ -111,6 +111,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             clocks,
             timg0_alarm,
             timg1_alarm,
+            cache_counters,
             system_timer,
             software,
             wifi_interrupts,
@@ -139,6 +140,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     runtime.clocks,
                     runtime.timg0_alarm,
                     runtime.timg1_alarm,
+                    runtime.cache_counters,
                     runtime.system_timer,
                     runtime.software_interrupts,
                     runtime.wifi_interrupts,
@@ -283,7 +285,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                 if AppTasks::console(spawner, usb, boot, evidence, requests).is_err()
                     || AppTasks::station_work(
                         spawner,
-                        station::place(inputs, load_receiver, sampler),
+                        station::place(inputs, load_receiver, sampler, cache_counters),
                     )
                     .is_err()
                     || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()

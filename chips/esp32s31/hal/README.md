@@ -24,8 +24,8 @@ handoff. Hart 0's level bits are set when the root splits the partition on
 the boot hart, hart 1's when hart 1 makes its controller. `fatal_view`
 observes hart 0's routes and lines in hart 0's fatal path only: hart 1's
 routes have no claimed observer and its lines are reachable only from it. Ordinary blocks are `peripherals::<block>`:
-`aes`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`, `system_timer`,
-`timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is
+`aes`, `cache_counters`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`,
+`system_timer`, `timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is
 the DMA memory core (`dma_address`, `dma_static`); the `dma_static!` macro is
 exported at the crate root. `boot` holds the bootstrap's owners; the radio modules are
 at the crate root.
@@ -116,6 +116,16 @@ operations, and `alarm_at`, which moves the alarm of the running counter to
 an absolute target and enables it without a stop, reload or divider reset;
 no product timer uses it. Runtime startup also selects XTAL and
 enables TIMG1 T0 in group one's clock word, after the group's reset pulse.
+
+`Hardware::cache_counters` owns the L1 cache's access counters of
+instruction buses 0 and 1 and data buses 0 and 1 (the enable/clear word,
+the overflow raw word and its clear strobes, every count) and a read-only
+observer of the configured cache and block sizes and the L2 bypass; no
+product owner uses them. Adoption writes nothing. `start` sets each bus's
+enable to its selection and clears the selected buses' counts and overflow
+bits; `snapshot` reads every count, then the overflow bits; `geometry`
+decodes the one-hot size words and adds the fixed L1 ways. The L2 counters'
+enables are debug-only in the vendor header and stay unclaimed.
 
 `arm_after` requires the IRQ owner's router `Bound` or `Silent` proof and a
 positive relative microsecond interval within generated counter geometry.
