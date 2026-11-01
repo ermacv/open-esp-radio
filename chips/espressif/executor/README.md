@@ -30,11 +30,11 @@ contexts, so it is `Send`, and the future need not be. Every waker has one vtabl
 index, never a pointer; the timer queue keeps one deadline per task by that
 index. Each task's poll is one direct call of its never-inlined instance of
 `task::poll_task`, which the declaration exports as a record,
-`__OER_TASK_POLL.<module path>`, for the image checks. The task's slot refers
-to the record, and every start (the generated function or `Spawner::start`)
-and every poll reaches the slot, so an image holds the record exactly when it
-can start or poll the task; a task it never starts or polls, such as a radio
-task of an image that starts no station, leaves no record. Both executors
+`__OER_TASK_POLL.<module path>`, for the image checks. `Spawner::start` takes
+the record with the task and keeps it, so an image holds the record exactly
+when it can start the task; a task is polled only once started, and a task
+the image never starts, such as a radio task of an image that starts no
+station, leaves no record. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 `TaskId`. An executor's context is the executor that runs on the core and
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt

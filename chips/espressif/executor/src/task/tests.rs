@@ -115,9 +115,9 @@ macro_rules! probe_set {
         struct $set;
         std::thread_local! {
             static SLOTS: [&'static Task<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>; 3] = [
-                Box::leak(Box::new(Task::new(0, &Task::<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>::BOUNDARY))),
-                Box::leak(Box::new(Task::new(1, &Task::<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>::BOUNDARY))),
-                Box::leak(Box::new(Task::new(2, &Task::<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>::BOUNDARY))),
+                Box::leak(Box::new(Task::new(0))),
+                Box::leak(Box::new(Task::new(1))),
+                Box::leak(Box::new(Task::new(2))),
             ];
         }
         impl $set {
@@ -167,10 +167,10 @@ fn a_round_polls_each_ready_task_once_and_a_wake_during_it_waits_for_the_next() 
     let seen: [Rc<Seen>; 3] = Default::default();
     seen[0].wake_self.set(true);
     spawner
-        .start(Set::slot(0), start_probe(&seen[0], 10, current))
+        .start(Set::slot(0), &RECORD, start_probe(&seen[0], 10, current))
         .expect("first start");
     spawner
-        .start(Set::slot(2), start_probe(&seen[2], 12, current))
+        .start(Set::slot(2), &RECORD, start_probe(&seen[2], 12, current))
         .expect("first start");
     assert_eq!(pends(EXECUTOR), 2, "each start pends the executor");
 
@@ -195,7 +195,7 @@ fn the_polled_task_is_current_and_its_waker_names_it() {
     let current = current();
     let seen: [Rc<Seen>; 3] = Default::default();
     Spawner::<Set>::new()
-        .start(Set::slot(1), start_probe(&seen[1], 0, current))
+        .start(Set::slot(1), &RECORD, start_probe(&seen[1], 0, current))
         .expect("first start");
     round::<Set>(current);
     assert_eq!(
@@ -233,7 +233,7 @@ fn a_waker_marks_its_task_ready_and_pends_its_executor() {
     let current = current();
     let seen: [Rc<Seen>; 3] = Default::default();
     Spawner::<Set>::new()
-        .start(Set::slot(2), start_probe(&seen[2], 0, current))
+        .start(Set::slot(2), &RECORD, start_probe(&seen[2], 0, current))
         .expect("first start");
     round::<Set>(current);
     let waker = TaskId {
@@ -260,7 +260,7 @@ fn a_second_start_is_refused_and_keeps_the_first_arguments() {
     let second = Rc::new(Seen::default());
     first.finish_at.set(Some(2));
     spawner
-        .start(Set::slot(0), start_probe(&first, 1, current))
+        .start(Set::slot(0), &RECORD, start_probe(&first, 1, current))
         .expect("first start");
     let made = Rc::new(Cell::new(false));
     let refused = {
@@ -270,7 +270,10 @@ fn a_second_start_is_refused_and_keeps_the_first_arguments() {
             probe(&second, 2, current)
         })
     };
-    assert_eq!(spawner.start(Set::slot(0), refused), Err(AlreadyStarted));
+    assert_eq!(
+        spawner.start(Set::slot(0), &RECORD, refused),
+        Err(AlreadyStarted)
+    );
     assert!(!made.get(), "a refused start makes no future");
     round::<Set>(current);
     assert_eq!(first.argument.get(), Some(1));
@@ -281,7 +284,7 @@ fn a_second_start_is_refused_and_keeps_the_first_arguments() {
     assert_eq!(first.polls.get(), 2);
     assert!(first.dropped.get());
     assert_eq!(
-        spawner.start(Set::slot(0), start_probe(&second, 3, current)),
+        spawner.start(Set::slot(0), &RECORD, start_probe(&second, 3, current)),
         Err(AlreadyStarted)
     );
     ready(EXECUTOR).expect("a test executor").mark(0);
@@ -330,6 +333,7 @@ fn a_start_preempted_by_its_executor_is_polled_only_once_published() {
     assert_eq!(
         spawner.start(
             Set::slot(1),
+            &RECORD,
             Box::new(move || Recorder { argument: 8, seen })
         ),
         Err(AlreadyStarted)
@@ -353,7 +357,7 @@ fn a_task_is_not_polled_again_from_inside_its_own_poll() {
     let current = current();
     let seen = Rc::new(Seen::default());
     Spawner::<Set>::new()
-        .start(Set::slot(0), start_probe(&seen, 0, current))
+        .start(Set::slot(0), &RECORD, start_probe(&seen, 0, current))
         .expect("first start");
     // The slot is taken for the poll, before its future is made and after:
     // a nested poll of it does nothing.
@@ -387,7 +391,7 @@ fn a_task_makes_its_future_at_its_first_poll() {
         })
     };
     Spawner::<Set>::new()
-        .start(Set::slot(1), start)
+        .start(Set::slot(1), &RECORD, start)
         .expect("first start");
     assert!(!made.get(), "the start makes no future");
     assert!(!round::<Set>(current));
@@ -425,8 +429,8 @@ impl Future for Local {
 }
 
 struct LocalSet;
-static LOCAL_RECORD: PollBoundary = Task::<fn() -> Local, LocalSet>::BOUNDARY;
-static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0, &LOCAL_RECORD);
+static RECORD: PollBoundary = Task::<fn() -> Local, LocalSet>::BOUNDARY;
+static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0);
 impl Tasks for LocalSet {
     type Binding = TestBinding;
     type Mode = Interrupt;
@@ -449,7 +453,7 @@ fn an_interrupt_mode_start_makes_its_future_in_its_executors_context() {
     }
     LOCAL.with(|local| local.set(1));
     Spawner::<LocalSet>::new()
-        .start(&LOCAL_TASK, make as fn() -> Local)
+        .start(&LOCAL_TASK, &RECORD, make as fn() -> Local)
         .expect("first start");
     std::thread::spawn(|| {
         LOCAL.with(|local| local.set(2));
@@ -715,7 +719,7 @@ fn a_signal_raised_for_a_thread_executor_task_wakes_it() {
     probe_set!(Set, Thread, Waits);
     let taken: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
     Spawner::<Set>::new()
-        .start(Set::slot(0), Box::new(move || Waits(taken)))
+        .start(Set::slot(0), &RECORD, Box::new(move || Waits(taken)))
         .expect("first start");
     // The first poll registers the task with the signal.
     assert!(!run_round::<Set>());
@@ -742,6 +746,7 @@ fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_sign
     Spawner::<Set>::new()
         .start(
             Set::slot(0),
+            &RECORD,
             Box::new(move || Preempted { level: 3, seized }),
         )
         .expect("first start");
@@ -762,11 +767,4 @@ fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_sign
     let seized = seized.borrow();
     assert_eq!(seized.own, Some(Poll::Ready(Ok(0b1))));
     assert_eq!(seized.take, Some(Err(ForeignContext)));
-}
-
-#[test]
-fn a_task_slot_keeps_the_poll_record_it_was_made_with() {
-    // An image holds the slot whenever it can start or poll the task, and
-    // with it this record: a task it never reaches leaves none.
-    assert!(core::ptr::eq(LOCAL_TASK.record(), &LOCAL_RECORD));
 }
