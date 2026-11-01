@@ -9,6 +9,7 @@
 //! | application | 1 | executor wake (line 40), its alarm (comparator 1, line 41), console (USB Serial/JTAG, line 42) |
 //! | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
 //! | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC (line 21) |
+//! | profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22) |
 //!
 //! The application executor runs in thread mode on hart 0; the library's
 //! service tasks ([`SdkTasks`]) and the image's tasks share it. The radio
@@ -35,6 +36,38 @@ pub use oer_esp32s31_compose::Esp32s31;
 /// Time on the executors' clock: timers, timeouts, instants.
 pub use embassy_time as time;
 
+/// `$future`, observed as the library's part `$part` (`observe`).
+#[cfg(feature = "observe")]
+macro_rules! observed {
+    ($part:ident, $future:expr) => {
+        $crate::esp32s31::observed::library(
+            $crate::observe::parts::LibraryPart::$part,
+            $future,
+        )
+    };
+}
+/// `$future` itself.
+#[cfg(not(feature = "observe"))]
+macro_rules! observed {
+    ($part:ident, $future:expr) => {
+        $future
+    };
+}
+
+#[cfg(feature = "observe")]
+pub(crate) mod observed;
+#[cfg(feature = "observe")]
+use observed::executor_observer;
+/// The observer of executor `SLOT`: none without `observe`.
+#[cfg(not(feature = "observe"))]
+#[cfg_attr(
+    not(oer_trace),
+    allow(dead_code, reason = "only a trace build asks a task set for its observer")
+)]
+const fn executor_observer<const SLOT: usize>() -> oer_trace::Noop {
+    oer_trace::Noop
+}
+
 mod aes;
 pub use aes::{Aes, AesClient, AesSeats, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
 
@@ -58,7 +91,7 @@ pub use oer_espressif_staged_runtime::panic::PanicRecord;
 pub use oer_espressif_staged_runtime::trap::PreviousException;
 
 oer_espressif_staged_runtime::interrupt_table! {
-    contexts { app_wake: 1; radio_executor: 2; radio: 3; hart1_app: 1; }
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; hart1_app: 1; profile: 4; }
     /// The application executor's wake (thread mode).
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     /// The application executor's alarm (system timer comparator 1).
@@ -80,6 +113,10 @@ oer_espressif_staged_runtime::interrupt_table! {
     #[cfg(feature = "console")]
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
     console_usb: ConsoleToken = oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, line 42, context app_wake, hart 0, Hardware;
+    #[cfg(feature = "observe")]
+    /// The PC sampler (TIMG1 T0), above every other level of hart 0 so that
+    /// it sees what it interrupts; it ticks only while a session runs.
+    sampler: SamplerToken = oer_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, line 22, context profile, hart 0, Hardware;
     #[cfg(feature = "hart1")]
     /// Hart 1's executor's wake (thread mode).
     hart1_wake: Hart1WakeToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_espressif_executor::wake_handler::<Esp32s31, 1, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
@@ -98,6 +135,7 @@ oer_espressif_executor::tasks! {
     /// The library's service tasks on the application executor; an image's
     /// set extends it.
     pub SdkTasks: Executor<Esp32s31, 0> {
+        @observer: executor_observer::<0>();
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
         /// The shared AES service.
@@ -156,6 +194,9 @@ pub struct Boot {
         oer_espressif_executor::TimeDriverReady<Esp32s31>,
         oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
     )>,
+    /// What only the boot hart observes, until the boot takes it.
+    #[cfg(feature = "observe")]
+    observe: Option<observed::Hart0>,
 }
 
 /// No IP service: the second boot started none.
@@ -452,6 +493,12 @@ pub enum Error {
     /// no station.
     #[cfg(feature = "wifi")]
     NoDevice,
+    /// The image named every one of its observed parts.
+    #[cfg(feature = "observe")]
+    ImageParts,
+    /// The boot took what the boot hart observes before.
+    #[cfg(feature = "observe")]
+    ObserveTaken,
 }
 
 #[cfg(feature = "wifi")]
@@ -498,6 +545,10 @@ impl Error {
             Self::NetWait(_) => oer_diagnostics::name!("sdk-net-wait"; 32),
             #[cfg(feature = "wifi")]
             Self::NoDevice => oer_diagnostics::name!("sdk-no-device"; 32),
+            #[cfg(feature = "observe")]
+            Self::ImageParts => oer_diagnostics::name!("sdk-image-parts"; 32),
+            #[cfg(feature = "observe")]
+            Self::ObserveTaken => oer_diagnostics::name!("sdk-observe-taken"; 32),
         }
     }
 }
@@ -564,6 +615,10 @@ pub fn start<S: Started, H: Hart1Started>(
                     hart1: hardware.hart1,
                     #[cfg(feature = "hart1")]
                     causes,
+                    #[cfg(feature = "observe")]
+                    timg1_alarm: hardware.timg1_alarm,
+                    #[cfg(feature = "observe")]
+                    cache_counters: hardware.cache_counters,
                     #[cfg(feature = "wifi")]
                     wifi: wifi::WifiPeripheral {
                         radio: hardware.radio,
@@ -583,7 +638,8 @@ pub fn start<S: Started, H: Hart1Started>(
         fail(Error::InterruptTaken.name());
     };
     let software: SoftwareInterrupts = hardware.software;
-    let setup = Boot {
+    #[cfg_attr(not(feature = "observe"), allow(unused_mut))]
+    let mut setup = Boot {
         adopted,
         pending: Pending::default(),
         timer: Some(hardware.system_timer),
@@ -612,7 +668,19 @@ pub fn start<S: Started, H: Hart1Started>(
         device: None,
         #[cfg(feature = "hart1")]
         timers: None,
+        #[cfg(feature = "observe")]
+        observe: None,
     };
+    #[cfg(feature = "observe")]
+    {
+        let hart0 = observed::hart0(
+            hardware.timg1_alarm,
+            hardware.cache_counters,
+            &mut setup,
+            interrupts.sampler,
+        );
+        setup.observe = Some(hart0);
+    }
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
         #[cfg(feature = "wifi")]
@@ -704,10 +772,10 @@ pub fn start<S: Started, H: Hart1Started>(
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
     #[cfg(not(feature = "hart1"))]
-    let mut net = core::pin::pin!(run_net(net));
+    let mut net = core::pin::pin!(observed!(Ip, run_net(net)));
     #[cfg(not(feature = "hart1"))]
-    let mut second = core::pin::pin!(run_app(second));
-    let mut app = core::pin::pin!(run_app(app));
+    let mut second = core::pin::pin!(observed!(Second, run_app(second)));
+    let mut app = core::pin::pin!(observed!(Application, run_app(app)));
     #[cfg(not(feature = "hart1"))]
     let roots = (
         (
@@ -758,17 +826,15 @@ struct Starts {
 impl Starts {
     fn spawn(self, library: &Spawner<SdkTasks>) {
         let Self { watchdog, pending } = self;
-        let mut started = SdkTasks::watchdog(library, watchdog).is_ok()
+        let started = SdkTasks::watchdog(library, watchdog).is_ok()
             && pending
                 .aes
                 .is_none_or(|engine| SdkTasks::aes_service(library, engine).is_ok());
         #[cfg(feature = "wifi")]
-        {
-            started = started
-                && pending
-                    .station
-                    .is_none_or(|start| SdkTasks::station(library, start).is_ok());
-        }
+        let started = started
+            && pending
+                .station
+                .is_none_or(|start| SdkTasks::station(library, start).is_ok());
         if !started {
             fail(Error::AlreadyStarted.name());
         }
@@ -787,6 +853,10 @@ struct Owned {
     hart1: oer_esp32s31_hal::cores::LaunchPermit,
     #[cfg(feature = "hart1")]
     causes: oer_esp32s31_hal::peripherals::reset_cause::ResetCauses,
+    #[cfg(feature = "observe")]
+    timg1_alarm: oer_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
+    #[cfg(feature = "observe")]
+    cache_counters: oer_esp32s31_hal::peripherals::cache_counters::CacheCounters,
     #[cfg(feature = "wifi")]
     wifi: wifi::WifiPeripheral,
 }
@@ -815,7 +885,7 @@ async fn run_app(app: impl core::future::Future<Output = AppResult>) {
 /// polling.
 async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
     let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
-    match watchdog.feed_every(&EmbassyClock, period).await {}
+    match observed!(Watchdog, watchdog.feed_every(&EmbassyClock, period)).await {}
 }
 
 /// Retain `reason`, report it and reset: the record-and-reset policy the

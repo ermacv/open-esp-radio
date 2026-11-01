@@ -96,7 +96,7 @@ impl Aes {
 /// The service task: it owns the engine for good.
 pub(crate) async fn serve(start: AesStart) {
     let AesStart { engine, service } = start;
-    let error = service.serve(engine).await;
+    let error = observed!(Aes, service.serve(engine)).await;
     super::fail(match error {
         crate::aes::AesError::Foreign => oer_diagnostics::name!("sdk-aes-context"; 32),
     });

@@ -82,13 +82,14 @@ pub(crate) fn on_pilot(
     PILOT.interrupt(part);
 }
 
-type Actor = wifi::RadioActor<pilot::Client<PhyToken>, Unobserved>;
+type Actor = wifi::RadioActor<pilot::Client<PhyToken>, StationObserver>;
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 static NONCES: StaticCell<wifi::NonceSource> = StaticCell::new();
 
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2).
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
+        @observer: super::executor_observer::<1>();
         radio_actor(actor: &'static mut Actor) = radio_actor;
         driver(driver: wifi::Driver<binding::Binding>) = drive;
     }
@@ -108,6 +109,23 @@ pub struct Unobserved;
 impl oer_trace::Observer for Unobserved {
     fn event<E: oer_trace::Event + Copy + 'static>(&self, _: E) {}
 }
+
+/// The observer of the station, its driver and the RF actor: the
+/// library's with `observe`, none without.
+#[cfg(feature = "observe")]
+type StationObserver = super::observed::Observer;
+#[cfg(not(feature = "observe"))]
+type StationObserver = Unobserved;
+
+/// The station service's event sink.
+#[cfg(feature = "observe")]
+type StationSink = super::observed::StationSink;
+#[cfg(not(feature = "observe"))]
+type StationSink = ();
+#[cfg(feature = "observe")]
+const STATION_SINK: StationSink = super::observed::STATION_SINK;
+#[cfg(not(feature = "observe"))]
+const STATION_SINK: StationSink = ();
 
 /// The boot-seeded nonce stream the RSN handshake draws from.
 pub struct Callbacks(&'static mut wifi::NonceSource);
@@ -141,11 +159,11 @@ fn failure(error: wifi::InitializationError) -> ! {
 }
 
 #[cfg(not(feature = "hart1"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:Unobserved,driver_observer:Unobserved,sink:(),engine:AesClient,events:ProductEvents,fail:failure}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,engine:AesClient,events:ProductEvents,fail:failure}}
 // The station's network end runs on hart 1, with the second boot's IP
 // service.
 #[cfg(feature = "hart1")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:Unobserved,driver_observer:Unobserved,sink:(),engine:AesClient,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,engine:AesClient,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
@@ -177,11 +195,11 @@ oer_espressif_staged_runtime::placed_static! {
 /// Run the shared RF actor until its periodic PHY tracking fails; the PHY
 /// may then be half changed, so the library records the failure and resets.
 async fn radio_actor(actor: &'static mut Actor) {
-    actor.run().await.reset()
+    observed!(RadioActor, actor.run()).await.reset()
 }
 
 async fn drive(driver: wifi::Driver<binding::Binding>) {
-    driver.run().await;
+    observed!(Driver, driver.run()).await;
 }
 
 /// The station runner's task: an ordinary stop ends it, every other exit
@@ -193,9 +211,15 @@ pub(crate) async fn serve_station(start: StationStart) {
         address,
         nonces,
     } = start;
-    let profile = wifi::Profile::new(&config, address, Callbacks(nonces), Unobserved, ())
-        .unwrap_or_else(|error| failure(error));
-    match runner.run(profile).await {
+    let profile = wifi::Profile::new(
+        &config,
+        address,
+        Callbacks(nonces),
+        StationObserver::default(),
+        STATION_SINK,
+    )
+    .unwrap_or_else(|error| failure(error));
+    match observed!(Station, runner.run(profile)).await {
         wifi::StationExit::Stopped => {}
         wifi::StationExit::Unavailable(wifi::UnavailableCause::Initialization(error)) => {
             failure(error)
@@ -505,7 +529,7 @@ impl Station {
         let resources =
             wifi::RadioResources::new::<binding::Binding>(wifi.radio, wifi.clocks, &identity);
         let pilot = PILOT.init(wifi.timg0_alarm, boot.router(), radio.phy);
-        let (actor, hardware) = resources.start(pilot, Unobserved);
+        let (actor, hardware) = resources.start(pilot, StationObserver::default());
         let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
         // The radio executor writes the system timer; the application
         // executor publishes its deadlines to it.
@@ -905,6 +929,16 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
     }
 }
 
+#[cfg(feature = "observe")]
+use super::observed::{bridge_copied, bridge_received, bridge_refused};
+/// The network bridge's frames: counted with `observe`.
+#[cfg(not(feature = "observe"))]
+fn bridge_received(_: oer_embassy_net::EthernetFrameView<'_>) {}
+#[cfg(not(feature = "observe"))]
+fn bridge_refused(_: oer_embassy_net::RxEnqueueError) {}
+#[cfg(not(feature = "observe"))]
+fn bridge_copied(_: oer_embassy_net::ethernet::LentCopy) {}
+
 /// The IP service's task: every status change wakes the waits. Once the
 /// station asks its network to stop, the service stops and returns every
 /// receive buffer it holds, then the station hears that it stopped.
@@ -917,9 +951,9 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
     let result = {
         let mut run = core::pin::pin!(service.run(
             |changed| publish(changed.current),
-            |_| {},
-            |_| {},
-            |_| {},
+            bridge_received,
+            bridge_refused,
+            bridge_copied,
             |_| {}
         ));
         match select(run.as_mut(), stopper.requested()).await {

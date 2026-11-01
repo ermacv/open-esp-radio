@@ -2,7 +2,7 @@
 
 The Espressif family's application entry. An image selects its chip by
 feature (`esp32s31`, exactly one) and the capabilities it uses (`wifi`,
-`console`),
+`console`, `hart1`, `observe`),
 takes the peripherals it needs once and builds drivers and services with
 defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
@@ -104,9 +104,16 @@ with the source it takes, otherwise the library does once the timer runs.
 | application | 1 | executor wake (line 40), its alarm (system timer comparator 1, line 41), console (USB Serial/JTAG, line 42) |
 | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
 | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC and doorbell (line 21) |
+| profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22) |
+| hart 1 application (`hart1`) | 1 | hart 1's executor wake (line 40), its alarm (comparator 2, line 41) |
 
 The radio entries exist with the `wifi` feature, the console's with
-`console`; an entry no driver binds routes no source. Service tasks on the application executor: the RTC
+`console`, the sampler's with `observe` and hart 1's with `hart1`; an entry
+no driver binds routes no source. With `hart1` the library launches hart 1
+once the boot ended: it runs the second boot there and then its IP service
+and future on its own thread-mode executor, and hart 0 waits for the second
+boot's end before it enables its interrupts. The image declares
+`harts = ["boot", 1]`. Service tasks on the application executor: the RTC
 watchdog feed, the AES service, the station runner and the IP service. The
 radio executor runs the radio actor and the MAC driver.
 
@@ -205,6 +212,27 @@ once (`Error::Channel`). `send` waits for room and `receive` for a value;
 `try_send` and `try_receive` do not wait. An end stays with the future that
 polls it (`!Send`).
 
+## Observation (`observe`)
+
+An image that measures the library's work enables `observe` and declares
+`instrumentation = ["trace"]` (without it the build fails). The library's
+executors, station, RF actor and IP service then report to its own
+counters, which `oer_espressif::observe` reads in the library's types; an
+image translates them into whatever reports them:
+
+| Reader | What |
+| --- | --- |
+| `executors()` | each executor's work and idle microseconds since boot (application, radio, hart 1) |
+| `parts()` | each part's polls and their time, and the longest of the epoch: the library's tasks and futures, the station service's spans, and up to four futures the image names (`Part::claim(name)?.polled(future)`) |
+| `counters()` | the network bridge's frames, the station's receive decisions, its transmit agreements' settlements, the link's rates and the receive driver's counters |
+| `tracking()` | the RF actor's PHY tracking ticks, with the epoch's temperatures and longest tick |
+| `Boot::observe` | the boot hart's handle (`Hart0`, `!Send`): its cycle and instruction counters, the L1 cache's counters and the PC sampler on TIMG1 T0, once |
+
+`start_epoch()` starts a new epoch of the longest polls and the extremes.
+Each counter has one writer; a reader in thread mode on either hart takes a
+counter whole or yields and reads again. Counts wrap at 2^32: a reader
+takes differences.
+
 ## Limits
 
 The application runs on hart 0. The AES service computes RFC 3394 key
@@ -219,5 +247,7 @@ It uses the early writer, which waits for room within its budget per line.
 ```console
 cargo test -p oer-espressif
 cargo clippy -p oer-espressif --all-targets
-cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console
+cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1
+RUSTFLAGS="--cfg oer_trace" CARGO_TARGET_DIR=target/instrumented/oer-espressif \
+  cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,observe
 ```

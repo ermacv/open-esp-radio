@@ -1937,6 +1937,7 @@ dependencies = [
  "oer-ieee80211-runtime",
  "oer-memory",
  "oer-network-port",
+ "oer-riscv",
  "oer-time",
  "oer-trace",
  "static_cell",
