@@ -40,9 +40,9 @@ portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, syn
     time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 sdk/espressif/
-hil-scenarios/aes/
-hil-scenarios/images/{esp32s31-rpc, esp32s31-wifi-station}/
-hil-scenarios/services/{aes, wifi-station}/
+hil-scenarios/{aes, sdk-station, wifi-load, wifi-station}/
+hil-scenarios/images/{esp32s31-rpc, esp32s31-sdk-station, esp32s31-wifi-station}/
+hil-scenarios/services/{aes, load, sdk-station, wifi-station}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/

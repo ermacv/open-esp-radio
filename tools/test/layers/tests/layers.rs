@@ -975,11 +975,14 @@ const ROLES: &[(&str, Role)] = &[
     ("protocols/hil/agent", Role::HilAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
+    ("hil-scenarios/images/esp32s31-sdk-station", Role::HilImage),
     ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
     ("hil-scenarios/services/load", Role::HilBinding),
+    ("hil-scenarios/services/sdk-station", Role::HilBinding),
     ("hil-scenarios/services/wifi-station", Role::HilBinding),
     ("hil-scenarios/aes", Role::Tool),
+    ("hil-scenarios/sdk-station", Role::Tool),
     ("hil-scenarios/wifi-station", Role::Tool),
     ("hil-scenarios/wifi-load", Role::Tool),
 ];
@@ -1140,10 +1143,12 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
                 && !["portable/time", "portable/time-virtual"].contains(&to_path))
         }
         // An image composes: it declares its interrupt table, entry, tasks
-        // and observation collectors and never bypasses the facade.
+        // and observation collectors and never bypasses the facade, or it
+        // runs on the application entry.
         Role::HilImage => matches!(
             to,
-            Role::Composition
+            Role::Sdk
+                | Role::Composition
                 | Role::Facade
                 | Role::ObservationContract
                 | Role::HilBinding
