@@ -3,13 +3,15 @@
 The image of the [SDK station](../../sdk-station/README.md) and
 [Wi-Fi station](../../wifi-station/README.md) scenarios: an
 application of the entry `oer-espressif` (`sdk/espressif`, features
-`esp32s31`, `wifi` and `console`). Its boot takes the AES service, the Wi-Fi
+`esp32s31`, `wifi`, `console`, `hart1` and `observe`). Its boot takes the AES service, the Wi-Fi
 station and its IP service with the library's defaults and the USB
 Serial/JTAG console; the library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
 declares no interrupt, DMA or service task of its own. Its boot is the
 [station example's](../../../firmware/apps/wifi-station/README.md) with
-three differences: the `console` feature and `Console::open`, every
+these differences: the `observe` feature with the `trace` instrumentation
+(the library's observations, which the image does not read yet), the
+`console` feature and `Console::open`, every
 channel scanned (`wifi::Config::all_channels`) in place of the profile's
 one, and its own IP pools, 32 receive, 16 transmit and 32 general frames
 (`Net::start_with` with a static `wifi::Pools` in the second boot), in

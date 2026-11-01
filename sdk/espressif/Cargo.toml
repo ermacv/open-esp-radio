@@ -18,6 +18,11 @@ console = []
 ## The second boot on hart 1: its IP service and future run on hart 1's
 ## executor. The image declares `harts = ["boot", 1]`.
 hart1 = []
+## What the library observes of its own work (`observe`): the executors'
+## CPU, named parts' polls, the station's, the bridge's and the PHY
+## tracking's counts, and on the boot hart its counters and a PC sampler on
+## TIMG1. The image declares `instrumentation = ["trace"]`.
+observe = []
 
 [dependencies]
 oer-crypto = { path = "../../portable/crypto" }
@@ -42,6 +47,7 @@ oer-espressif-staged-runtime = { path = "../../chips/espressif/staged-runtime" }
 oer-ieee80211-core-roles-sta = { path = "../../protocols/ieee80211/core/roles/sta" }
 oer-ieee80211-runtime = { path = "../../protocols/ieee80211/runtime" }
 oer-esp32s31-wifi = { path = "../../chips/esp32s31/wifi" }
+oer-riscv = { path = "../../portable/riscv" }
 oer-trace = { path = "../../portable/trace" }
 embassy-futures = "0.1.2"
 embassy-time = { workspace = true }

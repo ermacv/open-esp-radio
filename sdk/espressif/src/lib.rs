@@ -20,7 +20,9 @@
 //! - [`aes`]: the shared AES service, one engine owner and many clients;
 //! - [`channel`]: a typed channel between the application's future and the
 //!   second boot's;
-//! - [`net`]: waiting on the IP service for an address or a link loss.
+//! - [`net`]: waiting on the IP service for an address or a link loss;
+//! - `observe` (`observe` feature): what the library observes of its own
+//!   work, for an image that measures it.
 
 pub mod aes;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
@@ -28,6 +30,8 @@ mod boot;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 pub mod channel;
 pub mod net;
+#[cfg(any(test, all(feature = "observe", target_arch = "riscv32")))]
+pub mod observe;
 pub mod print;
 
 #[cfg(all(target_arch = "riscv32", not(feature = "esp32s31")))]

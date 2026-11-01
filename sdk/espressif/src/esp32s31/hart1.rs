@@ -44,7 +44,9 @@ pub(crate) type Hart1Executor = Executor<Esp32s31, 1>;
 oer_espressif_executor::tasks! {
     /// Hart 1's executor's tasks: none of the library's; the second boot's
     /// IP service and future are its roots.
-    pub Hart1Tasks: Executor<Esp32s31, 1> {}
+    pub Hart1Tasks: Executor<Esp32s31, 1> {
+        @observer: super::executor_observer::<2>();
+    }
 }
 
 oer_espressif_staged_runtime::placed_static! {
@@ -185,7 +187,9 @@ pub fn hart1_main<H: Hart1Started>(
         .unwrap_or_else(|error| fail(error.name()));
     // The second boot's futures stay in this frame, which never returns.
     let mut net = core::pin::pin!(run_net(net));
+    observed_root!(net, Ip);
     let mut second = core::pin::pin!(run_app(second));
+    observed_root!(second, Second);
     let roots = (Root::new(net.as_mut()), Root::new(second.as_mut()));
     match executor
         .run::<Hart1Tasks, _, _, _, 1, _>(&hart, &mut router, wake, irq, (), roots, |_| {})
