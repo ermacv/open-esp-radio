@@ -46,8 +46,10 @@ pub use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
 pub use oer_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
 pub use oer_network_port::{LinkSnapshot, LinkState};
 
-use super::{AesClient, Boot, Error, PhyToken, RadioAlarmToken, RadioToken, WakeToken, WifiToken};
-use crate::net::{NetError, Watchers};
+use super::{
+    AesClient, Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken, WifiToken,
+};
+use crate::net::{NetError, Published, Watchers};
 
 type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 
@@ -426,7 +428,8 @@ pub enum StopError {
     Failed,
 }
 
-/// The station's network device, which [`Net::start`] takes. Dropped
+/// The station's network device: the boot hands it to the second boot
+/// ([`super::Hart1Peripherals`]), where [`Net::start`] takes it. Dropped
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
     network: Option<(wifi::Network<'static>, wifi::NetworkStopper<'static>)>,
@@ -450,12 +453,12 @@ impl Station {
     /// # Errors
     /// The AES service has no free client, the station started already, or
     /// a binding or storage was refused.
-    pub fn start<N>(
+    pub fn start(
         wifi: WifiPeripheral,
         aes: &super::Aes,
         config: Config,
-        boot: &mut Boot<N>,
-    ) -> Result<(Self, Device), Error> {
+        boot: &mut Boot,
+    ) -> Result<(Self, NetStatus), Error> {
         let engine = aes.client()?;
         let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
         let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
@@ -533,6 +536,11 @@ impl Station {
             address,
             nonces,
         });
+        boot.device = Some(Device {
+            network: Some((network, stopper)),
+            address,
+            seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
+        });
         Ok((
             Self {
                 control,
@@ -540,10 +548,8 @@ impl Station {
                 address,
                 drain: config.drain,
             },
-            Device {
-                network: Some((network, stopper)),
-                address,
-                seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
+            NetStatus {
+                _local: core::marker::PhantomData,
             },
         ))
     }
@@ -710,6 +716,51 @@ pub type Stack<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
 
 static WATCHERS: Watchers<Context, 4> = Watchers::new();
 
+/// The IP service's status for the application, and the application's
+/// notify, which the service tells after each publication.
+static STATUS: Published = Published::new();
+static APPLICATION: super::Notify = super::Notify::new();
+
+/// The IP service's status as the application sees it: the boot's
+/// [`Station::start`] returns it, before the second boot starts the
+/// service. It stays with the application's future (`!Send`), the one task
+/// its waits wake; until the service starts it reads a running service
+/// without link or address.
+pub struct NetStatus {
+    _local: core::marker::PhantomData<*mut ()>,
+}
+
+impl NetStatus {
+    /// The service's link, IPv4 and lifecycle now.
+    pub async fn status(&self) -> Status {
+        crate::net::published_status(&STATUS, &APPLICATION).await
+    }
+
+    /// Wait for an IPv4 configuration over an up link; across a link loss
+    /// the wait goes on to the next lease.
+    ///
+    /// # Errors
+    /// The service stopped or failed.
+    pub async fn wait_ipv4(&self) -> Result<Ipv4Configuration, NetError> {
+        crate::net::published_ipv4(&STATUS, &APPLICATION).await
+    }
+
+    /// Wait until the link that is up now goes down or is replaced.
+    ///
+    /// # Errors
+    /// As [`Self::wait_ipv4`].
+    pub async fn wait_link_down(&self) -> Result<(), NetError> {
+        crate::net::published_link_down(&STATUS, &APPLICATION).await
+    }
+}
+
+/// Publish the service's status to the application and wake every wait.
+fn publish(status: Status) {
+    STATUS.publish(status);
+    oer_memory::QueueNotify::notify(&APPLICATION);
+    WATCHERS.wake_all();
+}
+
 /// How the stack takes its IPv4 configuration.
 pub use oer_embassy_net::ip::Configuration as NetConfig;
 
@@ -722,17 +773,17 @@ pub struct Net<const RX: usize = { self::RX }, const TX: usize = { self::TX }> {
 
 impl Net {
     /// Start the IP service over `device` with `configuration`
-    /// (`NetConfig::Dhcpv4` or a static address) and the library's pools;
-    /// the boot returns with the service, whose task runs once the
-    /// executor does.
+    /// (`NetConfig::Dhcpv4` or a static address) and the library's pools,
+    /// in the second boot; it returns with the service, whose task runs
+    /// once the executor does.
     ///
     /// # Errors
     /// The service started already or refused its configuration.
     pub fn start(
         device: Device,
         configuration: Configuration,
-        boot: Boot,
-    ) -> Result<(Self, Boot<IpStart<RX, TX>>), Error> {
+        boot: Hart1Boot,
+    ) -> Result<(Self, Hart1Boot<IpStart<RX, TX>>), Error> {
         Self::start_with(device, &POOLS, configuration, boot)
     }
 }
@@ -746,8 +797,8 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
         mut device: Device,
         pools: &'static Pools<RX, TX, GENERAL>,
         configuration: Configuration,
-        boot: Boot,
-    ) -> Result<(Self, Boot<IpStart<RX, TX>>), Error> {
+        boot: Hart1Boot,
+    ) -> Result<(Self, Hart1Boot<IpStart<RX, TX>>), Error> {
         let (network, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
         let resources = pools
             .resources
@@ -815,8 +866,13 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
         control,
     } = start;
     let result = {
-        let mut run =
-            core::pin::pin!(service.run(|_| WATCHERS.wake_all(), |_| {}, |_| {}, |_| {}, |_| {}));
+        let mut run = core::pin::pin!(service.run(
+            |changed| publish(changed.current),
+            |_| {},
+            |_| {},
+            |_| {},
+            |_| {}
+        ));
         match select(run.as_mut(), stopper.requested()).await {
             Either::First(result) => result,
             Either::Second(()) => {
@@ -825,7 +881,7 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
             }
         }
     };
-    WATCHERS.wake_all();
+    publish(control.status());
     if result.is_err() {
         super::fail(oer_diagnostics::name!("net-context"; 32));
     }

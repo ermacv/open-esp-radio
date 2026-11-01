@@ -118,11 +118,7 @@ pub struct AesPeripheral(pub(crate) AesParts);
 /// interrupt router before interrupts are enabled, and the library's
 /// service tasks to start once the executor runs. It exists only while the
 /// boot function runs, before any executor.
-///
-/// `N` is the IP service the boot started, whose pool sizes are the
-/// image's: [`NoNet`] until `wifi::Net::start` consumes the boot and
-/// returns it with the service.
-pub struct Boot<N = NoNet> {
+pub struct Boot {
     adopted: Adopted<InterruptController>,
     pub(crate) pending: Pending,
     /// The system timer, until a driver installs it or the boot ends.
@@ -138,45 +134,15 @@ pub struct Boot<N = NoNet> {
     /// The boot's identity, once a station drew it.
     pub(crate) boot_id: Option<u64>,
     evidence: Evidence,
-    /// The IP service to start with the executor.
-    net: N,
+    /// The station's network device, for the second boot.
+    #[cfg(feature = "wifi")]
+    pub(crate) device: Option<wifi::Device>,
 }
 
-/// No IP service: the boot started none.
+/// No IP service: the second boot started none.
 pub struct NoNet;
 
 impl Boot {
-    /// The same boot with `net` as its IP service.
-    #[cfg(feature = "wifi")]
-    pub(crate) fn with_net<M>(self, net: M) -> Boot<M> {
-        let Self {
-            adopted,
-            pending,
-            timer,
-            app_alarm,
-            radio,
-            urgent,
-            entropy,
-            boot_id,
-            evidence,
-            net: NoNet,
-        } = self;
-        Boot {
-            adopted,
-            pending,
-            timer,
-            app_alarm,
-            radio,
-            urgent,
-            entropy,
-            boot_id,
-            evidence,
-            net,
-        }
-    }
-}
-
-impl<N> Boot<N> {
     pub(crate) fn router(
         &mut self,
     ) -> &mut oer_espressif_interrupt_table::Router<InterruptController, 0> {
@@ -238,10 +204,10 @@ pub(crate) struct Pending {
     pub(crate) station: Option<wifi::StationStart>,
 }
 
-impl<N: NetTask> Boot<N> {
+impl Boot {
     /// End the boot: run `app` on hart 0 beside the library's service
     /// tasks once the executor starts.
-    pub fn run<F: core::future::Future<Output = AppResult>>(self, app: F) -> Run<F, N> {
+    pub fn run<F: core::future::Future<Output = AppResult>>(self, app: F) -> Run<F> {
         Run { boot: self, app }
     }
 }
@@ -251,10 +217,8 @@ impl<N: NetTask> Boot<N> {
 pub trait Started: started::Sealed {
     /// The application's future.
     type App: core::future::Future<Output = AppResult>;
-    /// The IP service the boot started, or [`NoNet`].
-    type Net: NetTask;
     #[doc(hidden)]
-    fn into_parts(self) -> (Boot<Self::Net>, Self::App);
+    fn into_parts(self) -> (Boot, Self::App);
 }
 
 mod started {
@@ -262,19 +226,126 @@ mod started {
 }
 
 /// The finished boot [`Boot::run`] returns.
-pub struct Run<F, N> {
-    boot: Boot<N>,
+pub struct Run<F> {
+    boot: Boot,
     app: F,
 }
 
-impl<F, N> started::Sealed for Run<F, N> {}
+impl<F> started::Sealed for Run<F> {}
 
-impl<F: core::future::Future<Output = AppResult>, N: NetTask> Started for Run<F, N> {
+impl<F: core::future::Future<Output = AppResult>> Started for Run<F> {
     type App = F;
-    type Net = N;
-    fn into_parts(self) -> (Boot<N>, F) {
+    fn into_parts(self) -> (Boot, F) {
         (self.boot, self.app)
     }
+}
+
+/// What the boot hands the second boot: the station's network device when
+/// the boot started a station.
+pub struct Hart1Peripherals {
+    /// The station's network device, which [`wifi::Net::start`] takes.
+    #[cfg(feature = "wifi")]
+    pub device: Option<wifi::Device>,
+}
+
+/// The second boot's context: `entry!(boot, hart1 = boot1)` calls `boot1`
+/// with it once the boot ended, before any executor, and runs the future it
+/// ends with beside the IP service it started. Both run where the second
+/// boot runs: on hart 0, the application's executor.
+///
+/// `N` is the IP service the second boot started, whose pool sizes are the
+/// image's: [`NoNet`] until `wifi::Net::start` consumes the context and
+/// returns it with the service.
+pub struct Hart1Boot<N = NoNet> {
+    net: N,
+}
+
+impl Hart1Boot {
+    /// The same context with `net` as its IP service.
+    #[cfg(feature = "wifi")]
+    pub(crate) fn with_net<M>(self, net: M) -> Hart1Boot<M> {
+        let Self { net: NoNet } = self;
+        Hart1Boot { net }
+    }
+}
+
+impl<N: NetTask> Hart1Boot<N> {
+    /// End the second boot: run `future` beside its IP service.
+    pub fn run<F: core::future::Future<Output = AppResult>>(self, future: F) -> Hart1Run<F, N> {
+        Hart1Run {
+            net: self.net,
+            future,
+        }
+    }
+}
+
+/// A finished second boot: what `boot1` returns, as `impl Hart1Started`.
+pub trait Hart1Started: started::Sealed {
+    /// The second boot's future.
+    type Future: core::future::Future<Output = AppResult>;
+    /// The IP service it started, or [`NoNet`].
+    type Net: NetTask;
+    #[doc(hidden)]
+    fn into_parts(self) -> (Self::Net, Self::Future);
+}
+
+/// The finished second boot [`Hart1Boot::run`] returns.
+pub struct Hart1Run<F, N> {
+    net: N,
+    future: F,
+}
+
+impl<F, N> started::Sealed for Hart1Run<F, N> {}
+
+impl<F: core::future::Future<Output = AppResult>, N: NetTask> Hart1Started for Hart1Run<F, N> {
+    type Future = F;
+    type Net = N;
+    fn into_parts(self) -> (N, F) {
+        (self.net, self.future)
+    }
+}
+
+pub use crate::channel::{Channel, ChannelError};
+
+/// The application's end of a [`Channel`]: it sends `A` and receives `B`.
+pub type ApplicationEnd<A, B, const N: usize> = crate::channel::End<A, B, N, Notify, Notify>;
+/// The second boot's end of a [`Channel`]: it sends `B` and receives `A`.
+pub type SecondEnd<A, B, const N: usize> = crate::channel::End<B, A, N, Notify, Notify>;
+/// How a channel's end and the IP status wake the future that waits: on
+/// one hart, its waker.
+pub(crate) type Notify = atomic_waker::AtomicWaker;
+
+impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
+    /// The application's end, taken once in the boot.
+    ///
+    /// # Errors
+    /// [`Error::Channel`]: the end was taken already.
+    pub fn application(&'static self, boot: &mut Boot) -> Result<ApplicationEnd<A, B, N>, Error> {
+        let _ = boot;
+        self.take_application().map_err(Error::Channel)
+    }
+
+    /// The second boot's end, taken once in the second boot after the
+    /// boot took the application's.
+    ///
+    /// # Errors
+    /// [`Error::Channel`]: the end was taken already, or the boot took no
+    /// application end.
+    pub fn second<M>(&'static self, boot: &mut Hart1Boot<M>) -> Result<SecondEnd<A, B, N>, Error> {
+        let _ = boot;
+        self.take_second().map_err(Error::Channel)
+    }
+}
+
+/// The second boot of an image that declares none: it drops what the boot
+/// handed it (a station's device tells the station that no network takes
+/// its frames) and runs nothing.
+#[doc(hidden)]
+pub fn no_hart1(
+    _handed: Hart1Peripherals,
+    boot: Hart1Boot,
+) -> Result<impl Hart1Started, Error> {
+    Ok(boot.run(core::future::pending()))
 }
 
 /// An IP service the executor runs beside the application, with the
@@ -312,6 +383,8 @@ pub enum Error {
     Storage,
     /// The entropy source failed its health check.
     Entropy,
+    /// A channel's end was refused.
+    Channel(ChannelError),
     /// The console could not take the USB Serial/JTAG block.
     #[cfg(feature = "console")]
     Console,
@@ -327,6 +400,10 @@ pub enum Error {
     /// A wait on the IP service ended without its condition.
     #[cfg(feature = "wifi")]
     NetWait(crate::net::NetError),
+    /// The second boot asked for the station's device, and the boot started
+    /// no station.
+    #[cfg(feature = "wifi")]
+    NoDevice,
 }
 
 #[cfg(feature = "wifi")]
@@ -360,6 +437,7 @@ impl Error {
             Self::AesClients => oer_diagnostics::name!("sdk-aes-clients"; 32),
             Self::Storage => oer_diagnostics::name!("sdk-storage"; 32),
             Self::Entropy => oer_diagnostics::name!("sdk-entropy"; 32),
+            Self::Channel(_) => oer_diagnostics::name!("sdk-channel"; 32),
             #[cfg(feature = "console")]
             Self::Console => oer_diagnostics::name!("sdk-console"; 32),
             #[cfg(feature = "wifi")]
@@ -370,6 +448,8 @@ impl Error {
             Self::WifiProfile(_) => oer_diagnostics::name!("sdk-wifi-profile"; 32),
             #[cfg(feature = "wifi")]
             Self::NetWait(_) => oer_diagnostics::name!("sdk-net-wait"; 32),
+            #[cfg(feature = "wifi")]
+            Self::NoDevice => oer_diagnostics::name!("sdk-no-device"; 32),
         }
     }
 }
@@ -378,12 +458,15 @@ impl Error {
 pub type AppResult = Result<core::convert::Infallible, Error>;
 
 /// Run the image: adopt the runtime, report the previous boot's faults,
-/// call `boot` with the peripherals, start the executor with the library's
-/// service tasks and the application's future. Any error records and resets.
+/// call `boot` with the peripherals, then `hart1` with what the boot handed
+/// it, and start the executor with the library's service tasks, the second
+/// boot's IP service and future, and the application's future. Any error
+/// records and resets.
 #[doc(hidden)]
-pub fn start<S: Started>(
+pub fn start<S: Started, H: Hart1Started>(
     handoff: Handoff<Port>,
     boot: fn(Peripherals, Boot) -> Result<S, Error>,
+    hart1: fn(Hart1Peripherals, Hart1Boot) -> Result<H, Error>,
 ) -> ! {
     let previous = oer_espressif_staged_runtime::panic::peek_previous();
     // Read before adoption prints and clears them.
@@ -472,7 +555,8 @@ pub fn start<S: Started>(
             previous_panic: previous,
             previous_exception,
         },
-        net: NoNet,
+        #[cfg(feature = "wifi")]
+        device: None,
     };
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
@@ -482,6 +566,13 @@ pub fn start<S: Started>(
         console: ConsolePeripheral(interrupts.console_usb),
     };
     let (mut setup, app) = boot(peripherals, setup)
+        .unwrap_or_else(|error| fail(error.name()))
+        .into_parts();
+    let handed = Hart1Peripherals {
+        #[cfg(feature = "wifi")]
+        device: setup.device.take(),
+    };
+    let (net, second) = hart1(handed, Hart1Boot { net: NoNet })
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     // Without a radio executor the application executor writes the timer.
@@ -514,10 +605,7 @@ pub fn start<S: Started>(
     #[cfg(feature = "wifi")]
     let urgent = setup.urgent.take();
     let Boot {
-        adopted,
-        pending,
-        net,
-        ..
+        adopted, pending, ..
     } = setup;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -531,9 +619,13 @@ pub fn start<S: Started>(
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
     let mut net = core::pin::pin!(run_net(net));
+    let mut second = core::pin::pin!(run_app(second));
     let mut app = core::pin::pin!(run_app(app));
     let roots = (
-        oer_espressif_executor::Root::new(net.as_mut()),
+        (
+            oer_espressif_executor::Root::new(net.as_mut()),
+            oer_espressif_executor::Root::new(second.as_mut()),
+        ),
         oer_espressif_executor::Root::new(app.as_mut()),
     );
     #[cfg(feature = "wifi")]
@@ -633,7 +725,7 @@ pub(crate) fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
 /// What [`main!`](crate::main) expands to needs; not an API.
 #[doc(hidden)]
 pub mod __private {
-    pub use super::start;
+    pub use super::{no_hart1, start};
     pub use oer_esp32s31_compose::exception::capture as exception;
     pub use oer_esp32s31_hal::platform::Port;
     pub use oer_espressif_staged_runtime::{Handoff, entry};

@@ -4,28 +4,55 @@
 mod profile;
 
 use oer_espressif::{
-    AppResult, Aes, Boot, Error, Peripherals, Started,
+    AppResult, Aes, ApplicationEnd, Boot, Channel, Error, Hart1Boot, Hart1Peripherals,
+    Hart1Started, Peripherals, SecondEnd, Started,
     print::{DiagPath, DiagnosticPath, Ipv4},
     println,
     time::{Duration, Timer, with_timeout},
-    wifi::{self, Net, NetConfig, Station, embassy_net},
+    wifi::{self, Net, NetConfig, NetStatus, Station, embassy_net},
 };
 use profile::{PROFILE, Security};
 
-oer_espressif::entry!(boot);
+/// The application asks the network's future for an exchange with this
+/// gateway and hears how it ended.
+static EXCHANGES: Channel<[u8; 4], Result<(), Exchange>, 1> = Channel::new();
+
+oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;
-    let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
-    let (net, boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
-    Ok(boot.run(app(station, net)))
+    let (station, status) = Station::start(p.wifi, &aes, config, &mut boot)?;
+    let exchanges = EXCHANGES.application(&mut boot)?;
+    Ok(boot.run(app(station, status, exchanges)))
 }
 
-async fn app(mut station: Station, net: Net) -> AppResult {
+/// The second boot: the IP service over the station's device, and the
+/// exchanges on its sockets.
+fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
+    let device = p.device.ok_or(Error::NoDevice)?;
+    let (net, mut boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
+    let requests = EXCHANGES.second(&mut boot)?;
+    Ok(boot.run(exchanges(net, requests)))
+}
+
+/// Exchange one line with each gateway the application names.
+async fn exchanges(net: Net, mut requests: SecondEnd<[u8; 4], Result<(), Exchange>, 1>) -> AppResult {
+    loop {
+        let gateway = requests.receive().await;
+        let result = exchange(&net, gateway).await;
+        requests.send(result).await;
+    }
+}
+
+async fn app(
+    mut station: Station,
+    net: NetStatus,
+    mut exchanges: ApplicationEnd<[u8; 4], Result<(), Exchange>, 1>,
+) -> AppResult {
     // A refused or failed attempt is a result to report, not a fault.
     loop {
-        match station.connect(network()?).await {
+        match station.connect(station_profile()?).await {
             Ok(joined) => {
                 println!("OER-WIFI connected channel={}", joined.channel);
                 break;
@@ -47,7 +74,8 @@ async fn app(mut station: Station, net: Net) -> AppResult {
         };
         println!("OER-WIFI ipv4 {}/{}", Ipv4(ipv4.address), ipv4.prefix_length);
         if let Some(gateway) = ipv4.gateway {
-            let _ = match exchange(&net, gateway).await {
+            exchanges.send(gateway).await;
+            let _ = match exchanges.receive().await {
                 Ok(()) => println!("OER-RESULT: pass wifi-station"),
                 Err(error) => println!("OER-WIFI tcp-failed {}", error),
             };
@@ -58,7 +86,7 @@ async fn app(mut station: Station, net: Net) -> AppResult {
 }
 
 /// The profile's network.
-fn network() -> Result<wifi::Profile, Error> {
+fn station_profile() -> Result<wifi::Profile, Error> {
     Ok(match PROFILE.security {
         Security::Open => wifi::Profile::open(PROFILE.ssid)?,
         Security::Wpa2Personal { passphrase } => wifi::Profile::wpa2(PROFILE.ssid, passphrase)?,

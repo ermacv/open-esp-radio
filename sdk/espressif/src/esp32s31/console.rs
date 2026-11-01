@@ -33,7 +33,7 @@ impl Console {
     ///
     /// # Errors
     /// [`Error::Console`] when the early writer could not retire its block.
-    pub fn open<N>(console: ConsolePeripheral, boot: &mut Boot<N>) -> Result<UsbConsole, Error> {
+    pub fn open(console: ConsolePeripheral, boot: &mut Boot) -> Result<UsbConsole, Error> {
         let (stream, _pads) = BINDING
             .open(boot.router(), console.0)
             .map_err(|_| Error::Console)?;

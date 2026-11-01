@@ -40,8 +40,10 @@ radio interrupt and links no Wi-Fi code; the library only feeds the RTC
 watchdog.
 
 A configured image's boot checks the profile's domain, channel and power
-limit before any radio owner starts, then starts the shared AES service, the
-station and the IP service with the library's defaults. The application
+limit before any radio owner starts, then starts the shared AES service and
+the station; its second boot (`entry!(boot, hart1 = network)`) starts the
+IP service with the library's defaults and runs the TCP exchange, which the
+application asks for over a `Channel` with the lease's gateway. The application
 connects with the profile's network and prints each failed attempt
 (`OER-WIFI connect-failed` with the station's cause) before trying again
 two seconds later; once joined, the station keeps the network and rejoins it
