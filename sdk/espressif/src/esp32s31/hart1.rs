@@ -188,7 +188,8 @@ pub fn hart1_main<H: Hart1Started>(
     // The second boot's futures stay in this frame, which never returns.
     let mut net = core::pin::pin!(run_net(net));
     observed_root!(net, Ip);
-    let mut second = core::pin::pin!(run_app(second));
+    let mut second = core::pin::pin!(second);
+    let mut second = core::pin::pin!(run_app(second.as_mut()));
     observed_root!(second, Second);
     let roots = (Root::new(net.as_mut()), Root::new(second.as_mut()));
     match executor
