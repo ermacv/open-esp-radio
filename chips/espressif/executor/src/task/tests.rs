@@ -517,6 +517,62 @@ fn declared_tasks_start_once_with_their_arguments_and_poll_by_index() {
     assert_eq!(Declared::second(&spawner, &seen.1), Err(AlreadyStarted));
 }
 
+/// A library's set and the image's set extending it, on one executor.
+mod extended {
+    use super::*;
+
+    pub(super) async fn library(seen: &'static AtomicU32) {
+        seen.fetch_add(1, Ordering::Relaxed);
+        core::future::pending::<()>().await;
+    }
+
+    pub(super) async fn application(seen: &'static AtomicU32) {
+        seen.fetch_add(10, Ordering::Relaxed);
+    }
+
+    crate::tasks! {
+        /// The library's tasks.
+        pub(super) Library: InterruptExecutor<super::TestBinding, 2> {
+            service(seen: &'static AtomicU32) = library;
+            other(seen: &'static AtomicU32) = library;
+        }
+    }
+
+    crate::tasks! {
+        /// The image's tasks, after the library's.
+        pub(super) Application: InterruptExecutor<super::TestBinding, 2> extends Library {
+            main(seen: &'static AtomicU32) = application;
+        }
+    }
+
+    pub(super) fn main_index() -> u8 {
+        main::TASK_INDEX
+    }
+}
+
+#[test]
+fn an_extending_set_numbers_its_tasks_after_its_base_and_polls_both() {
+    use extended::{Application, Library};
+    assert_eq!(<Library as Tasks>::COUNT, 2);
+    assert_eq!(<Application as Tasks>::COUNT, 3);
+    assert_eq!(extended::main_index(), 2);
+    let seen: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
+    let spawner = Spawner::<Application>::new();
+    // The base's tasks start through the extending set's spawner.
+    Library::service(&spawner.base(), seen).expect("library start");
+    Application::main(&spawner, seen).expect("application start");
+    let current = current();
+    // The executor runs the extending set: one round polls both sets' tasks.
+    assert!(!round::<Application>(current));
+    assert_eq!(seen.load(Ordering::Relaxed), 11);
+    // Each slot still starts once, through either spawner.
+    assert_eq!(Library::service(&spawner.base(), seen), Err(AlreadyStarted));
+    // A base task's wake marks its own index on the shared executor.
+    ready(EXECUTOR).expect("a test executor").mark(0);
+    assert!(!round::<Application>(current));
+    assert_eq!(seen.load(Ordering::Relaxed), 11);
+}
+
 /// A thread-mode executor's signal side on the test thread, made of the same
 /// parts as the chip's `Executor<B, SWI>`: the core's running context
 /// ([`crate::context::Running`]) at the level the test thread runs at, the

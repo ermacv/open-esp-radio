@@ -123,6 +123,13 @@ pub trait Tasks: Sized + 'static {
     fn poll(index: u8, token: &PollToken<Self>, cx: &mut Context<'_>);
 }
 
+/// A task set that extends `Base`: declared by [`tasks!`](crate::tasks)
+/// with `extends Base`, on `Base`'s executor and mode, it holds `Base`'s
+/// tasks first, at their own indices, and its own after them. Running the
+/// executor with the extending set polls both; `Base`'s tasks start through
+/// [`Spawner::base`].
+pub trait Extends<Base: Tasks>: Tasks<Binding = Base::Binding, Mode = Base::Mode> {}
+
 /// The right to poll the tasks of `T`, which only `T`'s executor holds, for
 /// one poll at a time.
 pub struct PollToken<T> {
@@ -134,6 +141,17 @@ impl<T: Tasks> PollToken<T> {
         Self {
             _executor: PhantomData,
         }
+    }
+
+    /// The right to poll the tasks of the set `T` extends, which `T`'s
+    /// executor holds with `T`'s: [`tasks!`](crate::tasks) delegates the
+    /// base's indices with it.
+    #[doc(hidden)]
+    pub const fn base<B: Tasks>(&self) -> PollToken<B>
+    where
+        T: Extends<B>,
+    {
+        PollToken::new()
     }
 }
 
@@ -152,6 +170,15 @@ impl<T: Tasks> Spawner<T> {
         Self {
             _tasks: PhantomData,
         }
+    }
+
+    /// The start right of the tasks of the set `T` extends, which run on
+    /// `T`'s executor, in the same mode.
+    pub const fn base<B: Tasks>(&self) -> Spawner<B>
+    where
+        T: Extends<B>,
+    {
+        Spawner::new()
     }
 
     /// Start `task` with `start`, written in place: the executor calls it at
@@ -214,7 +241,8 @@ pub struct Task<M: MakeFuture, T> {
 // to `CLAIMED`), until it publishes the start (`STARTED`, release), and then
 // only by the poll that takes it (`STARTED` or `LIVE` to `POLLING`,
 // acquire) until it returns it. A poll needs `T`'s token, which only `T`'s
-// executor holds, in its one context, which makes the future from the start
+// executor holds (directly, or as the base token of a set extending `T`,
+// whose executor is `T`'s, `Extends`), in its one context, which makes the future from the start
 // and polls it there. A start comes from another context than that only
 // through a `Send` spawner, of an interrupt-mode executor, which takes only a
 // `Send` start (`Admits`); the future never leaves the executor's context.
@@ -582,18 +610,37 @@ use tests::ready;
 macro_rules! tasks {
     (
         $(#[$set_attr:meta])*
-        $vis:vis $set:ident : InterruptExecutor < $binding:ty, $executor:literal > { $($tasks:tt)* }
+        $vis:vis $set:ident : InterruptExecutor < $binding:ty, $executor:literal > $(extends $base:path)? { $($tasks:tt)* }
     ) => {
-        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Interrupt] $executor { $($tasks)* });
+        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Interrupt] $executor [$($base)?] { $($tasks)* });
     };
     (
         $(#[$set_attr:meta])*
-        $vis:vis $set:ident : Executor < $binding:ty, $executor:literal > { $($tasks:tt)* }
+        $vis:vis $set:ident : Executor < $binding:ty, $executor:literal > $(extends $base:path)? { $($tasks:tt)* }
     ) => {
-        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Thread] $executor { $($tasks)* });
+        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Thread] $executor [$($base)?] { $($tasks)* });
+    };
+    // The base's tasks come first; its index range and poll are delegated.
+    (@first []) => { 0 };
+    (@first [$base:path]) => { <$base as $crate::task::Tasks>::COUNT };
+    (@base_poll [] $index:ident $token:ident $cx:ident) => {};
+    (@base_poll [$base:path] $index:ident $token:ident $cx:ident) => {
+        if $index < <$base as $crate::task::Tasks>::COUNT {
+            <$base as $crate::task::Tasks>::poll($index, &$token.base::<$base>(), $cx);
+            return;
+        }
+    };
+    (@extends [] $set:ident [$binding:ty] [$mode:ty] $executor:literal) => {};
+    (@extends [$base:path] $set:ident [$binding:ty] [$mode:ty] $executor:literal) => {
+        impl $crate::task::Extends<$base> for $set {}
+        const _: () = {
+            if <$base as $crate::task::Tasks>::EXECUTOR != $executor {
+                panic!("a set extends a set of its own executor");
+            }
+        };
     };
     (
-        @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$binding:ty] [$mode:ty] $executor:literal {
+        @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$binding:ty] [$mode:ty] $executor:literal [$($base:path)?] {
             $(@observer: $observer:expr;)?
             $(
                 $(#[$attr:meta])*
@@ -614,13 +661,14 @@ macro_rules! tasks {
                 fn observer() -> impl $crate::__trace::Observer { $observer }
             )?
             const EXECUTOR: u8 = $executor;
-            const COUNT: u8 = 0 $(+ { let _ = stringify!($name); 1 })*;
+            const COUNT: u8 = Self::FIRST_TASK $(+ { let _ = stringify!($name); 1 })*;
             #[allow(unused_doc_comments, unused_variables)]
             fn poll(
                 index: u8,
                 token: &$crate::task::PollToken<Self>,
                 cx: &mut ::core::task::Context<'_>,
             ) {
+                $crate::tasks!(@base_poll [$($base)?] index token cx);
                 $(
                     $(#[$attr])*
                     {
@@ -658,7 +706,13 @@ macro_rules! tasks {
             )*
         }
 
-        $crate::tasks!(@slots $set [0] $($(#[$attr])* $name;)*);
+        impl $set {
+            /// The index of the set's first own task: after its base's.
+            const FIRST_TASK: u8 = $crate::tasks!(@first [$($base)?]);
+        }
+
+        $crate::tasks!(@extends [$($base)?] $set [$binding] [$mode] $executor);
+        $crate::tasks!(@slots $set [super::$set::FIRST_TASK] $($(#[$attr])* $name;)*);
     };
     (@slots $set:ident [$index:expr]) => {};
     (@slots $set:ident [$index:expr] $(#[$attr:meta])* $name:ident; $($rest:tt)*) => {
