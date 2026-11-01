@@ -117,7 +117,16 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
         .collect();
     let chip = chip_of(package, &chips)?;
     let profile = oer_chip_profile::Profile::load(root, chip)?;
-    let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))?;
+    let analysis = analysis(
+        root,
+        package,
+        &profile,
+        &crate::manifest::workspace_metadata(root)?,
+    )?;
+    // The stacks of the harts the probe declares, as an image's: the build
+    // script and the image linker size them alike.
+    let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
+        .for_image(&analysis.harts)?;
     let target = profile.facts.rust_target.as_str();
     let cache = target_dir(root);
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
@@ -132,18 +141,12 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
             linker_target: &crate::compiler::linker_target(root),
             rust_target: target,
             max_move_bytes: policy.max_move_bytes,
-            runtime_environment: Vec::new(),
+            runtime_environment: policy.runtime_environment(),
             // A probe compiles the probe hooks alone, never a class.
             instrumentation: crate::instrumentation::Instrumentation::default(),
         },
     )?;
     cargo.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
-    let analysis = analysis(
-        root,
-        package,
-        &profile,
-        &crate::manifest::workspace_metadata(root)?,
-    )?;
     let specification = strict::configure(&mut cargo, &analysis, &output, true)?;
     let mut cargo = command(cargo, root, package, target, jobs)?;
     let images = RefCell::new(Vec::new());
@@ -324,6 +327,15 @@ mod tests {
         };
         assert_eq!(hart1("two-harts"), (true, true));
         assert_eq!(hart1("boot-hart"), (false, false));
+        let irq1 = |package: &str| {
+            policy(package)
+                .runtime_environment()
+                .into_iter()
+                .find(|(name, _)| name == "OPEN_RADIO_IRQ_STACK_HART1_BYTES")
+                .map(|(_, bytes)| bytes)
+        };
+        assert_ne!(irq1("two-harts").as_deref(), Some("0"));
+        assert_eq!(irq1("boot-hart").as_deref(), Some("0"));
     }
 
     #[test]
