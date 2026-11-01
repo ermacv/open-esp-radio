@@ -179,7 +179,7 @@ impl Boot {
 impl<N> Boot<N> {
     pub(crate) fn router(
         &mut self,
-    ) -> &mut oer_espressif_interrupt_table::Router<InterruptController> {
+    ) -> &mut oer_espressif_interrupt_table::Router<InterruptController, 0> {
         self.adopted.router()
     }
 
@@ -486,7 +486,7 @@ pub fn start<S: Started>(
         .into_parts();
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
-        let _ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+        let _ready = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
             oer_espressif_executor::systimer::SystemTimer {
                 comparators: timer.comparators,
                 counter: timer.counter,

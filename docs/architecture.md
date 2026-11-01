@@ -409,12 +409,15 @@ run its own executor.
   `InterruptGrant`; only that hart's handoff (`Handoff::adopt` for the boot
   hart, `SecondaryHandoff::adopt` for a secondary hart) makes it a
   controller, on that hart (a runtime hart check), and the controller and
-  its router stay there (`!Send`). Each hart sets its own CLIC's level bits.
+  its router stay there (`!Send`). The router names its hart in its type
+  (`Router<C, H>`): a binding of another hart's entry fails to compile. Each hart sets its own CLIC's level bits.
   A hart's interrupt enable consumes its `PreAdmission<H>` and returns its
   router with `Hart<H>`.
 - Each executor starts with a borrowed affine `Hart<H>`; its interrupt entry
   must name that hart at compile time. A software source identifies one
-  executor globally, and its task wakers stay on its owning hart. A task
+  executor globally, and its task wakers stay on its owning hart: a wake on
+  another hart records `WakerCrossedHarts` and resets, because the type
+  system cannot keep a `Waker` on its hart. A task
   reaches an executor on another hart only by raising that executor's
   signal, declared with a `FromPeerHart` raiser
   (`oer-espressif-executor::peer` carries one request and its answer that

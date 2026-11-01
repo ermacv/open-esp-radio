@@ -189,7 +189,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// # P::finish(p)
 /// # }
 /// fn bind(
-///     router: &mut Router<InterruptController>, token: MacToken,
+///     router: &mut Router<InterruptController, 0>, token: MacToken,
 ///     task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner,
 /// ) -> Result<(Ieee802154ArmedTaskOwner, Bound<MacToken>), (Ieee802154ArmedTaskOwner, BindError<MacToken>)> {
 ///     let (startup, interrupts) = prepare(setup, task);
@@ -225,7 +225,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// #     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(
-///     router: &mut Router<InterruptController>,
+///     router: &mut Router<InterruptController, 0>,
 ///     token: MacToken,
 ///     task: &mut Ieee802154TaskOwner,
 ///     interrupts: Ieee802154InterruptOwner,

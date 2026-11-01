@@ -259,7 +259,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
         fail(oer_diagnostics::name!("channel-claimed"; 32));
     };
     let timer = runtime_system_timer;
-    let timers = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+    let timers = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,

@@ -209,7 +209,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     // application executor publishes its deadlines to it for comparator 1,
     // and hart 1's network executor for comparator 2, whose alarm hart 1
     // routes itself.
-    let mut timers = oer_espressif_executor::init::<Esp32s31, 2, _, _>(
+    let mut timers = oer_espressif_executor::init::<Esp32s31, 2, _, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: system_timer.comparators,
             counter: system_timer.counter,
@@ -219,7 +219,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         system_timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _, _>(
         &mut timers,
         adopted.router(),
         interrupts.alarm,

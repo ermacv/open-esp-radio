@@ -35,10 +35,10 @@ note: required by a bound in `send`
 error[E0277]: `*mut ()` cannot be sent between threads safely
   --> tests/ui/interrupt_grant_is_one_per_hart.rs:34:12
    |
-34 |     send::<Router<InterruptController>>(); // ui-error: E0277
-   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `*mut ()` cannot be sent between threads safely
+34 |     send::<Router<InterruptController, 0>>(); // ui-error: E0277
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `*mut ()` cannot be sent between threads safely
    |
-   = help: within `Router<InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>>`, the trait `Send` is not implemented for `*mut ()`
+   = help: within `Router<InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>, 0>`, the trait `Send` is not implemented for `*mut ()`
 note: required because it appears within the type `PhantomData<*mut ()>`
   --> $RUST/core/src/marker.rs
    |
@@ -49,10 +49,10 @@ note: required because it appears within the type `InterruptController<Interrupt
    |
    | pub struct InterruptController<
    |            ^^^^^^^^^^^^^^^^^^^
-note: required because it appears within the type `Router<InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>>`
+note: required because it appears within the type `Router<InterruptController<InterruptCore0, oer_mmio::Fixed<276824064>>, 0>`
   --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
    |
-   | pub struct Router<C: Controller> {
+   | pub struct Router<C: Controller, const H: u8> {
    |            ^^^^^^
 note: required by a bound in `send`
   --> tests/ui/interrupt_grant_is_one_per_hart.rs:7:12

@@ -39,10 +39,6 @@ pub enum Fault {
     TimerBankUnavailable {
         comparator: u8,
     },
-    AlarmHart {
-        expected: u8,
-        actual: usize,
-    },
     MissingComparator {
         executor: u8,
         comparator: u8,
@@ -52,9 +48,28 @@ pub enum Fault {
         executor: u8,
         error: Error,
     },
+    /// A task's waker was woken on another hart than its executor's.
+    WakerCrossedHarts {
+        executor: u8,
+        owner: usize,
+        current: usize,
+    },
 }
 
 impl Fault {
+    /// The fault of a wake of a task of `executor`, whose executor runs on
+    /// hart `owner` (none before it started), on hart `current`: a waker
+    /// stays on its executor's hart.
+    pub(crate) fn crossed_wake(executor: u8, owner: Option<usize>, current: usize) -> Option<Self> {
+        owner
+            .filter(|&owner| owner != current)
+            .map(|owner| Self::WakerCrossedHarts {
+                executor,
+                owner,
+                current,
+            })
+    }
+
     #[cfg(feature = "chip")]
     pub(crate) fn binding<E: oer_espressif_interrupt_table::Entry>(
         executor: u8,
@@ -107,9 +122,13 @@ impl Fault {
                 FaultReason::TimerBankUnavailable,
                 [comparator.into(), 0, 0, 0],
             ),
-            Self::AlarmHart { expected, actual } => (
-                FaultReason::AlarmHart,
-                [expected.into(), actual as u32, 0, 0],
+            Self::WakerCrossedHarts {
+                executor,
+                owner,
+                current,
+            } => (
+                FaultReason::WakerCrossedHarts,
+                [executor.into(), owner as u32, current as u32, 0],
             ),
             Self::MissingComparator {
                 executor,
@@ -203,13 +222,9 @@ fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
             FaultReason::RouteWrongLevelBits,
             [executor, actual.into(), expected.into(), 0],
         ),
-        Error::WrongHart {
-            source,
-            hart,
-            current,
-        } => (
+        Error::WrongHart { hart, current } => (
             FaultReason::RouteWrongHart,
-            [executor, source.into(), hart.into(), current.into()],
+            [executor, hart.into(), current.into(), 0],
         ),
         Error::WrongClass {
             source,
@@ -279,18 +294,28 @@ mod tests {
     }
 
     #[test]
+    fn a_wake_on_another_hart_than_its_executors_is_a_fault() {
+        assert_eq!(Fault::crossed_wake(1, Some(1), 1), None);
+        assert_eq!(Fault::crossed_wake(1, None, 0), None, "not started");
+        let fault = Fault::crossed_wake(1, Some(1), 0).unwrap();
+        assert_eq!(
+            fault.diagnostic(),
+            (FaultReason::WakerCrossedHarts, [1, 1, 0, 0])
+        );
+    }
+
+    #[test]
     fn route_fault_keeps_every_source_observation() {
         let fault = Fault::Route {
             executor: 3,
             error: Error::WrongHart {
-                source: u16::MAX,
                 hart: 0xfe,
                 current: 0xfd,
             },
         };
         assert_eq!(
             fault.diagnostic(),
-            (FaultReason::RouteWrongHart, [3, 65535, 254, 253])
+            (FaultReason::RouteWrongHart, [3, 254, 253, 0])
         );
         let fault = Fault::ExecutorClaimed {
             executor: 2,

@@ -243,7 +243,8 @@ through adoption, and consumes it when enabling interrupts, returning the
 router and its existing `Hart<H>` together; a secondary hart's
 `SecondaryHandoff` does the same with its own token. `Adopted::parts` lends the hart
 and mutable router together before enable. Executor startup const-checks the
-entry's hart against this token; task wakers stay local to that hart. `Hart<H>` and
+entry's hart against this token; task wakers stay local to that hart, and a
+wake on another hart records and resets. `Hart<H>` and
 `PreAdmission<H>` are neither Send nor Sync and have no public constructor.
 Installation checks the executing hart and masks local interrupts before
 painting the inactive allocation and installing its trap registers. Its

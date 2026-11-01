@@ -155,7 +155,10 @@ fn controller_geometry_mismatches_refuse_installation_before_route_or_line_write
         let mut memory = configured_memory(control_bits, lines, level_bits);
         let matrix_before = memory.matrix.clone();
         let clic_before = memory.clic.clone();
-        assert_eq!(Router::install(memory.controller(), &[]).err(), Some(error));
+        assert_eq!(
+            Router::<_, 0>::install(memory.controller(), &[]).err(),
+            Some(error)
+        );
         assert_eq!(memory.matrix, matrix_before, "no route writes on mismatch");
         assert_eq!(memory.clic, clic_before, "no line writes on mismatch");
     }
@@ -171,7 +174,7 @@ fn verification_rechecks_mnlbits_after_installation() {
     let controller = InterruptGrant::new(matrix, clic, None)
         .into_controller_on(0)
         .expect("hart 0 builds its own controller");
-    let router = Router::install(controller, &[]).expect("matching geometry installs");
+    let router = Router::<_, 0>::install(controller, &[]).expect("matching geometry installs");
     assert_eq!(router.verify(), Ok(()));
     config.modify_int_config(|config| {
         config.set_mnlbits(Bits::constant::<0>());
@@ -453,7 +456,7 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
         }
     }
     {
-        let mut router = Router::install(memory.controller(), INTERRUPT_TABLE)
+        let mut router = Router::<_, 0>::install(memory.controller(), INTERRUPT_TABLE)
             .expect("a host controller installs");
         let tokens = Interrupts::take().expect("the test takes the tokens once");
         let _bound = router
@@ -517,7 +520,7 @@ fn the_router_refuses_a_table_outside_the_matrix_or_the_clic_before_any_write() 
     ] {
         let mut memory = Memory::filled(u32::MAX);
         assert_eq!(
-            Router::install(memory.controller(), table).err(),
+            Router::<_, 0>::install(memory.controller(), table).err(),
             Some(error)
         );
         assert!(

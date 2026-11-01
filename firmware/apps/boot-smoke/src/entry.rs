@@ -277,7 +277,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
     // The boot hart's executor writes the SYSTIMER registers; hart 1's
     // executor gets comparator 1 through a grant it routes on hart 1.
     let timer = runtime_system_timer;
-    let mut timers = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+    let mut timers = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,

@@ -32,9 +32,9 @@ impl Binding {
     pub fn interrupt(&'static self, part: &mut hw::ConsoleInterrupt) {
         self.0.service(part);
     }
-    pub fn open<I>(
+    pub fn open<const H: u8, I>(
         &'static self,
-        router: &mut Router<impl Controller>,
+        router: &mut Router<impl Controller, H>,
         token: I,
     ) -> Result<(Console, Pads), Unavailable>
     where

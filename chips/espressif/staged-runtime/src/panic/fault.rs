@@ -15,7 +15,6 @@ pub enum FaultReason {
     TimerInstalled = 9,
     TimerBinding = 11,
     TimerBankUnavailable = 12,
-    AlarmHart = 13,
     MissingComparator = 14,
     RouteWrongControlBits = 15,
     RouteWrongInterruptCount = 16,
@@ -63,6 +62,10 @@ pub enum FaultReason {
     /// (1 seat occupied, 2 wrong echo, 3 time range), the beat's sequence,
     /// the echo (or zero) and zero.
     LivenessBroken = 39,
+    /// A task's waker was woken on another hart than its executor's.
+    /// Observations: the executor's software interrupt, the executor's hart,
+    /// the waking hart and zero.
+    WakerCrossedHarts = 40,
     BindingRefused = 256,
     BindingStorageClaimed = 257,
     BindingHandlerOccupied = 258,
@@ -81,7 +84,6 @@ impl FaultReason {
             Self::TimerInstalled => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::TimerBinding => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::TimerBankUnavailable => oer_diagnostics::fault::Class::SoftwareInvariant,
-            Self::AlarmHart => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::MissingComparator => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::RouteWrongControlBits => oer_diagnostics::fault::Class::ConfigurationBoot,
             Self::RouteWrongInterruptCount => oer_diagnostics::fault::Class::ConfigurationBoot,
@@ -107,6 +109,7 @@ impl FaultReason {
             Self::PeerUnanswered => oer_diagnostics::fault::Class::Cancellation,
             Self::LivenessOverdue => oer_diagnostics::fault::Class::Cancellation,
             Self::LivenessBroken => oer_diagnostics::fault::Class::SoftwareInvariant,
+            Self::WakerCrossedHarts => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::BindingRefused => oer_diagnostics::fault::Class::ConfigurationBoot,
             Self::BindingStorageClaimed => oer_diagnostics::fault::Class::SoftwareInvariant,
             Self::BindingHandlerOccupied => oer_diagnostics::fault::Class::SoftwareInvariant,
@@ -129,7 +132,6 @@ impl FaultReason {
             9 => Some(Self::TimerInstalled),
             11 => Some(Self::TimerBinding),
             12 => Some(Self::TimerBankUnavailable),
-            13 => Some(Self::AlarmHart),
             14 => Some(Self::MissingComparator),
             15 => Some(Self::RouteWrongControlBits),
             16 => Some(Self::RouteWrongInterruptCount),
@@ -155,6 +157,7 @@ impl FaultReason {
             37 => Some(Self::PeerUnanswered),
             38 => Some(Self::LivenessOverdue),
             39 => Some(Self::LivenessBroken),
+            40 => Some(Self::WakerCrossedHarts),
             256 => Some(Self::BindingRefused),
             257 => Some(Self::BindingStorageClaimed),
             258 => Some(Self::BindingHandlerOccupied),
@@ -177,7 +180,6 @@ impl FaultReason {
             Self::TimerInstalled => "TimerInstalled",
             Self::TimerBinding => "TimerBinding",
             Self::TimerBankUnavailable => "TimerBankUnavailable",
-            Self::AlarmHart => "AlarmHart",
             Self::MissingComparator => "MissingComparator",
             Self::RouteWrongControlBits => "RouteWrongControlBits",
             Self::RouteWrongInterruptCount => "RouteWrongInterruptCount",
@@ -202,6 +204,7 @@ impl FaultReason {
             Self::SecondaryEarlyFault => "SecondaryEarlyFault",
             Self::PeerUnanswered => "PeerUnanswered",
             Self::LivenessOverdue => "LivenessOverdue",
+            Self::WakerCrossedHarts => "WakerCrossedHarts",
             Self::LivenessBroken => "LivenessBroken",
             Self::BindingRefused => "BindingRefused",
             Self::BindingStorageClaimed => "BindingStorageClaimed",
@@ -245,6 +248,11 @@ mod tests {
             (
                 FaultReason::LivenessBroken,
                 "LivenessBroken",
+                oer_diagnostics::fault::Class::SoftwareInvariant,
+            ),
+            (
+                FaultReason::WakerCrossedHarts,
+                "WakerCrossedHarts",
                 oer_diagnostics::fault::Class::SoftwareInvariant,
             ),
         ] {

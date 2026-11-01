@@ -21,8 +21,8 @@ pub(crate) fn early(note: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Writte
 /// Opens the console over the block the early writer retires: the router
 /// moves the interrupt's part to its handler and routes it. The pads stay
 /// apart, for the image that switches the console off.
-pub(crate) fn open<C: Controller>(
-    router: &mut Router<C>,
+pub(crate) fn open<const H: u8, C: Controller>(
+    router: &mut Router<C, H>,
     token: crate::ConsoleUsb,
 ) -> (Console, Pads) {
     INTERRUPT

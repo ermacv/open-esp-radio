@@ -153,15 +153,7 @@ fn error_words(error: Error) -> [u32; 3] {
         Error::WrongControlBits { actual, expected } => [1, actual.into(), expected.into()],
         Error::WrongInterruptCount { actual, expected } => [2, actual.into(), expected.into()],
         Error::WrongLevelBits { actual, expected } => [3, actual.into(), expected.into()],
-        Error::WrongHart {
-            source,
-            hart,
-            current,
-        } => [
-            4,
-            source.into(),
-            u32::from(hart) | (u32::from(current) << 8),
-        ],
+        Error::WrongHart { hart, current } => [4, hart.into(), current.into()],
         Error::WrongClass {
             source,
             table,

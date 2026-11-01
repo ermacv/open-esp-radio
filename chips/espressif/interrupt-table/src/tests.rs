@@ -5,7 +5,7 @@ crate::__fake_table!();
 
 #[test]
 fn install_silences_every_source_and_disables_every_line_before_it_checks() {
-    let router = Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap();
+    let router = Router::<_, 0>::install(FakeController::new(0), INTERRUPT_TABLE).unwrap();
     let controller = &router.controller;
     assert!(controller.routes.iter().all(Option::is_none));
     assert!(
@@ -27,7 +27,7 @@ fn install_silences_every_source_and_disables_every_line_before_it_checks() {
 
 #[test]
 fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
-    let mut router = fake_router(0);
+    let mut router = fake_router::<0>();
     router.controller.routes[7] = Some(30);
     assert_eq!(
         router.verify(),
@@ -37,7 +37,7 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
         })
     );
 
-    let mut router = fake_router(0);
+    let mut router = fake_router::<0>();
     // The timer's source on its own line, but the line at another level.
     router.controller.routes[3] = Some(16);
     router.controller.lines[16] = LineState::vectored(Control::level::<2, 3>());
@@ -59,7 +59,7 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
     ));
 
     // The timer's source on another entry's line of another hart.
-    let mut router = fake_router(0);
+    let mut router = fake_router::<0>();
     router.controller.routes[3] = Some(17);
     assert_eq!(
         router.verify(),
@@ -69,7 +69,7 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
         })
     );
 
-    let mut router = fake_router(0);
+    let mut router = fake_router::<0>();
     router.controller.lines[40] = LineState::vectored(Control::level::<3, 3>());
     assert_eq!(
         router.verify(),
@@ -81,6 +81,17 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
     );
 }
 
+#[test]
+fn a_router_of_one_hart_refuses_the_controller_of_another() {
+    assert_eq!(
+        Router::<_, 0>::install(FakeController::new(1), INTERRUPT_TABLE).err(),
+        Some(Error::WrongHart {
+            hart: 0,
+            current: 1
+        })
+    );
+}
+
 // The only test that takes the tokens and binds: both are once per image.
 #[test]
 fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
@@ -88,27 +99,11 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     let tokens = Interrupts::take().unwrap();
     assert!(Interrupts::take().is_none());
 
-    // The radio's entry is hart one's: hart zero's router refuses it and
-    // writes nothing.
-    let mut zero = fake_router(0);
+    // The radio's entry is hart one's: binding it on hart zero's router
+    // fails to compile (`Router::bind`).
+    let mut zero = fake_router::<0>();
     let before = zero.controller.writes.len();
-    let crate::BindError::Refused {
-        error,
-        token,
-        part: radio_part,
-    } = zero.bind(tokens.radio, RadioIrq).unwrap_err()
-    else {
-        panic!("a foreign hart is a pre-admission refusal");
-    };
-    assert_eq!(
-        error,
-        Error::WrongHart {
-            source: 5,
-            hart: 1,
-            current: 0
-        }
-    );
-    assert_eq!(zero.controller.writes.len(), before);
+    let (token, radio_part) = (tokens.radio, RadioIrq);
 
     // A table cannot reinterpret a token's class or route it to a handler
     // that reads another cell. Both refusals precede placement and writes.
@@ -123,7 +118,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
             handler: Some(handler),
         }])) as &'static crate::Table
     };
-    let mut wrong_class = Router::install(
+    let mut wrong_class = Router::<_, 0>::install(
         FakeController::new(0),
         table(crate::Class::Executor, timer_handler),
     )
@@ -160,7 +155,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     extern "C" fn other_cell_handler() {
         let _ = OTHER_CELL.with(on_timer);
     }
-    let mut wrong_cell = Router::install(
+    let mut wrong_cell = Router::<_, 0>::install(
         FakeController::new(0),
         table(TimerToken::CLASS, other_cell_handler as extern "C" fn()),
     )
@@ -253,7 +248,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     timer_handler();
     assert_eq!(TimerToken::cell().with(|part| part.handled), Some(3));
 
-    let mut one = fake_router(1);
+    let mut one = fake_router::<1>();
     let _bound = one.bind(token, radio_part).unwrap();
     assert_eq!(one.controller.routes[5], Some(17));
     assert_eq!(
@@ -329,7 +324,7 @@ fn install_refuses_an_entry_outside_the_controller_before_any_write() {
         (table_of(3, 20, 0), Error::NoSuchLevel { level: 0 }),
     ] {
         assert_eq!(
-            Router::install(FakeController::new(0), table).err(),
+            Router::<_, 0>::install(FakeController::new(0), table).err(),
             Some(error)
         );
     }
@@ -345,7 +340,7 @@ fn install_refuses_an_entry_outside_the_controller_before_any_write() {
             handler: Some(no_handler),
         }
     }]));
-    assert!(Router::install(FakeController::new(0), other).is_ok());
+    assert!(Router::<_, 0>::install(FakeController::new(0), other).is_ok());
 }
 
 #[test]
@@ -370,7 +365,7 @@ fn a_controller_refuses_a_source_or_line_it_lacks_and_writes_nothing() {
 
 #[test]
 fn only_a_silent_source_no_entry_binds_gets_the_polling_proof() {
-    let mut router = fake_router(0);
+    let mut router = fake_router::<0>();
     // The absent entry's build leaves it out: nothing binds source 6.
     let _silent: crate::Silent<AbsentIrq> = router.silent().unwrap();
     // The timer's entry binds source 3, the radio's (hart one) source 5.

@@ -84,16 +84,16 @@ impl Entropy {
 }
 
 /// Install the existing P2 writer and P1 comparator without changing routes.
-pub fn timers<A, R>(
+pub fn timers<const H: u8, A, R>(
     timer: hw::system_timer::SystemTimer,
-    router: &mut Router<impl Controller>,
+    router: &mut Router<impl Controller, H>,
     app: A,
     radio: R,
 ) where
     A: Entry<Part = hw::system_timer::SystimerAlarm1>,
     R: Entry<Part = hw::system_timer::SystimerAlarm0>,
 {
-    let mut timer_ready = oer_espressif_executor::init::<Esp32s31, 2, _, _>(
+    let mut timer_ready = oer_espressif_executor::init::<Esp32s31, 2, _, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -103,8 +103,13 @@ pub fn timers<A, R>(
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(&mut timer_ready, router, app, timer.alarm1)
-        .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _, _>(
+        &mut timer_ready,
+        router,
+        app,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
 }
 
 /// Bind a trace clock with `trace_clock!(platform::trace_now)` in an image

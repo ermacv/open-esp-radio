@@ -107,7 +107,7 @@ pub trait DoorbellAcknowledge {
 ///     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, context radio, hart 0, Hardware;
 /// }
 /// fn start(
-///     router: &mut oer_espressif_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController>,
+///     router: &mut oer_espressif_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController, 0>,
 ///     token: WifiToken,
 ///     banks: WifiInterruptBanks,
 ///     bell: FromCpu3Irq,
@@ -135,7 +135,7 @@ pub trait DoorbellAcknowledge {
 /// #     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(
-///     router: &mut oer_espressif_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController>,
+///     router: &mut oer_espressif_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController, 0>,
 ///     token: WifiToken,
 ///     part: WifiIrqPart<Lower>,
 /// ) {
