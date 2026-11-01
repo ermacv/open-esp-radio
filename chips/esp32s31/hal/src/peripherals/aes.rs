@@ -1,19 +1,26 @@
 //! CPU Typical AES atoms. Sequencing, completion waits and error policy are
-//! the chip crypto driver's responsibility. No DMA is enabled; the AES IRQ
-//! is enabled only by an [`InterruptingAes`] owner, whose interrupt part a
-//! handler holds.
+//! the chip crypto driver's responsibility. The polling owner enables no DMA
+//! and no AES IRQ; an [`InterruptingAes`] owner, whose interrupt part a
+//! handler holds, may enable the IRQ and run DMA-AES transfers over the
+//! AES's AXI-DMA channel ([`super::aes_dma`]).
 //! SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES in registers/evidence.
 
 use oer_esp32s31_pac::{
     aes, hp_sys_clkrst,
-    ownership::{AesPeripherals, CryptoClockPeripherals},
+    ownership::{AesPeripherals, AxiDmaPeripherals, CryptoClockPeripherals},
 };
 use oer_espressif_interrupt_table::Silent;
-use oer_mmio::{Index, InterruptSource};
+use oer_mmio::{Bits, Index, InterruptSource};
+
+use super::aes_dma::{AesDma, AesDmaChannel, DmaLengthError};
+
+/// The block modes of a DMA-AES transfer.
+pub use aes::block_mode::BlockMode as DmaBlockMode;
 
 /// The generated Typical/DMA status codes; the driver rejects other values.
 pub const IDLE: u32 = aes::state::State::Idle.bits();
 pub const WORK: u32 = aes::state::State::Work.bits();
+pub const DONE: u32 = aes::state::State::Done.bits();
 
 /// One CPU block, with geometry checked against the generated register model.
 pub type BlockWords = [u32; aes::text_in::COUNT];
@@ -45,16 +52,22 @@ pub struct AesParts {
     program: aes::AesProgram,
     clock: hp_sys_clkrst::CryptoClock,
     interrupt: AesInterrupt,
+    dma: AesDmaChannel,
 }
 
 impl AesParts {
-    pub(crate) fn new(aes: AesPeripherals, clock: CryptoClockPeripherals) -> Self {
+    pub(crate) fn new(
+        aes: AesPeripherals,
+        clock: CryptoClockPeripherals,
+        dma: AxiDmaPeripherals,
+    ) -> Self {
         Self {
             program: aes.aes_program,
             clock: clock.crypto_clock,
             interrupt: AesInterrupt {
                 part: aes.aes_interrupt,
             },
+            dma: AesDmaChannel::new(dma),
         }
     }
 
@@ -67,18 +80,21 @@ impl AesParts {
             InterruptingAes {
                 program: self.program,
                 clock: self.clock,
+                dma: self.dma,
             },
             self.interrupt,
         )
     }
 
-    /// Retain the unbound DMA interrupt capability while polling Typical AES.
+    /// Retain the unbound DMA interrupt capability and the unused DMA
+    /// channel while polling Typical AES.
     pub fn into_polled(self, silent: Silent<AesInterrupt>) -> AesRegisters {
         AesRegisters {
             program: self.program,
             clock: self.clock,
             _interrupt: self.interrupt,
             _silent: silent,
+            _dma: self.dma,
         }
     }
 }
@@ -105,6 +121,7 @@ pub struct AesRegisters {
     clock: hp_sys_clkrst::CryptoClock,
     _interrupt: AesInterrupt,
     _silent: Silent<AesInterrupt>,
+    _dma: AesDmaChannel,
 }
 
 /// The sole program owner whose interrupt part a handler holds: it may
@@ -112,13 +129,83 @@ pub struct AesRegisters {
 pub struct InterruptingAes {
     program: aes::AesProgram,
     clock: hp_sys_clkrst::CryptoClock,
+    dma: AesDmaChannel,
 }
+
+const IV_WORDS: [Index<{ aes::iv::COUNT }>; 4] = [
+    Index::constant::<0>(),
+    Index::constant::<1>(),
+    Index::constant::<2>(),
+    Index::constant::<3>(),
+];
 
 impl InterruptingAes {
     /// Enable the AES interrupt (`INT_ENA`).
     pub fn enable_interrupt(&mut self) {
         self.program.modify_int_ena(|w| {
             w.set_int_ena(true);
+        });
+    }
+
+    /// Clock and reset the AES's AXI-DMA, open its access ranges and connect
+    /// channel 0 to the AES.
+    pub fn prepare_dma(&mut self) {
+        self.dma.prepare();
+    }
+
+    /// Write the IV (CBC) or initial counter block (CTR), as little-endian
+    /// words of its bytes.
+    pub fn write_iv(&mut self, words: &BlockWords) {
+        for (index, word) in IV_WORDS.into_iter().zip(words) {
+            self.program.modify_iv(index, |w| {
+                w.set_data(*word);
+            });
+        }
+    }
+
+    /// Start a transfer of the input `storage` holds through the AES in
+    /// `mode` (CTR increments the counter's last 32 bits) into its output
+    /// buffer, under the loaded key and encryption mode.
+    ///
+    /// # Errors
+    /// [`DmaLengthError`] when `storage` holds no input; nothing is started.
+    pub fn start_dma(
+        &mut self,
+        storage: &AesDma,
+        mode: DmaBlockMode,
+    ) -> Result<(), DmaLengthError> {
+        let length = storage.arm().ok_or(DmaLengthError(0))?;
+        let (input, output) = storage.links();
+        self.dma.start(input, output);
+        self.program.modify_block_mode(|w| {
+            w.set_block_mode(Bits::truncate(mode.bits()));
+        });
+        // SOURCE: ESP_IDF_4D80C1B2_S31_AES_DMA: INC_SEL 0 increments the
+        // counter block's last 32 bits.
+        self.program.modify_inc_sel(|w| {
+            w.set_inc_sel(false);
+        });
+        self.program.modify_dma_enable(|w| {
+            w.set_dma_enable(true);
+        });
+        self.program.modify_block_num(|w| {
+            w.set_block_num(u32::from(length / 16));
+        });
+        self.program.trigger_trigger_trigger();
+        Ok(())
+    }
+
+    /// Whether the started transfer is complete: `STATE` reads `DONE` and
+    /// the DMA handed the output descriptor back.
+    pub fn dma_done(&self, storage: &AesDma) -> bool {
+        self.program.read_state().state().get() == DONE && storage.output_returned()
+    }
+
+    /// End the complete transfer: `DMA_EXIT`, then `DMA_ENABLE` cleared.
+    pub fn finish_dma(&mut self) {
+        self.program.trigger_dma_exit_dma_exit();
+        self.program.modify_dma_enable(|w| {
+            w.set_dma_enable(false);
         });
     }
 }

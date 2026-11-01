@@ -14,6 +14,7 @@
 //! - [`watchdog`]: the timer groups' and RTC watchdogs.
 
 pub mod aes;
+pub mod aes_dma;
 pub mod cache_counters;
 pub mod efuse;
 pub mod entropy;

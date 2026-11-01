@@ -6,8 +6,9 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_hal::peripherals::aes::{
-    AesInterrupt, BlockWords, IDLE, InterruptingAes, KeyWords, Registers,
+    AesInterrupt, BlockWords, DmaBlockMode, IDLE, InterruptingAes, KeyWords, Registers,
 };
+use oer_esp32s31_hal::peripherals::aes_dma::AesDma;
 use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
 use oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
 use oer_esp32s31_hal::peripherals::usb_serial_jtag;
@@ -20,7 +21,9 @@ use oer_espressif_executor::Executor;
 use oer_ieee80211_core_security_cipher::aes::{SoftwareAes128, software_aes128_key_wrap};
 use oer_time::Timer as _;
 
-use crate::ops::{Line, NONCE, Stats, ccm_seal, cmac};
+use crate::ops::{
+    BlockPasses, Line, NONCE, Stats, ccm_seal, ccm_seal_passes, cmac, cmac_passes,
+};
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; aes_done: 2; }
@@ -153,6 +156,29 @@ async fn measure(mut aes: InterruptingAes) {
     } else {
         text(b"OER-PROBE aes-timing interrupt none-in-typical-mode\r\n");
     }
+    aes.prepare_dma();
+    match AesDma::claim() {
+        Ok(mut dma) => {
+            Registers::disable_interrupt(&mut aes);
+            dma_latency(&mut aes, &mut dma, DmaWait::Flag, "dma-flag", "start-to-done");
+            pause().await;
+            agree &= dma_cases(&mut aes, &mut dma, DmaWait::Flag, "dma-flag").await;
+            aes.enable_interrupt();
+            dma_latency(
+                &mut aes,
+                &mut dma,
+                DmaWait::Interrupt,
+                "dma-interrupt",
+                "start-to-handler",
+            );
+            pause().await;
+            agree &= dma_cases(&mut aes, &mut dma, DmaWait::Interrupt, "dma-interrupt").await;
+        }
+        Err(_) => {
+            text(b"OER-PROBE aes-timing dma-storage-unavailable\r\n");
+            agree = false;
+        }
+    }
     agree &= wifi_mode(aes).await;
     text(if agree {
         b"OER-RESULT: pass aes-timing\r\n"
@@ -197,7 +223,7 @@ async fn software_cases() {
     report("software", "block", 16, &block_case(&mut SoftwareAes128));
     pause().await;
     for plain in UNWRAP_PLAIN {
-        let (stats, _) = unwrap_case(SoftwareAes128, plain);
+        let (stats, _) = unwrap_case(&mut SoftwareAes128, plain);
         report("software", "unwrap", plain.saturating_add(8), &stats);
         pause().await;
     }
@@ -223,7 +249,7 @@ async fn hardware_cases(aes: &mut InterruptingAes, wait: Wait, mode: &str) -> bo
     report(mode, "block", 16, &block_case(&mut blocks));
     pause().await;
     for plain in UNWRAP_PLAIN {
-        let (stats, plaintext) = unwrap_case(Hardware::new(&mut *blocks.aes, wait), plain);
+        let (stats, plaintext) = unwrap_case(&mut Hardware::new(&mut *blocks.aes, wait), plain);
         agree &= plaintext;
         report(mode, "unwrap", plain.saturating_add(8), &stats);
         pause().await;
@@ -333,9 +359,9 @@ fn wrapped(plain: usize) -> ([u8; 504], KeyData<512>) {
 
 /// RFC 3394 unwraps of `plain` bytes of key data, the key loaded each time
 /// as the station does; whether every plaintext came back.
-fn unwrap_case<P: Aes128Blocks>(blocks: P, plain: usize) -> (Stats, bool) {
+fn unwrap_case<P: Aes128Blocks>(blocks: &mut P, plain: usize) -> (Stats, bool) {
     let (plaintext, wrapped) = wrapped(plain);
-    let mut engine = BlockKeyUnwrap::new(blocks);
+    let mut engine = BlockKeyUnwrap::new(Borrowed(blocks));
     let mut stats = Stats::default();
     let mut agree = true;
     for _ in 0..runs(plain) {
@@ -351,6 +377,20 @@ fn unwrap_case<P: Aes128Blocks>(blocks: P, plain: usize) -> (Stats, bool) {
             .is_ok_and(|bytes| bytes == plaintext.get(..plain).unwrap_or(&[]));
     }
     (stats, agree)
+}
+
+/// A block primitive lent to an engine that takes one by value.
+struct Borrowed<'b, P>(&'b mut P);
+
+impl<P: Aes128Blocks> Aes128Blocks for Borrowed<'_, P> {
+    type Keyed<'k>
+        = P::Keyed<'k>
+    where
+        Self: 'k;
+
+    fn load_key(&mut self, key: &Aes128Key) -> P::Keyed<'_> {
+        self.0.load_key(key)
+    }
 }
 
 /// CCMP-128 seals of a `body`-byte payload, the key loaded each time; the
@@ -474,15 +514,7 @@ impl Aes128Blocks for Hardware<'_> {
         Self: 'k;
 
     fn load_key(&mut self, key: &Aes128Key) -> Keyed<'_> {
-        let mut words = KeyWords::default();
-        for (word, chunk) in words.iter_mut().zip(key.as_bytes().chunks_exact(4)) {
-            let mut bytes = [0; 4];
-            for (out, byte) in bytes.iter_mut().zip(chunk) {
-                *out = *byte;
-            }
-            *word = u32::from_le_bytes(bytes);
-        }
-        self.aes.write_key(&words);
+        self.aes.write_key(&key_words(key));
         Keyed {
             aes: &mut *self.aes,
             wait: self.wait,
@@ -541,6 +573,357 @@ impl BlockCipher for Keyed<'_> {
             self.encrypting = Some(false);
         }
         self.run(block);
+    }
+}
+
+/// The key's little-endian words, the rest of the key words zero.
+fn key_words(key: &Aes128Key) -> KeyWords {
+    let mut words = KeyWords::default();
+    for (word, chunk) in words.iter_mut().zip(key.as_bytes().chunks_exact(4)) {
+        *word = little_endian(chunk);
+    }
+    words
+}
+
+/// The block's little-endian words, as the AES's text and IV words take it.
+fn block_words(block: &Block) -> BlockWords {
+    let mut words = BlockWords::default();
+    for (word, chunk) in words.iter_mut().zip(block.chunks_exact(4)) {
+        *word = little_endian(chunk);
+    }
+    words
+}
+
+fn little_endian(chunk: &[u8]) -> u32 {
+    let mut bytes = [0; 4];
+    for (out, byte) in bytes.iter_mut().zip(chunk) {
+        *out = *byte;
+    }
+    u32::from_le_bytes(bytes)
+}
+
+/// How a DMA transfer waits for its end.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DmaWait {
+    /// Poll `STATE` for `DONE` and the output descriptor's `OWNER`.
+    Flag,
+    /// Spin until the AES handler counts an entry, then confirm as `Flag`.
+    Interrupt,
+}
+
+/// The cycles of a case's DMA transfers by phase: copying the input in,
+/// the IV, descriptors and start, the wait, and the exit with the copy out.
+#[derive(Clone, Copy, Default)]
+struct Split {
+    load: u64,
+    start: u64,
+    wait: u64,
+    finish: u64,
+    transfers: u32,
+}
+
+/// The accelerator's DMA-AES as block passes over the placed buffers.
+struct Dma<'a> {
+    aes: &'a mut InterruptingAes,
+    dma: &'a mut AesDma,
+    wait: DmaWait,
+    timeouts: u32,
+    failures: u32,
+    split: Split,
+}
+
+impl<'a> Dma<'a> {
+    fn new(aes: &'a mut InterruptingAes, dma: &'a mut AesDma, wait: DmaWait) -> Self {
+        Self {
+            aes,
+            dma,
+            wait,
+            timeouts: 0,
+            failures: 0,
+            split: Split::default(),
+        }
+    }
+
+    /// Load `key` and the encryption or decryption mode.
+    fn key(&mut self, key: &Aes128Key, encrypt: bool) {
+        self.aes.write_key(&key_words(key));
+        if encrypt {
+            self.aes.encrypt128();
+        } else {
+            self.aes.decrypt128();
+        }
+    }
+
+    /// One transfer of `data` in place through the AES in `mode`.
+    fn pass(&mut self, mode: DmaBlockMode, iv: Option<&Block>, data: &mut [u8]) {
+        let start = oer_riscv::cycle32();
+        if self.dma.load(data).is_err() {
+            self.failures = self.failures.saturating_add(1);
+            return;
+        }
+        let loaded = oer_riscv::cycle32();
+        if let Some(iv) = iv {
+            self.aes.write_iv(&block_words(iv));
+        }
+        let before = HANDLED.load(Ordering::Acquire);
+        if self.aes.start_dma(self.dma, mode).is_err() {
+            self.failures = self.failures.saturating_add(1);
+            return;
+        }
+        let started = oer_riscv::cycle32();
+        let finished = match self.wait {
+            DmaWait::Flag => (0..SPIN_LIMIT).any(|_| self.aes.dma_done(self.dma)),
+            DmaWait::Interrupt => {
+                (0..SPIN_LIMIT).any(|_| HANDLED.load(Ordering::Acquire) != before)
+                    && (0..SPIN_LIMIT).any(|_| self.aes.dma_done(self.dma))
+            }
+        };
+        let done = oer_riscv::cycle32();
+        self.aes.finish_dma();
+        self.dma.output(data);
+        let end = oer_riscv::cycle32();
+        if !finished {
+            self.timeouts = self.timeouts.saturating_add(1);
+        }
+        let split = &mut self.split;
+        split.load = split
+            .load
+            .saturating_add(u64::from(loaded.wrapping_sub(start)));
+        split.start = split
+            .start
+            .saturating_add(u64::from(started.wrapping_sub(loaded)));
+        split.wait = split
+            .wait
+            .saturating_add(u64::from(done.wrapping_sub(started)));
+        split.finish = split
+            .finish
+            .saturating_add(u64::from(end.wrapping_sub(done)));
+        split.transfers = split.transfers.saturating_add(1);
+    }
+
+    /// Report the phases of the case of `runs` runs since the last report,
+    /// per run, and forget them.
+    fn report_split(&mut self, mode: &str, operation: &str, bytes: usize, runs: u32) {
+        let split = core::mem::take(&mut self.split);
+        let runs = u64::from(runs.max(1));
+        let mut line = Line::new();
+        line.text("OER-PROBE aes-timing ")
+            .text(mode)
+            .text(" ")
+            .text(operation)
+            .text(" split bytes=")
+            .number(bytes as u64)
+            .text(" transfers=")
+            .number(u64::from(split.transfers) / runs)
+            .text(" load=")
+            .number(split.load / runs)
+            .text(" start=")
+            .number(split.start / runs)
+            .text(" wait=")
+            .number(split.wait / runs)
+            .text(" finish=")
+            .number(split.finish / runs)
+            .text("\r\n");
+        text(line.as_bytes());
+    }
+}
+
+impl BlockPasses for Dma<'_> {
+    fn ecb(&mut self, data: &mut [u8]) {
+        self.pass(DmaBlockMode::Ecb, None, data);
+    }
+
+    fn cbc(&mut self, iv: &Block, data: &mut [u8]) {
+        self.pass(DmaBlockMode::Cbc, Some(iv), data);
+    }
+
+    fn ctr(&mut self, counter: &Block, data: &mut [u8]) {
+        self.pass(DmaBlockMode::Ctr, Some(counter), data);
+    }
+}
+
+/// DMA-AES with a key loaded, one ECB transfer per block.
+struct DmaKeyed<'k, 'a> {
+    dma: &'k mut Dma<'a>,
+    encrypting: Option<bool>,
+}
+
+impl<'a> Aes128Blocks for Dma<'a> {
+    type Keyed<'k>
+        = DmaKeyed<'k, 'a>
+    where
+        Self: 'k;
+
+    fn load_key(&mut self, key: &Aes128Key) -> DmaKeyed<'_, 'a> {
+        self.aes.write_key(&key_words(key));
+        DmaKeyed {
+            dma: self,
+            encrypting: None,
+        }
+    }
+}
+
+impl BlockCipher for DmaKeyed<'_, '_> {
+    fn encrypt_block(&mut self, block: &mut Block) {
+        if self.encrypting != Some(true) {
+            self.dma.aes.encrypt128();
+            self.encrypting = Some(true);
+        }
+        self.dma.pass(DmaBlockMode::Ecb, None, block);
+    }
+
+    fn decrypt_block(&mut self, block: &mut Block) {
+        if self.encrypting != Some(false) {
+            self.dma.aes.decrypt128();
+            self.encrypting = Some(false);
+        }
+        self.dma.pass(DmaBlockMode::Ecb, None, block);
+    }
+}
+
+/// Every operation over DMA-AES of one wait, each result checked against
+/// software, with each case's phases.
+async fn dma_cases(
+    aes: &mut InterruptingAes,
+    dma: &mut AesDma,
+    wait: DmaWait,
+    mode: &str,
+) -> bool {
+    let mut agree = true;
+    let mut engine = Dma::new(aes, dma, wait);
+    report(mode, "block", 16, &block_case(&mut engine));
+    engine.report_split(mode, "block", 16, 256);
+    pause().await;
+    for plain in UNWRAP_PLAIN {
+        let mut blocks = Dma::new(&mut *engine.aes, &mut *engine.dma, wait);
+        let (stats, plaintext) = unwrap_case(&mut blocks, plain);
+        agree &= plaintext && blocks.timeouts == 0 && blocks.failures == 0;
+        report(mode, "unwrap", plain.saturating_add(8), &stats);
+        blocks.report_split(mode, "unwrap", plain.saturating_add(8), runs(plain));
+        pause().await;
+    }
+    for body in CCM_BODIES {
+        let (stats, mic) = ccm_passes_case(&mut engine, body);
+        agree &= mic == ccm_case(&mut SoftwareAes128, body).1;
+        report(mode, "ccm-seal", body, &stats);
+        engine.report_split(mode, "ccm-seal", body, runs(body));
+        pause().await;
+    }
+    for length in CMAC_LENGTHS {
+        let (stats, tag) = cmac_passes_case(&mut engine, length);
+        agree &= tag == cmac_case(&mut SoftwareAes128, length).1;
+        report(mode, "cmac", length, &stats);
+        engine.report_split(mode, "cmac", length, runs(length));
+        pause().await;
+    }
+    if engine.timeouts != 0 || engine.failures != 0 {
+        let mut line = Line::new();
+        line.text("OER-PROBE aes-timing ")
+            .text(mode)
+            .text(" timeouts=")
+            .number(u64::from(engine.timeouts))
+            .text(" failures=")
+            .number(u64::from(engine.failures))
+            .text("\r\n");
+        text(line.as_bytes());
+        agree = false;
+    }
+    let mut line = Line::new();
+    line.text("OER-PROBE aes-timing ")
+        .text(mode)
+        .text(if agree { " agrees" } else { " disagrees" })
+        .text(" with software\r\n");
+    text(line.as_bytes());
+    agree
+}
+
+/// CCMP-128 seals as a CBC-MAC and a CTR transfer, the key loaded each time.
+fn ccm_passes_case(engine: &mut Dma<'_>, body: usize) -> (Stats, [u8; 8]) {
+    let mut payload = [0_u8; 1500];
+    let mut stats = Stats::default();
+    let mut mic = [0; 8];
+    for _ in 0..runs(body) {
+        for (index, byte) in payload.iter_mut().enumerate() {
+            *byte = index as u8;
+        }
+        let start = oer_riscv::cycle32();
+        engine.key(&Aes128Key::copy_from(&KEY), true);
+        mic = ccm_seal_passes(
+            engine,
+            &CCM_NONCE,
+            &AAD,
+            payload.get_mut(..body).unwrap_or(&mut []),
+        );
+        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+    }
+    (stats, mic)
+}
+
+/// BIP AES-CMACs as an ECB and a CBC transfer, the key loaded each time.
+fn cmac_passes_case(engine: &mut Dma<'_>, length: usize) -> (Stats, Block) {
+    let mut frame = [0_u8; 512];
+    for (index, byte) in frame.iter_mut().enumerate() {
+        *byte = (index as u8).wrapping_mul(5);
+    }
+    let mut stats = Stats::default();
+    let mut tag = [0; 16];
+    for _ in 0..runs(length) {
+        let start = oer_riscv::cycle32();
+        engine.key(&Aes128Key::copy_from(&KEY), true);
+        tag = cmac_passes(engine, frame.get(..length).unwrap_or(&[]));
+        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+    }
+    (stats, tag)
+}
+
+/// From the start of a one-block ECB transfer to its end (`Flag`: `DONE`
+/// read; `Interrupt`: the handler's entry), 256 times.
+fn dma_latency(
+    aes: &mut InterruptingAes,
+    dma: &mut AesDma,
+    wait: DmaWait,
+    mode: &str,
+    operation: &str,
+) {
+    aes.write_key(&KeyWords::default());
+    aes.encrypt128();
+    let mut stats = Stats::default();
+    let mut missed = 0_u32;
+    for _ in 0..256 {
+        if dma.load(&[0x3c; 16]).is_err() {
+            missed = missed.saturating_add(1);
+            continue;
+        }
+        let before = HANDLED.load(Ordering::Acquire);
+        let start = oer_riscv::cycle32();
+        if aes.start_dma(dma, DmaBlockMode::Ecb).is_err() {
+            missed = missed.saturating_add(1);
+            continue;
+        }
+        let ended = match wait {
+            DmaWait::Flag => (0..SPIN_LIMIT)
+                .any(|_| aes.dma_done(dma))
+                .then(oer_riscv::cycle32),
+            DmaWait::Interrupt => (0..SPIN_LIMIT)
+                .any(|_| HANDLED.load(Ordering::Acquire) != before)
+                .then(|| HANDLED_AT.load(Ordering::Acquire)),
+        };
+        let _done = (0..SPIN_LIMIT).any(|_| aes.dma_done(dma));
+        aes.finish_dma();
+        match ended {
+            Some(end) => stats.add(end.wrapping_sub(start)),
+            None => missed = missed.saturating_add(1),
+        }
+    }
+    report(mode, operation, 16, &stats);
+    if missed != 0 {
+        let mut line = Line::new();
+        line.text("OER-PROBE aes-timing ")
+            .text(mode)
+            .text(" missed=")
+            .number(u64::from(missed))
+            .text("\r\n");
+        text(line.as_bytes());
     }
 }
 
