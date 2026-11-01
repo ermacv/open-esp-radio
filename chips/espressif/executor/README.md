@@ -34,7 +34,11 @@ index. Each task's poll is one direct call of its never-inlined instance of
 the record with the task and keeps it, so an image holds the record exactly
 when it can start the task; a task is polled only once started, and a task
 the image never starts, such as a radio task of an image that starts no
-station, leaves no record. Both executors
+station, leaves no record. The record (`PollBoundary<M>`) is typed by the
+task's start `M`, which selects its poll instance: a start with the record
+of a task with another start does not compile, and a declared task's start
+is its own opaque type. A record written by hand without the exported name
+is outside this check. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 `TaskId`. An executor's context is the executor that runs on the core and
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt
