@@ -16,6 +16,7 @@ use core::{
 use embassy_futures::select::{Either, select};
 use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+use oer_ieee80211_core_roles_sta::machine::StaProfile;
 use oer_memory::{QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
@@ -44,6 +45,9 @@ pub struct State<N: Notifies = SameHart> {
     operations: operation::Operations,
     /// The deadline the last stop request named.
     stop_deadline: Cell<Option<oer_time::Instant>>,
+    /// The profile of the one Connect in the queue, published in the same
+    /// poll as that request; the runner takes it with the request.
+    profile: Cell<Option<StaProfile>>,
 }
 
 impl State {
@@ -76,6 +80,7 @@ impl<N: Notifies> State<N> {
             policy_waker: PriorityWaker::new(),
             operations: operation::Operations::new(),
             stop_deadline: Cell::new(None),
+            profile: Cell::new(None),
         }
     }
 
@@ -103,6 +108,8 @@ impl<N: Notifies> State<N> {
         // A new epoch's requests never wait for an ended epoch's terminals;
         // an operation of the ended epoch reads its retired result.
         self.operations.begin_epoch();
+        // An ended epoch's unserved profile erases itself here.
+        drop(self.profile.take());
         self.set_status(Status {
             link: LinkSnapshot::DOWN,
             notice: None,
@@ -226,6 +233,11 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
     pub(super) fn stop_deadline(&self) -> Option<oer_time::Instant> {
         self.state.stop_deadline.get()
     }
+    /// The profile published with the Connect just received, if its
+    /// producer named one; a policy reconnect has none.
+    pub(super) fn take_profile(&self) -> Option<StaProfile> {
+        self.state.profile.take()
+    }
     pub(super) async fn wait_for_stop(&self) {
         match &self.endpoint {
             Some(endpoint) => endpoint.wait_for_stop().await,
@@ -287,6 +299,7 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
         status.link.state = LinkState::Down;
         self.state.set_status(status);
         self.state.operations.service_ended();
+        drop(self.state.profile.take());
         if let Some(endpoint) = self.endpoint.take() {
             // A duplicate completion refuses its unit owner and poisons reuse;
             // no radio owner is released through this notification.
@@ -331,6 +344,8 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
     pub fn events<O>(&self, output: O) -> Events<'c, O, N> {
         self.state.events(output)
     }
+    /// Install a fresh reconnect policy; it becomes active at the next
+    /// admitted connect, which names the network it reconnects to.
     pub fn configure_reconnect(&mut self, policy: super::ReconnectPolicy) {
         self.state.policy.set(super::reconnect::Policy::new(policy));
         self.state.policy_waker.wake();
@@ -387,6 +402,16 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
         &mut self,
         command: C,
     ) -> Result<(), ControlRefused<C>> {
+        self.send_with(command, None).await
+    }
+    /// [`Self::send`], publishing `profile` in the same poll as the command,
+    /// so a cancelled send leaves no profile behind. A refused or cancelled
+    /// send drops the profile, whose secrets erase themselves.
+    async fn send_with<C: Into<ServiceCommand<K>>>(
+        &mut self,
+        command: C,
+        profile: Option<StaProfile>,
+    ) -> Result<(), ControlRefused<C>> {
         if self.status().stopped || self.state.tasks.is_poisoned() {
             return Err(ControlRefused {
                 command,
@@ -400,6 +425,9 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
                     ServiceCommand::Station(request) => Some(request.command()),
                     _ => None,
                 };
+                if profile.is_some() {
+                    self.state.profile.set(profile);
+                }
                 permit.send(command);
                 self.admitted(kind);
                 Ok(())
@@ -427,20 +455,27 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
             }),
         }
     }
-    /// Admit a connect request once the previous one's terminal returned
-    /// its permission; the operation resolves to this request's terminal.
-    pub async fn connect(&mut self) -> Result<Operation<'c, N>, ControlError> {
-        self.operation(Command::Connect).await
+    /// Admit a connect to the network `profile` names once the previous
+    /// connect's terminal returned its permission; the operation resolves to
+    /// this request's terminal. The station takes the profile only while
+    /// idle and keeps it for later reconnections; a refused, stopped or
+    /// cancelled connect drops it, erasing its secrets.
+    pub async fn connect(&mut self, profile: StaProfile) -> Result<Operation<'c, N>, ControlError> {
+        self.operation(Command::Connect, Some(profile)).await
     }
     /// Admit a disconnect request, as [`Self::connect`].
     pub async fn disconnect(&mut self) -> Result<Operation<'c, N>, ControlError> {
-        self.operation(Command::Disconnect).await
+        self.operation(Command::Disconnect, None).await
     }
     /// Admit a background scan request, as [`Self::connect`].
     pub async fn scan(&mut self) -> Result<Operation<'c, N>, ControlError> {
-        self.operation(Command::BackgroundScan).await
+        self.operation(Command::BackgroundScan, None).await
     }
-    async fn operation(&mut self, command: Command) -> Result<Operation<'c, N>, ControlError> {
+    async fn operation(
+        &mut self,
+        command: Command,
+        profile: Option<StaProfile>,
+    ) -> Result<Operation<'c, N>, ControlError> {
         if self.state.ended() {
             return Err(ControlError::Stopped);
         }
@@ -454,9 +489,12 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
             Either::First(correlation) => correlation,
             Either::Second(()) => return Err(ControlError::Stopped),
         };
-        self.send(ServiceCommand::Station(Request::new(correlation, command)))
-            .await
-            .map_err(|refused| refused.reason)?;
+        self.send_with(
+            ServiceCommand::Station(Request::new(correlation, command)),
+            profile,
+        )
+        .await
+        .map_err(|refused| refused.reason)?;
         // Sent and recorded in the same poll: no terminal can precede it.
         self.state.operations.admitted(command, correlation);
         Ok(Operation::new(self.state, command, correlation))

@@ -1,0 +1,7 @@
+# Firmware catalog entry: `cargo fw idf build wifi-injector-vendor-reference`.
+# The Wi-Fi frame source peer's application on an ESP32-S31: the vendor
+# Wi-Fi driver sends unicast data frames at one fixed PHY rate and reports
+# whether each was acknowledged.
+image = "wifi-injector-vendor-reference"
+chip = "esp32s31"
+pins = "esp32s31"

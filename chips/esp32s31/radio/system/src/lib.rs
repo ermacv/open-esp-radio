@@ -33,12 +33,16 @@
 //! A hardware failure poisons the domain: the request that saw it and every
 //! later one are answered [`Failure::Poisoned`], handing back what they lent.
 //! The actor keeps the first [`Poison`]: where it happened (a request, the
-//! preparation, the RF close or the periodic tracking tick) and its step, so
-//! a request refused by an earlier failed tick names that tick.
+//! preparation, the RF close or the periodic tracking tick) and its step.
+//! No client asked for the periodic tracking, so no answer can carry its
+//! failure, and the clients keep running on a PHY the failed tick may have
+//! half changed: a failed tick, or a tracking deadline the clock cannot
+//! hold, ends the run with a [`TrackingFault`]. The actor keeps the poisoned
+//! domain and every owner it holds; the image owner decides what follows.
 //! The primary client is `K`; Wi-Fi-only compositions contain no extra inbox.
 //! The `bluetooth` feature adds its cell to the same run future and shared state.
 
-use core::{convert::Infallible, future::poll_fn};
+use core::future::poll_fn;
 
 use embassy_futures::select::{Either, select};
 use oer_esp32s31_phy::executor::boundary::Boundary;
@@ -52,6 +56,85 @@ use oer_esp32s31_radio_client::{
 /// poisoned by this cause.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Fault(pub PoisonCause);
+
+/// Where the periodic tracking failed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackingStage {
+    /// The next tracking deadline did not fit the clock; no tick ran.
+    Deadline,
+    /// The tracking tick was refused or failed after it started.
+    Tick,
+}
+
+/// The periodic tracking failed between requests: the PHY may be half
+/// changed and is no longer tracked, while the clients keep transmitting on
+/// it. The run that returns it keeps the poisoned domain and every owner;
+/// safe continuation is not established.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use = "the PHY may be half changed: only the image owner decides what follows"]
+pub struct TrackingFault {
+    pub stage: TrackingStage,
+    pub cause: PoisonCause,
+}
+
+impl TrackingFault {
+    /// The fault class of the cause (`docs/architecture.md`, "Fatal
+    /// decisions and reset"): a deadline past the clock's range exhausts
+    /// it; a refusal the actor's own state should have prevented breaks a
+    /// software invariant; every other failed or timed-out PHY step is an
+    /// unexpected hardware observation without an impossibility proof.
+    pub const fn class(&self) -> oer_diagnostics::fault::Class {
+        use oer_diagnostics::fault::Class;
+        use oer_esp32s31_phy::{concurrent::ConcurrentPhyError, state::client::PhyTrackTimeError};
+        use oer_esp32s31_radio_client::{CalibrationTrackingFault, PhyFault};
+        const fn step(fault: PhyFault) -> Class {
+            match fault {
+                PhyFault::DeadlineOverflow => Class::Exhaustion,
+                PhyFault::CapabilityUnavailable
+                | PhyFault::UnexpectedBinding
+                | PhyFault::RegistrationEpochMismatch
+                | PhyFault::Sequence => Class::SoftwareInvariant,
+                PhyFault::EdgeTimedOut
+                | PhyFault::HardwareInvariant
+                | PhyFault::RfOperationLimit => Class::UnexpectedHardware,
+            }
+        }
+        match self.cause {
+            PoisonCause::TrackingRefused(ConcurrentPhyError::Time(
+                PhyTrackTimeError::DeadlineOverflow { .. },
+            )) => Class::Exhaustion,
+            PoisonCause::TrackingRefused(ConcurrentPhyError::Time(
+                PhyTrackTimeError::TimeReversed { .. },
+            )) => Class::UnexpectedHardware,
+            PoisonCause::TrackingRefused(_) | PoisonCause::Domain(_) | PoisonCause::Custody => {
+                Class::SoftwareInvariant
+            }
+            PoisonCause::Tracking(fault)
+            | PoisonCause::Channel(fault)
+            | PoisonCause::Rf(fault)
+            | PoisonCause::CalibrationTracking(CalibrationTrackingFault::Step(fault)) => {
+                step(fault)
+            }
+            PoisonCause::CalibrationTracking(CalibrationTrackingFault::Radio(_))
+            | PoisonCause::Registration(_)
+            | PoisonCause::CommonPower(_)
+            | PoisonCause::ModemClock(_)
+            | PoisonCause::Rollback
+            | PoisonCause::Controller => Class::UnexpectedHardware,
+        }
+    }
+}
+
+/// The stage's name, then the cause's variant path.
+impl oer_diagnostics::DiagnosticPath for TrackingFault {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        path.name(match self.stage {
+            TrackingStage::Deadline => "Deadline",
+            TrackingStage::Tick => "Tick",
+        });
+        self.cause.push_path(path);
+    }
+}
 
 /// Why closing RF did not complete.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,8 +170,13 @@ pub trait PhyDomain {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault>;
     /// Close RF after the last member left.
     async fn close_rf(&mut self, last: LastClientLeft) -> Result<(), CloseFault>;
-    /// When the periodic tracking falls due, while a member is tracked.
-    fn tracking_deadline(&self) -> Option<oer_time::Instant>;
+    /// When the periodic tracking falls due, while a member is tracked;
+    /// `None` without a tracked client.
+    ///
+    /// # Errors
+    ///
+    /// The deadline does not fit the tracking clock.
+    fn tracking_deadline(&self) -> Result<Option<oer_time::Instant>, Fault>;
     /// One periodic tracking tick.
     async fn track_tick(&mut self) -> Result<(), Fault>;
 }
@@ -120,6 +208,7 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
 
 mod actor_core;
 mod deadline;
+pub mod observation;
 #[cfg(any(target_arch = "riscv32", test))]
 mod owned_operation;
 use actor_core::{Action, ActorCore};
@@ -154,15 +243,17 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wif
 }
 
 impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSystem<K, S, B, T> {
-    /// Serve the cells for the rest of the program, borrowing the actor's storage.
-    pub async fn run(&mut self) -> Infallible {
+    /// Serve the cells, borrowing the actor's storage, until the periodic
+    /// tracking fails.
+    pub async fn run(&mut self) -> TrackingFault {
         loop {
             while let Some(request) = self.inbox.take() {
                 self.serve(request).await;
             }
-            let deadline = (self.core.tracking_active())
-                .then(|| self.backend.tracking_deadline())
-                .flatten();
+            let deadline = match self.tracking_deadline() {
+                Ok(deadline) => deadline,
+                Err(fault) => return fault,
+            };
             let doorbell = self.doorbell;
             let rung = poll_fn(|cx| doorbell.poll_rung(cx));
             match deadline {
@@ -171,8 +262,9 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
                 }
                 Some(deadline) => {
                     if let Either::Second(()) = select(rung, self.timer.wait_until(deadline)).await
+                        && let Err(fault) = Boundary::new(self.tick()).await
                     {
-                        Boundary::new(self.tick()).await;
+                        return fault;
                     }
                 }
             }
@@ -196,13 +288,31 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
         matches!(select(rung, timer).await, Either::Second(()))
     }
 
-    async fn tick(&mut self) {
-        if let Err(Fault(cause)) = Boundary::new(self.backend.track_tick()).await {
-            self.core.poison(Poison {
-                origin: PoisonOrigin::TrackingTick,
-                cause,
-            });
+    /// The next tracking deadline while a member is tracked and the domain
+    /// is healthy.
+    fn tracking_deadline(&mut self) -> Result<Option<oer_time::Instant>, TrackingFault> {
+        if !self.core.tracking_active() {
+            return Ok(None);
         }
+        self.backend
+            .tracking_deadline()
+            .map_err(|Fault(cause)| self.tracking_failed(TrackingStage::Deadline, cause))
+    }
+
+    async fn tick(&mut self) -> Result<(), TrackingFault> {
+        Boundary::new(self.backend.track_tick())
+            .await
+            .map_err(|Fault(cause)| self.tracking_failed(TrackingStage::Tick, cause))
+    }
+
+    /// Poison the domain with the periodic tracking's failure: a request
+    /// that still reaches the actor names it.
+    fn tracking_failed(&mut self, stage: TrackingStage, cause: PoisonCause) -> TrackingFault {
+        self.core.poison(Poison {
+            origin: PoisonOrigin::TrackingTick,
+            cause,
+        });
+        TrackingFault { stage, cause }
     }
 
     async fn serve<Q: Client>(&mut self, request: Request<Q>)

@@ -129,7 +129,7 @@ fn multi<F: Future<Output = ()>>(
         .ok()
         .expect("one model attachment");
     match block_on(select(attached.run(), client(cells, ble))) {
-        Either::First(never) => match never {},
+        Either::First(fault) => panic!("the periodic tracking failed: {fault:?}"),
         Either::Second(()) => {}
     }
 }
@@ -420,17 +420,20 @@ fn runtime_handover_waits_for_the_entered_tracking_transaction() {
         );
         client.as_mut().poll(cx)
     });
-    let (ble, tracked) = block_on(attached.run_until(boundary));
+    let (ble, tracked) =
+        block_on(attached.run_until(boundary)).expect("the periodic tracking holds");
     assert!(!model.0.borrow().ble_tracking);
     assert!(matches!(model.log().last(), Some(Event::BleTrack)));
     // The same actor, RF epoch and member now perform the ordinary leave.
     model.0.borrow_mut().ble_stopped = true;
     let left =
         block_on(attached.run_until(ble.leave(Leaving::Tracked(tracked.member), tracked.payload)))
+            .expect("the periodic tracking holds")
             .unwrap();
     assert!(left.1.payload.stopped);
     assert_eq!(model.log().last(), Some(&Event::CloseRf));
-    let out = block_on(attached.run_until(core::future::ready(42)));
+    let out =
+        block_on(attached.run_until(core::future::ready(42))).expect("the periodic tracking holds");
     assert_eq!(out, 42);
 }
 
@@ -456,7 +459,9 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         .attach_bluetooth(inbox, &mut attachment)
         .ok()
         .expect("one model attachment");
-    let (ble, joined) = block_on(attached.run_until(ble.join(join()))).unwrap();
+    let (ble, joined) = block_on(attached.run_until(ble.join(join())))
+        .expect("the periodic tracking holds")
+        .unwrap();
     let joined = joined.expect("first installation");
     let epoch = joined.epoch;
     let mut attached = attached
@@ -468,6 +473,7 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         Leaving::Untracked(joined.member),
         joined.payload.installation,
     )))
+    .expect("the periodic tracking holds")
     .unwrap();
     assert!(left.payload.stopped);
     let inbox = attached.detach().ok().expect("normal stop detaches");
@@ -477,7 +483,9 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         .attach_bluetooth(inbox, &mut attachment)
         .ok()
         .expect("reinstall same actor");
-    let (ble, joined) = block_on(attached.run_until(ble.join(join()))).unwrap();
+    let (ble, joined) = block_on(attached.run_until(ble.join(join())))
+        .expect("the periodic tracking holds")
+        .unwrap();
     let joined = joined.expect("fresh installation");
     assert_ne!(epoch, joined.epoch);
     model.0.borrow_mut().ble_stopped = true;
@@ -485,6 +493,7 @@ fn detach_returns_the_inbox_only_after_stop_and_never_moves_the_shared_actor() {
         Leaving::Untracked(joined.member),
         joined.payload.installation,
     )))
+    .expect("the periodic tracking holds")
     .unwrap();
     assert!(left.payload.stopped);
     let _ = attached.detach().ok().expect("second normal stop");
@@ -540,7 +549,9 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
         .attach_bluetooth(inbox, &mut a)
         .ok()
         .expect("first loan");
-    let (ble, failed) = block_on(loan.run_until(ble.join(join()))).unwrap();
+    let (ble, failed) = block_on(loan.run_until(ble.join(join())))
+        .expect("the periodic tracking holds")
+        .unwrap();
     assert_eq!(
         failed.err().expect("failed prepare").cause,
         Failure::Poisoned(PREPARE_POISON)
@@ -550,10 +561,62 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
         .attach_bluetooth(inbox, &mut a)
         .ok()
         .expect("same common domain");
-    let (_, failed) = block_on(loan.run_until(ble.join(join()))).unwrap();
+    let (_, failed) = block_on(loan.run_until(ble.join(join())))
+        .expect("the periodic tracking holds")
+        .unwrap();
     assert_eq!(
         failed.err().expect("poison persists").cause,
         Failure::Poisoned(PREPARE_POISON)
     );
     assert_eq!(model.log(), vec![Event::Prepare(Err(Fault(PREPARE_CAUSE)))]);
+}
+
+#[test]
+fn a_tracking_deadline_the_clock_cannot_hold_ends_the_attached_run() {
+    use core::pin::pin;
+    let overflow =
+        PoisonCause::TrackingRefused(oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+            oer_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                class: oer_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
+            },
+        ));
+    let model = model(Script {
+        ble_available: true,
+        deadline_fault: Some(overflow),
+        ..Script::default()
+    });
+    let (end, _) = claim_for_host_test().expect("fresh radio client cells");
+    let (inbox, ble) =
+        bluetooth::claim_for_host_test(end.doorbell).expect("fresh Bluetooth client cell");
+    let mut actor = RadioSystem::new(
+        end,
+        model.clone(),
+        clock(),
+        LpClock::<RcSlow>::for_host_test(),
+    );
+    let mut attachment = ModelAttachment;
+    let mut attached = actor
+        .attach_bluetooth(inbox, &mut attachment)
+        .ok()
+        .expect("one model attachment");
+    let mut client = pin!(async {
+        let (ble, joined) = ble.join(join()).await.unwrap();
+        let joined = joined.expect("accepted BLE join");
+        let (_ble, tracked) = ble
+            .track(joined.member, joined.payload.installation)
+            .await
+            .unwrap();
+        let _tracked = tracked.expect("completed initial tracking");
+        core::future::pending::<()>().await
+    });
+    // Once a member is tracked the deadline is asked for, and its overflow
+    // ends the run instead of ending tracking silently.
+    assert_eq!(
+        block_on(attached.run_until(client.as_mut())),
+        Err(TrackingFault {
+            stage: TrackingStage::Deadline,
+            cause: overflow,
+        })
+    );
+    assert!(!model.log().contains(&Event::Tick));
 }

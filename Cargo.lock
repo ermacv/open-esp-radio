@@ -1838,6 +1838,7 @@ name = "oer-esp32s31-radio-client"
 version = "0.1.0"
 dependencies = [
  "oer-bluetooth-le-port",
+ "oer-diagnostics",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-ieee80211-contracts-port",
@@ -1854,6 +1855,7 @@ dependencies = [
  "embassy-futures",
  "oer-bluetooth-le-port",
  "oer-cooperate",
+ "oer-diagnostics",
  "oer-esp32s31-hal",
  "oer-esp32s31-phy",
  "oer-esp32s31-radio-client",
@@ -1864,6 +1866,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-time",
  "oer-time-virtual",
+ "oer-trace",
  "pin-project-lite",
 ]
 
@@ -1875,6 +1878,7 @@ dependencies = [
  "embassy-futures",
  "heapless",
  "oer-crypto",
+ "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-board",
  "oer-esp32s31-compose",
@@ -1906,6 +1910,34 @@ dependencies = [
  "oer-trace",
  "static_cell",
  "zeroize",
+]
+
+[[package]]
+name = "oer-espressif"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-time",
+ "oer-crypto",
+ "oer-diagnostics",
+ "oer-embassy-net",
+ "oer-embassy-time",
+ "oer-esp32s31-board",
+ "oer-esp32s31-compose",
+ "oer-esp32s31-hal",
+ "oer-esp32s31-wifi",
+ "oer-espressif-executor",
+ "oer-espressif-interrupt-table",
+ "oer-espressif-staged-runtime",
+ "oer-ieee80211-core-roles-sta",
+ "oer-ieee80211-runtime",
+ "oer-memory",
+ "oer-network-port",
+ "oer-time",
+ "oer-trace",
+ "static_cell",
 ]
 
 [[package]]
@@ -2159,22 +2191,10 @@ dependencies = [
 name = "oer-firmware-apps-wifi-station"
 version = "0.1.0"
 dependencies = [
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
  "oer-esp32s31-layout",
- "oer-esp32s31-wifi",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
+ "oer-espressif",
  "oer-ieee80211-contracts-port",
- "oer-memory",
  "oer-radio-regulatory",
- "oer-time",
- "oer-trace",
- "static_cell",
  "toml",
 ]
 
@@ -2286,6 +2306,7 @@ dependencies = [
  "oer-radio-regulatory",
  "oer-riscv",
  "oer-time",
+ "oer-trace",
  "static_cell",
 ]
 
@@ -2307,6 +2328,21 @@ dependencies = [
  "postcard",
  "postcard-schema",
  "serde",
+]
+
+[[package]]
+name = "oer-hil-agent-espressif"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-diagnostics",
+ "oer-esp32s31-compose",
+ "oer-espressif",
+ "oer-espressif-staged-runtime",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "oer-memory",
+ "oer-riscv",
 ]
 
 [[package]]
@@ -2373,7 +2409,6 @@ dependencies = [
 name = "oer-hil-scenarios-images-esp32s31-rpc"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "critical-section",
  "embassy-sync",
  "embassy-time",
@@ -2400,10 +2435,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-scenarios-images-esp32s31-sdk-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-esp32s31-layout",
+ "oer-espressif",
+ "oer-hil-agent",
+ "oer-hil-agent-espressif",
+ "oer-hil-protocol",
+ "oer-services-fault",
+ "oer-services-sdk-station",
+ "oer-services-wifi-station",
+ "postcard",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-hil-scenarios-images-esp32s31-wifi-station"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "critical-section",
  "embassy-futures",
  "embassy-net",
@@ -2430,6 +2481,20 @@ dependencies = [
  "postcard",
  "static_cell",
  "xarxa",
+]
+
+[[package]]
+name = "oer-hil-scenarios-sdk-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-harness",
+ "oer-hil-protocol",
+ "oer-lab-model",
+ "oer-services-fault",
+ "oer-services-sdk-station",
+ "serde_json",
 ]
 
 [[package]]
@@ -2612,6 +2677,7 @@ dependencies = [
  "heapless",
  "oer-bridges-ieee80211-ethernet",
  "oer-crypto",
+ "oer-diagnostics",
  "oer-espressif-ieee80211-policy",
  "oer-events",
  "oer-ieee80211-contracts-port",
@@ -3108,7 +3174,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-services-fault"
+version = "0.1.0"
+dependencies = [
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
 name = "oer-services-load"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-services-sdk-station"
 version = "0.1.0"
 dependencies = [
  "heapless",

@@ -169,7 +169,7 @@ impl<'a> Note<'a> {
 
     /// Appends the path's names and numbers. What does not fit the note's
     /// name budget makes the note say it overflowed; nothing else is lost.
-    fn pathed(mut self, path: &crate::DiagPath) -> Self {
+    pub(crate) fn pathed(mut self, path: &crate::DiagPath) -> Self {
         self.overflow |= path.overflowed();
         for &name in path.names() {
             let Some(bytes) = usize::from(self.name_bytes).checked_add(name.len()) else {
@@ -622,7 +622,10 @@ macro_rules! field_of {
 }
 
 macro_rules! topics {
-    ($(
+    (
+        $(#[$line_meta:meta])*
+        line $line:ident = $line_code:literal;
+        $(
         $(#[$meta:meta])*
         $variant:ident = $code:literal, $constructor:ident, $prefix:literal
             ($($key:literal $field:ident: $kind:ident),* $(,)?);
@@ -631,15 +634,23 @@ macro_rules! topics {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         #[repr(u16)]
         pub enum Topic {
+            $(#[$line_meta])* $line = $line_code,
             $($(#[$meta])* $variant = $code,)*
         }
 
         impl Topic {
             pub const fn from_raw(raw: u16) -> Option<Self> {
                 match raw {
+                    $line_code => Some(Self::$line),
                     $($code => Some(Self::$variant),)*
                     _ => None,
                 }
+            }
+
+            /// Whether the note is an application's line ([`crate::Line`]):
+            /// its first word describes its own text pieces and values.
+            pub const fn is_line(self) -> bool {
+                matches!(self, Self::$line)
             }
 
             pub const fn raw(self) -> u16 {
@@ -649,6 +660,7 @@ macro_rules! topics {
             /// How many 32-bit words a note of this topic carries.
             pub const fn word_count(self) -> usize {
                 match self {
+                    Self::$line => 1,
                     $(Self::$variant => 0 $(+ words_of!($kind))*,)*
                 }
             }
@@ -657,6 +669,7 @@ macro_rules! topics {
             /// words to the fixed ones.
             pub const fn has_path(self) -> bool {
                 match self {
+                    Self::$line => false,
                     $(Self::$variant => 0 $(+ has_path!($kind))* != 0,)*
                 }
             }
@@ -664,6 +677,7 @@ macro_rules! topics {
             /// How many names a note of this topic carries.
             pub const fn name_count(self) -> usize {
                 match self {
+                    Self::$line => 0,
                     $(Self::$variant => 0 $(+ names_of!($kind))*,)*
                 }
             }
@@ -672,6 +686,7 @@ macro_rules! topics {
             #[cfg(feature = "render")]
             pub const fn layout(self) -> (&'static str, &'static [(&'static str, Field)]) {
                 match self {
+                    Self::$line => ("", &[]),
                     $(Self::$variant => ($prefix, &[$(($key, field_of!($kind))),*]),)*
                 }
             }
@@ -699,6 +714,10 @@ macro_rules! topics {
 }
 
 topics! {
+    /// An application's line: static text pieces and values, and at most
+    /// one error path at its end ([`crate::Line`]). The fixed counts are
+    /// its shape word only; the shape gives the rest.
+    line Line = 90;
     /// The stack watchpoint the runtime armed.
     StackGuard = 1, stack_guard, "OPEN_RADIO_HIL stack_guard"
         ("hart" hart: dec, "control" control: hex8, "address" address: hex8);
@@ -1117,6 +1136,17 @@ topics! {
     PilotWindow = 79, pilot_window, "OPEN_RADIO_HIL pilot-window"
         ("tick" tick: dec, "events" events: dec, "lost" lost: dec, "cpu-hz" hz: dec,
          "capacity" capacity: dec);
+    /// The trap vector registers an exception hook read after the trap of
+    /// `terminal` (its `fatal_terminal`), whose `mepc` it repeats; the
+    /// hook's other observations follow it.
+    FatalTrapVectors = 80, fatal_trap_vectors, "fatal trap_vectors"
+        ("terminal" terminal: dec, "mepc" mepc: hex8, "mtvec" mtvec: hex8,
+         "mtvt" mtvt: hex8);
+    /// The terminal number of the previous boot's fatal exception, which
+    /// the image's own notes of that trap repeat: notes of an earlier trap
+    /// with the same registers carry an earlier number.
+    FatalTerminal = 81, fatal_terminal, "fatal terminal"
+        ("hart" hart: dec, "number" number: dec);
 }
 
 impl Topic {

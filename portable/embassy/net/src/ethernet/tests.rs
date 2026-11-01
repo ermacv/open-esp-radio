@@ -123,7 +123,7 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
     packet.set_len(18);
     packet.fill(7);
     assert!(stack.transmit(packet).is_ok());
-    let mut bridge = EthernetBridge::new(radio, port, None::<&'static LentSlots<_, 0>>);
+    let mut bridge = EthernetBridge::new(radio, port, None::<&'static LentSlots<_, 1>>);
     let mut observed = 0;
     {
         let mut future = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
@@ -319,7 +319,7 @@ fn a_lent_frame_without_headroom_or_slots_is_copied() {
     let (unslotted, _) = lent(60, &[5; 4]);
     publish_lent(
         radio.rx_publisher(),
-        None::<&'static LentSlots<_, 0>>,
+        None::<&'static LentSlots<Lent, 1>>,
         unslotted,
         &mut copied,
     )

@@ -1,0 +1,18 @@
+[package]
+name = "oer-services-fault"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The HIL fault service: the host has an image raise a CPU exception to check its exception path, record and reset"
+
+[dependencies]
+oer-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
+postcard-schema = { version = "0.2.5", default-features = false, features = ["derive"] }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+
+[lints]
+workspace = true

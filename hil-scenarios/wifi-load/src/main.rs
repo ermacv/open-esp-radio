@@ -6,13 +6,15 @@
 //! measured and reported (`target/hil/results/`): the measurements never
 //! decide a case, only a path or an exchange that does not work does.
 //! Each window also records what the link ran ([`link`]): the access
-//! point's view of the station and the image's rates each way.
+//! point's view of the station and the image's rates each way, and what
+//! the image's periodic PHY tracking did ([`tracking`]).
 //! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
 //! image's hart spends its window ([`profile`]).
 #![forbid(unsafe_code)]
 
 mod link;
 mod profile;
+mod tracking;
 mod traffic;
 
 use std::{
@@ -25,9 +27,10 @@ use std::{
 use oer_hil_agent::base::Service as _;
 use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_services_load::{
-    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts, Collected,
-    Counters, CountersCollected, DataBus, InstructionBus, Link, LinkCollected, Load, MAX_PARTS,
-    PartWindow, PartsCollected, Report, Start, Started, Transmit,
+    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
+    CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
+    LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
@@ -217,6 +220,7 @@ struct Ended {
     parts: Vec<PartWindow>,
     counters: Counters,
     link: Link,
+    tracking: Tracking,
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -251,15 +255,27 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
         CountersCollected::Report(counters) => counters,
         other => return Err(Failure::Fail(format!("the image's counters: {other:?}"))),
     };
-    match cx.call(CollectLink { run }, CALL)? {
-        LinkCollected::Report(link) => Ok(Ended {
+    let link = match cx.call(CollectLink { run }, CALL)? {
+        LinkCollected::Report(link) => link,
+        other => return Err(Failure::Fail(format!("the image's link: {other:?}"))),
+    };
+    match cx.call(CollectTracking { run }, CALL)? {
+        TrackingCollected::Report(tracking) => Ok(Ended {
             report,
             parts,
             counters,
             link,
+            tracking,
         }),
-        other => Err(Failure::Fail(format!("the image's link: {other:?}"))),
+        other => Err(Failure::Fail(format!("the image's tracking: {other:?}"))),
     }
+}
+
+/// What the image's periodic PHY tracking did over a window; its one-line
+/// summary is printed as `name`'s.
+fn tracking_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+    println!("  tracking {name}: {}", tracking::summary(&ended.tracking));
+    tracking::window(&ended.tracking)
 }
 
 /// What the link ran over a window: the access point's view between
@@ -772,6 +788,8 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     );
     let link = link_measurement("idle", &before, &after, span, &idle);
     cx.measure("idle link", link);
+    let tracking = tracking_measurement("idle", &idle);
+    cx.measure("idle tracking", tracking);
     Ok(())
 }
 
@@ -978,6 +996,8 @@ fn level(
     if let Some(object) = value.as_object_mut() {
         let link = link_measurement(&name, &before, &after, span, &ended);
         object.insert("link".to_owned(), link);
+        let tracking = tracking_measurement(&name, &ended);
+        object.insert("tracking".to_owned(), tracking);
     }
     if let (Some(samples), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(IMAGE);
@@ -1124,6 +1144,7 @@ mod tests {
             parts: Vec::new(),
             counters: Counters::default(),
             link: Link::default(),
+            tracking: Tracking::default(),
         };
         let value = measurement(Mode::Rx, 65, &sent, &traffic::Received::default(), &ended);
         assert_eq!(value["window_s"], 5.0);

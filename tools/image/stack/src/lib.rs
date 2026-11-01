@@ -57,7 +57,7 @@ pub use cha::{
     function_pointer_resolutions, typed_function_pointer_resolutions,
 };
 pub use contexts::{HartStack, LevelStack, Stacks, Vector, exception_copies, interrupt_stacks};
-pub use dwarf::{DebugMetadata, Dwarf, Returned, read as read_debug};
+pub use dwarf::{DebugMetadata, Dwarf, Marked, Returned, read as read_debug};
 use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
@@ -68,7 +68,7 @@ pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};
 pub use summaries::{Summary, parse as parse_summaries};
 pub use sweep::{LevelDrop, Load, TableBase, TargetSource, Transfer, TransferKind};
-pub use tasks::{TASK_POLL_RECORD, task_poll_resolutions};
+pub use tasks::{TASK_POLL_MARK, task_poll_resolutions};
 pub use trap::{ENTRY_RECORD, TrapEntry, interrupt_entry, trap_entry, vector_table};
 pub use trap_semantics::{TrapFact, TrapFailure, prove_traps};
 pub use wakers::{waker_resolutions, waker_vtable};
@@ -76,7 +76,7 @@ pub use wakers::{waker_resolutions, waker_vtable};
 /// The common image-derived resolutions. Reuses the already captured ELF,
 /// analysis and typed DWARF; callers add platform interrupt routing facts.
 /// The executor's waker vtable, when the image has one, requires the
-/// executor's task poll records ([`task_poll_resolutions`]).
+/// executor's task poll boundaries ([`task_poll_resolutions`]).
 pub fn image_resolutions(
     image: &ImageFacts<'_>,
     analysis: &Analysis,
@@ -91,8 +91,8 @@ pub fn image_resolutions(
     let audit = audit_function_addresses(image, analysis, types, keep, control)?;
     let pointers = function_pointer_resolutions(&audit, keep, control)?;
     resolutions.extend(task_poll_resolutions(
-        image,
         analysis,
+        dwarf,
         vtable.is_some(),
         keep,
         control,

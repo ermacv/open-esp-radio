@@ -207,6 +207,7 @@ wireless radio/BSS. These are the complete settings it owns:
 | `firewall.oer_station_dhcp` | Accept IPv4 UDP 68→67 from station to OpenWrt |
 | `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
 | `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
+| `firewall.oer_station_host_out`, `firewall.oer_station_host_in` | Only when the run names a host (`forward_host`): accept IPv4 UDP and TCP from station to that host and back, placed before the rejections |
 | Selected radio | Stand channel at the run's width (HT20 or HT40), beacon interval 100 TU, enabled, HE disabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
@@ -219,6 +220,16 @@ with the active station device before verification; dnsmasq is reloaded after th
 addressed bridge contains exactly the selected BSS. Runtime checks verify the bridge address and membership, firewall reject
 rules and running DHCP instance. SHA-256 of every non-station network section must
 be unchanged. Generated SSIDs and interface names remain redacted in evidence.
+
+`station::network::serve_dhcp` (the LAB operation `StationDhcp`) stops the
+applied network's DHCP server or has it serve again: it sets
+`dhcp.oer_station.ignore` (`1` stops, `0` serves), commits `dhcp`, reloads
+dnsmasq and reads the option back. It is refused before a station profile
+applied the network, and while `dhcp` has staged changes the commit would
+take along. Nothing else changes: the AP, the bridge, the firewall and the
+lease file stay. A later station profile renders the network again, serving.
+The network's verification (`VerifyNetwork`) checks the network as rendered,
+serving DHCP, so it fails while the server is stopped.
 
 The DHCP instance uses OpenWrt's [per-instance DHCP
 configuration](https://openwrt.org/docs/guide-user/base-system/dhcp_configuration#multiple_dhcpdns_serverforwarder_instances).

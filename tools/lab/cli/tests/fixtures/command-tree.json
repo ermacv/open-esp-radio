@@ -129,6 +129,7 @@
       "reset",
       "check",
       "console",
+      "send",
       "soak"
     ],
     "flags": [],
@@ -166,6 +167,18 @@
     "flags": [
       "--for",
       "--until"
+    ],
+    "forwards": false
+  },
+  {
+    "path": [
+      "stand",
+      "board",
+      "send"
+    ],
+    "subcommands": [],
+    "flags": [
+      "--timeout"
     ],
     "forwards": false
   },

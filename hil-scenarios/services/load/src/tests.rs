@@ -129,6 +129,30 @@ fn the_largest_reports_fit_one_response() {
         .collect(),
     });
     assert!(postcard::to_slice(&samples, &mut buffer).unwrap().len() <= 512);
+    let tracking = TrackingCollected::Report(Tracking {
+        available: true,
+        ticks: u32::MAX,
+        not_due: u32::MAX,
+        unavailable: u32::MAX,
+        inhibited: u32::MAX,
+        rfpll_corrected: u32::MAX,
+        wifi_i2c_changed: u32::MAX,
+        wifi_tx_power: u32::MAX,
+        bluetooth_ieee802154_tx_power: u32::MAX,
+        calibration_common: u32::MAX,
+        calibration_transmit: u32::MAX,
+        temperature_last: Some(i16::MIN),
+        temperature_min: Some(i16::MIN),
+        temperature_max: Some(i16::MAX),
+        tick_us: u32::MAX,
+        longest_tick_us: Some(u32::MAX),
+    });
+    let encoded = postcard::to_slice(&tracking, &mut buffer).unwrap();
+    assert!(encoded.len() <= 512, "{}", encoded.len());
+    assert_eq!(
+        postcard::from_bytes::<TrackingCollected>(encoded).unwrap(),
+        tracking
+    );
     let link = LinkCollected::Report(full_link());
     let encoded = postcard::to_slice(&link, &mut buffer).unwrap();
     assert!(encoded.len() <= 512, "{}", encoded.len());
@@ -420,9 +444,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_seven_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_eight_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 14);
+    assert_eq!(keys.len(), 16);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }

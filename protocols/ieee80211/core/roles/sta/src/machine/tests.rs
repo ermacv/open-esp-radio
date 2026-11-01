@@ -28,6 +28,7 @@ type TestConfigurationPath<'id> = oer_radio_port::Child<Root<oer_radio_port::Loc
 
 mod block_ack;
 mod key_unwrap;
+mod profile;
 mod repeated_message3;
 mod restart;
 mod sae;
@@ -403,6 +404,43 @@ struct World<'id, const G: usize = 2> {
     unwraps: usize,
 }
 
+/// A station with the test's pools and no profile yet.
+fn build_station<'id, const TX: usize, const G: usize>(
+    config: StaConfig<Caps, Callbacks>,
+    resources: StationResources<'id, Tokens<'id, G>, TX, TX, G>,
+) -> (
+    Station<'id, Tokens<'id, G>, Caps, Callbacks>,
+    StaCommandCredits<'id, TestConfigurationPath<'id>>,
+) {
+    #[cfg(not(feature = "placement"))]
+    {
+        Station::new(config, resources, GroupCapacity::new())
+    }
+    #[cfg(feature = "placement")]
+    {
+        let mut storage = core::mem::MaybeUninit::uninit();
+        let mut credits = None;
+        let station = oer_memory::Placed::init(&mut storage, |storage| {
+            let (station, granted) =
+                Station::init(storage, config, resources, GroupCapacity::new());
+            credits = Some(granted);
+            station
+        });
+        (
+            station.read(),
+            credits.expect("placed station command credits"),
+        )
+    }
+}
+
+/// The test network, protected by `security`.
+fn test_profile(security: StaSecurity) -> StaProfile {
+    StaProfile {
+        ssid: heapless::Vec::from_slice(SSID).unwrap(),
+        security,
+    }
+}
+
 impl<'id> World<'id> {
     fn new(mint: Mint<'id, TestPools>, skipped_absences: u8) -> Self {
         Self::with_security(mint, skipped_absences, StaSecurity::Open)
@@ -432,68 +470,11 @@ impl<'id> World<'id> {
         group_slots: [Slot; G],
     ) -> World<'id, G> {
         Self::with_builder::<TX, G>(mint, skipped_absences, group_slots, |config, resources| {
-            match security {
-                StaSecurity::Open => Station::new_open(config, resources),
-                StaSecurity::Wpa2Personal { pmk } => {
-                    #[cfg(not(feature = "placement"))]
-                    {
-                        Station::new_wpa2_personal(config, pmk, resources, GroupCapacity::new())
-                    }
-                    #[cfg(feature = "placement")]
-                    {
-                        let mut storage = core::mem::MaybeUninit::uninit();
-                        let mut credits = None;
-                        let station = oer_memory::Placed::init(&mut storage, |storage| {
-                            let (station, granted) = Station::init_wpa2_personal(
-                                storage,
-                                config,
-                                pmk,
-                                resources,
-                                GroupCapacity::new(),
-                            );
-                            credits = Some(granted);
-                            station
-                        });
-                        (
-                            station.read(),
-                            credits.expect("placed WPA2 station command credits"),
-                        )
-                    }
-                }
-                StaSecurity::Personal { password, pmk } => {
-                    #[cfg(not(feature = "placement"))]
-                    {
-                        Station::new_personal(
-                            config,
-                            password,
-                            pmk,
-                            resources,
-                            GroupCapacity::new(),
-                        )
-                    }
-                    #[cfg(feature = "placement")]
-                    {
-                        let mut storage = core::mem::MaybeUninit::uninit();
-                        let mut credits = None;
-                        let station = oer_memory::Placed::init(&mut storage, |storage| {
-                            let (station, granted) = Station::init_personal(
-                                storage,
-                                config,
-                                password,
-                                pmk,
-                                resources,
-                                GroupCapacity::new(),
-                            );
-                            credits = Some(granted);
-                            station
-                        });
-                        (
-                            station.read(),
-                            credits.expect("placed station command credits"),
-                        )
-                    }
-                }
-            }
+            let (mut station, credits) = build_station(config, resources);
+            station
+                .set_profile(test_profile(security))
+                .expect("an idle station takes its profile");
+            (station, credits)
         })
     }
 
@@ -521,7 +502,6 @@ impl<'id> World<'id> {
             address: oer_ieee80211_wire::address::OwnAddress::new(
                 oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
             ),
-            ssid: heapless::Vec::from_slice(SSID).unwrap(),
             channels,
             wide_channels: heapless::Vec::new(),
             dwell: Duration::from_millis(10),
@@ -2099,23 +2079,27 @@ fn eapol_frame(eapol: &[u8]) -> std::vec::Vec<u8> {
 }
 
 #[test]
-fn a_const_group_capacity_builds_a_personal_station() {
+fn a_const_group_capacity_builds_a_station_that_takes_a_personal_profile() {
     const CAPACITY: GroupCapacity<2> = GroupCapacity::new();
     installed(|mint| {
         let world =
             World::with_builder::<2, 2>(mint, 3, [Slot(1), Slot(2)], |config, resources| {
-                Station::new_personal(
-                    config,
-                    oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
-                    Pmk::from_bytes(PMK),
-                    resources,
-                    CAPACITY,
-                )
+                let (mut station, credits) = Station::new(config, resources, CAPACITY);
+                station
+                    .set_profile(test_profile(StaSecurity::Personal {
+                        password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(
+                            b"password",
+                        )
+                        .unwrap(),
+                        pmk: Pmk::from_bytes(PMK),
+                    }))
+                    .unwrap();
+                (station, credits)
             });
-        assert!(matches!(
-            world.station.security,
-            StaSecurity::Personal { .. }
-        ));
+        assert_eq!(
+            world.station.policy(),
+            Some(StaSecurityPolicy::Wpa2Personal)
+        );
     });
 }
 
@@ -3199,8 +3183,12 @@ fn leave_without_lease_reports_before_waiting() {
 #[test]
 fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission() {
     installed(|mint| {
-        let mut world =
-            connect_open_world(World::with_builder::<1, 0>(mint, 3, [], Station::new_open));
+        let mut world = connect_open_world(World::with_pools::<1, 1>(
+            mint,
+            3,
+            StaSecurity::Open,
+            [Slot(1)],
+        ));
         let mut pending = Vec::new();
         for _ in 0..1 {
             pending.push(
@@ -3441,7 +3429,7 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
         let observation = *world.station.scan.observations().next().unwrap();
         let access_point = observation.record;
         let join = || Join {
-            rsn: select_association_rsn(&access_point, world.station.policy()).unwrap(),
+            rsn: select_association_rsn(&access_point, world.station.policy().unwrap()).unwrap(),
             access_point,
             erp: observation.erp,
             channel: world.station.config.channels[0],

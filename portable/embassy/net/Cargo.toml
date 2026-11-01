@@ -19,7 +19,9 @@ owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/
 [dev-dependencies]
 # Link the pinned runner's time ABI. Tests never set or advance this driver;
 # service deadlines and stack events use a per-test oer-time-virtual clock.
-embassy-time = { version = "0.5.1", features = ["mock-driver", "generic-queue-8"] }
+# The queue size is oer-embassy-time's: the workspace unifies the features of
+# both test builds, and two generic-queue sizes do not compile together.
+embassy-time = { version = "0.5.1", features = ["mock-driver", "generic-queue-64"] }
 oer-time = { path = "../../time" }
 oer-time-virtual = { path = "../../time-virtual" }
 oer-memory = { path = "../../memory", features = ["host-context"] }

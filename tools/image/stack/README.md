@@ -360,15 +360,20 @@ call list substitutes for these machine and location facts.
 
 `task_poll_resolutions` finds the executor's task polls: the executor
 (`oer-espressif-executor`) polls each declared task by a direct call of its
-never-inlined poll boundary, whose address each task exports in a `#[used]`
-record (`TASK_POLL_RECORD`, `__OER_TASK_POLL.<module path>`, one relocated
-read-only word). Every direct call of a recorded boundary is a task poll site
-(`Resolutions::task_polls`) and the boundary is the task's root
-(`Resolutions::task_roots`); no function name is read. A record whose
-boundary no direct call reaches (an inlined poll, or a task never polled),
-or an image with the executor's waker vtable and no record, fails the
-analysis. The calls are direct: a task poll assumes nothing, and an
-executor's bound reaches only its own tasks.
+never-inlined poll boundary, whose zero-sized first parameter has the type
+`TASK_POLL_MARK` (`oer_espressif_executor::task::PollBoundary`). `read_debug`
+marks every subprogram with a formal parameter of that type, directly or
+through its origin or specification (`Dwarf::poll_boundaries`): each
+out-of-line copy is a boundary, each inlined copy a failure. Every direct
+call of a boundary is a task poll site (`Resolutions::task_polls`) and the
+boundary is the task's root (`Resolutions::task_roots`); no function name,
+symbol or kept record is read, so a task set whose executor the image never
+runs links no boundary and none of its tasks' code. An inlined boundary, a
+boundary no direct call reaches (its address only taken), or an image with
+the executor's waker vtable and no boundary fails the analysis. The calls
+are direct: a task poll assumes nothing, and an executor's bound reaches
+only its own tasks. The mark rests on the same DWARF type identities as the
+waker census.
 
 A direct recursive function can be unfolded once when path-sensitive
 instruction facts prove that every self-call passes a payload for which

@@ -697,6 +697,7 @@ pub struct ServiceIo<
     K,
     O: ServiceOutputSink<K>,
     L,
+    S: NetworkStop,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
@@ -718,7 +719,7 @@ pub struct ServiceIo<
     pub control: RunnerControl<'c, N>,
     /// The network side holding lent buffers, stopped before the port
     /// retires.
-    pub network: &'c dyn NetworkStop,
+    pub network: &'c S,
     /// The drain deadline of a stop no request timed.
     pub stop: StopPolicy,
 }
@@ -1333,6 +1334,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1427,6 +1429,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1527,6 +1530,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1703,6 +1707,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1846,6 +1851,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2043,6 +2049,15 @@ impl<
                         match self.pending.commands.request(command) {
                             Some(request) => {
                                 io.output.emit(ServiceOutput::CommandStarted(command));
+                                // A profile published with this Connect names its
+                                // network. A station that is not idle refuses it;
+                                // the Connect below then gets the same refusal,
+                                // and the dropped profile erases its secrets.
+                                if command.command() == contract::Command::Connect
+                                    && let Some(profile) = io.control.take_profile()
+                                {
+                                    drop(self.station.set_profile(profile));
+                                }
                                 if let Err(refused) = self.station.command(now, request) {
                                     let refused = self.pending.commands.refused(refused);
                                     io.output.emit(ServiceOutput::CommandRefused(refused));
@@ -2157,6 +2172,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2223,6 +2239,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2489,6 +2506,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2557,6 +2575,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2593,6 +2612,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2647,6 +2667,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2689,6 +2710,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2747,6 +2769,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2781,6 +2804,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2881,6 +2905,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2916,6 +2941,7 @@ impl<
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
+            impl NetworkStop,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3864,6 +3890,7 @@ fn station_action<
         B::Caps,
         impl ServiceOutputSink<B::Caps>,
         B::LentRx,
+        impl NetworkStop,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,

@@ -132,8 +132,9 @@ jobs:
                   | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
               | join(" ")' <<<"$meta"
           }
-          # The image crates that declare tasks take `type_alias_impl_trait`
-          # through RUSTC_BOOTSTRAP in .cargo/config.toml.
+          # The crates that declare tasks take `type_alias_impl_trait`
+          # through RUSTC_BOOTSTRAP in .cargo/config.toml; SDK images declare
+          # none.
           cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.
@@ -163,7 +164,7 @@ jobs:
           cargo fw build radio-root
           cargo fw build wifi-station
           OER_WIFI_STATION_PROFILE="$PWD/firmware/apps/wifi-station/profiles/open-ci.toml" \
-            cargo fw build wifi-station
+            cargo fw build wifi-station --features station
       - name: HIL image builds
         # Every image the HIL scenarios share, with the linked image's checks.
         run: |
@@ -181,3 +182,18 @@ jobs:
           while read -r package; do
             cargo fw probe "$package"
           done <<<"$packages"
+      - name: Image reports
+        # The text and JSON reports beside each image's ELFs (stack bounds,
+        # unresolved sites, reachability, panics, sizes), also when a later
+        # build fails, so a hole's site is read from the run. The configured
+        # wifi-station's reports replace the unconfigured one's.
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-reports
+          path: |
+            target/fw/*/*.txt
+            target/fw/*/*.json
+            target/fw/probes/*/*.txt
+            target/fw/probes/*/*.json
+          if-no-files-found: warn

@@ -70,6 +70,8 @@ oer_hil_protocol::messages! {
     topic SamplesCollected = "load/samples-report";
     endpoint CollectLink = "load/link" => LinkCollected;
     topic LinkCollected = "load/link-report";
+    endpoint CollectTracking = "load/tracking" => TrackingCollected;
+    topic TrackingCollected = "load/tracking-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -716,6 +718,61 @@ impl Link {
     }
 }
 
+/// What the shared RF actor's periodic PHY tracking did within run `run`'s
+/// window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectTracking {
+    pub run: u32,
+}
+
+/// The answer to [`CollectTracking`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum TrackingCollected {
+    Report(Tracking),
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The shared RF actor's periodic PHY tracking ticks within one window:
+/// the ticks by what they did, the tracked ticks that committed each
+/// branch, the PHY's temperature after them and the ticks' durations. Only
+/// a trace build counts them; others report `available: false` and zeros.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Tracking {
+    /// Whether the image counts the ticks.
+    pub available: bool,
+    /// Ticks that ran the tracking graph.
+    pub ticks: u32,
+    /// Ticks whose deadline fired before any client's tracking fell due.
+    pub not_due: u32,
+    /// Ticks on a domain that could not track (not registered, RF closed).
+    pub unavailable: u32,
+    /// Tracked ticks the registered policy inhibited: no child ran.
+    pub inhibited: u32,
+    /// Tracked ticks that committed each branch: the RFPLL capacitance
+    /// correction, a Wi-Fi PHY-I2C band change, a Wi-Fi or a Bluetooth LE /
+    /// IEEE 802.15.4 TX power gain change, the common (RX) and the transmit
+    /// recalibration.
+    pub rfpll_corrected: u32,
+    pub wifi_i2c_changed: u32,
+    pub wifi_tx_power: u32,
+    pub bluetooth_ieee802154_tx_power: u32,
+    pub calibration_common: u32,
+    pub calibration_transmit: u32,
+    /// The PHY's temperature after the window's last tracked tick and its
+    /// extremes over the window's tracked ticks, in PHY sensor units (no
+    /// Celsius conversion is established); `None` without a tracked tick
+    /// that read one.
+    pub temperature_last: Option<i16>,
+    pub temperature_min: Option<i16>,
+    pub temperature_max: Option<i16>,
+    /// The ticks' whole time and the longest tick that ended within the
+    /// window; `None` without one.
+    pub tick_us: u32,
+    pub longest_tick_us: Option<u32>,
+}
+
 /// The L1 cache's access counts within one window, by bus: the image
 /// clears each bus's counts at the window's start and reads them at its
 /// end. Instruction bus 0 carries hart 0's fetches and instruction bus 1
@@ -872,6 +929,7 @@ oer_hil_agent::service! {
         CollectCounters(CollectCounters) => counters,
         CollectSamples(CollectSamples) => samples,
         CollectLink(CollectLink) => link,
+        CollectTracking(CollectTracking) => tracking,
     }
 }
 

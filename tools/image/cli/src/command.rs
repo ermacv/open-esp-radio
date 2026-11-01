@@ -208,9 +208,15 @@ fn timestamp(time: SystemTime) -> String {
     )
 }
 
-pub fn run(root: &Path, image: &str, selector: &str, timeout: Duration) -> Result<ExitCode> {
+pub fn run(
+    root: &Path,
+    image: &str,
+    selector: &str,
+    timeout: Duration,
+    features: &[String],
+) -> Result<ExitCode> {
     let board = board(selector)?;
-    image::build(root, image, Enforced::Reported, None)?;
+    image::build(root, image, Enforced::Reported, None, features)?;
     let mut client = lease(&board)?;
     write_image(root, image, &board, &mut client)?;
     let run = root
@@ -347,12 +353,19 @@ fn build_enforcement(package: &str, diagnostic: bool) -> Result<Enforced> {
     }
 }
 
-pub fn build(root: &Path, image_name: &str, binary: Option<&str>, diagnostic: bool) -> Result<()> {
+pub fn build(
+    root: &Path,
+    image_name: &str,
+    binary: Option<&str>,
+    diagnostic: bool,
+    features: &[String],
+) -> Result<()> {
     let bundle = image::build(
         root,
         image_name,
         build_enforcement(&image::package(root, image_name)?, diagnostic)?,
         binary,
+        features,
     )?;
     for segment in bundle.segments() {
         eprintln!(
@@ -421,6 +434,39 @@ mod tests {
         assert_eq!(
             console_verdict(b"[boot] OER-RESULT: fail", "[boot] OER-RESULT: fail"),
             Some(Verdict::Fail)
+        );
+    }
+
+    #[test]
+    fn an_application_line_closes_the_run_with_its_verdict() {
+        let mut bytes = Vec::new();
+        oer_diagnostics::Console::new(|chunk: &[u8]| {
+            bytes.extend_from_slice(chunk);
+            Ok::<_, ()>(())
+        })
+        .note(&oer_diagnostics::typed_line!("OER-RESULT: pass wifi-station").note())
+        .unwrap();
+        let mut decoder = crate::diagnostics::Decoder::default();
+        // The console's lines as `lines` splits them; a frame starts on a
+        // line of its own.
+        let mut verdicts = Vec::new();
+        for line in bytes.split(|byte| *byte == b'\n') {
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            if let Some(text) = decoder.line(line).unwrap() {
+                let verdict = console_verdict(line, &text);
+                verdicts.push((text.into_owned(), verdict));
+            }
+        }
+        assert_eq!(
+            verdicts
+                .iter()
+                .find(|(text, _)| !text.is_empty())
+                .cloned()
+                .unwrap(),
+            (
+                "OER-RESULT: pass wifi-station".to_owned(),
+                Some(Verdict::Pass)
+            )
         );
     }
 

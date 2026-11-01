@@ -30,7 +30,7 @@ use oer_esp32s31_phy::{
     PhyParamTrackingPortError, PhyParamTrackingRunError, PhyRegisterConfig, PhyRegisterFailure,
     PhyRegisterRunError, PhyTargetObserver, PhyTargetPortError, RomShortDelay,
     TargetPhyParamTrackingError, TargetPhyRegisterError, close_concurrent_rf,
-    concurrent::{ConcurrentAcquire, ConcurrentPhy, phy_ready},
+    concurrent::{ConcurrentAcquire, ConcurrentPhy, ConcurrentPhyError, phy_ready},
     maintain_concurrent_phy, register_concurrent_phy, select_concurrent_wifi_channel,
     track_concurrent_phy, wake_concurrent_rf,
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
@@ -201,15 +201,21 @@ struct WifiShare {
 
 /// The ESP32-S31 radio domain as the radio system's backend.
 ///
-/// `C` provides the platform clocks, `T` is the PHY's time and `O` observes
-/// the PHY's target work.
-pub struct Esp32s31Radio<C: PlatformClockProvider, T, O, S> {
+/// `C` provides the platform clocks, `T` is the PHY's time, `O` observes
+/// the PHY's target work and `R` receives the radio system's own trace
+/// events ([`crate::observation`]).
+pub struct Esp32s31Radio<C: PlatformClockProvider, T, O, S, R> {
     radio: Option<RadioDomain<C::Backend, ConcurrentPhy>>,
     radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: C,
     timer: T,
     pilot: S,
     observer: O,
+    #[cfg_attr(
+        not(oer_trace),
+        allow(dead_code, reason = "only a trace build reports the tracking ticks")
+    )]
+    tracking: R,
     /// The first registration's configuration, until it is used.
     registration: Option<PhyRegisterConfig>,
     rf: Rf,
@@ -218,21 +224,28 @@ pub struct Esp32s31Radio<C: PlatformClockProvider, T, O, S> {
     bluetooth_attached: bool,
 }
 
-impl<C, T, O, S> Esp32s31Radio<C, T, O, S>
+impl<C, T, O, S, R> Esp32s31Radio<C, T, O, S, R>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    R: oer_trace::Observer,
     S: oer_esp32s31_phy::sar_pilot::Service,
 {
     /// The backend over the split radio domain and Wi-Fi's coexistence
-    /// state; `registration` configures the first PHY registration.
+    /// state; `registration` configures the first PHY registration and
+    /// `tracking` receives each periodic tracking tick.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "each argument is a distinct owner the backend keeps"
+    )]
     pub fn new(
         radio: RadioDomain<C::Backend, ConcurrentPhy>,
         wifi_coex: CoexAbsent<WifiClient>,
         clocks: C,
         timer: T,
         observer: O,
+        tracking: R,
         registration: PhyRegisterConfig,
         pilot: S,
     ) -> Self {
@@ -243,6 +256,7 @@ where
             clocks,
             timer,
             observer,
+            tracking,
             registration: Some(registration),
             pilot,
             rf: Rf::Unregistered,
@@ -254,6 +268,35 @@ where
                 membership: None,
                 tracking_due: false,
             },
+        }
+    }
+
+    /// The observation of a completed tick that started at `started`.
+    #[cfg(oer_trace)]
+    fn tracking_tick(
+        &self,
+        tick: oer_esp32s31_phy::ConcurrentTrackingTick,
+        started: oer_time::Instant,
+    ) -> crate::observation::TrackingTick {
+        use crate::observation::{TickRan, TrackingBranches, TrackingTick};
+        use oer_esp32s31_phy::ConcurrentTrackingTick as Tick;
+        let micros = u32::try_from(self.micros_since(started)).unwrap_or(u32::MAX);
+        let (ran, temperature) = match tick {
+            Tick::Tracked(outcome) => (
+                TickRan::Tracked(TrackingBranches::of(&outcome)),
+                require_radio(self.radio.as_ref(), self.radio_fault)
+                    .attachment()
+                    .phy_state()
+                    .ok()
+                    .map(|state| state.temperature_observation().value),
+            ),
+            Tick::NotDue => (TickRan::NotDue, None),
+            Tick::Unavailable(_) => (TickRan::Unavailable, None),
+        };
+        TrackingTick {
+            ran,
+            temperature,
+            micros,
         }
     }
 
@@ -344,11 +387,12 @@ const fn leave_poisoned(cause: PoisonCause) -> DomainHealth {
     ))
 }
 
-impl<C, T, O, S> PhyDomain for Esp32s31Radio<C, T, O, S>
+impl<C, T, O, S, R> PhyDomain for Esp32s31Radio<C, T, O, S, R>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    R: oer_trace::Observer,
     S: oer_esp32s31_phy::sar_pilot::Service,
 {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
@@ -434,34 +478,55 @@ where
         }
     }
 
-    fn tracking_deadline(&self) -> Option<oer_time::Instant> {
-        let micros = require_radio(self.radio.as_ref(), self.radio_fault)
+    fn tracking_deadline(&self) -> Result<Option<oer_time::Instant>, Fault> {
+        let Some(clients) = require_radio(self.radio.as_ref(), self.radio_fault)
             .attachment()
-            .client_snapshot()?
+            .client_snapshot()
+        else {
+            return Ok(None);
+        };
+        // A deadline past the clock's range would silently end tracking.
+        clients
             .next_tracking_deadline_micros()
-            .ok()??;
-        Some(oer_time::Instant::from_micros(micros))
+            .map(|micros| micros.map(oer_time::Instant::from_micros))
+            .map_err(|error| {
+                Fault(PoisonCause::TrackingRefused(ConcurrentPhyError::Time(
+                    error,
+                )))
+            })
     }
 
     async fn track_tick(&mut self) -> Result<(), Fault> {
+        #[cfg(oer_trace)]
+        let started = self.timer.now();
         // A rejected tick (the tracking clock ran backwards) would fall due
         // again at once; it poisons like a failed one.
-        let mut platform = ();
-        let mut operation = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, O>(
-            require_radio(self.radio.take(), self.radio_fault),
-            &mut platform,
-            &self.timer,
-            self.observer.clone(),
-            &mut self.pilot,
-        ));
-        let result = owned_operation::run(
-            operation.as_mut(),
-            &mut self.radio,
-            owned_operation::restore,
-        )
-        .await
-        .map(|_tick| ())
-        .map_err(|error| Fault(tracking_cause(error)));
+        let completed = {
+            let mut platform = ();
+            let mut operation = core::pin::pin!(track_concurrent_phy::<_, (), RomShortDelay, O>(
+                require_radio(self.radio.take(), self.radio_fault),
+                &mut platform,
+                &self.timer,
+                self.observer.clone(),
+                &mut self.pilot,
+            ));
+            owned_operation::run(
+                operation.as_mut(),
+                &mut self.radio,
+                owned_operation::restore,
+            )
+            .await
+        };
+        let result = match completed {
+            #[cfg(oer_trace)]
+            Ok(tick) => {
+                oer_trace::observe!(self.tracking, self.tracking_tick(tick, started));
+                Ok(())
+            }
+            #[cfg(not(oer_trace))]
+            Ok(_) => Ok(()),
+            Err(error) => Err(Fault(tracking_cause(error))),
+        };
         #[cfg(feature = "bluetooth")]
         if result.is_ok() && self.bluetooth_attached {
             self.wifi.tracking_due = false;
@@ -470,11 +535,12 @@ where
     }
 }
 
-impl<C, T, O, S> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O, S>
+impl<C, T, O, S, R> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O, S, R>
 where
     C: PlatformClockProvider,
     T: oer_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
+    R: oer_trace::Observer,
     S: oer_esp32s31_phy::sar_pilot::Service,
 {
     async fn enter(

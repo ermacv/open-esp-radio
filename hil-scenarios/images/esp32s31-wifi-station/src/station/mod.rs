@@ -50,23 +50,30 @@ const TX_CAP_DBM: i8 = 10;
 oer_espressif_executor::tasks! {
     /// The radio executor's tasks (P2): the shared RF actor from the boot,
     /// the station's driver from its join.
-    pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
+    pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
         @observer: crate::load::cpu::Observer::<{ crate::load::cpu::RADIO }>;
         radio_actor(actor: &'static mut Actor) = radio_actor;
         driver(driver: wifi::Driver<radio::binding::Binding>) = radio::drive;
     }
 }
 
-pub(crate) type Actor = wifi::RadioActor<crate::phy_pilot::Client>;
+/// The shared RF actor; the image's observer counts its tracking ticks.
+pub(crate) type Actor =
+    wifi::RadioActor<crate::phy_pilot::Client, crate::load::parts::DriverObserver>;
 pub(crate) static ACTOR: StaticCell<Actor> = StaticCell::new();
 
+/// Run the shared RF actor until its periodic PHY tracking fails. The PHY
+/// may then be half changed while the station keeps transmitting on it:
+/// the actor keeps every owner it holds, and the image records the failure
+/// and resets.
 async fn radio_actor(actor: &'static mut Actor) {
     let run = core::pin::pin!(actor.run());
-    match (Polled {
+    let failure = Polled {
         part: Part::RadioActor,
         future: run,
-    })
-    .await {}
+    }
+    .await;
+    failure.reset()
 }
 
 type Queue = WakingSpscQueue<(RequestIdentity, Request), 1>;
@@ -234,7 +241,6 @@ async fn work(inputs: Inputs) -> Infallible {
     let profile = match wifi::Profile::<radio::binding::Binding>::new(
         &config,
         address,
-        credentials,
         Callbacks(nonces),
         crate::load::parts::DriverObserver::default(),
         crate::load::parts::STATION_SINK,
@@ -291,7 +297,8 @@ async fn work(inputs: Inputs) -> Infallible {
         answer_join(join, &Joined::Refused(network_failed(error)));
         stopped(&mut requests, down).await
     }
-    let connect = match control.connect().await {
+    // The connect names the join's network; the station keeps it.
+    let connect = match control.connect(credentials).await {
         Ok(operation) => Some(operation),
         Err(error) => {
             answer_join(join, &Joined::Refused(answers::not_admitted(error)));

@@ -35,7 +35,11 @@ application          credentials, network stack (embassy-net), sockets
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
-image                interrupt table, tasks, chosen facades and engines
+image                boot (chosen peripherals and services), application tasks
+  application entry  the family SDK (`oer-espressif`): peripherals taken once,
+                     drivers and services with defaults, their interrupts,
+                     executors and service tasks, record and reset on the
+                     image's behalf
   service / facade   radio system (one owner of the shared RF front-end),
                      protocol facades, the chip's composition (`compose`)
   chip adapters      ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 backends
@@ -94,6 +98,7 @@ dependencies ([layer tests](../tools/test/layers/README.md)).
 | Driver | `HardwareDriver`, `ChipAdapter` | sequences over register ports or HAL atoms, waits that yield to the executor (named boot waits before it), typed errors, stop and recovery, calibration and scheduling algorithms | the PAC, raw pointers, protocol cores and runtimes, the platform runtime |
 | Platform | `PlatformContract`, `Platform` | startup order, the boot deadline, staging, handoff and adoption, entry and trap ABI, interrupt table, executor, fatal policy | register access past the HAL; chip knowledge past the platform port |
 | Service / facade | `ServiceClient`, `Service`, `Composition`, `Facade` | one owner of a resource for its clients; a composition or facade assembles a protocol runtime with its backend | the PAC, a second claim, diagnostic counters in a product API |
+| Application entry | `Sdk` | the default interrupt layout, executors and service tasks of the drivers and services an image selects; their terminal policy on the image's behalf | the PAC, register access, policy the image did not delegate to it |
 | Image | firmware | profile, board, interrupt table, tasks, chosen facades, instrumentation cfgs | copies of driver or platform logic |
 
 A HAL atom is one field or word access through a PAC accessor, one sampled
@@ -212,8 +217,13 @@ resources. Images declare its composed static type, select the interrupt entries
 callbacks and observers, and spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
-is the default, which the HIL station image keeps: it joins once per boot. Explicit
-Disconnect pauses reconnect and Connect resumes the configured policy.
+is the default, which the HIL station image keeps: it joins once per boot.
+Each `Control::connect` carries its network's profile (SSID and security);
+only an idle station takes it, and it stays for later connections, so the
+policy never connects first and reconnects with the kept profile. The
+policy becomes active when an application's connect links; one that ends
+without a link leaves the station idle and the retries to the application.
+Explicit Disconnect pauses reconnect.
 Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
 retires Runner. HIL retains command correlation and socket workload lifetime,
@@ -320,9 +330,37 @@ executor's binding `Esp32s31`, which images name in every executor type
 which need both the HAL's types and the runtime's retained memory and fatal
 path. Its `platform` boundary supplies typed interrupt parts, runtime preparation,
 factory identity, entropy and timer installation. The reusable console and
-SAR/PWDET bindings keep the existing driver/handler ownership, while images
-select their entries, priorities and task spawning. Trace clocks and unanswered
-request resets bind through that same platform.
+SAR/PWDET bindings keep the existing driver/handler ownership. Trace clocks
+and unanswered request resets bind through that same platform.
+
+`oer-espressif` (`sdk/espressif`) is the family's application entry above
+the compositions and facades; the `esp32s31` feature selects the chip, and a
+second chip would add its implementation beside it without changing the API.
+An image built on it writes `entry!(boot)`: the synchronous `boot` runs once
+before any executor, takes the peripherals it needs and builds drivers and
+services with defaults through the boot context, overriding a default only
+by an explicit setting or a static storage of its own (reconnect, drain,
+AES seats, IP pools), and returns the application's future (`impl
+Started`). The SDK owns the default interrupt table, the
+executors and its service tasks (`SdkTasks`, on the same executor as the
+image's IP service at the image's pool sizes and its application, which
+run as that executor's roots in the frame of the SDK's run), and applies
+record and reset on the image's
+behalf to every boot error, application error and unrecoverable service
+exit; handled errors stay values. The SDK runs the application on hart 0.
+
+An example and a HIL test image of one function build it the same way: the
+same `boot` through the SDK, so that what the test checks is what an
+application runs. A test image differs only by the SDK features it adds
+(`console`), by explicit settings in place of the library's defaults and by
+the handlers of its services; it serves them through the HIL agent on the
+entry (`hil-scenarios/hil-agent/espressif`). An image on the SDK depends on
+nothing the SDK places (compositions, facades, platform, interrupt table)
+besides it; `oer-test-layers` checks these direct dependencies, not that two
+`boot` functions take the same steps in the same order, which review keeps.
+Probes and images whose function
+or layout the SDK does not offer select their entries, priorities and task
+spawning through the compositions directly.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-time::deadline` contains only the deadline policy,
@@ -735,8 +773,12 @@ The current mechanisms have narrower guarantees than the policy:
 - Staged runtime claims one terminal election in boot-initialized SRAM before
   stopping other harts or running a recorder. Reentry returns `Reentered`;
   a losing terminal skips the recorder and requests reset without waiting.
-  The winning claim remains held until reset. A panic hook borrows that same
-  claim for its additional observation slots; each committed slot remains held.
+  The winning claim remains held until reset. It draws the next nonzero
+  terminal number from a retained counter, which only a claim locks; a claim
+  that finds it held numbers no terminal. A panic or exception hook borrows
+  that same claim for its additional observation slots; each committed slot
+  remains held, and a record that copies the claim's number names its
+  terminal even when an earlier terminal left the same registers.
   Commit publishes its completion marker last. A fresh boot may overwrite
   stale, unconsumed bytes with its first terminal record.
 - Peek does not clear. Each reporter clears only after its complete output
@@ -744,12 +786,25 @@ The current mechanisms have narrower guarantees than the policy:
   platform panic and postmortem remain until the complete boot-evidence frame
   and CRLF reach the transport. A refused output retains the record.
 - Payloads preserve panic text, Wi-Fi RAW, IEEE 802.15.4 entry observations and completed service prefix, HIL
-  machine-state observations and postmortem data, and RX-chain observations.
+  failure records and postmortem data, the S31 exception observations, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
-  HIL and RX-chain exception supplements use the entry-time cause/PC/trap value;
-  HIL samples pending/routes after stop as additional observations. Neither
-  the frame nor those sequential samples are an atomic snapshot of all hardware.
+  Every S31 image on the staged runtime, the SDK's included, binds one
+  exception hook (`oer-esp32s31-compose::exception`). It repeats none of the
+  frame's registers: after the stop it samples the trapping hart's pending
+  sources and, for an interrupt of a line without a handler, the routes to
+  that line and its state, recording whether the stop held, and copies the
+  claim's terminal number, which the runtime's frame record also holds, and
+  the frame's identifying registers. The next boot prints the frame and
+  those observations as separate records, each cleared on its own once
+  printed whole; the frame's `fatal_terminal` and the observation notes name
+  the terminal, the observation notes also their trap's `mepc`. An SDK boot
+  serves both to HIL (`Fault::Exception`, the trap's registers apart from
+  the observations), attaching the observations only to the trap of the
+  same terminal and registers: a hook that faulted before its commit leaves
+  an earlier terminal's record behind, possibly with the same registers. The RX-chain supplement uses the entry-time
+  cause/PC/trap value. Neither the frame nor the sequential samples are an
+  atomic snapshot of all hardware.
   The route and line view (`fatal_view`) exists only in the boot hart's
   fatal path: hart 1's routes have no claimed observer and its CLIC lines
   are reachable only from hart 1, so a fault on hart 1 records the common
@@ -930,7 +985,11 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   calls `track_concurrent_phy`, which evaluates demand and runs due work.
   The default period is 1 s, with eligibility at `previous + period + 1 µs`.
   SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
-  timers and polls the actor. The direct maintenance TXDC/PWDET path submits
+  timers and polls the actor. A failed tick, or a tracking deadline the
+  clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
+  keeps every owner, and the image records the fault's class and variant
+  path (`oer-esp32s31-compose::radio_fault`) and resets. The direct
+  maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
   2 µs wait and timer-driven readiness samples. Edge steps return fixed relative
@@ -1248,7 +1307,8 @@ under test; it stores nothing and knows no scenario, service or equipment.
 | Link | `tools/hil/link` | One board's serial line: frames, their boot (`boot_id`), request/response correlation, missing-message counts and the device's diagnostic lines |
 | Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |
 | CLI | `tools/hil/cli` | `cargo hil list` and `run`: scenarios are packages marked `hil-scenario` in their metadata |
-| Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, one host program per scenario with its cases and verdict |
+| SDK agent | `hil-scenarios/hil-agent/espressif` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the one-deep hand-over of a request to the image's worker |
+| Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, `hil-agent/` the agent on the application entry, one host program per scenario with its cases and verdict |
 
 A boot is named by the `boot_id` every frame carries. Its first frame is its
 Hello, which also names the image (`image_crc32`, the stage-two payload

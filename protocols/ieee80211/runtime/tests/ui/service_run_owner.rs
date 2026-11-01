@@ -18,6 +18,7 @@ pub fn run_once<
         B::Caps,
         impl oer_ieee80211_runtime::station::ServiceOutputSink<B::Caps>,
         B::LentRx,
+        impl oer_ieee80211_runtime::station::NetworkStop,
         1,
         1,
         1,

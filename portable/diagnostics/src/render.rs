@@ -8,6 +8,9 @@ use crate::note::{Field, Note};
 /// each field as ` key=value`, or as a bare comma-separated value when its
 /// key is empty.
 pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
+    if note.topic.is_line() {
+        return line(note, out);
+    }
     let (prefix, fields) = note.topic.layout();
     out.write_str(prefix)?;
     let mut words = note.words().iter().copied();
@@ -183,32 +186,75 @@ pub fn note(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
             },
             Field::Name => out.write_str(names.next().ok_or(fmt::Error)?)?,
             Field::Path => {
-                // Nested like the value's own `Debug`: `Err(Failed(Run(..)))`.
-                let depth = names.len();
-                for (index, name) in names.by_ref().enumerate() {
-                    if index > 0 {
-                        out.write_char('(')?;
-                    }
-                    out.write_str(name)?;
-                }
-                for _ in 1..depth {
-                    out.write_char(')')?;
-                }
-                let mut numbers = words.by_ref().peekable();
-                if numbers.peek().is_some() {
-                    out.write_str(" numbers=")?;
-                    for (index, number) in numbers.enumerate() {
-                        if index > 0 {
-                            out.write_char(',')?;
-                        }
-                        write!(out, "{number}")?;
-                    }
-                }
+                path(&mut names, &mut words, out)?;
                 if note.overflowed() {
                     out.write_str(" path-truncated")?;
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// Every remaining name nested like the value's own `Debug`,
+/// `Err(Failed(Run(..)))`, then the remaining words as ` numbers=…`.
+fn path<'a>(
+    names: &mut impl ExactSizeIterator<Item = &'a str>,
+    words: &mut impl Iterator<Item = u32>,
+    out: &mut impl Write,
+) -> fmt::Result {
+    let depth = names.len();
+    for (index, name) in names.by_ref().enumerate() {
+        if index > 0 {
+            out.write_char('(')?;
+        }
+        out.write_str(name)?;
+    }
+    for _ in 1..depth {
+        out.write_char(')')?;
+    }
+    let mut numbers = words.peekable();
+    if numbers.peek().is_some() {
+        out.write_str(" numbers=")?;
+        for (index, number) in numbers.enumerate() {
+            if index > 0 {
+                out.write_char(',')?;
+            }
+            write!(out, "{number}")?;
+        }
+    }
+    Ok(())
+}
+
+/// An application's line ([`crate::Line`]): its pieces and values in the
+/// order its shape gives, then ` line-truncated` when something did not fit.
+fn line(note: &Note<'_>, out: &mut impl Write) -> fmt::Result {
+    use crate::line::{Segment, Shape};
+    let (shape, values) = note.words().split_first().ok_or(fmt::Error)?;
+    let shape = Shape::of(*shape).ok_or(fmt::Error)?;
+    let mut words = values.iter().copied();
+    let mut names = note.names().iter().copied();
+    for segment in shape.segments() {
+        let mut next = || words.next().ok_or(fmt::Error);
+        match segment {
+            Segment::Text => out.write_str(names.next().ok_or(fmt::Error)?)?,
+            Segment::Dec => write!(out, "{}", next()?)?,
+            Segment::Hex => write!(out, "{:#x}", next()?)?,
+            Segment::Signed => write!(out, "{}", next()? as i32)?,
+            Segment::Flag => out.write_str(if next()? != 0 { "true" } else { "false" })?,
+            Segment::Ipv4 => {
+                let [a, b, c, d] = next()?.to_be_bytes();
+                write!(out, "{a}.{b}.{c}.{d}")?
+            }
+            Segment::Wide => {
+                let low = u64::from(next()?);
+                write!(out, "{}", low | u64::from(next()?) << 32)?
+            }
+            Segment::Path => path(&mut names, &mut words, out)?,
+        }
+    }
+    if note.overflowed() {
+        out.write_str(" line-truncated")?;
     }
     Ok(())
 }

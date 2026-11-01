@@ -212,6 +212,8 @@ pub enum CommandRefusal {
     AlreadyConnected,
     NotConnected,
     Transitioning,
+    /// Connect before any profile named the network to join.
+    NoProfile,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AbsenceRefusal {
@@ -433,6 +435,7 @@ impl From<core_station::CommandRefusal> for CommandRefusal {
             core_station::CommandRefusal::AlreadyConnected => Self::AlreadyConnected,
             core_station::CommandRefusal::NotConnected => Self::NotConnected,
             core_station::CommandRefusal::Transitioning => Self::Transitioning,
+            core_station::CommandRefusal::NoProfile => Self::NoProfile,
         }
     }
 }
@@ -602,6 +605,8 @@ impl From<oer_ieee80211_core_arbiter::SwitchMode> for SwitchMode {
         }
     }
 }
+
+mod diagnostic_path;
 
 #[cfg(test)]
 mod tests {

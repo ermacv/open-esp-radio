@@ -307,6 +307,19 @@ mod render {
             "fatal irq_pending words=00000001,00000002,00000003,00000004,00000005,ffffffff"
         );
         assert_eq!(
+            text(&Note::fatal_trap_vectors(
+                42,
+                0x5013_1378,
+                0x2f00_6003,
+                0x2f00_b400
+            )),
+            "fatal trap_vectors terminal=42 mepc=50131378 mtvec=2f006003 mtvt=2f00b400"
+        );
+        assert_eq!(
+            text(&Note::fatal_terminal(1, 42)),
+            "fatal terminal hart=1 number=42"
+        );
+        assert_eq!(
             text(&Note::cca_register(
                 crate::name!("BeforeRx"),
                 None,

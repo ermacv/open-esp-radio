@@ -35,7 +35,7 @@ use crate::station::future::{Boundary, Tracked};
 oer_espressif_executor::tasks! {
     /// Hart 1's tasks (P2 of hart 1): the station's network end, its IP
     /// stack and the load server.
-    pub(crate) NetworkTasks: InterruptExecutor<Esp32s31, 1> {
+    pub NetworkTasks: InterruptExecutor<Esp32s31, 1> {
         @observer: crate::load::cpu::Observer::<{ crate::load::cpu::NETWORK }>;
         network(inputs: Inputs) = run;
     }
@@ -226,6 +226,10 @@ async fn network_end(
         // Neither part ends before the exit.
         let _exit = select(serving, EXIT.requested()).await;
     }
+    // The load socket's queued datagrams hold lent receive buffers: they
+    // must drop before the IP service's final reclaim. A no-op after the
+    // station's own stop, which closed it already.
+    network.stop_load().await;
     ip.stop();
     Tracked {
         future: Pin::new(&mut running),

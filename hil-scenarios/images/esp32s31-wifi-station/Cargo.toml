@@ -18,7 +18,6 @@ oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-trace = { path = "../../../portable/trace" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
-bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 critical-section = "1.2.0"
 embassy-futures = "0.1.2"
 oer-espressif-executor = { workspace = true, features = ["port-slots"] }
@@ -32,7 +31,7 @@ heapless = "0.9.3"
 embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "f11388d0af7c43347f8ccd9f26a6505dedf098da", default-features = false, features = ["udp"] }
 xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "5b6f11a793c3b07e5ef5be39f3ad5e9b6e0fa711", default-features = false, features = ["udp-rx-queue-count-16"] }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault"] }
+oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault", "radio-fault"] }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
 oer-esp32s31-layout = { path = "../../../chips/esp32s31/layout" }
 static_cell.workspace = true

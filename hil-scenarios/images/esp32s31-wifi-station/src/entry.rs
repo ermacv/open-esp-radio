@@ -24,7 +24,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The SAR/PWDET conversion steps between radio executor rounds.
     phy: PhyToken = Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<station::RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::Round<station::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's alarm (system timer comparator 0).
     radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<station::RadioTasks, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
@@ -39,13 +39,12 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 42, context app_wake, hart 0, Hardware;
     /// Hart 1's network executor (P2 of hart 1), polled in its handler.
-    network: NetworkToken = FromCpu1Irq => oer_espressif_executor::interrupt_handler::<network::NetworkTasks, FromCpu1Irq>, line 16, context network_executor, hart 1, Executor;
+    network: NetworkToken = FromCpu1Irq => oer_espressif_executor::Round<network::NetworkTasks>, line 16, context network_executor, hart 1, Executor;
     /// The network executor's alarm (system timer comparator 2), above it
     /// on hart 1; it only acknowledges and pends.
     network_alarm: NetworkAlarmToken = SystimerAlarm2 => oer_espressif_executor::alarm_interrupt::<network::NetworkTasks, 2, SystimerAlarm2>, line 17, context network_alarm, hart 1, Hardware;
 }
 
-mod exception;
 mod fatal;
 mod network;
 mod peers;
@@ -125,7 +124,7 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 oer_espressif_staged_runtime::entry!(
     main,
     oer_esp32s31_hal::platform::Port,
-    exception = exception::capture
+    exception = oer_esp32s31_compose::exception::capture
 );
 
 fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platform::Port>) -> ! {
@@ -160,7 +159,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                 // acknowledges the previous boot's platform panic.
                 let evidence = system::Evidence::read(runtime.reset_cause);
                 fatal::report_previous();
+                oer_esp32s31_compose::exception::report_previous();
                 oer_esp32s31_compose::wifi_fault::report_previous();
+                oer_esp32s31_compose::radio_fault::report_previous();
                 (
                     runtime.aes,
                     runtime.efuse,
@@ -181,7 +182,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         )
     })
     .into_parts();
-    exception::report_stack_guard();
+    oer_esp32s31_compose::exception::report_stack_guard();
 
     let Some(interrupts) = Interrupts::take() else {
         fail(fatal::Failure::InterruptTable);
@@ -200,7 +201,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let resources =
         wifi::RadioResources::new::<station::radio::binding::Binding>(radio, clocks, &factory);
     let pilot = phy_pilot::init(timg0_alarm, adopted.router(), interrupts.phy);
-    let (actor, hardware) = resources.start(pilot);
+    let (actor, hardware) = resources.start(pilot, load::parts::DriverObserver::default());
     let actor = station::ACTOR
         .try_init(actor)
         .unwrap_or_else(|| fail(fatal::Failure::Storage));
@@ -352,6 +353,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             interrupts.wake,
             software.irq0,
             urgent,
+            (),
             move |spawner| {
                 let requests = Requests {
                     station: sender,

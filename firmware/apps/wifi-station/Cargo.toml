@@ -10,19 +10,12 @@ description = "Wi-Fi station of a build profile; without a profile it reports No
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-esp32s31-wifi = { path = "../../../chips/esp32s31/wifi" }
-oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault"] }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-espressif-executor = { path = "../../../chips/espressif/executor", features = ["port-slots"] }
-oer-espressif-interrupt-table = { path = "../../../chips/espressif/interrupt-table" }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-memory = { path = "../../../portable/memory" }
-oer-time = { path = "../../../portable/time" }
-oer-trace = { path = "../../../portable/trace" }
-static_cell = { workspace = true }
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31"] }
+
+[features]
+# The station of a profile: the SDK's Wi-Fi. A build with a profile needs it,
+# one without builds the NotConfigured image, which links no Wi-Fi.
+station = ["oer-espressif/wifi"]
 
 [dev-dependencies]
 toml = "=1.1.4"

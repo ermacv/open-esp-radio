@@ -44,8 +44,8 @@ fn runtime_built(vectors: &str, chip: &Vectors, trace: bool) -> Vec<u8> {
     std::fs::write(&path, vectors).unwrap();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let riscv = root.join("portable/riscv/src/lib.rs");
-    let tcontrol = root.join("chips/espressif/staged-runtime/src/stacks/tcontrol.rs");
     let volatile = root.join("portable/memory/src/volatile.rs");
+    let tcontrol = root.join("chips/espressif/staged-runtime/src/stacks/tcontrol.rs");
     // Compile the runtime's frame declaration and assembly invocation verbatim:
     // adding or changing an operand must affect this fixture as well. Only the
     // include paths change to select this test's generated files and mutations.
@@ -92,20 +92,22 @@ fn runtime_built(vectors: &str, chip: &Vectors, trace: bool) -> Vec<u8> {
 #![allow(dead_code, unused_imports, unused_macros)]
 
 extern crate self as oer_riscv;
+extern crate self as oer_memory;
 #[allow(unused_attributes, reason = "oer-riscv's crate root is a fixture module")]
 #[path = {riscv:?}]
 mod architecture;
 pub use architecture::*;
+// The layout's volatile read, from oer-memory's own module.
+#[path = {volatile:?}]
+mod volatile;
+pub use volatile::read_volatile;
 #[path = {tcontrol:?}]
 mod tcontrol;
-#[path = {volatile:?}]
-mod oer_memory;
 mod trap {{
     {trap}
 }}
 mod layout {{
     {layout}
-    use crate::oer_memory;
 }}
 mod stacks {{
     use crate::{{clic, machine::status, tcontrol, trigger}};

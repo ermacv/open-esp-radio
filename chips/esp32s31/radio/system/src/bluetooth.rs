@@ -91,17 +91,31 @@ where
     T: oer_time::Timer,
     A: BluetoothBackend<B, S>,
 {
-    pub async fn run(&mut self) -> Infallible {
-        self.run_until(core::future::pending::<Infallible>()).await
+    /// Serve both clients until the periodic tracking fails.
+    pub async fn run(&mut self) -> TrackingFault {
+        match self
+            .run_until(core::future::pending::<core::convert::Infallible>())
+            .await
+        {
+            Ok(never) => match never {},
+            Err(fault) => fault,
+        }
     }
     /// Observe the composition only between completed entered transactions.
-    pub async fn run_until<F: core::future::Future>(&mut self, next: F) -> F::Output {
+    ///
+    /// # Errors
+    ///
+    /// The periodic tracking failed before `next` completed.
+    pub async fn run_until<F: core::future::Future>(
+        &mut self,
+        next: F,
+    ) -> Result<F::Output, TrackingFault> {
         let mut next = core::pin::pin!(next);
         loop {
             if let core::task::Poll::Ready(out) =
                 poll_fn(|cx| core::task::Poll::Ready(next.as_mut().poll(cx))).await
             {
-                return out;
+                return Ok(out);
             }
             let mut served = false;
             if let Some(request) = self.actor.inbox.take() {
@@ -116,13 +130,11 @@ where
             if served {
                 continue;
             }
-            let deadline = (self.actor.core.tracking_active())
-                .then(|| self.actor.backend.tracking_deadline())
-                .flatten();
+            let deadline = self.actor.tracking_deadline()?;
             let wait = Boundary::new(self.actor.wait(deadline));
             match select(next.as_mut(), wait).await {
-                Either::First(out) => return out,
-                Either::Second(true) => Boundary::new(self.actor.tick()).await,
+                Either::First(out) => return Ok(out),
+                Either::Second(true) => Boundary::new(self.actor.tick()).await?,
                 Either::Second(false) => {}
             }
         }

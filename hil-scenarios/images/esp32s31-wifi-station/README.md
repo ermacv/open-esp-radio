@@ -92,10 +92,10 @@ nothing). The run's window opens `delay_ms` after the start and closes
 `duration_ms` later; the image reads its CPU, its parts and its counters at
 both ends, after opening and after closing, and keeps the times. It receives
 and echoes from the start until `drain_ms` after the window, then closes the
-socket and keeps the report, the parts', the counters' and the link's
-window until the next run starts. `Collect`, `CollectParts` (twelve parts
-an answer, from the asked number), `CollectCounters`, `CollectLink` and
-`CollectSamples` (forty samples an
+socket and keeps the report, the parts', the counters', the link's and the
+PHY tracking's window until the next run starts. `Collect`, `CollectParts`
+(twelve parts an answer, from the asked number), `CollectCounters`,
+`CollectLink`, `CollectTracking` and `CollectSamples` (forty samples an
 answer, from the asked number) of the running run answer `Running`, of the
 kept one what it kept, of any other `UnknownRun`; `CollectSamples` of a run
 without a profile answers `NotSampled`.
@@ -189,6 +189,16 @@ when it decided it.
   non-HT, HE and no rate. The receive metadata marks no A-MPDU boundary, so
   the image counts no received A-MPDU; transmitted aggregates are not
   counted yet. A build without `oer_trace` counts none of them.
+- **PHY tracking** (`src/load/tracking.rs`, `CollectTracking`). The shared
+  RF actor reports each periodic tracking tick (`TrackingTick`: tracked,
+  not due or unavailable, the branches a tracked tick committed, the PHY's
+  temperature after it in sensor units and the tick's duration) to the
+  image's observer in the radio executor (P2) on the boot hart. The load
+  server samples the counter on hart 1 at the window's ends, as it samples
+  the parts: a sequence number brackets each write and a sample taken
+  during one is taken again. The last, minimum and maximum temperature and
+  the longest tick belong to the parts' epoch, which starts at the
+  window's start. A build without `oer_trace` reports `available: false`.
 - **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
   starts `oer_esp32s31_compose::sampler` on TIMG1 T0 of the boot hart,
   which it samples, at the window's start and asks it to stop at the
@@ -237,12 +247,17 @@ to 3, the image classes 4 to 6).
 
 The boot reads the reset causes and peeks the previous boot's platform panic
 before serving boot evidence; complete output clears the record. It prints
-the previous boot's PHY and Wi-Fi MAC fault records. A failed boot check of
-either hart, an exception, a construction error the facade cannot return, an
-exhausted nonce stream or an IP stack failure is retained and resets
-(`src/fatal.rs`); a failure of hart 1's launch after its release records its
-stage and resets (`previous fault SecondaryLaunch` or
-`SecondaryEarlyFault`); the
+the previous boot's PHY, Wi-Fi MAC and radio tracking fault records. A
+failed boot check of either hart, a construction error the facade cannot
+return, an exhausted nonce stream or an IP stack failure is retained and
+resets (`src/fatal.rs`); a failed periodic PHY tracking tick, or a tracking
+deadline the clock cannot hold, ends the shared RF actor's run with its
+keeping every owner, and the actor's task records the fault's class and
+variant path (`oer_esp32s31_compose::radio_fault`) and resets; a failure of
+hart 1's launch after its release records its stage and resets (`previous
+fault SecondaryLaunch` or `SecondaryEarlyFault`). An exception keeps the
+runtime's trap-time frame and the platform's observations after the trap
+(`oer_esp32s31_compose::exception`), both printed by the next boot; the
 console's transport faults reset through the platform's retained path.
 
 `cargo fw build esp32s31-wifi-station` builds it; a scenario's harness builds

@@ -147,7 +147,7 @@ pub struct NetworkDrainFailure {
 /// every lent buffer.
 pub(super) async fn drain<'p, 'id: 'p, P: oer_ieee80211_contracts_port::LowerMacPhase<'p, 'id>>(
     phase: &mut P,
-    network: &dyn NetworkStop,
+    network: &impl NetworkStop,
     timer: &impl oer_time::Timer,
     deadline: oer_time::Instant,
 ) -> Result<(), NetworkDrainFailure> {

@@ -1,10 +1,11 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
-#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 
-//! A Wi-Fi station of its build profile. Without `OER_WIFI_STATION_PROFILE`
-//! the image reports NotConfigured and starts no RF; a configured image
-//! joins its profile's network with automatic reconnection.
+//! A Wi-Fi station of its build profile, on the application entry
+//! (`oer-espressif`). Without `OER_WIFI_STATION_PROFILE` the image reports
+//! NotConfigured and starts no RF; a configured image joins its profile's
+//! network with automatic reconnection, takes an IPv4 address by DHCP and
+//! exchanges one line over TCP with the gateway's echo port.
 
 #[cfg(all(target_arch = "riscv32", oer_wifi_station_configured))]
 include!("entry.rs");

@@ -83,12 +83,11 @@ dependencies = ["oer-espressif-interrupt-table", "oer-memory"]
 oer_espressif_interrupt_table::__fake_parts!();
 oer_espressif_interrupt_table::__fake_controller!();
 pub fn on_timer(_: &mut TimerIrq) {}
-pub fn on_radio(_: &mut RadioIrq) {}
 oer_espressif_interrupt_table::interrupt_table! {
     lines: FAKE_LINES,
     handler_attributes: [#[inline(never)]];
     contexts { executor: 2; }
-    radio: RadioToken = RadioIrq => on_radio, line 17, context executor, hart 0, Executor;
+    radio: RadioToken = RadioIrq => OnExecutor, line 17, context executor, hart 0, Executor;
     timer: TimerToken = TimerIrq => on_timer, line 18, context executor, hart 0,
         Exempt(ExecutorLevel, "export regression");
     #[cfg(any())]

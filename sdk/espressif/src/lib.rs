@@ -1,0 +1,63 @@
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
+//! The Espressif family's application entry.
+//!
+//! An application selects its chip by feature (`esp32s31`), takes the
+//! peripherals it needs once and builds drivers and services from them with
+//! defaults. The library places their interrupts, executors and service
+//! tasks and applies the record-and-reset policy on the image's behalf.
+//!
+//! - [`aes`]: the shared AES service, one engine owner and many clients;
+//! - [`net`]: waiting on the IP service for an address or a link loss.
+
+pub mod aes;
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+mod boot;
+pub mod net;
+pub mod print;
+
+#[cfg(all(target_arch = "riscv32", not(feature = "esp32s31")))]
+compile_error!("select the application's chip: the `esp32s31` feature");
+
+#[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
+mod esp32s31;
+#[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
+pub use esp32s31::*;
+
+/// The image's entry: `boot` runs once before any executor, with the
+/// peripherals and the boot context; it builds drivers and services and ends
+/// with [`Boot::run`] and the application's future, which the library runs
+/// beside its service tasks. Every error records and resets.
+///
+/// ```ignore
+/// oer_espressif::entry!(boot);
+///
+/// fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
+///     let aes = Aes::start(p.aes, &mut boot)?;
+///     Ok(boot.run(app(aes)))
+/// }
+/// ```
+#[macro_export]
+macro_rules! entry {
+    ($boot:path) => {
+        $crate::__private::entry!(
+            __oer_main,
+            $crate::__private::Port,
+            exception = $crate::__private::exception
+        );
+
+        fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
+            $crate::__private::start(handoff, $boot)
+        }
+    };
+}

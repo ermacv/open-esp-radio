@@ -28,6 +28,7 @@
 pub mod console;
 pub mod fault;
 pub mod fifo;
+pub mod line;
 pub mod note;
 pub mod path;
 pub mod radio_root;
@@ -40,6 +41,7 @@ pub use console::{
     Console, DecodeError, MAX_NOTE_LINE, PREFIX, decode, emit_note, emit_previous_panic,
 };
 pub use fifo::{Fifo, FifoWriter, Lost, Patience, Written};
+pub use line::{Format, FormatError, Hex, Ipv4, Line, LineValue, LineValues};
 pub use note::{Note, Topic};
 pub use path::{DiagPath, DiagnosticPath};
 pub use record::{
