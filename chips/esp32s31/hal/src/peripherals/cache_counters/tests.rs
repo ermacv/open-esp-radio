@@ -1,6 +1,7 @@
 //! The counter owner over host memory from the cache block's base: the
-//! words a start writes, the counts and overflow bits a snapshot reads and
-//! the geometry's one-hot decoding, checked through the owner's own reads.
+//! words a start writes and the images it leaves last, the counts and
+//! overflow bits a snapshot reads and the geometry's one-hot decoding,
+//! checked through the owner's and the part's own accessors.
 
 use std::{vec, vec::Vec};
 
@@ -43,7 +44,7 @@ fn a_start_enables_exactly_the_selected_buses() {
 }
 
 #[test]
-fn a_start_writes_only_the_enable_word_and_the_overflow_clear() {
+fn a_start_writes_only_the_trace_the_enable_word_and_the_overflow_clear() {
     let mut counters = memory(0);
     let mut geometry = memory(0x5a5a_5a5a);
     let (counters_before, geometry_before) = (counters.clone(), geometry.clone());
@@ -52,21 +53,101 @@ fn a_start_writes_only_the_enable_word_and_the_overflow_clear() {
     drop(owner);
     assert_eq!(
         changed(&counters_before, &counters),
-        2,
+        3,
         "the counts and the raw overflow word stay as read"
     );
     assert_eq!(geometry, geometry_before, "a start writes no geometry word");
 }
 
 #[test]
-fn a_start_of_no_bus_from_zero_changes_nothing() {
+fn a_start_turns_the_counters_trace_on() {
+    let mut counters = memory(0);
+    let mut geometry = memory(0);
+    let mut owner = CacheCounters::host(&mut counters, &mut geometry).expect("host memory");
+    assert!(!owner.tracing());
+    owner.start(Buses {
+        dbus1: true,
+        ..NONE
+    });
+    assert!(owner.tracing());
+}
+
+/// The block after the writes a start must leave last: the trace on, the
+/// overflow clear of `buses`, and the enable word written from the value
+/// read with every clear lane zero.
+fn expected_after_start(fill: u32, buses: Buses) -> Vec<u32> {
+    let mut words = memory(fill);
+    let mut part = CacheAccessCounters::host(&mut words).expect("host memory");
+    part.modify_trace_ena(|w| {
+        w.set_l1_cache_trace_ena(true);
+    });
+    part.trigger_l1_cache_acs_cnt_int_clr(|t| {
+        if buses.ibus0 {
+            t.l1_ibus0_ovf_int_clr();
+        }
+        if buses.ibus1 {
+            t.l1_ibus1_ovf_int_clr();
+        }
+        if buses.dbus0 {
+            t.l1_dbus0_ovf_int_clr();
+        }
+        if buses.dbus1 {
+            t.l1_dbus1_ovf_int_clr();
+        }
+    });
+    part.modify_l1_cache_acs_cnt_ctrl(|w| {
+        w.set_l1_ibus0_cnt_ena(buses.ibus0)
+            .set_l1_ibus1_cnt_ena(buses.ibus1)
+            .set_l1_dbus0_cnt_ena(buses.dbus0)
+            .set_l1_dbus1_cnt_ena(buses.dbus1);
+    });
+    drop(part);
+    words
+}
+
+#[test]
+fn a_start_ends_with_an_enable_write_that_sets_no_clear_lane() {
+    let selections = [
+        Buses::ALL,
+        Buses {
+            ibus0: true,
+            dbus0: true,
+            ..NONE
+        },
+        Buses {
+            ibus1: true,
+            dbus1: true,
+            ..NONE
+        },
+    ];
+    for fill in [0, u32::MAX, 0xa5a5_a5a5] {
+        for buses in selections {
+            let mut counters = memory(fill);
+            let mut geometry = memory(0);
+            let mut owner = CacheCounters::host(&mut counters, &mut geometry).expect("host memory");
+            owner.start(buses);
+            drop(owner);
+            assert_eq!(
+                counters,
+                expected_after_start(fill, buses),
+                "fill {fill:#x}, {buses:?}: the counters run under an enable word \
+                 without a clear strobe"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_start_of_no_bus_from_zero_changes_only_the_trace() {
     let mut counters = memory(0);
     let mut geometry = memory(0);
     let before = counters.clone();
     let mut owner = CacheCounters::host(&mut counters, &mut geometry).expect("host memory");
     owner.start(NONE);
+    assert!(owner.tracing());
+    assert_eq!(owner.enabled(), NONE);
     drop(owner);
-    assert_eq!(counters, before);
+    assert_eq!(changed(&before, &counters), 1);
 }
 
 #[test]

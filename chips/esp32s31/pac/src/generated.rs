@@ -53452,14 +53452,14 @@ pub mod cache {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x160, 0x164, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1c4,
-            0x1c8, 0x1cc, 0x1d0, 0x1d4, 0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8,
+            0x1c8, 0x1cc, 0x1d0, 0x1d4, 0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8, 0x3d8,
         ];
     }
 
     impl oer_mmio::Words for CacheAccessCountersWords {
         const OWNED: &'static [usize] = &[
             0x160, 0x164, 0x180, 0x184, 0x188, 0x18c, 0x190, 0x194, 0x198, 0x19c, 0x1a0, 0x1c4,
-            0x1c8, 0x1cc, 0x1d0, 0x1d4, 0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8,
+            0x1c8, 0x1cc, 0x1d0, 0x1d4, 0x1d8, 0x1dc, 0x1e0, 0x1e4, 0x1e8, 0x3d8,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -53707,6 +53707,21 @@ pub mod cache {
         #[inline]
         pub fn read_l1_dbus1_acs_nxtlvl_wr_cnt(&self) -> l1_dbus1_acs_nxtlvl_wr_cnt::R {
             l1_dbus1_acs_nxtlvl_wr_cnt::R(self.0.read::<0x1e8>())
+        }
+
+        /// Read `TRACE_ENA`.
+        #[inline]
+        pub fn read_trace_ena(&self) -> trace_ena::R {
+            trace_ena::R(self.0.read::<0x3d8>())
+        }
+
+        /// Read `TRACE_ENA`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_trace_ena(&mut self, change: impl FnOnce(&mut trace_ena::W)) {
+            let mut value = trace_ena::W(self.0.read::<0x3d8>());
+            change(&mut value);
+            self.0.write::<0x3d8>(value.0);
         }
     }
 
@@ -306068,7 +306083,7 @@ pub mod ownership {
         pub cache_bus_observer: super::cache::CacheBusObserver,
     }
 
-    /// The L1 cache's access counters of instruction buses 0 and 1 and data buses 0 and 1 (their enable and clear word, the overflow raw status and its clear strobes, every count word) and an observer of the configured cache and block sizes and the L2 bypass. A HIL load image reads them over its measuring windows; no product owner uses them.
+    /// The L1 cache's access counters of instruction buses 0 and 1 and data buses 0 and 1 (their enable and clear word, the overflow raw status and its clear strobes, every count word, and the trace enable they count under) and an observer of the configured cache and block sizes and the L2 bypass. A HIL load image reads them over its measuring windows; no product owner uses them.
     pub struct CacheCounterPeripherals {
         /// The `CacheAccessCounters` part.
         pub cache_access_counters: super::cache::CacheAccessCounters,

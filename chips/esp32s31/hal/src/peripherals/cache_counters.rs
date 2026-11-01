@@ -26,8 +26,11 @@
 //! data bus carries is not established. Only accesses that reach the L1
 //! cache count.
 //!
-//! Adopting the owner writes nothing; [`CacheCounters::start`] enables and
-//! clears the selected buses' counters.
+//! The counters count only while the L1 cache's trace is on
+//! (`TRACE_ENA.L1_CACHE_TRACE_ENA`, "L1-Cache trace for the performance
+//! counter and fail tracer"; reset 0). Adopting the owner writes nothing;
+//! [`CacheCounters::start`] turns the trace on, clears the selected buses'
+//! counters and then enables them.
 
 use oer_esp32s31_pac::{
     cache::{self, CacheAccessCounters, CacheGeometry},
@@ -123,8 +126,8 @@ pub struct Geometry {
 }
 
 /// The access counters of instruction buses 0 and 1 and data buses 0 and
-/// 1 with their enable, clear and overflow words, and an observer of the
-/// cache geometry.
+/// 1 with their enable, clear and overflow words and the trace enable, and
+/// an observer of the cache geometry.
 #[must_use = "dropping the counters permanently loses their register authority"]
 pub struct CacheCounters<P: Placement = CachePlacement> {
     counters: CacheAccessCounters<P>,
@@ -157,22 +160,37 @@ impl<'a> CacheCounters<oer_mmio::Host<'a>> {
 }
 
 impl<P: Placement> CacheCounters<P> {
-    /// Count from zero on the buses `buses` selects and on no other: set
-    /// each bus's enable to its selection, then clear the selected buses'
-    /// counts and overflow bits. Three kinds of write, in this order: the
-    /// enable word (the other lanes as read), each selected bus's count
-    /// clear (`L1_*_CNT_CLR`) and one overflow clear of the selected buses
-    /// (`L1_*_OVF_INT_CLR`, which the header says also clears the counts).
-    /// A bus counts from its own clear, a few writes apart from the others.
+    /// Count from zero on the buses `buses` selects and on no other. Five
+    /// steps, in this order, each one typed write:
+    ///
+    /// 1. set `TRACE_ENA.L1_CACHE_TRACE_ENA`, which the header names the
+    ///    L1 cache's trace "for the performance counter and fail tracer"
+    ///    (the other lane as read);
+    /// 2. stop every bus's counter: every `L1_*_CNT_ENA` zero, no clear;
+    /// 3. clear each selected bus's counts (`L1_*_CNT_CLR`), each strobe
+    ///    in a write of its own with every enable still zero;
+    /// 4. clear the selected buses' overflow bits (`L1_*_OVF_INT_CLR`,
+    ///    which the header says also clears the counts);
+    /// 5. enable the selected buses in one write that sets no clear lane.
+    ///
+    /// Every selected bus thus starts counting at the same write, and no
+    /// clear lane is set in the word the counters then run under: `CNT_CLR`
+    /// is `WT`, and the PAC writes a trigger lane only in its own strobe.
     ///
     /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_CACHE_REG_H
-    /// (`L1_CACHE_ACS_CNT_CTRL`, `L1_CACHE_ACS_CNT_INT_CLR`).
+    /// (`TRACE_ENA`, `L1_CACHE_ACS_CNT_CTRL`, `L1_CACHE_ACS_CNT_INT_CLR`).
+    /// The earlier open-esp-radio-rs implementation
+    /// (`crates/adapters/esp-hal/esp32s31/soc/src/cache/performance.rs`,
+    /// da26f64c3, `enable`) took the same order: trace, clear, then enable.
     pub fn start(&mut self, buses: Buses) {
+        self.counters.modify_trace_ena(|w| {
+            w.set_l1_cache_trace_ena(true);
+        });
         self.counters.modify_l1_cache_acs_cnt_ctrl(|w| {
-            w.set_l1_ibus0_cnt_ena(buses.ibus0)
-                .set_l1_ibus1_cnt_ena(buses.ibus1)
-                .set_l1_dbus0_cnt_ena(buses.dbus0)
-                .set_l1_dbus1_cnt_ena(buses.dbus1);
+            w.set_l1_ibus0_cnt_ena(false)
+                .set_l1_ibus1_cnt_ena(false)
+                .set_l1_dbus0_cnt_ena(false)
+                .set_l1_dbus1_cnt_ena(false);
         });
         if buses.ibus0 {
             self.counters
@@ -204,6 +222,18 @@ impl<P: Placement> CacheCounters<P> {
                 t.l1_dbus1_ovf_int_clr();
             }
         });
+        self.counters.modify_l1_cache_acs_cnt_ctrl(|w| {
+            w.set_l1_ibus0_cnt_ena(buses.ibus0)
+                .set_l1_ibus1_cnt_ena(buses.ibus1)
+                .set_l1_dbus0_cnt_ena(buses.dbus0)
+                .set_l1_dbus1_cnt_ena(buses.dbus1);
+        });
+    }
+
+    /// Whether the L1 cache's trace for its performance counters is on
+    /// (`TRACE_ENA.L1_CACHE_TRACE_ENA`).
+    pub fn tracing(&self) -> bool {
+        self.counters.read_trace_ena().l1_cache_trace_ena()
     }
 
     /// Whose counters run: each bus's enable bit.

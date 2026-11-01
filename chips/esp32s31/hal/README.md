@@ -119,11 +119,13 @@ enables TIMG1 T0 in group one's clock word, after the group's reset pulse.
 
 `Hardware::cache_counters` owns the L1 cache's access counters of
 instruction buses 0 and 1 and data buses 0 and 1 (the enable/clear word,
-the overflow raw word and its clear strobes, every count) and a read-only
+the overflow raw word and its clear strobes, every count, the L1 trace
+enable they count under) and a read-only
 observer of the configured cache and block sizes and the L2 bypass; no
-product owner uses them. Adoption writes nothing. `start` sets each bus's
-enable to its selection and clears the selected buses' counts and overflow
-bits; `snapshot` reads every count, then the overflow bits; `geometry`
+product owner uses them. Adoption writes nothing. `start` turns the L1
+trace on, stops every bus, clears the selected buses' counts and overflow
+bits, then enables the selection in one write that sets no clear lane;
+`snapshot` reads every count, then the overflow bits; `geometry`
 decodes the one-hot size words and adds the fixed L1 ways. The L2 counters'
 enables are debug-only in the vendor header and stay unclaimed.
 

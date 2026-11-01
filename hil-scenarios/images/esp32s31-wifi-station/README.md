@@ -109,8 +109,9 @@ without a profile answers `NotSampled`.
   frames: taken, or refused for want of a pool packet, of queue room or for
   their length or a down link. The bridge reports each frame through
   `oer_trace::observe!`; a build without `oer_trace` counts none of them.
-  Just before the window's start it enables and clears the L1 cache's
-  access counters of instruction buses 0 and 1 and data buses 0 and 1
+  Just before the window's start it turns the L1 cache's trace on, then
+  clears and enables the L1 cache's access counters of instruction buses 0
+  and 1 and data buses 0 and 1
   (`Hardware::cache_counters`, `oer_esp32s31_hal::peripherals::cache_counters`)
   and reads each bus's hits, misses, conflicts, next-level reads (a data
   bus also its next-level writes) and overflow bit at both ends, with the
