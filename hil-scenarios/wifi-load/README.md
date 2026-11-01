@@ -60,6 +60,15 @@ sequences `missing_by_timeout`, `missing_other`, its `duplicates` and
 agreement's negotiated `agreement_window` at the window's end, and
 `rsn_inputs_dropped`.
 
+`tx.ampdu` holds the window's differences of the station's transmit
+agreements, also counted only by a trace build: data `aggregates` settled
+(by a terminal, or `refused` before the port), their `subframes` and
+`average_subframes` (null without an aggregate), the aggregates by
+subframes `subframes_1`, `subframes_2`, `subframes_3_4`, `subframes_5_8`,
+`subframes_9_16` and `subframes_17_32` (these wrap at 2^16), the members
+the BlockAck `acknowledged`, those `retried` in a later aggregate and those
+`dropped`, and the `block_ack_requests` the station sent.
+
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)
 and `ibus1` (hart 1's, which this image does not run), `dbus0` and `dbus1`

@@ -330,6 +330,8 @@ pub struct Counters {
     /// the station service's. Only a trace build counts them; others report
     /// zeros.
     pub rx: RxCounts,
+    /// The transmit path's counts within the window.
+    pub tx: TxCounts,
 }
 
 /// The receive path's counts within one window, from the window's start
@@ -525,6 +527,65 @@ impl StationRx {
             rsn_inputs_dropped: end
                 .rsn_inputs_dropped
                 .wrapping_sub(start.rsn_inputs_dropped),
+        }
+    }
+}
+
+/// The transmit path's counts within one window, from the window's start
+/// and end readings. Only a trace build counts them; others report zeros.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TxCounts {
+    pub ampdu: TxAmpdu,
+}
+
+/// What the station's transmit agreements settled: data aggregates by
+/// their subframes, their members by BlockAck outcome, and the
+/// BlockAckReqs the station sent.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct TxAmpdu {
+    /// Aggregates settled: by a terminal, or refused before the port.
+    pub aggregates: u32,
+    /// Of them, refused before the port.
+    pub refused: u32,
+    /// Their subframes: every member of every aggregate.
+    pub subframes: u32,
+    /// Aggregates by subframes: 1, 2, 3 to 4, 5 to 8, 9 to 16, 17 to 32.
+    /// These wrap at 2^16, so the counters fit one response.
+    pub subframes_1: u16,
+    pub subframes_2: u16,
+    pub subframes_3_4: u16,
+    pub subframes_5_8: u16,
+    pub subframes_9_16: u16,
+    pub subframes_17_32: u16,
+    /// Members the BlockAck acknowledged, back in their queue for a later
+    /// aggregate, and dropped.
+    pub acknowledged: u32,
+    pub retried: u32,
+    pub dropped: u32,
+    /// BlockAckReqs the station sent.
+    pub block_ack_requests: u32,
+}
+
+impl TxAmpdu {
+    /// The counts between readings `start` and `end`, wrapping at 2^32
+    /// (the histogram at 2^16).
+    pub const fn window(start: &Self, end: &Self) -> Self {
+        Self {
+            aggregates: end.aggregates.wrapping_sub(start.aggregates),
+            refused: end.refused.wrapping_sub(start.refused),
+            subframes: end.subframes.wrapping_sub(start.subframes),
+            subframes_1: end.subframes_1.wrapping_sub(start.subframes_1),
+            subframes_2: end.subframes_2.wrapping_sub(start.subframes_2),
+            subframes_3_4: end.subframes_3_4.wrapping_sub(start.subframes_3_4),
+            subframes_5_8: end.subframes_5_8.wrapping_sub(start.subframes_5_8),
+            subframes_9_16: end.subframes_9_16.wrapping_sub(start.subframes_9_16),
+            subframes_17_32: end.subframes_17_32.wrapping_sub(start.subframes_17_32),
+            acknowledged: end.acknowledged.wrapping_sub(start.acknowledged),
+            retried: end.retried.wrapping_sub(start.retried),
+            dropped: end.dropped.wrapping_sub(start.dropped),
+            block_ack_requests: end
+                .block_ack_requests
+                .wrapping_sub(start.block_ack_requests),
         }
     }
 }

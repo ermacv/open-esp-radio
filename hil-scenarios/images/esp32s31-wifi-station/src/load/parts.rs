@@ -372,6 +372,10 @@ impl oer_trace::Observer for Observer {
         if let Some(decision) = Self::decoded::<E, StationRx>(event) {
             super::counters::observe_station(decision);
         }
+        type StationTx = oer_esp32s31_wifi::observation::StationTxAmpdu;
+        if let Some(settled) = Self::decoded::<E, StationTx>(event) {
+            super::counters::observe_station_tx(settled);
+        }
         if let Some(sample) = Self::decoded::<E, oer_trace::profile::PcSample>(event) {
             super::sampler::record(sample);
         }

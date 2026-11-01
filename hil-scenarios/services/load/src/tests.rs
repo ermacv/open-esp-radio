@@ -91,6 +91,23 @@ fn the_largest_reports_fit_one_response() {
         cache: full_cache(),
         cache_geometry: full_geometry(),
         rx: full_rx(),
+        tx: TxCounts {
+            ampdu: TxAmpdu {
+                aggregates: u32::MAX,
+                refused: u32::MAX,
+                subframes: u32::MAX,
+                subframes_1: u16::MAX,
+                subframes_2: u16::MAX,
+                subframes_3_4: u16::MAX,
+                subframes_5_8: u16::MAX,
+                subframes_9_16: u16::MAX,
+                subframes_17_32: u16::MAX,
+                acknowledged: u32::MAX,
+                retried: u32::MAX,
+                dropped: u32::MAX,
+                block_ack_requests: u32::MAX,
+            },
+        },
     });
     assert!(postcard::to_slice(&counters, &mut buffer).unwrap().len() <= 512);
     let samples = SamplesCollected::Page(Samples {
@@ -308,6 +325,31 @@ fn a_receive_window_takes_wrapping_differences_and_the_end_s_agreement_window() 
     );
     // A reading the image could not take makes the window's unavailable.
     assert!(!DriverRx::window(&DriverRx::default(), &end.driver).available);
+}
+
+#[test]
+fn a_transmit_window_takes_wrapping_differences() {
+    let start = TxAmpdu {
+        aggregates: u32::MAX,
+        subframes_17_32: 2,
+        block_ack_requests: 1,
+        ..TxAmpdu::default()
+    };
+    let end = TxAmpdu {
+        aggregates: 3,
+        subframes_17_32: 6,
+        block_ack_requests: 1,
+        ..TxAmpdu::default()
+    };
+    let window = TxAmpdu::window(&start, &end);
+    assert_eq!(
+        (
+            window.aggregates,
+            window.subframes_17_32,
+            window.block_ack_requests
+        ),
+        (4, 4, 0)
+    );
 }
 
 #[test]
