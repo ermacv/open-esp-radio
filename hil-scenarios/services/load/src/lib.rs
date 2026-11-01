@@ -52,7 +52,7 @@ pub const MAX_PARTS: usize = 12;
 pub const MAX_PART_NAME: usize = 12;
 /// The most samples one [`Samples`] answer holds; an image answers its
 /// samples in pages ([`CollectSamples::from`]).
-pub const MAX_PAGE_SAMPLES: usize = 40;
+pub const MAX_PAGE_SAMPLES: usize = 27;
 
 oer_hil_protocol::messages! {
     endpoint Start = "load/start" => Started;
@@ -374,6 +374,10 @@ pub struct Sample {
     /// The interrupted code's raw CLIC level: 0 for a task in thread mode,
     /// otherwise the level of the interrupt handler or executor it ran in.
     pub level: u8,
+    /// The interrupted return address register, where the image records
+    /// it: in a leaf function such as a memory copy, the caller's return
+    /// address.
+    pub ra: Option<u32>,
 }
 
 /// Why the image refused a request.

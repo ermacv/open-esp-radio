@@ -30,6 +30,12 @@
 //! No trap saves the floating-point state, so neither part executes a
 //! floating-point instruction, and neither writes a CSR other than
 //! `mscratch`, `mstatus`, `mepc`, `mcause`, `tcontrol` and the threshold.
+//!
+//! The one memory access outside the frame is an interrupt entry's aligned
+//! word store into [`ENTRY_RECORD`], when the image defines it, once `sp`
+//! is on the interrupt stack: a trace build's record of the interrupted
+//! `ra`. The entry never reads it, and the exception entry may not store
+//! into it.
 use crate::image::Function;
 use crate::sweep::destination;
 use oer_analysis_elf::rv32::{self, Role};
@@ -40,6 +46,11 @@ use oer_riscv::clic::MINTTHRESH;
 use oer_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
 use oer_riscv::trigger::TCONTROL;
 use std::collections::BTreeMap;
+
+/// The image symbol whose words an interrupt entry may store into outside
+/// its frame: the staged runtime's per-hart record of the interrupted `ra`
+/// in a trace build.
+pub const ENTRY_RECORD: &str = "_runtime_interrupted_ra";
 
 /// Instructions one path of an entry may execute before its handler.
 const MAX_STEPS: usize = 512;
@@ -159,7 +170,16 @@ fn check(
             name(entry)
         ))
     };
-    let mut pending = vec![State::entry(entry)];
+    // Only an interrupt entry records; the record has a size.
+    let record = returns
+        .then(|| file.symbols().find(|symbol| symbol.name == ENTRY_RECORD))
+        .flatten()
+        .and_then(|symbol| {
+            let start = u32::try_from(symbol.address).ok()?;
+            let end = start.checked_add(u32::try_from(symbol.size).ok()?)?;
+            (end > start).then_some(start..end)
+        });
+    let mut pending = vec![State::entry(entry, record)];
     let mut paths = 0;
     let mut found: Option<TrapEntry> = None;
     while let Some(mut state) = pending.pop() {
@@ -410,6 +430,8 @@ struct State {
     /// The interrupted `sp` and `mscratch`, which `mret` must find again.
     trap_sp: Value,
     trap_scratch: Value,
+    /// The [`ENTRY_RECORD`] words an interrupt entry may store into.
+    record: Option<std::ops::Range<u32>>,
 }
 
 enum Step {
@@ -428,7 +450,7 @@ fn preserved(register: usize) -> bool {
 }
 
 impl State {
-    fn entry(pc: u32) -> Self {
+    fn entry(pc: u32, record: Option<std::ops::Range<u32>>) -> Self {
         let mut registers: [Value; 32] =
             std::array::from_fn(|register| Value::Register(register as u8));
         registers[0] = Value::Constant(0);
@@ -448,6 +470,7 @@ impl State {
             memory: BTreeMap::new(),
             trap_sp: Value::At(Base::Sp, 0),
             trap_scratch: Value::At(Base::Scratch, 0),
+            record,
         }
     }
 
@@ -566,9 +589,26 @@ impl State {
         Step::Next
     }
 
+    /// Whether `width` bytes at `base + offset` are an aligned word of the
+    /// [`ENTRY_RECORD`], once `sp` is on the interrupt stack.
+    fn in_record(&self, base: u8, offset: i64, width: i64) -> bool {
+        let (Some(record), Value::Constant(address)) = (&self.record, self.get(base).add(offset))
+        else {
+            return false;
+        };
+        self.frame().is_some()
+            && width == 4
+            && address % 4 == 0
+            && record.contains(&address)
+            && address.checked_add(4).is_some_and(|end| end <= record.end)
+    }
+
     /// Store `width` bytes of `value` at `base + offset`.
     fn store(&mut self, base: u8, offset: i64, width: i64, value: Value) -> Step {
         let Some(address) = self.in_frame(base, offset, width) else {
+            if self.in_record(base, offset, width) {
+                return Step::Next;
+            }
             return Step::Fail("accesses memory outside its frame on the interrupt stack");
         };
         self.memory

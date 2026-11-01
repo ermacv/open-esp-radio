@@ -216,7 +216,11 @@ task stack (PSRAM). Each memory access must address the entry's frame below
 the lower of the two, which the entry may learn only from an unsigned
 comparison of both (a register swap through three `xor`s keeps the values
 apart); an access before that, an unknown transfer or different handlers on
-different paths fail. Before an entry sets `mstatus.MIE` (admits nesting) its
+different paths fail. The one access outside the frame is an interrupt
+entry's aligned word store, once `sp` is on the interrupt stack, into the
+image's `_runtime_interrupted_ra` (`ENTRY_RECORD`), when the image
+defines it: a trace build's per-hart record of the interrupted `ra`; no
+entry reads it, and the exception entry may not store into it. Before an entry sets `mstatus.MIE` (admits nesting) its
 frame must hold `mepc`, `mcause` and `mstatus` as the trap left them; it
 changes `tcontrol` only once the frame holds it, and it calls its handler
 with the FPU off (`mstatus.FS` cleared). No trap saves the floating-point
@@ -240,7 +244,7 @@ its loads, and a flag it holds decides a branch. A lost or stale
 `mepc`/`mcause`/`tcontrol`, a wrong `sp`, an early or repeated `MIE`, a
 deeper exit, the FPU left on or touched, another CSR written or a register
 not restored fails the check (`trap_exit_tests.rs` checks the staged
-runtime's own `vectors.s`). The compiler fixture reuses the runtime's
+runtime's own `vectors.s`, as a plain and as a trace build assembles it). The compiler fixture reuses the runtime's
 `global_asm!` invocation, `TrapFrame` declaration, architectural definitions
 and generated Rust vector tables and markers. Its operands therefore come
 from the same `size_of`, `offset_of` and constants as the runtime. Mutations

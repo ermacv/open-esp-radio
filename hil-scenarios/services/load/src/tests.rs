@@ -102,6 +102,7 @@ fn the_largest_reports_fit_one_response() {
                 tick: u32::MAX,
                 pc: u32::MAX,
                 level: u8::MAX,
+                ra: Some(u32::MAX),
             },
             MAX_PAGE_SAMPLES,
         )

@@ -531,15 +531,18 @@ impl Gates {
                                         .to_owned(),
                                 )),
                             };
-                        self.panics_of(&image, input, CheckedElf::Runtime, roots, &mut outcome);
                         // A report beside the panic sites, from the same
-                        // analysis; it decides nothing.
-                        match copies::write(&image, input.root, input.output) {
-                            Ok(()) => outcome.reports.push(copies::RUNTIME_REPORT.to_owned()),
+                        // analysis and roots; it decides nothing.
+                        let reach = roots.as_ref().ok().map(Vec::as_slice);
+                        match copies::write(&image, input.root, input.output, reach) {
+                            Ok(()) => outcome.reports.extend(
+                                [copies::RUNTIME_REPORT, copies::RUNTIME_JSON].map(str::to_owned),
+                            ),
                             Err(error) => outcome
                                 .warnings
                                 .push(format!("{}: {error}", copies::RUNTIME_REPORT)),
                         }
+                        self.panics_of(&image, input, CheckedElf::Runtime, roots, &mut outcome);
                     }
                 }
                 Err(error) => {

@@ -362,6 +362,7 @@ fn every_category_and_hardware_excess_is_reported_without_a_failed_check() {
         label: "hardware".into(),
         hardware: true,
         sites,
+        reached: BTreeSet::new(),
     }];
     let input = crate::CheckInput {
         root: directory.path(),

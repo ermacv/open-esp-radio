@@ -193,6 +193,20 @@ counts and budgets by layer and for `hardware`, each root's sites by layer, and 
 its caller, entry and the roots that reach it. `cargo fw build` prints both
 ELFs' frame and panic reports, including `--analysis`.
 
+Beside the panic report, the runtime ELF's copy report
+`runtime-copies.txt` lists every direct call or tail jump into `memcpy` or
+`memmove` (and their `compiler_builtins` names) from the final machine
+code: constant sizes from the value analysis' `a2` at the call, sites of at
+least 512 bytes one by one with their caller and DWARF inline chain,
+smaller ones counted and variable ones per caller. Each listed site and
+caller names the panic check's roots whose bound reaches its caller, and
+each root has its totals (sites, constant sites and bytes, variable sites);
+`-` collects the sites no root reaches. `runtime-copies.json`
+(`copies::Copies`, read with `copies::read`) holds every site with its
+return address, its caller's code range, its source and roots, and the copy
+entries' code ranges, for a host program that weights the sites by a PC
+profile. The report decides nothing and fails no build.
+
 The S31 accesses flash and PSRAM through separate MSPI controllers: a flash
 operation does not disable the PSRAM cache. Placement follows this hardware
 contract. The image linker runs the same interrupt analysis and `CodePlacement`
