@@ -28,8 +28,8 @@ oer-services-load = { path = "../../services/load" }
 heapless = "0.9.3"
 # The pinned stack's UDP sockets for the load service (the revision
 # `oer-embassy-net` pins), and each socket's receive queue at its largest.
-embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "935de4d28f1178ff9731b41e94fb1cab54f5fd2d", default-features = false, features = ["udp"] }
-xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "814e8d98943457632212a019826e1f4977053d5f", default-features = false, features = ["udp-rx-queue-count-16"] }
+embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "aa985de25232b805251e7de11479920937bc8582", default-features = false, features = ["udp"] }
+xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "1ec147d50b436c68769ffda7c783916b99f43cfc", default-features = false, features = ["udp-rx-queue-count-16"] }
 oer-espressif-staged-runtime = { path = "../../../chips/espressif/staged-runtime" }
 oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose", features = ["wifi-fault"] }
 oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }

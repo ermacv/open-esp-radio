@@ -267,8 +267,14 @@ fn a_lent_frame_becomes_a_packet_in_its_own_buffer() {
     drop(packet);
     assert_eq!(
         dropped.load(core::sync::atomic::Ordering::Relaxed),
+        0,
+        "the packet's drop only releases the slot"
+    );
+    assert_eq!(slots.reclaim(), 1);
+    assert_eq!(
+        dropped.load(core::sync::atomic::Ordering::Relaxed),
         1,
-        "dropping the packet returns the buffer once"
+        "the reclaim returns the buffer once"
     );
 }
 

@@ -489,6 +489,8 @@ async fn drive<
             );
         }
         poll_stack(cx);
+        // The stack's poll may have dropped lent frames' packets.
+        bridge.reclaim_lent();
         let ipv4 = if link.state == LinkState::Down {
             Ipv4Status::Unconfigured
         } else {
@@ -527,6 +529,9 @@ fn finish<
 ) -> Poll<Result<(), Error>> {
     let result = result.and(bridge.stop().map_err(|_| Error::ContextAccessRefused));
     iface.drop_received();
+    // The packets the interface held may be lent frames: return them now,
+    // the service polls its bridge no more.
+    bridge.reclaim_lent();
     let result = result.and(iface.clear());
     state.publish(
         Status {

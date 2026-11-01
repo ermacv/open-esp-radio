@@ -254,7 +254,17 @@ impl<
         while let Some(packet) = self.radio.try_receive_tx()? {
             drop(packet);
         }
+        self.reclaim_lent();
         Ok(())
+    }
+
+    /// Return to the device every lent frame whose packet the stack
+    /// dropped since the last reclaim: the typed slots drop its owner, a
+    /// direct call. A packet's drop only released its slot.
+    pub(crate) fn reclaim_lent(&self) {
+        if let Some(lent) = self.lent {
+            lent.reclaim();
+        }
     }
 
     /// One drain/one-TX turn. Always arm link and RX before observing them;
@@ -269,6 +279,12 @@ impl<
         transmitted: impl FnMut(EthernetFrameView<'_>),
     ) -> core::task::Poll<Result<core::convert::Infallible, crate::AccessRefused>> {
         use core::task::Poll;
+        // A lent frame's packet dropped later wakes this task to return it:
+        // register before reclaiming, so no release is missed.
+        if let Some(lent) = self.lent {
+            lent.register_reclaim(cx.waker());
+        }
+        self.reclaim_lent();
         let _ = self.device.poll_link(cx);
         self.radio
             .link_controller()
