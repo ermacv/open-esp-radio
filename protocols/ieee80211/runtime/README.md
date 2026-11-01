@@ -9,15 +9,8 @@ the cores (`sta`, `upper-mac`, `arbiter`) and portable support, never
 `oer-ieee80211-wire`, `oer-ieee80211-core-security-cipher`, a chip crate, an executor or
 Embassy time (`cargo test -p oer-test-layers`).
 
-The station's key-data unwrap runs in a `KeyUnwrapSlot`: the image's
-`oer_crypto::KeyUnwrap` engine as a static type, lent to `run` beside the
-timer. The slot is one more source of the common select, beside port events,
-commands and deadlines; its response returns the station's ticket before any
-other input can end the phase. The engine's operation is `Unpin`. The caller
-owns the slot, so an operation outlives a dropped run and keeps its buffer
-until the engine finishes; the next run finishes it before serving, and a run
-that ends finishes its own operation before the station retires. The runtime
-depends on `oer-crypto`, not on the software engine in `cipher`.
+The station unwraps its key data in its own step, over the block
+primitive its callbacks supply; the runtime carries no unwrap.
 
 `station` provides `Control` and the port-generic `Runner`; `monitor` holds the capture and
 injection handoffs of a monitor. The frames a monitor keeps and the channels

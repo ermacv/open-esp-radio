@@ -47,7 +47,7 @@ oer-esp32s31-hal = { path = "../../chips/esp32s31/hal" }
 oer-espressif-executor = { path = "../../chips/espressif/executor", features = ["port-slots"] }
 oer-espressif-interrupt-table = { path = "../../chips/espressif/interrupt-table" }
 oer-espressif-staged-runtime = { path = "../../chips/espressif/staged-runtime" }
-oer-ieee80211-core-roles-sta = { path = "../../protocols/ieee80211/core/roles/sta" }
+oer-ieee80211-core-security-cipher = { path = "../../protocols/ieee80211/core/security/cipher" }
 oer-ieee80211-runtime = { path = "../../protocols/ieee80211/runtime" }
 oer-esp32s31-wifi = { path = "../../chips/esp32s31/wifi" }
 oer-riscv = { path = "../../portable/riscv" }

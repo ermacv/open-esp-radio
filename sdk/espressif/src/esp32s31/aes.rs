@@ -12,8 +12,8 @@ use crate::aes::AesService;
 /// The engine the service owns: the polled CPU AES, IRQ55 held silent.
 pub(crate) type Engine = oer_esp32s31_compose::crypto::KeyUnwrapEngine;
 
-/// Key data capacity of every request: the Wi-Fi station's RSN key data.
-pub const CAPACITY: usize = oer_ieee80211_core_roles_sta::machine::KEY_DATA_CAPACITY;
+/// Key data capacity of every request: the largest RSN key data.
+pub const CAPACITY: usize = oer_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY;
 
 /// Client seats of the service [`Aes::start`] makes.
 pub const CLIENTS: usize = 4;

@@ -5484,7 +5484,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         protection: EapolProtection,
     ) -> Change<T, K> {
         let unwrapped = match request.key_unwrap() {
-            Ok(unwrap) => key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_blocks(), unwrap).into_plaintext(),
+            Ok(unwrap) => key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_blocks(), unwrap)
+                .into_plaintext(),
             Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
                 return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
             }
@@ -6162,7 +6163,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 Rekey::Unwrap(request, protection) => {
                     match request.key_unwrap() {
                         Ok(unwrap) => {
-                            let unwrapped = key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_blocks(), unwrap).into_plaintext();
+                            let unwrapped = key_unwrap::unwrap_now(
+                                self.config.callbacks.key_unwrap_blocks(),
+                                unwrap,
+                            )
+                            .into_plaintext();
                             if let Err(reason) =
                                 rsn.complete_unwrap(request, protection, unwrapped, events)
                             {

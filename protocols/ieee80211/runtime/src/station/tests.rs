@@ -1193,12 +1193,9 @@ where
                     completed.read()
                 }
                 _ => {
-                    join(
-                        service.run(owner, &mut io, &*world.clock),
-                        script,
-                    )
-                    .await
-                    .0
+                    join(service.run(owner, &mut io, &*world.clock), script)
+                        .await
+                        .0
                 }
             };
             let completed = if let Some(protected) = world.restart_stopped_service.get() {
@@ -1224,28 +1221,25 @@ where
                 let (control, next) = Control::new(sender, &state).unwrap();
                 world.commands.set(Some(control));
                 io.control = next;
-                let (completed, ()) = join(
-                    service.run(owner, &mut io, &*world.clock),
-                    async {
-                        let mut seen = world.air.sent().len();
-                        world.associate(&mut seen, protected).await;
-                        if protected {
-                            world.handshake(&mut seen).await;
-                        } else {
-                            world
-                                .notice(StaNotice::Connected {
-                                    bssid: BSSID,
-                                    channel: 6,
-                                })
-                                .await;
-                        }
-                        world.send_msdu(ACCESS_POINT_ADDRESS);
-                        let data = world.sent(&mut seen, DATA).await;
-                        assert_eq!(data.plaintext[4..10], BSSID);
-                        assert_eq!(data.key.is_some(), protected);
-                        world.command(ControlCommand::Stop).await;
-                    },
-                )
+                let (completed, ()) = join(service.run(owner, &mut io, &*world.clock), async {
+                    let mut seen = world.air.sent().len();
+                    world.associate(&mut seen, protected).await;
+                    if protected {
+                        world.handshake(&mut seen).await;
+                    } else {
+                        world
+                            .notice(StaNotice::Connected {
+                                bssid: BSSID,
+                                channel: 6,
+                            })
+                            .await;
+                    }
+                    world.send_msdu(ACCESS_POINT_ADDRESS);
+                    let data = world.sent(&mut seen, DATA).await;
+                    assert_eq!(data.plaintext[4..10], BSSID);
+                    assert_eq!(data.key.is_some(), protected);
+                    world.command(ControlCommand::Stop).await;
+                })
                 .await;
                 completed
             } else {
