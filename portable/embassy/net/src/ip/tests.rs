@@ -760,7 +760,10 @@ fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
     }
     PortState::wake(&port.borrow().rx_waker);
     settle(&mut task, &scheduled, &mut cx);
-    assert!(port.borrow().rx.is_empty(), "the bridge took both datagrams");
+    assert!(
+        port.borrow().rx.is_empty(),
+        "the bridge took both datagrams"
+    );
     assert_eq!(
         returned.load(Ordering::Relaxed),
         0,
