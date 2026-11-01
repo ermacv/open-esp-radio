@@ -143,12 +143,10 @@ impl<'a, C: Clock, const SLOTS: usize, const BUFFER: usize> Publisher<'a, BUFFER
             handoff: self.clock.now(),
             stamp,
         });
-        let length = frame.length();
         self.sender
             .frames
             .try_send(frame)
             .map_err(|AffineSpscTrySendError(frame)| frame)?;
-        self.sender.counters.received(length);
         self.sender.waker.wake();
         Ok(())
     }

@@ -252,7 +252,6 @@ impl<'pool, const CAPACITY: usize, const STAGE_SLOTS: usize> Publisher<'pool, CA
         &self,
         frame: NetworkRxFrame<'pool, STAGE_SLOTS, CAPACITY>,
     ) -> Result<(), NetworkRxFrame<'pool, STAGE_SLOTS, CAPACITY>> {
-        self.counters.received(frame.length());
         drop(frame);
         Ok(())
     }

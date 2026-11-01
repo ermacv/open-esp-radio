@@ -1162,7 +1162,6 @@ impl<const N: usize> Publisher<'static, BUFFER, N> for ReturningSink<N> {
         &self,
         frame: NetworkRxFrame<'static, N, BUFFER>,
     ) -> Result<(), NetworkRxFrame<'static, N, BUFFER>> {
-        self.counters.received(frame.length());
         if self.holding.get() {
             self.held.borrow_mut().push(self.returns.hold(frame));
         }
