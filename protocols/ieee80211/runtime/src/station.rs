@@ -3424,14 +3424,16 @@ where
     else {
         return none;
     };
-    if phase.station().ampdu_rate(rate).is_err() {
+    let Ok(rate) = phase.station().ampdu_rate(rate) else {
         return none;
-    }
+    };
+    // The port's length at the aggregate's rate: the assembler takes no
+    // more frames than it holds.
     let capabilities = phase.station().ampdu_capabilities();
-    station.tx_aggregate_windows(
-        usize::from(capabilities.max_subframes),
-        capabilities.max_length,
-    )
+    let Ok(max_length) = capabilities.max_length.at(rate.rate().get()) else {
+        return none;
+    };
+    station.tx_aggregate_windows(usize::from(capabilities.max_subframes), max_length.get())
 }
 
 /// Build one data aggregate through the station interface's builder and

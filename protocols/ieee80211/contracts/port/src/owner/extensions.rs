@@ -469,12 +469,16 @@ pub trait AmpduPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id> {
     /// What the backend aggregates.
     fn ampdu_capabilities(&self) -> AmpduCapabilities;
 
-    /// Check that the backend aggregates at this phase's rate.
+    /// Check that the backend aggregates at this phase's rate: a rate of its
+    /// formats with an A-MPDU length.
     fn ampdu_rate(
         &self,
         rate: PhaseRate<'p, 'id, Self::Caps>,
     ) -> Result<AmpduRate<'p, 'id, Self::Caps>, PhaseRate<'p, 'id, Self::Caps>> {
-        if self.ampdu_capabilities().formats.contains_rate(rate.get()) {
+        let capabilities = self.ampdu_capabilities();
+        if capabilities.formats.contains_rate(rate.get())
+            && capabilities.max_length.at(rate.get()).is_ok()
+        {
             Ok(AmpduRate(rate))
         } else {
             Err(rate)

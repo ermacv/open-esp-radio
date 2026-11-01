@@ -447,7 +447,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RefusalBody {
             let mut phase = owner.phase();
             let mut buffers = resources.buffers.into_iter();
             let rate = PhyRate::Ht(
-                HtRate::new(HtMcs::new(7).expect("MCS"), PpduBandwidth::Mhz20, false)
+                HtRate::new(HtMcs::new(0).expect("MCS"), PpduBandwidth::Mhz20, false)
                     .expect("HT rate"),
             );
             let rate = phase.rate(rate).expect("a supported rate");
@@ -502,8 +502,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RefusalBody {
             );
             drop(aggregate);
 
-            // The length: at most the declared maximum, with every
-            // subframe's FCS and delimiter at the widest spacing.
+            // The length: at most the rate's (6 490 octets at MCS 0), with
+            // every subframe's FCS and delimiter at the widest spacing.
             let mut aggregate = push(builder(), fresh(&mut buffers, 0, 480));
             for sequence in 1..13 {
                 aggregate = push(aggregate, fresh(&mut buffers, sequence, 480));

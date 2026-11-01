@@ -173,7 +173,9 @@ Module map:
   (`Station::tx_aggregate_windows`) a TID's owed MPDUs whose sequence
   numbers follow one another inside the window go as one A-MPDU
   (`StaData::poll_attempt`), at most the port's subframes and the lower of
-  the access point's and the port's Maximum A-MPDU Length; one ticket and
+  the access point's Maximum A-MPDU Length and the port's length at the
+  aggregate's rate (`AmpduCapabilities::max_length`), counted before any
+  MSDU leaves its queue; one ticket and
   one admission permission serve the aggregate. Each member's description
   waits in the machine's member bank (one place per buffer, `CAP`) while
   the aggregate is out; its context carries only the places, in subframe

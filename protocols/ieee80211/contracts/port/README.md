@@ -328,7 +328,7 @@ Extension traits of the phase: `AmpduPhase` (one attempt sends one A-MPDU,
 each subframe in a buffer of its own; every phase's station interface
 implements it, so a station service always aggregates), `BeaconTimingPhase` (an interface's
 TSF, its samples and its TBTT plan with the wake lead and the beacon window
-the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities`,
+the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities` with its per-rate `AmpduLengthTable`,
 `TbttEvent`, `TsfSample`, `VifTsf`, `MonitorCapabilities`) are in
 `extensions`. The backend that writes an interface's TSF keeps that TSF's
 relation to the radio clock and stamps each sample with its generation.

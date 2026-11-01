@@ -3326,7 +3326,13 @@ fn an_aggregate_is_planned_published_once_and_reports_its_block_ack() {
         let mut core = enabled(&mut hardware, pools);
         let source = backings();
         let capabilities = esp32s31_ampdu_capabilities(SUBFRAMES);
-        assert_eq!(capabilities.max_length, 6_490);
+        assert_eq!(
+            capabilities
+                .max_length
+                .at(ht_rate(0))
+                .map(|length| length.get()),
+            Ok(6_490)
+        );
         assert!(
             !capabilities
                 .formats
@@ -3545,8 +3551,8 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
             Some(AmpduRefusal::StartSpacing)
         );
 
-        // An empty aggregate, a group receiver and one longer than the declared
-        // maximum length.
+        // An empty aggregate, a group receiver and one longer than the rate's
+        // length (6 490 octets at MCS 0).
         assert_eq!(
             refused(
                 ampdu_values(ht_rate(7)),
@@ -3566,7 +3572,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         );
         assert_eq!(
             refused(
-                ampdu_values(ht_rate(7)),
+                ampdu_values(ht_rate(0)),
                 aggregate_of(source, 4, 2_000),
                 &mut hardware
             ),
@@ -3576,7 +3582,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
             &mut core,
             &mut hardware,
             aggregate_of(source, 3, 2_000),
-            ampdu_values(ht_rate(7)),
+            ampdu_values(ht_rate(0)),
         )
         .unwrap();
         hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 0b111, true));
@@ -4701,4 +4707,85 @@ fn a_key_handle_naming_no_bank_position_poisons_instead_of_admitting() {
         assert_eq!(refused.reason, KeyAdmissionError::Poisoned);
         assert_eq!(core.fault, Some(LowerMacFault::KeyBank));
     });
+}
+
+/// The PSDU of a full Ethernet frame's protected QoS Data MPDU: header,
+/// CCMP header, LLC/SNAP, 1500 octets, MIC and FCS.
+const FULL_PSDU: usize = 26 + 8 + 8 + 1_500 + 8 + 4;
+
+/// How many full subframes one aggregate at `rate` holds.
+fn full_subframes(rate: crate::mac::tx::TxPhyRate) -> usize {
+    let mut budget = ampdu::AmpduBudget::new(rate, 0, ampdu::AmpduBudget::WIDEST_DENSITY, 32)
+        .unwrap_or_else(|_| panic!("an aggregate rate"));
+    (0..40)
+        .take_while(|_| budget.push(FULL_PSDU).is_ok())
+        .count()
+}
+
+#[test]
+fn each_ht_rate_sizes_its_aggregate_by_the_vendor_ceiling() {
+    use crate::mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, HtRate, TxPhyRate};
+    let ht = |mcs, guard| TxPhyRate::Ht(HtRate::new(mcs, guard, HtChannelWidth::Mhz20));
+    // MCS 0: 6 490 octets hold four full subframes.
+    assert_eq!(
+        full_subframes(ht(HtMcs::Mcs0, HtGuardInterval::Long800Ns)),
+        4
+    );
+    // MCS 7: 65 535 octets; the 32 subframes of the owner end it first.
+    assert_eq!(
+        full_subframes(ht(HtMcs::Mcs7, HtGuardInterval::Long800Ns)),
+        32
+    );
+    // The vendor sets no ceiling at short-GI MCS 7: the HT Length field's.
+    assert_eq!(
+        ampdu::esp32s31_ampdu_length(ht(HtMcs::Mcs7, HtGuardInterval::Short400Ns)),
+        Some(ESP32S31_AMPDU_MAX_LENGTH)
+    );
+}
+
+#[test]
+fn the_port_table_holds_the_lengths_the_core_plans_by() {
+    let lengths = &ampdu::ESP32S31_AMPDU_LENGTHS;
+    let at = |rate| lengths.at(rate).map(|length| length.get());
+    assert_eq!(at(ht_rate(0)), Ok(6_490));
+    assert_eq!(at(ht_rate(7)), Ok(65_535));
+    let ht40 = PhyRate::Ht(
+        phy::HtRate::new(phy::HtMcs::new(3).unwrap(), PpduBandwidth::Mhz40, true).unwrap(),
+    );
+    // The vendor's table is indexed by the rate code, whose short-GI codes
+    // start at 26: short-GI MCS 3 takes the entry after long-GI MCS 9's.
+    assert_eq!(at(ht40), Ok(43_200));
+    assert_eq!(at(he_rate()), Ok(6_490));
+    // One spatial stream only, HE at 20 MHz only.
+    assert!(at(ht_rate(8)).is_err());
+    let he40 = PhyRate::He(
+        phy::HeRate::new(
+            phy::HeMcs::new(7).unwrap(),
+            SpatialStreams::new(1).unwrap(),
+            PpduBandwidth::Mhz40,
+            HeGiLtf::Ltf2xGi800Ns,
+            FecCoding::Ldpc,
+            false,
+        )
+        .unwrap(),
+    );
+    assert!(at(he40).is_err());
+    // Every portable HT rate with a length is one the formatter sends, at
+    // the length the core plans by.
+    for mcs in 0..8 {
+        for (width, guard) in [
+            (PpduBandwidth::Mhz20, false),
+            (PpduBandwidth::Mhz20, true),
+            (PpduBandwidth::Mhz40, false),
+            (PpduBandwidth::Mhz40, true),
+        ] {
+            let rate =
+                PhyRate::Ht(phy::HtRate::new(phy::HtMcs::new(mcs).unwrap(), width, guard).unwrap());
+            let planned = crate::mac::tx::TxPhyRate::try_from(rate)
+                .ok()
+                .and_then(ampdu::esp32s31_ampdu_length)
+                .map(u32::from);
+            assert_eq!(at(rate).ok(), planned, "{rate:?}");
+        }
+    }
 }
