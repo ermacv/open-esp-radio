@@ -1718,6 +1718,16 @@ fn an_outstanding_dma_allocation_refuses_installation_with_a_typed_error() {
 }
 
 #[test]
+fn a_transmission_terminal_leaves_the_event_queue_the_size_of_a_received_frame() {
+    let (event, received) = event_sizes::<radio::LocalId<'static>, TestDevice, 512>();
+    // A tag and its padding beside the received frame's fields.
+    assert!(
+        event <= received + 2 * size_of::<usize>(),
+        "an event takes {event} bytes, a received frame {received}"
+    );
+}
+
+#[test]
 fn clean_uninstall_returns_all_dma_and_core_owners_for_a_fresh_installation() {
     let (parts, observed, _) = installed(Vec::new());
     let _ = block_on(reinstalled(

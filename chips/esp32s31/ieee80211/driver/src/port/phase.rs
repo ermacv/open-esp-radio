@@ -74,7 +74,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 if matches!(event, owned::OwnedEvent::Received { .. }) {
                     self.held.storage.took_received();
                 }
-                return Poll::Ready(Ok(Ok(event.lend(&self.loan))));
+                match event.lend(&self.loan, self.held.completions) {
+                    Some(event) => return Poll::Ready(Ok(Ok(event))),
+                    // A parked terminal's place held none.
+                    None => self.held.storage.poison(Fault::Capacity),
+                }
             }
             if let Some(cause) = self.held.storage.poisoned.get() {
                 return Poll::Ready(Err(radio::EventEnd::Quarantined { cause }));

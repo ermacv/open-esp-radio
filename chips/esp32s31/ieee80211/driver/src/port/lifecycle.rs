@@ -47,7 +47,7 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
     >,
     events: oer_memory::AffineSpscReceiver<
         's,
-        owned::OwnedEvent<'static, Id, D, B, O>,
+        owned::OwnedEvent<'static, Id, D, B>,
         { TERMINAL_CAPACITY + RX_HELD },
         oer_memory::CompactSpscCursor,
     >,
@@ -58,7 +58,8 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
         oer_memory::CompactSpscCursor,
     >,
     failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
-    failed_terminal: &'s oer_memory::OnceValue<owned::OwnedTerminal<'static, Id, D, B, O>>,
+    failed_terminal: &'s oer_memory::OnceValue<owned::Retained<'static, Id, D, B, O>>,
+    completions: &'s handoff::Completions<'static, Id, D, B, O>,
     gate: &'s GateIssuer<'static, Part<Id, 1>>,
     tuned: &'s mut Cell<Channel>,
     identity: &'s mut Cell<u64>,
@@ -96,6 +97,14 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize, O: Observatio
             match event {
                 owned::OwnedEvent::Terminal(terminal) => {
                     return Poll::Ready(Ok(Some(terminal.lend(&self.loan))));
+                }
+                owned::OwnedEvent::TxCompleted(parked) => {
+                    match handoff::take_completion(held.completions, parked) {
+                        Some(completed) => {
+                            return Poll::Ready(Ok(Some(completed.lend(&self.loan))));
+                        }
+                        None => held.storage.poison(Fault::Capacity),
+                    }
                 }
                 owned::OwnedEvent::Received { frame, .. } => {
                     held.storage.took_received();
@@ -289,6 +298,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 recycled,
                 failed_command: &queues.held.failed_command,
                 failed_terminal: &queues.held.failed_terminal,
+                completions: &queues.held.completions,
                 gate,
                 tuned,
                 identity: &mut queues.held.frontend_identity,
@@ -308,6 +318,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     rx_out: &queues.held.rx_out,
                     gate,
                     failed_terminal: &queues.held.failed_terminal,
+                    completions: &queues.held.completions,
                     clock_replies: Outgoing(driver_clock_replies),
                 },
                 driver: &mut queues.driver,
@@ -431,6 +442,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             || !held.events.empty()
             || !held.recycled.empty()
             || held.failed_terminal.is_requested()
+            || !held.completions_vacant()
             || held.rx_out.get() != 0
             || storage.shared.network.held() != 0
             || !storage.shared.returned.all_returned()
@@ -518,6 +530,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOw
                     recycled: frontend.recycled.borrow_local(),
                     failed_command: frontend.failed_command,
                     failed_terminal: frontend.failed_terminal,
+                    completions: frontend.completions,
                     gate: frontend.gate,
                     tuned: frontend.tuned,
                     identity: frontend.identity,

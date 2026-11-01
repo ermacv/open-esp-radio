@@ -84,8 +84,10 @@ pub(super) enum OwnedTxCompleted<
         >,
     ),
 }
-pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    TxCompleted(OwnedTxCompleted<'o, Id, D, B, O>),
+/// Every terminal but a transmission's, which waits at its ticket's place
+/// in the installation's completion table while only that place travels
+/// through the event queue ([`handoff::ParkedCompletion`]).
+pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
     TsfSampled {
         sample: TsfSample,
         permission: OwnedTsfPermission<'o, Id>,
@@ -104,8 +106,30 @@ pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize
     GroupKeyInstalled(OwnedInstalledGroup<'o, Id>),
     PairwiseKeyInstalled(OwnedInstalledPairwise<'o, Id>),
 }
-pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    Terminal(OwnedTerminal<'o, Id, D, B, O>),
+/// A terminal the installation keeps when it cannot deliver it.
+pub(super) enum Retained<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    Terminal(OwnedTerminal<'o, Id, D, B>),
+    TxCompleted(OwnedTxCompleted<'o, Id, D, B, O>),
+}
+impl<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    From<OwnedTerminal<'o, Id, D, B>> for Retained<'o, Id, D, B, O>
+{
+    fn from(terminal: OwnedTerminal<'o, Id, D, B>) -> Self {
+        Self::Terminal(terminal)
+    }
+}
+impl<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    From<OwnedTxCompleted<'o, Id, D, B, O>> for Retained<'o, Id, D, B, O>
+{
+    fn from(completed: OwnedTxCompleted<'o, Id, D, B, O>) -> Self {
+        Self::TxCompleted(completed)
+    }
+}
+/// One message of the event queue. A transmission's terminal travels as
+/// its place alone, so the queue's slot is the size of a received frame.
+pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
+    Terminal(OwnedTerminal<'o, Id, D, B>),
+    TxCompleted(handoff::ParkedCompletion),
     Received {
         frame: ReceiveBuffer<'o, Id, D::Receive>,
         meta: Esp32s31RxMeta,
@@ -238,10 +262,8 @@ impl<Id: SlotIdentity> OwnedInstalledGroup<'static, Id> {
         }
     }
 }
-impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    OwnedTerminal<'static, Id, D, B, O>
-{
-    pub(super) fn lend<'p>(
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, D, B> {
+    pub(super) fn lend<'p, O: Observations>(
         self,
         loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
     ) -> Terminal<'p, Id, D, B, O>
@@ -249,12 +271,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         Id: 'p,
     {
         match self {
-            Self::TxCompleted(OwnedTxCompleted::Single(t)) => {
-                LowerMacTerminal::TxCompleted(TxCompleted::Single(t.lend(loan)))
-            }
-            Self::TxCompleted(OwnedTxCompleted::Aggregate(t)) => {
-                LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(t.lend(loan)))
-            }
             Self::TsfSampled { sample, permission } => LowerMacTerminal::TsfSampled {
                 sample,
                 permission: match permission {
@@ -284,19 +300,19 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         }
     }
-    pub(super) fn retain<'p>(
+    pub(super) fn retain<'p, O: Observations>(
         t: Terminal<'p, Id, D, B, O>,
         loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
-    ) -> Self
+    ) -> Retained<'static, Id, D, B, O>
     where
         Id: 'p,
     {
-        match t {
+        Retained::Terminal(match t {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(t)) => {
-                Self::TxCompleted(OwnedTxCompleted::Single(t.into_owned(loan)))
+                return Retained::TxCompleted(OwnedTxCompleted::Single(t.into_owned(loan)));
             }
             LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(t)) => {
-                Self::TxCompleted(OwnedTxCompleted::Aggregate(t.into_owned(loan)))
+                return Retained::TxCompleted(OwnedTxCompleted::Aggregate(t.into_owned(loan)));
             }
             LowerMacTerminal::TsfSampled { sample, permission } => Self::TsfSampled {
                 sample,
@@ -329,27 +345,47 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(key)) => {
                 Self::PairwiseKeyInstalled(OwnedInstalledPairwise::AccessPoint(key.into_owned()))
             }
-        }
+        })
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    OwnedEvent<'static, Id, D, B, O>
+    OwnedTxCompleted<'static, Id, D, B, O>
 {
     pub(super) fn lend<'p>(
         self,
         loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
-    ) -> Event<'p, Id, D, B, O>
+    ) -> Terminal<'p, Id, D, B, O>
     where
         Id: 'p,
     {
-        match self {
+        LowerMacTerminal::TxCompleted(match self {
+            Self::Single(t) => TxCompleted::Single(t.lend(loan)),
+            Self::Aggregate(t) => TxCompleted::Aggregate(t.lend(loan)),
+        })
+    }
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedEvent<'static, Id, D, B> {
+    /// The public event, a transmission's terminal taken from its place in
+    /// `completions`; `None` when the place holds none.
+    pub(super) fn lend<'p, O: Observations>(
+        self,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+        completions: &handoff::Completions<'static, Id, D, B, O>,
+    ) -> Option<Event<'p, Id, D, B, O>>
+    where
+        Id: 'p,
+    {
+        Some(match self {
             Self::Terminal(t) => LowerMacEvent::Terminal(t.lend(loan)),
+            Self::TxCompleted(parked) => {
+                LowerMacEvent::Terminal(handoff::take_completion(completions, parked)?.lend(loan))
+            }
             Self::Received { frame, meta } => LowerMacEvent::Received {
                 frame: frame.lend(),
                 meta,
             },
             Self::Tbtt(t) => LowerMacEvent::Tbtt(t),
-        }
+        })
     }
 }
 
