@@ -18,7 +18,7 @@ or refusal directly to the image's concrete callback. No scoped application
 callback, port identity or installation loan is required by the image.
 
 The image declares `bind_station!` with its interrupt entries, station
-callbacks, collectors, the composed engine type and handled-error terminal policy.
+callbacks, collectors and handled-error terminal policy.
 The binding names where the station's network end runs (`Binding::Notifies`):
 `SameHart`, local wakers throughout, or, with the macro's `across_harts`
 arm, `AcrossHarts<N, S, D>`, whose three notify types raise the network
@@ -27,15 +27,16 @@ queue end, the link, the network stop and the lent receive buffers' returns
 name their notify types, so a wake across harts is a direct call and no
 waker crosses harts.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
-the facade's affine `DmaResources` claim, signals, declared storage and the
-value-owned key-unwrap engine supplied by `compose::crypto::key_unwrap`.
+the facade's affine `DmaResources` claim, signals and declared storage. The
+station unwraps EAPOL-Key data (RFC 3394) synchronously in its step over the
+block primitive the facade's station callbacks supply
+(`StaCallbacks::KeyUnwrapBlocks`): the software AES-128 block.
 The permanent RX ring and nine TX allocations have one declaration in the
 facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
 modules hold only their line and signals. `Resources` consumes the opaque
 `WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` runs
 on the existing P2 executor; `Runners::station` runs on P1 beside networking.
-The station runner retains that engine from construction; the image supplies
-its start-time `Profile`: the station's address, scan channels and callbacks.
+The image supplies the station runner's start-time `Profile`: the station's address, scan channels and callbacks.
 The network comes with each connect: `Control::connect(credentials)` takes
 the `PreparedCredentials` of one network, which only an idle station takes
 and keeps for its reconnections; a refused, stopped or cancelled connect

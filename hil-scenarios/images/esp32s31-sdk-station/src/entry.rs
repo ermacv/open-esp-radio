@@ -9,7 +9,7 @@ use core::pin::pin;
 
 use embassy_futures::select::{Either as Raced, select};
 use oer_espressif::{
-    Aes, AppResult, ApplicationEnd, Boot, Channel, Console, Error, Hart1Boot, Hart1Peripherals,
+    AppResult, ApplicationEnd, Boot, Channel, Console, Error, Hart1Boot, Hart1Peripherals,
     Hart1Started, Peripherals, SecondEnd, Started, observe,
     time::{Duration, with_timeout},
     wifi::{
@@ -59,9 +59,8 @@ static EXCHANGES: Channel<Exchange, Exchanged, 1> = Channel::new();
 oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
-    let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?;
-    let (station, net) = Station::start(p.wifi, &aes, config, &mut boot)?;
+    let (station, net) = Station::start(p.wifi, config, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;
     let load = load::serve::LOAD.application(&mut boot)?;

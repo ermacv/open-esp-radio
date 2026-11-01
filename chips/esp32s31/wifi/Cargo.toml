@@ -16,8 +16,8 @@ oer-diagnostics = { path = "../../../portable/diagnostics" }
 heapless = { version = "0.9.3", features = ["zeroize"] }
 static_cell.workspace = true
 bytemuck = { version = "1.25.2", features = ["derive"] }
-oer-crypto = { path = "../../../portable/crypto" }
 oer-ieee80211-core-security-rsn = { path = "../../../protocols/ieee80211/core/security/rsn" }
+oer-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
 oer-network-port = { path = "../../../protocols/network/port" }
 oer-ieee80211-runtime = { path = "../../../protocols/ieee80211/runtime", features = ["placement"] }
 oer-ieee80211-core-roles-sta = { path = "../../../protocols/ieee80211/core/roles/sta" }
