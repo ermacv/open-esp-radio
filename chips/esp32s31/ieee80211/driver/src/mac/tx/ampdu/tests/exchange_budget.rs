@@ -62,6 +62,6 @@ fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner()
             + 48
             <= 250
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
     assert_eq!(pool.claimed_slots(), 0);
 }

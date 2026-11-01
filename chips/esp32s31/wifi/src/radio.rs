@@ -21,7 +21,11 @@ use oer_esp32s31_hal::{
     },
     root::WifiPartition,
 };
-use oer_esp32s31_ieee80211_driver::mac::tx::{TxSlot, runtime::WifiTxRuntimePolicy};
+use oer_esp32s31_ieee80211_driver::mac::tx::{
+    TxBacking, TxSlot,
+    ampdu::{HtAmpduTxResources, HtAmpduTxStorage, RetainedAmpduDmaStorage, RetainedDmaAmpduTx},
+    runtime::WifiTxRuntimePolicy,
+};
 use oer_esp32s31_ieee80211_driver::{
     lower_mac::{ConnectionFramePriorities, LowerMacConfig, RadioCoexPriorities},
     ordinary_tx::{OrdinaryTxOwner, WifiTxEntropy},
@@ -73,7 +77,13 @@ pub(crate) struct DriverStorage<W: Binding> {
     shared: StaticCell<PortSharedStorage<TX, Lent<W>>>,
     storage: StaticCell<PortStorage<Device<W>, TX>>,
     device: StaticCell<Device<W>>,
-    slots: [StaticCell<TxSlot<TX>>; 9],
+    /// The transmitter's descriptor and one per EDCA queue.
+    slots: [StaticCell<TxSlot<TX>>; 5],
+    pool: StaticCell<TxPool<TX>>,
+    /// Each aggregate chain's metadata and the leases it retains.
+    chains: [StaticCell<HtAmpduTxStorage<TX_AMPDU_SUBFRAMES>>; AMPDU_CHAINS],
+    retention:
+        [StaticCell<RetainedAmpduDmaStorage<TxBacking<TX>, TX_AMPDU_SUBFRAMES>>; AMPDU_CHAINS],
 }
 impl<W: Binding> DriverStorage<W> {
     pub(crate) const fn new(lent: Lent<W>) -> Self {
@@ -82,7 +92,10 @@ impl<W: Binding> DriverStorage<W> {
             shared: StaticCell::new(),
             storage: StaticCell::new(),
             device: StaticCell::new(),
-            slots: [const { StaticCell::new() }; 9],
+            slots: [const { StaticCell::new() }; 5],
+            pool: StaticCell::new(),
+            chains: [const { StaticCell::new() }; AMPDU_CHAINS],
+            retention: [const { StaticCell::new() }; AMPDU_CHAINS],
         }
     }
 }
@@ -102,7 +115,7 @@ pub(crate) struct Boot<W: Binding> {
     pub rx: oer_esp32s31_hal::memory::dma_static::Placed<
         oer_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic<N, B, S, Q, RadioExecutor>,
     >,
-    pub tx: [oer_esp32s31_hal::memory::dma_static::Placed<TxDmaStorage<TX>>; 9],
+    pub tx: crate::dma::TxDma,
     pub storage: &'static mut DriverStorage<W>,
 }
 pub struct Platform {
@@ -311,11 +324,17 @@ async fn install<W: Binding>(
             }))
         })
         .ok_or(InitializationError::Storage)?;
-    let [t0, t1, t2, t3, t4, t5, t6, t7, t8] = boot.tx;
-    let [s0, s1, s2, s3, s4, s5, s6, s7, s8] = &mut storage.slots;
+    let crate::dma::TxDma {
+        pool,
+        descriptors: [t0, t1, t2, t3, t4],
+        chains: [c0, c1],
+    } = boot.tx;
+    let [s0, s1, s2, s3, s4] = &mut storage.slots;
+    let [m0, m1] = &mut storage.chains;
+    let [r0, r1] = &mut storage.retention;
     macro_rules! slot {
         ($dma:ident, $slot:ident) => {{
-            let dma = TxDmaStorage::pin::<ChipDma>($dma).map_err(|_| InitializationError::Tx)?;
+            let dma = TxDmaStorage::pin::<ChipDma, _>($dma).map_err(|_| InitializationError::Tx)?;
             Pin::new(
                 $slot
                     .try_init(TxSlot::from_dma(dma))
@@ -323,6 +342,23 @@ async fn install<W: Binding>(
             )
         }};
     }
+    macro_rules! chain {
+        ($dma:ident, $metadata:ident, $retention:ident) => {{
+            let metadata = $metadata
+                .try_init(HtAmpduTxStorage::new())
+                .ok_or(InitializationError::Storage)?;
+            let retention = $retention
+                .try_init(RetainedAmpduDmaStorage::new())
+                .ok_or(InitializationError::Storage)?;
+            let resources = HtAmpduTxResources::pin_static(metadata, $dma)
+                .map_err(|_| InitializationError::Tx)?;
+            RetainedDmaAmpduTx::new(resources, retention)
+        }};
+    }
+    let pool = storage
+        .pool
+        .try_init(TxPool::pin(pool).map_err(|_| InitializationError::Tx)?)
+        .ok_or(InitializationError::Storage)?;
     let transmitter = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot!(t0, s0),
         policy: WifiTxRuntimePolicy::vendor_defaults(),
@@ -352,16 +388,11 @@ async fn install<W: Binding>(
             })
             .ok_or(InitializationError::Storage)?,
         transmitter,
-        buffers: [
-            slot!(t1, s1),
-            slot!(t2, s2),
-            slot!(t3, s3),
-            slot!(t4, s4),
-            slot!(t5, s5),
-            slot!(t6, s6),
-            slot!(t7, s7),
-            slot!(t8, s8),
-        ],
+        pool,
+        descriptors: TxDescriptors {
+            single: [slot!(t1, s1), slot!(t2, s2), slot!(t3, s3), slot!(t4, s4)],
+            chains: [chain!(c0, m0, r0), chain!(c1, m1, r1)],
+        },
         config: LowerMacConfig {
             station_address: boot.station,
             channel,

@@ -44,7 +44,13 @@ impl<W: Binding> Composition for ImageComposition<W> {
         machine::StaConfigurationContext<'p, Epoch<Id>>;
 }
 pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
+/// The pool places the station's management frames take; the data machine
+/// takes the next [`DATA_BUFFERS`].
 const MANAGEMENT: u8 = 4;
+/// The buffers the data machine holds: as many as its queues take
+/// (`PortData`'s capacity). The pool's other buffers stay unused by this
+/// image until the data machine takes more.
+const DATA_BUFFERS: usize = 8;
 #[cfg(oer_trace)]
 pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_memory::OnceValue::new();
@@ -171,8 +177,8 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         Self: 'id,
         Id: 'id,
     {
-        // The eight identical DMA allocations are split once by their affine
-        // pool indices: four remain with Station, four with StaData.
+        // The identical pool buffers are split once by their affine pool
+        // indices: the first four remain with Station, the next with StaData.
         let (small, mpdu) = match buffer {
             port::AnyBuffer::Fresh(buffer) => {
                 (buffer.index() < MANAGEMENT, ReturnedMpdu::Fresh(buffer))
@@ -411,7 +417,12 @@ fn initialize_service<'id, W: Binding>(
         resources.gate,
     );
     let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
-    let [b0, b1, b2, b3, b4, b5, b6, b7] = resources.buffers;
+    let [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, ..] = resources.buffers;
+    const {
+        if MANAGEMENT != 4 || DATA_BUFFERS != 8 || port::TX_BUFFERS < 12 {
+            panic!("the split names four management and eight data buffers of the pool");
+        }
+    }
     let Profile {
         station,
         security,
@@ -452,7 +463,7 @@ fn initialize_service<'id, W: Binding>(
             StaData::init_in_place(
                 place,
                 [t4, t5, t6, t7],
-                [b4, b5, b6, b7],
+                [b4, b5, b6, b7, b8, b9, b10, b11],
                 Backend::<W::Id, W>::TX_QUEUE_DEPTH,
             )
         },

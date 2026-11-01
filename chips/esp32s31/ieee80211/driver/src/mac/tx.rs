@@ -36,6 +36,12 @@ use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage;
 use oer_esp32s31_hal::ieee80211::dma::tx_storage::{
     PinnedTxDmaStorage, TxDmaAccess, TxDmaStorageError,
 };
+use oer_esp32s31_hal::memory::dma_static::PlacedTxLease;
+use oer_memory::PinnedDmaTxRadioLease;
+
+/// The buffer one TX descriptor publishes: a buffer of `B` bytes of a
+/// transmit pool placed in the DMA window, held by the radio.
+pub type TxBacking<const B: usize> = PlacedTxLease<PinnedDmaTxRadioLease<'static, B, 0, 0>>;
 
 use oer_ieee80211_contracts_port::TxStatus;
 use oer_ieee80211_wire::qos::WmmAccessCategory;
@@ -2992,15 +2998,15 @@ The production constructor consumes a pinned DMA allocation:
 #     loop {}
 # }
 use oer_esp32s31_hal::ieee80211::dma::tx_storage::PinnedTxDmaStorage;
-use oer_esp32s31_ieee80211_driver::mac::tx::TxSlot;
-fn slot(dma: PinnedTxDmaStorage<512>) -> TxSlot<512> {
+use oer_esp32s31_ieee80211_driver::mac::tx::{TxBacking, TxSlot};
+fn slot(dma: PinnedTxDmaStorage<TxBacking<512>>) -> TxSlot<512> {
     TxSlot::from_dma(dma)
 }
 ```
 "#
 )]
 pub struct TxSlot<const BUFFER_SIZE: usize> {
-    dma: PinnedTxDmaStorage<BUFFER_SIZE>,
+    dma: PinnedTxDmaStorage<TxBacking<BUFFER_SIZE>>,
     generation_cursor: u32,
     work: crate::mac::tx_work::MacTxWork,
     active: TxCookie,
@@ -3032,17 +3038,19 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
         self.slot.as_ref()
     }
 
-    /// The free buffer; a DMA owner that left its free phase is stale.
+    /// The free attached buffer; a DMA owner that left its free phase is
+    /// stale, one without a buffer invalid.
     pub fn into_buffer(self) -> Result<&'owner mut [u8; BUFFER_SIZE], TxError> {
         match self.slot.get_mut().dma.access() {
-            TxDmaAccess::Free(free) => Ok(free.into_buffer()),
+            TxDmaAccess::Free(free) => whole_buffer(free.into_buffer()),
             _ => Err(TxError::Stale),
         }
     }
-    /// The free buffer; a DMA owner that left its free phase is stale.
+    /// The free attached buffer; a DMA owner that left its free phase is
+    /// stale, one without a buffer invalid.
     pub fn buffer_mut(&mut self) -> Result<&mut [u8; BUFFER_SIZE], TxError> {
         match self.slot.as_mut().get_mut().dma.access() {
-            TxDmaAccess::Free(free) => Ok(free.into_buffer()),
+            TxDmaAccess::Free(free) => whole_buffer(free.into_buffer()),
             _ => Err(TxError::Stale),
         }
     }
@@ -3070,9 +3078,20 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
     }
 }
 
+/// The whole `B`-byte buffer of an attached pool lease.
+fn whole_buffer<const B: usize>(
+    buffer: Result<&mut [u8], TxDmaStorageError>,
+) -> Result<&mut [u8; B], TxError> {
+    buffer
+        .map_err(map_dma_storage_error)?
+        .try_into()
+        .map_err(|_| TxError::Invalid)
+}
+
 impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
-    /// Attach MAC policy to a statically pinned lower DMA allocation.
-    pub fn from_dma(dma: PinnedTxDmaStorage<BUFFER_SIZE>) -> Self {
+    /// Attach MAC policy to a statically pinned lower DMA descriptor, which
+    /// holds no buffer until [`Self::attach`].
+    pub fn from_dma(dma: PinnedTxDmaStorage<TxBacking<BUFFER_SIZE>>) -> Self {
         Self {
             dma,
             generation_cursor: 0,
@@ -3096,11 +3115,42 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// ```
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_model() -> Result<Self, TxDmaStorageError> {
+        let mut slot = Self::new_model_descriptor()?;
+        let backing = test_support::model_backing().ok_or(TxDmaStorageError::Backing)?;
+        Pin::new(&mut slot)
+            .attach(backing)
+            .map_err(|_| TxDmaStorageError::Backing)?;
+        Ok(slot)
+    }
+
+    /// A native model descriptor without a buffer, as a port holds one
+    /// between publications ([`Self::attach`]).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn new_model_descriptor() -> Result<Self, TxDmaStorageError> {
         let storage = Box::leak(Box::new(TxDmaStorage::new()));
-        let dma = TxDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::HostDma>(
+        let dma = TxDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::HostDma, _>(
             oer_esp32s31_hal::memory::dma_static::Placed::host(storage),
         )?;
         Ok(Self::from_dma(dma))
+    }
+
+    /// Attach the buffer the descriptor publishes, while the slot is free
+    /// and holds none; the buffer comes back unchanged otherwise.
+    pub fn attach(
+        self: Pin<&mut Self>,
+        backing: TxBacking<BUFFER_SIZE>,
+    ) -> Result<(), TxBacking<BUFFER_SIZE>> {
+        self.get_mut().dma.attach(backing)
+    }
+
+    /// Take the attached buffer back while the slot is free.
+    pub fn detach(self: Pin<&mut Self>) -> Option<TxBacking<BUFFER_SIZE>> {
+        self.get_mut().dma.detach()
+    }
+
+    /// Whether a buffer is attached.
+    pub const fn attached(&self) -> bool {
+        self.dma.attached()
     }
 
     /// Receipt remains in pinned CPU metadata across retry detach/abort. Read
@@ -3131,11 +3181,6 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// Stable descriptor address retained by the lower DMA owner.
     pub fn descriptor_address(self: Pin<&Self>) -> u32 {
         self.get_ref().dma.binding().descriptor_address()
-    }
-
-    /// Stable source-buffer address retained by the lower DMA owner.
-    pub fn buffer_address(self: Pin<&Self>) -> u32 {
-        self.get_ref().dma.binding().buffer_address()
     }
 
     /// Cancel a descriptor that has not been published to an ordinary queue.
@@ -3520,7 +3565,9 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
 
 fn map_dma_storage_error(error: TxDmaStorageError) -> TxError {
     match error {
-        TxDmaStorageError::Address | TxDmaStorageError::InvalidLength => TxError::Invalid,
+        TxDmaStorageError::Address
+        | TxDmaStorageError::InvalidLength
+        | TxDmaStorageError::Backing => TxError::Invalid,
         TxDmaStorageError::State => TxError::Stale,
     }
 }

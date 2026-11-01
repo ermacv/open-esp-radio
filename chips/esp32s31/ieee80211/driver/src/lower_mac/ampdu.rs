@@ -3,27 +3,22 @@
 //! One aggregate is one attempt: the core plans it
 //! ([`LowerMacCore::plan_ampdu`](super::LowerMacCore::plan_ampdu)),
 //! [`publish`] has [`RetainedDmaAmpduTx`] begin it, commit every subframe
-//! with `commit_ht` or `commit_he` and publish it once, and [`service`]
-//! ends it. Its completion reports the recipient's BlockAck; the aggregate
-//! is never retained for a retry (`retain_for_ampdu_retry`), since
-//! selecting what a later aggregate retransmits is the portable layer's.
-//!
-//! The backend's driver does not submit aggregates yet: A-MPDU
-//! transmission is not in the first image of the ESP32-S31 backend; it will
-//! follow the phase contract's form (`PhaseAggregate`, numbered subframes).
+//! with `commit_ht` or `commit_he` and publish it once, and
+//! [`LowerMacCore::service_ampdu`](super::LowerMacCore::service_ampdu) ends
+//! it. Its completion reports the recipient's BlockAck; the aggregate is
+//! never retained for a retry (`retain_for_ampdu_retry`), since selecting
+//! what a later aggregate retransmits is the portable layer's.
 //!
 //! # Buffers
 //!
-//! A lent [`Esp32s31AmpduBuffer`] is one idle aggregate owner together with
-//! the subframes the caller appended. Each subframe is a
-//! [`PlacedBacking`] lease of the integrator's [`AmpduBackingSource`],
-//! the same retained-lease memory the station and access-point aggregate
-//! paths publish from: the MPDU is written after the eight-byte metadata
-//! prefix at the start of the lease's region, and `commit_ht` publishes it
-//! where it was written. The owner retains every lease until the attempt's
-//! completion releases it, when dropping the lease returns it to its source.
-//! The ordinary TX slots cannot serve here: each is a single descriptor with
-//! its own buffer, while an aggregate descriptor chain references leases.
+//! An [`Esp32s31AmpduBuffer`] is one idle aggregate owner together with the
+//! subframes the caller appended. Each subframe is a [`PlacedBacking`]
+//! lease of the transmit pool every MPDU is written into: the MPDU follows
+//! the eight-byte metadata prefix at the start of the lease's region, and
+//! `commit_ht` publishes it where it was written. The owner retains every
+//! lease until the hardware left the chain; its release hands each lease
+//! back to the caller in subframe order, so a later aggregate can send the
+//! same MPDU again.
 //!
 //! # Limits
 //!
@@ -38,16 +33,15 @@ use oer_radio_port::{PoolPath, Root};
 
 use crate::mac::tx::{
     HeAmpduTxConfig, HtAmpduDensity, HtChannelWidth, HtGuardInterval, HtMcs, HtProtectionSpacing,
-    HtRate, LegacyTxQueue, TxControlFrame, TxCookie,
+    HtRate, LegacyTxQueue, TxControlFrame, TxCookie, TxDmaState,
     ampdu::{
         AmpduFrameLayout, AmpduFrameSize, HeAmpduFrameRequest, HeAmpduPolicy, HtAmpduFrameRequest,
         HtAmpduHardware, HtAmpduTxCompletion, HtAmpduTxError, RetainedDmaAmpduTx,
         TX_AMPDU_METADATA_SIZE,
     },
 };
-use oer_esp32s31_hal::memory::dma_static::{PlacedBacking, PlacedTxLease};
+use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_ieee80211_contracts_port::{AmpduCapabilities, BlockAckReport, PhyFormatSet, TxStatus};
-use oer_memory::{PinnedDmaTxRadioLease, StableDmaBacking as _};
 
 use crate::{
     ampdu_tx::{AmpduTxRoleAdapter, HtAmpduPublicationInputs, ht_ampdu_publication_config},
@@ -84,35 +78,97 @@ pub const fn esp32s31_ampdu_capabilities(slots: usize) -> AmpduCapabilities {
     }
 }
 
-/// The memory type of aggregate subframes: what an aggregate owner of the
-/// core retains.
-pub trait AmpduBacking {
-    /// One subframe's memory. Its region must start word-aligned, as every
-    /// S31 TX descriptor buffer does.
-    type Backing: PlacedBacking;
-}
-
-/// Stable DMA memory the core lends as aggregate subframes.
+/// The length rule of one aggregate: what [`super::LowerMacCore::plan_ampdu`]
+/// checks, from the rate, the access category's advertised TXOP limit an HE
+/// aggregate carries and the recipient's density, and what a port checks
+/// subframe by subframe before it accepts one into an aggregate.
 ///
-/// Dropping a backing returns it to its source, as
-/// `oer_memory::ReturningStableDmaBacking` returns a pool slot.
-pub trait AmpduBackingSource: AmpduBacking {
-    /// A free backing, or `None` when every one is in use.
-    fn backing(&self) -> Option<Self::Backing>;
+/// The empty delimiters an HE subframe needs grow with the density, so a
+/// budget at the widest density (16 µs) admits nothing the recipient's own
+/// density refuses.
+pub struct AmpduBudget {
+    budget: crate::mac::tx::ampdu::HtAmpduLengthAccumulator,
+    he: Option<HeAmpduPolicy>,
 }
 
-/// The subframe memory of a core without aggregates. It is no
-/// [`AmpduBackingSource`], so such a core lends no aggregate and its port
-/// does not implement `LowerMacAmpdu`; its backing type is never
-/// constructed.
-#[derive(Debug)]
-pub enum NoAmpdu {}
+impl AmpduBudget {
+    /// The widest MPDU start spacing (16 µs, IEEE encoding 7).
+    pub const WIDEST_DENSITY: HtAmpduDensity = HtAmpduDensity::from_spacing_code(7);
 
-impl AmpduBacking for NoAmpdu {
-    type Backing = PlacedTxLease<PinnedDmaTxRadioLease<'static, 0, 0, 0>>;
+    /// An empty budget of up to `slots` subframes at `rate`.
+    ///
+    /// # Errors
+    ///
+    /// A non-HT rate, or an HE TXOP limit with no room for any subframe.
+    pub fn new(
+        rate: crate::mac::tx::TxPhyRate,
+        txop_limit_units_32_us: u16,
+        density: HtAmpduDensity,
+        slots: usize,
+    ) -> Result<Self, super::AmpduRefusal> {
+        use crate::mac::tx::{HeEdcaTxopLimit, TxPhyRate, ampdu::HtAmpduLengthAccumulator};
+        let max_subframes = u8::try_from(slots.min(32)).unwrap_or(32);
+        let (max_bytes, he) = match rate {
+            TxPhyRate::Ht(rate) => (
+                rate.vendor_ampdu_byte_limit()
+                    .map_or(ESP32S31_AMPDU_MAX_LENGTH, |limit| {
+                        limit.min(ESP32S31_AMPDU_MAX_LENGTH)
+                    }),
+                None,
+            ),
+            TxPhyRate::He(rate) => {
+                let txop = crate::mac::tx::runtime::he_txop_limit(
+                    txop_limit_units_32_us,
+                    HeEdcaTxopLimit::DEFAULT,
+                )
+                .map_err(|_| super::AmpduRefusal::Length)?;
+                let policy = HeAmpduPolicy::new(rate, density, txop);
+                let apep = rate
+                    .checked_maximum_apep_bytes(txop)
+                    .ok_or(super::AmpduRefusal::Length)?;
+                let max_bytes = u16::try_from(apep)
+                    .unwrap_or(u16::MAX)
+                    .min(ESP32S31_AMPDU_MAX_LENGTH);
+                (max_bytes, Some(policy))
+            }
+            TxPhyRate::Legacy(_) => return Err(super::AmpduRefusal::LegacyRate),
+        };
+        let budget = HtAmpduLengthAccumulator::new(max_subframes, max_bytes)
+            .map_err(|_| super::AmpduRefusal::Length)?;
+        Ok(Self { budget, he })
+    }
+
+    /// The HE policy the budget follows; `None` for HT.
+    pub const fn he_policy(&self) -> Option<HeAmpduPolicy> {
+        self.he
+    }
+
+    /// Count one more subframe of `psdu` octets: its MPDU with the hardware
+    /// MIC and FCS.
+    ///
+    /// # Errors
+    ///
+    /// The aggregate would grow past the format's length or subframe limit;
+    /// the budget is unchanged.
+    pub fn push(&mut self, psdu: usize) -> Result<(), super::AmpduRefusal> {
+        let delimiters = match self.he {
+            None => 0,
+            Some(policy) => {
+                let psdu = u16::try_from(psdu).map_err(|_| super::AmpduRefusal::Length)?;
+                policy
+                    .rate()
+                    .ampdu_empty_delimiters(psdu, policy.density())
+                    .ok_or(super::AmpduRefusal::Length)?
+            }
+        };
+        let psdu = u32::try_from(psdu).map_err(|_| super::AmpduRefusal::Length)?;
+        self.budget
+            .push(psdu, delimiters)
+            .map_err(|_| super::AmpduRefusal::Length)
+    }
 }
 
-/// The aggregate owner behind one lent buffer. The port publishes only
+/// The aggregate owner behind one buffer. The port publishes only
 /// referenced subframes, so its formatter workspace is empty.
 pub type Esp32s31AmpduOwner<'slot, B, const SLOTS: usize> = RetainedDmaAmpduTx<'slot, B, SLOTS>;
 
@@ -122,38 +178,36 @@ struct Subframe<B> {
 }
 
 /// One aggregate being built: an idle aggregate owner and the subframes
-/// appended so far. [`publish`] takes it; [`Self::into_owner`] gives the
-/// owner back unpublished, its subframes returned to their source.
-pub struct Esp32s31AmpduBuffer<'slot, S: AmpduBacking, const SLOTS: usize> {
-    pub(super) owner: Esp32s31AmpduOwner<'slot, S::Backing, SLOTS>,
-    source: &'slot S,
-    subframes: [Option<Subframe<S::Backing>>; SLOTS],
+/// appended so far, each in a buffer of its own. [`publish`] takes it;
+/// [`Self::into_owner`] gives the owner and the buffers back unpublished.
+pub struct Esp32s31AmpduBuffer<'slot, L, const SLOTS: usize> {
+    pub(super) owner: Esp32s31AmpduOwner<'slot, L, SLOTS>,
+    subframes: [Option<Subframe<L>>; SLOTS],
     // Separate storage avoids per-entry alignment padding on RV32.
     admitted_at: [oer_time::Instant; SLOTS],
     count: usize,
 }
 
-impl<'slot, S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, S, SLOTS> {
-    /// An empty aggregate over the idle `owner`, its subframes from
-    /// `source`, the owner configured to [`ESP32S31_AMPDU_MAX_LENGTH`].
+impl<'slot, L, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, L, SLOTS> {
+    /// An empty aggregate over the idle `owner`, the owner configured to
+    /// [`ESP32S31_AMPDU_MAX_LENGTH`].
     ///
     /// # Errors
     ///
     /// The owner, when it is not idle.
     #[allow(clippy::result_large_err, reason = "the owner goes back by value")]
     pub fn new(
-        mut owner: Esp32s31AmpduOwner<'slot, S::Backing, SLOTS>,
-        source: &'slot S,
-    ) -> Result<Self, Esp32s31AmpduOwner<'slot, S::Backing, SLOTS>> {
-        if owner
-            .configure_max_aggregate_bytes(ESP32S31_AMPDU_MAX_LENGTH)
-            .is_err()
+        mut owner: Esp32s31AmpduOwner<'slot, L, SLOTS>,
+    ) -> Result<Self, Esp32s31AmpduOwner<'slot, L, SLOTS>> {
+        if owner.state() != TxDmaState::Free
+            || owner
+                .configure_max_aggregate_bytes(ESP32S31_AMPDU_MAX_LENGTH)
+                .is_err()
         {
             return Err(owner);
         }
         Ok(Self {
             owner,
-            source,
             subframes: [const { None }; SLOTS],
             admitted_at: [oer_time::Instant::EPOCH; SLOTS],
             count: 0,
@@ -165,13 +219,20 @@ impl<'slot, S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, S, S
         self.subframes.iter().flatten().map(|subframe| subframe.len)
     }
 
-    /// Return the subframes to their source and give the owner back.
-    pub fn into_owner(self) -> Esp32s31AmpduOwner<'slot, S::Backing, SLOTS> {
-        self.owner
+    /// Hand every subframe's buffer to `returned`, in subframe order, and
+    /// give the owner back.
+    pub fn into_owner(self, mut returned: impl FnMut(L)) -> Esp32s31AmpduOwner<'slot, L, SLOTS> {
+        let Self {
+            owner, subframes, ..
+        } = self;
+        for subframe in subframes.into_iter().flatten() {
+            returned(subframe.backing);
+        }
+        owner
     }
 }
 
-impl<S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS> {
+impl<L: PlacedBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
     pub(super) fn matches_admission<Path: PoolPath>(
         &mut self,
         role: oer_ieee80211_contracts_port::VifRole,
@@ -206,33 +267,44 @@ const fn subframe_capacity(len: usize) -> Option<usize> {
     }
 }
 
-impl<S: AmpduBackingSource, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS> {
-    /// Append a subframe of `len` MPDU octets: the memory to encode it into.
-    /// `None` when the aggregate holds `SLOTS`, the length is zero, the
-    /// source has no free backing, or its backing is too short for the MPDU
-    /// with its metadata, MIC and FCS.
-    pub fn push_mpdu(&mut self, len: usize, admitted_at: oer_time::Instant) -> Option<&mut [u8]> {
-        if self.count >= SLOTS || len == 0 {
-            return None;
+impl<L: PlacedBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
+    /// Append the subframe `backing` holds, an MPDU of `len` octets after
+    /// the metadata prefix, admitted at `admitted_at`: its MPDU memory.
+    ///
+    /// # Errors
+    ///
+    /// The backing, unchanged, when the aggregate holds `SLOTS`, the length
+    /// is zero, or the backing is too short for the MPDU with its metadata,
+    /// MIC and FCS.
+    pub fn push_backing(
+        &mut self,
+        mut backing: L,
+        len: usize,
+        admitted_at: oer_time::Instant,
+    ) -> Result<&mut [u8], L> {
+        let fits = subframe_capacity(len)
+            .is_some_and(|capacity| backing.stable_dma_region().len() >= capacity);
+        if self.count >= SLOTS || len == 0 || !fits {
+            return Err(backing);
         }
-        let capacity = subframe_capacity(len)?;
-        let mut backing = self.source.backing()?;
-        if backing.stable_dma_region().len() < capacity {
-            // Dropping the backing returns it.
-            return None;
-        }
-        *self.admitted_at.get_mut(self.count)? = admitted_at;
-        let subframe = self
-            .subframes
-            .get_mut(self.count)?
-            .insert(Subframe { backing, len });
+        let (Some(at), Some(slot)) = (
+            self.admitted_at.get_mut(self.count),
+            self.subframes.get_mut(self.count),
+        ) else {
+            return Err(backing);
+        };
+        *at = admitted_at;
+        let subframe = slot.insert(Subframe { backing, len });
         self.count += 1;
         let region = subframe.backing.stable_dma_region().into_mut_slice();
-        region.get_mut(TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + len)
+        Ok(region
+            .get_mut(TX_AMPDU_METADATA_SIZE..)
+            .and_then(|mpdu| mpdu.get_mut(..len))
+            .unwrap_or_default())
     }
 }
 
-impl<S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS> {
+impl<L, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
     /// The original admission of a retained unpublished subframe.
     pub fn admitted_at(&self, index: usize) -> Option<oer_time::Instant> {
         self.subframes.get(index)?.as_ref()?;
@@ -288,7 +360,7 @@ impl<S: AmpduBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, S, SLOTS> {
     }
 }
 
-impl<S: AmpduBacking, const SLOTS: usize> fmt::Debug for Esp32s31AmpduBuffer<'_, S, SLOTS> {
+impl<L, const SLOTS: usize> fmt::Debug for Esp32s31AmpduBuffer<'_, L, SLOTS> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Esp32s31AmpduBuffer")
@@ -382,6 +454,11 @@ impl<B, const SLOTS: usize, Path: PoolPath> PublishedAmpdu<'_, '_, B, SLOTS, Pat
     #[cfg(test)]
     pub(super) const fn owner(&self) -> &Esp32s31AmpduOwner<'_, B, SLOTS> {
         &self.owner
+    }
+
+    /// The hardware index of the aggregate's queue.
+    pub(super) fn queue_index(&self) -> usize {
+        usize::from(LegacyTxQueue::from_access_category(self.queue.category()).hardware_index())
     }
 }
 
@@ -495,25 +572,23 @@ impl<B, const SLOTS: usize, Path: PoolPath> fmt::Debug for AmpduFault<'_, '_, B,
 pub struct ExpiredAmpdu<
     'core,
     'slot,
-    S: AmpduBacking,
+    L,
     const SLOTS: usize,
     Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
 > {
-    buffer: Esp32s31AmpduBuffer<'slot, S, SLOTS>,
+    buffer: Esp32s31AmpduBuffer<'slot, L, SLOTS>,
     plan: AmpduPlan<'core, Path>,
     msdus: u64,
 }
-impl<S: AmpduBacking, const SLOTS: usize, Path: PoolPath> fmt::Debug
-    for ExpiredAmpdu<'_, '_, S, SLOTS, Path>
-{
+impl<L, const SLOTS: usize, Path: PoolPath> fmt::Debug for ExpiredAmpdu<'_, '_, L, SLOTS, Path> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ExpiredAmpdu")
             .field("msdus", &self.msdus)
             .finish_non_exhaustive()
     }
 }
-impl<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath>
-    ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>
+impl<'core, 'slot, L, const SLOTS: usize, Path: PoolPath>
+    ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>
 {
     /// Original positions of expired MSDUs; the rest remains live.
     pub const fn expired_msdus(&self) -> u64 {
@@ -522,7 +597,7 @@ impl<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath>
     pub(super) fn into_parts(
         self,
     ) -> (
-        Esp32s31AmpduBuffer<'slot, S, SLOTS>,
+        Esp32s31AmpduBuffer<'slot, L, SLOTS>,
         AmpduPlan<'core, Path>,
         u64,
     ) {
@@ -533,16 +608,14 @@ impl<'core, 'slot, S: AmpduBacking, const SLOTS: usize, Path: PoolPath>
 pub enum AmpduStartError<
     'core,
     'slot,
-    S: AmpduBacking,
+    L,
     const SLOTS: usize,
     Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
 > {
-    Expired(ExpiredAmpdu<'core, 'slot, S, SLOTS, Path>),
-    Fault(AmpduFault<'core, 'slot, S::Backing, SLOTS, Path>),
+    Expired(ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>),
+    Fault(AmpduFault<'core, 'slot, L, SLOTS, Path>),
 }
-impl<S: AmpduBacking, const SLOTS: usize, Path: PoolPath> fmt::Debug
-    for AmpduStartError<'_, '_, S, SLOTS, Path>
-{
+impl<L, const SLOTS: usize, Path: PoolPath> fmt::Debug for AmpduStartError<'_, '_, L, SLOTS, Path> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Expired(expired) => f.debug_tuple("Expired").field(&expired.msdus).finish(),
@@ -558,18 +631,18 @@ impl<S: AmpduBacking, const SLOTS: usize, Path: PoolPath> fmt::Debug
     clippy::result_large_err,
     reason = "retain the complete DMA and key owners without allocation"
 )]
-pub fn publish<'core, 'slot, S, H, const SLOTS: usize, Path: PoolPath>(
+pub fn publish<'core, 'slot, L, H, const SLOTS: usize, Path: PoolPath>(
     hardware: &mut H,
-    buffer: Esp32s31AmpduBuffer<'slot, S, SLOTS>,
+    buffer: Esp32s31AmpduBuffer<'slot, L, SLOTS>,
     plan: AmpduPlan<'core, Path>,
     now: oer_time::Instant,
     publication_timeout: oer_time::Duration,
 ) -> Result<
-    PublishedAmpdu<'core, 'slot, S::Backing, SLOTS, Path>,
-    AmpduStartError<'core, 'slot, S, SLOTS, Path>,
+    PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
+    AmpduStartError<'core, 'slot, L, SLOTS, Path>,
 >
 where
-    S: AmpduBacking,
+    L: PlacedBacking,
     H: HtAmpduHardware,
 {
     let expired = buffer.expired_mask(now, plan.settings.lifetime);
@@ -686,7 +759,9 @@ where
     }
 }
 
-/// Consume one interrupt or deadline edge several queues share, as
+/// Consume one interrupt or deadline edge several queues share, handing
+/// the subframes' buffers to `returned` in subframe order once the
+/// hardware left the chain, as
 /// `OrdinaryTxOwner::service_queued_single_attempt` does for an MPDU: the
 /// queue's BlockAck completion, then its collision detach on a collision
 /// edge, then its timeout abort on a timeout edge or the expired deadline,
@@ -703,12 +778,20 @@ pub fn service<'core, 'slot, B, H, const SLOTS: usize, Path: PoolPath>(
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
     now: oer_time::Instant,
+    returned: impl FnMut(B),
 ) -> Result<AmpduProgress<'core, 'slot, B, SLOTS, Path>, AmpduFault<'core, 'slot, B, SLOTS, Path>>
 where
     B: PlacedBacking,
     H: HtAmpduHardware,
 {
-    match service_step(hardware, &mut published, wake, may_begin_timeout_abort, now) {
+    match service_step(
+        hardware,
+        &mut published,
+        wake,
+        may_begin_timeout_abort,
+        now,
+        returned,
+    ) {
         Ok(None) => Ok(AmpduProgress::Pending(published)),
         Ok(Some(outcome)) => Ok(AmpduProgress::Complete(CompletedAmpdu {
             outcome,
@@ -733,6 +816,7 @@ fn service_step<B, H, const SLOTS: usize, Path: PoolPath>(
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
     now: oer_time::Instant,
+    mut returned: impl FnMut(B),
 ) -> Result<Option<AmpduOutcome>, HtAmpduTxError>
 where
     B: PlacedBacking,
@@ -744,14 +828,16 @@ where
         if now < published.deadline {
             return Ok(None);
         }
-        published.owner.finish_timeout_abort(hardware, cookie)?;
+        published
+            .owner
+            .finish_timeout_abort(hardware, cookie, &mut returned)?;
         return Ok(Some(AmpduOutcome::Aborted));
     }
     if let Some(event) = published.owner.acknowledge_completion(hardware)? {
         match event {
             crate::mac::tx::CompletionObservation::Observed(completion) => {
                 published.owner.detach_completed(hardware, cookie)?;
-                published.owner.release_completed(cookie)?;
+                published.owner.release_completed(cookie, &mut returned)?;
                 return Ok(Some(AmpduOutcome::Completed(completion)));
             }
             crate::mac::tx::CompletionObservation::NoEffect => {}
@@ -761,7 +847,10 @@ where
         WifiTxWake::Interrupt { events } => events,
         WifiTxWake::Deadline => 0,
     };
-    if published.owner.abort_collision(hardware, cookie)? {
+    if published
+        .owner
+        .abort_collision(hardware, cookie, &mut returned)?
+    {
         return Ok(Some(AmpduOutcome::Collision));
     }
     let expired = now >= published.deadline;

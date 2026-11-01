@@ -1,8 +1,10 @@
 //! The shared admission-age suite against the S31 backend: an MSDU admitted
 //! with a sub-TU lifetime expires before its publication or between retries,
 //! and an acknowledgement of a hardware-owned publication wins over its age.
-//! Re-formation and BA-window delivery require `AmpduPhase`, which the S31
-//! port does not expose; those cases are unsupported here, not model-only.
+//! Re-formation and BA-window delivery also need the Block Ack originator
+//! above the port, whose BAR moves the window; this port fixture runs no
+//! originator, so those cases are not exercised here. The port's own
+//! aggregate expiry by subframe position is `port::aggregate`'s case.
 use super::*;
 use oer_ieee80211_testing_conformance::msdu_age::{Case, End, Trace, verify};
 

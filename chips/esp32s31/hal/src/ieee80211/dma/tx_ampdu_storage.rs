@@ -692,9 +692,11 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
             .ok_or(AmpduDmaStorageError::Count)
     }
 
-    pub fn cancel(&mut self) -> Result<(), AmpduDmaStorageError> {
+    /// Cancel the reserved chain and hand every retained lease to
+    /// `returned`, in the order they were pushed.
+    pub fn cancel(&mut self, returned: impl FnMut(B)) -> Result<(), AmpduDmaStorageError> {
         self.dma_mut().cancel()?;
-        self.drop_backings();
+        self.return_backings(returned);
         Ok(())
     }
 
@@ -709,18 +711,26 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         self.dma_mut().mark_detached(detached)
     }
 
-    pub fn release_detached(&mut self) -> Result<(), AmpduDmaStorageError> {
+    /// Release the detached chain and hand every retained lease to
+    /// `returned`, in the order they were pushed.
+    pub fn release_detached(
+        &mut self,
+        returned: impl FnMut(B),
+    ) -> Result<(), AmpduDmaStorageError> {
         self.dma_mut().release_detached()?;
-        self.drop_backings();
+        self.return_backings(returned);
         Ok(())
     }
 
+    /// Release the aborted chain the detach proof names and hand every
+    /// retained lease to `returned`, in the order they were pushed.
     pub fn release_aborted(
         &mut self,
         detached: MacTxQueueDetached<'_>,
+        returned: impl FnMut(B),
     ) -> Result<(), AmpduDmaStorageError> {
         self.dma_mut().release_aborted(detached)?;
-        self.drop_backings();
+        self.return_backings(returned);
         Ok(())
     }
 
@@ -776,18 +786,25 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
             .expect("retained aggregate owner contains its lease arena")
     }
 
-    fn drop_backings(&mut self) {
+    /// Hand every retained lease to `returned` in push order; only after
+    /// the chain left the hardware.
+    fn return_backings(&mut self, mut returned: impl FnMut(B)) {
         for index in 0..self.held {
-            drop(
-                self.retention_mut().backings[index]
-                    .take()
-                    .map(ManuallyDrop::into_inner),
-            );
+            if let Some(backing) = self.retention_mut().backings[index]
+                .take()
+                .map(ManuallyDrop::into_inner)
+            {
+                returned(backing);
+            }
             self.retention_mut().backing_identities[index] = None;
             self.retention_mut().backing_descriptors[index] = None;
         }
         self.held = 0;
         self.active_count = 0;
+    }
+
+    fn drop_backings(&mut self) {
+        self.return_backings(drop);
     }
 
     #[allow(

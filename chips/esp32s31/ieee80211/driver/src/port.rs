@@ -8,7 +8,7 @@
 
 use crate::mac::{
     rx::{NormalizedRxFrame, RxError},
-    tx::{LegacyTxQueue, TxSlot, TxSlotAccess, TxSlotFree},
+    tx::{LegacyTxQueue, TxBacking, TxSlot, TxSlotAccess},
 };
 use crate::{
     lower_mac::{self as core_mac, *},
@@ -32,6 +32,8 @@ use oer_radio_port::{self as radio, Child, Root, Slot};
 use oer_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
 use oer_time::{Clock, Duration, Instant, Timer};
 
+mod aggregate;
+pub use aggregate::{Aggregate, AggregateExecution, SubframeMpdus, Subframes, TX_AMPDU_SUBFRAMES};
 mod atomic_words;
 use atomic_words::KeyActivity;
 mod buffer;
@@ -59,8 +61,60 @@ pub use crate::lower_mac::{ContentionDraw, Observations};
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
 pub use settings::SettingFault;
 
-/// Shared admission capacity across the four access categories.
+/// Shared admission capacity across the four access categories. An
+/// aggregate takes one ticket, as an MPDU does.
 pub const TX_TICKETS: usize = 8;
+
+/// The transmit pool's buffers: two complete aggregates, one in the air
+/// while the next is built, and three for MPDUs beside them.
+pub const TX_BUFFERS: usize = 2 * TX_AMPDU_SUBFRAMES + 3;
+
+/// The aggregate descriptor chains: the one an aggregate in the air holds
+/// and the one the next aggregate publishes through.
+pub const AMPDU_CHAINS: usize = 2;
+
+/// The ordinary descriptors: one per EDCA queue, which holds one published
+/// MPDU at a time.
+pub const TX_DESCRIPTORS: usize = 4;
+
+const _: () = {
+    // A buffer place is named by a `u8` pool index.
+    if TX_BUFFERS > u8::MAX as usize + 1 {
+        panic!("the transmit pool's places fit their u8 index");
+    }
+    if AMPDU_CHAINS == 0 || AMPDU_CHAINS * TX_AMPDU_SUBFRAMES > TX_BUFFERS {
+        panic!("every chain can hold a complete aggregate from the pool");
+    }
+    if TX_DESCRIPTORS != crate::lower_mac::LOWER_MAC_TX_QUEUES {
+        panic!("one ordinary descriptor per EDCA queue");
+    }
+};
+
+/// The transmit pool every MPDU and subframe is written into.
+pub type TxPool<const B: usize> =
+    oer_esp32s31_hal::memory::dma_static::PlacedTxPool<B, 0, 0, TX_BUFFERS>;
+
+/// One aggregate descriptor chain over the pool's buffers.
+pub type AmpduChain<const B: usize> =
+    crate::lower_mac::Esp32s31AmpduOwner<'static, TxBacking<B>, TX_AMPDU_SUBFRAMES>;
+
+/// The descriptors the pool's buffers are published through: one ordinary
+/// descriptor per EDCA queue and the aggregate chains. A stopped port gets
+/// them back only when every one is idle.
+pub struct TxDescriptors<const B: usize> {
+    pub single: [Pin<&'static mut TxSlot<B>>; TX_DESCRIPTORS],
+    pub chains: [AmpduChain<B>; AMPDU_CHAINS],
+}
+
+impl<const B: usize> TxDescriptors<B> {
+    /// Whether no descriptor holds a buffer or a publication.
+    fn idle(&self) -> bool {
+        self.single
+            .iter()
+            .all(|slot| slot.state() == crate::mac::tx::TxDmaState::Free && !slot.attached())
+            && self.chains.iter().all(|chain| chain.is_fully_free())
+    }
+}
 
 /// The receive units P1 holds at once besides those it lent the network:
 /// its receive events and the MPDUs its receive Block Ack agreements keep,
@@ -221,9 +275,12 @@ pub enum Fault {
     Retune(WifiRetuneError),
     /// The device lost its registers to an earlier failure.
     Abandoned,
-    /// The lower MAC completed an aggregate the ordinary port never
-    /// publishes; its queue and ticket stay quarantined.
-    UnexpectedAggregate,
+    /// An aggregate's descriptor chain refused or quarantined its
+    /// publication; its owners stay quarantined.
+    Aggregate(crate::mac::tx::ampdu::HtAmpduTxError),
+    /// Planning refused an aggregate its builder accepted under the same
+    /// rule; its owners stay quarantined.
+    AggregatePlan(crate::lower_mac::AmpduRefusal),
     /// The core asked for a retune right after recording the channel it was
     /// tuned to.
     TuneNotRecorded,
@@ -257,7 +314,7 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 /// Only the P2 registration can reach its device `RefCell`.
 pub struct PortStorage<D: Device<B>, const B: usize> {
     device: RefCell<&'static mut D>,
-    shared: &'static mut PortSharedStorage<B, D::Lent>,
+    shared: &'static mut PortSharedStorage<B, D::Lent, D::Body>,
     identity: Cell<u64>,
     expired: Cell<u32>,
     /// The station and AP tables the driver last installed in its policy.
@@ -268,14 +325,21 @@ pub struct PortStorage<D: Device<B>, const B: usize> {
 /// Caller-placed cross-context state, with no device, Cell, RefCell or shared
 /// producer. Place once before constructing `PortStorage`; quarantine keeps
 /// its DMA return places and key activity unavailable for reuse.
-pub struct PortSharedStorage<const B: usize, P: LentNotifies = SameHart> {
+pub struct PortSharedStorage<
+    const B: usize,
+    P: LentNotifies = SameHart,
+    Body = core::convert::Infallible,
+> {
     poisoned: oer_memory::OnceValue<Fault>,
     // P2 can preempt a P1 notification. The P1 body consumer cannot
     // preempt its P2 producer, so its AtomicWaker needs no second slot.
     driver: PriorityWaker,
     body: AtomicWaker,
     key_live: [KeyActivity; 20],
-    returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
+    /// Each pool buffer's place, holding it while the CPU owns it.
+    returned: oer_memory::ReturnBank<TxBacking<B>, TX_BUFFERS>,
+    /// Each pool buffer's subframe record while an aggregate names it.
+    subframes: aggregate::SubframeTable<B, Body>,
     /// The receive units lent to the network.
     network: lent::NetworkCredit<P>,
     /// The received units queued for P1 and not yet taken.
@@ -326,7 +390,7 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     #[inline(never)]
     pub const fn new(
         device: &'static mut D,
-        shared: &'static mut PortSharedStorage<B, D::Lent>,
+        shared: &'static mut PortSharedStorage<B, D::Lent, D::Body>,
     ) -> Self {
         Self {
             device: RefCell::new(device),
@@ -350,13 +414,13 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
         self.shared.check()
     }
 }
-impl<const B: usize> PortSharedStorage<B> {
+impl<const B: usize, Body> PortSharedStorage<B, SameHart, Body> {
     /// Vacant cross-context backing, placed separately from the P2-only device.
     pub const fn new() -> Self {
         Self::with_network(lent::SameHart::new())
     }
 }
-impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
+impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
     // Keep the waker's typed scope at the indirect call, independently of
     // the large terminal dispatchers that notify the P1 body.
     #[inline(never)]
@@ -373,6 +437,7 @@ impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
+            subframes: oer_memory::ReturnBank::new(),
             network,
             received: settings::ReceivedInFlight::new(),
             settings: settings::Settings::new(),
@@ -415,7 +480,7 @@ std::thread_local! {
         const { core::cell::Cell::new(None) };
 }
 
-impl<const B: usize> Default for PortSharedStorage<B> {
+impl<const B: usize, Body> Default for PortSharedStorage<B, SameHart, Body> {
     fn default() -> Self {
         Self::new()
     }
@@ -425,7 +490,10 @@ impl<const B: usize> Default for PortSharedStorage<B> {
 pub struct PortParts<D: Device<B>, const B: usize, O: Observations> {
     pub storage: &'static mut PortStorage<D, B>,
     pub transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
-    pub buffers: [Pin<&'static mut TxSlot<B>>; TX_TICKETS],
+    /// The transmit pool, whose every buffer the port holds from here on.
+    pub pool: &'static TxPool<B>,
+    /// The idle descriptors its buffers are published through.
+    pub descriptors: TxDescriptors<B>,
     pub config: LowerMacConfig,
     pub access_point_address: IndividualAddress,
     pub coex: &'static D::Coex,
@@ -446,12 +514,13 @@ pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
 }
 struct Initial<D: Device<B>, const B: usize, O: Observations> {
     transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
+    descriptors: TxDescriptors<B>,
     observations: O,
     config: LowerMacConfig,
     coex: &'static D::Coex,
 }
-/// What a stopped port reinstalls with: the disabled core's transmitter and
-/// the driver's observation receiver.
+/// What a stopped port reinstalls with: the disabled core's transmitter,
+/// the idle descriptors and the driver's observation receiver.
 type Reusable<D, const B: usize, O: Observations> = (
     OrdinaryTxIdleOwner<
         'static,
@@ -460,6 +529,7 @@ type Reusable<D, const B: usize, O: Observations> = (
         <D as Device<B>>::Timer,
         B,
     >,
+    TxDescriptors<B>,
     O,
 );
 enum BackendState<D: Device<B>, const B: usize, O: Observations> {
@@ -467,9 +537,10 @@ enum BackendState<D: Device<B>, const B: usize, O: Observations> {
     Running,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Backend<Id, D, B, O> {
-    /// Optional aggregate admission of this port implementation. Its
-    /// `NoAggregate` owner is uninhabited and it implements no `AmpduPhase`.
-    pub const AMPDU: Option<AmpduCapabilities> = None;
+    /// The aggregates this port sends: up to [`TX_AMPDU_SUBFRAMES`]
+    /// subframes, through [`AmpduPhase`] of either interface.
+    pub const AMPDU: Option<AmpduCapabilities> =
+        Some(esp32s31_ampdu_capabilities(TX_AMPDU_SUBFRAMES));
 
     #[inline(never)]
     pub fn new(parts: PortParts<D, B, O>) -> Result<Self, PortParts<D, B, O>> {
@@ -485,10 +556,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
                 + 24
                 + crate::ordinary_tx::TX_CCMP_MIC_SIZE
                 + crate::ordinary_tx::TX_FCS_SIZE
-            || parts
-                .buffers
-                .iter()
-                .any(|slot| slot.state() != crate::mac::tx::TxDmaState::Free)
+            || !parts.descriptors.idle()
             || parts.storage.shared.poisoned.get().is_some()
         {
             return Err(parts);
@@ -497,20 +565,23 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
         let PortParts {
             storage,
             transmitter,
-            buffers,
+            pool,
+            descriptors,
             config,
             access_point_address,
             coex,
             observations,
         } = parts;
-        // Every slot was checked free above. A slot that is not, or a place
-        // the bank already holds, poisons this installation: the allocation
+        // The port takes every pool buffer at its place, and each place's
+        // subframe record starts empty. A buffer the pool does not give, or
+        // a place already held, poisons this installation: the allocation
         // stays out of the bank and enable refuses with the fault.
-        for (index, slot) in buffers.into_iter().enumerate() {
-            let seeded = match slot.access() {
-                TxSlotAccess::Free(memory) => storage.shared.returned.seed(index, memory).is_ok(),
-                _ => false,
-            };
+        for index in 0..TX_BUFFERS {
+            let seeded = u8::try_from(index).ok().is_some_and(|place| {
+                claim(pool, place)
+                    .is_some_and(|memory| storage.shared.returned.seed(index, memory).is_ok())
+                    && storage.shared.subframes.seed(index, None).is_ok()
+            });
             if !seeded {
                 storage.shared.poison(Fault::Capacity);
             }
@@ -520,6 +591,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
             storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
+                descriptors,
                 observations,
                 config,
                 coex,
@@ -532,6 +604,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
             identity: PhantomData,
         })
     }
+}
+
+/// Buffer `place` of `pool`, as the radio holds it.
+fn claim<const B: usize>(pool: &'static TxPool<B>, place: u8) -> Option<TxBacking<B>> {
+    pool.claim_network(place)
+        .ok()?
+        .publish(oer_memory::FrameLen::constant::<0>(), |_| {});
+    pool.claim_radio(place).ok()
 }
 
 /// Hardware and reusable DMA owners returned after confirmed normal stopping.
@@ -561,11 +641,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPor
     pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B, O>, Self> {
         if self.storage.shared.poisoned.get().is_some()
             || !self.storage.shared.returned.all_returned()
+            || !self.storage.shared.subframes_vacant()
             || tsf_epoch == self.config.tsf_epoch
         {
             return Err(self);
         }
-        let Some((transmitter, observations)) = self.reusable.take() else {
+        let Some((transmitter, descriptors, observations)) = self.reusable.take() else {
             return Err(self);
         };
         self.config.tsf_epoch = tsf_epoch;
@@ -575,6 +656,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPor
             storage: self.storage,
             state: BackendState::Initial(Some(Initial {
                 transmitter,
+                descriptors,
                 observations,
                 config: self.config,
                 coex: self.coex,
@@ -680,6 +762,22 @@ impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ack {
     pub snr_db: i8,
+}
+
+/// What the port observed of an aggregate's BlockAck: its SNR, when the
+/// completion carried a sample.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BlockAckAnswer {
+    pub snr_db: Option<i8>,
+}
+
+impl BlockAckSnr for BlockAckAnswer {
+    fn snr_sample(&self) -> SnrSample {
+        match self.snr_db {
+            Some(snr_db) => SnrSample::Measured(snr_db),
+            None => SnrSample::Unmeasured,
+        }
+    }
 }
 
 impl Ack {

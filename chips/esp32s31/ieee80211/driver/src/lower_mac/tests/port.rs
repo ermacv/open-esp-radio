@@ -90,6 +90,9 @@ struct Observed {
     /// The next publication ends in the hardware's TX-timeout edge instead
     /// of a completion.
     timeout_edge: bool,
+    /// Publications are aggregates: each completes with this BlockAck's
+    /// starting sequence, bitmap and whether it arrived, beside its status.
+    block_ack: Option<(u16, u64, bool)>,
     hold_cut: bool,
     hold_stop: bool,
     cut_calls: usize,
@@ -403,9 +406,18 @@ impl Device<512> for TestDevice {
                 .get(self.completed)
                 .copied()
                 .unwrap_or((0, 0));
-            self.hardware.completion[usize::from(queue)] = Some(
-                oer_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail),
-            );
+            let completion =
+                oer_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail);
+            match self.observed.borrow().block_ack {
+                Some((start, bitmap, received)) => {
+                    self.hardware.block_ack_completion[usize::from(queue)] = Some(
+                        oer_esp32s31_hal::types::MacHtAmpduCompletionObservation::new_model(
+                            completion, 0, start, bitmap, received,
+                        ),
+                    );
+                }
+                None => self.hardware.completion[usize::from(queue)] = Some(completion),
+            }
             self.done[index] = true;
             self.completed += 1;
             Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
@@ -480,6 +492,7 @@ type Family<Id> = Types<Id, TestDevice, 512, Draws>;
 type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
+mod aggregate;
 mod barriers;
 mod conformance;
 mod retune;
@@ -524,7 +537,6 @@ fn installed_with_entropy(
         statuses,
         ..Observed::default()
     }));
-    let buffers: [_; TX_TICKETS] = core::array::from_fn(|_| slot());
     let device = TestDevice {
         hardware,
         timer: timer.clone(),
@@ -551,7 +563,8 @@ fn installed_with_entropy(
     let parts = PortParts {
         storage,
         transmitter,
-        buffers,
+        pool: crate::mac::tx::test_support::model_pool().expect("model pool"),
+        descriptors: descriptors(),
         config: crate::lower_mac::LowerMacConfig {
             station_address: STATION,
             channel: channel(6),
@@ -563,6 +576,32 @@ fn installed_with_entropy(
         observations: Draws(observed.borrow().draws.clone()),
     };
     (parts, observed, timer)
+}
+
+/// Model descriptors the port publishes its pool's buffers through: four
+/// bare ordinary descriptors and the aggregate chains.
+fn descriptors() -> crate::port::TxDescriptors<512> {
+    let descriptor = || {
+        core::pin::Pin::static_mut(Box::leak(Box::new(
+            crate::mac::tx::TxSlot::new_model_descriptor().expect("model descriptor"),
+        )))
+    };
+    let chain = || {
+        crate::mac::tx::ampdu::RetainedDmaAmpduTx::new_model(
+            core::pin::Pin::static_mut(Box::leak(Box::new(
+                crate::mac::tx::ampdu::HtAmpduTxStorage::new(),
+            ))),
+            Box::leak(Box::new(
+                crate::mac::tx::ampdu::RetainedAmpduDmaStorage::new(),
+            )),
+        )
+        .ok()
+        .expect("model chain")
+    };
+    crate::port::TxDescriptors {
+        single: core::array::from_fn(|_| descriptor()),
+        chains: core::array::from_fn(|_| chain()),
+    }
 }
 
 fn block_on<F: Future>(future: F) -> F::Output {

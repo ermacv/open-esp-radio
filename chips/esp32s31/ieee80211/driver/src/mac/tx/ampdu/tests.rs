@@ -462,7 +462,7 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
             Err(HtAmpduTxError::FrameTooLong)
         );
         assert_eq!(owner.held_backing_count(), 0);
-        owner.cancel(cookie).unwrap();
+        owner.cancel(cookie, drop).unwrap();
     }
 
     assert_eq!(pool.claim_network(0).unwrap().release(), 0);
@@ -559,7 +559,7 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
         assert_eq!(owner.held_backing_count(), 1);
         assert_eq!(pool.claimed_slots(), 1);
         // The caller retains the owner while waiting for the settle deadline.
-        let result = owner.finish_timeout_abort(&mut hardware, cookie);
+        let result = owner.finish_timeout_abort(&mut hardware, cookie, drop);
         if detach_failed {
             assert_eq!(result, Err(HtAmpduTxError::DetachFailed));
             drop(owner);
@@ -570,7 +570,7 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
             assert_eq!(owner.held_backing_count(), 0);
             assert_eq!(pool.claimed_slots(), 0);
             assert_eq!(
-                owner.finish_timeout_abort(&mut hardware, cookie),
+                owner.finish_timeout_abort(&mut hardware, cookie, drop),
                 Err(HtAmpduTxError::Stale)
             );
             drop(owner);
@@ -726,12 +726,12 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
         u32::from(aggregate.bytes) + u32::from(retained.bytes) + u32::from(retry.bytes)
     );
     assert!(work.psdu_bytes < 3 * u32::from(aggregate.bytes));
-    owner.release_completed(cookie).unwrap();
+    owner.release_completed(cookie, drop).unwrap();
     assert_eq!(owner.work(), work);
     assert_eq!(pool.claimed_slots(), 0);
     let next = owner.begin().unwrap();
     assert_eq!(owner.work(), Default::default());
-    owner.cancel(next).unwrap();
+    owner.cancel(next, drop).unwrap();
 }
 
 #[test]
@@ -770,7 +770,7 @@ fn owned_dma_pool_builds_two_mpdu_length_without_publishing_hardware() {
     );
     assert_eq!(owner.frame_count(), 2);
     assert_eq!(owner.state(), TxDmaState::Reserved);
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
     assert_eq!(owner.state(), TxDmaState::Free);
 }
 
@@ -946,7 +946,7 @@ fn owned_dma_pool_preserves_one_subframe_he_ampdu_length() {
             subframes: 1,
         }
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 }
 
 #[test]
@@ -983,7 +983,7 @@ fn owned_he_commit_derives_empty_delimiters_from_rate_and_peer_density() {
             subframes: 2,
         }
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
     let first = released_slot(&pool, 0, TX_AMPDU_METADATA_SIZE);
     assert_eq!(first[4], 1);
 }
@@ -1026,7 +1026,7 @@ fn he_trigger_preparation_fails_closed_without_original_msdu_length() {
         owner.prepared_he_trigger(LegacyTxQueue::BestEffort, config),
         Err(HtAmpduTxError::TriggerMsduLengthUnavailable)
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 }
 
 #[test]
@@ -1124,7 +1124,7 @@ fn incremental_pool_length_matches_blob_accumulator_for_full_window() {
             );
         }
     }
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 }
 
 #[test]
@@ -1168,7 +1168,7 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
     assert_eq!(frame, &[0x5a; 32]);
     assert_eq!(mic_length, 8);
 
-    owner.release_completed(cookie).unwrap();
+    owner.release_completed(cookie, drop).unwrap();
     assert_eq!(owner.state(), TxDmaState::Free);
     assert_eq!(owner.completed_frame(cookie, 0), Err(HtAmpduTxError::Stale));
 }
@@ -1204,7 +1204,7 @@ fn detached_pool_compacts_only_missing_frames_for_ampdu_retry() {
     assert_eq!(owner.state(), TxDmaState::Reserved);
     assert_eq!(owner.buffer_addresses[0], committed[1]);
     assert_eq!(owner.buffer_addresses[1], committed[3]);
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
     for slot in [1, 3] {
         let bytes = released_slot(&pool, slot, TX_AMPDU_METADATA_SIZE + 2);
         assert_eq!(bytes[TX_AMPDU_METADATA_SIZE], slot);
@@ -1249,7 +1249,7 @@ fn protection_failure_republishes_every_frame_without_the_retry_bit() {
     assert_eq!(aggregate, original);
     assert_eq!(owner.state(), TxDmaState::Reserved);
     assert_eq!(owner.buffer_addresses[..3], committed[..3]);
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
     for slot in 0..3 {
         let bytes = released_slot(&pool, slot, TX_AMPDU_METADATA_SIZE + 2);
         assert_eq!(bytes[TX_AMPDU_METADATA_SIZE + 1], 0x41);
@@ -1304,7 +1304,7 @@ fn detached_he_pool_retains_one_missing_mpdu_at_the_original_rate() {
             .ampdu_empty_delimiters(32 + 8 + TX_FCS_SIZE, density)
             .unwrap()
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
     let buffer = released_slot(&pool, 0, TX_AMPDU_METADATA_SIZE + 2);
     assert_eq!(buffer[TX_AMPDU_METADATA_SIZE + 1] & 0x08, 0x08);
 }
@@ -1347,7 +1347,7 @@ fn full_window_and_byte_ceiling_are_independent() {
         Err(HtAmpduTxError::AggregateFull)
     );
     assert_eq!(owner.frame_count(), 20);
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 
     owner.configure_max_aggregate_bytes(0x1fff).unwrap();
     let cookie = owner.begin().unwrap();
@@ -1371,7 +1371,7 @@ fn full_window_and_byte_ceiling_are_independent() {
             .can_commit_referenced_ht_frame(cookie, 100, 8, 0, rate, 1700)
             .unwrap()
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 }
 
 #[test]
@@ -1417,7 +1417,7 @@ fn he_rate_duration_gate_prevents_an_oversized_dma_publication() {
         ),
         Err(HtAmpduTxError::AggregateFull)
     );
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 
     let gi_800 = HeRate::ldpc(
         crate::mac::tx::HeMcs::Mcs9,
@@ -1434,7 +1434,7 @@ fn he_rate_duration_gate_prevents_an_oversized_dma_publication() {
             .unwrap();
     }
     assert_eq!(owner.prepared_aggregate(cookie).unwrap().bytes, 48_512);
-    owner.cancel(cookie).unwrap();
+    owner.cancel(cookie, drop).unwrap();
 }
 
 #[test]

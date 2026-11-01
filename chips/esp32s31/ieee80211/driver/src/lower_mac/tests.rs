@@ -1419,11 +1419,11 @@ fn an_attempt_is_published_from_the_slot_it_was_written_in() {
         let frame = data_frame(BSSID);
 
         let request = values(&frame, false);
-        let written = request.slot.slot().buffer_address();
+        let written = request.slot.slot().descriptor_address();
         assert_eq!(submit(&mut core, &mut hardware, request), Ok(()));
         // The queue publishes the slot the MPDU was written in, which comes
         // back with its completion.
-        assert_eq!(queued(&core, BE).slot().buffer_address(), written);
+        assert_eq!(queued(&core, BE).slot().descriptor_address(), written);
         assert!(core.queue_busy(WmmAccessCategory::BestEffort));
         assert_eq!(hardware.legacy.len(), 1);
         assert_eq!(hardware.legacy[0].1.interface(), MacInterface::Station);
@@ -1438,7 +1438,7 @@ fn an_attempt_is_published_from_the_slot_it_was_written_in() {
             [completed(TxStatus::Success, Some(0x60))]
         );
         assert_eq!(events.queues, [WmmAccessCategory::BestEffort]);
-        assert_eq!(events.slots[0].as_ref().buffer_address(), written);
+        assert_eq!(events.slots[0].as_ref().descriptor_address(), written);
         assert_eq!(core.next_deadline(), None);
         assert!(!core.queue_busy(WmmAccessCategory::BestEffort));
         let next = values(&frame, false);
@@ -1539,7 +1539,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         let request = values(&data_frame(BSSID), false);
-        let address = request.slot.slot().buffer_address();
+        let address = request.slot.slot().descriptor_address();
         submit(&mut core, &mut hardware, request).unwrap();
         let deadline = core.next_deadline();
         let mut events = Events::default();
@@ -1549,7 +1549,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
         assert!(events.completions.is_empty());
         assert!(events.slots.is_empty());
         assert_eq!(hardware.publications(), 1);
-        assert_eq!(queued(&core, BE).slot().buffer_address(), address);
+        assert_eq!(queued(&core, BE).slot().descriptor_address(), address);
         assert_eq!(
             queued(&core, BE).slot().state(),
             crate::mac::tx::TxDmaState::HardwareOwned
@@ -1563,7 +1563,7 @@ fn a_no_effect_rts_event_retains_its_published_owner_until_the_real_result() {
             [completed(TxStatus::Success, Some(0x60))]
         );
         assert_eq!(events.slots.len(), 1);
-        assert_eq!(events.slots[0].as_ref().buffer_address(), address);
+        assert_eq!(events.slots[0].as_ref().descriptor_address(), address);
         assert_eq!(hardware.publications(), 1);
     });
 }
@@ -1901,6 +1901,7 @@ fn review_aggregate_no_effect_cannot_postpone_expired_watchdog() {
             WifiTxWake::Deadline,
             true,
             deadline,
+            drop,
         );
         assert!(result.is_err(), "NoEffect hid an expired A-MPDU watchdog");
     });
@@ -2345,7 +2346,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
             assert_eq!(
                 core.write_ccmp_header(
                     &pairwise,
-                    &mut queued_free_slot(slot.as_mut()),
+                    queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                     26,
                     oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(expected).unwrap()
                 ),
@@ -2404,7 +2405,7 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
         assert_eq!(
             core.write_ccmp_header(
                 &key,
-                &mut queued_free_slot(slot.as_mut()),
+                queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                 26,
                 oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
             ),
@@ -2446,7 +2447,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
             assert_eq!(
                 core.write_ccmp_header(
                     &key,
-                    &mut queued_free_slot(slot.as_mut()),
+                    queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                     header_len,
                     oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
                 ),
@@ -2460,7 +2461,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
         assert_eq!(
             core.write_ccmp_header(
                 &key,
-                &mut queued_free_slot(slot.as_mut()),
+                queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                 last_header_len,
                 oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap(),
             ),
@@ -3142,11 +3143,8 @@ impl Backings {
     }
 }
 
-impl AmpduBacking for Backings {
-    type Backing = Backing;
-}
-
-impl AmpduBackingSource for Backings {
+impl Backings {
+    /// A free backing, or `None` when every one is in use.
     fn backing(&self) -> Option<Backing> {
         let index = self.free.0.borrow_mut().pop()?;
         self.pool.claim_network(index).unwrap().publish(
@@ -3176,7 +3174,32 @@ fn ampdu_owner() -> Esp32s31AmpduOwner<'static, Backing, SUBFRAMES> {
     .unwrap()
 }
 
-type Aggregate = Esp32s31AmpduBuffer<'static, Backings, SUBFRAMES>;
+type Aggregate = Esp32s31AmpduBuffer<'static, Backing, SUBFRAMES>;
+
+/// Appending a fresh backing of a source, as a port appends the buffer it
+/// wrote each MPDU into.
+trait PushFrom {
+    /// The MPDU memory of a subframe of `len` octets, or `None` when the
+    /// source has no backing or the aggregate refuses it.
+    fn push_from(
+        &mut self,
+        source: &Backings,
+        len: usize,
+        admitted_at: oer_time::Instant,
+    ) -> Option<&mut [u8]>;
+}
+
+impl PushFrom for Aggregate {
+    fn push_from(
+        &mut self,
+        source: &Backings,
+        len: usize,
+        admitted_at: oer_time::Instant,
+    ) -> Option<&mut [u8]> {
+        // A refused backing drops and returns to its source.
+        self.push_backing(source.backing()?, len, admitted_at).ok()
+    }
+}
 
 fn ht_rate(mcs: u8) -> PhyRate {
     PhyRate::Ht(
@@ -3201,11 +3224,11 @@ fn he_rate() -> PhyRate {
 /// An aggregate of `count` QoS Data MPDUs of `len` bytes to the BSS, with
 /// sequence numbers from 100.
 fn aggregate_of(source: &'static Backings, count: usize, len: usize) -> Aggregate {
-    let mut buffer = Esp32s31AmpduBuffer::new(ampdu_owner(), source)
+    let mut buffer = Esp32s31AmpduBuffer::new(ampdu_owner())
         .ok()
         .expect("an idle aggregate owner");
     for index in 0..count {
-        let mpdu = buffer.push_mpdu(len, at(0)).expect("a backing");
+        let mpdu = buffer.push_from(source, len, at(0)).expect("a backing");
         mpdu[..26].copy_from_slice(&data_frame(BSSID));
         mpdu[22..24].copy_from_slice(&((100 + index as u16) << 4).to_le_bytes());
     }
@@ -3222,6 +3245,15 @@ fn ampdu_values(rate: PhyRate) -> AmpduValues {
         power_ceiling_dbm: None,
         backoff_slots: 9,
         min_mpdu_start_spacing: 5,
+        txop_limit_units_32_us: 0,
+    }
+}
+
+/// [`ampdu_values`] under the advertised TXOP limit `txop_units_32_us`.
+fn txop_values(txop_units_32_us: u16, rate: PhyRate) -> AmpduValues {
+    AmpduValues {
+        txop_limit_units_32_us: txop_units_32_us,
+        ..ampdu_values(rate)
     }
 }
 
@@ -3256,6 +3288,7 @@ fn end_ampdu<'core>(
         interrupt(EVENT_TX_COMPLETE),
         true,
         core.now(),
+        drop,
     )
     .unwrap()
     {
@@ -3371,16 +3404,31 @@ fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
         let color = crate::mac::irq::event_mask(
             oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
         );
-        let published =
-            match ampdu::service(&mut hardware, published, interrupt(color), true, core.now())
-                .unwrap()
-            {
-                AmpduProgress::Pending(published) => published,
-                AmpduProgress::Complete(_) => panic!("BSS color never detaches the aggregate"),
-            };
+        let published = match ampdu::service(
+            &mut hardware,
+            published,
+            interrupt(color),
+            true,
+            core.now(),
+            drop,
+        )
+        .unwrap()
+        {
+            AmpduProgress::Pending(published) => published,
+            AmpduProgress::Complete(_) => panic!("BSS color never detaches the aggregate"),
+        };
         assert_eq!(source.free(), BACKINGS - 3);
         hardware.collision_pending[BE] = true;
-        match ampdu::service(&mut hardware, published, interrupt(0), true, core.now()).unwrap() {
+        match ampdu::service(
+            &mut hardware,
+            published,
+            interrupt(0),
+            true,
+            core.now(),
+            drop,
+        )
+        .unwrap()
+        {
             AmpduProgress::Complete(completed) => {
                 let mut events = Events::default();
                 let _owner = core
@@ -3456,7 +3504,7 @@ fn an_access_category_with_a_txop_limit_takes_ht_and_he_aggregates() {
             &mut core,
             &mut hardware,
             aggregate_of(source, 2, 26),
-            ampdu_values(ht_rate(7)),
+            txop_values(94, ht_rate(7)),
         )
         .unwrap();
         assert_eq!(hardware.ht.len(), 1);
@@ -3466,7 +3514,7 @@ fn an_access_category_with_a_txop_limit_takes_ht_and_he_aggregates() {
             &mut core,
             &mut hardware,
             aggregate_of(source, 2, 26),
-            ampdu_values(he_rate()),
+            txop_values(94, he_rate()),
         )
         .unwrap();
         assert_eq!(hardware.he.len(), 1);
@@ -3509,7 +3557,7 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         );
         let mut group = aggregate_of(source, 0, 26);
         group
-            .push_mpdu(26, at(0))
+            .push_from(source, 26, at(0))
             .unwrap()
             .copy_from_slice(&data_frame([0xff; 6]));
         assert_eq!(
@@ -3538,14 +3586,14 @@ fn aggregates_outside_the_limits_are_refused_with_their_subframes() {
         // cannot hold with their metadata, MIC and FCS.
         let mut buffer = aggregate_of(source, 0, 26);
         for _ in 0..SUBFRAMES {
-            assert!(buffer.push_mpdu(26, at(0)).is_some());
+            assert!(buffer.push_from(source, 26, at(0)).is_some());
         }
-        assert!(buffer.push_mpdu(26, at(0)).is_none());
+        assert!(buffer.push_from(source, 26, at(0)).is_none());
         assert_eq!(buffer.subframes(), SUBFRAMES);
-        drop(buffer.into_owner());
+        drop(buffer.into_owner(drop));
         let mut buffer = aggregate_of(source, 0, 26);
-        assert!(buffer.push_mpdu(BACKING - 20, at(0)).is_some());
-        assert!(buffer.push_mpdu(BACKING - 19, at(0)).is_none());
+        assert!(buffer.push_from(source, BACKING - 20, at(0)).is_some());
+        assert!(buffer.push_from(source, BACKING - 19, at(0)).is_none());
         drop(buffer);
 
         // Refused and dropped aggregates published nothing and kept no
@@ -3907,7 +3955,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             let source = backings();
             let mut buffer = aggregate_of(source, 0, 26);
             for _ in 0..2 {
-                let frame = buffer.push_mpdu(26, at(0)).unwrap();
+                let frame = buffer.push_from(source, 26, at(0)).unwrap();
                 frame.copy_from_slice(&data_frame(BSSID));
                 let fc = oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
                     frame[0], frame[1],
@@ -3938,6 +3986,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                     WifiTxWake::Deadline,
                     true,
                     deadline,
+                    drop,
                 )
                 .err()
                 .unwrap();
@@ -3959,6 +4008,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                     interrupt(EVENT_TX_COMPLETE),
                     true,
                     core.now(),
+                    drop,
                 )
                 .unwrap() else {
                     panic!("terminal")

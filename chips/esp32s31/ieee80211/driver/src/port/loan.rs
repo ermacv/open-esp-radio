@@ -71,29 +71,29 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
 }
 impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B, O>> for NoAggregatePayload<'p, Id, D, B, O>
+    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B, O>> for Subframes<'p, Id, D, B, O>
 {
-    type Owned = NoAggregatePayload<'static, Id, D, B, O>;
-    fn into_owned(self, _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Owned {
-        match self.impossible {}
+    type Owned = Subframes<'static, Id, D, B, O>;
+    fn into_owned(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Owned {
+        Subframes::into_owned(self, loan)
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    OwnedPayload<Id, Esp32s31Backend<Id, D, B, O>> for NoAggregatePayload<'static, Id, D, B, O>
+    OwnedPayload<Id, Esp32s31Backend<Id, D, B, O>> for Subframes<'static, Id, D, B, O>
 {
     type Lent<'p>
-        = NoAggregatePayload<'p, Id, D, B, O>
+        = Subframes<'p, Id, D, B, O>
     where
         Self: 'p,
         Id: 'p,
         Esp32s31Backend<Id, D, B, O>: 'p;
-    fn lend<'p>(self, _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Lent<'p>
+    fn lend<'p>(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Lent<'p>
     where
         Self: 'p,
         Id: 'p,
         Esp32s31Backend<Id, D, B, O>: 'p,
     {
-        match self.impossible {}
+        Subframes::lend(self, loan)
     }
 }
 impl<'p, Id: SlotIdentity, R> PairwiseKey<'p, Id, R> {

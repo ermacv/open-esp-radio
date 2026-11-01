@@ -77,12 +77,17 @@ An exhausted enabled walker reloads from `LAST.next`; an owner-clear descriptor
 stops it unwritten at NEXT. The reload does not require LAST to remain owned.
 These bounded 32-descriptor W1 observations do not prove general DMA quiescence.
 
-[`PinnedTxDmaStorage`](tx_storage.rs) permanently retains its allocation.
-Dropping the movable owner does not free or detach hardware-visible memory.
+[`PinnedTxDmaStorage`](tx_storage.rs) permanently retains its descriptor
+allocation and holds the one `PlacedBacking` buffer lease attached to it
+while free; reservation publishes that lease's placed address. Dropping the
+movable owner does not free or detach hardware-visible memory: a lease the
+hardware may still read is leaked, never returned. The lease leaves only
+while the descriptor is free again.
 External aggregate retention takes only `PlacedBacking` leases (a placed
 TX pool's, `oer_esp32s31_hal::memory::dma_static`), whose addresses it publishes
 without a window check, and stores them without automatic destruction.
-Only cancellation before publication or a proven detach releases them. Safe
+Only cancellation before publication or a proven detach releases them, and
+the release hands each lease back to its caller in push order. Safe
 `forget` of an aggregate owner followed by destruction of its local retention
 arena leaks the allocations; neither destructor is needed to keep DMA memory
 alive. The arena itself is never referenced by a DMA descriptor.

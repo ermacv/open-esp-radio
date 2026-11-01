@@ -1,5 +1,7 @@
 use super::keys::RawKeyIdentity;
 use super::*;
+use crate::mac::tx::TxBacking;
+use oer_memory::StableDmaBacking as _;
 
 pub struct BufferClass<const B: usize>;
 impl<const B: usize> TxBufferClass for BufferClass<B> {
@@ -13,15 +15,15 @@ pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observ
     pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
 }
-type ReturnRight<const B: usize> = oer_memory::ReturnToken<'static, TxSlotFree<'static, B>>;
+type ReturnRight<const B: usize> = oer_memory::ReturnToken<'static, TxBacking<B>>;
 
-/// One buffer place's DMA memory and its sole right of return, held
+/// One buffer place's pool buffer and its sole right of return, held
 /// together: memory never exists here without its right.
 enum Dma<const B: usize> {
     /// The CPU owns the memory; its right travels with it, and dropping the
     /// buffer returns the memory.
     Free {
-        memory: TxSlotFree<'static, B>,
+        memory: TxBacking<B>,
         returned: ReturnRight<B>,
     },
     /// The hardware owns the memory; the right waits for the completion
@@ -35,22 +37,29 @@ enum Dma<const B: usize> {
 pub(super) struct ReturnableBuffer<const B: usize>(Dma<B>);
 impl<const B: usize> ReturnableBuffer<B> {
     /// The pair the bank's place hands out, or nothing to return.
-    pub(super) fn taken(pair: Option<(TxSlotFree<'static, B>, ReturnRight<B>)>) -> Self {
+    pub(super) fn taken(pair: Option<(TxBacking<B>, ReturnRight<B>)>) -> Self {
         Self(match pair {
             Some((memory, returned)) => Dma::Free { memory, returned },
             None => Dma::Released,
         })
     }
-    /// The CPU's memory, while it owns it.
-    pub(super) fn memory_mut(&mut self) -> Option<&mut TxSlotFree<'static, B>> {
+    /// The CPU's whole buffer, from its metadata prefix, while it owns it.
+    pub(super) fn memory_mut(&mut self) -> Option<&mut [u8]> {
         match &mut self.0 {
-            Dma::Free { memory, .. } => Some(memory),
+            Dma::Free { memory, .. } => Some(memory.stable_dma_region().into_mut_slice()),
             _ => None,
         }
     }
+    /// The MPDU of `len` octets after the metadata prefix, while the CPU
+    /// owns the memory.
+    pub(super) fn mpdu(&mut self, len: usize) -> Option<&mut [u8]> {
+        self.memory_mut()?
+            .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)?
+            .get_mut(..len)
+    }
     /// Hand the memory to the hardware, keeping its right; `None`, and no
     /// change, unless the CPU owns it.
-    pub(super) fn publish(&mut self) -> Option<TxSlotFree<'static, B>> {
+    pub(super) fn publish(&mut self) -> Option<TxBacking<B>> {
         match core::mem::replace(&mut self.0, Dma::Released) {
             Dma::Free { memory, returned } => {
                 self.0 = Dma::Published { returned };
@@ -64,10 +73,7 @@ impl<const B: usize> ReturnableBuffer<B> {
     }
     /// The completion handed `memory` back: it rejoins its right. Refused,
     /// with the memory and no change, unless the hardware owned it.
-    pub(super) fn complete(
-        &mut self,
-        memory: TxSlotFree<'static, B>,
-    ) -> Result<(), TxSlotFree<'static, B>> {
+    pub(super) fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
         match core::mem::replace(&mut self.0, Dma::Released) {
             Dma::Published { returned } => {
                 self.0 = Dma::Free { memory, returned };
@@ -101,8 +107,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMe
     for Buffer<'_, Id, D, B, O>
 {
     fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable> {
-        let memory = self.dma.memory_mut().ok_or(BufferMemoryUnavailable)?;
-        memory.reset_work();
+        self.dma.memory_mut().ok_or(BufferMemoryUnavailable)?;
         self.admission = None;
         Ok(())
     }
@@ -110,8 +115,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMe
         self.dma
             .memory_mut()
             .ok_or(BufferMemoryUnavailable)?
-            .buffer_mut()
-            .map_err(|_| BufferMemoryUnavailable)?
             .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)
             .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
             .ok_or(BufferMemoryUnavailable)
@@ -371,7 +374,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         S: AggregateState,
         'id: 'k + 'p,
     {
-        match operation.into_parts().0.impossible {}
+        super::aggregate::push(operation)
     }
     fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B, O> {
         AnyBuffer::Fresh(buffer)
@@ -401,79 +404,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 }
 
-/// This port exposes ordinary MPDUs. Aggregate ownership is uninhabited,
-/// and the optional `AmpduPhase` is not implemented.
-pub struct NoAggregate<'id, Id: SlotIdentity, D, const B: usize, O: Observations, S> {
-    pub(super) impossible: Infallible,
-    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D, O, S)>,
-}
-pub struct NoAggregatePayload<'id, Id: SlotIdentity, D, const B: usize, O: Observations> {
-    pub(super) impossible: Infallible,
-    marker: PhantomData<fn(&'id (), Id) -> (&'id (), Id, D, O)>,
-}
-impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> IntoIterator
-    for NoAggregatePayload<'id, Id, D, B, O>
-{
-    type Item = Mpdu<'id, Id, D, B, O>;
-    type IntoIter = core::iter::Empty<Self::Item>;
-    fn into_iter(self) -> Self::IntoIter {
-        match self.impossible {}
-    }
-}
-impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> ExecutionPayload
-    for NoAggregatePayload<'_, Id, D, B, O>
-{
-    type Execution<'a>
-        = Infallible
-    where
-        Self: 'a;
-    fn execution(&mut self) -> Infallible {
-        match self.impossible {}
-    }
-}
-impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, S: AggregateState>
-    PhaseAggregate<'id> for NoAggregate<'id, Id, D, B, O, S>
-{
-    type Types = Types<Id, D, B, O>;
-    type State = S;
-    type Backend = Esp32s31Backend<Id, D, B, O>;
-    type OwnedContext = D::OwnedContext<Id>;
-    type OwnedPayload = NoAggregatePayload<'static, Id, D, B, O>;
-    type Execution = Infallible;
-    type Cancelled = NoAggregatePayload<'id, Id, D, B, O>;
-    fn into_admission(
-        self,
-        _: D::Context<'id, Id>,
-        _: Slot<'id, Tickets, Part<Id, 2>>,
-        _: Admission<Self>,
-    ) -> AdmissionOwners<
-        Self::OwnedContext,
-        Slot<'static, Tickets, Part<Id, 2>>,
-        Self::OwnedPayload,
-        Infallible,
-    >
-    where
-        S: NonEmptyState,
-    {
-        match self.impossible {}
-    }
-    fn receiver(&self) -> IndividualAddress {
-        match self.impossible {}
-    }
-    fn tid(&self) -> Tid {
-        match self.impossible {}
-    }
-    fn protection(&self) -> MpduProtection {
-        match self.impossible {}
-    }
-    fn subframes(&self) -> usize {
-        match self.impossible {}
-    }
-    fn into_parts(self) -> Self::Cancelled {
-        match self.impossible {}
-    }
-}
-
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PhaseTypes<'id>
     for Types<Id, D, B, O>
 {
@@ -492,7 +422,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, O, R, K>;
     type KeyIdentity = keys::KeyIdentity<'id, Id>;
     type Aggregate<'k, 'p, R, K, S>
-        = NoAggregate<'id, Id, D, B, O, S>
+        = super::aggregate::Aggregate<'k, 'p, 'id, Id, D, B, O, R, K, S>
     where
         R: RoleKeys<'id, Self>,
         K: Ieee80211Capabilities,
@@ -501,11 +431,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type TxBody = D::Body;
     type TicketKind = Tickets;
     type AckEvidence = Ack;
-    type BlockAckEvidence = Ack;
+    type BlockAckEvidence = BlockAckAnswer;
     type AirDenied = Infallible;
     type AnyTxBuffer = AnyBuffer<'id, Id, D, B, O>;
     type TxMpdu = Mpdu<'id, Id, D, B, O>;
-    type TxAggregate = NoAggregatePayload<'id, Id, D, B, O>;
+    type TxAggregate = super::aggregate::Subframes<'id, Id, D, B, O>;
     type RxBuffer = ReceiveBuffer<'id, Id, D::Receive>;
     type LentRx = super::LentReceive<D::Receive, D::Lent>;
     type RxMeta = Esp32s31RxMeta;
@@ -525,18 +455,12 @@ mod tests {
     use super::*;
     use std::boxed::Box;
 
-    type Bank = oer_memory::ReturnBank<TxSlotFree<'static, 512>, 1>;
+    type Bank = oer_memory::ReturnBank<TxBacking<512>, 1>;
 
-    /// A bank whose one place holds a free model slot.
+    /// A bank whose one place holds a free model buffer.
     fn bank() -> &'static Bank {
-        let slot = Pin::static_mut(Box::leak(Box::new(
-            crate::mac::tx::TxSlot::<512>::new_model().expect("model slot"),
-        )));
-        let TxSlotAccess::Free(memory) = slot.access() else {
-            panic!("a new slot is free")
-        };
         let bank = Box::leak(Box::new(Bank::new()));
-        assert!(bank.seed(0, memory).is_ok());
+        assert!(bank.seed(0, bank_memory()).is_ok());
         bank
     }
 
@@ -587,14 +511,8 @@ mod tests {
         assert!(buffer.publish().is_none());
     }
 
-    /// Free memory of another model slot.
-    fn bank_memory() -> TxSlotFree<'static, 512> {
-        let slot = Pin::static_mut(Box::leak(Box::new(
-            crate::mac::tx::TxSlot::<512>::new_model().expect("model slot"),
-        )));
-        let TxSlotAccess::Free(memory) = slot.access() else {
-            panic!("a new slot is free")
-        };
-        memory
+    /// Free memory of another model pool.
+    fn bank_memory() -> TxBacking<512> {
+        crate::mac::tx::test_support::model_backing().expect("model buffer")
     }
 }

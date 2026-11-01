@@ -61,7 +61,9 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     assert_eq!(submitted.mpdus, 1);
     assert_eq!(submitted.psdu_bytes, u32::from(aggregate.bytes));
     assert!(owner.begin_timeout_abort(&mut hardware, cookie).unwrap());
-    owner.finish_timeout_abort(&mut hardware, cookie).unwrap();
+    owner
+        .finish_timeout_abort(&mut hardware, cookie, drop)
+        .unwrap();
     assert_eq!(owner.work(), submitted);
     assert_eq!(pool.claimed_slots(), 0);
 }

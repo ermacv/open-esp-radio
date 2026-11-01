@@ -1,15 +1,15 @@
 error[E0382]: use of moved value: `free`
- --> tests/ui/tx_free_once.rs:7:13
+ --> tests/ui/tx_free_once.rs:8:13
   |
-4 | pub fn reserve(free: TxDmaFree<'_, 64>) {
-  |                ---- move occurs because `free` has type `TxDmaFree<'_, 64>`, which does not implement the `Copy` trait
-5 |     let _ = free.reserve(64, 8);
+5 | pub fn reserve<L: PlacedBacking>(free: TxDmaFree<'_, L>) {
+  |                                  ---- move occurs because `free` has type `TxDmaFree<'_, L>`, which does not implement the `Copy` trait
+6 |     let _ = free.reserve(64, 8);
   |                  -------------- `free` moved due to this method call
-6 |     #[cfg(all())]
-7 |     let _ = free.reserve(64, 8); // ui-error: E0382
+7 |     #[cfg(all())]
+8 |     let _ = free.reserve(64, 8); // ui-error: E0382
   |             ^^^^ value used here after move
   |
-note: `TxDmaFree::<'owner, BUFFER_SIZE>::reserve` takes ownership of the receiver `self`, which moves `free`
+note: `TxDmaFree::<'owner, L>::reserve` takes ownership of the receiver `self`, which moves `free`
  --> src/ieee80211/dma/tx_storage.rs
   |
   |         self,

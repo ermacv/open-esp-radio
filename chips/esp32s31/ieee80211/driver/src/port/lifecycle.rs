@@ -7,7 +7,7 @@ pub(super) type PortCoreOwner<'id, Id, D, const B: usize> =
 pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
     pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
-    pub buffers: [Buffer<'p, Id, D, B, O>; TX_TICKETS],
+    pub buffers: [Buffer<'p, Id, D, B, O>; TX_BUFFERS],
     pub connection_epoch: Slot<'p, ConnectionEpochKind, Part<Id, 4>>,
     pub station_association: core_mac::association::VacantStationAssociation<'p, CorePath<Id>>,
     pub access_point_association:
@@ -38,7 +38,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
 }
 pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
-    storage: &'static PortSharedStorage<B, D::Lent>,
+    storage: &'static PortSharedStorage<B, D::Lent, D::Body>,
     commands: oer_memory::AffineSpscSender<
         's,
         driver::Command<'static, Id, D, B, O>,
@@ -141,7 +141,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         CorePools<TX_TICKETS>,
         ArbiterPool,
         TransmitPool<Tickets, TX_TICKETS>,
-        radio::Slots<Buffers, TX_TICKETS>,
+        radio::Slots<Buffers, TX_BUFFERS>,
         radio::Slots<ConnectionEpochKind, 1>,
         radio::Slots<GroupPermission<Station>, 1>,
         radio::Slots<GroupPermission<AccessPoint>, 1>,
@@ -174,6 +174,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         backing.addresses = None;
         if !matches!(self.state, BackendState::Initial(Some(_)))
             || !self.storage.shared.returned.all_returned()
+            || !self.storage.shared.subframes_vacant()
             || self.storage.shared.network.held() != 0
             || !backing.driver.retired()
             || !backing.held.drained()
@@ -225,6 +226,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             core,
             core_tickets,
             queues,
+            initial.descriptors,
             initial.observations,
             self.timer.now(),
         );

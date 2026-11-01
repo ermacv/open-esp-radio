@@ -96,7 +96,7 @@ fn aggregate_expiry_returns_every_owner_and_reformation_keeps_the_live_age() {
         lifetime(&mut core, VifRole::Station, 100);
         let source = backings();
         let mut buffer = aggregate_of(source, 1, 26);
-        let mpdu = buffer.push_mpdu(26, at(50)).unwrap();
+        let mpdu = buffer.push_from(source, 26, at(50)).unwrap();
         mpdu.copy_from_slice(&data_frame(BSSID));
         mpdu[22..24].copy_from_slice(&(101_u16 << 4).to_le_bytes());
         let plan = core
@@ -177,6 +177,7 @@ fn a_published_aggregate_returns_its_original_admission_samples_after_age() {
             interrupt(EVENT_TX_COMPLETE),
             true,
             core.now(),
+            drop,
         )
         .unwrap() else {
             panic!("the hardware-owned aggregate completed");
@@ -213,7 +214,7 @@ fn unpublished_aggregate_expiry_releases_the_key_after_its_terminal() {
         let admission = TxAdmission::Protected(core.admit_key(&key, ticket).ok().unwrap());
         let source = backings();
         let mut buffer = aggregate_of(source, 0, 26);
-        let frame = buffer.push_mpdu(26, at(0)).unwrap();
+        let frame = buffer.push_from(source, 26, at(0)).unwrap();
         frame.copy_from_slice(&data_frame(BSSID));
         let fc =
             oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
