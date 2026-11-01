@@ -251,7 +251,7 @@ impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id>>
             Err(f) => return oer_radio_port::Ended::fail_stop(f.fail_stop(), ()),
         };
         match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(o) => oer_radio_port::Ended::uninstall(o, (), ()),
@@ -409,4 +409,116 @@ fn poison_before_admission_retains_the_whole_request_without_inventing_a_termina
         slot.end_model_world();
         assert_eq!(drops.get(), 2);
     }));
+}
+
+/// Queue a receiver and disable by a deadline 1 ms away; with `past` the
+/// sink moves the environment's clock beyond it while it returns the
+/// withdrawn receiver. Records whether the disable issued an owner.
+struct DisableBy {
+    env: alloc::rc::Rc<Environment>,
+    drops: alloc::rc::Rc<core::cell::Cell<u32>>,
+    past: bool,
+    disabled: alloc::rc::Rc<core::cell::Cell<Option<bool>>>,
+}
+impl<Id: oer_radio_port::SlotIdentity> oer_radio_port::PortBody<Id, Backend<Id, Tracked>>
+    for DisableBy
+{
+    type Output = ();
+    async fn run<'a, 'p>(
+        self,
+        owner: oer_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_radio_port::Disabled>,
+        resources: Resources<'p, Id>,
+    ) -> oer_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
+    where
+        Backend<Id, Tracked>: 'p,
+        Id: 'p,
+        'p: 'a,
+    {
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("model enable")
+        };
+        let Resources {
+            seats: [mut seat, ..],
+            session,
+        } = resources;
+        {
+            let phase = owner.phase();
+            let capacity = phase.take(&mut seat).await;
+            assert!(matches!(
+                phase.submit(Request {
+                    id: LeOperationId(4),
+                    capacity,
+                    command: Command::DirectTest(DtmCommand::Receive(
+                        session,
+                        Supported::new(rx(19)).expect("supported receiver"),
+                    )),
+                    context: oer_radio_port::PortContext::new(Tracked(self.drops)),
+                }),
+                Ok(Ok(_))
+            ));
+        }
+        let step = Duration::from_millis(1);
+        let deadline = self.env.now().saturating_add(step);
+        let mut offered = 0;
+        let disabled = owner
+            .disable(Some(deadline), &mut |_| {
+                offered += 1;
+                if self.past {
+                    self.env.advance(step).expect("virtual time");
+                }
+                core::ops::ControlFlow::Continue(())
+            })
+            .await;
+        assert_eq!(offered, 1, "the withdrawn receiver reaches the sink");
+        match disabled {
+            Ok(owner) => {
+                self.disabled.set(Some(true));
+                oer_radio_port::Ended::uninstall(owner, (), ())
+            }
+            Err(oer_radio_port::DisableFailed::Expired(request)) => {
+                self.disabled.set(Some(false));
+                oer_radio_port::Ended::fail_stop(request, ())
+            }
+            Err(oer_radio_port::DisableFailed::Poisoned(_)) => panic!("no model fault here"),
+        }
+    }
+}
+#[test]
+fn a_disable_whose_sink_runs_past_the_deadline_issues_no_disabled_owner() {
+    use oer_radio_port::*;
+    for past in [false, true] {
+        let env = alloc::rc::Rc::new(env());
+        let drops = alloc::rc::Rc::new(core::cell::Cell::new(0));
+        let disabled = alloc::rc::Rc::new(core::cell::Cell::new(None));
+        let joined = run(with_local_slot(async |claim| {
+            let mut slot = claim.place();
+            let end = LocalExecution
+                .scope(
+                    conformance::registration::guarded(
+                        slot.register(Backend::new(env.clone()))
+                            .ok()
+                            .expect("fresh test slot"),
+                    ),
+                    async |front| {
+                        run_port(
+                            front,
+                            DisableBy {
+                                env: env.clone(),
+                                drops: drops.clone(),
+                                past,
+                                disabled: disabled.clone(),
+                            },
+                        )
+                        .await
+                    },
+                )
+                .await;
+            let joined = matches!(end, PortEnd::Uninstalled { .. });
+            drop(end);
+            slot.end_model_world();
+            joined
+        }));
+        assert_eq!(disabled.get(), Some(!past));
+        assert_eq!(joined, !past, "nothing joins after the deadline");
+    }
 }

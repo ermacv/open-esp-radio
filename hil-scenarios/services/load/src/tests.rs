@@ -86,6 +86,7 @@ fn the_largest_reports_fit_one_response() {
         bridge_refused_pool: u32::MAX,
         bridge_refused_queue: u32::MAX,
         bridge_refused_other: u32::MAX,
+        bridge_copied: u32::MAX,
         stack_received: u32::MAX,
     });
     assert!(postcard::to_slice(&counters, &mut buffer).unwrap().len() <= 512);

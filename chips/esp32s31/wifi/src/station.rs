@@ -68,6 +68,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     where
         Self: 'id,
         Id: 'id;
+    type LentRx = crate::LentRx;
     type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
     type Small = port::BufferClass<TX>;
     type Large = port::BufferClass<TX>;
@@ -298,7 +299,8 @@ type Completed<'p, 'id, W> = ServiceCompleted<
     1,
     <W as Binding>::Sink,
 >;
-type Io<'c, W> = ServiceIo<'c, Caps, Events<'static, Output<<W as Binding>::Events>>, 2, 8, 2>;
+type Io<'c, W> =
+    ServiceIo<'c, Caps, Events<'static, Output<<W as Binding>::Events>>, crate::LentRx, 2, 8, 2>;
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, W: Binding> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, W>>>;
 const RX_BA_BANKS: usize = 8;
@@ -433,6 +435,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             ..
         } = runner;
         let crate::ServiceConnection {
+            network_stop,
             start,
             commands,
             transmit,
@@ -445,6 +448,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             completed,
             running,
         } = storage;
+        let stop = config.stop;
         let service = initialize_service::<W>(profile, config, resources, service, receive_storage);
         start.complete(Ok(()));
         let mut io = ServiceIo {
@@ -453,6 +457,8 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             receive,
             control,
             output: &mut output,
+            network: network_stop,
+            stop,
         };
         let mut unwrap = KeyUnwrapSlot::new(engine);
         let done = running
@@ -460,12 +466,24 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
                 running_future::<W>(service, completed.uninit(), owner, &mut io, &mut unwrap)
             })
             .await;
-        let (end, _retired) = oer_memory::unpack_placed!(done, ServiceCompleted { end, retired });
+        let (end, _retired, network) = oer_memory::unpack_placed!(
+            done,
+            ServiceCompleted {
+                end,
+                retired,
+                network
+            }
+        );
+        let network = network.read().map(crate::failure::convert::network_drain);
+        let failed = |fault| crate::failure::FailedStation {
+            failure: crate::failure::convert::service::<StationComposition<W, W::Id>>(fault),
+            network,
+        };
         oer_memory::match_placed!(end,ServiceEnd{
         Stopped(owner)=>rp::Ended::uninstall(owner.read(),(),StationExit::Stopped),
-        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))},
-        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))},
-        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),StationExit::Quarantined(crate::failure::convert::service::<StationComposition<W, W::Id>>(fault.read())))}
+        Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(failed(fault.read())))},
+        Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(failed(fault.read())))},
+        Quarantined{request,fault,custody}=>{drop(custody);rp::Ended::fail_stop(request.read(),StationExit::Quarantined(failed(fault.read())))}
         })
     }
 }
@@ -482,13 +500,15 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
     runner.frontend = poster;
     let exit = match front {
         Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
-            rp::PortEnd::Uninstalled { joined, output } => {
-                // The exit is published only after the radio release ended.
+            rp::PortEnd::Uninstalled {
+                joined,
+                output,
+                deadline,
+            } => {
+                // The exit is published only after the radio release ended,
+                // or once the stop's deadline passed first.
                 let mut pending = retire.post(joined);
-                let released = core::future::poll_fn(|cx| pending.poll_answer(cx))
-                    .await
-                    .map_err(|lost| crate::failure::ReleaseCause::HandoffLost(lost.observations()))
-                    .and_then(|(_, released)| released);
+                let released = release_answer::<W>(&mut pending, deadline).await;
                 released_exit(output, released)
             }
             rp::PortEnd::FailStopped { outcome, output } => {
@@ -503,7 +523,7 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
                 };
                 match output {
                     StationExit::Stopped => retirement(None),
-                    StationExit::Failed(failure) => retirement(Some(failure)),
+                    StationExit::Failed(failed) => retirement(Some(failed)),
                     StationExit::Poisoned(_)
                     | StationExit::Quarantined(_)
                     | StationExit::RetirementFailed(_)
@@ -526,6 +546,22 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
     exit
 }
 
+/// The radio driver task's release answer, waited for until `deadline`
+/// ([`crate::release::within`]): an answer after it is never read, the
+/// release reports `Deadline`, and the spent poster is never reused.
+async fn release_answer<W: Binding>(
+    pending: &mut oer_memory::Awaiting<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    deadline: rp::StopDeadline,
+) -> Result<(), crate::failure::ReleaseCause> {
+    use crate::failure::ReleaseCause;
+    match crate::release::within(&EmbassyClock, deadline, |cx| pending.poll_answer(cx)).await {
+        Some(answer) => answer
+            .map_err(|lost| ReleaseCause::HandoffLost(lost.observations()))
+            .and_then(|(_, released)| released),
+        None => Err(ReleaseCause::Deadline),
+    }
+}
+
 /// An uninstalled station's exit once its radio release ended: a failed
 /// release never reports the ordinary Stopped.
 fn released_exit(
@@ -535,14 +571,18 @@ fn released_exit(
     let Err(cause) = released else {
         return output;
     };
-    let failure = match output {
+    let failed = match output {
         StationExit::Stopped => None,
-        StationExit::Failed(failure) => Some(failure),
+        StationExit::Failed(failed) => Some(failed),
         StationExit::Poisoned(_)
         | StationExit::Quarantined(_)
         | StationExit::RetirementFailed(_)
         | StationExit::ReleaseFailed(_)
         | StationExit::Unavailable(_) => return output,
     };
-    StationExit::ReleaseFailed(crate::failure::ReleaseFailure { failure, cause })
+    StationExit::ReleaseFailed(crate::failure::ReleaseFailure {
+        failure: failed.map(|failed| failed.failure),
+        network: failed.and_then(|failed| failed.network),
+        cause,
+    })
 }

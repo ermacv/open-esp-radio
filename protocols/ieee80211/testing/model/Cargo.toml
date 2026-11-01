@@ -11,6 +11,7 @@ description = "Allocating host reference backend for the IEEE 802.11 lower-MAC p
 test-support = ["oer-radio-port/test-support"]
 
 [dependencies]
+atomic-waker = "1.1.2"
 heapless = "0.9.3"
 oer-ieee80211-contracts-port = { path = "../../contracts/port" }
 oer-ieee80211-testing-conformance = { path = "../conformance" }

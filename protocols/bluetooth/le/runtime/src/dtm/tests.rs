@@ -513,7 +513,10 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
         if service.completion() == Err(Fault::Poisoned) {
             return Ended::fail_stop(owner.fail_stop(), ());
         }
-        match owner.disable(&mut |_| ControlFlow::Continue(())).await {
+        match owner
+            .disable(None, &mut |_| ControlFlow::Continue(()))
+            .await
+        {
             Ok(owner) => Ended::uninstall(owner, (), ()),
             Err(owner) => Ended::fail_stop(owner.fail_stop(), ()),
         }
@@ -661,7 +664,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for ResetFlow<Id> {
                     reset
                 };
                 let owner = owner
-                    .disable(&mut |_| ControlFlow::Continue(()))
+                    .disable(None, &mut |_| ControlFlow::Continue(()))
                     .await
                     .ok()
                     .expect("model stop");
@@ -685,6 +688,7 @@ fn active_reset_is_acknowledged_only_after_joined_reinstallation() {
         let PortEnd::Uninstalled {
             joined,
             output: Some(reset),
+            ..
         } = first
         else {
             panic!("first reset joins its stopped owner")

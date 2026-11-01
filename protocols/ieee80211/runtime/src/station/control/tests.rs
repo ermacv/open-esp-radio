@@ -1,4 +1,6 @@
 use super::*;
+use oer_ieee80211_core_roles_sta::data::EthernetFrame;
+use oer_ieee80211_testing_model::ModelLentRx;
 use oer_ieee80211_wire::qos::WmmUserPriority;
 use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrameView, FrameLengthError};
@@ -28,7 +30,7 @@ impl oer_network_port::EthernetFrame for Frame {
 fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-    let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
@@ -80,7 +82,7 @@ fn cancellation_poisons_control_reuse_and_stop_wait_retains_completion() {
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, mut runner) = Control::new(sender, &state).unwrap();
-    control.stop();
+    control.stop(oer_time::Instant::from_micros(u64::MAX));
     embassy_futures::block_on(runner.wait_for_stop());
     let mut cx = Context::from_waker(core::task::Waker::noop());
     assert!(
@@ -116,7 +118,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     }
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-    let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
@@ -168,13 +170,16 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         payload: &[3; 4],
     })
     .unwrap();
-    received.try_send(frame).unwrap();
+    assert!(received.try_send(Received::Copied(frame)).is_ok());
     assert!(device.poll_receive_ready(&mut cx).is_ready());
-    assert_eq!(device.try_receive().unwrap().parts().payload, &[3; 4]);
+    let Some(Received::Copied(frame)) = device.try_receive() else {
+        panic!("the copied frame");
+    };
+    assert_eq!(frame.parts().payload, &[3; 4]);
     assert!(device.try_receive().is_none());
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
-    control.stop();
+    control.stop(oer_time::Instant::from_micros(u64::MAX));
     assert_eq!(delivered.len(), 4);
 }
 
@@ -198,7 +203,7 @@ impl oer_network_port::EthernetFrame for Marked {
 fn a_network_frame_requests_the_priority_of_its_marking() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-    let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
@@ -463,7 +468,7 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
     let Some(ServiceCommand::Station(explicit)) = receiver.try_receive() else {
         panic!("the disconnect is admitted")
     };
-    control.stop_gracefully();
+    control.stop_gracefully(oer_time::Instant::from_micros(u64::MAX));
     assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
     assert!(!runner.policy_ready(now));
     assert_eq!(runner.policy_deadline(), None);

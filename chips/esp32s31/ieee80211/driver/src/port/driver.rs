@@ -543,19 +543,19 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         };
         if let Some((Some(start), len, meta)) = accepted {
-            let end = start
-                .checked_add(len)
-                .filter(|end| *end <= unit.bytes().len())
-                .ok_or(Fault::Capacity)?;
+            let mut unit = unit;
+            // The buffer lends the MPDU from here on: its view is narrowed
+            // once, checked against the received unit.
+            unit.narrow(start, len).map_err(|_| Fault::Capacity)?;
             held.rx_out.set(held.rx_out.get() + 1);
             if let Err(event) = held.events.push(owned::OwnedEvent::Received {
-                frame: ReceiveBuffer {
-                    brand: PhantomData,
-                    unit: Some(unit),
-                    range: start..end,
-                    poison: &held.storage.shared.poisoned,
-                    driver: &held.storage.shared.driver,
-                },
+                frame: ReceiveBuffer::new(
+                    unit,
+                    super::LossGuard::new(
+                        &held.storage.shared.poisoned,
+                        &held.storage.shared.driver,
+                    ),
+                ),
                 meta,
             }) {
                 core::mem::forget(event);
@@ -578,15 +578,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         held: &Held<'_, 'id, Id, D, B, O>,
         device: &mut D,
     ) -> Result<(), Fault> {
-        while let Some(mut frame) = held.recycled.pop() {
-            device.recycle(
-                frame
-                    .unit
-                    .take()
-                    .expect("recycle consumes the original RX unit"),
-            );
+        while let Some(frame) = held.recycled.pop() {
+            device.recycle(frame.into_unit().0);
             held.rx_out
                 .set(held.rx_out.get().checked_sub(1).ok_or(Fault::Capacity)?);
+        }
+        let network = &held.storage.shared.network;
+        let transferred = network.take_transferred();
+        held.rx_out.set(
+            held.rx_out
+                .get()
+                .checked_sub(transferred)
+                .ok_or(Fault::Capacity)?,
+        );
+        if network.take_returned() {
+            device.returned();
         }
         let now = device.timer().now();
         // A start in flight may lend the device's registers to the radio

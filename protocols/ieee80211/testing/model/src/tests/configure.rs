@@ -126,7 +126,7 @@ impl<Id: SlotIdentity> PortBody<Id, ConfigurationBackend<Id>> for ConfigureAcros
                 if matches!(self.drain, Drain::Posted) {
                     yield_now().await;
                 }
-                let disabled = enabled.disable(&mut consume).await.ok().unwrap();
+                let disabled = enabled.disable(None, &mut consume).await.ok().unwrap();
                 enabled = disabled.enable().await.ok().unwrap();
             } else {
                 for _ in 0..2 {
@@ -154,7 +154,7 @@ impl<Id: SlotIdentity> PortBody<Id, ConfigurationBackend<Id>> for ConfigureAcros
         assert_eq!(self.drops.get(), 2);
         Ended::uninstall(
             enabled
-                .disable(&mut |_| panic!("all permissions returned"))
+                .disable(None, &mut |_| panic!("all permissions returned"))
                 .await
                 .ok()
                 .unwrap(),
@@ -230,7 +230,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveAcrossDisable {
         };
         frames.push(frame);
         let Ok(disabled) = enabled
-            .disable(&mut |_| panic!("RX cannot reach the terminal sink"))
+            .disable(None, &mut |_| panic!("RX cannot reach the terminal sink"))
             .await
         else {
             panic!()
@@ -280,7 +280,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveAcrossDisable {
         assert_eq!(frame.bytes(), [3]);
         enabled.phase().recycle(frame);
         let Ok(disabled) = enabled
-            .disable(&mut |_| panic!("all events consumed"))
+            .disable(None, &mut |_| panic!("all events consumed"))
             .await
         else {
             panic!()

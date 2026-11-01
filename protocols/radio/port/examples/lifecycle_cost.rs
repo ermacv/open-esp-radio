@@ -235,11 +235,14 @@ macro_rules! port {
                     core::future::poll_fn(|_| view.probe.poll(1)).await;
                     Ok(Ok(()))
                 }
+                // Its drain is two bounded probe steps; the measurement
+                // needs no clock, so no deadline can pass during it.
                 async fn disable<'a, 'p, S>(
                     _: Call,
                     view: &'a mut Self::View<'p>,
+                    _: StopDeadline,
                     sink: &'a mut S,
-                ) -> Result<(), Poisoned<u32>>
+                ) -> Result<(), DisableEnd<u32>>
                 where
                     Self: 'p,
                     Id: 'p,
@@ -252,7 +255,7 @@ macro_rules! port {
                         core::ops::ControlFlow::Continue(()) => Ok(()),
                         core::ops::ControlFlow::Break(terminal) => {
                             view.probe.calls.store(terminal, Ordering::Relaxed);
-                            Err(Poisoned { cause: 1 })
+                            Err(DisableEnd::Poisoned(Poisoned { cause: 1 }))
                         }
                     }
                 }
@@ -299,6 +302,7 @@ macro_rules! port {
                 }
                 fn shutdown_bound<'s>(
                     frontend: &Self::Frontend<'s>,
+                    _: StopDeadline,
                 ) -> impl Future<Output = ()> + use<'r, 's, Id>
                 where
                     Self: 's,
@@ -326,7 +330,7 @@ macro_rules! port {
                         Err(failed) => return Ended::fail_stop(failed.fail_stop(), ()),
                     };
                     match owner
-                        .disable(&mut |event| {
+                        .disable(None, &mut |event| {
                             core::hint::black_box(event);
                             core::ops::ControlFlow::Continue(())
                         })

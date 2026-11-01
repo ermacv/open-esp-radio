@@ -507,6 +507,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type TxMpdu = Mpdu<'id, Id, D, B, O>;
     type TxAggregate = NoAggregatePayload<'id, Id, D, B, O>;
     type RxBuffer = ReceiveBuffer<'id, Id, D::Receive>;
+    type LentRx = super::LentReceive<D::Receive>;
     type RxMeta = Esp32s31RxMeta;
     type StationKeys = PortKeys<Id, Station>;
     type AccessPointKeys = PortKeys<Id, AccessPoint>;

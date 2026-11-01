@@ -335,18 +335,38 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
     async fn disable<'a, 'p, S>(
         _: Call,
         v: &'a mut Self::View<'p>,
+        deadline: StopDeadline,
         sink: &'a mut S,
-    ) -> Result<(), Poisoned<Fault>>
+    ) -> Result<(), DisableEnd<Fault>>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
         S: FnMut(Self::Terminal<'p>) -> ControlFlow<Self::Terminal<'p>>,
     {
+        // A deadline that passed already starts no drain.
+        if deadline.is_some_and(|deadline| v.timer.now() >= deadline) {
+            return Err(DisableEnd::Expired);
+        }
+        let timer = v.timer.clone();
+        let mut alarm = core::pin::pin!(async {
+            match deadline {
+                Some(deadline) => timer.wait_until(deadline).await,
+                None => core::future::pending().await,
+            }
+        });
         v.shared.draining.store(true, Ordering::Release);
         v.shared.notify.notify();
+        // Both waits keep their progress in the shared state and the clock
+        // mailbox: at the deadline only the wait ends, and the owners they
+        // did not return stay quarantined there.
         poll_fn(|cx| {
             v.wakes.register_frontend(cx);
+            // Checked before the drain: a drain that completes only after
+            // the deadline issues no disabled owner.
+            if alarm.as_mut().poll(cx).is_ready() {
+                return Poll::Ready(Err(DisableEnd::Expired));
+            }
             while let Ok(mut event) = v.events.try_receive() {
                 let id = event.admitted.id;
                 if v.outstanding.get() != Some(id) {
@@ -355,9 +375,9 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
                         "one failed terminal reservation"
                     );
                     v.shared.poison(Fault::Accounting);
-                    return Poll::Ready(Err(Poisoned {
+                    return Poll::Ready(Err(DisableEnd::Poisoned(Poisoned {
                         cause: Fault::Accounting,
-                    }));
+                    })));
                 }
                 let credit = event.credit.take();
                 if let ControlFlow::Break(terminal) = sink(event.lend(&v.loan)) {
@@ -368,9 +388,9 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
                         "sole terminal cannot be rejected twice"
                     );
                     v.shared.poison(Fault::RejectedTerminal);
-                    return Poll::Ready(Err(Poisoned {
+                    return Poll::Ready(Err(DisableEnd::Poisoned(Poisoned {
                         cause: Fault::RejectedTerminal,
-                    }));
+                    })));
                 }
                 v.outstanding.set(None);
                 if let Some(credit) = credit {
@@ -378,20 +398,38 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
                 }
             }
             if let Some(cause) = v.fault() {
-                return Poll::Ready(Err(Poisoned { cause }));
+                return Poll::Ready(Err(DisableEnd::Poisoned(Poisoned { cause })));
             }
             if v.shared.drained.load(Ordering::Acquire) {
                 Poll::Ready(Ok(()))
+            } else if alarm.as_mut().poll(cx).is_ready() {
+                Poll::Ready(Err(DisableEnd::Expired))
             } else {
                 Poll::Pending
             }
         })
         .await?;
-        if let Err(cause) = v.clock.get_mut().retire().await {
-            v.shared.poison(cause);
-            return Err(Poisoned { cause });
+        let mut retire = core::pin::pin!(v.clock.get_mut().retire());
+        let retired = poll_fn(|cx| {
+            if alarm.as_mut().poll(cx).is_ready() {
+                return Poll::Ready(None);
+            }
+            retire.as_mut().poll(cx).map(Some)
+        })
+        .await;
+        match retired {
+            // A retirement that ran past the deadline issues no disabled
+            // owner.
+            Some(Ok(())) if deadline.is_some_and(|deadline| timer.now() >= deadline) => {
+                Err(DisableEnd::Expired)
+            }
+            Some(Ok(())) => Ok(()),
+            Some(Err(cause)) => {
+                v.shared.poison(cause);
+                Err(DisableEnd::Poisoned(Poisoned { cause }))
+            }
+            None => Err(DisableEnd::Expired),
         }
-        Ok(())
     }
     async fn now<'a, 'p>(
         _: Call,
@@ -435,7 +473,10 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
     {
         Ok(())
     }
-    fn shutdown_bound<'s>(f: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<'s, Id, D, X>
+    fn shutdown_bound<'s>(
+        f: &Self::Frontend<'s>,
+        stop: StopDeadline,
+    ) -> impl Future<Output = ()> + use<'s, Id, D, X>
     where
         Self: 's,
         Id: 's,
@@ -443,9 +484,12 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
         let timer = f.timer.clone();
         let bound = f.bound;
         async move {
-            if let Some(deadline) = timer.now().checked_add(bound) {
-                timer.wait_until(deadline).await;
-            }
+            // An own bound past the clock's range has already expired.
+            let Some(own) = timer.now().checked_add(bound) else {
+                return;
+            };
+            let deadline = oer_radio_port::earliest(Some(own), stop).unwrap_or(own);
+            timer.wait_until(deadline).await;
         }
     }
 }

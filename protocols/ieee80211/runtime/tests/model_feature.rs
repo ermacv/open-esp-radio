@@ -159,7 +159,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Receive {
             assert!(poll_once(phase.next_event()).is_pending());
         }
         let Ok(disabled) = enabled
-            .disable(&mut |_| panic!("all RX slots were recycled"))
+            .disable(None, &mut |_| panic!("all RX slots were recycled"))
             .await
         else {
             panic!("recycled RX must not poison the model");
@@ -241,7 +241,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveLoss {
             assert!(poll_once(phase.next_event()).is_pending());
         }
         let owner = owner
-            .disable(&mut |_| panic!("all owners returned"))
+            .disable(None, &mut |_| panic!("all owners returned"))
             .await
             .ok()
             .unwrap();
@@ -356,7 +356,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Owners {
             assert!(poll_once(phase.next_event()).is_pending());
         }
         let Ok(disabled) = enabled
-            .disable(&mut |_| panic!("both terminals were returned"))
+            .disable(None, &mut |_| panic!("both terminals were returned"))
             .await
         else {
             panic!("disable")

@@ -6,7 +6,7 @@ error[E0505]: cannot move out of `owner` because it is borrowed
  4 |     let phase = owner.phase();
    |                 ----- borrow of `owner` occurs here
 ...
- 7 |     let _ = owner.disable(&mut |_| core::ops::ControlFlow::Continue(())).await; // ui-error: E0505
+ 7 |     let _ = owner.disable(None, &mut |_| core::ops::ControlFlow::Continue(())).await; // ui-error: E0505
    |             ^^^^^ move out of `owner` occurs here
 ...
 10 | }

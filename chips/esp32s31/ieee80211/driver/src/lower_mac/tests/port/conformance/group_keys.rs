@@ -149,7 +149,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBody {
             completed_at.set(self.timer.now());
             core::ops::ControlFlow::Continue(())
         };
-        let mut disable = pin!(owner.disable(&mut sink));
+        let mut disable = pin!(owner.disable(None, &mut sink));
         // Disable has begun while the change is still held, then the cut opens.
         let early = core::future::poll_fn(|cx| Poll::Ready(disable.as_mut().poll(cx))).await;
         assert!(early.is_pending() || self.applied);
@@ -334,7 +334,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for PublishedBody {
             });
         }
         let Ok(owner) = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")
@@ -477,7 +477,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ExpireBody {
             }
         }
         match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => radio::Ended::uninstall(owner, (), ()),
@@ -608,7 +608,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RollbackBody {
             }
         }
         match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => radio::Ended::uninstall(owner, (), ()),
@@ -690,11 +690,12 @@ fn a_rejected_gtk_replacement_restores_the_old_entry_and_quarantines_its_owners(
 }
 
 /// A station data frame labelled with the material byte it travels under.
-fn labelled(material: u8, released: &Rc<Cell<usize>>) -> TestReceive {
+fn labelled(material: u8, released: &super::super::Released) -> TestReceive {
     let mut bytes = super::super::super::data_frame(STATION);
     bytes[25] = material;
     TestReceive {
         bytes,
+        view: 0..26,
         released: released.clone(),
     }
 }
@@ -708,7 +709,7 @@ struct CutBody {
     case: oer_ieee80211_testing_conformance::group_keys::Case,
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
-    released: Rc<Cell<usize>>,
+    released: super::super::Released,
     seen: Rc<RefCell<Option<oer_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>>,
 }
 use oer_ieee80211_testing_conformance::group_keys::{Event, Installation};
@@ -882,7 +883,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
             });
         }
         let Ok(owner) = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         else {
             panic!("disable")
@@ -901,7 +902,7 @@ fn the_s31_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
             case,
             timer,
             observed: observed.clone(),
-            released: Rc::new(Cell::new(0)),
+            released: Default::default(),
             seen: seen.clone(),
         };
         assert!(matches!(

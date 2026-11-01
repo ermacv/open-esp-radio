@@ -27,12 +27,18 @@ impl Notify for Notification {
         Poll::Pending
     }
 }
-struct TestClock(TestTimer);
+/// The radio clock's client; `late` moves time on by [`LATE`] while it
+/// retires, as a preempted retirement does.
+struct TestClock(TestTimer, bool);
+const LATE: Duration = Duration::from_millis(1);
 impl ClockClient for TestClock {
     fn activate(&mut self) -> Result<(), Fault> {
         Ok(())
     }
     async fn retire(&mut self) -> Result<(), Fault> {
+        if self.1 {
+            self.0.0.advance(LATE).expect("virtual time");
+        }
         Ok(())
     }
     async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault> {
@@ -49,6 +55,7 @@ struct Calls {
     quarantined: Cell<bool>,
     quarantine_calls: Cell<u32>,
     drops: Cell<u32>,
+    expired: Cell<bool>,
 }
 struct TestDevice {
     timer: TestTimer,
@@ -67,7 +74,7 @@ impl Device for TestDevice {
         self.timer.clone()
     }
     fn clock(&mut self) -> TestClock {
-        TestClock(self.timer.clone())
+        TestClock(self.timer.clone(), matches!(self.mode, Mode::LateRetire))
     }
     fn shutdown_bound(&self) -> Duration {
         Duration::from_millis(2)
@@ -142,10 +149,13 @@ enum Mode {
     Indeterminate,
     Unread,
     SinkReject,
+    /// The clock retires past the stop's deadline.
+    LateRetire,
 }
 struct Body {
     calls: Rc<Calls>,
     mode: Mode,
+    timer: TestTimer,
 }
 impl<Id: SlotIdentity> PortBody<Id, Backend<Id, TestDevice, Tracked>> for Body {
     type Output = ();
@@ -266,13 +276,26 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, TestDevice, Tracked>> for Body {
             }
         }
         if matches!(self.mode, Mode::SinkReject) {
-            let result = owner.disable(&mut ControlFlow::Break).await;
-            let Err(owner) = result else {
+            let result = owner.disable(None, &mut ControlFlow::Break).await;
+            let Err(oer_radio_port::DisableFailed::Poisoned(owner)) = result else {
                 panic!("rejecting terminal cannot disable normally")
             };
             Ended::fail_stop(owner.fail_stop(), ())
+        } else if matches!(self.mode, Mode::LateRetire) {
+            let deadline = Some(self.timer.now().saturating_add(LATE));
+            let result = owner
+                .disable(deadline, &mut |_| ControlFlow::Continue(()))
+                .await;
+            let Err(oer_radio_port::DisableFailed::Expired(request)) = result else {
+                panic!("a retirement past the deadline issues no disabled owner")
+            };
+            self.calls.expired.set(true);
+            Ended::fail_stop(request, ())
         } else {
-            match owner.disable(&mut |_| ControlFlow::Continue(())).await {
+            match owner
+                .disable(None, &mut |_| ControlFlow::Continue(()))
+                .await
+            {
                 Ok(owner) => Ended::uninstall(owner, (), ()),
                 Err(owner) => Ended::fail_stop(owner.fail_stop(), ()),
             }
@@ -292,8 +315,9 @@ fn scenario(mode: Mode) {
     run(with_local_slot(async |claim| {
         let calls = Rc::new(Calls::default());
         let mut slot = claim.place();
+        let timer = TestTimer(Rc::new(VirtualClock::new()));
         let device = TestDevice {
-            timer: TestTimer(Rc::new(VirtualClock::new())),
+            timer: timer.clone(),
             calls: calls.clone(),
             mode,
             running: false,
@@ -311,13 +335,19 @@ fn scenario(mode: Mode) {
                         Body {
                             calls: calls.clone(),
                             mode,
+                            timer: timer.clone(),
                         },
                     )
                     .await
                 },
             )
             .await;
-        if matches!(mode, Mode::Ordinary | Mode::Unread) {
+        if matches!(mode, Mode::LateRetire) {
+            // The deadline passed: nothing proves a stop, nothing joins.
+            assert!(calls.expired.get());
+            assert!(matches!(end, PortEnd::FailStopped { .. }));
+            assert_eq!(calls.shutdown.get(), 0);
+        } else if matches!(mode, Mode::Ordinary | Mode::Unread) {
             assert!(matches!(end, PortEnd::Uninstalled { .. }));
             assert_eq!(calls.shutdown.get(), 1);
             assert!(!calls.quarantined.get());
@@ -360,6 +390,10 @@ fn disable_settles_unread_admitted_work() {
 #[test]
 fn rejecting_sink_retains_original_terminal_in_permanent_storage() {
     scenario(Mode::SinkReject)
+}
+#[test]
+fn a_clock_retired_past_the_stop_deadline_issues_no_disabled_owner() {
+    scenario(Mode::LateRetire)
 }
 
 #[test]

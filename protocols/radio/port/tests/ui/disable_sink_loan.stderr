@@ -1,8 +1,8 @@
 error[E0499]: cannot borrow `*sink` as mutable more than once at a time
   --> tests/ui/disable_sink_loan.rs:13:19
    |
-11 |     let disabling = owner.disable(sink);
-   |                                   ---- first mutable borrow occurs here
+11 |     let disabling = owner.disable(None, sink);
+   |                                         ---- first mutable borrow occurs here
 12 |     #[cfg(all())]
 13 |     let _second = &mut *sink; // ui-error: E0499
    |                   ^^^^^^^^^^ second mutable borrow occurs here

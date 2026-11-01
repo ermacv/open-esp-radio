@@ -8,7 +8,7 @@ pub fn disable<'p, 'id, Id: SlotIdentity, B: PortBackend<Id>, S>(
 ) where
     S: FnMut(B::Terminal<'id>) -> ControlFlow<B::Terminal<'id>>,
 {
-    let disabling = owner.disable(sink);
+    let disabling = owner.disable(None, sink);
     #[cfg(ui_reject)]
     let _second = &mut *sink; // ui-error: E0499
     drop(disabling);

@@ -175,7 +175,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
             .hold_completion(WmmAccessCategory::BestEffort, false);
         let mut invalid = false;
         let disabled = owner
-            .disable(&mut |terminal| {
+            .disable(None, &mut |terminal| {
                 match (result.as_mut(), super::observed(terminal)) {
                     (Ok(trace), Ok(event)) => trace.events.push(event),
                     _ => invalid = true,

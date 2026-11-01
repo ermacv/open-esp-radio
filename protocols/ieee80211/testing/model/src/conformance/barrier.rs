@@ -69,7 +69,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Body {
         };
         let result = exercise(&mut owner.phase(), resources, self).await;
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,

@@ -405,7 +405,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Case {
             ));
             core::ops::ControlFlow::Continue(())
         };
-        let owner = owner.disable(&mut sink).await.ok().unwrap();
+        let owner = owner.disable(None, &mut sink).await.ok().unwrap();
         assert_eq!(seen, 1);
         assert_eq!(self.air.sent().len(), 1);
         Ended::uninstall(owner, (), ())

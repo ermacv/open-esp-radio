@@ -25,7 +25,7 @@ use oer_ieee80211_core_security_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_ieee80211_core_upper_mac::rate_control::RateControl;
 use oer_ieee80211_wire::address::IndividualAddress;
 use oer_radio_port::{Ended, LocalId, PortBody, SlotIdentity, run_port, with_local_slot};
-use oer_time::Duration;
+use oer_time::{Clock as _, Duration};
 use oer_time_virtual::VirtualClock;
 use std::boxed::Box;
 use std::rc::Rc;
@@ -48,8 +48,8 @@ mod block_ack;
 mod contracts;
 use oer_ieee80211_testing_model::{
     AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
-    ModelBackend, ModelCaps24, ModelLarge, ModelPhase, ModelResources, ModelRxMeta, ModelSetup,
-    ModelSmall, ModelTypes,
+    ModelBackend, ModelCaps24, ModelLarge, ModelLentRx, ModelPhase, ModelResources, ModelRxMeta,
+    ModelSetup, ModelSmall, ModelTypes,
 };
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
@@ -92,6 +92,7 @@ struct ServicePort<Id: SlotIdentity>(PhantomData<Id>);
 
 impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     type Backend = ModelBackend<Id, ModelCaps24, ServiceContexts>;
+    type LentRx = ModelLentRx;
     type Caps = ModelCaps24;
     type SlotId = Id;
     type Types<'p>
@@ -283,6 +284,18 @@ impl Observations {
             .iter()
             .filter_map(|event| match event {
                 Observation::Service(ServiceEvent::RxMsdusRefused(refused)) => Some(*refused),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn rx_msdus_copied(&self) -> Vec<RxMsdusCopied> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Observation::Service(ServiceEvent::RxMsdusCopied(copied)) => Some(*copied),
                 _ => None,
             })
             .collect()
@@ -481,6 +494,31 @@ async fn yield_now() {
     .await;
 }
 
+/// A scenario's network side: it reports its stop at once, unless the
+/// scenario lost it.
+#[derive(Default)]
+struct TestNetwork {
+    lost: Cell<bool>,
+    requested: Cell<bool>,
+    /// The composition has no network.
+    absent: Cell<bool>,
+}
+impl NetworkStop for TestNetwork {
+    fn takes_frames(&self) -> bool {
+        !self.absent.get()
+    }
+    fn request_stop(&self) {
+        self.requested.set(true);
+    }
+    fn poll_stopped(&self, _: &mut core::task::Context<'_>) -> Poll<Result<(), NetworkStopLost>> {
+        if self.lost.get() {
+            Poll::Ready(Err(NetworkStopLost))
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+}
+
 /// Poll with a test-owned watchdog clock. Each pending poll advances it by
 /// one millisecond; the model's clock remains under the scenario's control.
 fn block_on<F: Future>(future: F) -> F::Output {
@@ -526,11 +564,17 @@ struct World<'b> {
     expect_queued_command_on_poison: Cell<bool>,
     expected_stream_end: Cell<Option<ExpectedStreamEnd>>,
     drop_stopped_service: Cell<bool>,
+    /// The network drain failure a stop must end with, and report.
+    expected_drain: Cell<Option<NetworkDrainFailure>>,
+    /// The scenario's network side: it stops at once, or is lost.
+    network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
     stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
-    delivered: RefCell<WakingSpscReceiver<'b, EthernetFrame, 8>>,
+    delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
+    /// How many delivered frames the backend lent in place.
+    lent: Cell<usize>,
     /// How long the key-unwrap engine takes; zero is ready on the first poll.
     unwrap_delay: Cell<Duration>,
     /// What the key-unwrap engine did, in order.
@@ -855,7 +899,10 @@ impl Application<'_, '_, '_> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            let parts = msdu.parts();
+            if matches!(msdu, Received::Lent(_)) {
+                self.lent.set(self.lent.get() + 1);
+            }
+            let parts = oer_network_port::EthernetFrame::view(&msdu).unwrap();
             let mut bytes = Vec::from(parts.destination);
             bytes.extend_from_slice(&parts.source);
             bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
@@ -863,6 +910,17 @@ impl Application<'_, '_, '_> {
             frames.push(bytes);
         }
         frames
+    }
+
+    /// The next frame the network stack received, kept by the caller.
+    async fn take_delivered(&self) -> Received<ModelLentRx> {
+        for _ in 0..50 {
+            yield_now().await;
+        }
+        self.delivered
+            .borrow()
+            .try_receive()
+            .expect("a delivered frame")
     }
 
     /// Begin the 4-way handshake after association and return the derived
@@ -967,7 +1025,7 @@ struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
     transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
-    receive: WakingSpscSender<'b, EthernetFrame, 8>,
+    receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -1130,6 +1188,10 @@ where
                 transmit: self.transmit,
                 receive: self.receive,
                 output: &mut output,
+                network: &world.network,
+                stop: StopPolicy {
+                    drain: Duration::from_secs(1),
+                },
             };
             let script = self.script;
             let script = async move {
@@ -1226,7 +1288,9 @@ where
             let ServiceCompleted {
                 end,
                 retired: mut service,
+                network,
             } = completed;
+            assert_eq!(network, world.expected_drain.get());
             match world.expected_stream_end.get() {
                 Some(
                     expected @ (ExpectedStreamEnd::Drained | ExpectedStreamEnd::SubmissionFailed),
@@ -1301,6 +1365,27 @@ where
                 .disables_at_body_end
                 .set(Some(world.air.disable_calls()));
             assert_eq!(world.observed.tokens_lost(), 0);
+            if let Some(expected) = world.expected_drain.get() {
+                // A drain that ran out of the stop's deadline leaves no time
+                // for the disable: it expires at once, without a new bound,
+                // and the port stays quarantined. A lost participant fails
+                // before the deadline, and the disable still runs.
+                let quarantined = expected.cause == NetworkDrainCause::Deadline;
+                assert!(
+                    match &end {
+                        ServiceEnd::Quarantined {
+                            fault: ServiceFault::NetworkDrain(failure),
+                            ..
+                        } => quarantined && *failure == expected,
+                        ServiceEnd::Failed {
+                            fault: ServiceFault::NetworkDrain(failure),
+                            ..
+                        } => !quarantined && *failure == expected,
+                        _ => false,
+                    },
+                    "the stop ends with its drain: {expected:?}"
+                );
+            }
             if matches!(&end, ServiceEnd::Stopped(_) | ServiceEnd::Failed { .. }) {
                 assert_eq!(
                     service.station.frame_credits(),
@@ -1350,7 +1435,7 @@ where
                         panic!("dropping a stopped service must leave its disabled owner usable");
                     };
                     let Ok(owner) = owner
-                        .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                        .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                         .await
                     else {
                         panic!("the next epoch must also disable");
@@ -1470,7 +1555,7 @@ where
             clock.clone(),
         );
         let mut transmit = WakingSpscQueue::<TxMsdu, 2>::new();
-        let mut receive = WakingSpscQueue::<EthernetFrame, 8>::new();
+        let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
         let (stack, transmit) = transmit.split();
         let (receive, delivered) = receive.split();
         let world = World {
@@ -1485,9 +1570,12 @@ where
             expect_queued_command_on_poison: Cell::new(false),
             expected_stream_end: Cell::new(None),
             drop_stopped_service: Cell::new(false),
+            expected_drain: Cell::new(None),
+            network: TestNetwork::default(),
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
+            lent: Cell::new(0),
             unwrap_delay: Cell::new(Duration::ZERO),
             unwraps: RefCell::new(Vec::new()),
         };
@@ -1520,10 +1608,19 @@ where
         match uninstalled {
             oer_radio_port::PortEnd::Uninstalled { .. } => {}
             oer_radio_port::PortEnd::FailStopped { outcome, .. } => {
-                assert!(matches!(
-                    outcome.outcome(),
-                    oer_radio_port::Abandon::Stopped(_)
-                ));
+                // Past a stop's deadline the supervisor waits no longer:
+                // nothing confirms the stop then.
+                let past_deadline = matches!(
+                    world.expected_drain.get(),
+                    Some(NetworkDrainFailure {
+                        cause: NetworkDrainCause::Deadline,
+                        ..
+                    })
+                );
+                assert_eq!(
+                    matches!(outcome.outcome(), oer_radio_port::Abandon::Unconfirmed(_)),
+                    past_deadline
+                );
                 assert_eq!(
                     world.air.disable_calls(),
                     world
@@ -2133,6 +2230,8 @@ fn a_station_scans_joins_handshakes_carries_data_both_ways_and_disconnects() {
                 expected.extend_from_slice(&[0x08, 0x00]);
                 expected.extend_from_slice(&[0xcd; 40]);
                 assert_eq!(world.delivered().await, [expected]);
+                // Its one MSDU stays in the backend's buffer, lent in place.
+                assert_eq!(world.lent.get(), 1);
                 world
                     .air
                     .receive(&protected_data(1, source, &[0xcd; 40]), decrypted());
@@ -3211,12 +3310,164 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
             let mut seen = 0;
             world.associate(&mut seen, false).await;
             let mut control = world.commands.take().unwrap();
-            control.stop();
+            control.stop(Instant::from_micros(u64::MAX));
             world.commands.set(Some(control));
             world
                 .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
             assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
+        })
+    });
+}
+
+/// An unprotected QoS Data A-MSDU from `source` to the station, one
+/// subframe per payload.
+fn open_amsdu(source: [u8; 6], payloads: &[&[u8]]) -> Vec<u8> {
+    let mut frame = protected_data(1, source, &[]);
+    frame.truncate(24);
+    frame[0] = 0x88;
+    frame[1] &= !0x40;
+    // QoS Control: TID 0, A-MSDU present.
+    frame.extend_from_slice(&[0x80, 0]);
+    for (index, payload) in payloads.iter().enumerate() {
+        if index != 0 {
+            while (frame.len() - 26) % 4 != 0 {
+                frame.push(0);
+            }
+        }
+        frame.extend_from_slice(&LOCAL);
+        frame.extend_from_slice(&source);
+        frame.extend_from_slice(&u16::try_from(8 + payload.len()).unwrap().to_be_bytes());
+        frame.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00]);
+        frame.extend_from_slice(payload);
+    }
+    frame
+}
+
+#[test]
+fn an_amsdu_is_copied_and_a_single_msdu_lent() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let source = [0x02, 0, 0, 0, 0, 0x08];
+            world
+                .air
+                .receive(&open_amsdu(source, &[&[1; 20], &[2; 30]]), meta());
+            let delivered = world.delivered().await;
+            assert_eq!(delivered.len(), 2);
+            assert_eq!(delivered[0][14..], [1; 20]);
+            assert_eq!(delivered[1][14..], [2; 30]);
+            assert_eq!(world.lent.get(), 0, "an A-MSDU's MSDUs are copies");
+            assert_eq!(
+                world.observed.rx_msdus_copied(),
+                [RxMsdusCopied {
+                    aggregated: 2,
+                    kept: 0
+                }]
+            );
+            world.air.receive(&open_amsdu(source, &[&[3; 20]]), meta());
+            assert_eq!(world.delivered().await.len(), 1);
+            assert_eq!(world.lent.get(), 1, "one MSDU stays in its buffer");
+            assert_eq!(world.air.pending_rx(), 0, "every buffer came back");
+        })
+    });
+}
+
+#[test]
+fn a_stop_waits_for_the_network_lent_buffers_until_its_deadline() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let source = [0x02, 0, 0, 0, 0, 0x08];
+            let mut open = protected_data(1, source, &[0xcd; 40]);
+            open[1] &= !0x40;
+            open.drain(24..32);
+            world.air.receive(&open, meta());
+            // The network keeps the frame's buffer past the stop's deadline.
+            let held = world.take_delivered().await;
+            assert!(matches!(held, Received::Lent(_)));
+            world.expected_drain.set(Some(NetworkDrainFailure {
+                cause: NetworkDrainCause::Deadline,
+                held: 1,
+            }));
+            let mut control = world.commands.take().unwrap();
+            let deadline = world.clock.now().saturating_add(Duration::from_millis(100));
+            control.stop(deadline);
+            world.commands.set(Some(control));
+            for _ in 0..50 {
+                yield_now().await;
+            }
+            assert!(
+                !world.status().stopped,
+                "the stop waits for the held buffer"
+            );
+            world.clock.advance(Duration::from_millis(100)).unwrap();
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
+                    super::contract::LeaveReason::PortFailed,
+                )))
+                .await;
+            assert!(world.clock.now() >= deadline);
+            drop(held);
+        })
+    });
+}
+
+#[test]
+fn without_a_network_a_received_msdu_returns_its_buffer_and_the_stop_ends_normally() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            world.network.absent.set(true);
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            let source = [0x02, 0, 0, 0, 0, 0x08];
+            let mut open = protected_data(1, source, &[0xcd; 40]);
+            open[1] &= !0x40;
+            open.drain(24..32);
+            world.air.receive(&open, meta());
+            assert!(world.delivered().await.is_empty(), "nothing is queued");
+            assert_eq!(world.air.pending_rx(), 0, "the buffer went back at once");
+            assert_eq!(
+                world.observed.rx_msdus_refused(),
+                [RxMsdusRefused {
+                    too_long: 0,
+                    queue_full: 0,
+                    no_network: 1,
+                }]
+            );
+            let mut control = world.commands.take().unwrap();
+            control.stop(Instant::from_micros(u64::MAX));
+            world.commands.set(Some(control));
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
+                .await;
+            assert!(world.status().stopped || world.network.requested.get());
+        })
+    });
+}
+
+#[test]
+fn a_lost_stop_participant_fails_the_stop_before_its_deadline() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            world.network.lost.set(true);
+            world.expected_drain.set(Some(NetworkDrainFailure {
+                cause: NetworkDrainCause::ParticipantLost,
+                held: 0,
+            }));
+            let mut control = world.commands.take().unwrap();
+            control.stop(Instant::from_micros(u64::MAX));
+            world.commands.set(Some(control));
+            world
+                .notice(StaNotice::Disconnected(StaDisconnectReason::Arbiter(
+                    super::contract::LeaveReason::PortFailed,
+                )))
+                .await;
+            assert!(world.network.requested.get());
         })
     });
 }
@@ -3309,7 +3560,7 @@ fn product_policy_connects_reconnects_after_peer_departure_and_gracefully_stops(
                 }
             }
             let mut control = world.commands.take().unwrap();
-            control.stop_gracefully();
+            control.stop_gracefully(oer_time::Instant::from_micros(u64::MAX));
             world.commands.set(Some(control));
             let _deauth = world.sent(&mut seen, DEAUTHENTICATION).await;
             world
@@ -3327,6 +3578,7 @@ fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
         None,
         Some(MsduRefusal::TooLong),
         Some(MsduRefusal::QueueFull),
+        Some(MsduRefusal::NoNetwork),
     ] {
         count_refusal(&mut refused, refusal);
     }
@@ -3334,12 +3586,14 @@ fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {
         refused,
         RxMsdusRefused {
             too_long: 1,
-            queue_full: 2
+            queue_full: 2,
+            no_network: 1,
         }
     );
     let mut saturated = RxMsdusRefused {
         too_long: u16::MAX,
         queue_full: 0,
+        no_network: 0,
     };
     count_refusal(&mut saturated, Some(MsduRefusal::TooLong));
     assert_eq!(saturated.too_long, u16::MAX);

@@ -19,10 +19,11 @@ pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
     StationSettings,
 };
-use oer_ieee80211_core_roles_sta::data::{EthernetFrame as Frame, TxMsdu};
+use oer_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_ieee80211_runtime::station as runtime;
 use oer_memory::WakingSpscQueue;
 use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
+pub use runtime::StopPolicy;
 pub use runtime::{ControlError, Operation, OperationEnd};
 
 pub const RX_DEPTH: usize = 8;
@@ -83,8 +84,12 @@ impl<'a> Control<'a> {
     pub async fn scan(&mut self) -> Result<Operation<'a>, ControlError> {
         self.inner.scan().await
     }
-    pub fn stop(&mut self) {
-        self.inner.stop_gracefully();
+    /// Disconnect and stop. The network asked through its
+    /// [`NetworkStopper`] must return the station's lent receive buffers by
+    /// `deadline`, or the radio does not retire
+    /// ([`RetirementCause::NetworkDrain`](crate::RetirementCause::NetworkDrain)).
+    pub fn stop(&mut self, deadline: oer_time::Instant) {
+        self.inner.stop_gracefully(deadline);
     }
     /// The station's exit, published by its runner after the radio release
     /// ended. The copy reports the result; the runner keeps every owner.
@@ -146,18 +151,74 @@ impl StatusReader<'_> {
         self.inner.status()
     }
 }
+/// A received buffer the station lends to the network: the S31 port's
+/// receive unit on the chip.
+#[cfg(target_arch = "riscv32")]
+type LentRx = oer_esp32s31_ieee80211_driver::port::LentReceive<
+    oer_esp32s31_ieee80211_driver::port::device::StagedReceive<{ chip::Q }, { chip::B }>,
+>;
+/// The received buffers the station may lend the network at once: the
+/// bound for the network's packet slots of lent frames.
+#[cfg(target_arch = "riscv32")]
+pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::device::lent_rx(chip::Q);
+/// The host build has no receive buffer to lend.
+#[cfg(not(target_arch = "riscv32"))]
+type LentRx = Unlent;
+#[cfg(not(target_arch = "riscv32"))]
+pub enum Unlent {}
+#[cfg(not(target_arch = "riscv32"))]
+impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
+    fn storage(&self) -> &[u8] {
+        match *self {}
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        match *self {}
+    }
+    fn mpdu_len(&self) -> usize {
+        match *self {}
+    }
+    fn advance(&mut self, _: usize) -> Result<(), oer_ieee80211_contracts_port::AdvanceRefused> {
+        match *self {}
+    }
+}
+type Frame = runtime::Received<LentRx>;
+
 /// Affine neutral Ethernet end. The concrete station frame is private.
 pub struct Network<'a> {
-    inner: runtime::Device<'a, 2, RX_DEPTH>,
+    inner: runtime::Device<'a, LentRx, 2, RX_DEPTH>,
 }
+/// One received MSDU: in the station's receive buffer, or copied.
 pub struct Received {
     inner: Frame,
+}
+/// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
+/// returns the buffer to the radio.
+pub struct ReceivedStorage(runtime::NetworkRx<LentRx>);
+impl oer_network_port::FrameStorage for ReceivedStorage {
+    fn bytes(&self) -> &[u8] {
+        self.0.bytes()
+    }
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        self.0.bytes_mut()
+    }
+    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+        self.0.advance(by)
+    }
 }
 impl EthernetFrame for Received {
     fn view(
         &self,
     ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
         self.inner.view()
+    }
+}
+impl oer_network_port::ReceivedFrame for Received {
+    type Storage = ReceivedStorage;
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage>, Self> {
+        match self.inner {
+            runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
+            copied => Err(Self { inner: copied }),
+        }
     }
 }
 impl NetDevice for Network<'_> {
@@ -218,7 +279,101 @@ impl Drop for StartGuard<'_> {
         }
     }
 }
+/// The station's stop request to the network side and its answer, both on
+/// the station's executor.
+struct NetworkStopState {
+    requested: core::cell::Cell<bool>,
+    stopped: core::cell::Cell<bool>,
+    lost: core::cell::Cell<bool>,
+    /// The composition has no network: the station delivers no frame.
+    absent: core::cell::Cell<bool>,
+    network: oer_sync::PriorityWaker,
+    station: oer_sync::PriorityWaker,
+}
+impl NetworkStopState {
+    const fn new() -> Self {
+        Self {
+            requested: core::cell::Cell::new(false),
+            stopped: core::cell::Cell::new(false),
+            lost: core::cell::Cell::new(false),
+            absent: core::cell::Cell::new(false),
+            network: oer_sync::PriorityWaker::new(),
+            station: oer_sync::PriorityWaker::new(),
+        }
+    }
+    fn reset(&self) {
+        self.requested.set(false);
+        self.stopped.set(false);
+        self.lost.set(false);
+        self.absent.set(false);
+    }
+}
+impl runtime::NetworkStop for NetworkStopState {
+    fn takes_frames(&self) -> bool {
+        !self.absent.get()
+    }
+    fn request_stop(&self) {
+        self.requested.set(true);
+        self.network.wake();
+    }
+    fn poll_stopped(&self, cx: &mut Context<'_>) -> Poll<Result<(), runtime::NetworkStopLost>> {
+        self.station.register(cx.waker());
+        if self.stopped.get() {
+            Poll::Ready(Ok(()))
+        } else if self.lost.get() {
+            Poll::Ready(Err(runtime::NetworkStopLost))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+/// The network side's end of the station's stop: it stops the application
+/// and the IP service, which drop every frame they hold, then reports it.
+/// Dropping it unreported fails the station's stop as a lost participant.
+pub struct NetworkStopper<'a> {
+    state: &'a NetworkStopState,
+}
+impl NetworkStopper<'_> {
+    /// Ready once the station asked the network to stop.
+    pub async fn requested(&self) {
+        core::future::poll_fn(|cx| {
+            self.state.network.register(cx.waker());
+            if self.state.requested.get() {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await
+    }
+    /// The application and the IP service stopped and hold no frame of the
+    /// station. The station still waits for every lent buffer's return.
+    pub fn stopped(self) {
+        self.report(|state| &state.stopped);
+    }
+    /// The composition has no network side: it gives up the station's
+    /// network end, the station delivers no frame (each received MSDU's
+    /// buffer goes back at once), and its stop needs no answer.
+    pub fn no_network(self, network: Network<'_>) {
+        drop(network);
+        self.state.absent.set(true);
+        self.report(|state| &state.stopped);
+    }
+    fn report(self, flag: impl FnOnce(&NetworkStopState) -> &core::cell::Cell<bool>) {
+        let state = self.state;
+        core::mem::forget(self);
+        flag(state).set(true);
+        state.station.wake();
+    }
+}
+impl Drop for NetworkStopper<'_> {
+    fn drop(&mut self) {
+        self.state.lost.set(true);
+        self.state.station.wake();
+    }
+}
 pub struct Channels {
+    network_stop: NetworkStopState,
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
@@ -229,6 +384,7 @@ pub struct Channels {
 impl Channels {
     pub const fn new() -> Self {
         Self {
+            network_stop: NetworkStopState::new(),
             start: StartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
@@ -239,7 +395,11 @@ impl Channels {
     }
     pub fn split(
         &mut self,
-    ) -> Result<(Control<'_>, Network<'_>, Connection<'_>), runtime::ControlCreateError> {
+    ) -> Result<
+        (Control<'_>, Network<'_>, NetworkStopper<'_>, Connection<'_>),
+        runtime::ControlCreateError,
+    > {
+        self.network_stop.reset();
         let (send, commands) = self.commands.split();
         let (tx, transmit) = self.tx.split();
         let (receive, rx) = self.rx.split();
@@ -252,8 +412,12 @@ impl Channels {
                 stop: &self.stop,
             },
             Network { inner: network },
+            NetworkStopper {
+                state: &self.network_stop,
+            },
             Connection {
                 service: ServiceConnection {
+                    network_stop: &self.network_stop,
                     start: StartGuard(&self.start),
                     commands,
                     transmit,
@@ -278,6 +442,7 @@ pub struct Connection<'a> {
 }
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 struct ServiceConnection<'a> {
+    network_stop: &'a NetworkStopState,
     start: StartGuard<'a>,
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
     transmit: oer_memory::WakingSpscReceiver<'a, TxMsdu, 2>,
@@ -291,6 +456,8 @@ mod chip;
 mod dma;
 pub mod policy;
 mod reconnect;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod release;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 #[cfg(target_arch = "riscv32")]
 #[doc(hidden)]
@@ -370,10 +537,35 @@ mod tests {
         }
     }
     #[test]
+    fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {
+        use runtime::NetworkStop as _;
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        let state = NetworkStopState::new();
+        state.request_stop();
+        let stopper = NetworkStopper { state: &state };
+        assert!(state.poll_stopped(&mut cx).is_pending());
+        stopper.stopped();
+        assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        state.reset();
+        let mut channels = Channels::new();
+        let (_, network, _, _) = channels.split().unwrap();
+        assert!(state.takes_frames());
+        NetworkStopper { state: &state }.no_network(network);
+        assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
+        assert!(!state.takes_frames(), "no network takes no frame");
+        state.reset();
+        // Losing the stopper proves no stop of the application.
+        drop(NetworkStopper { state: &state });
+        assert_eq!(
+            state.poll_stopped(&mut cx),
+            Poll::Ready(Err(runtime::NetworkStopLost))
+        );
+    }
+    #[test]
     fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()
      {
         let mut channels = Channels::new();
-        let (mut control, mut net, connection) = channels.split().unwrap();
+        let (mut control, mut net, _stopper, connection) = channels.split().unwrap();
         assert_eq!(control.link(), LinkSnapshot::DOWN);
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
@@ -397,6 +589,7 @@ mod tests {
         let crate::Connection {
             service:
                 crate::ServiceConnection {
+                    network_stop: _,
                     start,
                     commands,
                     transmit: _,
@@ -465,7 +658,7 @@ mod tests {
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = core::task::Waker::from(wakes.clone());
         let mut channels = Channels::new();
-        let (mut control, _network, connection) = channels.split().unwrap();
+        let (mut control, _network, _stopper, connection) = channels.split().unwrap();
         let mut cx = Context::from_waker(&waker);
         {
             let mut waiting = core::pin::pin!(control.wait_started());

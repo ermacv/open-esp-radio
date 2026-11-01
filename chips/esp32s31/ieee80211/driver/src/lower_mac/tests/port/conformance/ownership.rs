@@ -313,7 +313,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OwnershipBody {
             capture.terminal(terminal, &mut access);
             core::ops::ControlFlow::Continue(())
         };
-        let mut disable = core::pin::pin!(owner.disable(&mut sink));
+        let mut disable = core::pin::pin!(owner.disable(None, &mut sink));
         let mut requested = false;
         let ended = core::future::poll_fn(|cx| {
             let poll = disable.as_mut().poll(cx);

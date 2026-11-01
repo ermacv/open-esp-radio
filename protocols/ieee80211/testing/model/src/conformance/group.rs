@@ -216,7 +216,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
             }
             .await;
             return match owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
             {
                 Err(failed) => Ended::fail_stop(failed.fail_stop(), result),
@@ -240,7 +240,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise {
         let mut completed_at = Instant::from_micros(self.air.monotonic_now().as_micros());
         let mut invalid = false;
         let disabled = owner
-            .disable(&mut |terminal| {
+            .disable(None, &mut |terminal| {
                 match observed(terminal) {
                     Ok(event) => events.push(event),
                     Err(_) => invalid = true,

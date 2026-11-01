@@ -2,9 +2,11 @@
 
 use crate::OwnedNetworkTxFrame;
 use oer_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, NetDevice, TransmitRefused,
+    EthernetFrame, EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, LentParts,
+    NetDevice, ReceivedFrame, TransmitRefused,
 };
-use oer_network_wire::ethernet::EthernetHeader;
+use oer_network_wire::ethernet::{EtherType, EthernetHeader};
+use xarxa_driver::PacketBuf;
 
 impl EthernetFrame for OwnedNetworkTxFrame<'_> {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
@@ -55,6 +57,113 @@ impl OwnedNetworkTxFrame<'_> {
     }
 }
 
+/// A lent frame's storage, started at its Ethernet header: the bytes one
+/// packet adopts. Dropping it drops the storage, which returns it to its
+/// lender.
+pub struct InPlace<S>(S);
+
+impl<S: FrameStorage> xarxa_driver::ExternalPacketStorage for InPlace<S> {
+    fn storage_mut(&mut self) -> &mut [u8] {
+        self.0.bytes_mut()
+    }
+}
+
+/// The packet slots of a device's lent frames, placed in a `static` by the
+/// image; their count bounds the lent frames the stack holds at once.
+pub type LentSlots<S, const N: usize> = xarxa_driver::ExternalPacketSlots<InPlace<S>, N>;
+
+/// Adoption of a lent frame's storage as a packet, for slots of any count.
+pub trait AdoptLent<S> {
+    /// The packet holding `owner`'s first `len` bytes, or the owner back.
+    fn adopt_lent(
+        &'static self,
+        owner: InPlace<S>,
+        len: usize,
+    ) -> Result<PacketBuf, xarxa_driver::ExternalPacketRefused<InPlace<S>>>;
+}
+
+impl<S: FrameStorage, const N: usize> AdoptLent<S> for LentSlots<S, N> {
+    fn adopt_lent(
+        &'static self,
+        owner: InPlace<S>,
+        len: usize,
+    ) -> Result<PacketBuf, xarxa_driver::ExternalPacketRefused<InPlace<S>>> {
+        self.adopt(owner, 0, len)
+    }
+}
+
+/// Why the bridge copied a frame its device lent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LentCopy {
+    /// The bridge has no slots for lent frames.
+    NoSlots,
+    /// The payload starts too early for an Ethernet header before it.
+    NoHeadroom,
+    /// The slots refused the packet.
+    Refused(xarxa_driver::ExternalPacketRefusal),
+}
+
+/// Publish a lent frame in place: write its Ethernet header before its
+/// payload and adopt its storage as the packet, without copying the
+/// payload. When that is impossible the frame is copied, as a copied
+/// device frame is, after `copied` reports why. A storage that broke its
+/// stable-bytes contract is refused as `OutsideStorage`.
+pub fn publish_lent<const RX: usize, S: FrameStorage>(
+    publisher: &mut crate::OwnedRxPublisher<'_, RX>,
+    slots: Option<&'static dyn AdoptLent<S>>,
+    frame: LentFrame<S>,
+    copied: &mut impl FnMut(LentCopy),
+) -> Result<(), crate::RxEnqueueError> {
+    use crate::RxEnqueueError::InvalidLength;
+    let outside = InvalidLength(FrameLengthError::OutsideStorage);
+    let LentParts {
+        mut storage,
+        destination,
+        source,
+        ether_type,
+        payload,
+    } = frame.into_parts();
+    let header = EthernetHeader {
+        destination,
+        source,
+        ether_type: EtherType::new(ether_type),
+    }
+    .to_bytes();
+    let placed = payload
+        .start
+        .checked_sub(header.len())
+        .zip(payload.len().checked_add(header.len()));
+    let (Some(slots), Some((start, len))) = (slots, placed) else {
+        copied(if slots.is_none() {
+            LentCopy::NoSlots
+        } else {
+            LentCopy::NoHeadroom
+        });
+        let payload = storage.bytes().get(payload).ok_or(outside)?;
+        return publisher.try_send_parts(destination, source, ether_type, payload);
+    };
+    // The packet begins at the header: the storage starts there, and the
+    // payload follows the header in it.
+    storage.advance(start).map_err(|_| outside)?;
+    let bytes = storage.bytes_mut();
+    if bytes.len() < len {
+        return Err(outside);
+    }
+    for (byte, value) in bytes.iter_mut().zip(header) {
+        *byte = value;
+    }
+    match slots.adopt_lent(InPlace(storage), len) {
+        Ok(packet) => publisher.try_publish(packet),
+        Err(refused) => {
+            copied(LentCopy::Refused(refused.reason));
+            // The header write left the payload as it was.
+            let storage = refused.owner.0;
+            let payload = storage.bytes().get(header.len()..len).ok_or(outside)?;
+            publisher.try_send_parts(destination, source, ether_type, payload)
+        }
+    }
+}
+
 /// Copy a neutral received owner into the stack's final RX pool allocation.
 /// Rejection returns the complete owner to the bridge's policy.
 pub fn publish<const RX: usize, F: EthernetFrame>(
@@ -95,7 +204,12 @@ impl crate::OwnedLinkController<'_> {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    reason = "tests build fixed frame fixtures"
+)]
 mod tests;
 
 /// Ethernet translation for an image whose existing bridge drains RX, serves
@@ -111,17 +225,28 @@ pub struct EthernetBridge<
 > {
     radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
     device: D,
+    lent: Option<&'static dyn AdoptLent<Lent<D>>>,
     link: oer_network_port::LinkSnapshot,
     pending: Option<(u64, OwnedNetworkTxFrame<'r>)>,
 }
 
+/// The storage of a device's lent frames.
+pub type Lent<D> = <<D as NetDevice>::RxFrame as ReceivedFrame>::Storage;
+
 impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>
     EthernetBridge<'r, X, RX, TX, D>
 {
-    pub fn new(radio: crate::OwnedNetworkRunner<'r, X, RX, TX>, device: D) -> Self {
+    /// `lent` adopts the frames the device lends; without it the bridge
+    /// copies them.
+    pub fn new(
+        radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
+        device: D,
+        lent: Option<&'static dyn AdoptLent<Lent<D>>>,
+    ) -> Self {
         Self {
             radio,
             device,
+            lent,
             link: oer_network_port::LinkSnapshot::DOWN,
             pending: None,
         }
@@ -133,6 +258,11 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
     pub(crate) fn stop(&mut self) -> Result<(), crate::AccessRefused> {
         self.radio.link_controller().set_link_up(false);
         self.pending = None;
+        // A received frame the device still queues may be lent: dropping it
+        // returns it to the device before the device's own stop.
+        while let Some(frame) = self.device.try_receive() {
+            drop(frame);
+        }
         while let Some(packet) = self.radio.try_receive_tx()? {
             drop(packet);
         }
@@ -147,6 +277,7 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
         cx: &mut core::task::Context<'_>,
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
+        mut copied: impl FnMut(LentCopy),
         transmitted: impl FnMut(EthernetFrameView<'_>),
     ) -> core::task::Poll<Result<core::convert::Infallible, crate::AccessRefused>> {
         use core::task::Poll;
@@ -170,7 +301,13 @@ impl<'r, X: oer_memory::ExecutionContext, const RX: usize, const TX: usize, D: N
             if let Ok(view) = frame.view() {
                 received(view);
             }
-            if let Err((_owner, reason)) = publish(self.radio.rx_publisher(), frame) {
+            let published = match frame.into_lent() {
+                Ok(lent) => publish_lent(self.radio.rx_publisher(), self.lent, lent, &mut copied),
+                Err(frame) => {
+                    publish(self.radio.rx_publisher(), frame).map_err(|(_, reason)| reason)
+                }
+            };
+            if let Err(reason) = published {
                 refused(reason);
             }
         }

@@ -13,8 +13,8 @@ oer-sync = { path = "../../sync" }
 oer-network-port = { path = "../../../protocols/network/port" }
 oer-network-wire = { path = "../../../protocols/network/wire" }
 oer-memory = { path = "../../memory" }
-xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "6f5ae91f9269ec3151d1aa61d0cfe0f3ae1b0798", features = ["async"] }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
+xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "814e8d98943457632212a019826e1f4977053d5f", features = ["async", "external-origin"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "935de4d28f1178ff9731b41e94fb1cab54f5fd2d", features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
 
 [dev-dependencies]
 # Link the pinned runner's time ABI. Tests never set or advance this driver;
@@ -24,7 +24,7 @@ oer-time = { path = "../../time" }
 oer-time-virtual = { path = "../../time-virtual" }
 oer-memory = { path = "../../memory", features = ["host-context"] }
 critical-section = { version = "1.2.0", features = ["std"] }
-owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "17f796c8ddb90ff510d995e24c2dcb758a97e8f8", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
+owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "935de4d28f1178ff9731b41e94fb1cab54f5fd2d", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
 
 [features]
 default = []

@@ -46,7 +46,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Retune {
     {
         let owner = owner.enable().await.ok().expect("first enable");
         let mut owner = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
             .ok()
             .expect("disable");
@@ -85,7 +85,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Retune {
         match enabled {
             Ok(owner) => {
                 let owner = owner
-                    .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                    .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                     .await
                     .ok()
                     .expect("disable after the retune");

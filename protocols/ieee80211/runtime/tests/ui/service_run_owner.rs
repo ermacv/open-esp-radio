@@ -17,6 +17,7 @@ pub fn run_once<
         '_,
         B::Caps,
         impl oer_ieee80211_runtime::station::ServiceOutputSink<B::Caps>,
+        B::LentRx,
         1,
         1,
         1,

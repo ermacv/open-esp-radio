@@ -283,7 +283,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
                     .push(record(completed, &mut resources.terminal_access));
                 core::ops::ControlFlow::Continue(())
             };
-            let mut disable = pin!(owner.disable(&mut sink));
+            let mut disable = pin!(owner.disable(None, &mut sink));
             for _ in 0..4 {
                 assert!(
                     core::future::poll_fn(|cx| Poll::Ready(disable.as_mut().poll(cx)))
@@ -303,7 +303,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Withdraw {
             }
         } else {
             match owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
             {
                 Ok(owner) => owner,

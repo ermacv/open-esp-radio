@@ -93,6 +93,11 @@ pub mod contract;
 mod events;
 pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
+mod network;
+pub use network::{
+    NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost, NoNetwork,
+    Received, RxMsdusCopied, StopPolicy,
+};
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -125,8 +130,8 @@ use oer_ieee80211_core_roles_sta::port::{PortDataTokens, PortStaTokens, StationP
 use oer_ieee80211_core_roles_sta::{
     data,
     data::{
-        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame, FrameTooLong, Msdu,
-        StaData, TxMsdu,
+        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame,
+        MAX_ETHERNET_PAYLOAD_LEN, Msdu, MsduPlan, PlannedCopyError, StaData, TxMsdu,
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
@@ -136,10 +141,11 @@ use oer_ieee80211_core_roles_sta::{
 use oer_ieee80211_core_upper_mac::block_ack::RxDisposition;
 use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
-    Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner, PoisonedOwner,
-    PortBackend,
+    DisableFailed, Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner,
+    PoisonedOwner, PortBackend,
 };
 use oer_time::{Instant, Timer};
 
@@ -162,6 +168,7 @@ pub trait StationPort: Sized {
             >,
             Fault = <Self::Backend as PortBackend<Self::SlotId>>::Fault,
             TxBody = core::convert::Infallible,
+            LentRx = Self::LentRx,
             Context = TxContext<
                 'id,
                 Self::Caps,
@@ -176,6 +183,9 @@ pub trait StationPort: Sized {
         Self: 'id,
         Self::Backend: 'id,
         Self::SlotId: 'id;
+    /// A received buffer the backend lends to the network, the same in
+    /// every install.
+    type LentRx: oer_ieee80211_contracts_port::LentRxBuffer;
     /// Fixed terminal custody from the backend's capacity layout.
     type TerminalStorage<T>: TerminalStorage<T>;
     /// Buffer class for station management traffic.
@@ -566,6 +576,13 @@ pub enum ServiceFault<B: StationPort> {
         cause: <B::Backend as PortBackend<B::SlotId>>::Fault,
         missing: PendingTerminal,
     },
+    /// A requested stop's network drain failed: the network still held lent
+    /// receive buffers, so the port cannot retire and its owners stay
+    /// quarantined.
+    NetworkDrain(NetworkDrainFailure),
+    /// The stop's deadline passed while the port disabled: it proved no
+    /// stop, and its owners stay quarantined.
+    StopDeadline,
 }
 
 /// A concrete output recipient. Events carry their original owners by value.
@@ -588,11 +605,12 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_ieee80211_runtime::station::{
 ///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+/// use oer_ieee80211_runtime::station::Received;
+/// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
 /// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-/// let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+/// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
 /// let mut output = |_: ServiceOutput<()>| {};
@@ -602,6 +620,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
 ///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output, control,
+///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// ```
 ///
@@ -609,20 +628,23 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 ///
 /// ```
 /// use oer_ieee80211_runtime::station::{
-///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
+///     Control, ControlCommand, Received, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+/// use oer_ieee80211_core_roles_sta::data::TxMsdu;
 /// use oer_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
 /// let mut tx = WakingSpscQueue::<TxMsdu, 1>::new();
-/// let mut rx = WakingSpscQueue::<EthernetFrame, 1>::new();
+/// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (application, commands) = commands.split();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
-/// let io = ServiceIo { commands, transmit, receive, output: &mut output, control };
+/// let io = ServiceIo {
+///     commands, transmit, receive, output: &mut output, control,
+///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
+/// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
 /// ```
@@ -630,6 +652,7 @@ pub struct ServiceIo<
     'c,
     K,
     O: ServiceOutputSink<K>,
+    L,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
@@ -640,11 +663,16 @@ pub struct ServiceIo<
     /// The MSDUs the network stack sends.
     pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
-    pub receive: WakingSpscSender<'c, EthernetFrame, RX_DEPTH>,
+    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH>,
     /// What the service tells the application.
     pub output: &'c mut O,
     /// Affine cooperative stop and completion connection to Control.
     pub control: RunnerControl<'c>,
+    /// The network side holding lent buffers, stopped before the port
+    /// retires.
+    pub network: &'c dyn NetworkStop,
+    /// The drain deadline of a stop no request timed.
+    pub stop: StopPolicy,
 }
 
 /// How the service ended.
@@ -789,6 +817,10 @@ pub struct ServiceCompleted<
 > {
     pub end: ServiceEnd<'p, 'id, B>,
     pub retired: RetiredService<'id, B, C, S, GROUPS, O>,
+    /// The network drain before the port retired, when it failed. A
+    /// requested stop also ends `Failed` with it; after another failure it
+    /// is reported beside that failure.
+    pub network: Option<NetworkDrainFailure>,
 }
 
 /// Only a normal Stop grants this continuation on the existing installation.
@@ -870,6 +902,7 @@ impl<
             end => Err(Self {
                 end,
                 retired: self.retired,
+                network: self.network,
             }),
         }
     }
@@ -1067,6 +1100,8 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     receive: RxBlockAckView<'id, B::Types<'id>>,
     commands: CommandCredits<'id, <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath>,
     admissions: Admissions,
+    /// The network drain before the port retired, when it failed.
+    network: Option<NetworkDrainFailure>,
     /// A retune whose disable/enable failed remains owned until retirement.
     retune: Option<
         oer_ieee80211_core_arbiter::PendingRetune<
@@ -1168,6 +1203,7 @@ impl<
                     receive,
                     commands: CommandCredits::new(credits),
                     admissions: Admissions::default(),
+                    network: None,
                     retune: None,
                     group: None,
                     pairwise: None,
@@ -1224,7 +1260,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), retune: None, group: None, pairwise: None, unwrap: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), network: None, retune: None, group: None, pairwise: None, unwrap: None },
                 }),
             })
         })
@@ -1248,6 +1284,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1283,9 +1320,12 @@ impl<
                 pending
             }
         );
+        let pending = pending.read();
+        let network = pending.network;
         let completed = oer_memory::Placed::init(output, |place| {
             oer_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
+                network: network,
                 retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS, O>>| {
                     // Destructure the complete finish result before constructing
                     // the retired bank with its station and returned places.
@@ -1298,7 +1338,7 @@ impl<
                         events: events.read(),
                         _places: places,
                         _arbiter: arbiter,
-                        _pending: pending.read(),
+                        _pending: pending,
                         _terminal_access: terminal_access.read(),
                     }));
                     while let Some(notice) = retired._arbiter.poll_notice() {
@@ -1337,6 +1377,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1371,6 +1412,7 @@ impl<
             mut pending,
             terminal_access,
         } = state;
+        let network = pending.network;
         let (mut station, mut places) = station.finish(reason);
         let data = data.finish(&mut events);
         rates.disconnected();
@@ -1397,6 +1439,7 @@ impl<
         io.control.complete();
         ServiceCompleted {
             end,
+            network,
             retired: RetiredService {
                 station,
                 data,
@@ -1433,6 +1476,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1457,10 +1501,41 @@ impl<
                 let phase = B::lend_phase(&mut lent);
                 self.serve(&mut arbiter, phase, io, timer, unwrap).await
             };
+            // One deadline for the whole stop: the network drain, the
+            // disable, the port's retirement and what follows it.
+            let mut stop_deadline = None;
+            let next = match next {
+                Served::Stop | Served::Failed(_) => {
+                    // The network returns its buffers before the port
+                    // retires; a stop's request names the deadline, a
+                    // failure takes it from the policy.
+                    let deadline = match (&next, io.control.stop_deadline()) {
+                        (Served::Stop, Some(deadline)) => deadline,
+                        _ => timer.now().saturating_add(io.stop.drain),
+                    };
+                    stop_deadline = Some(deadline);
+                    let drained = {
+                        let mut lent = owner.phase();
+                        let phase = B::lend_phase(&mut lent);
+                        network::drain(phase, io.network, timer, deadline).await
+                    };
+                    // Kept beside any failure; a requested stop fails with it.
+                    self.pending.network = drained.err();
+                    match (next, drained) {
+                        (Served::Stop, Err(failure)) => {
+                            Served::Failed(ServiceFault::NetworkDrain(failure).into())
+                        }
+                        (next, _) => next,
+                    }
+                }
+                next => next,
+            };
             match next {
                 Served::Stop => {
-                    let owner = self.disable(&mut arbiter, owner, timer, custody).await;
-                    let end = stop_disabled(owner, custody);
+                    let owner = self
+                        .disable(&mut arbiter, owner, timer, custody, stop_deadline)
+                        .await;
+                    let end = stop_disabled(owner, custody, ServiceFault::StopDeadline);
                     let arbiter_end = match &end {
                         ServiceStop::Stopped(_) => ArbiterEnd::Stopped,
                         ServiceStop::Failed { .. }
@@ -1471,13 +1546,22 @@ impl<
                 }
                 Served::Failed(failure) => {
                     let fault = failure.retain_in(custody);
-                    let owner = self.disable(&mut arbiter, owner, timer, custody).await;
+                    let owner = self
+                        .disable(&mut arbiter, owner, timer, custody, stop_deadline)
+                        .await;
+                    // An expired disable keeps the original failure; its
+                    // `Deadline` cause is the lifecycle's.
                     let end = match owner {
                         Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
                             fault,
                         },
-                        Err(owner) => ServiceStop::Poisoned { owner, fault },
+                        Err(DisableFailed::Poisoned(owner)) => {
+                            ServiceStop::Poisoned { owner, fault }
+                        }
+                        Err(DisableFailed::Expired(request)) => {
+                            ServiceStop::Quarantined { request, fault }
+                        }
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
@@ -1506,24 +1590,33 @@ impl<
                     // Drained promises there can be no further terminal.
                     // A violating disable return stays sealed, never reaching a machine.
                     let mut sink = |terminal| retain_after_event_end::<B>(custody, terminal);
-                    let end = match owner.disable(&mut sink).await {
+                    // No stop deadline: the port's own bound ends this drain.
+                    let end = match owner.disable(None, &mut sink).await {
                         Ok(owner) => ServiceStop::Failed {
                             owner: FailedInstallation { owner },
                             fault,
                         },
-                        Err(owner) => ServiceStop::Poisoned { owner, fault },
+                        Err(DisableFailed::Poisoned(owner)) => {
+                            ServiceStop::Poisoned { owner, fault }
+                        }
+                        Err(DisableFailed::Expired(request)) => {
+                            ServiceStop::Quarantined { request, fault }
+                        }
                     };
                     return (end, arbiter.finish(ArbiterEnd::PortFailed));
                 }
                 Served::Retune(pending) => {
-                    let disabled = self.disable(&mut arbiter, owner, timer, custody).await;
-                    let disabled = match stop_disabled(disabled, custody) {
-                        ServiceStop::Stopped(owner) => owner,
-                        end => {
-                            self.pending.retune = Some(pending);
-                            return (end, arbiter.finish(ArbiterEnd::PortFailed));
-                        }
-                    };
+                    let disabled = self
+                        .disable(&mut arbiter, owner, timer, custody, None)
+                        .await;
+                    let disabled =
+                        match stop_disabled(disabled, custody, ServiceFault::StopDeadline) {
+                            ServiceStop::Stopped(owner) => owner,
+                            end => {
+                                self.pending.retune = Some(pending);
+                                return (end, arbiter.finish(ArbiterEnd::PortFailed));
+                            }
+                        };
                     (arbiter, owner) = match self
                         .enable(arbiter, disabled, Some(pending), io, timer)
                         .await
@@ -1558,6 +1651,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1675,12 +1769,13 @@ impl<
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
         timer: &impl Timer,
         custody: &mut TerminalCustody<'id, B>,
+        deadline: oer_radio_port::StopDeadline,
     ) -> Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-        PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+        DisableFailed<'p, 'id, B::SlotId, B::Backend>,
     > {
         let mut sink = |terminal| self.disable_terminal(arbiter, timer, custody, terminal);
-        owner.disable(&mut sink).await
+        owner.disable(deadline, &mut sink).await
     }
 
     /// Serve the running phase until the port must move, stop or failed.
@@ -1698,6 +1793,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1998,6 +2094,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2051,6 +2148,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2278,6 +2376,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2335,6 +2434,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2369,6 +2469,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2379,10 +2480,11 @@ impl<
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         if let Some((frame, meta)) = self.pending.receive.pop_ready() {
-            self.deliver_received(now, &frame, meta, io);
-            B::span(ServiceSpan::Recycle, false);
-            phase.recycle(frame);
-            B::span(ServiceSpan::Recycle, true);
+            if let Some(frame) = self.deliver_received(now, frame, meta, phase, io) {
+                B::span(ServiceSpan::Recycle, false);
+                phase.recycle(frame);
+                B::span(ServiceSpan::Recycle, true);
+            }
             return Ok(true);
         }
         if let Some((frame, meta)) = self.pending.receive.pop_deferred() {
@@ -2416,6 +2518,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2456,6 +2559,7 @@ impl<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2480,80 +2584,182 @@ impl<
                     return Err(ServiceFault::RxBlockAckCapacity.into());
                 }
             };
-        self.deliver_received(now, &frame, meta, io);
-        Ok(Some(frame))
+        Ok(self.deliver_received(now, frame, meta, phase, io))
     }
 
+    /// Deliver one received frame's MSDUs to the network queue. A frame
+    /// that delivered exactly one MSDU is lent in place; the others are
+    /// copied. The buffer comes back for its recycle unless it was lent.
     #[inline(never)]
     fn deliver_received<
+        'p,
+        P,
         const TX_DEPTH: usize,
         const RX_DEPTH: usize,
         const COMMAND_DEPTH: usize,
     >(
         &mut self,
         now: Instant,
-        frame: &<B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
+        frame: <B::Types<'id> as PhaseTypes<'id>>::RxBuffer,
         meta: <B::Types<'id> as PhaseTypes<'id>>::RxMeta,
+        phase: &mut P,
         io: &mut ServiceIo<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
         >,
-    ) {
+    ) -> Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
         B::span(ServiceSpan::Deliver, false);
+        // Delivery runs for every sink; only an enabled one counts.
+        let counted = <O as EventSink<ServiceEvent>>::ENABLED;
         let mut refused = RxMsdusRefused::default();
+        let mut copied = RxMsdusCopied::default();
+        // The first MSDU waits: it is lent if it stays the frame's only one.
+        let mut first: Option<MsduPlan> = None;
+        let mut several = false;
+        let bytes = frame.bytes();
+        let takes = io.network.takes_frames();
         let result = self.station.receive(
             now,
-            frame.bytes(),
+            bytes,
             meta,
-            |parts| {
-                B::span(ServiceSpan::Queue, false);
-                let refusal = Self::queue_received(io, EthernetFrame::from_parts(parts));
-                B::span(ServiceSpan::Queue, true);
-                // Delivery runs for every sink; only an enabled one counts.
-                if <O as EventSink<ServiceEvent>>::ENABLED {
-                    count_refusal(&mut refused, refusal);
+            |delivery| {
+                if !takes {
+                    // No network: the frame's buffer goes back at once.
+                    if counted {
+                        count_refusal(&mut refused, Some(MsduRefusal::NoNetwork));
+                    }
+                    return;
                 }
+                B::span(ServiceSpan::Queue, false);
+                if first.is_none() && !several {
+                    first = Some(delivery.plan());
+                } else {
+                    several = true;
+                    let earlier = first
+                        .take()
+                        .map(|plan| Self::copy_received(io, bytes, &plan));
+                    let refusal = Self::copy_received(io, bytes, &delivery.plan());
+                    if counted {
+                        for refusal in earlier.into_iter().chain([refusal]) {
+                            count_refusal(&mut refused, refusal);
+                            copied.aggregated = copied.aggregated.saturating_add(1);
+                        }
+                    }
+                }
+                B::span(ServiceSpan::Queue, true);
             },
             &mut self.events,
         );
+        let kept = match first {
+            None => Some(frame),
+            Some(plan) => {
+                B::span(ServiceSpan::Queue, false);
+                let (refusal, kept) = match phase.lend(frame) {
+                    Ok(lent) => (Self::queue_lent(io, lent, plan), None),
+                    Err(refusal) => {
+                        let buffer = refusal.buffer;
+                        let refusal = Self::copy_received(io, buffer.bytes(), &plan);
+                        if counted {
+                            copied.kept = copied.kept.saturating_add(1);
+                        }
+                        (refusal, Some(buffer))
+                    }
+                };
+                if counted {
+                    count_refusal(&mut refused, refusal);
+                }
+                B::span(ServiceSpan::Queue, true);
+                kept
+            }
+        };
         B::span(ServiceSpan::Deliver, true);
         // The sink is the station's during delivery: the frame's refusals
-        // follow its events as one aggregate.
+        // and copies follow its events as one aggregate each.
         if refused != RxMsdusRefused::default() {
             report(&mut self.events, || ServiceEvent::RxMsdusRefused(refused));
+        }
+        if copied != RxMsdusCopied::default() {
+            report(&mut self.events, || ServiceEvent::RxMsdusCopied(copied));
         }
         if let Err(reason) = result {
             report(&mut self.events, || {
                 ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
             });
         }
+        kept
     }
 
-    /// Hand one received MSDU to the network queue; a refusal returns its
-    /// reason.
+    /// Copy one received MSDU, `payload` of `frame`, to the network queue;
+    /// a refusal returns its reason.
     #[inline(never)]
-    fn queue_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+    fn copy_received<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
         io: &mut ServiceIo<
             '_,
             B::Caps,
             impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
         >,
-        frame: Result<EthernetFrame, FrameTooLong>,
+        frame: &[u8],
+        plan: &MsduPlan,
     ) -> Option<MsduRefusal> {
-        match frame {
+        match EthernetFrame::copy_planned(frame, plan) {
             Ok(frame) => io
                 .receive
-                .try_send(frame)
+                .try_send(Received::Copied(frame))
                 .is_err()
                 .then_some(MsduRefusal::QueueFull),
-            Err(_) => Some(MsduRefusal::TooLong),
+            // The station located the payload in this frame.
+            Err(PlannedCopyError::TooLong(_) | PlannedCopyError::OutsideFrame) => {
+                Some(MsduRefusal::TooLong)
+            }
+        }
+    }
+
+    /// Hand one lent MSDU to the network queue; a refusal drops the lent
+    /// buffer, which returns it to the backend, and returns its reason.
+    #[inline(never)]
+    fn queue_lent<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+        >,
+        lent: B::LentRx,
+        plan: MsduPlan,
+    ) -> Option<MsduRefusal> {
+        let MsduPlan {
+            destination,
+            source,
+            ether_type,
+            payload,
+        } = plan;
+        if payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
+            return Some(MsduRefusal::TooLong);
+        }
+        match LentFrame::new(NetworkRx(lent), destination, source, ether_type, payload) {
+            Ok(frame) => io
+                .receive
+                .try_send(Received::Lent(frame))
+                .is_err()
+                .then_some(MsduRefusal::QueueFull),
+            // The payload lies in the MPDU, which starts the lent storage.
+            Err(_storage) => Some(MsduRefusal::TooLong),
         }
     }
 
@@ -3077,6 +3283,7 @@ fn station_action<
         '_,
         B::Caps,
         impl ServiceOutputSink<B::Caps>,
+        B::LentRx,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,
@@ -3322,10 +3529,24 @@ mod tests;
 fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     owner: Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
-        PoisonedOwner<'p, 'id, B::SlotId, B::Backend>,
+        DisableFailed<'p, 'id, B::SlotId, B::Backend>,
     >,
     custody: &TerminalCustody<'id, B>,
+    expired: ServiceFault<B>,
 ) -> ServiceStop<'p, 'id, B> {
+    let owner = match owner {
+        Ok(owner) => Ok(owner),
+        Err(DisableFailed::Poisoned(owner)) => Err(owner),
+        Err(DisableFailed::Expired(request)) => {
+            return ServiceStop::Quarantined {
+                request,
+                fault: match custody {
+                    TerminalCustody::Clear => expired,
+                    TerminalCustody::Quarantined(bank) => ServiceFault::Contract(bank.violation()),
+                },
+            };
+        }
+    };
     match (owner, custody) {
         (Ok(owner), TerminalCustody::Clear) => ServiceStop::Stopped(owner),
         (Ok(owner), TerminalCustody::Quarantined(bank)) => ServiceStop::Failed {
@@ -3348,12 +3569,14 @@ fn stop_disabled<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
 enum MsduRefusal {
     TooLong,
     QueueFull,
+    NoNetwork,
 }
 
 fn count_refusal(refused: &mut RxMsdusRefused, refusal: Option<MsduRefusal>) {
     match refusal {
         Some(MsduRefusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
         Some(MsduRefusal::QueueFull) => refused.queue_full = refused.queue_full.saturating_add(1),
+        Some(MsduRefusal::NoNetwork) => refused.no_network = refused.no_network.saturating_add(1),
         None => {}
     }
 }

@@ -23,6 +23,9 @@ pub enum ServiceEvent {
     /// The service did not deliver some MSDUs of one received frame: one
     /// event per frame, after the station's own events of that frame.
     RxMsdusRefused(RxMsdusRefused),
+    /// The service copied some MSDUs of one received frame instead of
+    /// lending its buffer: one event per frame, beside its refusals.
+    RxMsdusCopied(super::RxMsdusCopied),
     /// The service installed a group key: the station's first or a
     /// replacement. `key_id` is 0..=3.
     GroupKeyInstalled { key_id: u8, replaced: bool },
@@ -46,6 +49,8 @@ pub struct RxMsdusRefused {
     pub too_long: u16,
     /// MSDUs the full receive queue to the application did not take.
     pub queue_full: u16,
+    /// MSDUs of a composition without a network.
+    pub no_network: u16,
 }
 
 /// The sink a composition lends a station service: it takes the events of

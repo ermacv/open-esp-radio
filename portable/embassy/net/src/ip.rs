@@ -231,6 +231,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
     pub fn start<D: NetDevice>(
         &'static mut self,
         device: D,
+        lent: Option<&'static dyn crate::ethernet::AdoptLent<crate::ethernet::Lent<D>>>,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
@@ -247,7 +248,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
                 Service {
                     iface,
                     runner,
-                    bridge: EthernetBridge::new(radio, device),
+                    bridge: EthernetBridge::new(radio, device, lent),
                     configuration,
                     state,
                 },
@@ -354,6 +355,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, D: NetDevi
         mut events: impl FnMut(StatusChanged),
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
+        mut copied: impl FnMut(crate::ethernet::LentCopy),
         mut transmitted: impl FnMut(EthernetFrameView<'_>),
     ) -> Result<(), Error> {
         let mut running = core::pin::pin!(self.runner.run());
@@ -368,6 +370,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, D: NetDevi
             &mut events,
             &mut received,
             &mut refused,
+            &mut copied,
             &mut transmitted,
         )
         .await
@@ -381,12 +384,20 @@ trait Interface {
     fn restart_dhcp(&self);
     fn lease(&self) -> Option<Ipv4Configuration>;
     fn clear(&self) -> Result<(), Error>;
+    /// Drop every received packet the stack has not taken yet and every
+    /// reply it retains: a lent one returns to its device.
+    fn drop_received(&self) {}
 }
 impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
     for Iface<'_, OwnedNetworkDevice<'_, X, RX, TX>>
 {
     fn restart_dhcp(&self) {
         self.restart_dhcpv4();
+    }
+    fn drop_received(&self) {
+        self.with_driver(|driver| while driver.receive().is_some() {});
+        // A reply reuses its request's packet: a lent one goes back too.
+        self.release_retained();
     }
     fn lease(&self) -> Option<Ipv4Configuration> {
         self.dhcpv4_lease().map(|lease| Ipv4Configuration {
@@ -413,6 +424,7 @@ async fn drive<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevi
     mut events: impl FnMut(StatusChanged),
     mut received: impl FnMut(EthernetFrameView<'_>),
     mut refused: impl FnMut(crate::RxEnqueueError),
+    mut copied: impl FnMut(crate::ethernet::LentCopy),
     mut transmitted: impl FnMut(EthernetFrameView<'_>),
 ) -> Result<(), Error> {
     core::future::poll_fn(|cx| {
@@ -425,8 +437,13 @@ async fn drive<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevi
         if state.stop.get() {
             return finish(state, bridge, iface, Ok(()), &mut events);
         }
-        if let Poll::Ready(Err(_)) = bridge.poll(cx, &mut received, &mut refused, &mut transmitted)
-        {
+        if let Poll::Ready(Err(_)) = bridge.poll(
+            cx,
+            &mut received,
+            &mut refused,
+            &mut copied,
+            &mut transmitted,
+        ) {
             return finish(
                 state,
                 bridge,
@@ -485,6 +502,7 @@ fn finish<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>(
     events: &mut impl FnMut(StatusChanged),
 ) -> Poll<Result<(), Error>> {
     let result = result.and(bridge.stop().map_err(|_| Error::ContextAccessRefused));
+    iface.drop_received();
     let result = result.and(iface.clear());
     state.publish(
         Status {
@@ -504,5 +522,10 @@ fn finish<X: ExecutionContext, const RX: usize, const TX: usize, D: NetDevice>(
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros, clippy::disallowed_methods)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::arithmetic_side_effects,
+    reason = "tests build fixed frame fixtures"
+)]
 mod tests;

@@ -39,6 +39,8 @@ mod buffer;
 pub mod device;
 mod driver;
 mod keys;
+mod lent;
+pub use lent::LentReceive;
 mod lifecycle;
 mod registration;
 pub use registration::{Registration, RegistrationError};
@@ -102,7 +104,17 @@ type Core<'id, Id: SlotIdentity, D, const B: usize> = LowerMacCore<
 /// An owned RX allocation from the cooperative receive owner.
 pub trait ReceiveUnit: 'static {
     fn normalized(&self) -> Result<NormalizedRxFrame<'_>, RxError>;
+    /// The unit's view: the received bytes, or the MPDU once narrowed.
     fn bytes(&self) -> &[u8];
+    /// Narrow the view to `length` bytes from `offset` in it; a range
+    /// outside it is refused and changes nothing. Normalization reads the
+    /// whole received unit, so it runs before.
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError>;
+    /// [`Self::bytes`], then the rest of the unit's allocation; every byte
+    /// is initialized.
+    fn storage(&self) -> &[u8];
+    /// [`Self::storage`], mutably, for a network owner that rewrites it.
+    fn storage_mut(&mut self) -> &mut [u8];
 }
 
 /// One bounded P2 hardware step. Implementations retain all progress in
@@ -115,8 +127,12 @@ pub trait Device<const B: usize>: Sized + 'static {
     type Entropy: WifiTxEntropy;
     type Timer: Timer + Clone + 'static;
     type Hardware: LowerMacHardware;
-    type Receive: ReceiveUnit;
+    type Receive: ReceiveUnit + Send;
     type Body: TxBody + 'static;
+    /// The receive units the network may hold at once. The device's other
+    /// units stay with the radio, for its receive events and their
+    /// reordering.
+    const LENT_RX: usize;
     type OwnedContext<Id: SlotIdentity>;
     type Context<'p, Id: SlotIdentity + 'p>: LoanedContext<'p, Id, Owned = Self::OwnedContext<Id>>
         + 'p;
@@ -150,6 +166,8 @@ pub trait Device<const B: usize>: Sized + 'static {
     ) -> Poll<Result<Option<Self::Receive>, Fault>>;
     fn finish_rx_cut(&mut self) -> Result<(), Fault>;
     fn recycle(&mut self, frame: Self::Receive);
+    /// The network dropped a lent unit: rearm what the ring got back.
+    fn returned(&mut self);
     /// Mask requests and erase keys synchronously. A successful stop must
     /// include both DMA and entered IRQ operations; otherwise return false.
     fn abandon(&mut self) -> bool;
@@ -228,6 +246,8 @@ pub struct PortSharedStorage<const B: usize> {
     body: AtomicWaker,
     key_live: [KeyActivity; 20],
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
+    /// The receive units lent to the network.
+    network: lent::NetworkCredit,
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
@@ -310,6 +330,7 @@ impl<const B: usize> PortSharedStorage<B> {
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
+            network: lent::NetworkCredit::new(),
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),
@@ -537,29 +558,69 @@ use handoff::{Attached, FrontHeld, Held, HeldBacking, Incoming, Outgoing};
 
 pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     brand: PhantomData<fn(&'id (), Id) -> (&'id (), Id)>,
-    unit: Option<R>,
-    range: core::ops::Range<usize>,
+    /// The unit, its view narrowed to the MPDU. A lost buffer never drops
+    /// it: its original DMA lease stays quarantined.
+    unit: core::mem::ManuallyDrop<R>,
+    loss: LossGuard,
+}
+/// Poisons the installation when its receive buffer is lost: dropping a
+/// buffer does not authorize rearming its allocation.
+pub(crate) struct LossGuard {
     poison: &'static oer_memory::OnceValue<Fault>,
     driver: &'static PriorityWaker,
+    armed: bool,
 }
-impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
-    fn bytes(&self) -> &[u8] {
-        &self
-            .unit
-            .as_ref()
-            .expect("received owner holds its allocation")
-            .bytes()[self.range.clone()]
+impl LossGuard {
+    pub(crate) fn new(
+        poison: &'static oer_memory::OnceValue<Fault>,
+        driver: &'static PriorityWaker,
+    ) -> Self {
+        Self {
+            poison,
+            driver,
+            armed: true,
+        }
+    }
+    /// The buffer's unit leaves by an explicit path; nothing is lost.
+    pub(crate) fn disarm(mut self) -> &'static PriorityWaker {
+        self.armed = false;
+        self.driver
     }
 }
-impl<Id: SlotIdentity, R> Drop for ReceiveBuffer<'_, Id, R> {
+impl Drop for LossGuard {
     fn drop(&mut self) {
-        if let Some(unit) = self.unit.take() {
-            // Losing an affine receive owner quarantines its original DMA
-            // lease; Drop cannot authorize rearming that allocation.
-            core::mem::forget(unit);
+        if self.armed {
             let _ = self.poison.set(Fault::Abandoned);
             self.driver.wake();
         }
+    }
+}
+impl<'id, Id: SlotIdentity, R> ReceiveBuffer<'id, Id, R> {
+    pub(crate) fn new(unit: R, loss: LossGuard) -> Self {
+        Self {
+            brand: PhantomData,
+            unit: core::mem::ManuallyDrop::new(unit),
+            loss,
+        }
+    }
+    /// The unit, by an explicit return path, and the driver to wake.
+    pub(crate) fn into_unit(self) -> (R, &'static PriorityWaker) {
+        let Self { unit, loss, .. } = self;
+        (core::mem::ManuallyDrop::into_inner(unit), loss.disarm())
+    }
+    /// The same buffer under another brand.
+    pub(crate) fn rebrand<'p>(self) -> ReceiveBuffer<'p, Id, R> {
+        let Self { unit, loss, .. } = self;
+        ReceiveBuffer {
+            brand: PhantomData,
+            unit,
+            loss,
+        }
+    }
+}
+impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
+    fn bytes(&self) -> &[u8] {
+        self.unit.bytes()
     }
 }
 

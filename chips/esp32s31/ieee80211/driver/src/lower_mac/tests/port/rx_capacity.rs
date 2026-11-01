@@ -22,7 +22,7 @@ impl Wake for Ready {
 
 struct ContinuousReceive {
     observed: Rc<RefCell<Observed>>,
-    released: Rc<Cell<usize>>,
+    released: super::Released,
     clock: TestTimer,
     rx_interrupt: Waker,
 }
@@ -61,6 +61,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
                 observed.continuous_rx = true;
                 observed.received.extend((0..FRAMES).map(|_| TestReceive {
                     bytes: super::super::data_frame(STATION),
+                    view: 0..26,
                     released: self.released.clone(),
                 }));
             }
@@ -86,11 +87,15 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
             observed.continuous_rx = false;
         }
         let owner = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
             .ok()
             .expect("model disable");
-        assert_eq!(self.released.get(), FRAMES, "each RX owner recycled once");
+        assert_eq!(
+            super::count(&self.released),
+            FRAMES,
+            "each RX owner recycled once"
+        );
         radio::Ended::uninstall(owner, (), longest_gap)
     }
 }
@@ -101,7 +106,7 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
     clock.1.set(true);
     observed.borrow_mut().check_context = true;
     observed.borrow_mut().context = 2;
-    let released = Rc::new(Cell::new(0));
+    let released = super::Released::default();
     let p1_ready = Arc::new(Ready(AtomicBool::new(true)));
     let p2_ready = Arc::new(Ready(AtomicBool::new(true)));
     let p1_waker = Waker::from(p1_ready.clone());
@@ -143,11 +148,11 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
                 observed.borrow_mut().context = 1;
                 if let Poll::Ready(end) = p1.as_mut().poll(&mut Context::from_waker(&p1_waker)) {
                     let (joined, output) = match end {
-                        radio::PortEnd::Uninstalled { joined, output } => (joined, output),
+                        radio::PortEnd::Uninstalled { joined, output, .. } => (joined, output),
                         _ => panic!(
                             "clean RX uninstall: delivered={}, released={}, time={:?}",
                             observed.borrow().rx_delivered,
-                            released.get(),
+                            super::count(&released),
                             clock.now()
                         ),
                     };
@@ -174,5 +179,5 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
     }));
     assert_eq!(observed.borrow().rx_delivered, FRAMES);
     assert!(observed.borrow().rx_saturated_polls > 0);
-    assert_eq!(released.get(), FRAMES);
+    assert_eq!(super::count(&released), FRAMES);
 }

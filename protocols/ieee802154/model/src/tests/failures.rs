@@ -153,9 +153,10 @@ fn request_identity_exhaustion_preserves_the_last_id_and_returns_unadmitted_capa
                 drop(ready(client.operation(&mut seat)));
             }
             let poisoned = owner
-                .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+                .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .err()
+                .and_then(|failed| failed.into_poisoned().ok())
                 .unwrap();
             assert_eq!(poisoned.cause(), cause);
             Ended::uninstall(poisoned, (), ())
@@ -251,7 +252,7 @@ fn a_fault_injected_from_the_disable_sink_is_reported_by_that_disable() {
             }
             let mut offered = 0;
             let poisoned = owner
-                .disable(&mut |event| {
+                .disable(None, &mut |event| {
                     assert!(matches!(
                         event,
                         ModelEvent::TransmitDone(_, _, TxStatus::Aborted)
@@ -263,6 +264,7 @@ fn a_fault_injected_from_the_disable_sink_is_reported_by_that_disable() {
                 })
                 .await
                 .err()
+                .and_then(|failed| failed.into_poisoned().ok())
                 .expect("the callback's fault is visible");
             assert_eq!(offered, 1);
             assert_eq!(poisoned.cause(), ModelFault::Injected);

@@ -41,6 +41,13 @@ pub trait Composition: 'static {
 
 pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPowerProfile>;
 
+/// The receive units of a pool of `units` the network may hold: it leaves
+/// the radio one unit per ticket, for its receive events and their
+/// reordering.
+pub const fn lent_rx(units: usize) -> usize {
+    units.saturating_sub(super::TX_TICKETS)
+}
+
 /// One retained original DMA allocation; normalization borrows it in place.
 pub struct StagedReceive<const Q: usize, const RB: usize>(NetworkRxFrame<'static, Q, RB>);
 impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
@@ -49,6 +56,15 @@ impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     }
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
+    }
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError> {
+        self.0.narrow(offset, length)
+    }
+    fn storage(&self) -> &[u8] {
+        self.0.storage()
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        self.0.storage_mut()
     }
 }
 
@@ -255,6 +271,7 @@ where
     type Timer = T;
     type Hardware = RadioAccess;
     type Receive = StagedReceive<Q, RB>;
+    const LENT_RX: usize = lent_rx(Q);
     type Body = C::Body;
     type OwnedContext<Id: SlotIdentity> = C::OwnedContext<Id>;
     type Context<'p, Id: SlotIdentity + 'p> = C::Context<'p, Id>;
@@ -554,6 +571,9 @@ where
     }
     fn recycle(&mut self, frame: Self::Receive) {
         drop(frame);
+        self.rx_pending = true;
+    }
+    fn returned(&mut self) {
         self.rx_pending = true;
     }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {

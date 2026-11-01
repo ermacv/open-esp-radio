@@ -359,7 +359,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
         if disabling {
             self.mark(PublicationEvent::Requested);
         }
-        let mut disable = core::pin::pin!(owner.disable(&mut sink));
+        let mut disable = core::pin::pin!(owner.disable(None, &mut sink));
         let mut requested = false;
         let ended = core::future::poll_fn(|cx| {
             let poll = disable.as_mut().poll(cx);
@@ -666,7 +666,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
             );
             core::ops::ControlFlow::Continue(())
         };
-        let Ok(owner) = owner.disable(&mut sink).await else {
+        let Ok(owner) = owner.disable(None, &mut sink).await else {
             panic!("the model disables")
         };
         Ended::uninstall(owner, (), ())

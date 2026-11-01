@@ -20,7 +20,8 @@
 
 mod device;
 pub use device::{
-    EthernetFrame, EthernetFrameView, LinkSnapshot, NetDevice, TransmitError, TransmitRefused,
+    EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot, NetDevice,
+    ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
 };
 
 mod flow;
@@ -57,6 +58,9 @@ pub enum FrameLengthError {
     TooShort,
     /// The slice exceeds the configured frame storage.
     TooLong,
+    /// A lent frame's payload is no longer inside its owner's storage: the
+    /// storage broke its stable-bytes contract.
+    OutsideStorage,
 }
 
 /// Why a received frame was not admitted to a network integration.

@@ -123,7 +123,7 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
     let mut hardware = MockMmio::default();
     let mut previous = None;
     for payload in 0..32_u8 {
-        free_slot(slot.as_mut()).into_buffer()[0] = payload;
+        free_slot(slot.as_mut()).into_buffer().unwrap()[0] = payload;
         let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
         slot.as_mut()
             .submit_legacy_q0(
@@ -168,7 +168,7 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
         slot.as_mut()
             .detach_completed(&mut hardware, cookie)
             .unwrap();
-        assert_eq!(free_slot(slot.as_mut()).into_buffer()[0], payload);
+        assert_eq!(free_slot(slot.as_mut()).into_buffer().unwrap()[0], payload);
         previous = Some(cookie);
     }
 }
@@ -214,7 +214,7 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
 #[test]
 fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    free_slot(slot.as_mut()).into_buffer()[..4].copy_from_slice(&[1, 2, 3, 4]);
+    free_slot(slot.as_mut()).into_buffer().unwrap()[..4].copy_from_slice(&[1, 2, 3, 4]);
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     assert!(!matches!(
         slot.as_mut().access(),

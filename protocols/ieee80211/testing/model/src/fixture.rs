@@ -41,6 +41,8 @@ impl<C: Ieee80211Capabilities, X: ModelContext> Fixture<C, X> {
 pub(super) enum Report<T> {
     Joined(T),
     Stopped(T),
+    /// Fail-stopped without a confirmed stop, as at a passed deadline.
+    Unconfirmed(T),
     Abandoned,
 }
 
@@ -86,17 +88,18 @@ where
             )
             .await;
         let report = match end {
-            PortEnd::Uninstalled { joined, output } => {
+            PortEnd::Uninstalled { joined, output, .. } => {
                 drop(joined);
                 Report::Joined(output)
             }
             PortEnd::FailStopped { outcome, output } => {
-                assert!(matches!(
-                    outcome.outcome(),
-                    oer_radio_port::Abandon::Stopped(_)
-                ));
+                let stopped = matches!(outcome.outcome(), oer_radio_port::Abandon::Stopped(_));
                 drop(outcome);
-                Report::Stopped(output)
+                if stopped {
+                    Report::Stopped(output)
+                } else {
+                    Report::Unconfirmed(output)
+                }
             }
             PortEnd::Abandoned { outcome, .. } => {
                 drop(outcome);

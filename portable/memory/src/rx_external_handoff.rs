@@ -194,6 +194,24 @@ impl Drop for ExternalRxBuffer {
 // transfer the affine buffer's access between cores.
 unsafe impl Send for ExternalRxBuffer {}
 
+/// The bytes a lease lends from its view's start.
+#[derive(Clone, Copy)]
+enum Span {
+    /// The published view.
+    View,
+    /// The view's start to the end of the stable allocation.
+    Storage,
+}
+
+impl Span {
+    const fn length(self, view: usize, offset: usize, capacity: usize) -> usize {
+        match self {
+            Self::View => view,
+            Self::Storage => capacity.saturating_sub(offset),
+        }
+    }
+}
+
 #[derive(bytemuck::Zeroable)]
 struct ExternalRxHandoffSlot {
     /// Initialized exactly while `state` is not `SLOT_FREE`: a free slot's
@@ -247,6 +265,14 @@ impl ExternalRxHandoffSlot {
     }
 
     fn publish(&self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
+        self.set_view(offset, length)?;
+        self.state.store(SLOT_READY, Ordering::Release);
+        Ok(())
+    }
+
+    /// Change the view of the current affine owner, within the initialized
+    /// allocation; the slot's state is unchanged.
+    fn set_view(&self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
         FrameRangeError::check(offset, length, 0, self.initialized_length())?;
         // SAFETY: the current affine owner alone mutates this view; the
         // checked range remains inside the retained initialized allocation.
@@ -255,7 +281,6 @@ impl ExternalRxHandoffSlot {
             *self.offset.get() = offset;
             *self.length.get() = length;
         }
-        self.state.store(SLOT_READY, Ordering::Release);
         Ok(())
     }
 
@@ -284,25 +309,32 @@ impl ExternalRxHandoffSlot {
         }
     }
 
-    fn frame(&self) -> &[u8] {
-        // SAFETY: a live lease uniquely owns the non-free slot state.
+    fn frame(&self, span: Span) -> &[u8] {
+        // SAFETY: a live lease uniquely owns the non-free slot state. Both
+        // spans start at the published view, inside the allocation, and every
+        // allocation byte is initialized (`ExternalRxReturn::detach`).
         #[allow(unsafe_code, reason = "live lease retains external slot ownership")]
         unsafe {
             let offset = *self.offset.get();
-            let length = *self.length.get();
-            (*self.buffer.get()).assume_init_ref().frame(offset, length)
+            let buffer = (*self.buffer.get()).assume_init_ref();
+            let length = span.length(*self.length.get(), offset, buffer.capacity());
+            buffer.frame(offset, length)
         }
     }
 
-    fn with_frame<R>(&self, f: impl FnOnce(&mut [u8]) -> R) -> R {
-        // SAFETY: the caller's affine lease requires unique mutable access,
-        // proving exclusive ownership of the current non-free allocation.
+    /// `lease` is the live flag of the one affine lease of this slot,
+    /// borrowed mutably for as long as the bytes.
+    fn frame_mut<'a>(&'a self, lease: &'a mut bool, span: Span) -> &'a mut [u8] {
+        let _ = lease;
+        // SAFETY: the caller's affine lease is borrowed mutably for the
+        // returned lifetime, proving exclusive ownership of the current
+        // non-free allocation; the span is as in `frame`.
         #[allow(unsafe_code, reason = "affine lease uniquely owns external bytes")]
         unsafe {
             let offset = *self.offset.get();
-            let length = *self.length.get();
             let buffer = (*self.buffer.get()).assume_init_mut();
-            f(buffer.frame_mut(offset, length))
+            let length = span.length(*self.length.get(), offset, buffer.capacity());
+            buffer.frame_mut(offset, length)
         }
     }
 
@@ -395,12 +427,14 @@ impl<const FRAME_CAPACITY: usize, const SLOT_COUNT: usize>
             let Some(slot) = self.slots.get(index) else {
                 continue;
             };
+            let length = buffer.length();
             match slot.try_claim_radio(buffer) {
                 Ok(()) => {
                     return Ok(ExternalRxRadioLease {
                         slot,
                         index: index as u8,
                         live: true,
+                        view: (0, length),
                     });
                 }
                 Err(returned) => buffer = returned,
@@ -486,6 +520,8 @@ pub struct ExternalRxRadioLease<'pool, const FRAME_CAPACITY: usize> {
     slot: &'pool ExternalRxHandoffSlot,
     index: u8,
     live: bool,
+    /// The current view, as offset and length in the allocation.
+    view: (usize, usize),
 }
 
 impl<'pool, const FRAME_CAPACITY: usize> ExternalRxRadioLease<'pool, FRAME_CAPACITY> {
@@ -494,11 +530,41 @@ impl<'pool, const FRAME_CAPACITY: usize> ExternalRxRadioLease<'pool, FRAME_CAPAC
     }
 
     pub fn frame(&self) -> &[u8] {
-        self.slot.frame()
+        self.slot.frame(Span::View)
     }
 
     pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut [u8]) -> R) -> R {
-        self.slot.with_frame(f)
+        f(self.slot.frame_mut(&mut self.live, Span::View))
+    }
+
+    /// Narrow the view to `length` bytes from `offset` in the current view,
+    /// for example to the frame without its receive prefix. A range outside
+    /// the current view is refused and changes nothing.
+    pub fn narrow(&mut self, offset: usize, length: usize) -> Result<(), FrameRangeError> {
+        let (start, current) = self.view;
+        let absolute = start.checked_add(offset).ok_or(FrameRangeError {
+            offset,
+            length,
+            initialized_offset: start,
+            initialized_length: current,
+        })?;
+        FrameRangeError::check(absolute, length, start, current)?;
+        self.slot.set_view(absolute, length)?;
+        self.view = (absolute, length);
+        Ok(())
+    }
+
+    /// The bytes from the view's start to the end of the stable allocation:
+    /// the received frame, then the rest of the allocation. Every byte is
+    /// initialized ([`ExternalRxReturn::detach`]).
+    pub fn storage(&self) -> &[u8] {
+        self.slot.frame(Span::Storage)
+    }
+
+    /// [`Self::storage`], mutably, for an owner that rewrites its frame in
+    /// place.
+    pub fn storage_mut(&mut self) -> &mut [u8] {
+        self.slot.frame_mut(&mut self.live, Span::Storage)
     }
 
     /// Publish the final protocol-owned view for a later network claim.
@@ -539,11 +605,11 @@ impl<const FRAME_CAPACITY: usize> ExternalRxNetworkLease<'_, FRAME_CAPACITY> {
     }
 
     pub fn frame(&self) -> &[u8] {
-        self.slot.frame()
+        self.slot.frame(Span::View)
     }
 
     pub fn with_frame<R>(&mut self, f: impl FnOnce(&mut [u8]) -> R) -> R {
-        self.slot.with_frame(f)
+        f(self.slot.frame_mut(&mut self.live, Span::View))
     }
 
     pub fn republish(

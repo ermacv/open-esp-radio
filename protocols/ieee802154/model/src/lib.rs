@@ -59,7 +59,8 @@ use oer_radio_port::{
     SlotWakes,
 };
 use oer_radio_port::{
-    Child, EventsLost, FifoPermitPool, Mint, Poisoned, PortResult, Root, Seat, Slot,
+    Child, DisableEnd, EventsLost, FifoPermitPool, Mint, Poisoned, PortResult, Root, Seat, Slot,
+    StopDeadline,
 };
 
 use oer_ieee802154_wire::{Channel, Frame, FrameError};
@@ -1557,11 +1558,14 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
         }))
     }
 
+    // The model drains in the call itself and has no monotonic clock: no
+    // deadline can pass during it.
     fn disable<'a, 'p, S>(
         _: Call,
         frontend: &'a mut Self::View<'p>,
+        _: StopDeadline,
         sink: &'a mut S,
-    ) -> impl Future<Output = Result<(), Poisoned<ModelFault>>> + 'a
+    ) -> impl Future<Output = Result<(), DisableEnd<ModelFault>>> + 'a
     where
         Self: 'p,
         Id: 'p,
@@ -1601,11 +1605,11 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
                     }
                 };
                 frontend.shared.with(|state| state.poisoned = Some(cause));
-                return ready(Err(Poisoned { cause }));
+                return ready(Err(DisableEnd::Poisoned(Poisoned { cause })));
             }
         }
         ready(frontend.shared.with(|state| match state.poisoned {
-            Some(cause) => Err(Poisoned { cause }),
+            Some(cause) => Err(DisableEnd::Poisoned(Poisoned { cause })),
             None => Ok(()),
         }))
     }
@@ -1669,7 +1673,12 @@ impl<Id: SlotIdentity> PortBackend<Id> for OwnedModel<Id> {
     {
         Ok(())
     }
-    fn shutdown_bound<'s>(_: &Self::Frontend<'s>) -> impl Future<Output = ()> + use<'s, Id>
+    // Its P2 owner answers in the same poll; only a test's own bound ends
+    // a model stop, and the model has no clock to take a deadline on.
+    fn shutdown_bound<'s>(
+        _: &Self::Frontend<'s>,
+        _: StopDeadline,
+    ) -> impl Future<Output = ()> + use<'s, Id>
     where
         Self: 's,
         Id: 's,

@@ -112,6 +112,7 @@ impl InterruptTypes for Interrupts {
 #[derive(Clone, Copy)]
 pub struct Config {
     pub(crate) reconnect: crate::ReconnectPolicy,
+    pub(crate) stop: runtime::StopPolicy,
     pub(crate) channel: u8,
     pub(crate) country: [u8; 2],
     pub(crate) cap_dbm: i8,
@@ -135,11 +136,14 @@ impl Config {
     }
     /// The same signature in every build; a trace build's target is chosen
     /// with [`Self::with_trace_target`].
+    /// `stop` bounds the network's return of the station's lent receive
+    /// buffers for a stop no request timed: a stop after a failure.
     pub fn new(
         channel: u8,
         country: [u8; 2],
         cap_dbm: i8,
         all_channels: bool,
+        stop: runtime::StopPolicy,
     ) -> Result<Self, InitializationError> {
         let domain =
             RegulatoryDomain::of(Country::new(country).map_err(|_| InitializationError::Country)?)
@@ -157,6 +161,7 @@ impl Config {
         .ok_or(InitializationError::Channel)?;
         Ok(Self {
             reconnect: crate::ReconnectPolicy::DISABLED,
+            stop,
             channel,
             country,
             cap_dbm,
@@ -383,9 +388,9 @@ pub(crate) struct ServiceRunner<W: Binding> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationExit {
     Stopped,
-    Failed(crate::failure::StationFailure),
-    Poisoned(crate::failure::StationFailure),
-    Quarantined(crate::failure::StationFailure),
+    Failed(crate::failure::FailedStation),
+    Poisoned(crate::failure::FailedStation),
+    Quarantined(crate::failure::FailedStation),
     /// Ended for uninstall, but the installation fail-stopped instead.
     RetirementFailed(crate::failure::RetirementFailure),
     /// Retired, but the Wi-Fi radio release did not complete.
@@ -400,7 +405,12 @@ pub enum UnavailableCause {
 pub fn station<W: Binding>(
     resources: Resources<W>,
     config: Config,
-) -> (Control<'static>, Network<'static>, Runners<W>) {
+) -> (
+    Control<'static>,
+    Network<'static>,
+    crate::NetworkStopper<'static>,
+    Runners<W>,
+) {
     let Resources {
         engine,
         events,
@@ -419,7 +429,7 @@ pub fn station<W: Binding>(
     } = resources;
     let crate::WifiHardware { cell, wifi } = hardware;
     let crate::DmaResources { rx, tx } = dma;
-    let (mut control, network, connection) = storage
+    let (mut control, network, stopper, connection) = storage
         .channels
         .split()
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
@@ -453,6 +463,7 @@ pub fn station<W: Binding>(
     (
         control,
         network,
+        stopper,
         Runners {
             driver: Driver {
                 boot: radio::Boot {

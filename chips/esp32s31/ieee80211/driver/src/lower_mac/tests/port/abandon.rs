@@ -80,7 +80,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for QueueThenFail {
 fn abandon_preempts_queued_publication_and_rx_and_erases_keys_only_on_p2() {
     let (parts, observed, _) = fixture();
     let dropped = Rc::new(Cell::new(0));
-    let released = Rc::new(Cell::new(0));
+    let released = super::Released::default();
     let requested = Rc::new(Cell::new(false));
     block_on(radio::with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -106,6 +106,7 @@ fn abandon_preempts_queued_publication_and_rx_and_erases_keys_only_on_p2() {
         let polls = observed.borrow().device_polls;
         observed.borrow_mut().received.push_back(TestReceive {
             bytes: [0; 26],
+            view: 0..26,
             released: released.clone(),
         });
         assert!(matches!(
@@ -117,7 +118,7 @@ fn abandon_preempts_queued_publication_and_rx_and_erases_keys_only_on_p2() {
         assert_eq!(observed.borrow().abandoned_publications, 0);
         assert_eq!(observed.borrow().device_polls, polls);
         assert_eq!(observed.borrow().received.len(), 1);
-        assert_eq!(released.get(), 0);
+        assert_eq!(super::count(&released), 0);
         assert_eq!(dropped.get(), 0, "quarantine retains queued DMA and body");
         assert!(matches!(
             poll_p1(p1.as_mut(), &observed),

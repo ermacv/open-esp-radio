@@ -10,8 +10,9 @@
 //! batches beside the stack's own packets. Each slot holds one 1514-byte
 //! Ethernet frame.
 use oer_embassy_net::{NetworkInterfaceId, RxEnqueueError};
+use oer_embassy_net::ethernet::{LentCopy, LentSlots};
 use oer_embassy_net::ip::{Configuration, Control, Error, Resources, Service};
-use oer_esp32s31_wifi::Network;
+use oer_esp32s31_wifi::{Network, ReceivedStorage};
 use oer_memory::{PlacedFuture, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
 
@@ -29,6 +30,10 @@ pub(crate) type Device = oer_embassy_net::OwnedNetworkDevice<'static, Context, R
 /// socket and reads the lease.
 pub(crate) type Interface = embassy_net::iface::Iface<'static, Device>;
 static IP: StaticCell<IpResources> = StaticCell::new();
+
+/// The packets of the frames the station lends in place: as many as its
+/// receive buffers the network may hold.
+static LENT: LentSlots<ReceivedStorage, { oer_esp32s31_wifi::LENT_RX }> = LentSlots::new();
 
 pub(crate) type Running = impl core::future::Future<Output = ()>;
 static RUNNING: ConstStaticCell<StaticPlace<Running>> = ConstStaticCell::new(StaticPlace::new());
@@ -48,6 +53,7 @@ pub(crate) fn start(
     let (control, service) = resources
         .start(
             net,
+            Some(&LENT),
             NetworkInterfaceId::new(0),
             address,
             seed,
@@ -75,11 +81,16 @@ fn refused(reason: RxEnqueueError) {
     });
 }
 
+/// The bridge copied a frame the station lent in place.
+fn copied(_: LentCopy) {
+    crate::load::parts::bridged(Bridged::Copied);
+}
+
 #[define_opaque(Running)]
 fn running_future(mut service: Service<Context, RX, TX, Network<'static>>) -> Running {
     async move {
         // Only an access from another context than its executor's fails it.
-        if service.run(|_| {}, received, refused, |_| {}).await.is_err() {
+        if service.run(|_| {}, received, refused, copied, |_| {}).await.is_err() {
             crate::fail(Failure::Network);
         }
     }

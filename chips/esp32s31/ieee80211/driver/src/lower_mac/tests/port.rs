@@ -63,6 +63,8 @@ struct Observed {
     stops: usize,
     abandoned: bool,
     detached: bool,
+    /// Times the driver rearmed units the network returned.
+    returned: usize,
     hold_start: bool,
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
@@ -193,19 +195,41 @@ impl TestDevice {
 }
 struct TestReceive {
     bytes: [u8; 26],
-    released: Rc<Cell<usize>>,
+    /// The view in `bytes`, narrowed by the driver to the MPDU.
+    view: core::ops::Range<usize>,
+    released: std::sync::Arc<core::sync::atomic::AtomicUsize>,
 }
 impl ReceiveUnit for TestReceive {
     fn normalized(&self) -> Result<crate::mac::rx::NormalizedRxFrame<'_>, crate::mac::rx::RxError> {
         Ok(super::normalized(&self.bytes))
     }
     fn bytes(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes[self.view.clone()]
+    }
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError> {
+        let start = self.view.start + offset;
+        if start + length > self.view.end {
+            return Err(oer_memory::FrameRangeError {
+                offset,
+                length,
+                initialized_offset: self.view.start,
+                initialized_length: self.view.len(),
+            });
+        }
+        self.view = start..start + length;
+        Ok(())
+    }
+    fn storage(&self) -> &[u8] {
+        &self.bytes[self.view.start..]
+    }
+    fn storage_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes[self.view.start..]
     }
 }
 impl Drop for TestReceive {
     fn drop(&mut self) {
-        self.released.set(self.released.get() + 1);
+        self.released
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     }
 }
 impl Device<512> for TestDevice {
@@ -216,6 +240,7 @@ impl Device<512> for TestDevice {
     type Hardware = Hardware;
     type Receive = TestReceive;
     type Body = Payload;
+    const LENT_RX: usize = 2;
     type OwnedContext<Id: radio::SlotIdentity> = Tag;
     type Context<'p, Id: radio::SlotIdentity + 'p> = Tag;
     type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
@@ -417,6 +442,10 @@ impl Device<512> for TestDevice {
         self.assert_driver_context();
         drop(frame);
     }
+    fn returned(&mut self) {
+        self.assert_driver_context();
+        self.observed.borrow_mut().returned += 1;
+    }
     fn abandon(&mut self) -> bool {
         self.assert_driver_context();
         let keys = self.hardware.installed_keys.len();
@@ -575,7 +604,7 @@ where
             })
             .await
         {
-            radio::PortEnd::Uninstalled { joined, output } => {
+            radio::PortEnd::Uninstalled { joined, output, .. } => {
                 drop(joined);
                 Report::Uninstalled { output }
             }
@@ -727,7 +756,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
         }
         assert_eq!(outcomes.len(), self.expected);
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -951,7 +980,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for SuspendBody {
             _ => {}
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1070,7 +1099,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
             ));
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1088,6 +1117,112 @@ fn every_group_mutation_has_a_finite_rx_cut_and_returns_its_permission_once() {
         Report::Uninstalled { .. }
     ));
     assert_eq!(observed.borrow().resumed_cuts, 4);
+}
+
+/// Enable, then disable by a stop deadline: one that passed already, or
+/// one that passes while a held publication keeps the drain open.
+/// When a disable's stop deadline passes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Passes {
+    /// Before the disable starts.
+    Before,
+    /// While its drain waits for a held queue.
+    During,
+    /// In its sink, while the drain returns a withdrawn MPDU and then ends
+    /// in the same poll.
+    InSink,
+}
+struct DisableBy {
+    clock: TestTimer,
+    observed: Rc<RefCell<Observed>>,
+    passes: Passes,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBy {
+    type Output = bool;
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, bool>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = match owner.enable().await {
+            Ok(owner) => owner,
+            Err(_) => panic!("enable"),
+        };
+        let step = oer_time::Duration::from_millis(1);
+        let deadline = if self.passes == Passes::Before {
+            self.clock.now()
+        } else {
+            self.observed.borrow_mut().held_queues = [self.passes == Passes::During; 4];
+            let mut phase = owner.phase();
+            let [buffer, ..] = resources.buffers;
+            let [ticket, ..] = resources.tickets;
+            submit_mpdu(&mut phase, buffer, ticket, None, None);
+            self.clock.now().saturating_add(step)
+        };
+        let stops = self.observed.borrow().stops;
+        let offered = core::cell::Cell::new(0);
+        let mut sink = |_| {
+            offered.set(offered.get() + 1);
+            if self.passes == Passes::InSink {
+                self.clock.0.advance(step).expect("advance clock");
+            }
+            core::ops::ControlFlow::Continue(())
+        };
+        let mut disable = pin!(owner.disable(Some(deadline), &mut sink));
+        let mut advanced = false;
+        let disabled = core::future::poll_fn(|cx| {
+            let polled = disable.as_mut().poll(cx);
+            assert!(
+                polled.is_ready() || self.passes != Passes::Before,
+                "a passed deadline ends at once"
+            );
+            if polled.is_pending() && self.passes == Passes::During && !advanced {
+                // The drain is open: the deadline passes during it.
+                advanced = true;
+                self.clock.0.advance(step).expect("advance clock");
+                cx.waker().wake_by_ref();
+            }
+            polled
+        })
+        .await;
+        let request = match disabled {
+            Err(radio::DisableFailed::Expired(request)) => request,
+            Ok(_) => panic!("drained ({:?})", self.passes),
+            Err(radio::DisableFailed::Poisoned(owner)) => {
+                panic!("poisoned {:?} ({:?})", owner.cause(), self.passes)
+            }
+        };
+        assert_eq!(request.deadline(), Some(deadline));
+        match self.passes {
+            Passes::Before => {
+                assert_eq!(self.observed.borrow().stops, stops, "no drain started")
+            }
+            Passes::During => {}
+            Passes::InSink => assert_eq!(offered.get(), 1, "the withdrawn MPDU reached the sink"),
+        }
+        radio::Ended::fail_stop(request, true)
+    }
+}
+#[test]
+fn a_disable_past_its_stop_deadline_issues_no_disabled_owner_and_fail_stops() {
+    for passes in [Passes::Before, Passes::During, Passes::InSink] {
+        let (backend, observed, clock) = installed(Vec::new());
+        let report = block_on(run_body(
+            backend,
+            DisableBy {
+                clock,
+                observed,
+                passes,
+            },
+        ));
+        // Expired disables prove no stop and issue no disabled owner.
+        assert!(matches!(report, Report::FailStopped { output: true, .. }));
+    }
 }
 
 struct Expire {
@@ -1136,7 +1271,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Expire {
             resources.gate = phase.open_gate(gate);
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1155,10 +1290,28 @@ fn queued_msdu_expires_from_submit_without_publication_behind_a_closed_gate() {
     assert_eq!(observed.borrow().publications, 0);
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum ReceiveMode {
+    Recycle,
+    Lose,
+    /// Lend the unit to the network and drop it there before disabling.
+    Lend,
+    /// Lend the unit and keep it held across the disable.
+    LendHeld,
+}
+/// How many receive units were released, shared with the units.
+pub(super) type Released = std::sync::Arc<core::sync::atomic::AtomicUsize>;
+pub(super) fn count(released: &Released) -> usize {
+    released.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+type Stash = Rc<RefCell<Option<crate::port::LentReceive<TestReceive>>>>;
 struct ReceiveBody {
     observed: Rc<RefCell<Observed>>,
-    released: Rc<Cell<usize>>,
-    lose: bool,
+    released: Released,
+    mode: ReceiveMode,
+    /// Where a held unit outlives the body.
+    stash: Stash,
 }
 impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
     type Output = ();
@@ -1172,6 +1325,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
         Id: 'id,
         'id: 'p,
     {
+        use oer_ieee80211_contracts_port::LentRxBuffer;
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -1194,6 +1348,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
             ));
             self.observed.borrow_mut().received.push_back(TestReceive {
                 bytes: super::data_frame(STATION),
+                view: 0..26,
                 released: self.released.clone(),
             });
             let frame = match phase.next_event().await {
@@ -1205,58 +1360,122 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
                 _ => panic!("received MPDU"),
             };
             assert_eq!(frame.bytes(), &super::data_frame(STATION));
-            assert_eq!(self.released.get(), 0);
-            if self.lose {
-                drop(frame);
-                assert!(matches!(
-                    phase.next_event().await,
-                    Err(radio::EventEnd::Quarantined { .. })
-                ));
-            } else {
-                phase.recycle(frame);
+            assert_eq!(count(&self.released), 0);
+            match self.mode {
+                ReceiveMode::Lose => {
+                    drop(frame);
+                    assert!(matches!(
+                        phase.next_event().await,
+                        Err(radio::EventEnd::Quarantined { .. })
+                    ));
+                }
+                ReceiveMode::Recycle => phase.recycle(frame),
+                ReceiveMode::Lend | ReceiveMode::LendHeld => {
+                    let Ok(mut lent) = phase.lend(frame) else {
+                        panic!("lent");
+                    };
+                    assert_eq!(lent.mpdu_len(), super::data_frame(STATION).len());
+                    assert_eq!(lent.storage(), &super::data_frame(STATION));
+                    lent.storage_mut()[0] = 0xa5;
+                    assert_eq!(lent.storage()[0], 0xa5);
+                    assert_eq!(count(&self.released), 0);
+                    if self.mode == ReceiveMode::Lend {
+                        drop(lent);
+                        assert_eq!(count(&self.released), 1);
+                    } else {
+                        *self.stash.borrow_mut() = Some(lent);
+                    }
+                }
             }
         }
-        if self.lose {
+        if self.mode == ReceiveMode::Lose {
             return radio::Ended::fail_stop(owner.fail_stop(), ());
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
             Err(_) => panic!("disable"),
         };
-        assert_eq!(self.released.get(), 1);
+        let returned = if self.mode == ReceiveMode::LendHeld {
+            0
+        } else {
+            1
+        };
+        assert_eq!(count(&self.released), returned);
         radio::Ended::uninstall(owner, (), ())
     }
 }
 #[test]
 fn received_bss_mpdu_keeps_its_original_owner_until_explicit_recycling() {
     let (backend, observed, _) = installed(Vec::new());
-    let released = Rc::new(Cell::new(0));
+    let released = Released::default();
     assert!(matches!(
         block_on(run_body(
             backend,
             ReceiveBody {
                 observed,
                 released: released.clone(),
-                lose: false
+                mode: ReceiveMode::Recycle,
+                stash: Stash::default(),
             }
         )),
         Report::Uninstalled { .. }
     ));
-    assert_eq!(released.get(), 1);
+    assert_eq!(count(&released), 1);
+}
+#[test]
+fn a_lent_unit_returns_to_its_ring_when_the_network_drops_it() {
+    let (backend, observed, _) = installed(Vec::new());
+    let released = Released::default();
+    assert!(matches!(
+        block_on(run_body(
+            backend,
+            ReceiveBody {
+                observed: observed.clone(),
+                released: released.clone(),
+                mode: ReceiveMode::Lend,
+                stash: Stash::default(),
+            }
+        )),
+        Report::Uninstalled { .. }
+    ));
+    assert_eq!(count(&released), 1);
+    assert!(observed.borrow().returned >= 1);
+}
+#[test]
+fn a_unit_the_network_still_holds_refuses_retirement() {
+    let (backend, observed, _) = installed(Vec::new());
+    let released = Released::default();
+    let stash = Stash::default();
+    let result = block_on(run_body(
+        backend,
+        ReceiveBody {
+            observed,
+            released: released.clone(),
+            mode: ReceiveMode::LendHeld,
+            stash: stash.clone(),
+        },
+    ));
+    // A unit the network still holds keeps its memory: the installation
+    // cannot confirm its stop, and the late return changes nothing.
+    assert!(!matches!(result, Report::Uninstalled { .. }));
+    assert_eq!(count(&released), 0);
+    drop(stash.borrow_mut().take());
+    assert_eq!(count(&released), 1);
 }
 #[test]
 fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent() {
     let (backend, observed, _) = installed(Vec::new());
-    let released = Rc::new(Cell::new(0));
+    let released = Released::default();
     let result = block_on(run_body(
         backend,
         ReceiveBody {
             observed: observed.clone(),
             released: released.clone(),
-            lose: true,
+            mode: ReceiveMode::Lose,
+            stash: Stash::default(),
         },
     ));
     assert!(matches!(
@@ -1267,7 +1486,7 @@ fn dropping_a_received_owner_quarantines_its_allocation_and_poison_is_permanent(
         }
     ));
     drop(result);
-    assert_eq!(released.get(), 0);
+    assert_eq!(count(&released), 0);
     assert!(observed.borrow().abandoned);
 }
 
@@ -1367,7 +1586,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
             assert_eq!(self.dropped.get(), 1);
         }
         let owner = match owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
         {
             Ok(owner) => owner,
@@ -1505,7 +1724,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
         );
         let owner = owner.enable().await.ok().expect("enable");
         let owner = owner
-            .disable(&mut |_| core::ops::ControlFlow::Continue(()))
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
             .await
             .ok()
             .expect("disable");
@@ -1552,6 +1771,7 @@ where
         let radio::PortEnd::Uninstalled {
             joined,
             output: first,
+            ..
         } = first
         else {
             panic!("first installation joins");
@@ -1573,6 +1793,7 @@ where
         let radio::PortEnd::Uninstalled {
             joined,
             output: second,
+            ..
         } = second
         else {
             panic!("second installation joins");

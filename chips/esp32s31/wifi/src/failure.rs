@@ -16,6 +16,31 @@ pub enum StationFailure {
         cause: BackendFault,
         missing: PendingTerminal,
     },
+    /// A requested stop's network drain failed.
+    NetworkDrain(NetworkDrain),
+    /// The stop's deadline passed while the port disabled.
+    StopDeadline,
+}
+/// The station's ended service: its failure, and the network drain before
+/// the port retired when that failed too.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FailedStation {
+    pub failure: StationFailure,
+    pub network: Option<NetworkDrain>,
+}
+/// The network did not return the station's lent receive buffers before
+/// the port retires: why, and the buffers it still held.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NetworkDrain {
+    pub cause: NetworkDrainCause,
+    pub held: usize,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NetworkDrainCause {
+    /// The stop's deadline passed.
+    Deadline,
+    /// The network's stopper was dropped without reporting its stop.
+    ParticipantLost,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendFault {
@@ -352,6 +377,8 @@ pub enum PlatformClock {
 pub struct RetirementFailure {
     /// The station's own failure, when it ended with one.
     pub failure: Option<StationFailure>,
+    /// The network drain before the port retired, when it failed.
+    pub network: Option<NetworkDrain>,
     /// Why the ordinary retirement did not complete.
     pub cause: RetirementCause,
     /// The P2 owner confirmed the hardware stopped before quarantine.
@@ -365,6 +392,10 @@ pub enum RetirementCause {
     BodyAlreadyIssued,
     Deadline,
     StopUnconfirmed,
+    /// The network still held lent receive buffers when the port retired;
+    /// their memory stays quarantined with it, and a later return does not
+    /// publish it to DMA.
+    NetworkDrain(NetworkDrain),
     InvalidState(SlotObservation),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -386,6 +417,8 @@ pub enum SlotStorage {
 pub struct ReleaseFailure {
     /// The station's own failure, when it ended with one.
     pub failure: Option<StationFailure>,
+    /// The network drain before the port retired, when it failed.
+    pub network: Option<NetworkDrain>,
     pub cause: ReleaseCause,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -403,6 +436,10 @@ pub enum ReleaseCause {
     LeaveUnanswered([u32; 4]),
     /// The leave completed into a poisoned radio domain.
     DomainPoisoned(RadioPoison),
+    /// The stop's deadline passed before the radio driver task answered the
+    /// release. The task keeps what it was handed; a later answer is never
+    /// read, and nothing is reused.
+    Deadline,
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;

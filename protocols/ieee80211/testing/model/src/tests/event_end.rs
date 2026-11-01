@@ -148,9 +148,9 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                 assert_eq!(returned, ["configure", "tx", "gate"]);
                 assert_eq!(self.drops.get(), 2);
                 let disabled = owner
-                    .disable(&mut |_| panic!("Drained returned every terminal"))
+                    .disable(None, &mut |_| panic!("Drained returned every terminal"))
                     .await;
-                let Err(poisoned) = disabled else {
+                let Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) = disabled else {
                     panic!("the fault persists")
                 };
                 Ended::uninstall(poisoned, (), ())

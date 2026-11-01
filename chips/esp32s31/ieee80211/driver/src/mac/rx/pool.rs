@@ -276,4 +276,26 @@ impl<const SLOTS: usize, const CAPACITY: usize> NetworkRxFrame<'_, SLOTS, CAPACI
     pub const fn length(&self) -> usize {
         self.metadata.length
     }
+
+    /// Narrow the frame's view to `length` bytes from `offset` in it, for
+    /// example to its MPDU ([`ExternalRxRadioLease::narrow`]). The
+    /// normalized views read the whole unit and stay for before this.
+    pub fn narrow(
+        &mut self,
+        offset: usize,
+        length: usize,
+    ) -> Result<(), oer_memory::FrameRangeError> {
+        self.lease.narrow(offset, length)
+    }
+
+    /// The received bytes, then the rest of the DMA allocation; every byte
+    /// is initialized ([`ExternalRxRadioLease::storage`]).
+    pub fn storage(&self) -> &[u8] {
+        self.lease.storage()
+    }
+
+    /// [`Self::storage`], mutably.
+    pub fn storage_mut(&mut self) -> &mut [u8] {
+        self.lease.storage_mut()
+    }
 }

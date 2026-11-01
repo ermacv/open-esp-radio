@@ -52,7 +52,6 @@ pub async fn drive(driver: wifi::Driver<binding::Binding>) {
 pub async fn serve(
     runner: wifi::StationRunner<binding::Binding>,
     _control: wifi::Control<'static>,
-    _network: wifi::Network<'static>,
     config: wifi::Config,
     address: [u8; 6],
     nonces: &'static mut wifi::NonceSource,

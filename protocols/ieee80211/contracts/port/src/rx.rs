@@ -75,6 +75,58 @@ pub trait RxBuffer {
     fn bytes(&self) -> &[u8];
 }
 
+/// A received buffer moved out of the port's receive capacity to a network
+/// owner ([`LowerMacPhase::lend`](crate::LowerMacPhase::lend)).
+///
+/// The storage starts at the MPDU's first byte, as [`RxBuffer::bytes`] lent
+/// it, and continues to the end of its allocation; every byte is
+/// initialized. The owner may rewrite it in place. Dropping the owner
+/// returns the memory to the backend, which counts the buffer as held by
+/// the network until then; the drop happens in a task, never in an
+/// interrupt handler.
+pub trait LentRxBuffer: Send + 'static {
+    /// The MPDU, then the rest of its allocation.
+    fn storage(&self) -> &[u8];
+    /// [`Self::storage`], mutably.
+    fn storage_mut(&mut self) -> &mut [u8];
+    /// The MPDU's length at the start of the storage.
+    fn mpdu_len(&self) -> usize;
+    /// Start the storage `by` bytes later, inside the MPDU, which shortens
+    /// by as much. A step past the MPDU is refused and changes nothing.
+    fn advance(&mut self, by: usize) -> Result<(), AdvanceRefused>;
+}
+
+/// A refused [`LentRxBuffer::advance`]: the step does not fit the MPDU.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdvanceRefused {
+    /// The requested step.
+    pub by: usize,
+    /// The MPDU's length then.
+    pub mpdu_len: usize,
+}
+
+/// Why a backend kept a receive buffer instead of lending it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LendRefusal {
+    /// The backend's buffers cannot leave its receive capacity.
+    Unsupported,
+    /// The network already holds every buffer the backend lends.
+    Capacity,
+    /// The installation is stopping or stopped; it lends nothing more.
+    Stopping,
+}
+
+/// A refused [`LowerMacPhase::lend`](crate::LowerMacPhase::lend): the
+/// unchanged buffer, still owed to
+/// [`LowerMacPhase::recycle`](crate::LowerMacPhase::recycle), and why.
+#[derive(Debug)]
+pub struct LendRefused<B> {
+    /// The buffer, unchanged.
+    pub buffer: B,
+    /// Why it was kept.
+    pub reason: LendRefusal,
+}
+
 /// The metadata a backend gives a received MPDU: the portable fields
 /// ([`RxMeta`]), and whatever more the backend's type guarantees
 /// ([`SignalMetadata`]).

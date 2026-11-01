@@ -26,7 +26,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Retune {
             let old = phase.rate(PhyRate::Legacy(LegacyRate::Dsss1M)).unwrap();
             assert!(phase.no_ack(old).is_ok());
         }
-        let mut owner = owner.disable(&mut |_| core::ops::ControlFlow::Continue(())).await.ok().unwrap(); // ui-error: E0505
+        let mut owner = owner.disable(None, &mut |_| core::ops::ControlFlow::Continue(())).await.ok().unwrap(); // ui-error: E0505
         owner.setup().set_channel(
             SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_contracts_port::RegulatedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap())).unwrap()).unwrap(),
         );

@@ -49,7 +49,6 @@ oer_espressif_executor::tasks! {
         station_task(
             runner: wifi::StationRunner<station::binding::Binding>,
             control: wifi::Control<'static>,
-            network: wifi::Network<'static>,
             config: wifi::Config,
             address: [u8; 6],
             nonces: &'static mut wifi::NonceSource,
@@ -134,7 +133,16 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let profile = profile::PROFILE;
     // The profile's domain, channel and power limit are checked before any
     // radio owner starts.
-    let config = wifi::Config::new(profile.channel, profile.country, profile.cap_dbm, false)
+    // No IP stack holds the station's frames: a stop needs no drain time.
+    let config = wifi::Config::new(
+        profile.channel,
+        profile.country,
+        profile.cap_dbm,
+        false,
+        wifi::StopPolicy {
+            drain: oer_time::Duration::ZERO,
+        },
+    )
         .unwrap_or_else(|error| station::failure(error))
         .with_reconnect(RECONNECT);
     let Some(silent) = adopted
@@ -202,7 +210,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let mut tx_bytes = [0; 4];
     rng.fill(&mut tx_bytes);
     let entropy = u32::from_le_bytes(tx_bytes);
-    let (control, network, runners) = wifi::station(
+    let (control, network, stopper, runners) = wifi::station(
         wifi::Resources {
             engine,
             events: station::ProductEvents,
@@ -222,6 +230,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         },
         config,
     );
+    // No IP stack takes the station's frames.
+    stopper.no_network(network);
     if RadioTasks::radio_actor(&radio, actor).is_err()
         || RadioTasks::driver(&radio, runners.driver).is_err()
     {
@@ -245,7 +255,6 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     spawner,
                     runners.station,
                     control,
-                    network,
                     config,
                     address,
                     nonces,
