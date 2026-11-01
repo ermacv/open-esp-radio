@@ -26,25 +26,25 @@ use embassy_futures::select::{Either, select};
 use oer_embassy_net::{
     NetworkInterfaceId,
     ethernet::LentSlots,
-    ip::{self, Configuration, Ipv4Configuration, Resources, Service, Status},
+    ip::{self, Configuration, Resources, Service},
 };
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_compose::{Esp32s31, pilot, platform::DeviceIdentity};
 use oer_esp32s31_hal::peripherals::{
-    efuse::EfuseRegisters, entropy::EntropyRegisters, software_interrupt::FromCpu3Irq,
-    timg0_alarm::Timg0AlarmParts,
+    efuse::EfuseRegisters, software_interrupt::FromCpu3Irq, timg0_alarm::Timg0AlarmParts,
 };
 use oer_esp32s31_wifi::{self as wifi, InterruptTypes};
 use oer_espressif_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };
 use oer_espressif_interrupt_table::signal::{FromHandler, FromTask, IrqSignal};
-use oer_ieee80211_runtime::station::contract::{CommandOutcome, CommandRefusal};
+use oer_ieee80211_runtime::station::contract::CommandOutcome;
 use static_cell::StaticCell;
 
 pub use embassy_net;
-pub use oer_ieee80211_runtime::station::contract::DisconnectReason;
-pub use oer_network_port::LinkSnapshot;
+pub use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
+pub use oer_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
+pub use oer_network_port::{LinkSnapshot, LinkState};
 
 use super::{AesClient, Boot, Error, PhyToken, RadioAlarmToken, RadioToken, WakeToken, WifiToken};
 use crate::net::{NetError, Watchers};
@@ -188,7 +188,6 @@ pub struct WifiPeripheral {
     pub(crate) timg0_alarm: Timg0AlarmParts,
     pub(crate) interrupts: oer_esp32s31_hal::owner::WifiInterruptBanks,
     pub(crate) efuse: EfuseRegisters,
-    pub(crate) entropy: EntropyRegisters,
 }
 
 /// The radio parts of the boot context: the radio executor's and the
@@ -226,14 +225,39 @@ impl Config {
     /// # Errors
     /// The country or channel is refused.
     pub fn new(country: [u8; 2], channel: u8, cap_dbm: i8) -> Result<Self, ConfigError> {
-        let config = wifi::Config::new(channel, country, cap_dbm, false, STOP).map_err(
-            |error| match error {
-                wifi::InitializationError::Country | wifi::InitializationError::Domain => {
-                    ConfigError::Country
+        Self::chip(country, channel, cap_dbm, false)
+    }
+
+    /// Every 2.4 GHz channel `country` permits, scanned at each connect, at
+    /// `cap_dbm`, reconnecting every second after a lost association: for
+    /// an image that learns its network's channel only when it connects.
+    ///
+    /// # Errors
+    /// The country is refused, or it permits no 2.4 GHz channel.
+    pub fn all_channels(country: [u8; 2], cap_dbm: i8) -> Result<Self, ConfigError> {
+        // The radio starts on the domain's lowest permitted channel.
+        crate::boot::lowest_channel(
+            |channel| Self::chip(country, channel, cap_dbm, true),
+            |error| *error == ConfigError::Channel,
+        )
+        .map_err(|refused| refused.unwrap_or(ConfigError::Channel))
+    }
+
+    fn chip(
+        country: [u8; 2],
+        channel: u8,
+        cap_dbm: i8,
+        all_channels: bool,
+    ) -> Result<Self, ConfigError> {
+        let config =
+            wifi::Config::new(channel, country, cap_dbm, all_channels, STOP).map_err(|error| {
+                match error {
+                    wifi::InitializationError::Country | wifi::InitializationError::Domain => {
+                        ConfigError::Country
+                    }
+                    _ => ConfigError::Channel,
                 }
-                _ => ConfigError::Channel,
-            },
-        )?;
+            })?;
         let reconnect = wifi::ReconnectPolicy::every(oer_time::Duration::from_secs(1))
             .map_err(|wifi::ZeroReconnectInterval| ConfigError::Reconnect)?;
         Ok(Self(config.with_reconnect(reconnect)))
@@ -302,6 +326,7 @@ pub enum ConnectError {
 pub struct Station {
     control: wifi::Control<'static>,
     started: bool,
+    address: [u8; 6],
 }
 
 /// The station's network device, which [`Net::start`] takes. Dropped
@@ -368,10 +393,12 @@ impl Station {
         let executor = RadioExecutor::new(radio.line2)
             .start(hart, router, radio.radio, radio.irq2, urgent)
             .unwrap_or_else(|failure| failure.reset());
-        let mut rng = oer_esp32s31_compose::platform::Entropy::new(wifi.entropy, EmbassyClock);
+        let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
+        let mut rng = oer_esp32s31_compose::platform::Entropy::new(entropy, EmbassyClock);
         if !rng.is_healthy() {
             return Err(Error::Entropy);
         }
+        boot.boot_id = Some(super::draw_boot_id(&mut rng));
         let nonces = NONCES
             .try_init(wifi::NonceSource::from_entropy(|seed| rng.fill(seed)))
             .ok_or(Error::Storage)?;
@@ -413,6 +440,7 @@ impl Station {
             Self {
                 control,
                 started: false,
+                address,
             },
             Device {
                 network: Some((network, stopper)),
@@ -468,6 +496,11 @@ impl Station {
     /// The link's state and epoch now.
     pub fn link(&self) -> LinkSnapshot {
         self.control.link()
+    }
+
+    /// The station's own MAC address.
+    pub fn address(&self) -> [u8; 6] {
+        self.address
     }
 }
 

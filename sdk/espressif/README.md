@@ -1,7 +1,8 @@
 # oer-espressif
 
 The Espressif family's application entry. An image selects its chip by
-feature (`esp32s31`, exactly one) and the capabilities it uses (`wifi`),
+feature (`esp32s31`, exactly one) and the capabilities it uses (`wifi`,
+`console`),
 takes the peripherals it needs once and builds drivers and services with
 defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
@@ -29,7 +30,9 @@ async fn app(mut station: Station, net: Net) -> AppResult {
 ## Boot and run
 
 `main!(boot)` declares the image's entry. After stage-two adoption the
-library reports the previous boot's retained faults, then calls `boot` once
+library reports the previous boot's retained faults (what it read, hart 0's
+reset cause and the previous panic, stays readable through
+`Boot::evidence`), then calls `boot` once
 on hart 0, before any executor and with interrupts disabled. `boot` moves
 peripherals into drivers and services through the boot context (`Boot`):
 their interrupt bindings, executors and service tasks are made there and
@@ -38,17 +41,20 @@ library then installs the system timer (the radio executor writes it when
 a station started, the application executor otherwise), enables interrupts
 and runs the application executor in thread mode with its service tasks
 (`SdkTasks`) and the image's task (`main!`'s set extends `SdkTasks`).
+Before the executor starts the library draws the boot's identity
+(`boot_id`, nonzero, random) from the entropy source: a station draws it
+with the source it takes, otherwise the library does once the timer runs.
 
 ## Default layout (ESP32-S31)
 
 | Context | Level | Entries |
 | --- | --- | --- |
-| application | 1 | executor wake (line 40), its alarm (system timer comparator 1, line 41) |
+| application | 1 | executor wake (line 40), its alarm (system timer comparator 1, line 41), console (USB Serial/JTAG, line 42) |
 | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
 | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC and doorbell (line 21) |
 
-The radio entries exist with the `wifi` feature; an entry no driver binds
-routes no source. Service tasks on the application executor: the RTC
+The radio entries exist with the `wifi` feature, the console's with
+`console`; an entry no driver binds routes no source. Service tasks on the application executor: the RTC
 watchdog feed, the AES service, the station runner and the IP service. The
 radio executor runs the radio actor and the MAC driver.
 
@@ -68,7 +74,10 @@ the client's seat and its response comes back by value; the service runs
 one request at a time, the next pending client after the last served. A
 client is also a `KeyUnwrap` engine; the Wi-Fi station takes one.
 
-`wifi::Station::start` takes the radio and an AES client. `connect(profile)`
+`wifi::Station::start` takes the radio, the entropy source and an AES
+client. Its configuration names one channel (`wifi::Config::new`) or every
+2.4 GHz channel the country permits, scanned at each connect
+(`wifi::Config::all_channels`). `connect(profile)`
 ends with the result of that connection attempt: `Connected`, or a
 `ConnectError` with the station's own cause (`Failed(DisconnectReason)` names
 `NotFound`, `AuthenticationFailed`, `AssociationFailed`, `HandshakeFailed`
@@ -84,6 +93,12 @@ stops (after a failure, within 2 s) the IP service stops first and returns
 every buffer it holds. A station whose device no `Net::start` took tells
 the station that no network takes its frames.
 
+`Console::open` takes the USB Serial/JTAG block from the early writer and
+binds its interrupt in the application's context: the stream
+(`UsbConsole`) reads and writes as `embedded_io_async` does, for a HIL agent
+or a log of the image's own. From then on `println!` writes nothing and
+returns `false`; a fatal note still reaches the host.
+
 ## Failures
 
 | When | Fate of the owners | Result |
@@ -91,6 +106,7 @@ the station that no network takes its frames.
 | A boot step refuses a value (configuration, profile) before binding | the peripheral was moved into the call and is dropped | `Error`, which the library records and resets on |
 | A boot step fails after a binding or a claimed storage (`Storage`, `Entropy`, `Net`) | bound owners stay bound, claimed storage stays claimed | `Error`, record and reset |
 | `boot` returns `Err`, or the application's future returns `Err` | all owners stay where they are | record and reset |
+| The entropy source fails its health check when the library draws the boot's identity | all owners stay where they are | record and reset |
 | The station runner exits other than an ordinary stop (failed, poisoned, quarantined, retirement or release failure, abandoned, initialization) | the runner keeps every owner | record and reset |
 | A fatal MAC assertion, a PHY transaction fault, nonce exhaustion | owners quarantined by their fault owner | record and reset |
 | The IP service is refused its context | the service keeps its owners | record and reset |
@@ -118,5 +134,5 @@ budget per line.
 ```console
 cargo test -p oer-espressif
 cargo clippy -p oer-espressif --all-targets
-cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi
+cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console
 ```

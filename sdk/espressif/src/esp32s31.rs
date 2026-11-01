@@ -6,7 +6,7 @@
 //!
 //! | Context | Level | Entries |
 //! |---|---|---|
-//! | application | 1 | executor wake (line 40), its alarm (comparator 1, line 41) |
+//! | application | 1 | executor wake (line 40), its alarm (comparator 1, line 41), console (USB Serial/JTAG, line 42) |
 //! | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
 //! | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC (line 21) |
 //!
@@ -19,6 +19,7 @@ use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_hal::{
     peripherals::{
         aes::AesParts,
+        entropy::EntropyRegisters,
         software_interrupt::{FromCpu0Irq, SoftwareInterrupts},
         system_timer::{SystemTimer, SystimerAlarm1},
         watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
@@ -44,6 +45,16 @@ pub use aes::{Aes, AesClient, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
 #[cfg(feature = "wifi")]
 pub mod wifi;
 
+#[cfg(feature = "console")]
+mod console;
+#[cfg(feature = "console")]
+pub use console::{Console, ConsolePeripheral, UsbConsole};
+
+/// Why a hart left reset.
+pub use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
+/// The record of the previous boot's panic.
+pub use oer_espressif_staged_runtime::panic::PanicRecord;
+
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     /// The application executor's wake (thread mode).
@@ -64,6 +75,9 @@ oer_espressif_staged_runtime::interrupt_table! {
     #[cfg(feature = "wifi")]
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, line 21, context radio, hart 0, Hardware;
+    #[cfg(feature = "console")]
+    /// The USB Serial/JTAG console: it raises the console endpoint's signal.
+    console_usb: ConsoleToken = oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, line 42, context app_wake, hart 0, Hardware;
 }
 
 oer_espressif_executor::tasks! {
@@ -93,6 +107,9 @@ pub struct Peripherals {
     /// The radio: [`wifi::Station::start`] takes it.
     #[cfg(feature = "wifi")]
     pub wifi: wifi::WifiPeripheral,
+    /// The USB Serial/JTAG console: [`Console::open`] takes it.
+    #[cfg(feature = "console")]
+    pub console: ConsolePeripheral,
 }
 
 /// The AES accelerator's owner.
@@ -113,6 +130,11 @@ pub struct Boot {
     /// The doorbell's urgent source, once a station started.
     #[cfg(feature = "wifi")]
     urgent: Option<wifi::Urgent>,
+    /// The entropy source, until a station takes it or the boot ends.
+    pub(crate) entropy: Option<EntropyRegisters>,
+    /// The boot's identity, once a station drew it.
+    pub(crate) boot_id: Option<u64>,
+    evidence: Evidence,
 }
 
 impl Boot {
@@ -121,6 +143,37 @@ impl Boot {
     ) -> &mut oer_espressif_interrupt_table::Router<InterruptController> {
         self.adopted.router()
     }
+
+    /// Why the chip left reset and the previous boot's panic, as the
+    /// library read and reported them before the boot.
+    pub fn evidence(&self) -> Evidence {
+        self.evidence
+    }
+}
+
+/// What the library read before the boot.
+#[derive(Clone, Copy, Debug)]
+pub struct Evidence {
+    /// Why hart 0 left reset.
+    pub reset_cause: ResetCause,
+    /// The previous boot's panic, already printed and cleared.
+    pub previous_panic: Option<PanicRecord>,
+}
+
+static BOOT_ID: crate::boot::BootId = crate::boot::BootId::new();
+
+/// This boot's identity: a nonzero random value the library draws from the
+/// entropy source once, before the executor starts, so every task reads
+/// the same value.
+pub fn boot_id() -> u64 {
+    BOOT_ID.get()
+}
+
+/// A nonzero boot identity from `rng`.
+pub(crate) fn draw_boot_id(rng: &mut oer_esp32s31_compose::platform::Entropy) -> u64 {
+    let mut bytes = [0; 8];
+    rng.fill(&mut bytes);
+    crate::boot::identity(bytes)
 }
 
 /// Service tasks a boot step prepared, started with the executor.
@@ -163,6 +216,9 @@ pub enum Error {
     Storage,
     /// The entropy source failed its health check.
     Entropy,
+    /// The console could not take the USB Serial/JTAG block.
+    #[cfg(feature = "console")]
+    Console,
     /// The IP service refused its configuration.
     #[cfg(feature = "wifi")]
     Net(oer_embassy_net::ip::Error),
@@ -208,6 +264,8 @@ impl Error {
             Self::AesClients => oer_diagnostics::name!("sdk-aes-clients"; 32),
             Self::Storage => oer_diagnostics::name!("sdk-storage"; 32),
             Self::Entropy => oer_diagnostics::name!("sdk-entropy"; 32),
+            #[cfg(feature = "console")]
+            Self::Console => oer_diagnostics::name!("sdk-console"; 32),
             #[cfg(feature = "wifi")]
             Self::Net(_) => oer_diagnostics::name!("sdk-net"; 32),
             #[cfg(feature = "wifi")]
@@ -247,7 +305,7 @@ where
             oer_esp32s31_board::BootstrapPsram,
             oer_esp32s31_compose::phy_fault::report_previous,
             |hardware| {
-                let _causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                let causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 oer_esp32s31_compose::wifi_fault::report_previous();
                 if let Some(record) = previous {
                     let mut console = oer_espressif_staged_runtime::diagnostics::Console::shared(
@@ -259,6 +317,8 @@ where
                     );
                 }
                 Owned {
+                    reset_cause: causes.of(oer_esp32s31_hal::platform::BOOT_HART),
+                    entropy: hardware.entropy,
                     aes: hardware.aes,
                     system_timer: hardware.system_timer,
                     software: hardware.software_interrupts,
@@ -270,7 +330,6 @@ where
                         timg0_alarm: hardware.timg0_alarm,
                         interrupts: hardware.wifi_interrupts,
                         efuse: hardware.efuse,
-                        entropy: hardware.entropy,
                     },
                 }
             },
@@ -300,11 +359,19 @@ where
         }),
         #[cfg(feature = "wifi")]
         urgent: None,
+        entropy: Some(hardware.entropy),
+        boot_id: None,
+        evidence: Evidence {
+            reset_cause: hardware.reset_cause,
+            previous_panic: previous,
+        },
     };
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
         #[cfg(feature = "wifi")]
         wifi: hardware.wifi,
+        #[cfg(feature = "console")]
+        console: ConsolePeripheral(interrupts.console_usb),
     };
     let Started {
         boot: mut setup,
@@ -323,6 +390,20 @@ where
         )
         .unwrap_or_else(|failure| failure.reset());
     }
+    // A station drew the identity with the entropy source it took; otherwise
+    // the timer is installed now, and the read gap has a clock.
+    let id = match (setup.boot_id, setup.entropy.take()) {
+        (Some(id), _) => id,
+        (None, Some(registers)) => {
+            let mut rng = oer_esp32s31_compose::platform::Entropy::new(registers, EmbassyClock);
+            if !rng.is_healthy() {
+                fail(Error::Entropy.name());
+            }
+            draw_boot_id(&mut rng)
+        }
+        (None, None) => fail(Error::Entropy.name()),
+    };
+    BOOT_ID.publish(id);
     #[cfg(feature = "wifi")]
     let urgent = setup.urgent.take();
     let Boot {
@@ -408,6 +489,8 @@ impl<T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>, F> Starts<
 
 /// The parts the boot keeps from the runtime's hardware.
 struct Owned {
+    reset_cause: ResetCause,
+    entropy: EntropyRegisters,
     aes: AesParts,
     system_timer: SystemTimer,
     software: SoftwareInterrupts,
