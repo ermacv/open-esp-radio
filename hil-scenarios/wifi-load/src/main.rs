@@ -255,6 +255,27 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
 /// each direction's rate stays a `u32` of bit/s.
 const MAX_LEVEL_MBPS: u64 = 1000;
 
+/// The channel width the router's profile asks for: HT40, or the
+/// `OER_WIFI_LOAD_WIDTH` it names (`ht20` or `ht40`).
+const WIDTH_ENV: &str = "OER_WIFI_LOAD_WIDTH";
+
+fn width() -> Result<RouterChannelWidth, Failure> {
+    match std::env::var(WIDTH_ENV) {
+        Err(_) => Ok(RouterChannelWidth::Ht40),
+        Ok(text) => parse_width(&text),
+    }
+}
+
+fn parse_width(text: &str) -> Result<RouterChannelWidth, Failure> {
+    match text.trim() {
+        "ht20" => Ok(RouterChannelWidth::Ht20),
+        "ht40" => Ok(RouterChannelWidth::Ht40),
+        other => Err(Failure::Incomplete(format!(
+            "{WIDTH_ENV}=`{other}` is neither `ht20` nor `ht40`"
+        ))),
+    }
+}
+
 /// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 1 to
 /// [`MAX_LEVEL_MBPS`].
 fn levels_mbps() -> Result<Vec<u64>, Failure> {
@@ -533,7 +554,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
-        width: RouterChannelWidth::Ht40,
+        width: width()?,
         forward_host: Some(host),
     })?;
     let join = Join {
@@ -978,6 +999,13 @@ fn percent(part: u64, whole: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_width_is_ht20_or_ht40_and_nothing_else() {
+        assert_eq!(parse_width("ht20").unwrap(), RouterChannelWidth::Ht20);
+        assert_eq!(parse_width(" ht40 ").unwrap(), RouterChannelWidth::Ht40);
+        assert!(parse_width("40").is_err());
+    }
 
     #[test]
     fn throughput_is_over_the_window_not_between_the_first_and_last_datagram() {
