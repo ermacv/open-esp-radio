@@ -138,6 +138,17 @@ pub const fn lent_rx(units: usize) -> usize {
 /// running for more than this many units, whatever P1 retains.
 const RX_IN_FLIGHT: usize = TX_TICKETS;
 
+/// The queued units at or below which P1's take wakes a P2 that waits for
+/// room: half the queue, so a P2 held back by P1 runs once per half queue
+/// of received units, not once per unit.
+const RX_WAKE_AT: usize = RX_IN_FLIGHT / 2;
+
+const _: () = {
+    if RX_WAKE_AT >= RX_IN_FLIGHT {
+        panic!("a waiting P2 wakes before P1 took every queued unit");
+    }
+};
+
 /// The device events one driver turn serves before it polls again: a ring's
 /// worth of received units, so a burst costs one turn, not one per unit.
 const EVENTS_PER_POLL: usize = 32;
@@ -462,9 +473,10 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
     }
     /// P1 took one received unit P2 queued: wake a driver that waits for
-    /// it. A unit never queued poisons the installation.
+    /// room once the queue is down to [`RX_WAKE_AT`]. A unit never queued
+    /// poisons the installation.
     fn took_received(&self) {
-        match self.received.take() {
+        match self.received.take(RX_WAKE_AT) {
             Ok(true) => self.driver.wake(),
             Ok(false) => {}
             Err(fault) => self.poison(Fault::Setting(fault)),

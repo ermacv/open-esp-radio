@@ -825,12 +825,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let network = &held.storage.shared.network;
         let starved = held.rx_out.get() >= RX_HELD && network.want_room();
         let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
-        // P1's next take wakes a driver its queued units hold back; one it
-        // took meanwhile leaves room now.
+        // P1's take that leaves half the queue wakes a driver its queued
+        // units hold back; takes that reached it meanwhile leave room now.
         let mut waiting = false;
         if received.room(RX_IN_FLIGHT) == 0 && held.rx_out.get() < RX_HELD {
-            received.want();
-            waiting = received.room(RX_IN_FLIGHT) != 0;
+            waiting = received.want(RX_WAKE_AT);
         }
         if again || served_tx || starved || short || waiting {
             cx.waker().wake_by_ref();
