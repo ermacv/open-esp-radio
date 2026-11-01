@@ -71,6 +71,7 @@ impl Ieee80211Capabilities for Caps {
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
         rx_block_ack_max_tid: 7,
         rx_block_ack_max_window: 64,
+        rx_amsdu_in_ampdu: true,
         edca_max_aifsn: 15,
         edca_max_cw_exponent: 10,
         edca_max_txop_limit_units_32_us: u16::MAX,

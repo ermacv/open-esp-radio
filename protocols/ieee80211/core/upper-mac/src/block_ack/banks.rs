@@ -502,6 +502,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let negotiation = match RxBlockAckNegotiation::request(
             parsed,
             P::Caps::CAPS.rx_block_ack_max_tid,
+            P::Caps::CAPS.rx_amsdu_in_ampdu,
             capacity,
             available.is_some() && supported,
             now,

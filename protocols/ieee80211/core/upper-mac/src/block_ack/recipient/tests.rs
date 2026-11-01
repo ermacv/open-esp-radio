@@ -20,7 +20,7 @@ struct Bank(u8);
 
 fn session(clock: &VirtualClock, timeout: u16) -> RxBlockAckSession<Bank, 8, 8> {
     let negotiation =
-        RxBlockAckNegotiation::request(request(0, timeout), 7, 8, true, clock.now()).unwrap();
+        RxBlockAckNegotiation::request(request(0, timeout), 7, true, 8, true, clock.now()).unwrap();
     RxBlockAckSession::activate(negotiation, Bank(3)).unwrap()
 }
 
@@ -39,7 +39,7 @@ fn released<const N: usize>(release: &RxReorderRelease<N>) -> std::vec::Vec<u8> 
 fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     let clock = VirtualClock::new();
     let negotiation =
-        RxBlockAckNegotiation::request(request(3, 0), 7, 8, true, clock.now()).unwrap();
+        RxBlockAckNegotiation::request(request(3, 0), 7, true, 8, true, clock.now()).unwrap();
     let response = negotiation.response();
     assert_eq!(response.status, AddbaStatus::Success);
     assert_eq!(response.window, 8);
@@ -60,11 +60,42 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
 }
 
 #[test]
+fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
+    let clock = VirtualClock::new();
+    let mut without = request(0, 0);
+    without.amsdu = false;
+    for (request, delivers, granted) in [
+        (request(0, 0), true, true),
+        (request(0, 0), false, false),
+        (without, true, false),
+        (without, false, false),
+    ] {
+        let negotiation =
+            RxBlockAckNegotiation::request(request, 7, delivers, 8, true, clock.now()).unwrap();
+        assert_eq!(negotiation.response().status, AddbaStatus::Success);
+        assert_eq!(negotiation.response().amsdu, granted);
+        assert!(matches!(
+            oer_ieee80211_wire::block_ack::frame::parse_block_ack_action(
+                &negotiation.response().encode().unwrap()
+            ),
+            Some(BlockAckAction::AddbaResponse { amsdu, .. }) if amsdu == granted
+        ));
+        // A retried identical request repeats the same grant; the session
+        // compares what was requested, not what was granted.
+        let receiver: RxBlockAckSession<Bank, 8, 8> =
+            RxBlockAckSession::activate(negotiation, Bank(3)).unwrap();
+        let repeated = receiver.repeated_request(request).unwrap();
+        assert_eq!(repeated.status, AddbaStatus::Success);
+        assert_eq!(repeated.amsdu, granted);
+    }
+}
+
+#[test]
 fn a_zero_request_window_uses_the_ht_default_bounded_by_real_capacity() {
     let clock = VirtualClock::new();
     let mut request = request(0, 0);
     request.window = 0;
-    let accepted = RxBlockAckNegotiation::request(request, 7, 7, true, clock.now()).unwrap();
+    let accepted = RxBlockAckNegotiation::request(request, 7, true, 7, true, clock.now()).unwrap();
     assert_eq!(accepted.response().window, 7);
 }
 
@@ -80,7 +111,7 @@ fn unavailable_bank_and_unsupported_parameters_have_explicit_responses() {
         (request(0, 0), 0, true),
     ] {
         let response =
-            RxBlockAckNegotiation::request(request, 7, capacity, bank_available, clock.now())
+            RxBlockAckNegotiation::request(request, 7, true, capacity, bank_available, clock.now())
                 .err()
                 .unwrap();
         assert_eq!(response.status, AddbaStatus::RequestDeclined);
@@ -184,7 +215,7 @@ fn inactivity_refreshes_on_rx_and_expiry_releases_the_bank_and_frames() {
 #[test]
 fn overflowing_deadline_refuses_negotiation_without_creating_a_session() {
     let clock = VirtualClock::starting_at(Instant::from_micros(u64::MAX));
-    let response = RxBlockAckNegotiation::request(request(0, 1), 7, 8, true, clock.now())
+    let response = RxBlockAckNegotiation::request(request(0, 1), 7, true, 8, true, clock.now())
         .err()
         .unwrap();
     assert_eq!(response.status, AddbaStatus::RequestDeclined);

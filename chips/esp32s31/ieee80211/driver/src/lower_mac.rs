@@ -365,6 +365,23 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
             .union(ReceiveFilter::PROBE_REQUESTS),
         rx_block_ack_max_tid: RESOURCES.rx_block_ack_max_tid,
         rx_block_ack_max_window: RESOURCES.rx_block_ack_max_window,
+        // The receive MAC acknowledges an MPDU carrying an A-MSDU inside an
+        // agreement's A-MPDU but never delivers it to the receive DMA.
+        // SOURCE: stand HIL `wifi-load`, ESP32-S31 station, HT20 channel 13,
+        // OpenWrt mt76 AP, WPA2-CCMP, 2026-11-01. An air capture showed
+        // every RTT probe aggregated with a load datagram into one A-MSDU
+        // MPDU that the station's BlockAck acknowledged; the driver staged
+        // no unit for it, no RX statistics or RX-control error counted it,
+        // and the reorder skipped its sequence (99 of 99 probes at RX 10).
+        // Without probes nothing was lost. 200-byte datagrams aggregated
+        // into 2843 short A-MSDU MPDUs lost 12471 of 12500, so length is not
+        // the cause; the interface SPP A-MSDU bit set either way changed
+        // nothing. With A-MSDU refused in the ADDBA response the AP sent
+        // none and nothing was lost. The vendor station's production ADDBA
+        // response (`libnet80211[ieee80211_ht.o]::
+        // ht_recv_action_ba_addba_request`) grants A-MSDU only under a
+        // test-only switch that is zero by default, so it refuses them too.
+        rx_amsdu_in_ampdu: false,
         // The bounds `EdcaContentionParameters::new` checks.
         edca_max_aifsn: 0x0f,
         edca_max_cw_exponent: crate::mac::edca::MAX_HARDWARE_ECW_EXPONENT,
