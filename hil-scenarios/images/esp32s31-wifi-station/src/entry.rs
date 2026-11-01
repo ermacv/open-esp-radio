@@ -81,6 +81,12 @@ struct Hart1Parts {
 
 oer_espressif_staged_runtime::secondary_entry!(1, HART1: oer_esp32s31_hal::platform::Port, Hart1Parts => hart1_main);
 
+/// The hart `secondary_entry!` above roots and the manifest's `harts`
+/// declares: the image links its task stack at the stack policy's launch
+/// size, not at the chip's zero default for a hart no image starts.
+const SECONDARY_HART: oer_esp32s31_hal::platform::Hart =
+    oer_esp32s31_hal::platform::Hart::constant::<1>();
+
 const DATA_SENTINEL: u32 = 0x5353_31d2;
 const INTERNAL_SRAM_START: u32 = oer_esp32s31_layout::LAYOUT.sram.origin();
 const INTERNAL_SRAM_END: u32 = oer_esp32s31_layout::LAYOUT.sram.end();
@@ -491,13 +497,19 @@ fn validate_runtime_layout() {
         .enumerate()
         .all(|(hart, range)| {
             let [bottom, top] = bounds(range);
-            bottom >= PROFILE_DATA_START
-                && top <= PROFILE_DATA_END
-                && top.checked_sub(bottom)
+            let bytes = top.checked_sub(bottom);
+            // A started secondary hart's stack is sized by the image's
+            // link; every other hart keeps the chip's default allocation.
+            let sized = if hart == SECONDARY_HART.get() {
+                bytes.is_some_and(|bytes| bytes != 0 && bytes.is_multiple_of(16))
+            } else {
+                bytes
                     == oer_esp32s31_layout::LAYOUT
                         .task_stack_bytes
                         .get(hart)
                         .copied()
+            };
+            bottom >= PROFILE_DATA_START && top <= PROFILE_DATA_END && sized
         });
 
     let initialized_data = INITIALIZED_DATA.load(Ordering::Relaxed);
