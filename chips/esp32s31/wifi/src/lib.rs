@@ -161,7 +161,7 @@ type LentRx = oer_esp32s31_ieee80211_driver::port::LentReceive<
 /// The received buffers the station may lend the network at once: the
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
-pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::device::lent_rx(chip::Q);
+pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::lent_rx(chip::Q);
 /// The host build has no receive buffer to lend.
 #[cfg(not(target_arch = "riscv32"))]
 type LentRx = Unlent;

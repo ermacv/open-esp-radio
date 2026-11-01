@@ -64,10 +64,19 @@ pub const TX_TICKETS: usize = 8;
 
 /// The receive units P1 holds at once besides those it lent the network:
 /// its receive events and the MPDUs its receive Block Ack agreements keep,
-/// one 32-MPDU reorder window. They share the receive pool with the
-/// network's units ([`device::lent_rx`]); the pool, not this bound, limits
-/// what both hold together.
+/// one 32-MPDU reorder window. The network leaves them in the receive pool
+/// ([`lent_rx`]).
 pub const RX_HELD: usize = 32;
+
+/// The receive units of a pool of `units` (the units that may be outside
+/// the ring at once) the network may hold. It leaves the radio
+/// [`RX_HELD`] units and the admission's critical reserve: when P1 holds a
+/// full reorder window and the network all it may, the pool still stages
+/// the MPDU that closes the window's hole, which the hardware already
+/// acknowledged, as ordinary bulk input.
+pub const fn lent_rx(units: usize) -> usize {
+    units.saturating_sub(RX_HELD + crate::rx::transaction::DEFAULT_CRITICAL_RESERVE)
+}
 
 /// The received units P2 queues for P1 that P1 has not taken yet. P2
 /// queues no more until P1 takes one, so a burst never keeps P1 from

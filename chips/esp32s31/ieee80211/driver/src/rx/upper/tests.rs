@@ -24,6 +24,7 @@ use crate::{
     rx::{
         sink::CountingAdmission,
         test_ring::{BUFFER, Ring, S31Prefix, SLOTS, management_header},
+        transaction::DEFAULT_CRITICAL_RESERVE,
     },
 };
 
@@ -151,6 +152,46 @@ impl Wake for Wakes {
     fn wake(self: Arc<Self>) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
+}
+
+/// A protected data header: bulk input to the admission.
+fn protected_data_header() -> [u8; 24] {
+    let mut header = management_header(0);
+    // Frame control: type data, Protected Frame set.
+    header[0] = 0x08;
+    header[1] = 0x40;
+    header
+}
+
+#[test]
+fn a_bulk_unit_is_discarded_once_the_units_held_above_the_ring_leave_only_the_reserve() {
+    // P1's reorder and the network hold units outside the ring. The MPDU that
+    // closes a reorder hole is bulk input: staged while the pool keeps more
+    // than the critical reserve, discarded (after the hardware acknowledged
+    // it) once only the reserve is left, so the hole never closes.
+    let mut fixture = fixture();
+    let data = S31Prefix::new().unit(&protected_data_header());
+    let mut held = Vec::new();
+    for _ in 0..SLOTS - DEFAULT_CRITICAL_RESERVE - 1 {
+        fixture.ring.complete_with(&data);
+        assert_eq!(fixture.settle(), DatapathRxProgress::Drained);
+        held.push(poll_next(&mut fixture.receiver).expect("a staged bulk unit"));
+    }
+    // The next one still finds a credit beyond the reserve.
+    fixture.ring.complete_with(&data);
+    assert_eq!(fixture.settle(), DatapathRxProgress::Drained);
+    held.push(poll_next(&mut fixture.receiver).expect("a staged bulk unit"));
+    assert_eq!(fixture.counters.report().overload_drops, 0);
+    assert_eq!(
+        fixture.ring.pool.available_slots(),
+        DEFAULT_CRITICAL_RESERVE
+    );
+    // Only the reserve is left: the next bulk unit is dropped.
+    fixture.ring.complete_with(&data);
+    fixture.settle();
+    assert!(poll_next(&mut fixture.receiver).is_none());
+    assert_eq!(fixture.counters.report().overload_drops, 1);
+    drop(held);
 }
 
 #[test]
