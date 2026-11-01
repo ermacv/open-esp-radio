@@ -27,15 +27,18 @@ use oer_services_load::{MAX_PART_NAME, MAX_PARTS, PartWindow, Parts};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub(crate) enum Part {
-    /// The application executor's tasks.
+    /// The boot hart's application executor's tasks.
     Console,
     StationWork,
     RtcWatchdog,
-    /// The radio executor's tasks.
+    Relay,
+    /// The boot hart's radio executor's tasks.
     RadioActor,
     Driver,
-    /// Inside the station work: the station's state machine, the IP stack,
-    /// the station's requests and the load server.
+    /// Hart 1's executor's task.
+    Network,
+    /// Inside the station work: the station's state machine and its
+    /// requests; inside the network: the IP stack and the load server.
     Station,
     Ip,
     Requests,
@@ -58,8 +61,10 @@ impl Part {
         Part::Console,
         Part::StationWork,
         Part::RtcWatchdog,
+        Part::Relay,
         Part::RadioActor,
         Part::Driver,
+        Part::Network,
         Part::Station,
         Part::Ip,
         Part::Requests,
@@ -80,8 +85,10 @@ impl Part {
             Part::Console => "console",
             Part::StationWork => "station-work",
             Part::RtcWatchdog => "rtc-watchdog",
+            Part::Relay => "relay",
             Part::RadioActor => "radio-actor",
             Part::Driver => "driver",
+            Part::Network => "network",
             Part::Station => "station",
             Part::Ip => "ip",
             Part::Requests => "requests",
@@ -121,7 +128,7 @@ impl Part {
     }
 }
 
-pub(crate) const COUNT: usize = 18;
+pub(crate) const COUNT: usize = 20;
 const _: () = {
     if COUNT > u8::MAX as usize {
         panic!("every part has a number for a page's start");

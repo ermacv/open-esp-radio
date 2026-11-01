@@ -29,7 +29,8 @@
 //! how busy its harts were. The load itself never crosses the HIL link:
 //! the link carries the parameters and the counters.
 //!
-//! A run can also sample where the serving hart spends its window
+//! A run can also sample where the image's measured hart (its README names
+//! it) spends its window
 //! ([`Profile`], [`CollectSamples`]).
 //!
 //! [`header`] is the datagram header both ends write and read. RX and TX
@@ -96,7 +97,7 @@ pub struct Start {
     pub profile: Option<Profile>,
 }
 
-/// Sample the serving hart's interrupted program counter every `period_us`
+/// Sample the measured hart's interrupted program counter every `period_us`
 /// over the window, from a timer no executor or product timer uses. The
 /// period lies within [`MIN_SAMPLE_PERIOD_US`] and [`MAX_SAMPLE_PERIOD_US`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -303,7 +304,7 @@ pub enum CountersCollected {
 /// Counts within one run's measuring window.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Counters {
-    /// Machine cycles of the hart that serves the load, wait-for-interrupt
+    /// Machine cycles of the image's measured hart, wait-for-interrupt
     /// time included.
     pub cycles: u64,
     /// Instructions that hart retired.
@@ -436,7 +437,7 @@ pub struct Samples {
     pub samples: heapless::Vec<Sample, MAX_PAGE_SAMPLES>,
 }
 
-/// One kept tick: where the serving hart was when the timer interrupted it.
+/// One kept tick: where the measured hart was when the timer interrupted it.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Sample {
     /// The tick's number from the window's first, 0.

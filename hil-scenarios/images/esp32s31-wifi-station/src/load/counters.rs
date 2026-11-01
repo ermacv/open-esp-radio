@@ -1,14 +1,15 @@
-//! The window's counters: the serving hart's cycles and retired
-//! instructions, the L1 cache's access counts by bus, what the network
-//! bridge did with the station's frames and what the IP stack took.
+//! The window's counters: the boot hart's (the radio's and the station's)
+//! cycles and retired instructions, the L1 cache's access counts by bus,
+//! what the network bridge did with the station's frames and what the IP
+//! stack took.
 //!
 //! The bridge reports each frame through `oer_trace::observe!`, so only an
-//! `oer_trace` build counts them; the station work's task is their one
-//! writer and the load server, in the same task, their reader. The hart's
-//! counters, the cache's and the stack's are read at the window's ends;
-//! the cache's are cleared just before its start. Bridge and cache counts
-//! wrap at 2^32 (a cache bus reports its overflow); the stack's saturate
-//! there.
+//! `oer_trace` build counts them; hart 1's network task is their one writer
+//! and the load server, in the same task, their reader. The boot hart's
+//! counters and the cache's (read on the boot hart by its relay, which owns
+//! the cache's counters) and the stack's are read at the window's ends; the
+//! cache's are cleared just before its start. Bridge and cache counts wrap
+//! at 2^32 (a cache bus reports its overflow); the stack's saturate there.
 
 use oer_services_load::{CacheCounts, CacheGeometry, Counters, DataBus, InstructionBus};
 
@@ -87,7 +88,7 @@ impl oer_trace::Event for BridgeFrame {
 static BRIDGE: [core::sync::atomic::AtomicU32; Bridged::ALL.len()] =
     [const { core::sync::atomic::AtomicU32::new(0) }; Bridged::ALL.len()];
 
-/// Count `frame`; only the station work's task calls it.
+/// Count `frame`; only hart 1's network task calls it.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 pub(crate) fn observe(frame: BridgeFrame) {
     use core::sync::atomic::Ordering;
@@ -114,32 +115,55 @@ pub(crate) struct Snapshot {
 #[cfg(target_arch = "riscv32")]
 pub(crate) type Cache = oer_esp32s31_hal::peripherals::cache_counters::CacheCounters;
 
-/// Clear and run every bus's cache counters: the window's start.
+/// What the boot hart's relay reads there for the load server: the boot
+/// hart's cycles and retired instructions and the cache's counts and
+/// geometry.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn start_cache(cache: &mut Cache) {
-    cache.start(oer_esp32s31_hal::peripherals::cache_counters::Buses::ALL);
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct Hart {
+    pub cycles: u64,
+    pub instructions: u64,
+    pub cache: CacheCounts,
+    pub cache_geometry: CacheGeometry,
 }
 
-/// The counters now, with the stack's received frames `stack_received`
-/// and the cache's counts and geometry.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn snapshot(stack_received: u32, cache: &Cache) -> Snapshot {
+impl Hart {
+    /// The counters of the hart that calls it and `cache`'s; with `start`,
+    /// clear and run every bus's cache counters first: the window's start.
+    pub(crate) fn now(cache: &mut Cache, start: bool) -> Self {
+        if start {
+            cache.start(oer_esp32s31_hal::peripherals::cache_counters::Buses::ALL);
+        }
+        let cycles = oer_riscv::cycle64();
+        let instructions = oer_riscv::instret64();
+        let counts = cache.snapshot();
+        Self {
+            cycles,
+            instructions,
+            cache: CacheCounts {
+                ibus0: instruction(counts.ibus0),
+                ibus1: instruction(counts.ibus1),
+                dbus0: data(counts.dbus0),
+                dbus1: data(counts.dbus1),
+            },
+            cache_geometry: geometry(cache.geometry()),
+        }
+    }
+}
+
+/// The counters now: the boot hart's `hart` with the cache's, the
+/// bridge's, and the stack's received frames `stack_received`.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn snapshot(hart: Hart, stack_received: u32) -> Snapshot {
     use core::sync::atomic::Ordering;
-    let cycles = oer_riscv::cycle64();
-    let instructions = oer_riscv::instret64();
-    let counts = cache.snapshot();
     Snapshot {
-        cycles,
-        instructions,
+        cycles: hart.cycles,
+        instructions: hart.instructions,
         bridge: BRIDGE.each_ref().map(|count| count.load(Ordering::Relaxed)),
         stack_received,
-        cache: CacheCounts {
-            ibus0: instruction(counts.ibus0),
-            ibus1: instruction(counts.ibus1),
-            dbus0: data(counts.dbus0),
-            dbus1: data(counts.dbus1),
-        },
-        cache_geometry: geometry(cache.geometry()),
+        cache: hart.cache,
+        cache_geometry: hart.cache_geometry,
     }
 }
 

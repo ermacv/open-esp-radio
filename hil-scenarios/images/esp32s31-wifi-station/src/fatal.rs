@@ -80,10 +80,11 @@ pub(crate) enum Failure {
     Storage = 17,
     NonceExhausted = 18,
     Network = 19,
+    Cores = 20,
 }
 
 impl Failure {
-    const ALL: [Self; 18] = [
+    const ALL: [Self; 19] = [
         Self::Layout,
         Self::TaskAllocation,
         Self::RootTaken,
@@ -102,6 +103,7 @@ impl Failure {
         Self::Storage,
         Self::NonceExhausted,
         Self::Network,
+        Self::Cores,
     ];
 
     pub(crate) fn from_boot(error: oer_espressif_staged_runtime::BootError) -> Self {
@@ -145,6 +147,7 @@ impl Failure {
             Self::Storage => oer_diagnostics::name!("storage"; 32),
             Self::NonceExhausted => oer_diagnostics::name!("nonce-exhausted"; 32),
             Self::Network => oer_diagnostics::name!("network"; 32),
+            Self::Cores => oer_diagnostics::name!("cores-taken"; 32),
         }
     }
 

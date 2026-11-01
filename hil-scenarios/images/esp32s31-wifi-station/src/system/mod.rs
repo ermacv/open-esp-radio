@@ -26,6 +26,12 @@ impl Evidence {
             platform_panic: oer_espressif_staged_runtime::panic::peek_previous(),
         }
     }
+
+    /// Why each hart left reset, as the boot read it: hart 1's launch takes
+    /// them as its preconditions.
+    pub(crate) fn causes(&self) -> ResetCauses {
+        self.causes
+    }
 }
 
 impl Platform for Evidence {

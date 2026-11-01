@@ -34,6 +34,12 @@ wifi::bind_station! {
         engine: oer_esp32s31_compose::crypto::KeyUnwrapEngine,
         events: crate::station::Events,
         fail: crate::station::radio::failure,
+        // The network end runs on hart 1 (`crate::network`).
+        across_harts: {
+            network: &crate::peers::NETWORK,
+            station: &crate::peers::STATION,
+            driver: &crate::peers::DRIVER,
+        },
     }
 }
 

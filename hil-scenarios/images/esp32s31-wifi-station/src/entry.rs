@@ -9,16 +9,16 @@ use oer_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
 use oer_esp32s31_hal::peripherals::{
-    software_interrupt::{FromCpu0Irq, FromCpu2Irq, FromCpu3Irq},
-    system_timer::{SystimerAlarm0, SystimerAlarm1},
+    software_interrupt::{FromCpu0Irq, FromCpu1Irq, FromCpu2Irq, FromCpu3Irq},
+    system_timer::{SystimerAlarm0, SystimerAlarm1, SystimerAlarm2},
     timg0_alarm::Timg0AlarmInterrupt,
     timg1_alarm::Timg1AlarmInterrupt,
 };
 use oer_esp32s31_wifi::{self as wifi, InterruptTypes as _};
-use oer_espressif_executor::{Doorbell, DoorbellLine, Executor, InterruptExecutor};
+use oer_espressif_executor::{AlarmGrant, Doorbell, DoorbellLine, Executor, InterruptExecutor};
 
 oer_espressif_staged_runtime::interrupt_table! {
-    contexts { app_wake: 1; radio_executor: 2; radio: 3; profile: 4; }
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; profile: 4; network_executor: 2; network_alarm: 3; }
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
     /// The SAR/PWDET conversion steps between radio executor rounds.
@@ -38,10 +38,17 @@ oer_espressif_staged_runtime::interrupt_table! {
     alarm: TimeAlarm = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 42, context app_wake, hart 0, Hardware;
+    /// Hart 1's network executor (P2 of hart 1), polled in its handler.
+    network: NetworkToken = FromCpu1Irq => oer_espressif_executor::interrupt_handler::<network::NetworkTasks, FromCpu1Irq>, line 16, context network_executor, hart 1, Executor;
+    /// The network executor's alarm (system timer comparator 2), above it
+    /// on hart 1; it only acknowledges and pends.
+    network_alarm: NetworkAlarmToken = SystimerAlarm2 => oer_espressif_executor::alarm_interrupt::<network::NetworkTasks, 2, SystimerAlarm2>, line 17, context network_alarm, hart 1, Hardware;
 }
 
 mod exception;
 mod fatal;
+mod network;
+mod peers;
 mod phy_pilot;
 mod services;
 mod station;
@@ -50,15 +57,29 @@ mod transport;
 mod usb;
 
 oer_espressif_executor::tasks! {
-    /// The application executor's tasks: the console, the station's work
-    /// with the load server, and the RTC watchdog's feed.
+    /// The application executor's tasks: the console, the station's work,
+    /// the relay of the load server on hart 1 and the RTC watchdog's feed.
     AppTasks: Executor<Esp32s31, 0> {
         @observer: load::cpu::Observer::<{ load::cpu::APPLICATION }>;
         console(usb: transport::Usb, boot: u64, evidence: system::Evidence, requests: Requests) = console;
         station_work(work: oer_memory::PlacedFuture<'static, station::Work>) = station::run;
+        relay(relay: load::relay::Relay) = load::relay::run;
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
     }
 }
+
+/// What hart 1 takes at its launch: its executor, which owns `FROM_CPU1`'s
+/// line, that line's interrupt part and table token, its executor's timer
+/// grant and its network task's ends.
+struct Hart1Parts {
+    executor: peers::NetworkExecutor,
+    irq: FromCpu1Irq,
+    token: NetworkToken,
+    alarm: AlarmGrant<Esp32s31, 1, NetworkAlarmToken>,
+    network: network::Inputs,
+}
+
+oer_espressif_staged_runtime::secondary_entry!(1, HART1: oer_esp32s31_hal::platform::Port, Hart1Parts => hart1_main);
 
 const DATA_SENTINEL: u32 = 0x5353_31d2;
 const INTERNAL_SRAM_START: u32 = oer_esp32s31_layout::LAYOUT.sram.origin();
@@ -118,6 +139,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             entropy,
             watchdogs,
             evidence,
+            hart1,
         ),
         _psram,
         mut adopted,
@@ -147,6 +169,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     runtime.entropy,
                     runtime.watchdogs,
                     evidence,
+                    runtime.hart1,
                 )
             },
         )
@@ -175,14 +198,61 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let actor = station::ACTOR
         .try_init(actor)
         .unwrap_or_else(|| fail(fatal::Failure::Storage));
-    // The radio executor writes the system timer; the application executor
-    // publishes its deadlines to it.
-    oer_esp32s31_compose::platform::timers(
-        system_timer,
+    // The radio executor writes the system timer on comparator 0; the
+    // application executor publishes its deadlines to it for comparator 1,
+    // and hart 1's network executor for comparator 2, whose alarm hart 1
+    // routes itself.
+    let mut timers = oer_espressif_executor::init::<Esp32s31, 2, _, _>(
+        oer_espressif_executor::systimer::SystemTimer {
+            comparators: system_timer.comparators,
+            counter: system_timer.counter,
+        },
+        adopted.router(),
+        interrupts.radio_alarm,
+        system_timer.alarm0,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_espressif_executor::bind::<Esp32s31, 0, _, _>(
+        &mut timers,
         adopted.router(),
         interrupts.alarm,
-        interrupts.radio_alarm,
+        system_timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    let network_alarm = oer_espressif_executor::grant::<Esp32s31, 1, _>(
+        &mut timers,
+        interrupts.network_alarm,
+        system_timer.alarm2,
     );
+
+    // The load server on hart 1 reaches the boot hart's console, sampler
+    // and counters through the relay; the station hands hart 1 its network
+    // end through its ends of the start.
+    let sampler = load::sampler::init(timg1_alarm, adopted.router(), interrupts.sampler);
+    let (relay, hart0) = load::relay::split(sampler, cache_counters);
+    let (load_sender, load_receiver) = load::serve::requests();
+    let (network, network_inputs) = network::split(load_receiver, hart0);
+    // Hart 1 starts before any executor: it installs its own stacks and
+    // exception path, then its own interrupt context, timer and executor;
+    // a failure after its release resets.
+    let Ok(Some(mut cores)) = oer_esp32s31_hal::cores::Cores::take() else {
+        fail(fatal::Failure::Cores);
+    };
+    let _hart1 = oer_esp32s31_compose::secondary::launch_hart1(
+        &mut cores,
+        hart1,
+        evidence.causes(),
+        &timers,
+        &HART1,
+        Hart1Parts {
+            executor: InterruptExecutor::<Esp32s31, 1>::new(software.line1),
+            irq: software.irq1,
+            token: interrupts.network,
+            alarm: network_alarm,
+            network: network_inputs,
+        },
+    )
+    .unwrap_or_else(|failure| failure.reset());
     // The radio handler's part holds both banks and the doorbell's lowering
     // half; its binding makes the doorbell's ringing half.
     let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(software.line3);
@@ -199,7 +269,6 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             >(error)
         });
     let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
-    let sampler = load::sampler::init(timg1_alarm, adopted.router(), interrupts.sampler);
     let (hart, router) = adopted.parts();
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, urgent)
@@ -244,7 +313,6 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
     let dma = wifi::DmaResources::claim()
         .unwrap_or_else(|error| station::radio::failure(wifi::InitializationError::Dma(error)));
     let (sender, receiver) = station::requests();
-    let (load_sender, load_receiver) = load::serve::requests();
     let inputs = station::Inputs {
         requests: receiver,
         deferred: station::Deferred {
@@ -259,6 +327,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             dma,
         },
         radio,
+        network,
         seed,
         nonces,
     };
@@ -283,11 +352,8 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
                     load: load_sender,
                 };
                 if AppTasks::console(spawner, usb, boot, evidence, requests).is_err()
-                    || AppTasks::station_work(
-                        spawner,
-                        station::place(inputs, load_receiver, sampler, cache_counters),
-                    )
-                    .is_err()
+                    || AppTasks::station_work(spawner, station::place(inputs)).is_err()
+                    || AppTasks::relay(spawner, relay).is_err()
                     || AppTasks::rtc_watchdog(spawner, rtc_watchdog).is_err()
                 {
                     fail(fatal::Failure::TaskAllocation);
@@ -295,6 +361,41 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             },
         )
         .unwrap_or_else(|failure| failure.reset()) {}
+}
+
+/// Hart 1's main, on its own stacks with its interrupt stack and exception
+/// path installed: make its own interrupt context, route its executor's
+/// alarm, start its network executor on `FROM_CPU1` with the network task,
+/// enable its interrupts and wait for them.
+fn hart1_main(
+    handoff: oer_espressif_staged_runtime::SecondaryHandoff<oer_esp32s31_hal::platform::Port, 1>,
+    parts: Hart1Parts,
+) -> ! {
+    let Hart1Parts {
+        executor,
+        irq,
+        token,
+        alarm,
+        network,
+    } = parts;
+    let mut adopted = match handoff.adopt(INTERRUPT_TABLE) {
+        Ok(adopted) => adopted,
+        Err(error) => fail(fatal::Failure::from_boot(error)),
+    };
+    let (hart, router) = adopted.parts();
+    alarm
+        .bind(hart, router)
+        .unwrap_or_else(|failure| failure.reset());
+    let spawner = executor
+        .start::<network::NetworkTasks, _, _, 1, _>(hart, router, token, irq, ())
+        .unwrap_or_else(|failure| failure.reset());
+    if network::NetworkTasks::network(&spawner, network).is_err() {
+        fail(fatal::Failure::TaskAllocation);
+    }
+    match adopted.enable_interrupts() {
+        Ok(_router_and_hart) => oer_espressif_staged_runtime::idle(),
+        Err(error) => fail(fatal::Failure::from_boot(error)),
+    }
 }
 
 /// The console's ends of the services' request queues.

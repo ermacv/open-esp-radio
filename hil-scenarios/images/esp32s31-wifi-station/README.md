@@ -11,19 +11,56 @@ Serial/JTAG console and mounts two services:
 
 ## Composition
 
-The boot composes the shared RF actor with its SAR/PWDET binding, the radio
-executor (P2), the Wi-Fi interrupt (P3) and its doorbell, and keeps every
-owner the station's construction takes; the application executor (P1) runs
-the console, the station's work with the load server beside it in one task,
-and the RTC watchdog's feed. Hart 0 lines: P4 PC sampler (TIMG1 T0) 22;
-P3 Wi-Fi handler 21 and radio alarm 19; P2 radio executor 17 and TIMG0
-SAR/PWDET steps 16; P1 executor wake 40, alarm 41 and console 42
-(`docs/architecture.md`, Execution).
+The image runs both harts (`harts = ["boot", 1]`): the radio on the boot
+hart, the network on hart 1, across one owned-packet boundary, the
+station's network end.
+
+- **Hart 0.** The boot composes the shared RF actor with its SAR/PWDET
+  binding, the radio executor (P2: the actor and the Wi-Fi driver), the
+  Wi-Fi interrupt (P3) and its doorbell, and keeps every owner the
+  station's construction takes. The application executor (thread mode,
+  `FROM_CPU0`) runs the console, the station's work (its requests, its
+  control and its runner), the relay of the load server (`src/load/relay.rs`)
+  and the RTC watchdog's feed. Lines: P4 PC sampler (TIMG1 T0) 22; P3 Wi-Fi
+  handler 21 and radio alarm (SYSTIMER comparator 0) 19; P2 radio executor
+  17 and TIMG0 SAR/PWDET steps 16; P1 executor wake 40, alarm (comparator 1)
+  41 and console 42.
+- **Hart 1.** During boot, before any executor, the boot hart installs the
+  time driver (the radio executor writes the SYSTIMER), grants hart 1's
+  executor comparator 2 and launches hart 1 with the root's permit
+  (`oer_esp32s31_compose::secondary::launch_hart1`). Hart 1 makes its own
+  interrupt context, routes its alarm and starts its interrupt-mode
+  executor with one task, `network` (`src/network`): it waits for the
+  station's network end, starts the IP stack over it, runs the IP service,
+  the station's network stop and the load server with its sockets. Lines of
+  hart 1: P2 network executor (`FROM_CPU1`) 16, P3 its alarm (comparator 2)
+  17. Hart 1 takes no critical section and writes no SYSTIMER register but
+  its alarm's acknowledgement.
+
+No waker crosses harts. Every cross-hart wake raises the receiving task's
+executor signal (`FromPeerHart`, `src/peers.rs`), and every queue end on a
+hart notifies through its task's signal:
+
+| Signal | Task | Raised by | Ends that wait on it |
+| --- | --- | --- | --- |
+| network | hart 1's `network` | hart 0's application tasks | the station's receive and copies, transmit room, link and stop request; the start; the exit; the load requests; the relay's replies and command room |
+| station | hart 0's `station_work` | hart 1's `network` | the station's transmit, receive and copies room, the network stop's answer and the lent buffers' return; the start's answer; the exit's end; the lease |
+| relay | hart 0's `relay` | hart 1's `network` | the relay's commands and reply room |
+| driver | hart 0's radio `driver` | hart 1's `network` (and the station work below it) | the driver's request for its lent buffers |
+
+A lent receive buffer the station itself drops (a delivery its network
+queue refused) raises the station's signal from the station work's own
+task; the executor's next round wakes it, a raise the signal's declaration
+does not name.
 
 The boot takes one join. `Join` validates the SSID, the passphrase and the
 channel, derives the PMK, then constructs the station for that channel,
-starts its driver on the radio executor and the IP stack beside it, and
-connects. `Joined::Linked` answers once the connect completed: associated
+starts its driver on the radio executor, hands the station's network end
+with the station's address and a seed to hart 1, waits until hart 1 started
+the IP stack over it, and connects. The station's status reads the DHCP
+lease hart 1 publishes (one writer, read whole under a sequence number);
+the station's exit asks hart 1 to stop the IP service and waits for its
+end. `Joined::Linked` answers once the connect completed: associated
 and authorized. `GetStatus` answers in every phase with the station's own
 address, the access point it is linked to and the DHCP lease. `Leave` stops
 the station gracefully (disconnect, link down, the station's runner retired)
@@ -62,6 +99,17 @@ answer, from the asked number) of the running run answer `Running`, of the
 kept one what it kept, of any other `UnknownRun`; `CollectSamples` of a run
 without a profile answers `NotSampled`.
 
+The load server runs on hart 1 beside the IP stack; the console, the PC
+sampler and the counters it reads are the boot hart's. It reaches them
+through the boot hart's relay task (`src/load/relay.rs`): one queue of
+commands (publish an answer, publish a samples page, the sampler's
+availability, start, stop request and stop, the boot hart's counters) and
+two reply queues, each across harts. A call numbers its command and takes
+only its own reply, so a call the server abandoned (a station stop during
+a window) leaves a reply the next call discards. An answer goes out once
+the relay's task runs on the boot hart: after the server queued it, not
+when it decided it.
+
 - **Receive.** A datagram whose header asks for an echo, of any run, goes
   back to its source at once with the reply flag instead (`echoed`, or
   `echo_refused` when the socket has no room) and is never load. Every
@@ -82,43 +130,50 @@ without a profile answers `NotSampled`.
   `missed`; other errors count
   as `failed`. At rate 0 it sends as fast as the socket takes datagrams,
   yielding every 16.
-- **CPU.** Each executor's task set selects the observer of its own slot,
-  which accumulates the executor's work spans and, for the hart's thread
-  executor, its idle spans (masked WFI), in 64-bit totals. `GetCpu` and
-  each window end read them since boot with the image's time. Work spans
-  include preemption and overlap between executors, so they never add up
-  to busy time; only a hart's idle time gives its utilisation
-  (`1 - idle / window` between two reports). A build without `oer_trace`
-  reports no harts or executors.
+- **CPU.** Each executor's task set selects the observer of its own slot
+  (the boot hart's application and radio executors, hart 1's network
+  executor), which accumulates the executor's work spans and, for the boot
+  hart's thread executor, its idle spans (masked WFI), in 64-bit totals.
+  `GetCpu` and each window end read them since boot with the image's time.
+  Work spans include preemption and overlap between executors, so they
+  never add up to busy time; only a hart's idle time gives its utilisation
+  (`1 - idle / window` between two reports), one row per hart. Hart 1 runs
+  only its network executor, polled in its interrupt, while its main waits
+  for interrupts: its idle time is the report's time less that executor's
+  work (its alarm handler outside a round counts as idle). A build without
+  `oer_trace` reports no harts or executors.
 - **Parts** (`src/load/parts.rs`). The tasks (`console`, `station-work`,
-  `rtc-watchdog` on P1; `radio-actor`, `driver` on P2) and the station
-  work's futures (`station`, `ip`, `requests`, `load`) are each polled
-  through `Polled`, which observes the start and end of every poll through
-  `oer_trace::observe!`. Each part counts its polls, their time and its
-  longest poll; the window's start begins a new epoch for the longest. A
-  poll's time includes its preemption, so the station work's futures nest
-  inside `station-work` and P2's parts preempt P1's: shares do not add up.
-  Inside `station` the service's spans (`step`, `pending`, `sources`,
-  `received`, `deliver`, `queue`, `terminal`, `transmit`, `recycle`) count the
-  same way, reported through the driver's observer. A build without
-  `oer_trace` keeps no part.
+  `rtc-watchdog`, `relay` on the boot hart's thread executor;
+  `radio-actor`, `driver` on its P2; `network` on hart 1), the station
+  work's futures (`station`, `requests`) and the network's (`ip`, `load`)
+  are each polled through `Polled`, which observes the start and end of
+  every poll through `oer_trace::observe!`. Each part counts its polls,
+  their time and its longest poll; the window's start begins a new epoch
+  for the longest. A poll's time includes its preemption, so a task's
+  futures nest inside its task and the boot hart's P2 parts preempt its
+  thread parts: shares do not add up. Inside `station` the service's spans
+  (`step`, `pending`, `sources`, `received`, `deliver`, `queue`,
+  `terminal`, `transmit`, `recycle`) count the same way, reported through
+  the driver's observer. A build without `oer_trace` keeps no part.
 - **Counters** (`src/load/counters.rs`). At both window ends the image reads
-  the hart's 64-bit cycle and retired-instruction counters (all its work,
-  interrupts and the load service's own included), the frames the IP stack
-  took from its device, and what the network bridge did with the station's
-  frames: taken, or refused for want of a pool packet, of queue room or for
-  their length or a down link. The bridge reports each frame through
-  `oer_trace::observe!`; a build without `oer_trace` counts none of them.
-  Just before the window's start it turns the L1 cache's trace on, then
-  clears and enables the L1 cache's access counters of instruction buses 0
-  and 1 and data buses 0 and 1
-  (`Hardware::cache_counters`, `oer_esp32s31_hal::peripherals::cache_counters`)
-  and reads each bus's hits, misses, conflicts, next-level reads (a data
-  bus also its next-level writes) and overflow bit at both ends, with the
-  configured cache geometry at the end. Hart 1 does not run in this image.
+  the boot hart's 64-bit cycle and retired-instruction counters (the radio
+  and the station: all its work and interrupts included), which its relay
+  reads there, the frames the IP stack took from its device, and what the
+  network bridge did with the station's frames: taken, or refused for want
+  of a pool packet, of queue room or for their length or a down link. The
+  bridge reports each frame through `oer_trace::observe!`; a build without
+  `oer_trace` counts none of them.
+  Just before the window's start the relay turns the L1 cache's trace on,
+  then clears and enables the L1 cache's access counters of instruction
+  buses 0 and 1 and data buses 0 and 1 (`Hardware::cache_counters`,
+  `oer_esp32s31_hal::peripherals::cache_counters`, owned by the relay on
+  the boot hart), and reads each bus's hits, misses, conflicts, next-level
+  reads (a data bus also its next-level writes) and overflow bit at both
+  ends, with the configured cache geometry at the end.
 - **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
-  starts `oer_esp32s31_compose::sampler` on TIMG1 T0 at the window's start
-  and asks it to stop at the window's end, before the end's readings. Its
+  starts `oer_esp32s31_compose::sampler` on TIMG1 T0 of the boot hart,
+  which it samples, at the window's start and asks it to stop at the
+  window's end, before the end's readings, both through the relay. Its
   P4 handler reports each scheduled tick's interrupted `mepc` and
   `mcause.mpil` (0 for task code), and the interrupted `ra` its interrupt
   entry recorded (`oer_espressif_staged_runtime::stacks::interrupted_ra`),
@@ -130,10 +185,11 @@ without a profile answers `NotSampled`.
   `oer_trace`. A disarmed sampler's timer is stopped and masked.
 
 The IP stack's pools are sized for about 65 Mbit/s of 1400-byte datagrams
-each way (`src/station/ip.rs`): 32 receive slots for the station's bursts,
+each way (`src/network/ip.rs`): 32 receive slots for the station's bursts,
 16 transmit credits, 32 general slots, and 16 datagrams queued per socket.
 The stack's storage is written from a constant image, never built on the
-task stack. The load runs on P1 beside the station and its IP stack.
+task stack. The load runs on hart 1 beside the IP stack, in hart 1's one
+task.
 
 ## Regulatory configuration
 
@@ -162,9 +218,12 @@ to 3, the image classes 4 to 6).
 
 The boot reads the reset causes and peeks the previous boot's platform panic
 before serving boot evidence; complete output clears the record. It prints
-the previous boot's PHY and Wi-Fi MAC fault records. A failed boot check, an
-exception, a construction error the facade cannot return, an exhausted nonce
-stream or an IP stack failure is retained and resets (`src/fatal.rs`); the
+the previous boot's PHY and Wi-Fi MAC fault records. A failed boot check of
+either hart, an exception, a construction error the facade cannot return, an
+exhausted nonce stream or an IP stack failure is retained and resets
+(`src/fatal.rs`); a failure of hart 1's launch after its release records its
+stage and resets (`previous fault SecondaryLaunch` or
+`SecondaryEarlyFault`); the
 console's transport faults reset through the platform's retained path.
 
 `cargo fw build esp32s31-wifi-station` builds it; a scenario's harness builds

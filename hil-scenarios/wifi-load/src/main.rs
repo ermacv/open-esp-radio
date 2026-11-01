@@ -373,7 +373,7 @@ fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
         .collect()
 }
 
-/// The window's counters: the serving hart's cycles and retired
+/// The window's counters: the image's measured hart's cycles and retired
 /// instructions with their rate per microsecond (MHz) and per cycle, what
 /// the network bridge did with the station's frames, the frames the IP
 /// stack took with the hart's instructions over them, and the L1 cache's

@@ -25,11 +25,12 @@ clock); per level it records offered, sent and received throughput, lost
 and untracked datagrams (an exact tally, shared by both ends), the sender's
 refused and missed sends, RTT of 20 probes per second within the window
 (replies read through the drain) echoed by the image (min, median,
-p95, max, replies), each hart's busy share (1 − idle/window) with each
-executor's work share, each named part's polls (tasks, the station work's
+p95, max, replies), each hart's busy share (1 − idle/window: the boot hart's
+radio and station, hart 1's network and load) with each executor's work
+share, each named part's polls (tasks, the station work's and the network's
 futures and the station service's spans: count, rate, share of the window
 with an open poll's part, and the mean and longest of the ended polls), and
-the window's counters (the hart's cycles and retired instructions, their
+the window's counters (the boot hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the network bridge's taken and refused
 frames, the IP stack's received frames with the hart's instructions over
 them, and the L1 cache's `cache` counts). The idle baseline records the
@@ -56,8 +57,9 @@ the configured `size_bytes` and `line_bytes` (null when the one-hot word
 selects no single size), the L1 caches' fixed `ways` (null for the L2,
 which no source states), and `l2_bypassed`. With
 `OER_WIFI_LOAD_PROFILE_US=1000` (250 to 10000) each level also samples the
-image's hart every period over the window and records a `profile`: ticks,
-stride and effective period, the samples by interrupted raw CLIC level
+image's boot hart (the radio's) every period over the window and records
+a `profile`: ticks, stride and effective period, the samples by
+interrupted raw CLIC level
 (0 task code; with three level bits P1 `0x1f`, P2 `0x3f`, P3 `0x5f`, as
 the CPU report's executor levels), the 40
 functions and the 40 innermost inlined functions with the most samples, and

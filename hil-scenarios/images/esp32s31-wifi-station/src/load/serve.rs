@@ -1,13 +1,14 @@
 //! The load server on the station's IP stack: one run at a time on one UDP
 //! socket bound to the station's DHCP address.
 //!
-//! The server shares the station work's task (P1). A run receives and
-//! echoes from its start, sends within its window and reads the CPU, the
-//! named parts and the counters at the window's ends (clearing the cache's
-//! counters just before its start), sampling the hart between them when it
-//! asks; after its drain it closes the socket and
-//! keeps what it read until the next run starts.
-//! Every answer is published without waiting.
+//! The server shares hart 1's network task with the IP stack. A run
+//! receives and echoes from its start, sends within its window and reads
+//! the CPU, the named parts and the counters at the window's ends (the
+//! cache's cleared just before its start),
+//! sampling the boot hart between them when it asks; after its drain it
+//! closes the socket and keeps what it read until the next run starts.
+//! Every answer goes to the boot hart's relay, which publishes it, as do
+//! the sampler and the boot hart's counters ([`super::relay`]).
 
 use core::cell::Cell;
 use core::convert::Infallible;
@@ -37,11 +38,11 @@ use static_cell::ConstStaticCell;
 use super::action::{Action, Answer, Kept, MAX_PAYLOAD, Phase, action};
 use super::pace::{GRANULARITY_US, MAX_BATCH, Next, Schedule};
 use super::receive::{Datagram, Receiving, classify, echo};
-use super::sampler::Profiler;
+use super::relay::{self, Client};
 use super::{counters, cpu, parts};
 use crate::fatal::Failure;
+use crate::network::ip::{Device, Interface};
 use crate::station::emit;
-use crate::station::ip::{Device, Interface};
 
 /// Each socket queues at most this many received datagrams (the stack's
 /// `udp-rx-queue-count-16`): some 2.7 ms of 1400-byte datagrams at 65 Mbit/s.
@@ -61,7 +62,13 @@ const TALLY_WORDS: usize = 8192;
 static TALLY: ConstStaticCell<Tally<TALLY_WORDS>> = ConstStaticCell::new(Tally::new());
 
 type Queue = WakingSpscQueue<(RequestIdentity, Request), 1>;
-static REQUESTS: ConstStaticCell<Queue> = ConstStaticCell::new(WakingSpscQueue::new());
+/// The console on the boot hart sends, the server on hart 1 receives. The
+/// console never waits for room: a taken request raises the relay's signal
+/// instead, which finds nothing to do.
+static REQUESTS: ConstStaticCell<Queue> = ConstStaticCell::new(WakingSpscQueue::across_harts(
+    &crate::peers::NETWORK,
+    &crate::peers::RELAY,
+));
 /// The console's end of the load requests.
 pub(crate) type Sender = WakingSpscSender<'static, (RequestIdentity, Request), 1>;
 /// The load server's end.
@@ -83,9 +90,9 @@ pub(crate) fn queue(requests: &Sender, identity: RequestIdentity, request: Reque
     }
 }
 
-/// The station's IP interface while its stack runs: the station work lends
-/// it once the stack started and withdraws it when the stack stopped. A
-/// stop of the station first closes the load's socket through it: the
+/// The station's IP interface while its stack runs: hart 1's network task
+/// lends it once the stack started and withdraws it when the stack stopped.
+/// A stop of the station first closes the load's socket through it: the
 /// socket's queued datagrams hold the station's lent receive buffers.
 pub(crate) struct Network {
     interface: Cell<Option<Interface>>,
@@ -94,7 +101,7 @@ pub(crate) struct Network {
     /// A run's socket is open.
     open: Cell<bool>,
     /// The run waiting for the stop, and the stop waiting for the run; both
-    /// in the station work's task.
+    /// in hart 1's network task.
     run_waker: Cell<Option<Waker>>,
     stop_waker: Cell<Option<Waker>>,
 }
@@ -159,14 +166,9 @@ impl Network {
 
 type Socket = UdpSocket<'static, Device>;
 
-/// Serve the load requests until the chip resets, sampling with `sampler`
-/// and counting the cache's accesses with `cache`.
-pub(crate) async fn serve(
-    mut requests: Receiver,
-    network: &Network,
-    mut sampler: Profiler,
-    mut cache: counters::Cache,
-) -> Infallible {
+/// Serve the load requests until the chip resets, publishing, sampling and
+/// reading the boot hart through `hart0`.
+pub(crate) async fn serve(mut requests: Receiver, network: &Network, hart0: &Client) -> Infallible {
     let tally = TALLY
         .try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage));
@@ -178,49 +180,64 @@ pub(crate) async fn serve(
         };
         match action(phase, request) {
             Action::Start(start) => {
-                match sampled(&start, &sampler).and_then(|()| open(network, &start)) {
+                match sampled(&start, hart0)
+                    .await
+                    .and_then(|()| open(network, &start))
+                {
                     Ok(socket) => {
-                        emit(identity, &Started::Running);
-                        let instruments = Instruments {
-                            sampler: &mut sampler,
-                            cache: &mut cache,
-                        };
-                        let ended =
-                            run(&mut requests, socket, start, tally, network, instruments).await;
+                        let running = relay::Answer::Started(Started::Running);
+                        hart0.publish(identity, running).await;
+                        let ended = run(&mut requests, socket, start, tally, network, hart0).await;
                         network.closed();
                         // A run the station's stop ended keeps no report.
                         kept = ended.map(|ended| (start.run, ended));
                     }
-                    Err(error) => emit(identity, &Started::Refused(error)),
+                    Err(error) => {
+                        let refused = relay::Answer::Started(Started::Refused(error));
+                        hart0.publish(identity, refused).await;
+                    }
                 }
             }
-            Action::Answer(answer) => publish(identity, answer),
-            Action::Cpu => emit(identity, &cpu_load().await),
+            Action::Answer(answer) => publish(hart0, identity, answer).await,
+            Action::Cpu => {
+                let load = relay::Answer::Cpu(cpu_load().await);
+                hart0.publish(identity, load).await;
+            }
             Action::Kept(kind) => match (&kept, kind) {
                 (Some((_, ended)), Kept::Report) => {
-                    emit(identity, &Collected::Report(ended.report.clone()));
+                    let report = Collected::Report(ended.report.clone());
+                    hart0
+                        .publish(identity, relay::Answer::Collected(report))
+                        .await;
                 }
                 (Some((_, ended)), Kept::Parts { from }) => {
-                    emit(
-                        identity,
-                        &PartsCollected::Report(parts::page(&ended.parts, from)),
-                    );
+                    let parts = PartsCollected::Report(parts::page(&ended.parts, from));
+                    hart0.publish(identity, relay::Answer::Parts(parts)).await;
                 }
                 (Some((_, ended)), Kept::Counters) => {
-                    emit(identity, &CountersCollected::Report(ended.counters));
+                    let counters = CountersCollected::Report(ended.counters);
+                    hart0
+                        .publish(identity, relay::Answer::Counters(counters))
+                        .await;
                 }
-                (Some((_, ended)), Kept::Samples { from }) => {
-                    let answer = match ended.sampled {
-                        None => SamplesCollected::Refused(LoadError::NotSampled),
-                        Some(Err(error)) => SamplesCollected::Refused(error),
-                        Some(Ok(())) => sampler.page(from).map_or(
-                            SamplesCollected::Refused(LoadError::NoSampler),
-                            SamplesCollected::Page,
-                        ),
-                    };
-                    emit(identity, &answer);
-                }
-                (None, kind) => publish(identity, Answer::UnknownRun(kind)),
+                (Some((_, ended)), Kept::Samples { from }) => match ended.sampled {
+                    // The samples are in the boot hart's buffer: its relay
+                    // publishes the page.
+                    Some(Ok(())) => hart0.page(identity, from).await,
+                    Some(Err(error)) => {
+                        let refused = SamplesCollected::Refused(error);
+                        hart0
+                            .publish(identity, relay::Answer::Samples(refused))
+                            .await;
+                    }
+                    None => {
+                        let refused = SamplesCollected::Refused(LoadError::NotSampled);
+                        hart0
+                            .publish(identity, relay::Answer::Samples(refused))
+                            .await;
+                    }
+                },
+                (None, kind) => publish(hart0, identity, Answer::UnknownRun(kind)).await,
             },
         }
     }
@@ -228,10 +245,10 @@ pub(crate) async fn serve(
 
 /// Whether the image can sample `start`: a run that asks for samples
 /// needs the sampler disarmed.
-fn sampled(start: &Start, sampler: &Profiler) -> Result<(), LoadError> {
+async fn sampled(start: &Start, hart0: &Client) -> Result<(), LoadError> {
     match start.profile {
-        Some(_) if !sampler.available() => Err(LoadError::NoSampler),
-        _ => Ok(()),
+        Some(_) => hart0.available().await,
+        None => Ok(()),
     }
 }
 
@@ -245,26 +262,28 @@ async fn next(requests: &mut Receiver) -> (RequestIdentity, Request) {
     }
 }
 
-fn publish(identity: RequestIdentity, answer: Answer) {
-    match answer {
-        Answer::Started(started) => emit(identity, &started),
-        Answer::Running(Kept::Report) => emit(identity, &Collected::Running),
-        Answer::Running(Kept::Parts { .. }) => emit(identity, &PartsCollected::Running),
-        Answer::Running(Kept::Counters) => emit(identity, &CountersCollected::Running),
-        Answer::Running(Kept::Samples { .. }) => emit(identity, &SamplesCollected::Running),
-        Answer::UnknownRun(Kept::Report) => {
-            emit(identity, &Collected::Refused(LoadError::UnknownRun));
-        }
+/// Publish what the server answers by itself.
+async fn publish(hart0: &Client, identity: RequestIdentity, answer: Answer) {
+    use relay::Answer as Published;
+    let unknown = LoadError::UnknownRun;
+    let published = match answer {
+        Answer::Started(started) => Published::Started(started),
+        Answer::Running(Kept::Report) => Published::Collected(Collected::Running),
+        Answer::Running(Kept::Parts { .. }) => Published::Parts(PartsCollected::Running),
+        Answer::Running(Kept::Counters) => Published::Counters(CountersCollected::Running),
+        Answer::Running(Kept::Samples { .. }) => Published::Samples(SamplesCollected::Running),
+        Answer::UnknownRun(Kept::Report) => Published::Collected(Collected::Refused(unknown)),
         Answer::UnknownRun(Kept::Parts { .. }) => {
-            emit(identity, &PartsCollected::Refused(LoadError::UnknownRun));
+            Published::Parts(PartsCollected::Refused(unknown))
         }
         Answer::UnknownRun(Kept::Counters) => {
-            emit(identity, &CountersCollected::Refused(LoadError::UnknownRun));
+            Published::Counters(CountersCollected::Refused(unknown))
         }
         Answer::UnknownRun(Kept::Samples { .. }) => {
-            emit(identity, &SamplesCollected::Refused(LoadError::UnknownRun));
+            Published::Samples(SamplesCollected::Refused(unknown))
         }
-    }
+    };
+    hart0.publish(identity, published).await;
 }
 
 /// The run's socket, bound to `start.port` of the station's DHCP address.
@@ -318,12 +337,6 @@ struct Ended {
     sampled: Option<Result<(), LoadError>>,
 }
 
-/// What a run measures its window with besides the CPU and the parts.
-struct Instruments<'a> {
-    sampler: &'a mut Profiler,
-    cache: &'a mut counters::Cache,
-}
-
 /// Run `start` on `socket` beside the requests until its drain ended, with
 /// `tally` cleared for it; what it keeps.
 async fn run(
@@ -332,9 +345,8 @@ async fn run(
     start: Start,
     tally: &mut Tally<TALLY_WORDS>,
     network: &Network,
-    instruments: Instruments<'_>,
+    hart0: &Client,
 ) -> Option<Ended> {
-    let Instruments { sampler, cache } = instruments;
     tally.clear();
     let window = Window {
         start_us: Cell::new(None),
@@ -345,27 +357,25 @@ async fn run(
     let ends = {
         let mut activity = pin!(select(
             receive(&socket, start.run, tally, &mut receiving, &window),
-            measure(
-                &socket,
-                &start,
-                &window,
-                &mut sent,
-                network,
-                Instruments {
-                    sampler: &mut *sampler,
-                    cache,
-                },
-            ),
+            measure(&socket, &start, &window, &mut sent, network, hart0),
         ));
         loop {
             let running = Phase::Running { run: start.run };
             match select3(next(requests), activity.as_mut(), network.stopping()).await {
                 Either3::First((identity, request)) => match action(running, request) {
-                    Action::Answer(answer) => publish(identity, answer),
-                    Action::Cpu => emit(identity, &cpu_load().await),
+                    Action::Answer(answer) => publish(hart0, identity, answer).await,
+                    Action::Cpu => {
+                        let load = relay::Answer::Cpu(cpu_load().await);
+                        hart0.publish(identity, load).await;
+                    }
                     // A running server starts nothing and keeps no report.
-                    Action::Start(_) => emit(identity, &Started::Refused(LoadError::Busy)),
-                    Action::Kept(kind) => publish(identity, Answer::Running(kind)),
+                    Action::Start(_) => {
+                        let busy = relay::Answer::Started(Started::Refused(LoadError::Busy));
+                        hart0.publish(identity, busy).await;
+                    }
+                    Action::Kept(kind) => {
+                        publish(hart0, identity, Answer::Running(kind)).await;
+                    }
                 },
                 Either3::Second(Either::First(never)) => match never {},
                 Either3::Second(Either::Second(ends)) => break Some(ends),
@@ -377,9 +387,10 @@ async fn run(
     let Some(ends) = ends else {
         // The station stops: its received datagrams go with the socket. A
         // session the run started stops too; one the handler kept makes
-        // the next sampled run refuse.
-        sampler.request_stop();
-        let _ = sampler.stop().await;
+        // the next sampled run refuse. A call the window had begun leaves
+        // its reply, which these calls discard.
+        hart0.request_stop().await;
+        let _ = hart0.stop().await;
         return None;
     };
     let report = Report {
@@ -438,7 +449,8 @@ async fn receive(
 }
 
 /// The run's window and drain: open the window `delay_ms` after now, read
-/// the CPU and the parts, clear the cache's counters, read the counters,
+/// the CPU and the parts, clear the cache's counters and read the counters
+/// (both on the boot hart),
 /// sample when asked, send within it, close it after `duration_ms`, read
 /// them again, stop sampling, then wait out the drain.
 async fn measure(
@@ -447,33 +459,32 @@ async fn measure(
     window: &Window,
     sent: &mut Sent,
     network: &Network,
-    instruments: Instruments<'_>,
+    hart0: &Client,
 ) -> Ends {
-    let Instruments { sampler, cache } = instruments;
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
     wait_until(planned_start).await;
     let cpu_start = cpu_load().await;
     let parts_start = parts_sample(true).await;
-    counters::start_cache(cache);
-    let counters_start = counters::snapshot(stack_received(network), cache);
+    let counters_start = counters::snapshot(hart0.counters(true).await, stack_received(network));
     let start_us = now_us();
     window.start_us.set(Some(start_us));
-    let sampling = start
-        .profile
-        .map(|profile| sampler.start(profile.period_us));
+    let sampling = match start.profile {
+        Some(profile) => Some(hart0.start(profile.period_us).await),
+        None => None,
+    };
     if let Some(transmit) = start.transmit {
         send(socket, start.run, transmit, start_us, planned_end, sent).await;
     }
     wait_until(planned_end).await;
     let end_us = now_us();
     window.end_us.set(Some(end_us));
-    sampler.request_stop();
+    hart0.request_stop().await;
     let cpu_end = cpu_load().await;
     let parts_end = parts_sample(false).await;
-    let counters_end = counters::snapshot(stack_received(network), cache);
+    let counters_end = counters::snapshot(hart0.counters(false).await, stack_received(network));
     let sampled = match sampling {
-        Some(Ok(())) => Some(sampler.stop().await),
+        Some(Ok(())) => Some(hart0.stop().await),
         other => other,
     };
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;

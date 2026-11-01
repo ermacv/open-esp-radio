@@ -39,6 +39,7 @@ static_cell.workspace = true
 
 [dev-dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
+oer-memory = { path = "../../../portable/memory" }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-protocol = { workspace = true }
 oer-services-wifi-station = { path = "../../services/wifi-station" }
@@ -60,6 +61,10 @@ bootstrap = { unnamed = 0 }
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The harts this image runs: hart 1 starts during boot and runs the
+# station's network end, its IP stack and the load server on its own
+# interrupt-mode executor with its own timer.
+harts = ["boot", 1]
 # The load service's CPU report collects the executors' activity
 # observations, which only `oer_trace` builds emit.
 instrumentation = ["trace"]

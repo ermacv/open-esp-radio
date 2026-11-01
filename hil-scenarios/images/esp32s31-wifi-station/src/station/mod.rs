@@ -3,20 +3,23 @@
 //!
 //! The boot composes the shared RF actor, the radio executor and the Wi-Fi
 //! interrupt, and keeps every owner the station's construction takes. The
-//! station work answers each request; the boot's one join constructs the
-//! station for its channel, spawns its driver on the radio executor and runs
-//! the station and the IP stack beside the requests until the station ends.
-//! Nothing radiates before the join. The load server shares the work's
-//! task and opens its sockets on the IP stack the work lends it.
+//! station work answers each request on the boot hart; the boot's one join
+//! constructs the station for its channel, spawns its driver on the radio
+//! executor, hands the station's network end to hart 1, whose network task
+//! starts the IP stack over it (`crate::network`), and runs the station
+//! beside the requests until the station ends. Nothing radiates before the
+//! join. The station's network channels, its start and its exit cross the
+//! harts through executor signals (`crate::peers`), never a waker.
 
-mod future;
-pub(crate) mod ip;
+pub(crate) mod future;
 pub(crate) mod irq;
 pub(crate) mod radio;
 
 use core::cell::Cell;
 use core::convert::Infallible;
+use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::task::Poll;
 
 use embassy_futures::{
     join::join as both,
@@ -37,7 +40,7 @@ use crate::fatal::Failure;
 use crate::load::parts::{Part, Polled};
 use crate::requests::{Action, Answer, Phase, action};
 use crate::transport::CONSOLE;
-use future::{Boundary, Tracked};
+use future::Boundary;
 
 /// The regulatory domain the station installs.
 const COUNTRY: [u8; 2] = *b"DE";
@@ -106,6 +109,8 @@ pub(crate) struct Inputs {
     pub requests: Receiver,
     pub deferred: Deferred,
     pub radio: Spawner<RadioTasks>,
+    /// The station's ends towards hart 1's network.
+    pub network: crate::network::Station,
     pub seed: u64,
     pub nonces: wifi::NonceSource,
 }
@@ -113,37 +118,18 @@ pub(crate) struct Inputs {
 pub(crate) type Work = impl core::future::Future<Output = ()>;
 static WORK: ConstStaticCell<StaticPlace<Work>> = ConstStaticCell::new(StaticPlace::new());
 
-/// The station work and the load server beside it, with its sampler and
-/// cache counters, written in their own static place.
-pub(crate) fn place(
-    inputs: Inputs,
-    load: crate::load::serve::Receiver,
-    sampler: crate::load::sampler::Profiler,
-    cache: crate::load::counters::Cache,
-) -> PlacedFuture<'static, Work> {
+/// The station work, written in its own static place.
+pub(crate) fn place(inputs: Inputs) -> PlacedFuture<'static, Work> {
     WORK.try_take()
         .unwrap_or_else(|| crate::fail(Failure::Storage))
-        .future(|| work_future(inputs, load, sampler, cache))
+        .future(|| work_future(inputs))
 }
 
 #[define_opaque(Work)]
-fn work_future(
-    inputs: Inputs,
-    load: crate::load::serve::Receiver,
-    sampler: crate::load::sampler::Profiler,
-    cache: crate::load::counters::Cache,
-) -> Work {
+fn work_future(inputs: Inputs) -> Work {
     async move {
-        let network = crate::load::serve::Network::new();
-        let station = core::pin::pin!(work(inputs, &network));
-        let load = core::pin::pin!(crate::load::serve::serve(load, &network, sampler, cache));
-        let load = Polled {
-            part: Part::Load,
-            future: Boundary(load),
-        };
-        match select(Boundary(station), load).await {
-            Either::First(never) | Either::Second(never) => match never {},
-        }
+        let station = core::pin::pin!(work(inputs));
+        match Boundary(station).await {}
     }
 }
 
@@ -201,11 +187,12 @@ async fn answer_connect(join: RequestIdentity, operation: Option<wifi::Operation
     }
 }
 
-async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallible {
+async fn work(inputs: Inputs) -> Infallible {
     let Inputs {
         mut requests,
         deferred,
         radio,
+        network,
         seed,
         nonces,
     } = inputs;
@@ -293,14 +280,17 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
     if RadioTasks::driver(&radio, runners.driver).is_err() {
         crate::fail(Failure::TaskAllocation);
     }
-    let (ip, interface, running) = match ip::start(address, seed, net) {
-        Ok(started) => started,
-        Err(error) => {
-            answer_join(join, &Joined::Refused(network_failed(error)));
-            stopped(&mut requests, down).await
-        }
+    // Hart 1 starts the IP stack over the station's network end.
+    let start = crate::network::Start {
+        net,
+        stopper,
+        address,
+        seed,
     };
-    network.lend(interface);
+    if let Err(error) = network.start(start).await {
+        answer_join(join, &Joined::Refused(network_failed(error)));
+        stopped(&mut requests, down).await
+    }
     let connect = match control.connect().await {
         Ok(operation) => Some(operation),
         Err(error) => {
@@ -309,17 +299,16 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         }
     };
 
-    // Run the station and the IP stack beside the requests until the station
-    // ends: by a leave, or by its own failure.
+    // Run the station beside the requests until the station ends: by a
+    // leave, or by its own failure. Hart 1 runs the IP stack meanwhile.
     let status = control.status_reader();
+    let lease = Cell::new(None);
     let up = || Status {
         address,
         link: answers::link(&status.status()),
-        ipv4: ipv4(ip.status().ipv4),
+        ipv4: refreshed(&lease),
     };
     let leaving = Cell::new(None);
-    let network_done = Cell::new(false);
-    let mut running = running;
     let mut station = core::pin::pin!(runners.station.run(profile));
     let exit = {
         // The requests and the join's connect answer are one part.
@@ -332,21 +321,10 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
                 part: Part::Station,
                 future: Boundary(station.as_mut()),
             },
+            // Polled before the requests, the lease is the one of this
+            // round when a status answers.
             both(
-                both(
-                    Polled {
-                        part: Part::Ip,
-                        future: Tracked {
-                            future: core::pin::Pin::new(&mut running),
-                            done: &network_done,
-                        },
-                    },
-                    // The station's stop asks the network first: the IP
-                    // service stops and drops every frame it holds, then
-                    // the station retires the radio. Polled after the IP
-                    // part, it sees that part's end in the same round.
-                    stop_network(stopper, &network, &ip, &network_done),
-                ),
+                watch_lease(&lease),
                 Polled {
                     part: Part::Requests,
                     future: serving,
@@ -356,7 +334,7 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
         .await
         {
             Either::First(exit) => exit,
-            Either::Second(((_, ()), (never, ()))) => match never {},
+            Either::Second((never, _)) => match never {},
         }
     };
     answer_join(join, &Joined::Refused(ended(&exit)));
@@ -366,14 +344,33 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
             exit => emit(leave, &Left::Refused(ended(&exit))),
         }
     }
-    ip.stop();
-    Tracked {
-        future: core::pin::Pin::new(&mut running),
-        done: &network_done,
-    }
-    .await;
-    network.withdraw();
+    // Hart 1 stops the IP service and withdraws its interface.
+    crate::network::stop().await;
     stopped(&mut requests, down).await
+}
+
+/// The lease hart 1's IP service published, or `lease`, the last one read
+/// whole, while hart 1 writes a new one.
+fn refreshed(lease: &Cell<Option<Ipv4>>) -> Option<Ipv4> {
+    if let Ok(read) = crate::network::LEASE.read() {
+        lease.set(read);
+    }
+    lease.get()
+}
+
+/// Keep `lease` the lease hart 1 published last: each publication raises
+/// this task's signal, and a read during a write is taken again in the next
+/// round.
+async fn watch_lease(lease: &Cell<Option<Ipv4>>) -> Infallible {
+    poll_fn(|cx| {
+        crate::network::LEASE.register(cx);
+        match crate::network::LEASE.read() {
+            Ok(read) => lease.set(read),
+            Err(crate::handoff::Concurrent) => cx.waker().wake_by_ref(),
+        }
+        Poll::Pending
+    })
+    .await
 }
 
 /// The join's settings: WPA2-Personal with its passphrase on its channel in
@@ -475,51 +472,12 @@ async fn serve_running(
     }
 }
 
-/// Once the station asks, close the load's socket and stop the IP service,
-/// then report the network stopped. Without the request it never ends.
-async fn stop_network(
-    stopper: wifi::NetworkStopper<'static>,
-    network: &crate::load::serve::Network,
-    ip: &oer_embassy_net::ip::Control<'static>,
-    done: &Cell<bool>,
-) {
-    stopper.requested().await;
-    // The socket's queued datagrams hold lent receive buffers.
-    network.stop_load().await;
-    ip.stop();
-    core::future::poll_fn(|_| {
-        if done.get() {
-            core::task::Poll::Ready(())
-        } else {
-            // The IP part's end comes in a later round of the same join,
-            // which its own wake starts.
-            core::task::Poll::Pending
-        }
-    })
-    .await;
-    stopper.stopped();
-    core::future::pending::<()>().await;
-}
-
 /// Serve the stopped station until the chip resets.
 async fn stopped(requests: &mut Receiver, status: impl Fn() -> Status) -> ! {
     loop {
         let (identity, request) = next(requests).await;
         // A stopped station takes neither a join nor a leave.
         let _taken = answer(identity, action(Phase::Stopped, request), &status);
-    }
-}
-
-/// The IPv4 configuration DHCP leased.
-fn ipv4(status: oer_embassy_net::ip::Ipv4Status) -> Option<Ipv4> {
-    use oer_embassy_net::ip::Ipv4Status;
-    match status {
-        Ipv4Status::Lease(config) | Ipv4Status::Static(config) => Some(Ipv4 {
-            address: config.address,
-            prefix: config.prefix_length,
-            gateway: config.gateway,
-        }),
-        Ipv4Status::Unconfigured => None,
     }
 }
 
