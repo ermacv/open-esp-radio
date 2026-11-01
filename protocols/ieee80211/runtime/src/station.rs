@@ -141,7 +141,8 @@ use oer_ieee80211_core_roles_sta::{
     },
     machine::{
         KEY_DATA_CAPACITY, KeyUnwrapId, Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput,
-        StaKeyUnwrapRequest, StaNotice, StaReceived, StaTokens, StaTransmit, StaTxContext, Station,
+        StaKeyUnwrapRequest, StaNotice, StaReceived, StaTokens, StaTraffic, StaTransmit,
+        StaTxContext, Station,
     },
 };
 use oer_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
@@ -352,26 +353,42 @@ const MAX_INPUT_STEPS_PER_BATCH: u8 = 8;
 /// an alarm or a transmission waits at most this many port events.
 const MAX_WAITING_EVENT_STEPS: u8 = 8;
 
-/// What a served port event leaves for the station's next step.
+/// What a served port event or a taken MSDU leaves for the station's next
+/// step.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Taken {
-    /// A data frame delivered at once and nothing else: neither the station
-    /// nor its receive reordering owes anything it did not owe before, and
-    /// no deadline came earlier.
+    /// A data frame delivered at once, or an MSDU the station only recorded
+    /// as traffic, and nothing else: neither the station nor its receive
+    /// reordering owes anything it did not owe before, and no deadline came
+    /// earlier. The MSDU waits in the data machine, whose attempts pass
+    /// alone takes it.
     Direct,
     /// Anything else: the next step may owe an action.
     Input,
 }
 
+impl Taken {
+    /// What a turn that took `event` and `transmit` leaves: direct when
+    /// each it took was and it took one.
+    fn of(event: Option<Self>, transmit: Option<Self>) -> Self {
+        match (event, transmit) {
+            (None | Some(Self::Direct), Some(Self::Direct)) | (Some(Self::Direct), None) => {
+                Self::Direct
+            }
+            _ => Self::Input,
+        }
+    }
+}
+
 /// Whether the station's next step is skipped at `now`. `settled` holds,
-/// after a direct frame, the earliest deadline of the station, its arbiter
-/// and its receive reordering; `event_steps` counts the port events taken in
-/// a row. Between direct frames a step owes nothing before that deadline,
-/// so it runs only at the deadline and once per [`MAX_WAITING_EVENT_STEPS`]
-/// events.
-fn skips_step(settled: Option<Option<Instant>>, event_steps: u8, now: Instant) -> bool {
+/// after a direct input, the earliest deadline of the station, its arbiter
+/// and its receive reordering; `skipped` counts the steps skipped in a row.
+/// Between direct inputs a step owes nothing before that deadline, so it
+/// runs only at the deadline and once per [`MAX_WAITING_EVENT_STEPS`]
+/// inputs.
+fn skips_step(settled: Option<Option<Instant>>, skipped: u8, now: Instant) -> bool {
     matches!(settled, Some(deadline)
-        if event_steps != 0 && deadline.is_none_or(|deadline| now < deadline))
+        if skipped < MAX_WAITING_EVENT_STEPS && deadline.is_none_or(|deadline| now < deadline))
 }
 
 /// A station frame's transmission on the port `B`.
@@ -1870,29 +1887,59 @@ impl<
         let mut batch = 0_u8;
         // The steps in a row that took a port event.
         let mut event_steps = 0_u8;
-        // After direct frames, the deadline the skipped steps wait for.
+        // After direct inputs, the deadline the skipped steps wait for.
         let mut settled: Option<Option<Instant>> = None;
+        // The steps skipped in a row.
+        let mut skipped = 0_u8;
+        // An MSDU taken since the data machine's attempts last passed.
+        let mut data_taken = false;
         loop {
             // One clock read serves the turn's step and pending receives.
             let turn = timer.now();
-            // A direct frame changed nothing a step or a pending receive
+            // A direct input changed nothing a step or a pending receive
             // takes: both run again at the deadline, after any other input,
-            // or after `MAX_WAITING_EVENT_STEPS` events.
-            if !skips_step(settled, event_steps, turn) {
+            // or after `MAX_WAITING_EVENT_STEPS` inputs.
+            let skip = skips_step(settled, skipped, turn);
+            let stepped = if skip {
+                skipped = skipped.saturating_add(1);
+                // A taken MSDU changed the data machine alone: its attempts
+                // pass is the whole step. An attempt that went may change
+                // what the station owes, so the whole step follows at once.
+                if core::mem::take(&mut data_taken) {
+                    B::span(ServiceSpan::Step, false);
+                    let attempted = self.attempt_data(turn, phase, io);
+                    B::span(ServiceSpan::Step, true);
+                    match attempted {
+                        Ok(false) => Next::Wait,
+                        Ok(true) => {
+                            settled = None;
+                            continue;
+                        }
+                        Err(fault) => Next::Failed(fault),
+                    }
+                } else {
+                    Next::Wait
+                }
+            } else {
                 settled = None;
+                skipped = 0;
+                data_taken = false;
                 B::span(ServiceSpan::Step, false);
                 let stepped = self.step(arbiter, turn, phase, io);
                 B::span(ServiceSpan::Step, true);
-                match stepped {
-                    Next::Wait => {}
-                    Next::Retune(pending) => return Served::Retune(pending),
-                    Next::Failed(StepFailure::Port(
-                        fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)),
-                    )) => {
-                        return self.drain_port_error(arbiter, phase, timer, fault).await;
-                    }
-                    Next::Failed(fault) => return Served::Failed(fault),
+                stepped
+            };
+            match stepped {
+                Next::Wait => {}
+                Next::Retune(pending) => return Served::Retune(pending),
+                Next::Failed(StepFailure::Port(
+                    fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)),
+                )) => {
+                    return self.drain_port_error(arbiter, phase, timer, fault).await;
                 }
+                Next::Failed(fault) => return Served::Failed(fault),
+            }
+            if !skip {
                 // Releasing RX owners is a separate input source. Its receive
                 // transition must not nest inside the control-action step frame.
                 B::span(ServiceSpan::Pending, false);
@@ -1937,7 +1984,7 @@ impl<
                 }
                 continue;
             }
-            let (event, command_ready, tick, transmit, unwrapped, now) = {
+            let (event, room, command_ready, tick, transmit, unwrapped, now) = {
                 let machine_deadline = self.step_deadline(arbiter);
                 let deadline = [
                     machine_deadline,
@@ -1960,7 +2007,7 @@ impl<
                 let sending = self.data.accepts() && self.station.link().is_some();
                 // Frames wait in delivery order for the network's next return.
                 let parked = self.pending.receive.has_ready();
-                let (event, command_ready, tick, transmit, unwrapped) = {
+                let (event, room, command_ready, tick, transmit, unwrapped) = {
                     let command = async {
                         match embassy_futures::select::select(
                             io.control.wait_for_stop(),
@@ -2021,7 +2068,7 @@ impl<
                             || unwrapped.is_some()
                         {
                             B::span(ServiceSpan::Sources, true);
-                            Poll::Ready((event, command_ready, tick, transmit, unwrapped))
+                            Poll::Ready((event, room, command_ready, tick, transmit, unwrapped))
                         } else {
                             B::span(ServiceSpan::Sources, true);
                             Poll::Pending
@@ -2029,10 +2076,19 @@ impl<
                     })
                     .await
                 };
-                (event, command_ready, tick, transmit, unwrapped, timer.now())
+                (
+                    event,
+                    room,
+                    command_ready,
+                    tick,
+                    transmit,
+                    unwrapped,
+                    timer.now(),
+                )
             };
-            // Only a direct frame taken alone skips the next step.
-            let mut quiet = unwrapped.is_none() && !tick && !transmit;
+            // Only direct inputs taken alone skip the next step: lend room
+            // is an input to the pending receives.
+            let mut quiet = unwrapped.is_none() && !tick && !room;
             // The response returns the station's ticket before any other
             // input can end the phase.
             if let Some((id, result)) = unwrapped {
@@ -2043,12 +2099,12 @@ impl<
                 );
             }
             let took_event = matches!(event, Some(Ok(Ok(_))));
-            let taken = match event {
+            let event = match event {
                 Some(event) => match self.serve_event(arbiter, now, event, phase, io) {
-                    Ok(taken) => taken,
+                    Ok(taken) => Some(taken),
                     Err(served) => return served,
                 },
-                None => Taken::Input,
+                None => None,
             };
             if tick {
                 self.station.input(now, StaInput::Tick, &mut self.events);
@@ -2069,11 +2125,6 @@ impl<
                 None => None,
             };
             quiet &= command.is_none();
-            settled = if quiet {
-                self.settled(arbiter, settled, taken)
-            } else {
-                None
-            };
             if let Some(command) = command {
                 match command {
                     ServiceCommand::Station(command) => {
@@ -2113,11 +2164,20 @@ impl<
                     }
                 }
             }
-            if transmit && self.data.accepts() && self.station.link().is_some() {
+            let transmit = if transmit && self.data.accepts() && self.station.link().is_some() {
                 B::span(ServiceSpan::Transmit, false);
-                self.send(now, io);
+                let taken = self.send(now, io);
                 B::span(ServiceSpan::Transmit, true);
-            }
+                data_taken = true;
+                Some(taken)
+            } else {
+                None
+            };
+            settled = if quiet {
+                self.settled(arbiter, settled, Taken::of(event, transmit))
+            } else {
+                None
+            };
             event_steps = if took_event {
                 event_steps.saturating_add(1) % MAX_WAITING_EVENT_STEPS
             } else {
@@ -2214,9 +2274,9 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) {
+    ) -> Taken {
         let Some(mut link) = self.station.link() else {
-            return;
+            return Taken::Direct;
         };
         let ServiceIo {
             transmit, output, ..
@@ -2256,9 +2316,11 @@ impl<
                 }),
             }
         });
-        // The TID's transmit agreement hears its data.
-        if let Some(tid) = taken {
-            self.station.tx_block_ack_traffic(tid, now);
+        // The TID's transmit agreement hears its data. An MSDU refused or
+        // not taken changed nothing.
+        match taken.map(|tid| self.station.tx_block_ack_traffic(tid, now)) {
+            Some(StaTraffic::Input) => Taken::Input,
+            Some(StaTraffic::Recorded) | None => Taken::Direct,
         }
     }
 
@@ -2379,162 +2441,190 @@ impl<
                     }
                 }
             }
-            // Data goes only while the link is up: otherwise its MPDUs wait
-            // in the machine, none lost. At most the backend's queue depth
-            // of data attempts of a category waits at the port, so a
-            // station frame, submitted at once, waits for at most that
-            // depth and the one on the air; the limit is the service's, for
-            // every data source it runs.
-            'data: loop {
-                // Without an owed MPDU and a free ticket Data has no
-                // attempt: the turn asks for neither window nor link.
-                let Some(window_tid) = self.data.attempt_tid() else {
-                    break 'data;
-                };
-                // The window of the TID the next attempt takes.
-                let window = aggregate_window::<B, P, S, C, GROUPS>(
-                    &self.station,
-                    &self.rates,
-                    phase,
-                    window_tid,
-                );
-                let spacing = self
-                    .station
-                    .tx_aggregate_limits()
-                    .map_or(0, |(spacing, _)| spacing);
-                // This scope owns the short LinkView borrow. Only an owned
-                // follow-up leaves it; handling it may then borrow all of self.
-                let submitted = 'submitted: {
-                    let Some(link) = self.station.link() else {
-                        break 'data;
-                    };
-                    let Some(attempt) = self
-                        .data
-                        .poll_attempt(|tid| window.filter(|_| tid == window_tid), &mut self.events)
-                    else {
-                        break 'data;
-                    };
-                    progress = true;
-                    let transmit = match attempt {
-                        data::DataAttempt::Single(transmit) => transmit,
-                        data::DataAttempt::Aggregate(aggregate) => {
-                            break 'submitted submit_aggregate::<B, P, S, O, GROUPS>(
-                                now,
-                                phase,
-                                &link,
-                                &self.rates,
-                                AggregateBanks {
-                                    data: &mut self.data,
-                                    pending: &mut self.pending,
-                                    events: &mut self.events,
-                                },
-                                spacing,
-                                aggregate,
-                            );
-                        }
-                    };
-                    let data::DataTransmitParts {
-                        context,
-                        ticket,
-                        buffer,
-                    } = transmit.into_parts();
-                    let access_category = context.access_category();
-                    let plan = context.protection(&link).and_then(|protection| {
-                        self.rates
-                            .plan(FrameRates::Data, |rate| phase.rate(rate))
-                            .map(|plan| (protection, plan))
-                            .ok_or(TxRefusal::NoRate)
-                    });
-                    let prepared = match (buffer, plan) {
-                        (ReturnedMpdu::Fresh(buffer), Ok((protection, plan))) => {
-                            let protection = match protection {
-                                DataProtection::Open => Some(TxProtection::Open),
-                                DataProtection::Ccmp(key) => key.number().map(TxProtection::Ccmp),
-                            };
-                            match protection {
-                                Some(protection) => {
-                                    prepare_source::<B, B::Large>(TxSource::Fresh {
-                                        buffer,
-                                        frame: ClassFrame::individual(*context.frame(), plan),
-                                        body: None,
-                                        protection,
-                                    })
-                                }
-                                None => Err((
-                                    TxRefusal::PacketNumberExhausted,
-                                    <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer),
-                                )),
-                            }
-                        }
-                        (ReturnedMpdu::Sent(mpdu), Ok((_protection, plan))) => {
-                            prepare_source::<B, B::Large>(TxSource::Retransmission {
-                                mpdu,
-                                plan: RetransmissionPlan::Individual(plan),
-                            })
-                        }
-                        (buffer, Err(reason)) => {
-                            let buffer = match buffer {
-                                ReturnedMpdu::Fresh(buffer) => {
-                                    <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer)
-                                }
-                                ReturnedMpdu::Sent(mpdu) => {
-                                    <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase_sent(mpdu)
-                                }
-                            };
-                            Err((reason, buffer))
-                        }
-                    };
-                    match prepared {
-                        Err((reason, buffer)) => Ok(Follow::Refused {
-                            context: TxContext::Data(context),
-                            ticket,
-                            buffer,
-                            reason,
-                        }),
-                        Ok(source) => {
-                            let index = ticket.index();
-                            self.pending
-                                .admissions
-                                .insert(PendingTerminal::Transmit(index));
-                            let unplaced = tx_contexts::keep(
-                                &mut self.pending.tx_contexts,
-                                index,
-                                TxContext::Data(context),
-                            )
-                            .err();
-                            let result = phase.station().submit(
-                                (oer_ieee80211_contracts_port::Attempt {
-                                    context: (),
-                                    ticket,
-                                    source,
-                                    access_category,
-                                    protection: DataContext::<'id, B>::PROTECTION,
-                                    power: DataContext::<'id, B>::POWER,
-                                    coex_operation: DataContext::<'id, B>::COEX_OPERATION,
-                                })
-                                .admit(),
-                            );
-                            submitted::<B, GROUPS>(
-                                index,
-                                unplaced,
-                                result.map_err(|poisoned| poisoned.cause),
-                            )
-                        }
-                    }
-                };
-                match submitted {
-                    Ok(follow) => {
-                        if let Err(reason) = self.follow(now, follow, io) {
-                            return Next::Failed(reason.into());
-                        }
-                    }
-                    Err(fault) => return Next::Failed(fault.into()),
-                }
+            match self.attempt_data(now, phase, io) {
+                Ok(attempted) => progress |= attempted,
+                Err(fault) => return Next::Failed(fault),
             }
             if !progress {
                 return Next::Wait;
             }
         }
+    }
+
+    /// Submit every data attempt owed at `now`: whether one went.
+    // Keep source-specific temporaries out of the service poll frame.
+    #[inline(never)]
+    fn attempt_data<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        &mut self,
+        now: Instant,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            impl NetworkStop,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            impl Notifies,
+        >,
+    ) -> Result<bool, StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        let mut progress = false;
+        // Data goes only while the link is up: otherwise its MPDUs wait
+        // in the machine, none lost. At most the backend's queue depth
+        // of data attempts of a category waits at the port, so a
+        // station frame, submitted at once, waits for at most that
+        // depth and the one on the air; the limit is the service's, for
+        // every data source it runs.
+        'data: loop {
+            // Without an owed MPDU and a free ticket Data has no
+            // attempt: the turn asks for neither window nor link.
+            let Some(window_tid) = self.data.attempt_tid() else {
+                break 'data;
+            };
+            // The window of the TID the next attempt takes.
+            let window = aggregate_window::<B, P, S, C, GROUPS>(
+                &self.station,
+                &self.rates,
+                phase,
+                window_tid,
+            );
+            let spacing = self
+                .station
+                .tx_aggregate_limits()
+                .map_or(0, |(spacing, _)| spacing);
+            // This scope owns the short LinkView borrow. Only an owned
+            // follow-up leaves it; handling it may then borrow all of self.
+            let submitted = 'submitted: {
+                let Some(link) = self.station.link() else {
+                    break 'data;
+                };
+                let Some(attempt) = self
+                    .data
+                    .poll_attempt(|tid| window.filter(|_| tid == window_tid), &mut self.events)
+                else {
+                    break 'data;
+                };
+                progress = true;
+                let transmit = match attempt {
+                    data::DataAttempt::Single(transmit) => transmit,
+                    data::DataAttempt::Aggregate(aggregate) => {
+                        break 'submitted submit_aggregate::<B, P, S, O, GROUPS>(
+                            now,
+                            phase,
+                            &link,
+                            &self.rates,
+                            AggregateBanks {
+                                data: &mut self.data,
+                                pending: &mut self.pending,
+                                events: &mut self.events,
+                            },
+                            spacing,
+                            aggregate,
+                        );
+                    }
+                };
+                let data::DataTransmitParts {
+                    context,
+                    ticket,
+                    buffer,
+                } = transmit.into_parts();
+                let access_category = context.access_category();
+                let plan = context.protection(&link).and_then(|protection| {
+                    self.rates
+                        .plan(FrameRates::Data, |rate| phase.rate(rate))
+                        .map(|plan| (protection, plan))
+                        .ok_or(TxRefusal::NoRate)
+                });
+                let prepared = match (buffer, plan) {
+                    (ReturnedMpdu::Fresh(buffer), Ok((protection, plan))) => {
+                        let protection = match protection {
+                            DataProtection::Open => Some(TxProtection::Open),
+                            DataProtection::Ccmp(key) => key.number().map(TxProtection::Ccmp),
+                        };
+                        match protection {
+                            Some(protection) => prepare_source::<B, B::Large>(TxSource::Fresh {
+                                buffer,
+                                frame: ClassFrame::individual(*context.frame(), plan),
+                                body: None,
+                                protection,
+                            }),
+                            None => Err((
+                                TxRefusal::PacketNumberExhausted,
+                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer),
+                            )),
+                        }
+                    }
+                    (ReturnedMpdu::Sent(mpdu), Ok((_protection, plan))) => {
+                        prepare_source::<B, B::Large>(TxSource::Retransmission {
+                            mpdu,
+                            plan: RetransmissionPlan::Individual(plan),
+                        })
+                    }
+                    (buffer, Err(reason)) => {
+                        let buffer = match buffer {
+                            ReturnedMpdu::Fresh(buffer) => {
+                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer)
+                            }
+                            ReturnedMpdu::Sent(mpdu) => {
+                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase_sent(mpdu)
+                            }
+                        };
+                        Err((reason, buffer))
+                    }
+                };
+                match prepared {
+                    Err((reason, buffer)) => Ok(Follow::Refused {
+                        context: TxContext::Data(context),
+                        ticket,
+                        buffer,
+                        reason,
+                    }),
+                    Ok(source) => {
+                        let index = ticket.index();
+                        self.pending
+                            .admissions
+                            .insert(PendingTerminal::Transmit(index));
+                        let unplaced = tx_contexts::keep(
+                            &mut self.pending.tx_contexts,
+                            index,
+                            TxContext::Data(context),
+                        )
+                        .err();
+                        let result = phase.station().submit(
+                            (oer_ieee80211_contracts_port::Attempt {
+                                context: (),
+                                ticket,
+                                source,
+                                access_category,
+                                protection: DataContext::<'id, B>::PROTECTION,
+                                power: DataContext::<'id, B>::POWER,
+                                coex_operation: DataContext::<'id, B>::COEX_OPERATION,
+                            })
+                            .admit(),
+                        );
+                        submitted::<B, GROUPS>(
+                            index,
+                            unplaced,
+                            result.map_err(|poisoned| poisoned.cause),
+                        )
+                    }
+                }
+            };
+            self.follow(now, submitted?, io)?;
+        }
+        Ok(progress)
     }
 
     /// What follows a station's action, once it no longer borrows the

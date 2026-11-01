@@ -3706,20 +3706,32 @@ fn every_service_span_is_found_by_its_number_and_no_other_number_is() {
 }
 
 #[test]
-fn a_step_is_skipped_only_after_a_direct_frame_before_its_deadline_and_within_the_event_bound() {
+fn a_step_is_skipped_only_after_a_direct_input_before_its_deadline_and_within_the_bound() {
     let now = Instant::from_micros(100);
     let later = Some(Instant::from_micros(101));
     let due = Some(now);
-    // After a direct frame, with no deadline or one still ahead.
-    assert!(super::skips_step(Some(None), 1, now));
+    // After a direct input, with no deadline or one still ahead.
+    assert!(super::skips_step(Some(None), 0, now));
     assert!(super::skips_step(
         Some(later),
         MAX_WAITING_EVENT_STEPS - 1,
         now
     ));
-    // A deadline reached, any other input, and the end of a run of
-    // waiting events each run the step.
-    assert!(!super::skips_step(Some(due), 1, now));
-    assert!(!super::skips_step(None, 1, now));
-    assert!(!super::skips_step(Some(None), 0, now));
+    // A deadline reached, any other input, and the end of a run of skipped
+    // steps each run the step.
+    assert!(!super::skips_step(Some(due), 0, now));
+    assert!(!super::skips_step(None, 0, now));
+    assert!(!super::skips_step(Some(None), MAX_WAITING_EVENT_STEPS, now));
+}
+
+#[test]
+fn a_turn_is_direct_only_when_it_took_an_input_and_each_it_took_was_direct() {
+    use super::Taken::{Direct, Input};
+    assert_eq!(super::Taken::of(Some(Direct), None), Direct);
+    assert_eq!(super::Taken::of(None, Some(Direct)), Direct);
+    assert_eq!(super::Taken::of(Some(Direct), Some(Direct)), Direct);
+    assert_eq!(super::Taken::of(None, None), Input);
+    assert_eq!(super::Taken::of(Some(Input), Some(Direct)), Input);
+    assert_eq!(super::Taken::of(Some(Direct), Some(Input)), Input);
+    assert_eq!(super::Taken::of(None, Some(Input)), Input);
 }
