@@ -1,6 +1,6 @@
 //! The HIL Wi-Fi station load scenario. The image's station joins the lab
-//! router's isolated network, which forwards UDP between it and this host
-//! (wired to the router: one hop over the air). The host sends and receives
+//! router's isolated network, HT 40 MHz wide, which forwards UDP between it
+//! and this host (wired to the router: one hop over the air). The host sends and receives
 //! the load; the image counts its end and reports its CPU over the HIL link.
 //! RX and TX are named from the image's side. Every level of every mode is
 //! measured and reported (`target/hil/results/`): the measurements never
@@ -20,7 +20,7 @@ use std::{
 };
 
 use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
+use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_services_load::{
     CacheGeometry, CacheLevel, Collect, CollectCounters, CollectParts, Collected, Counters,
     CountersCollected, DataBus, InstructionBus, Load, MAX_PARTS, PartWindow, PartsCollected,
@@ -75,7 +75,7 @@ const DEVICE_PORT: u16 = 5001;
 const PAYLOAD: usize = 1400;
 /// Total offered load of each level, Mbit/s; a mode with two directions
 /// offers half each way. `OER_WIFI_LOAD_MBPS` (comma-separated) replaces
-/// them, e.g. to offer more than HT20 carries.
+/// them, e.g. to offer more than these levels.
 const LEVELS_MBPS: [u64; 4] = [10, 30, 50, 65];
 const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 /// Each level's measuring window, the time before it opens and the drain
@@ -533,6 +533,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
+        width: RouterChannelWidth::Ht40,
         forward_host: Some(host),
     })?;
     let join = Join {

@@ -12,7 +12,7 @@ use std::{
 };
 
 use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterOperation, Scenario, check};
+use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
 const SCENARIO: Scenario = Scenario::new(
@@ -131,6 +131,7 @@ fn join(cx: &mut Cx<'_>) -> Result<(), Failure> {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
+        width: RouterChannelWidth::Ht20,
         forward_host: None,
     })?;
     let request = Join {

@@ -33,7 +33,7 @@ mod run;
 mod stand;
 
 pub use finish::Cleanup;
-pub use oer_lab_client::protocol::RouterOperation;
+pub use oer_lab_client::protocol::{RouterChannelWidth, RouterOperation};
 pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.

@@ -349,6 +349,7 @@ fn config(security: StaSecurity) -> TestConfig {
             ),
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             channels,
+            wide_channels: heapless::Vec::new(),
             dwell: Duration::from_millis(10),
             skipped_absences: 3,
             access_point_margin_db: 6,

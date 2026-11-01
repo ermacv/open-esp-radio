@@ -123,12 +123,21 @@ pub struct Config {
     #[cfg(oer_trace)]
     pub(crate) target: Option<[u8; 6]>,
     pub(crate) all_channels: bool,
+    /// Whether a join may tune HT 40 MHz where the access point offers it.
+    pub(crate) ht40: bool,
     pub(crate) domain: RegulatoryDomain,
     pub(crate) supported: oer_ieee80211_contracts_port::SupportedChannel<Caps>,
 }
 impl Config {
     pub fn with_reconnect(mut self, policy: crate::ReconnectPolicy) -> Self {
         self.reconnect = policy;
+        self
+    }
+    /// Join at HT 40 MHz where the access point's HT elements name a
+    /// secondary channel the regulatory domain permits beside the scanned
+    /// one; otherwise, and without it, the join stays at 20 MHz.
+    pub fn with_ht40(mut self) -> Self {
+        self.ht40 = true;
         self
     }
     /// Name the access point whose frames a trace build observes; without
@@ -172,6 +181,7 @@ impl Config {
             #[cfg(oer_trace)]
             target: None,
             all_channels,
+            ht40: false,
             domain,
             supported,
         })
@@ -229,6 +239,30 @@ impl<W: Binding> Profile<W> {
                 .push(config.supported)
                 .map_err(|_| InitializationError::Channel)?;
         }
+        let mut wide_channels = heapless::Vec::new();
+        if config.ht40 {
+            for scanned in &channels {
+                let number = scanned.channel().number();
+                for width in [WifiChannelWidth::Mhz40Above, WifiChannelWidth::Mhz40Below] {
+                    // A secondary outside the band or the domain is no
+                    // 40 MHz channel of this primary.
+                    let Ok(wide) = oer_ieee80211_contracts_port::Channel::ghz2_4(number, width)
+                    else {
+                        continue;
+                    };
+                    if let Ok(permitted) = config
+                        .domain
+                        .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(wide))
+                        && let Some(wide) =
+                            oer_ieee80211_contracts_port::SupportedChannel::<Caps>::new(permitted)
+                    {
+                        wide_channels
+                            .push(wide)
+                            .map_err(|_| InitializationError::Channel)?;
+                    }
+                }
+            }
+        }
         Ok(Self {
             station: StaConfig {
                 address: OwnAddress::new(
@@ -237,6 +271,7 @@ impl<W: Binding> Profile<W> {
                 ),
                 ssid: credentials.ssid,
                 channels,
+                wide_channels,
                 dwell: Duration::from_millis(250),
                 skipped_absences: 3,
                 access_point_margin_db: 6,
@@ -244,7 +279,11 @@ impl<W: Binding> Profile<W> {
                 association: &service::ASSOCIATION,
                 listen_interval:
                     oer_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
-                phy: oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20,
+                phy: if config.ht40 {
+                    oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht40
+                } else {
+                    oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
+                },
                 callbacks: CoreCallbacks(callbacks),
             },
             security: match credentials.pmk {

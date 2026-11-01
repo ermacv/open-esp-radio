@@ -202,6 +202,14 @@ returned lease's RX-capacity fact, a TX event or another applicable deadline;
 an overdue RX retry must not keep P2 running while P1 needs to return buffers.
 TX deadlines and the port contract are unchanged.
 
+P1 holds at most `RX_HELD` (32) received units besides those it lent the
+network: its queued receive events and the MPDUs its receive Block Ack
+agreements keep, a 32-MPDU reorder window. P2 queues at most eight units P1
+has not taken yet; at that bound it asks to be woken, and P1's next take of
+a received event wakes it. A burst therefore keeps P1 from running for at
+most eight units, however many P1 retains. The units come from one pool: P1
+and the network share what the pool holds.
+
 One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The radio handler masks RX delivery, acknowledges and raises

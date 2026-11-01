@@ -85,13 +85,13 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
     >,
     pub(super) events: oer_memory::AffineSpscQueue<
         owned::OwnedEvent<'id, Id, D, B, O>,
-        { TERMINAL_CAPACITY + TX_TICKETS },
+        { TERMINAL_CAPACITY + RX_HELD },
         oer_memory::CompactSpscCursor,
     >,
     pub(super) rx_out: Cell<usize>,
     pub(super) recycled: oer_memory::AffineSpscQueue<
         ReceiveBuffer<'id, Id, D::Receive>,
-        TX_TICKETS,
+        RX_HELD,
         oer_memory::CompactSpscCursor,
     >,
     pub(super) failed_command: oer_memory::OnceValue<driver::Command<'id, Id, D, B, O>>,
@@ -146,6 +146,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.clock_use.set(ClockUse::Idle);
         self.rx_out.set(0);
         storage.shared.network.reset();
+        storage.shared.received.reset();
         let settings = &storage.shared.settings;
         settings.clock_requested.set(false);
         settings.enabled.set(false);
@@ -176,8 +177,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 pub(super) struct Held<'s, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) storage: &'static PortStorage<D, B>,
     pub(super) commands: Incoming<'s, Cmd<'id, Id, D, B, O>, COMMANDS>,
-    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B, O>, { TERMINAL_CAPACITY + TX_TICKETS }>,
-    pub(super) recycled: Incoming<'s, ReceiveBuffer<'id, Id, D::Receive>, TX_TICKETS>,
+    pub(super) events: Outgoing<'s, Msg<'id, Id, D, B, O>, { TERMINAL_CAPACITY + RX_HELD }>,
+    pub(super) recycled: Incoming<'s, ReceiveBuffer<'id, Id, D::Receive>, RX_HELD>,
     pub(super) rx_out: &'s Cell<usize>,
     pub(super) gate: &'s GateIssuer<'id, Part<Id, 1>>,
     pub(super) failed_terminal: &'s FailedTerminal<'id, Id, D, B, O>,
@@ -223,11 +224,11 @@ pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, 
     pub(super) events: LocalSpscReceiver<
         'p,
         Msg<'static, Id, D, B, O>,
-        { TERMINAL_CAPACITY + TX_TICKETS },
+        { TERMINAL_CAPACITY + RX_HELD },
         CompactSpscCursor,
     >,
     pub(super) recycled:
-        LocalSpscSender<'p, ReceiveBuffer<'static, Id, D::Receive>, TX_TICKETS, CompactSpscCursor>,
+        LocalSpscSender<'p, ReceiveBuffer<'static, Id, D::Receive>, RX_HELD, CompactSpscCursor>,
     pub(super) failed_command: &'p FailedCommand<'static, Id, D, B, O>,
     pub(super) failed_terminal: &'p FailedTerminal<'static, Id, D, B, O>,
     pub(super) gate: &'p GateIssuer<'static, Part<Id, 1>>,

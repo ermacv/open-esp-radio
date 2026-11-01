@@ -85,9 +85,9 @@ pub enum AgreementStop {
 }
 
 /// The most frames one agreement retains, and the most in-order releases
-/// waiting for delivery. The station's frame/token bank admits at most eight
-/// in flight; the image chooses the number of banks independently.
-pub const RX_BLOCK_ACK_WINDOW: usize = 8;
+/// waiting for delivery: a 32-MPDU window. The image chooses the number of
+/// banks and the retained frames independently, at most this many.
+pub const RX_BLOCK_ACK_WINDOW: usize = 32;
 const WINDOW: usize = RX_BLOCK_ACK_WINDOW;
 /// Encoded replies waiting for a control transmit credit.
 const PENDING: usize = 8;
@@ -154,7 +154,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
     pub fn new(slots: [T::Slot; BANKS], gap_timeout: Duration) -> Self {
         const {
             if FRAMES == 0 || FRAMES > WINDOW {
-                panic!("RX storage must reserve one to eight existing frame credits");
+                panic!("RX storage must reserve one to RX_BLOCK_ACK_WINDOW existing frame credits");
             }
         }
         Self {

@@ -42,8 +42,9 @@ pub trait Composition: 'static {
 pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPowerProfile>;
 
 /// The receive units of a pool of `units` the network may hold: it leaves
-/// the radio one unit per ticket, for its receive events and their
-/// reordering.
+/// the radio at least one unit per ticket for its receive events. The
+/// radio's events and reordering hold up to [`RX_HELD`](super::RX_HELD) of
+/// the pool, sharing what the network does not hold.
 pub const fn lent_rx(units: usize) -> usize {
     units.saturating_sub(super::TX_TICKETS)
 }

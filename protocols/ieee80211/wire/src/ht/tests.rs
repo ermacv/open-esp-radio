@@ -72,6 +72,36 @@ fn ht40_records_keep_width_geometry_and_peer_facts_coherent() {
 }
 
 #[test]
+fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
+    let info = HtCapabilityInfo::from_bytes([0; 2])
+        .with_sm_power_save(HtCapabilityInfo::SM_POWER_SAVE_DISABLED)
+        .to_bytes();
+    let [ampdu] = HtAmpduParameters::from_bytes([0])
+        .with_exponent(HtAmpduParameters::EXPONENT_65535_OCTETS)
+        .with_spacing(HtAmpduParameters::SPACING_4_US)
+        .to_bytes();
+    let below = crate::channel::Channel::ghz2_4(13, WifiChannelWidth::Mhz40Below).unwrap();
+    let capability = ht_capability_ie(
+        HtLocalCapabilities::new(u16::from_le_bytes(info), ampdu, 0xff, 1),
+        below,
+    );
+    // Width, both short guard intervals and SM power save disabled.
+    assert_eq!(u16::from_le_bytes([capability[2], capability[3]]), 0x006e);
+    let peer = ht_peer_capabilities(&capability).unwrap();
+    assert_eq!(
+        HtAmpduParameters::from_bytes([peer.ampdu_parameters()]).max_ampdu_length(),
+        65_535
+    );
+    assert_eq!(
+        HtAmpduParameters::from_bytes([peer.ampdu_parameters()])
+            .spacing()
+            .get(),
+        5
+    );
+    assert!(peer.supports_short_guard_interval(WifiChannelWidth::Mhz40Below));
+}
+
+#[test]
 fn peer_mcs32_is_still_parsed_without_local_advertisement() {
     let channel = crate::channel::Channel::ghz2_4(6, WifiChannelWidth::Mhz40Above).unwrap();
     let local = ht_capability_ie(TEST_HT_CAPABILITIES, channel);

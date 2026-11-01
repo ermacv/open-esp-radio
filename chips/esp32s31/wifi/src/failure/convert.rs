@@ -59,6 +59,7 @@ pub(super) fn setting_fault(
         Source::ChannelUnset => SettingFault::ChannelUnset,
         Source::EdcaLifetime => SettingFault::EdcaLifetime,
         Source::BlockAckSequence => SettingFault::BlockAckSequence,
+        Source::ReceivedUnqueued => SettingFault::ReceivedUnqueued,
     }
 }
 

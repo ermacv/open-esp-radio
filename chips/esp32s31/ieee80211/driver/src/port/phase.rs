@@ -71,6 +71,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         poll_fn(|cx| {
             self.held.storage.body.register(cx.waker());
             if let Some(event) = self.held.events.try_receive().ok() {
+                if matches!(event, owned::OwnedEvent::Received { .. }) {
+                    self.held.storage.took_received();
+                }
                 return Poll::Ready(Ok(Ok(event.lend(&self.loan))));
             }
             if let Some(cause) = self.held.storage.poisoned.get() {

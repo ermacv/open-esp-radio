@@ -377,14 +377,16 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
 }
 
 /// The join's settings: WPA2-Personal with its passphrase on its channel in
-/// the image's regulatory domain, without automatic reconnect.
+/// the image's regulatory domain, HT 40 MHz wide where the access point
+/// offers it, without automatic reconnect.
 fn validate(join: &Join) -> Result<(wifi::StationSettings, wifi::Config), StationError> {
     let settings =
         wifi::StationSettings::wpa2_passphrase(join.ssid.as_bytes(), join.passphrase.as_bytes())
             .map_err(|_| StationError::InvalidSettings)?;
     // A trace build's configuration names no access point to observe.
     let config = wifi::Config::new(join.channel, COUNTRY, TX_CAP_DBM, false, STOP)
-        .map_err(|_| StationError::InvalidSettings)?;
+        .map_err(|_| StationError::InvalidSettings)?
+        .with_ht40();
     Ok((settings, config))
 }
 

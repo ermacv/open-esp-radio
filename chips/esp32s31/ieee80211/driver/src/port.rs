@@ -62,6 +62,18 @@ pub use settings::SettingFault;
 /// Shared admission capacity across the four access categories.
 pub const TX_TICKETS: usize = 8;
 
+/// The receive units P1 holds at once besides those it lent the network:
+/// its receive events and the MPDUs its receive Block Ack agreements keep,
+/// one 32-MPDU reorder window. They share the receive pool with the
+/// network's units ([`device::lent_rx`]); the pool, not this bound, limits
+/// what both hold together.
+pub const RX_HELD: usize = 32;
+
+/// The received units P2 queues for P1 that P1 has not taken yet. P2
+/// queues no more until P1 takes one, so a burst never keeps P1 from
+/// running for more than this many units, whatever P1 retains.
+const RX_IN_FLIGHT: usize = TX_TICKETS;
+
 /// The device events one driver turn serves before it polls again: a ring's
 /// worth of received units, so a burst costs one turn, not one per unit.
 const EVENTS_PER_POLL: usize = 32;
@@ -252,6 +264,8 @@ pub struct PortSharedStorage<const B: usize> {
     returned: oer_memory::ReturnBank<TxSlotFree<'static, B>, TX_TICKETS>,
     /// The receive units lent to the network.
     network: lent::NetworkCredit,
+    /// The received units queued for P1 and not yet taken.
+    received: settings::ReceivedInFlight,
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
@@ -343,6 +357,7 @@ impl<const B: usize> PortSharedStorage<B> {
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_memory::ReturnBank::new(),
             network,
+            received: settings::ReceivedInFlight::new(),
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),
@@ -363,6 +378,15 @@ impl<const B: usize> PortSharedStorage<B> {
         self.poisoned
             .get()
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
+    }
+    /// P1 took one received unit P2 queued: wake a driver that waits for
+    /// it. A unit never queued poisons the installation.
+    fn took_received(&self) {
+        match self.received.take() {
+            Ok(true) => self.driver.wake(),
+            Ok(false) => {}
+            Err(fault) => self.poison(Fault::Setting(fault)),
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 
 use super::*;
 use atomic_words::AtomicWords;
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicUsize, Ordering};
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
     extensions::wmm::{WmmAcParameters, WmmParameterSet},
@@ -26,7 +26,53 @@ impl Flag {
     }
 }
 
+/// The received units P2 queued for P1 that P1 has not taken, and whether
+/// P2 waits for P1 to take one. P2 asks before it reads the count again,
+/// and P1 takes before it reads the ask, so a take after P2 saw the queue
+/// full always finds the ask, on one hart or across two.
+pub(super) struct ReceivedInFlight {
+    queued: AtomicUsize,
+    wanted: AtomicBool,
+}
+impl ReceivedInFlight {
+    pub(super) const fn new() -> Self {
+        Self {
+            queued: AtomicUsize::new(0),
+            wanted: AtomicBool::new(false),
+        }
+    }
+    /// P2 queued one unit.
+    pub(super) fn queue(&self) {
+        self.queued.fetch_add(1, Ordering::SeqCst);
+    }
+    /// The units P2 may still queue under `bound`.
+    pub(super) fn room(&self, bound: usize) -> usize {
+        bound.saturating_sub(self.queued.load(Ordering::SeqCst))
+    }
+    /// P2 waits for P1 to take a unit: P1's next take wakes it.
+    pub(super) fn want(&self) {
+        self.wanted.store(true, Ordering::SeqCst);
+    }
+    /// P1 took one unit: whether P2 waits for it. A take of a unit never
+    /// queued is refused and leaves the count as it was.
+    pub(super) fn take(&self) -> Result<bool, SettingFault> {
+        if self.queued.fetch_sub(1, Ordering::SeqCst) == 0 {
+            // The count wrapped below zero for one step; P2 read no room.
+            self.queued.fetch_add(1, Ordering::SeqCst);
+            return Err(SettingFault::ReceivedUnqueued);
+        }
+        Ok(self.wanted.swap(false, Ordering::SeqCst))
+    }
+    /// A new installation queued nothing yet.
+    pub(super) fn reset(&self) {
+        self.queued.store(0, Ordering::SeqCst);
+        self.wanted.store(false, Ordering::SeqCst);
+    }
+}
+
+#[cfg(oer_debug_control)]
 pub(super) struct Byte(AtomicU8);
+#[cfg(oer_debug_control)]
 impl Byte {
     pub(super) const fn new() -> Self {
         Self(AtomicU8::new(0))
@@ -42,7 +88,7 @@ impl Byte {
 /// Why a published setting cannot be stored or used.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingFault {
-    /// The channel is not a 2.4 GHz HT20 channel, the only kind S31 tunes.
+    /// The channel is not a 2.4 GHz channel, the only band S31 tunes.
     UnsupportedChannel,
     /// No channel was published yet, or its byte names none.
     ChannelUnset,
@@ -50,29 +96,46 @@ pub enum SettingFault {
     EdcaLifetime,
     /// A published Block Ack record holds no sequence number.
     BlockAckSequence,
+    /// P1 took a received unit P2 never queued.
+    ReceivedUnqueued,
 }
 
-/// One 2.4 GHz HT20 channel number; zero until the first publication.
-pub(super) struct ChannelSetting(Byte);
+/// One 2.4 GHz channel, 20 or 40 MHz wide: its number and its width in
+/// one word, so P2 never reads one without the other; zero until the first
+/// publication.
+pub(super) struct ChannelSetting(AtomicU16);
 impl ChannelSetting {
     const fn new() -> Self {
-        Self(Byte::new())
+        Self(AtomicU16::new(0))
     }
-    /// Store a 2.4 GHz HT20 channel; any other is refused unchanged.
+    /// Store a 2.4 GHz channel; any other is refused unchanged.
     pub(super) fn set(&self, channel: Channel) -> Result<(), SettingFault> {
-        if channel.band() != Band::Ghz2_4 || channel.width() != ChannelWidth::Mhz20 {
+        if channel.band() != Band::Ghz2_4 {
             return Err(SettingFault::UnsupportedChannel);
         }
-        self.0.set(channel.number());
+        let width = match channel.width() {
+            ChannelWidth::Mhz20 => 0,
+            ChannelWidth::Mhz40Above => 1,
+            ChannelWidth::Mhz40Below => 2,
+        };
+        self.0.store(
+            u16::from_le_bytes([channel.number(), width]),
+            Ordering::SeqCst,
+        );
         Ok(())
     }
     /// The last stored channel.
     pub(super) fn get(&self) -> Result<Channel, SettingFault> {
-        match self.0.get() {
+        let [number, width] = self.0.load(Ordering::SeqCst).to_le_bytes();
+        let width = match width {
+            0 => ChannelWidth::Mhz20,
+            1 => ChannelWidth::Mhz40Above,
+            2 => ChannelWidth::Mhz40Below,
+            _ => return Err(SettingFault::ChannelUnset),
+        };
+        match number {
             0 => Err(SettingFault::ChannelUnset),
-            number => {
-                Channel::ghz2_4(number, ChannelWidth::Mhz20).map_err(|_| SettingFault::ChannelUnset)
-            }
+            number => Channel::ghz2_4(number, width).map_err(|_| SettingFault::ChannelUnset),
         }
     }
 }
@@ -329,9 +392,43 @@ mod tests {
         let six = Channel::ghz2_4(6, ChannelWidth::Mhz20).expect("channel 6");
         assert_eq!(setting.set(six), Ok(()));
         // A refused channel leaves the stored one unchanged.
-        let wide = Channel::ghz2_4(6, ChannelWidth::Mhz40Above).expect("HT40 channel 6");
-        assert_eq!(setting.set(wide), Err(SettingFault::UnsupportedChannel));
+        let five_ghz = Channel::ghz5(36, ChannelWidth::Mhz20).expect("channel 36");
+        assert_eq!(setting.set(five_ghz), Err(SettingFault::UnsupportedChannel));
         assert_eq!(setting.get(), Ok(six));
+    }
+
+    #[test]
+    fn a_take_reports_a_waiting_driver_once_and_refuses_a_unit_never_queued() {
+        let received = ReceivedInFlight::new();
+        assert_eq!(received.take(), Err(SettingFault::ReceivedUnqueued));
+        assert_eq!(received.room(8), 8);
+        for _ in 0..8 {
+            received.queue();
+        }
+        assert_eq!(received.room(8), 0);
+        assert_eq!(received.take(), Ok(false));
+        received.want();
+        assert_eq!(received.take(), Ok(true));
+        assert_eq!(received.take(), Ok(false));
+        assert_eq!(received.room(8), 3);
+        received.reset();
+        assert_eq!(received.room(8), 8);
+        assert_eq!(received.take(), Err(SettingFault::ReceivedUnqueued));
+        assert_eq!(received.room(8), 8);
+    }
+
+    #[test]
+    fn the_channel_setting_keeps_a_40_mhz_channel_with_its_secondary() {
+        let setting = ChannelSetting::new();
+        for (number, width) in [
+            (13, ChannelWidth::Mhz40Below),
+            (6, ChannelWidth::Mhz40Above),
+            (1, ChannelWidth::Mhz20),
+        ] {
+            let channel = Channel::ghz2_4(number, width).expect("2.4 GHz channel");
+            assert_eq!(setting.set(channel), Ok(()));
+            assert_eq!(setting.get(), Ok(channel));
+        }
     }
 
     #[test]

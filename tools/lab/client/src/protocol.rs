@@ -386,19 +386,31 @@ pub struct HolderStatus {
     pub operations: usize,
 }
 
+/// The width of the station profile's channel.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RouterChannelWidth {
+    /// HT 20 MHz.
+    Ht20,
+    /// HT 40 MHz, the secondary channel below the primary on channels 5 to
+    /// 13 and above it on 1 to 4.
+    Ht40,
+}
+
 /// One operation on the lab router.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RouterOperation {
     /// Apply the WPA2 station profile with `ssid` and `passphrase` on
-    /// `channel`, one the stand file's `[router]` allows, to the stand's AP;
-    /// its isolated network forwards UDP between its stations and
-    /// `forward_host` when given (a run's load generator on the host).
-    /// Result: the applied profile's description.
+    /// `channel`, one the stand file's `[router]` allows, `width` wide, to
+    /// the stand's AP; its isolated network forwards UDP between its
+    /// stations and `forward_host` when given (a run's load generator on
+    /// the host). Result: the applied profile's description.
     ApplyStationProfile {
         ssid: String,
         passphrase: String,
         channel: u8,
+        width: RouterChannelWidth,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         forward_host: Option<Ipv4Addr>,
     },
