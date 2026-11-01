@@ -63,3 +63,19 @@ fn a_station_profile_without_a_width_is_twenty_megahertz() {
         }
     ));
 }
+
+#[test]
+fn a_station_link_names_its_station() {
+    let operation = RouterOperation::StationLink {
+        mac: "02:00:00:00:00:01".to_owned(),
+    };
+    let text = serde_json::to_string(&operation).unwrap();
+    assert_eq!(
+        text,
+        r#"{"router":"station-link","mac":"02:00:00:00:00:01"}"#
+    );
+    assert_eq!(
+        serde_json::from_str::<RouterOperation>(&text).unwrap(),
+        operation
+    );
+}

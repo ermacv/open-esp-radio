@@ -1,0 +1,44 @@
+[station]
+	inactive time:	10 ms
+	rx bytes:	9214632
+	rx packets:	6603
+	tx bytes:	41023987
+	tx packets:	27931
+	tx retries:	1204
+	tx failed:	3
+	rx drop misc:	17
+	signal:  	-38 [-40, -42] dBm
+	signal avg:	-39 [-41, -43] dBm
+	tx duration:	2011483 us
+	rx bitrate:	65.0 MBit/s MCS 7
+	rx duration:	801233 us
+	airtime weight: 256
+	tx bitrate:	150.0 MBit/s MCS 7 40MHz short GI
+	expected throughput:	89.843Mbps
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	short
+	WMM/WME:	yes
+	MFP:		no
+	TDLS peer:	no
+	DTIM period:	2
+	beacon interval:100
+	short preamble:	yes
+	short slot time:yes
+	connected time:	42 seconds
+	associated at [boottime]:	1934.180s
+	associated at:	1793612345120 ms
+	current time:	1793612387130 ms
+[channel]
+	channel 13 (2472 MHz), width: 40 MHz, center1: 2462 MHz
+[survey]
+	frequency:			2472 MHz [in use]
+	noise:				-91 dBm
+	channel active time:		1931882 ms
+	channel busy time:		95312 ms
+	channel receive time:		40121 ms
+	channel BSS receive time:		1311 ms
+	channel transmit time:		21843 ms
+[aqm]
+tid0 drops: 4
