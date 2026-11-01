@@ -1,0 +1,92 @@
+schema = 1
+
+[layout]
+name = "AXI_DMA_DESCRIPTOR"
+description = """
+The 16-byte node an AXI-DMA channel follows: the control word, the buffer
+address and the link to the next node of a chain, aligned to 8 bytes."""
+size = 16
+align = 8
+
+[layout.review]
+sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[layout.words]]
+name = "CONTROL"
+offset = 0x00
+access = "shared"
+
+[[layout.words.fields]]
+name = "OWNER"
+bits = "31"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "transfer", writer = "hardware" }]
+description = "Set by software to hand the descriptor to the DMA; the DMA clears it when it is done with the buffer."
+
+[[layout.words.fields]]
+name = "SUC_EOF"
+bits = "30"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "transfer", writer = "hardware" }]
+description = "Set on the last descriptor of a chain; the IN channel sets it on the descriptor that ends a received frame."
+
+[[layout.words.fields]]
+name = "ERR_EOF"
+bits = "28"
+writer = "hardware"
+description = "Set by an IN channel when the received data contains an error."
+
+[[layout.words.fields]]
+name = "LENGTH"
+bits = "23:12"
+writer = "phased"
+phases = [{ name = "arm", writer = "cpu" }, { name = "transfer", writer = "hardware" }]
+description = "The valid bytes of the buffer: written by software for OUT, by the DMA for IN."
+
+[[layout.words.fields]]
+name = "SIZE"
+bits = "11:0"
+writer = "cpu"
+description = "The buffer's capacity in bytes."
+
+[[layout.words]]
+name = "BUFFER"
+offset = 0x04
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "The buffer's address."
+placement = ["dma-window"]
+
+[[layout.words]]
+name = "NEXT"
+offset = 0x08
+access = "shared"
+
+[[layout.words.fields]]
+name = "ADDRESS"
+bits = "31:0"
+writer = "cpu"
+description = "The next descriptor's address, or zero at the end."
+points-to = "AXI_DMA_DESCRIPTOR"
+
+[[layout.words]]
+fields = []
+name = "PADDING"
+offset = 0x0c
+access = "shared"
+description = "The padding to the 8-byte alignment of the next descriptor; no engine reads it."
+
+[[review]]
+entity = "AXI_DMA_DESCRIPTOR"
+sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "complete"

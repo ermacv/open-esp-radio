@@ -1257,6 +1257,16 @@ pub mod instances {
         pub const CACHE: super::super::Interrupt = super::super::Interrupt::CACHE;
     }
 
+    /// The `AXI_DMA` instance of [`AXI_DMA`](super::axi_dma).
+    ///
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA.
+    pub mod axi_dma {
+        /// The instance's base address.
+        pub const BASE: usize = 0x20348000;
+        /// The bytes of the instance's window.
+        pub const SIZE: usize = 0x2e0;
+    }
+
     /// The `AES` instance of [`AES`](super::aes).
     ///
     /// SOURCE: ESP_IDF_4D80C1B2_S31_AES.
@@ -2649,7 +2659,7 @@ pub mod aes {
 
     /// The `AesProgram` part of `AES`.
     ///
-    /// SOURCE: ESP_IDF_4D80C1B2_S31_AES, TRM_S31_V01_AES.
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AES, TRM_S31_V01_AES, ESP_IDF_4D80C1B2_S31_AES_DMA.
     #[must_use = "dropping a register owner permanently loses its register authority"]
     pub struct AesProgram<P: oer_mmio::Placement = oer_mmio::Fixed<0x20508000>>(
         oer_mmio::Block<P, AesProgramWords>,
@@ -2662,14 +2672,16 @@ pub mod aes {
         type Sharing = oer_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
-            0x3c, 0x40, 0x48, 0x4c, 0x90, 0xb0, 0xd0, 0xd4,
+            0x3c, 0x40, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x90, 0x94, 0x98, 0x9c, 0xb0, 0xb8,
+            0xd0, 0xd4,
         ];
     }
 
     impl oer_mmio::Words for AesProgramWords {
         const OWNED: &'static [usize] = &[
             0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38,
-            0x3c, 0x40, 0x48, 0x4c, 0x90, 0xb0, 0xd0, 0xd4,
+            0x3c, 0x40, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x90, 0x94, 0x98, 0x9c, 0xb0, 0xb8,
+            0xd0, 0xd4,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -2761,6 +2773,21 @@ pub mod aes {
             state::R(self.0.read::<0x4c>())
         }
 
+        /// Read `IV%s`.
+        #[inline]
+        pub fn read_iv(&self, index: oer_mmio::Index<4>) -> iv::R {
+            iv::R(self.0.read_indexed::<0x50, 0x4, 4>(index))
+        }
+
+        /// Read `IV%s`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_iv(&mut self, index: oer_mmio::Index<4>, change: impl FnOnce(&mut iv::W)) {
+            let mut value = iv::W(self.0.read_indexed::<0x50, 0x4, 4>(index));
+            change(&mut value);
+            self.0.write_indexed::<0x50, 0x4, 4>(index, value.0);
+        }
+
         /// Read `DMA_ENABLE`.
         #[inline]
         pub fn read_dma_enable(&self) -> dma_enable::R {
@@ -2776,6 +2803,51 @@ pub mod aes {
             self.0.write::<0x90>(value.0);
         }
 
+        /// Read `BLOCK_MODE`.
+        #[inline]
+        pub fn read_block_mode(&self) -> block_mode::R {
+            block_mode::R(self.0.read::<0x94>())
+        }
+
+        /// Read `BLOCK_MODE`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_block_mode(&mut self, change: impl FnOnce(&mut block_mode::W)) {
+            let mut value = block_mode::W(self.0.read::<0x94>());
+            change(&mut value);
+            self.0.write::<0x94>(value.0);
+        }
+
+        /// Read `BLOCK_NUM`.
+        #[inline]
+        pub fn read_block_num(&self) -> block_num::R {
+            block_num::R(self.0.read::<0x98>())
+        }
+
+        /// Read `BLOCK_NUM`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_block_num(&mut self, change: impl FnOnce(&mut block_num::W)) {
+            let mut value = block_num::W(self.0.read::<0x98>());
+            change(&mut value);
+            self.0.write::<0x98>(value.0);
+        }
+
+        /// Read `INC_SEL`.
+        #[inline]
+        pub fn read_inc_sel(&self) -> inc_sel::R {
+            inc_sel::R(self.0.read::<0x9c>())
+        }
+
+        /// Read `INC_SEL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_inc_sel(&mut self, change: impl FnOnce(&mut inc_sel::W)) {
+            let mut value = inc_sel::W(self.0.read::<0x9c>());
+            change(&mut value);
+            self.0.write::<0x9c>(value.0);
+        }
+
         /// Read `INT_ENA`.
         #[inline]
         pub fn read_int_ena(&self) -> int_ena::R {
@@ -2789,6 +2861,13 @@ pub mod aes {
             let mut value = int_ena::W(self.0.read::<0xb0>());
             change(&mut value);
             self.0.write::<0xb0>(value.0);
+        }
+
+        /// Write to the write-trigger field `DMA_EXIT` of `DMA_EXIT`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_dma_exit_dma_exit(&mut self) {
+            self.0.write::<0xb8>(0x00000001);
         }
 
         /// Read `PSEUDO`.
@@ -2873,6 +2952,2877 @@ pub mod aes {
         #[inline]
         pub fn trigger_int_clear_int_clear(&mut self) {
             self.0.write::<0xac>(0x00000001);
+        }
+    }
+}
+
+/// The `AXI_DMA` block type.
+///
+/// The AXI general-purpose DMA controller: channel 0's IN (peripheral to memory) and OUT (memory to peripheral) halves and the controller's memory ranges and clock.
+pub mod axi_dma {
+    /// The `IN_INT_RAW_CH0` register.
+    pub mod in_int_raw_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x0;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffff800;
+
+        /// Width of `IN_DONE_CH0_INT_RAW` in bits.
+        pub const IN_DONE_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_DONE_CH0_INT_RAW`.
+        pub const IN_DONE_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_DONE_CH0_INT_RAW`.
+        pub const IN_DONE_CH0_INT_RAW_MASK: u32 = 0x1;
+
+        /// Width of `IN_SUC_EOF_CH0_INT_RAW` in bits.
+        pub const IN_SUC_EOF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_SUC_EOF_CH0_INT_RAW`.
+        pub const IN_SUC_EOF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_SUC_EOF_CH0_INT_RAW`.
+        pub const IN_SUC_EOF_CH0_INT_RAW_MASK: u32 = 0x2;
+
+        /// Width of `IN_ERR_EOF_CH0_INT_RAW` in bits.
+        pub const IN_ERR_EOF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_ERR_EOF_CH0_INT_RAW`.
+        pub const IN_ERR_EOF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_ERR_EOF_CH0_INT_RAW`.
+        pub const IN_ERR_EOF_CH0_INT_RAW_MASK: u32 = 0x4;
+
+        /// Width of `IN_DSCR_ERR_CH0_INT_RAW` in bits.
+        pub const IN_DSCR_ERR_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_DSCR_ERR_CH0_INT_RAW`.
+        pub const IN_DSCR_ERR_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_DSCR_ERR_CH0_INT_RAW`.
+        pub const IN_DSCR_ERR_CH0_INT_RAW_MASK: u32 = 0x8;
+
+        /// Width of `IN_DSCR_EMPTY_CH0_INT_RAW` in bits.
+        pub const IN_DSCR_EMPTY_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_DSCR_EMPTY_CH0_INT_RAW`.
+        pub const IN_DSCR_EMPTY_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_DSCR_EMPTY_CH0_INT_RAW`.
+        pub const IN_DSCR_EMPTY_CH0_INT_RAW_MASK: u32 = 0x10;
+
+        /// Width of `INFIFO_L1_OVF_CH0_INT_RAW` in bits.
+        pub const INFIFO_L1_OVF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L1_OVF_CH0_INT_RAW`.
+        pub const INFIFO_L1_OVF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L1_OVF_CH0_INT_RAW`.
+        pub const INFIFO_L1_OVF_CH0_INT_RAW_MASK: u32 = 0x20;
+
+        /// Width of `INFIFO_L1_UDF_CH0_INT_RAW` in bits.
+        pub const INFIFO_L1_UDF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L1_UDF_CH0_INT_RAW`.
+        pub const INFIFO_L1_UDF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L1_UDF_CH0_INT_RAW`.
+        pub const INFIFO_L1_UDF_CH0_INT_RAW_MASK: u32 = 0x40;
+
+        /// Width of `INFIFO_L2_OVF_CH0_INT_RAW` in bits.
+        pub const INFIFO_L2_OVF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L2_OVF_CH0_INT_RAW`.
+        pub const INFIFO_L2_OVF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L2_OVF_CH0_INT_RAW`.
+        pub const INFIFO_L2_OVF_CH0_INT_RAW_MASK: u32 = 0x80;
+
+        /// Width of `INFIFO_L2_UDF_CH0_INT_RAW` in bits.
+        pub const INFIFO_L2_UDF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L2_UDF_CH0_INT_RAW`.
+        pub const INFIFO_L2_UDF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L2_UDF_CH0_INT_RAW`.
+        pub const INFIFO_L2_UDF_CH0_INT_RAW_MASK: u32 = 0x100;
+
+        /// Width of `INFIFO_L3_OVF_CH0_INT_RAW` in bits.
+        pub const INFIFO_L3_OVF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L3_OVF_CH0_INT_RAW`.
+        pub const INFIFO_L3_OVF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L3_OVF_CH0_INT_RAW`.
+        pub const INFIFO_L3_OVF_CH0_INT_RAW_MASK: u32 = 0x200;
+
+        /// Width of `INFIFO_L3_UDF_CH0_INT_RAW` in bits.
+        pub const INFIFO_L3_UDF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L3_UDF_CH0_INT_RAW`.
+        pub const INFIFO_L3_UDF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L3_UDF_CH0_INT_RAW`.
+        pub const INFIFO_L3_UDF_CH0_INT_RAW_MASK: u32 = 0x400;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `IN_DONE_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_done_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `IN_SUC_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_suc_eof_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `IN_ERR_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_err_eof_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `IN_DSCR_ERR_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_dscr_err_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `IN_DSCR_EMPTY_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_dscr_empty_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The `INFIFO_L1_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l1_ovf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// The `INFIFO_L1_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l1_udf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// The `INFIFO_L2_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l2_ovf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The `INFIFO_L2_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l2_udf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The `INFIFO_L3_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l3_ovf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// The `INFIFO_L3_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l3_udf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+        }
+
+        /// One sample of the register's asserted fields, to acknowledge once.
+        #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+        #[derive(Debug, Eq, PartialEq)]
+        pub struct Snapshot(pub(super) u32);
+
+        impl Snapshot {
+            /// Whether no declared field was asserted.
+            pub const fn is_clear(&self) -> bool {
+                self.0 == 0
+            }
+
+            /// The `IN_DONE_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_done_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The snapshot without `IN_DONE_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_in_done_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffe)
+                }
+            }
+
+            /// The `IN_SUC_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_suc_eof_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The snapshot without `IN_SUC_EOF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_in_suc_eof_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffd)
+                }
+            }
+
+            /// The `IN_ERR_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_err_eof_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The snapshot without `IN_ERR_EOF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_in_err_eof_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffb)
+                }
+            }
+
+            /// The `IN_DSCR_ERR_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_dscr_err_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The snapshot without `IN_DSCR_ERR_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_in_dscr_err_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffff7)
+                }
+            }
+
+            /// The `IN_DSCR_EMPTY_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn in_dscr_empty_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The snapshot without `IN_DSCR_EMPTY_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_in_dscr_empty_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffffef)
+                }
+            }
+
+            /// The `INFIFO_L1_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l1_ovf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// The snapshot without `INFIFO_L1_OVF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_infifo_l1_ovf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffffdf)
+                }
+            }
+
+            /// The `INFIFO_L1_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l1_udf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// The snapshot without `INFIFO_L1_UDF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_infifo_l1_udf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffffbf)
+                }
+            }
+
+            /// The `INFIFO_L2_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l2_ovf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The snapshot without `INFIFO_L2_OVF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_infifo_l2_ovf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffff7f)
+                }
+            }
+
+            /// The `INFIFO_L2_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l2_udf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The snapshot without `INFIFO_L2_UDF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_infifo_l2_udf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffeff)
+                }
+            }
+
+            /// The `INFIFO_L3_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l3_ovf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// The snapshot without `INFIFO_L3_OVF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_infifo_l3_ovf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffdff)
+                }
+            }
+
+            /// The `INFIFO_L3_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn infifo_l3_udf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// The snapshot without `INFIFO_L3_UDF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_infifo_l3_udf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffbff)
+                }
+            }
+        }
+    }
+
+    /// The `IN_INT_CLR_CH0` register.
+    pub mod in_int_clr_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0xc;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffff800;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x000007ff;
+
+        /// Width of `IN_DONE_CH0_INT_CLR` in bits.
+        pub const IN_DONE_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_DONE_CH0_INT_CLR`.
+        pub const IN_DONE_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_DONE_CH0_INT_CLR`.
+        pub const IN_DONE_CH0_INT_CLR_MASK: u32 = 0x1;
+
+        /// Width of `IN_SUC_EOF_CH0_INT_CLR` in bits.
+        pub const IN_SUC_EOF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_SUC_EOF_CH0_INT_CLR`.
+        pub const IN_SUC_EOF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_SUC_EOF_CH0_INT_CLR`.
+        pub const IN_SUC_EOF_CH0_INT_CLR_MASK: u32 = 0x2;
+
+        /// Width of `IN_ERR_EOF_CH0_INT_CLR` in bits.
+        pub const IN_ERR_EOF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_ERR_EOF_CH0_INT_CLR`.
+        pub const IN_ERR_EOF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_ERR_EOF_CH0_INT_CLR`.
+        pub const IN_ERR_EOF_CH0_INT_CLR_MASK: u32 = 0x4;
+
+        /// Width of `IN_DSCR_ERR_CH0_INT_CLR` in bits.
+        pub const IN_DSCR_ERR_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_DSCR_ERR_CH0_INT_CLR`.
+        pub const IN_DSCR_ERR_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_DSCR_ERR_CH0_INT_CLR`.
+        pub const IN_DSCR_ERR_CH0_INT_CLR_MASK: u32 = 0x8;
+
+        /// Width of `IN_DSCR_EMPTY_CH0_INT_CLR` in bits.
+        pub const IN_DSCR_EMPTY_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_DSCR_EMPTY_CH0_INT_CLR`.
+        pub const IN_DSCR_EMPTY_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_DSCR_EMPTY_CH0_INT_CLR`.
+        pub const IN_DSCR_EMPTY_CH0_INT_CLR_MASK: u32 = 0x10;
+
+        /// Width of `INFIFO_L1_OVF_CH0_INT_CLR` in bits.
+        pub const INFIFO_L1_OVF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L1_OVF_CH0_INT_CLR`.
+        pub const INFIFO_L1_OVF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L1_OVF_CH0_INT_CLR`.
+        pub const INFIFO_L1_OVF_CH0_INT_CLR_MASK: u32 = 0x20;
+
+        /// Width of `INFIFO_L1_UDF_CH0_INT_CLR` in bits.
+        pub const INFIFO_L1_UDF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L1_UDF_CH0_INT_CLR`.
+        pub const INFIFO_L1_UDF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L1_UDF_CH0_INT_CLR`.
+        pub const INFIFO_L1_UDF_CH0_INT_CLR_MASK: u32 = 0x40;
+
+        /// Width of `INFIFO_L2_OVF_CH0_INT_CLR` in bits.
+        pub const INFIFO_L2_OVF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L2_OVF_CH0_INT_CLR`.
+        pub const INFIFO_L2_OVF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L2_OVF_CH0_INT_CLR`.
+        pub const INFIFO_L2_OVF_CH0_INT_CLR_MASK: u32 = 0x80;
+
+        /// Width of `INFIFO_L2_UDF_CH0_INT_CLR` in bits.
+        pub const INFIFO_L2_UDF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L2_UDF_CH0_INT_CLR`.
+        pub const INFIFO_L2_UDF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L2_UDF_CH0_INT_CLR`.
+        pub const INFIFO_L2_UDF_CH0_INT_CLR_MASK: u32 = 0x100;
+
+        /// Width of `INFIFO_L3_OVF_CH0_INT_CLR` in bits.
+        pub const INFIFO_L3_OVF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L3_OVF_CH0_INT_CLR`.
+        pub const INFIFO_L3_OVF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L3_OVF_CH0_INT_CLR`.
+        pub const INFIFO_L3_OVF_CH0_INT_CLR_MASK: u32 = 0x200;
+
+        /// Width of `INFIFO_L3_UDF_CH0_INT_CLR` in bits.
+        pub const INFIFO_L3_UDF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INFIFO_L3_UDF_CH0_INT_CLR`.
+        pub const INFIFO_L3_UDF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `INFIFO_L3_UDF_CH0_INT_CLR`.
+        pub const INFIFO_L3_UDF_CH0_INT_CLR_MASK: u32 = 0x400;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `IN_DONE_CH0_INT_CLR`.
+            #[inline]
+            pub fn in_done_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `IN_SUC_EOF_CH0_INT_CLR`.
+            #[inline]
+            pub fn in_suc_eof_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `IN_ERR_EOF_CH0_INT_CLR`.
+            #[inline]
+            pub fn in_err_eof_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `IN_DSCR_ERR_CH0_INT_CLR`.
+            #[inline]
+            pub fn in_dscr_err_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `IN_DSCR_EMPTY_CH0_INT_CLR`.
+            #[inline]
+            pub fn in_dscr_empty_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `INFIFO_L1_OVF_CH0_INT_CLR`.
+            #[inline]
+            pub fn infifo_l1_ovf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `INFIFO_L1_UDF_CH0_INT_CLR`.
+            #[inline]
+            pub fn infifo_l1_udf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `INFIFO_L2_OVF_CH0_INT_CLR`.
+            #[inline]
+            pub fn infifo_l2_ovf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `INFIFO_L2_UDF_CH0_INT_CLR`.
+            #[inline]
+            pub fn infifo_l2_udf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `INFIFO_L3_OVF_CH0_INT_CLR`.
+            #[inline]
+            pub fn infifo_l3_ovf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `INFIFO_L3_UDF_CH0_INT_CLR`.
+            #[inline]
+            pub fn infifo_l3_udf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+        }
+    }
+
+    /// The `IN_CONF0_CH0` register.
+    pub mod in_conf0_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000003ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x10;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffc00;
+
+        /// Width of `IN_RST_CH0` in bits.
+        pub const IN_RST_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_RST_CH0`.
+        pub const IN_RST_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_RST_CH0`.
+        pub const IN_RST_CH0_MASK: u32 = 0x1;
+
+        /// Width of `IN_LOOP_TEST_CH0` in bits.
+        pub const IN_LOOP_TEST_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_LOOP_TEST_CH0`.
+        pub const IN_LOOP_TEST_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_LOOP_TEST_CH0`.
+        pub const IN_LOOP_TEST_CH0_MASK: u32 = 0x2;
+
+        /// Width of `MEM_TRANS_EN_CH0` in bits.
+        pub const MEM_TRANS_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `MEM_TRANS_EN_CH0`.
+        pub const MEM_TRANS_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `MEM_TRANS_EN_CH0`.
+        pub const MEM_TRANS_EN_CH0_MASK: u32 = 0x4;
+
+        /// Width of `IN_ETM_EN_CH0` in bits.
+        pub const IN_ETM_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_ETM_EN_CH0`.
+        pub const IN_ETM_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_ETM_EN_CH0`.
+        pub const IN_ETM_EN_CH0_MASK: u32 = 0x8;
+
+        /// Width of `IN_BURST_SIZE_SEL_CH0` in bits.
+        pub const IN_BURST_SIZE_SEL_CH0_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `IN_BURST_SIZE_SEL_CH0`.
+        pub const IN_BURST_SIZE_SEL_CH0_MAX: u32 = 0x7;
+        /// Positioned bits of `IN_BURST_SIZE_SEL_CH0`.
+        pub const IN_BURST_SIZE_SEL_CH0_MASK: u32 = 0x70;
+
+        /// Width of `IN_CMD_DISABLE_CH0` in bits.
+        pub const IN_CMD_DISABLE_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_CMD_DISABLE_CH0`.
+        pub const IN_CMD_DISABLE_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_CMD_DISABLE_CH0`.
+        pub const IN_CMD_DISABLE_CH0_MASK: u32 = 0x80;
+
+        /// Width of `IN_ECC_AEC_EN_CH0` in bits.
+        pub const IN_ECC_AEC_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `IN_ECC_AEC_EN_CH0`.
+        pub const IN_ECC_AEC_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `IN_ECC_AEC_EN_CH0`.
+        pub const IN_ECC_AEC_EN_CH0_MASK: u32 = 0x100;
+
+        /// Width of `INDSCR_BURST_EN_CH0` in bits.
+        pub const INDSCR_BURST_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INDSCR_BURST_EN_CH0`.
+        pub const INDSCR_BURST_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `INDSCR_BURST_EN_CH0`.
+        pub const INDSCR_BURST_EN_CH0_MASK: u32 = 0x200;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `IN_RST_CH0` field.
+            #[inline]
+            pub const fn in_rst_ch0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `IN_LOOP_TEST_CH0` field.
+            #[inline]
+            pub const fn in_loop_test_ch0(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `MEM_TRANS_EN_CH0` field.
+            #[inline]
+            pub const fn mem_trans_en_ch0(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `IN_ETM_EN_CH0` field.
+            #[inline]
+            pub const fn in_etm_en_ch0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `IN_BURST_SIZE_SEL_CH0` field.
+            #[inline]
+            pub const fn in_burst_size_sel_ch0(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// The `IN_CMD_DISABLE_CH0` field.
+            #[inline]
+            pub const fn in_cmd_disable_ch0(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The `IN_ECC_AEC_EN_CH0` field.
+            #[inline]
+            pub const fn in_ecc_aec_en_ch0(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The `INDSCR_BURST_EN_CH0` field.
+            #[inline]
+            pub const fn indscr_burst_en_ch0(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `IN_RST_CH0` field.
+            #[inline]
+            pub const fn in_rst_ch0(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `IN_LOOP_TEST_CH0` field.
+            #[inline]
+            pub const fn in_loop_test_ch0(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `MEM_TRANS_EN_CH0` field.
+            #[inline]
+            pub const fn mem_trans_en_ch0(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `IN_ETM_EN_CH0` field.
+            #[inline]
+            pub const fn in_etm_en_ch0(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `IN_BURST_SIZE_SEL_CH0` field.
+            #[inline]
+            pub const fn in_burst_size_sel_ch0(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// The `IN_CMD_DISABLE_CH0` field.
+            #[inline]
+            pub const fn in_cmd_disable_ch0(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The `IN_ECC_AEC_EN_CH0` field.
+            #[inline]
+            pub const fn in_ecc_aec_en_ch0(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The `INDSCR_BURST_EN_CH0` field.
+            #[inline]
+            pub const fn indscr_burst_en_ch0(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// Set `IN_RST_CH0`.
+            #[inline]
+            pub fn set_in_rst_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `IN_LOOP_TEST_CH0`.
+            #[inline]
+            pub fn set_in_loop_test_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `MEM_TRANS_EN_CH0`.
+            #[inline]
+            pub fn set_mem_trans_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `IN_ETM_EN_CH0`.
+            #[inline]
+            pub fn set_in_etm_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `IN_BURST_SIZE_SEL_CH0`.
+            #[inline]
+            pub fn set_in_burst_size_sel_ch0(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xffffff8f) | (value.get() << 4);
+                self
+            }
+
+            /// Set `IN_CMD_DISABLE_CH0`.
+            #[inline]
+            pub fn set_in_cmd_disable_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffff7f) | (u32::from(value) << 7);
+                self
+            }
+
+            /// Set `IN_ECC_AEC_EN_CH0`.
+            #[inline]
+            pub fn set_in_ecc_aec_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffeff) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `INDSCR_BURST_EN_CH0`.
+            #[inline]
+            pub fn set_indscr_burst_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+                self
+            }
+        }
+    }
+
+    /// The `IN_LINK1_CH0` register.
+    pub mod in_link1_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000001f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x20;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffe0;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x0000000e;
+
+        /// Width of `INLINK_AUTO_RET_CH0` in bits.
+        pub const INLINK_AUTO_RET_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INLINK_AUTO_RET_CH0`.
+        pub const INLINK_AUTO_RET_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `INLINK_AUTO_RET_CH0`.
+        pub const INLINK_AUTO_RET_CH0_MASK: u32 = 0x1;
+
+        /// Width of `INLINK_STOP_CH0` in bits.
+        pub const INLINK_STOP_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INLINK_STOP_CH0`.
+        pub const INLINK_STOP_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `INLINK_STOP_CH0`.
+        pub const INLINK_STOP_CH0_MASK: u32 = 0x2;
+
+        /// Width of `INLINK_START_CH0` in bits.
+        pub const INLINK_START_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INLINK_START_CH0`.
+        pub const INLINK_START_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `INLINK_START_CH0`.
+        pub const INLINK_START_CH0_MASK: u32 = 0x4;
+
+        /// Width of `INLINK_RESTART_CH0` in bits.
+        pub const INLINK_RESTART_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INLINK_RESTART_CH0`.
+        pub const INLINK_RESTART_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `INLINK_RESTART_CH0`.
+        pub const INLINK_RESTART_CH0_MASK: u32 = 0x8;
+
+        /// Width of `INLINK_PARK_CH0` in bits.
+        pub const INLINK_PARK_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `INLINK_PARK_CH0`.
+        pub const INLINK_PARK_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `INLINK_PARK_CH0`.
+        pub const INLINK_PARK_CH0_MASK: u32 = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `INLINK_AUTO_RET_CH0` field.
+            #[inline]
+            pub const fn inlink_auto_ret_ch0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `INLINK_PARK_CH0` field.
+            #[inline]
+            pub const fn inlink_park_ch0(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `INLINK_AUTO_RET_CH0` field.
+            #[inline]
+            pub const fn inlink_auto_ret_ch0(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `INLINK_PARK_CH0` field.
+            #[inline]
+            pub const fn inlink_park_ch0(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Set `INLINK_AUTO_RET_CH0`.
+            #[inline]
+            pub fn set_inlink_auto_ret_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+        }
+    }
+
+    /// The `IN_LINK2_CH0` register.
+    pub mod in_link2_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x24;
+
+        /// Width of `INLINK_ADDR_CH0` in bits.
+        pub const INLINK_ADDR_CH0_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `INLINK_ADDR_CH0`.
+        pub const INLINK_ADDR_CH0_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `INLINK_ADDR_CH0`.
+        pub const INLINK_ADDR_CH0_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `INLINK_ADDR_CH0` field.
+            #[inline]
+            pub const fn inlink_addr_ch0(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `INLINK_ADDR_CH0` field.
+            #[inline]
+            pub const fn inlink_addr_ch0(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `INLINK_ADDR_CH0`.
+            #[inline]
+            pub fn set_inlink_addr_ch0(
+                &mut self,
+                value: oer_memory::DmaRef<super::super::layouts::AxiDmaDescriptor>,
+            ) -> &mut Self {
+                self.0 = value.bits();
+                self
+            }
+
+            /// Set `INLINK_ADDR_CH0` to the zero image: no address.
+            #[inline]
+            pub fn clear_inlink_addr_ch0(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
+                self
+            }
+        }
+    }
+
+    /// The `IN_PERI_SEL_CH0` register.
+    pub mod in_peri_sel_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000003f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x44;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffc0;
+
+        /// Width of `PERI_IN_SEL_CH0` in bits.
+        pub const PERI_IN_SEL_CH0_WIDTH: u32 = 6;
+        /// Greatest unsigned image of `PERI_IN_SEL_CH0`.
+        pub const PERI_IN_SEL_CH0_MAX: u32 = 0x3f;
+        /// Positioned bits of `PERI_IN_SEL_CH0`.
+        pub const PERI_IN_SEL_CH0_MASK: u32 = 0x3f;
+
+        /// The declared values of the `PERI_IN_SEL_CH0` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum PeriInSelCh0 {
+            Aes = 0x4,
+            None = 0x3f,
+        }
+
+        impl PeriInSelCh0 {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x4 => Some(Self::Aes),
+                    0x3f => Some(Self::None),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `PERI_IN_SEL_CH0` field.
+            #[inline]
+            pub const fn peri_in_sel_ch0(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `PERI_IN_SEL_CH0` field as its declared value, if it is one.
+            #[inline]
+            pub const fn peri_in_sel_ch0_variant(self) -> Option<PeriInSelCh0> {
+                PeriInSelCh0::from_bits(self.0 & 0x3f)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `PERI_IN_SEL_CH0` field.
+            #[inline]
+            pub const fn peri_in_sel_ch0(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `PERI_IN_SEL_CH0` field as its declared value, if it is one.
+            #[inline]
+            pub const fn peri_in_sel_ch0_variant(&self) -> Option<PeriInSelCh0> {
+                PeriInSelCh0::from_bits(self.0 & 0x3f)
+            }
+
+            /// Set `PERI_IN_SEL_CH0`.
+            #[inline]
+            pub fn set_peri_in_sel_ch0(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc0) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `OUT_INT_RAW_CH0` register.
+    pub mod out_int_raw_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x138;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffff800;
+
+        /// Width of `OUT_DONE_CH0_INT_RAW` in bits.
+        pub const OUT_DONE_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_DONE_CH0_INT_RAW`.
+        pub const OUT_DONE_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_DONE_CH0_INT_RAW`.
+        pub const OUT_DONE_CH0_INT_RAW_MASK: u32 = 0x1;
+
+        /// Width of `OUT_EOF_CH0_INT_RAW` in bits.
+        pub const OUT_EOF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_EOF_CH0_INT_RAW`.
+        pub const OUT_EOF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_EOF_CH0_INT_RAW`.
+        pub const OUT_EOF_CH0_INT_RAW_MASK: u32 = 0x2;
+
+        /// Width of `OUT_DSCR_ERR_CH0_INT_RAW` in bits.
+        pub const OUT_DSCR_ERR_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_DSCR_ERR_CH0_INT_RAW`.
+        pub const OUT_DSCR_ERR_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_DSCR_ERR_CH0_INT_RAW`.
+        pub const OUT_DSCR_ERR_CH0_INT_RAW_MASK: u32 = 0x4;
+
+        /// Width of `OUT_TOTAL_EOF_CH0_INT_RAW` in bits.
+        pub const OUT_TOTAL_EOF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_TOTAL_EOF_CH0_INT_RAW`.
+        pub const OUT_TOTAL_EOF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_TOTAL_EOF_CH0_INT_RAW`.
+        pub const OUT_TOTAL_EOF_CH0_INT_RAW_MASK: u32 = 0x8;
+
+        /// Width of `OUTFIFO_L1_OVF_CH0_INT_RAW` in bits.
+        pub const OUTFIFO_L1_OVF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L1_OVF_CH0_INT_RAW`.
+        pub const OUTFIFO_L1_OVF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L1_OVF_CH0_INT_RAW`.
+        pub const OUTFIFO_L1_OVF_CH0_INT_RAW_MASK: u32 = 0x10;
+
+        /// Width of `OUTFIFO_L1_UDF_CH0_INT_RAW` in bits.
+        pub const OUTFIFO_L1_UDF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L1_UDF_CH0_INT_RAW`.
+        pub const OUTFIFO_L1_UDF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L1_UDF_CH0_INT_RAW`.
+        pub const OUTFIFO_L1_UDF_CH0_INT_RAW_MASK: u32 = 0x20;
+
+        /// Width of `OUTFIFO_L2_OVF_CH0_INT_RAW` in bits.
+        pub const OUTFIFO_L2_OVF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L2_OVF_CH0_INT_RAW`.
+        pub const OUTFIFO_L2_OVF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L2_OVF_CH0_INT_RAW`.
+        pub const OUTFIFO_L2_OVF_CH0_INT_RAW_MASK: u32 = 0x40;
+
+        /// Width of `OUTFIFO_L2_UDF_CH0_INT_RAW` in bits.
+        pub const OUTFIFO_L2_UDF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L2_UDF_CH0_INT_RAW`.
+        pub const OUTFIFO_L2_UDF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L2_UDF_CH0_INT_RAW`.
+        pub const OUTFIFO_L2_UDF_CH0_INT_RAW_MASK: u32 = 0x80;
+
+        /// Width of `OUTFIFO_L3_OVF_CH0_INT_RAW` in bits.
+        pub const OUTFIFO_L3_OVF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L3_OVF_CH0_INT_RAW`.
+        pub const OUTFIFO_L3_OVF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L3_OVF_CH0_INT_RAW`.
+        pub const OUTFIFO_L3_OVF_CH0_INT_RAW_MASK: u32 = 0x100;
+
+        /// Width of `OUTFIFO_L3_UDF_CH0_INT_RAW` in bits.
+        pub const OUTFIFO_L3_UDF_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L3_UDF_CH0_INT_RAW`.
+        pub const OUTFIFO_L3_UDF_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L3_UDF_CH0_INT_RAW`.
+        pub const OUTFIFO_L3_UDF_CH0_INT_RAW_MASK: u32 = 0x200;
+
+        /// Width of `OUT_LINK_SWITCH_CH0_INT_RAW` in bits.
+        pub const OUT_LINK_SWITCH_CH0_INT_RAW_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_LINK_SWITCH_CH0_INT_RAW`.
+        pub const OUT_LINK_SWITCH_CH0_INT_RAW_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_LINK_SWITCH_CH0_INT_RAW`.
+        pub const OUT_LINK_SWITCH_CH0_INT_RAW_MASK: u32 = 0x400;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `OUT_DONE_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_done_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `OUT_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_eof_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `OUT_DSCR_ERR_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_dscr_err_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `OUT_TOTAL_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_total_eof_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `OUTFIFO_L1_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l1_ovf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The `OUTFIFO_L1_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l1_udf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// The `OUTFIFO_L2_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l2_ovf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// The `OUTFIFO_L2_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l2_udf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The `OUTFIFO_L3_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l3_ovf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The `OUTFIFO_L3_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l3_udf_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// The `OUT_LINK_SWITCH_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_link_switch_ch0_int_raw(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+        }
+
+        /// One sample of the register's asserted fields, to acknowledge once.
+        #[must_use = "a sampled write-one-to-clear set must be acknowledged"]
+        #[derive(Debug, Eq, PartialEq)]
+        pub struct Snapshot(pub(super) u32);
+
+        impl Snapshot {
+            /// Whether no declared field was asserted.
+            pub const fn is_clear(&self) -> bool {
+                self.0 == 0
+            }
+
+            /// The `OUT_DONE_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_done_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The snapshot without `OUT_DONE_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_out_done_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffe)
+                }
+            }
+
+            /// The `OUT_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_eof_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The snapshot without `OUT_EOF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_out_eof_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffd)
+                }
+            }
+
+            /// The `OUT_DSCR_ERR_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_dscr_err_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The snapshot without `OUT_DSCR_ERR_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_out_dscr_err_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffffb)
+                }
+            }
+
+            /// The `OUT_TOTAL_EOF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_total_eof_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The snapshot without `OUT_TOTAL_EOF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_out_total_eof_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffff7)
+                }
+            }
+
+            /// The `OUTFIFO_L1_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l1_ovf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The snapshot without `OUTFIFO_L1_OVF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_outfifo_l1_ovf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffffef)
+                }
+            }
+
+            /// The `OUTFIFO_L1_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l1_udf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000020) != 0
+            }
+
+            /// The snapshot without `OUTFIFO_L1_UDF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_outfifo_l1_udf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffffdf)
+                }
+            }
+
+            /// The `OUTFIFO_L2_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l2_ovf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000040) != 0
+            }
+
+            /// The snapshot without `OUTFIFO_L2_OVF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_outfifo_l2_ovf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffffbf)
+                }
+            }
+
+            /// The `OUTFIFO_L2_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l2_udf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000080) != 0
+            }
+
+            /// The snapshot without `OUTFIFO_L2_UDF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_outfifo_l2_udf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xffffff7f)
+                }
+            }
+
+            /// The `OUTFIFO_L3_OVF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l3_ovf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The snapshot without `OUTFIFO_L3_OVF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_outfifo_l3_ovf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffeff)
+                }
+            }
+
+            /// The `OUTFIFO_L3_UDF_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn outfifo_l3_udf_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// The snapshot without `OUTFIFO_L3_UDF_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_outfifo_l3_udf_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffdff)
+                }
+            }
+
+            /// The `OUT_LINK_SWITCH_CH0_INT_RAW` field.
+            #[inline]
+            pub const fn out_link_switch_ch0_int_raw(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// The snapshot without `OUT_LINK_SWITCH_CH0_INT_RAW` unless `keep`: it is then not acknowledged.
+            pub const fn retain_out_link_switch_ch0_int_raw(self, keep: bool) -> Self {
+                if keep {
+                    self
+                } else {
+                    Self(self.0 & 0xfffffbff)
+                }
+            }
+        }
+    }
+
+    /// The `OUT_INT_CLR_CH0` register.
+    pub mod out_int_clr_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x144;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffff800;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x000007ff;
+
+        /// Width of `OUT_DONE_CH0_INT_CLR` in bits.
+        pub const OUT_DONE_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_DONE_CH0_INT_CLR`.
+        pub const OUT_DONE_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_DONE_CH0_INT_CLR`.
+        pub const OUT_DONE_CH0_INT_CLR_MASK: u32 = 0x1;
+
+        /// Width of `OUT_EOF_CH0_INT_CLR` in bits.
+        pub const OUT_EOF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_EOF_CH0_INT_CLR`.
+        pub const OUT_EOF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_EOF_CH0_INT_CLR`.
+        pub const OUT_EOF_CH0_INT_CLR_MASK: u32 = 0x2;
+
+        /// Width of `OUT_DSCR_ERR_CH0_INT_CLR` in bits.
+        pub const OUT_DSCR_ERR_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_DSCR_ERR_CH0_INT_CLR`.
+        pub const OUT_DSCR_ERR_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_DSCR_ERR_CH0_INT_CLR`.
+        pub const OUT_DSCR_ERR_CH0_INT_CLR_MASK: u32 = 0x4;
+
+        /// Width of `OUT_TOTAL_EOF_CH0_INT_CLR` in bits.
+        pub const OUT_TOTAL_EOF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_TOTAL_EOF_CH0_INT_CLR`.
+        pub const OUT_TOTAL_EOF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_TOTAL_EOF_CH0_INT_CLR`.
+        pub const OUT_TOTAL_EOF_CH0_INT_CLR_MASK: u32 = 0x8;
+
+        /// Width of `OUTFIFO_L1_OVF_CH0_INT_CLR` in bits.
+        pub const OUTFIFO_L1_OVF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L1_OVF_CH0_INT_CLR`.
+        pub const OUTFIFO_L1_OVF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L1_OVF_CH0_INT_CLR`.
+        pub const OUTFIFO_L1_OVF_CH0_INT_CLR_MASK: u32 = 0x10;
+
+        /// Width of `OUTFIFO_L1_UDF_CH0_INT_CLR` in bits.
+        pub const OUTFIFO_L1_UDF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L1_UDF_CH0_INT_CLR`.
+        pub const OUTFIFO_L1_UDF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L1_UDF_CH0_INT_CLR`.
+        pub const OUTFIFO_L1_UDF_CH0_INT_CLR_MASK: u32 = 0x20;
+
+        /// Width of `OUTFIFO_L2_OVF_CH0_INT_CLR` in bits.
+        pub const OUTFIFO_L2_OVF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L2_OVF_CH0_INT_CLR`.
+        pub const OUTFIFO_L2_OVF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L2_OVF_CH0_INT_CLR`.
+        pub const OUTFIFO_L2_OVF_CH0_INT_CLR_MASK: u32 = 0x40;
+
+        /// Width of `OUTFIFO_L2_UDF_CH0_INT_CLR` in bits.
+        pub const OUTFIFO_L2_UDF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L2_UDF_CH0_INT_CLR`.
+        pub const OUTFIFO_L2_UDF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L2_UDF_CH0_INT_CLR`.
+        pub const OUTFIFO_L2_UDF_CH0_INT_CLR_MASK: u32 = 0x80;
+
+        /// Width of `OUTFIFO_L3_OVF_CH0_INT_CLR` in bits.
+        pub const OUTFIFO_L3_OVF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L3_OVF_CH0_INT_CLR`.
+        pub const OUTFIFO_L3_OVF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L3_OVF_CH0_INT_CLR`.
+        pub const OUTFIFO_L3_OVF_CH0_INT_CLR_MASK: u32 = 0x100;
+
+        /// Width of `OUTFIFO_L3_UDF_CH0_INT_CLR` in bits.
+        pub const OUTFIFO_L3_UDF_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTFIFO_L3_UDF_CH0_INT_CLR`.
+        pub const OUTFIFO_L3_UDF_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTFIFO_L3_UDF_CH0_INT_CLR`.
+        pub const OUTFIFO_L3_UDF_CH0_INT_CLR_MASK: u32 = 0x200;
+
+        /// Width of `OUT_LINK_SWITCH_CH0_INT_CLR` in bits.
+        pub const OUT_LINK_SWITCH_CH0_INT_CLR_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_LINK_SWITCH_CH0_INT_CLR`.
+        pub const OUT_LINK_SWITCH_CH0_INT_CLR_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_LINK_SWITCH_CH0_INT_CLR`.
+        pub const OUT_LINK_SWITCH_CH0_INT_CLR_MASK: u32 = 0x400;
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `OUT_DONE_CH0_INT_CLR`.
+            #[inline]
+            pub fn out_done_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `OUT_EOF_CH0_INT_CLR`.
+            #[inline]
+            pub fn out_eof_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `OUT_DSCR_ERR_CH0_INT_CLR`.
+            #[inline]
+            pub fn out_dscr_err_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+
+            /// Set the write-trigger field `OUT_TOTAL_EOF_CH0_INT_CLR`.
+            #[inline]
+            pub fn out_total_eof_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000008;
+                self
+            }
+
+            /// Set the write-trigger field `OUTFIFO_L1_OVF_CH0_INT_CLR`.
+            #[inline]
+            pub fn outfifo_l1_ovf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000010;
+                self
+            }
+
+            /// Set the write-trigger field `OUTFIFO_L1_UDF_CH0_INT_CLR`.
+            #[inline]
+            pub fn outfifo_l1_udf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000020;
+                self
+            }
+
+            /// Set the write-trigger field `OUTFIFO_L2_OVF_CH0_INT_CLR`.
+            #[inline]
+            pub fn outfifo_l2_ovf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000040;
+                self
+            }
+
+            /// Set the write-trigger field `OUTFIFO_L2_UDF_CH0_INT_CLR`.
+            #[inline]
+            pub fn outfifo_l2_udf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000080;
+                self
+            }
+
+            /// Set the write-trigger field `OUTFIFO_L3_OVF_CH0_INT_CLR`.
+            #[inline]
+            pub fn outfifo_l3_ovf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000100;
+                self
+            }
+
+            /// Set the write-trigger field `OUTFIFO_L3_UDF_CH0_INT_CLR`.
+            #[inline]
+            pub fn outfifo_l3_udf_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000200;
+                self
+            }
+
+            /// Set the write-trigger field `OUT_LINK_SWITCH_CH0_INT_CLR`.
+            #[inline]
+            pub fn out_link_switch_ch0_int_clr(&mut self) -> &mut Self {
+                self.0 |= 0x00000400;
+                self
+            }
+        }
+    }
+
+    /// The `OUT_CONF0_CH0` register.
+    pub mod out_conf0_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x000007ff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x148;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffff800;
+
+        /// Width of `OUT_RST_CH0` in bits.
+        pub const OUT_RST_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_RST_CH0`.
+        pub const OUT_RST_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_RST_CH0`.
+        pub const OUT_RST_CH0_MASK: u32 = 0x1;
+
+        /// Width of `OUT_LOOP_TEST_CH0` in bits.
+        pub const OUT_LOOP_TEST_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_LOOP_TEST_CH0`.
+        pub const OUT_LOOP_TEST_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_LOOP_TEST_CH0`.
+        pub const OUT_LOOP_TEST_CH0_MASK: u32 = 0x2;
+
+        /// Width of `OUT_AUTO_WRBACK_CH0` in bits.
+        pub const OUT_AUTO_WRBACK_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_AUTO_WRBACK_CH0`.
+        pub const OUT_AUTO_WRBACK_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_AUTO_WRBACK_CH0`.
+        pub const OUT_AUTO_WRBACK_CH0_MASK: u32 = 0x4;
+
+        /// Width of `OUT_EOF_MODE_CH0` in bits.
+        pub const OUT_EOF_MODE_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_EOF_MODE_CH0`.
+        pub const OUT_EOF_MODE_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_EOF_MODE_CH0`.
+        pub const OUT_EOF_MODE_CH0_MASK: u32 = 0x8;
+
+        /// Width of `OUT_ETM_EN_CH0` in bits.
+        pub const OUT_ETM_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_ETM_EN_CH0`.
+        pub const OUT_ETM_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_ETM_EN_CH0`.
+        pub const OUT_ETM_EN_CH0_MASK: u32 = 0x10;
+
+        /// Width of `OUT_BURST_SIZE_SEL_CH0` in bits.
+        pub const OUT_BURST_SIZE_SEL_CH0_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `OUT_BURST_SIZE_SEL_CH0`.
+        pub const OUT_BURST_SIZE_SEL_CH0_MAX: u32 = 0x7;
+        /// Positioned bits of `OUT_BURST_SIZE_SEL_CH0`.
+        pub const OUT_BURST_SIZE_SEL_CH0_MASK: u32 = 0xe0;
+
+        /// Width of `OUT_CMD_DISABLE_CH0` in bits.
+        pub const OUT_CMD_DISABLE_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_CMD_DISABLE_CH0`.
+        pub const OUT_CMD_DISABLE_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_CMD_DISABLE_CH0`.
+        pub const OUT_CMD_DISABLE_CH0_MASK: u32 = 0x100;
+
+        /// Width of `OUT_ECC_AEC_EN_CH0` in bits.
+        pub const OUT_ECC_AEC_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUT_ECC_AEC_EN_CH0`.
+        pub const OUT_ECC_AEC_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUT_ECC_AEC_EN_CH0`.
+        pub const OUT_ECC_AEC_EN_CH0_MASK: u32 = 0x200;
+
+        /// Width of `OUTDSCR_BURST_EN_CH0` in bits.
+        pub const OUTDSCR_BURST_EN_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTDSCR_BURST_EN_CH0`.
+        pub const OUTDSCR_BURST_EN_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTDSCR_BURST_EN_CH0`.
+        pub const OUTDSCR_BURST_EN_CH0_MASK: u32 = 0x400;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `OUT_RST_CH0` field.
+            #[inline]
+            pub const fn out_rst_ch0(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `OUT_LOOP_TEST_CH0` field.
+            #[inline]
+            pub const fn out_loop_test_ch0(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `OUT_AUTO_WRBACK_CH0` field.
+            #[inline]
+            pub const fn out_auto_wrback_ch0(self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `OUT_EOF_MODE_CH0` field.
+            #[inline]
+            pub const fn out_eof_mode_ch0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `OUT_ETM_EN_CH0` field.
+            #[inline]
+            pub const fn out_etm_en_ch0(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The `OUT_BURST_SIZE_SEL_CH0` field.
+            #[inline]
+            pub const fn out_burst_size_sel_ch0(self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// The `OUT_CMD_DISABLE_CH0` field.
+            #[inline]
+            pub const fn out_cmd_disable_ch0(self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The `OUT_ECC_AEC_EN_CH0` field.
+            #[inline]
+            pub const fn out_ecc_aec_en_ch0(self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// The `OUTDSCR_BURST_EN_CH0` field.
+            #[inline]
+            pub const fn outdscr_burst_en_ch0(self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `OUT_RST_CH0` field.
+            #[inline]
+            pub const fn out_rst_ch0(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `OUT_LOOP_TEST_CH0` field.
+            #[inline]
+            pub const fn out_loop_test_ch0(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `OUT_AUTO_WRBACK_CH0` field.
+            #[inline]
+            pub const fn out_auto_wrback_ch0(&self) -> bool {
+                (self.0 & 0x00000004) != 0
+            }
+
+            /// The `OUT_EOF_MODE_CH0` field.
+            #[inline]
+            pub const fn out_eof_mode_ch0(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `OUT_ETM_EN_CH0` field.
+            #[inline]
+            pub const fn out_etm_en_ch0(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// The `OUT_BURST_SIZE_SEL_CH0` field.
+            #[inline]
+            pub const fn out_burst_size_sel_ch0(&self) -> oer_mmio::Bits<3> {
+                oer_mmio::Bits::truncate(self.0 >> 5)
+            }
+
+            /// The `OUT_CMD_DISABLE_CH0` field.
+            #[inline]
+            pub const fn out_cmd_disable_ch0(&self) -> bool {
+                (self.0 & 0x00000100) != 0
+            }
+
+            /// The `OUT_ECC_AEC_EN_CH0` field.
+            #[inline]
+            pub const fn out_ecc_aec_en_ch0(&self) -> bool {
+                (self.0 & 0x00000200) != 0
+            }
+
+            /// The `OUTDSCR_BURST_EN_CH0` field.
+            #[inline]
+            pub const fn outdscr_burst_en_ch0(&self) -> bool {
+                (self.0 & 0x00000400) != 0
+            }
+
+            /// Set `OUT_RST_CH0`.
+            #[inline]
+            pub fn set_out_rst_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `OUT_LOOP_TEST_CH0`.
+            #[inline]
+            pub fn set_out_loop_test_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `OUT_AUTO_WRBACK_CH0`.
+            #[inline]
+            pub fn set_out_auto_wrback_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `OUT_EOF_MODE_CH0`.
+            #[inline]
+            pub fn set_out_eof_mode_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `OUT_ETM_EN_CH0`.
+            #[inline]
+            pub fn set_out_etm_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+                self
+            }
+
+            /// Set `OUT_BURST_SIZE_SEL_CH0`.
+            #[inline]
+            pub fn set_out_burst_size_sel_ch0(&mut self, value: oer_mmio::Bits<3>) -> &mut Self {
+                self.0 = (self.0 & 0xffffff1f) | (value.get() << 5);
+                self
+            }
+
+            /// Set `OUT_CMD_DISABLE_CH0`.
+            #[inline]
+            pub fn set_out_cmd_disable_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffeff) | (u32::from(value) << 8);
+                self
+            }
+
+            /// Set `OUT_ECC_AEC_EN_CH0`.
+            #[inline]
+            pub fn set_out_ecc_aec_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+                self
+            }
+
+            /// Set `OUTDSCR_BURST_EN_CH0`.
+            #[inline]
+            pub fn set_outdscr_burst_en_ch0(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffbff) | (u32::from(value) << 10);
+                self
+            }
+        }
+    }
+
+    /// The `OUT_LINK1_CH0` register.
+    pub mod out_link1_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000000f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x158;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xfffffff0;
+
+        /// The bits of the write-trigger fields: zero in every write but a
+        /// field's explicit trigger.
+        pub const TRIGGERS: u32 = 0x00000007;
+
+        /// Width of `OUTLINK_STOP_CH0` in bits.
+        pub const OUTLINK_STOP_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTLINK_STOP_CH0`.
+        pub const OUTLINK_STOP_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTLINK_STOP_CH0`.
+        pub const OUTLINK_STOP_CH0_MASK: u32 = 0x1;
+
+        /// Width of `OUTLINK_START_CH0` in bits.
+        pub const OUTLINK_START_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTLINK_START_CH0`.
+        pub const OUTLINK_START_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTLINK_START_CH0`.
+        pub const OUTLINK_START_CH0_MASK: u32 = 0x2;
+
+        /// Width of `OUTLINK_RESTART_CH0` in bits.
+        pub const OUTLINK_RESTART_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTLINK_RESTART_CH0`.
+        pub const OUTLINK_RESTART_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTLINK_RESTART_CH0`.
+        pub const OUTLINK_RESTART_CH0_MASK: u32 = 0x4;
+
+        /// Width of `OUTLINK_PARK_CH0` in bits.
+        pub const OUTLINK_PARK_CH0_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OUTLINK_PARK_CH0`.
+        pub const OUTLINK_PARK_CH0_MAX: u32 = 0x1;
+        /// Positioned bits of `OUTLINK_PARK_CH0`.
+        pub const OUTLINK_PARK_CH0_MASK: u32 = 0x8;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `OUTLINK_PARK_CH0` field.
+            #[inline]
+            pub const fn outlink_park_ch0(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+        }
+
+        /// The write-trigger fields one write of the register sets together;
+        /// every other bit of the write is zero or its fixed value.
+        pub struct T(pub(super) u32);
+
+        impl T {
+            /// Set the write-trigger field `OUTLINK_STOP_CH0`.
+            #[inline]
+            pub fn outlink_stop_ch0(&mut self) -> &mut Self {
+                self.0 |= 0x00000001;
+                self
+            }
+
+            /// Set the write-trigger field `OUTLINK_START_CH0`.
+            #[inline]
+            pub fn outlink_start_ch0(&mut self) -> &mut Self {
+                self.0 |= 0x00000002;
+                self
+            }
+
+            /// Set the write-trigger field `OUTLINK_RESTART_CH0`.
+            #[inline]
+            pub fn outlink_restart_ch0(&mut self) -> &mut Self {
+                self.0 |= 0x00000004;
+                self
+            }
+        }
+    }
+
+    /// The `OUT_LINK2_CH0` register.
+    pub mod out_link2_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x15c;
+
+        /// Width of `OUTLINK_ADDR_CH0` in bits.
+        pub const OUTLINK_ADDR_CH0_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `OUTLINK_ADDR_CH0`.
+        pub const OUTLINK_ADDR_CH0_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `OUTLINK_ADDR_CH0`.
+        pub const OUTLINK_ADDR_CH0_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `OUTLINK_ADDR_CH0` field.
+            #[inline]
+            pub const fn outlink_addr_ch0(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `OUTLINK_ADDR_CH0` field.
+            #[inline]
+            pub const fn outlink_addr_ch0(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `OUTLINK_ADDR_CH0`.
+            #[inline]
+            pub fn set_outlink_addr_ch0(
+                &mut self,
+                value: oer_memory::DmaRef<super::super::layouts::AxiDmaDescriptor>,
+            ) -> &mut Self {
+                self.0 = value.bits();
+                self
+            }
+
+            /// Set `OUTLINK_ADDR_CH0` to the zero image: no address.
+            #[inline]
+            pub fn clear_outlink_addr_ch0(&mut self) -> &mut Self {
+                self.0 &= 0x00000000;
+                self
+            }
+        }
+    }
+
+    /// The `OUT_PERI_SEL_CH0` register.
+    pub mod out_peri_sel_ch0 {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000003f;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x17c;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffc0;
+
+        /// Width of `PERI_OUT_SEL_CH0` in bits.
+        pub const PERI_OUT_SEL_CH0_WIDTH: u32 = 6;
+        /// Greatest unsigned image of `PERI_OUT_SEL_CH0`.
+        pub const PERI_OUT_SEL_CH0_MAX: u32 = 0x3f;
+        /// Positioned bits of `PERI_OUT_SEL_CH0`.
+        pub const PERI_OUT_SEL_CH0_MASK: u32 = 0x3f;
+
+        /// The declared values of the `PERI_OUT_SEL_CH0` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum PeriOutSelCh0 {
+            Aes = 0x4,
+            None = 0x3f,
+        }
+
+        impl PeriOutSelCh0 {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x4 => Some(Self::Aes),
+                    0x3f => Some(Self::None),
+                    _ => None,
+                }
+            }
+        }
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `PERI_OUT_SEL_CH0` field.
+            #[inline]
+            pub const fn peri_out_sel_ch0(self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `PERI_OUT_SEL_CH0` field as its declared value, if it is one.
+            #[inline]
+            pub const fn peri_out_sel_ch0_variant(self) -> Option<PeriOutSelCh0> {
+                PeriOutSelCh0::from_bits(self.0 & 0x3f)
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `PERI_OUT_SEL_CH0` field.
+            #[inline]
+            pub const fn peri_out_sel_ch0(&self) -> oer_mmio::Bits<6> {
+                oer_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `PERI_OUT_SEL_CH0` field as its declared value, if it is one.
+            #[inline]
+            pub const fn peri_out_sel_ch0_variant(&self) -> Option<PeriOutSelCh0> {
+                PeriOutSelCh0::from_bits(self.0 & 0x3f)
+            }
+
+            /// Set `PERI_OUT_SEL_CH0`.
+            #[inline]
+            pub fn set_peri_out_sel_ch0(&mut self, value: oer_mmio::Bits<6>) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc0) | value.get();
+                self
+            }
+        }
+    }
+
+    /// The `INTR_MEM_START_ADDR` register.
+    pub mod intr_mem_start_addr {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x27c;
+
+        /// Width of `ACCESS_INTR_MEM_START_ADDR` in bits.
+        pub const ACCESS_INTR_MEM_START_ADDR_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ACCESS_INTR_MEM_START_ADDR`.
+        pub const ACCESS_INTR_MEM_START_ADDR_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `ACCESS_INTR_MEM_START_ADDR`.
+        pub const ACCESS_INTR_MEM_START_ADDR_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `ACCESS_INTR_MEM_START_ADDR` field.
+            #[inline]
+            pub const fn access_intr_mem_start_addr(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `ACCESS_INTR_MEM_START_ADDR` field.
+            #[inline]
+            pub const fn access_intr_mem_start_addr(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `ACCESS_INTR_MEM_START_ADDR`.
+            #[inline]
+            pub fn set_access_intr_mem_start_addr(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `INTR_MEM_END_ADDR` register.
+    pub mod intr_mem_end_addr {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x280;
+
+        /// Width of `ACCESS_INTR_MEM_END_ADDR` in bits.
+        pub const ACCESS_INTR_MEM_END_ADDR_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ACCESS_INTR_MEM_END_ADDR`.
+        pub const ACCESS_INTR_MEM_END_ADDR_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `ACCESS_INTR_MEM_END_ADDR`.
+        pub const ACCESS_INTR_MEM_END_ADDR_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `ACCESS_INTR_MEM_END_ADDR` field.
+            #[inline]
+            pub const fn access_intr_mem_end_addr(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `ACCESS_INTR_MEM_END_ADDR` field.
+            #[inline]
+            pub const fn access_intr_mem_end_addr(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `ACCESS_INTR_MEM_END_ADDR`.
+            #[inline]
+            pub fn set_access_intr_mem_end_addr(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `EXTR_MEM_START_ADDR` register.
+    pub mod extr_mem_start_addr {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x284;
+
+        /// Width of `ACCESS_EXTR_MEM_START_ADDR` in bits.
+        pub const ACCESS_EXTR_MEM_START_ADDR_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ACCESS_EXTR_MEM_START_ADDR`.
+        pub const ACCESS_EXTR_MEM_START_ADDR_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `ACCESS_EXTR_MEM_START_ADDR`.
+        pub const ACCESS_EXTR_MEM_START_ADDR_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `ACCESS_EXTR_MEM_START_ADDR` field.
+            #[inline]
+            pub const fn access_extr_mem_start_addr(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `ACCESS_EXTR_MEM_START_ADDR` field.
+            #[inline]
+            pub const fn access_extr_mem_start_addr(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `ACCESS_EXTR_MEM_START_ADDR`.
+            #[inline]
+            pub fn set_access_extr_mem_start_addr(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `EXTR_MEM_END_ADDR` register.
+    pub mod extr_mem_end_addr {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0xffffffff;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x288;
+
+        /// Width of `ACCESS_EXTR_MEM_END_ADDR` in bits.
+        pub const ACCESS_EXTR_MEM_END_ADDR_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ACCESS_EXTR_MEM_END_ADDR`.
+        pub const ACCESS_EXTR_MEM_END_ADDR_MAX: u32 = 0xffffffff;
+        /// Positioned bits of `ACCESS_EXTR_MEM_END_ADDR`.
+        pub const ACCESS_EXTR_MEM_END_ADDR_MASK: u32 = 0xffffffff;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `ACCESS_EXTR_MEM_END_ADDR` field.
+            #[inline]
+            pub const fn access_extr_mem_end_addr(self) -> u32 {
+                self.0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `ACCESS_EXTR_MEM_END_ADDR` field.
+            #[inline]
+            pub const fn access_extr_mem_end_addr(&self) -> u32 {
+                self.0
+            }
+
+            /// Set `ACCESS_EXTR_MEM_END_ADDR`.
+            #[inline]
+            pub fn set_access_extr_mem_end_addr(&mut self, value: u32) -> &mut Self {
+                self.0 = value;
+                self
+            }
+        }
+    }
+
+    /// The `MISC_CONF` register.
+    pub mod misc_conf {
+        /// The bits of the register's declared fields.
+        pub const FIELDS: u32 = 0x0000001b;
+        /// The register's width in bits.
+        pub const WIDTH: u32 = 32;
+
+        /// The register's byte offset in its block.
+        pub const OFFSET: usize = 0x2a8;
+
+        /// The reserved bits: never a field, kept by every read-modify-write and
+        /// stored at their reset value by a write from zero.
+        pub const RESERVED: u32 = 0xffffffe4;
+
+        /// Width of `AXIM_RST_WR_INTER` in bits.
+        pub const AXIM_RST_WR_INTER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `AXIM_RST_WR_INTER`.
+        pub const AXIM_RST_WR_INTER_MAX: u32 = 0x1;
+        /// Positioned bits of `AXIM_RST_WR_INTER`.
+        pub const AXIM_RST_WR_INTER_MASK: u32 = 0x1;
+
+        /// Width of `AXIM_RST_RD_INTER` in bits.
+        pub const AXIM_RST_RD_INTER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `AXIM_RST_RD_INTER`.
+        pub const AXIM_RST_RD_INTER_MAX: u32 = 0x1;
+        /// Positioned bits of `AXIM_RST_RD_INTER`.
+        pub const AXIM_RST_RD_INTER_MASK: u32 = 0x2;
+
+        /// Width of `ARB_PRI_DIS` in bits.
+        pub const ARB_PRI_DIS_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ARB_PRI_DIS`.
+        pub const ARB_PRI_DIS_MAX: u32 = 0x1;
+        /// Positioned bits of `ARB_PRI_DIS`.
+        pub const ARB_PRI_DIS_MASK: u32 = 0x8;
+
+        /// Width of `CLK_EN` in bits.
+        pub const CLK_EN_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `CLK_EN`.
+        pub const CLK_EN_MAX: u32 = 0x1;
+        /// Positioned bits of `CLK_EN`.
+        pub const CLK_EN_MASK: u32 = 0x10;
+
+        /// One observation of the register.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub struct R(pub(super) u32);
+
+        impl R {
+            /// The `AXIM_RST_WR_INTER` field.
+            #[inline]
+            pub const fn axim_rst_wr_inter(self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `AXIM_RST_RD_INTER` field.
+            #[inline]
+            pub const fn axim_rst_rd_inter(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `ARB_PRI_DIS` field.
+            #[inline]
+            pub const fn arb_pri_dis(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `CLK_EN` field.
+            #[inline]
+            pub const fn clk_en(self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+        }
+
+        /// The register's value while it is changed.
+        pub struct W(pub(super) u32);
+
+        impl W {
+            /// The `AXIM_RST_WR_INTER` field.
+            #[inline]
+            pub const fn axim_rst_wr_inter(&self) -> bool {
+                (self.0 & 0x00000001) != 0
+            }
+
+            /// The `AXIM_RST_RD_INTER` field.
+            #[inline]
+            pub const fn axim_rst_rd_inter(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// The `ARB_PRI_DIS` field.
+            #[inline]
+            pub const fn arb_pri_dis(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// The `CLK_EN` field.
+            #[inline]
+            pub const fn clk_en(&self) -> bool {
+                (self.0 & 0x00000010) != 0
+            }
+
+            /// Set `AXIM_RST_WR_INTER`.
+            #[inline]
+            pub fn set_axim_rst_wr_inter(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+                self
+            }
+
+            /// Set `AXIM_RST_RD_INTER`.
+            #[inline]
+            pub fn set_axim_rst_rd_inter(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `ARB_PRI_DIS`.
+            #[inline]
+            pub fn set_arb_pri_dis(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `CLK_EN`.
+            #[inline]
+            pub fn set_clk_en(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+                self
+            }
+        }
+    }
+
+    /// The `AxiDmaChannel0` part of `AXI_DMA`.
+    ///
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA, ESP_IDF_4D80C1B2_S31_AXI_DMA_LL.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct AxiDmaChannel0<P: oer_mmio::Placement = oer_mmio::Fixed<0x20348000>>(
+        oer_mmio::Block<P, AxiDmaChannel0Words>,
+    );
+
+    /// The words [`AxiDmaChannel0`] holds, as byte offsets from its instance's base.
+    pub struct AxiDmaChannel0Words;
+
+    impl oer_mmio::Registers for AxiDmaChannel0Words {
+        type Sharing = oer_mmio::sharing::Owned;
+        const WORDS: &'static [usize] = &[
+            0x0, 0xc, 0x10, 0x20, 0x24, 0x44, 0x138, 0x144, 0x148, 0x158, 0x15c, 0x17c, 0x27c,
+            0x280, 0x284, 0x288, 0x2a8,
+        ];
+    }
+
+    impl oer_mmio::Words for AxiDmaChannel0Words {
+        const OWNED: &'static [usize] = &[
+            0x0, 0xc, 0x10, 0x20, 0x24, 0x44, 0x138, 0x144, 0x148, 0x158, 0x15c, 0x17c, 0x27c,
+            0x280, 0x284, 0x288, 0x2a8,
+        ];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type AxiDmaChannel0Claim =
+        oer_mmio::Block<oer_mmio::Fixed<0x20348000>, AxiDmaChannel0Words>;
+
+    impl AxiDmaChannel0 {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: AxiDmaChannel0Claim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> AxiDmaChannel0<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> AxiDmaChannel0<P> {
+        /// Read `IN_INT_RAW_CH0`.
+        #[inline]
+        pub fn read_in_int_raw_ch0(&self) -> in_int_raw_ch0::R {
+            in_int_raw_ch0::R(self.0.read::<0x0>())
+        }
+
+        /// Sample `IN_INT_RAW_CH0` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_in_int_raw_ch0(&self) -> in_int_raw_ch0::Snapshot {
+            in_int_raw_ch0::Snapshot(self.0.read::<0x0>() & in_int_raw_ch0::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: one to each bit the snapshot
+        /// holds, zero to every other field; the bits of no field keep the
+        /// value read now.
+        #[inline]
+        pub fn acknowledge_in_int_raw_ch0(&mut self, snapshot: in_int_raw_ch0::Snapshot) {
+            let kept = self.0.read::<0x0>() & !in_int_raw_ch0::FIELDS;
+            self.0.write::<0x0>(kept | snapshot.0);
+        }
+
+        /// Write to the write-trigger field `IN_DONE_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_in_done_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000001);
+        }
+
+        /// Write to the write-trigger field `IN_SUC_EOF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_in_suc_eof_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000002);
+        }
+
+        /// Write to the write-trigger field `IN_ERR_EOF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_in_err_eof_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000004);
+        }
+
+        /// Write to the write-trigger field `IN_DSCR_ERR_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_in_dscr_err_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000008);
+        }
+
+        /// Write to the write-trigger field `IN_DSCR_EMPTY_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_in_dscr_empty_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000010);
+        }
+
+        /// Write to the write-trigger field `INFIFO_L1_OVF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_infifo_l1_ovf_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000020);
+        }
+
+        /// Write to the write-trigger field `INFIFO_L1_UDF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_infifo_l1_udf_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000040);
+        }
+
+        /// Write to the write-trigger field `INFIFO_L2_OVF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_infifo_l2_ovf_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000080);
+        }
+
+        /// Write to the write-trigger field `INFIFO_L2_UDF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_infifo_l2_udf_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000100);
+        }
+
+        /// Write to the write-trigger field `INFIFO_L3_OVF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_infifo_l3_ovf_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000200);
+        }
+
+        /// Write to the write-trigger field `INFIFO_L3_UDF_CH0_INT_CLR` of `IN_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0_infifo_l3_udf_ch0_int_clr(&mut self) {
+            self.0.write::<0xc>(0x00000400);
+        }
+
+        /// Write to the write-trigger fields of `IN_INT_CLR_CH0` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_in_int_clr_ch0(&mut self, change: impl FnOnce(&mut in_int_clr_ch0::T)) {
+            let mut triggers = in_int_clr_ch0::T(0);
+            change(&mut triggers);
+            self.0.write::<0xc>(triggers.0);
+        }
+
+        /// Read `IN_CONF0_CH0`.
+        #[inline]
+        pub fn read_in_conf0_ch0(&self) -> in_conf0_ch0::R {
+            in_conf0_ch0::R(self.0.read::<0x10>())
+        }
+
+        /// Read `IN_CONF0_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_in_conf0_ch0(&mut self, change: impl FnOnce(&mut in_conf0_ch0::W)) {
+            let mut value = in_conf0_ch0::W(self.0.read::<0x10>());
+            change(&mut value);
+            self.0.write::<0x10>(value.0);
+        }
+
+        /// Read `IN_LINK1_CH0`.
+        #[inline]
+        pub fn read_in_link1_ch0(&self) -> in_link1_ch0::R {
+            in_link1_ch0::R(self.0.read::<0x20>())
+        }
+
+        /// Write to the write-trigger field `INLINK_STOP_CH0` of `IN_LINK1_CH0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_in_link1_ch0_inlink_stop_ch0(&mut self) {
+            self.0
+                .write::<0x20>(self.0.read::<0x20>() & 0xfffffff1 | 0x00000002);
+        }
+
+        /// Write to the write-trigger field `INLINK_START_CH0` of `IN_LINK1_CH0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_in_link1_ch0_inlink_start_ch0(&mut self) {
+            self.0
+                .write::<0x20>(self.0.read::<0x20>() & 0xfffffff1 | 0x00000004);
+        }
+
+        /// Write to the write-trigger field `INLINK_RESTART_CH0` of `IN_LINK1_CH0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_in_link1_ch0_inlink_restart_ch0(&mut self) {
+            self.0
+                .write::<0x20>(self.0.read::<0x20>() & 0xfffffff1 | 0x00000008);
+        }
+
+        /// Read `IN_LINK1_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_in_link1_ch0(&mut self, change: impl FnOnce(&mut in_link1_ch0::W)) {
+            let mut value = in_link1_ch0::W(self.0.read::<0x20>() & 0xfffffff1);
+            change(&mut value);
+            self.0.write::<0x20>(value.0);
+        }
+
+        /// Read `IN_LINK2_CH0`.
+        #[inline]
+        pub fn read_in_link2_ch0(&self) -> in_link2_ch0::R {
+            in_link2_ch0::R(self.0.read::<0x24>())
+        }
+
+        /// Read `IN_LINK2_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_in_link2_ch0(&mut self, change: impl FnOnce(&mut in_link2_ch0::W)) {
+            let mut value = in_link2_ch0::W(self.0.read::<0x24>());
+            change(&mut value);
+            self.0.write::<0x24>(value.0);
+        }
+
+        /// Read `IN_PERI_SEL_CH0`.
+        #[inline]
+        pub fn read_in_peri_sel_ch0(&self) -> in_peri_sel_ch0::R {
+            in_peri_sel_ch0::R(self.0.read::<0x44>())
+        }
+
+        /// Read `IN_PERI_SEL_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_in_peri_sel_ch0(&mut self, change: impl FnOnce(&mut in_peri_sel_ch0::W)) {
+            let mut value = in_peri_sel_ch0::W(self.0.read::<0x44>());
+            change(&mut value);
+            self.0.write::<0x44>(value.0);
+        }
+
+        /// Read `OUT_INT_RAW_CH0`.
+        #[inline]
+        pub fn read_out_int_raw_ch0(&self) -> out_int_raw_ch0::R {
+            out_int_raw_ch0::R(self.0.read::<0x138>())
+        }
+
+        /// Sample `OUT_INT_RAW_CH0` once, keeping its declared fields, to acknowledge.
+        #[inline]
+        pub fn sample_out_int_raw_ch0(&self) -> out_int_raw_ch0::Snapshot {
+            out_int_raw_ch0::Snapshot(self.0.read::<0x138>() & out_int_raw_ch0::FIELDS)
+        }
+
+        /// Acknowledge exactly the sampled set: one to each bit the snapshot
+        /// holds, zero to every other field; the bits of no field keep the
+        /// value read now.
+        #[inline]
+        pub fn acknowledge_out_int_raw_ch0(&mut self, snapshot: out_int_raw_ch0::Snapshot) {
+            let kept = self.0.read::<0x138>() & !out_int_raw_ch0::FIELDS;
+            self.0.write::<0x138>(kept | snapshot.0);
+        }
+
+        /// Write to the write-trigger field `OUT_DONE_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_out_done_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000001);
+        }
+
+        /// Write to the write-trigger field `OUT_EOF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_out_eof_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000002);
+        }
+
+        /// Write to the write-trigger field `OUT_DSCR_ERR_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_out_dscr_err_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000004);
+        }
+
+        /// Write to the write-trigger field `OUT_TOTAL_EOF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_out_total_eof_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000008);
+        }
+
+        /// Write to the write-trigger field `OUTFIFO_L1_OVF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_outfifo_l1_ovf_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000010);
+        }
+
+        /// Write to the write-trigger field `OUTFIFO_L1_UDF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_outfifo_l1_udf_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000020);
+        }
+
+        /// Write to the write-trigger field `OUTFIFO_L2_OVF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_outfifo_l2_ovf_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000040);
+        }
+
+        /// Write to the write-trigger field `OUTFIFO_L2_UDF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_outfifo_l2_udf_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000080);
+        }
+
+        /// Write to the write-trigger field `OUTFIFO_L3_OVF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_outfifo_l3_ovf_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000100);
+        }
+
+        /// Write to the write-trigger field `OUTFIFO_L3_UDF_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_outfifo_l3_udf_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000200);
+        }
+
+        /// Write to the write-trigger field `OUT_LINK_SWITCH_CH0_INT_CLR` of `OUT_INT_CLR_CH0`, starting its
+        /// hardware action once; every other bit is zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0_out_link_switch_ch0_int_clr(&mut self) {
+            self.0.write::<0x144>(0x00000400);
+        }
+
+        /// Write to the write-trigger fields of `OUT_INT_CLR_CH0` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_int_clr_ch0(&mut self, change: impl FnOnce(&mut out_int_clr_ch0::T)) {
+            let mut triggers = out_int_clr_ch0::T(0);
+            change(&mut triggers);
+            self.0.write::<0x144>(triggers.0);
+        }
+
+        /// Read `OUT_CONF0_CH0`.
+        #[inline]
+        pub fn read_out_conf0_ch0(&self) -> out_conf0_ch0::R {
+            out_conf0_ch0::R(self.0.read::<0x148>())
+        }
+
+        /// Read `OUT_CONF0_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_out_conf0_ch0(&mut self, change: impl FnOnce(&mut out_conf0_ch0::W)) {
+            let mut value = out_conf0_ch0::W(self.0.read::<0x148>());
+            change(&mut value);
+            self.0.write::<0x148>(value.0);
+        }
+
+        /// Read `OUT_LINK1_CH0`.
+        #[inline]
+        pub fn read_out_link1_ch0(&self) -> out_link1_ch0::R {
+            out_link1_ch0::R(self.0.read::<0x158>())
+        }
+
+        /// Write to the write-trigger field `OUTLINK_STOP_CH0` of `OUT_LINK1_CH0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_out_link1_ch0_outlink_stop_ch0(&mut self) {
+            self.0
+                .write::<0x158>(self.0.read::<0x158>() & 0xfffffff8 | 0x00000001);
+        }
+
+        /// Write to the write-trigger field `OUTLINK_START_CH0` of `OUT_LINK1_CH0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_out_link1_ch0_outlink_start_ch0(&mut self) {
+            self.0
+                .write::<0x158>(self.0.read::<0x158>() & 0xfffffff8 | 0x00000002);
+        }
+
+        /// Write to the write-trigger field `OUTLINK_RESTART_CH0` of `OUT_LINK1_CH0`, starting its
+        /// hardware action once; every other field keeps the value read, every other trigger is zero.
+        #[inline]
+        pub fn trigger_out_link1_ch0_outlink_restart_ch0(&mut self) {
+            self.0
+                .write::<0x158>(self.0.read::<0x158>() & 0xfffffff8 | 0x00000004);
+        }
+
+        /// Write to the write-trigger fields of `OUT_LINK1_CH0` the change sets, in one
+        /// write, starting each one's hardware action once; every other bit is
+        /// zero or its fixed value.
+        #[inline]
+        pub fn trigger_out_link1_ch0(&mut self, change: impl FnOnce(&mut out_link1_ch0::T)) {
+            let mut triggers = out_link1_ch0::T(0);
+            change(&mut triggers);
+            self.0.write::<0x158>(triggers.0);
+        }
+
+        /// Read `OUT_LINK2_CH0`.
+        #[inline]
+        pub fn read_out_link2_ch0(&self) -> out_link2_ch0::R {
+            out_link2_ch0::R(self.0.read::<0x15c>())
+        }
+
+        /// Read `OUT_LINK2_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_out_link2_ch0(&mut self, change: impl FnOnce(&mut out_link2_ch0::W)) {
+            let mut value = out_link2_ch0::W(self.0.read::<0x15c>());
+            change(&mut value);
+            self.0.write::<0x15c>(value.0);
+        }
+
+        /// Read `OUT_PERI_SEL_CH0`.
+        #[inline]
+        pub fn read_out_peri_sel_ch0(&self) -> out_peri_sel_ch0::R {
+            out_peri_sel_ch0::R(self.0.read::<0x17c>())
+        }
+
+        /// Read `OUT_PERI_SEL_CH0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_out_peri_sel_ch0(&mut self, change: impl FnOnce(&mut out_peri_sel_ch0::W)) {
+            let mut value = out_peri_sel_ch0::W(self.0.read::<0x17c>());
+            change(&mut value);
+            self.0.write::<0x17c>(value.0);
+        }
+
+        /// Read `INTR_MEM_START_ADDR`.
+        #[inline]
+        pub fn read_intr_mem_start_addr(&self) -> intr_mem_start_addr::R {
+            intr_mem_start_addr::R(self.0.read::<0x27c>())
+        }
+
+        /// Read `INTR_MEM_START_ADDR`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_intr_mem_start_addr(
+            &mut self,
+            change: impl FnOnce(&mut intr_mem_start_addr::W),
+        ) {
+            let mut value = intr_mem_start_addr::W(self.0.read::<0x27c>());
+            change(&mut value);
+            self.0.write::<0x27c>(value.0);
+        }
+
+        /// Read `INTR_MEM_END_ADDR`.
+        #[inline]
+        pub fn read_intr_mem_end_addr(&self) -> intr_mem_end_addr::R {
+            intr_mem_end_addr::R(self.0.read::<0x280>())
+        }
+
+        /// Read `INTR_MEM_END_ADDR`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_intr_mem_end_addr(&mut self, change: impl FnOnce(&mut intr_mem_end_addr::W)) {
+            let mut value = intr_mem_end_addr::W(self.0.read::<0x280>());
+            change(&mut value);
+            self.0.write::<0x280>(value.0);
+        }
+
+        /// Read `EXTR_MEM_START_ADDR`.
+        #[inline]
+        pub fn read_extr_mem_start_addr(&self) -> extr_mem_start_addr::R {
+            extr_mem_start_addr::R(self.0.read::<0x284>())
+        }
+
+        /// Read `EXTR_MEM_START_ADDR`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_extr_mem_start_addr(
+            &mut self,
+            change: impl FnOnce(&mut extr_mem_start_addr::W),
+        ) {
+            let mut value = extr_mem_start_addr::W(self.0.read::<0x284>());
+            change(&mut value);
+            self.0.write::<0x284>(value.0);
+        }
+
+        /// Read `EXTR_MEM_END_ADDR`.
+        #[inline]
+        pub fn read_extr_mem_end_addr(&self) -> extr_mem_end_addr::R {
+            extr_mem_end_addr::R(self.0.read::<0x288>())
+        }
+
+        /// Read `EXTR_MEM_END_ADDR`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_extr_mem_end_addr(&mut self, change: impl FnOnce(&mut extr_mem_end_addr::W)) {
+            let mut value = extr_mem_end_addr::W(self.0.read::<0x288>());
+            change(&mut value);
+            self.0.write::<0x288>(value.0);
+        }
+
+        /// Read `MISC_CONF`.
+        #[inline]
+        pub fn read_misc_conf(&self) -> misc_conf::R {
+            misc_conf::R(self.0.read::<0x2a8>())
+        }
+
+        /// Read `MISC_CONF`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_misc_conf(&mut self, change: impl FnOnce(&mut misc_conf::W)) {
+            let mut value = misc_conf::W(self.0.read::<0x2a8>());
+            change(&mut value);
+            self.0.write::<0x2a8>(value.0);
         }
     }
 }
@@ -107103,6 +110053,82 @@ pub mod hp_sys_clkrst {
         pub fn set_aes_module_reset(&mut self, asserted: bool) {
             self.modify_crypto_ctrl0(|w| {
                 w.set_reg_crypto_aes_rst_en(asserted);
+            });
+        }
+    }
+
+    /// The `AxiDmaClock` part of `HP_SYS_CLKRST`.
+    ///
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_LL.
+    #[must_use = "dropping a register owner permanently loses its register authority"]
+    pub struct AxiDmaClock<P: oer_mmio::Placement = oer_mmio::Fixed<0x20587000>>(
+        oer_mmio::Block<P, AxiDmaClockWords>,
+    );
+
+    /// The words [`AxiDmaClock`] holds, as byte offsets from its instance's base.
+    pub struct AxiDmaClockWords;
+
+    impl oer_mmio::Registers for AxiDmaClockWords {
+        type Sharing = oer_mmio::sharing::Owned;
+        const WORDS: &'static [usize] = &[0x78];
+    }
+
+    impl oer_mmio::Words for AxiDmaClockWords {
+        const OWNED: &'static [usize] = &[0x78];
+        const OBSERVED: &'static [usize] = &[];
+    }
+
+    /// The part's device registers, as the PAC root claims them.
+    pub type AxiDmaClockClaim = oer_mmio::Block<oer_mmio::Fixed<0x20587000>, AxiDmaClockWords>;
+
+    impl AxiDmaClock {
+        /// The owner of the part's device registers.
+        #[inline]
+        pub fn new(block: AxiDmaClockClaim) -> Self {
+            Self(block)
+        }
+    }
+
+    impl<'a> AxiDmaClock<oer_mmio::Host<'a>> {
+        /// The part over host memory, for tests of its accessors.
+        pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            oer_mmio::Block::host(words).map(Self)
+        }
+    }
+
+    impl<P: oer_mmio::Placement> AxiDmaClock<P> {
+        /// Read `AXI_PDMA_CTRL0`.
+        #[inline]
+        pub fn read_axi_pdma_ctrl0(&self) -> axi_pdma_ctrl0::R {
+            axi_pdma_ctrl0::R(self.0.read::<0x78>())
+        }
+
+        /// Read `AXI_PDMA_CTRL0`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_axi_pdma_ctrl0(&mut self, change: impl FnOnce(&mut axi_pdma_ctrl0::W)) {
+            let mut value = axi_pdma_ctrl0::W(self.0.read::<0x78>());
+            change(&mut value);
+            self.0.write::<0x78>(value.0);
+        }
+
+        /// Open (`true`) or close the `bus` clock of `AXI_DMA` (`HP_SYS_CLKRST.AXI_PDMA_CTRL0.REG_AXI_PDMA_SYS_CLK_EN`); every other bit keeps the value read.
+        ///
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_LL.
+        #[inline]
+        pub fn set_axi_dma_bus_clock(&mut self, on: bool) {
+            self.modify_axi_pdma_ctrl0(|w| {
+                w.set_reg_axi_pdma_sys_clk_en(on);
+            });
+        }
+
+        /// Assert (`true`) or release the `module` reset of `AXI_DMA` (`HP_SYS_CLKRST.AXI_PDMA_CTRL0.REG_AXI_PDMA_RST_EN`); every other bit keeps the value read.
+        ///
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_LL.
+        #[inline]
+        pub fn set_axi_dma_module_reset(&mut self, asserted: bool) {
+            self.modify_axi_pdma_ctrl0(|w| {
+                w.set_reg_axi_pdma_rst_en(asserted);
             });
         }
     }
@@ -306326,7 +309352,15 @@ pub mod ownership {
         pub crypto_clock: super::hp_sys_clkrst::CryptoClock,
     }
 
-    /// The single Typical AES program owner and its unbound DMA interrupt capability.
+    /// AXI-DMA channel 0, the AES's DMA: both its halves, the controller's access ranges and register clock, and the AXI-PDMA bus clock and reset word.
+    pub struct AxiDmaPeripherals {
+        /// The `AxiDmaClock` part.
+        pub axi_dma_clock: super::hp_sys_clkrst::AxiDmaClock,
+        /// The `AxiDmaChannel0` part.
+        pub axi_dma_channel0: super::axi_dma::AxiDmaChannel0,
+    }
+
+    /// The single AES program owner (Typical, and ECB/CBC/CTR DMA-AES) and its interrupt capability.
     pub struct AesPeripherals {
         /// The `AesProgram` part.
         pub aes_program: super::aes::AesProgram,
@@ -306410,6 +309444,8 @@ pub mod ownership {
         pub debug: DebugPeripherals,
         /// [`CryptoClockPeripherals`].
         pub crypto_clock: CryptoClockPeripherals,
+        /// [`AxiDmaPeripherals`].
+        pub axi_dma: AxiDmaPeripherals,
         /// [`AesPeripherals`].
         pub aes: AesPeripherals,
     }
@@ -306423,18 +309459,16 @@ pub mod ownership {
                 super::lp_apm::LpApmFilterClaim,
                 super::hp_apm::HpApmFilterClaim,
                 super::hp_mem_apm::HpMemApmFilterClaim,
+                super::lp_peri_clkrst::LpPericlkrstRngInitClaim,
             ),
             (
-                super::lp_peri_clkrst::LpPericlkrstRngInitClaim,
                 super::hp_sys_clkrst::HpSysClkrstSystimerClaim,
                 super::usb_serial_jtag::UsbSerialJtagPadsClaim,
-            ),
-            (
                 super::pmu::PmuCpuStallClaim,
                 super::hp_system::HpSysCoreStallStatusClaim,
-                super::hp_sys_clkrst::HpSysClkrstCoreClaim,
             ),
             (
+                super::hp_sys_clkrst::HpSysClkrstCoreClaim,
                 super::lp_aonclkrst::LpAonClkrstCoreResetClaim,
                 super::lp_system_reg::LpSysCoreControlClaim,
                 super::hp_sys_clkrst::HpSysClkrstUart0Claim,
@@ -306443,35 +309477,31 @@ pub mod ownership {
                 super::efuse::EfuseClaim,
                 super::lp_aonclkrst::LpAonResetCauseClaim,
                 super::timg::Timg0WdtClaim,
+                super::timg::Timg1WdtClaim,
             ),
             (
-                super::timg::Timg1WdtClaim,
                 super::hp_sys_clkrst::HpSysClkrstTimg0Claim,
                 super::hp_sys_clkrst::HpSysClkrstTimg1Claim,
-            ),
-            (
                 super::rtc_wdt::LpWdtClaim,
                 super::rtc_wdt::LpWdtSwdClaim,
-                super::timg::Timg0Timer0Claim,
             ),
             (
+                super::timg::Timg0Timer0Claim,
                 super::timg::Timg0InterruptBankClaim,
                 super::timg::Timg1Timer0Claim,
                 super::timg::Timg1InterruptBankClaim,
             ),
+            (super::systimer::SystimerClaim,),
         ),
         (
             (
-                super::systimer::SystimerClaim,
                 super::systimer::SystimerCounterClaim,
                 super::hp_system::FromCpu0Claim,
-            ),
-            (
                 super::hp_system::FromCpu1Claim,
                 super::hp_system::FromCpu2Claim,
-                super::hp_system::FromCpu3Claim,
             ),
             (
+                super::hp_system::FromCpu3Claim,
                 super::interrupt_core::InterruptCore0StatusClaim,
                 super::interrupt_core::InterruptCore1StatusClaim,
                 super::wifi_bb::WifiPhyRateOracleWifiBbClaim,
@@ -306480,18 +309510,16 @@ pub mod ownership {
                 super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxClaim,
                 super::wifi_mac::WifiMacAntennaInitClaim,
                 super::modem_pwr::WifiMacAuxTsfControlClaim,
+                super::wifi_mac::WifiMacBeaconIeCrcClaim,
             ),
             (
-                super::wifi_mac::WifiMacBeaconIeCrcClaim,
                 super::wifi_mac::WifiMacBeamformingFeedbackTestClaim,
                 super::wifi_mac::WifiMacBeamformingReportClaim,
-            ),
-            (
                 super::wifi_mac::WifiMacBlockAckClaim,
                 super::wifi_mac::WifiMacBssidPolicyClaim,
-                super::wifi_mac::WifiMacCoexInitClaim,
             ),
             (
+                super::wifi_mac::WifiMacCoexInitClaim,
                 super::modem_pwr::WifiMacCoexRuntimeClaim,
                 super::wifi_mac::WifiMacColdHandshakeClaim,
                 super::wifi_mac::WifiMacControlClaim,
@@ -306500,15 +309528,13 @@ pub mod ownership {
                 super::wifi_mac::WifiMacCoreEnableClaim,
                 super::wifi_mac::WifiMacCryptoControlClaim,
                 super::wifi_mac::WifiMacCsiDumpClaim,
+                super::wifi_mac::WifiMacDiagnosticStatisticsClaim,
             ),
+            (super::wifi_mac::WifiMacHeBufferStatusClaim,),
         ),
         (
             (
-                super::wifi_mac::WifiMacDiagnosticStatisticsClaim,
-                super::wifi_mac::WifiMacHeBufferStatusClaim,
                 super::wifi_mac::WifiMacHeColorCollisionClaim,
-            ),
-            (
                 super::wifi_mac::WifiMacHeInitPrefixClaim,
                 super::wifi_mac::WifiMacHeInitSuffixClaim,
                 super::wifi_mac::WifiMacHeMuEdcaTimerClaim,
@@ -306517,18 +309543,16 @@ pub mod ownership {
                 super::wifi_mac::WifiMacHeObssNarrowBandRuClaim,
                 super::wifi_mac::WifiMacHeTbDiagnosticsClaim,
                 super::wifi_mac::WifiMacHeTbStatisticsClaim,
+                super::wifi_mac::WifiMacHeTriggerRxDiagnosticsClaim,
             ),
             (
-                super::wifi_mac::WifiMacHeTriggerRxDiagnosticsClaim,
                 super::wifi_mac::WifiMacInternalTxBlockAckClaim,
                 super::wifi_mac::WifiMacKeyTableClaim,
-            ),
-            (
                 super::wifi_mac::WifiMacLastRxBufferClaim,
                 super::modem_pwr::WifiMacRegdmaControlClaim,
-                super::modem_pwr::WifiMacRtcTimerUpdateClaim,
             ),
             (
+                super::modem_pwr::WifiMacRtcTimerUpdateClaim,
                 super::wifi_mac::WifiMacRxBssidListClaim,
                 super::wifi_mac::WifiMacRxCsiControlClaim,
                 super::wifi_mac::WifiMacRxCustomTypeClaim,
@@ -306537,35 +309561,31 @@ pub mod ownership {
                 super::wifi_mac::WifiMacRxEndStateClaim,
                 super::wifi_mac::WifiMacRxFilterClaim,
                 super::wifi_mac::WifiMacRxHangStatisticsClaim,
+                super::wifi_mac::WifiMacRxPowerSaveClaim,
             ),
             (
-                super::wifi_mac::WifiMacRxPowerSaveClaim,
                 super::wifi_mac::WifiMacRxRuntimeResultsClaim,
                 super::wifi_mac::WifiMacRxStatisticsClaim,
-            ),
-        ),
-        (
-            (
                 super::wifi_mac::WifiMacStaBeaconFilterClaim,
                 super::modem_pwr::WifiMacStaTbttTargetClaim,
-                super::modem_pwr::WifiMacTsfLoadClaim,
             ),
+            (super::modem_pwr::WifiMacTsfLoadClaim,),
+        ),
+        (
             (
                 super::modem_pwr::WifiMacTsfStatusClaim,
                 super::modem_pwr::WifiMacTsfTimerClaim,
                 super::wifi_mac::WifiMacTxrxCallbacksClaim,
+                super::wifi_mac::WifiMacTxrxPrefixClaim,
             ),
             (
-                super::wifi_mac::WifiMacTxrxPrefixClaim,
                 super::wifi_mac::WifiMacTxrxSuffixClaim,
                 super::wifi_mac::WifiMacTxCommonClaim,
-            ),
-            (
                 super::wifi_mac::WifiMacTxCompletionClaim,
                 super::wifi_mac::WifiMacTxPowerInitClaim,
-                super::wifi_mac::WifiMacTxQueueControlClaim,
             ),
             (
+                super::wifi_mac::WifiMacTxQueueControlClaim,
                 super::wifi_mac::WifiMacTxQueueVectorClaim,
                 super::wifi_mac::WifiMacTxStatisticsClaim,
                 super::wifi_mac::WifiMacInterfaceAddressClaim,
@@ -306574,35 +309594,31 @@ pub mod ownership {
                 super::wifi_mac::WifiMacRxDmaClaim,
                 super::wifi_mac::WifiMacInterruptClaim,
                 super::modem_pwr::WifiMacPowerInterruptClaim,
+                super::modem_pwr::WifiMacLocalTimeClaim,
             ),
             (
-                super::modem_pwr::WifiMacLocalTimeClaim,
                 super::pmu::PmuWakeStatusClaim,
                 super::modem_lpcon::ModemWakeStatusClaim,
-            ),
-            (
                 super::interrupt_core::InterruptCore1Claim,
                 super::lp_system_reg::LpWakeStubClaim,
-                super::cache::CacheAccessCountersClaim,
             ),
-        ),
-        (
             (
+                super::cache::CacheAccessCountersClaim,
                 super::cache::CacheGeometryClaim,
                 super::hp_sys_clkrst::HpSysClkrstRadioClaim,
                 super::pmu::PmuRadioClaim,
             ),
+            (super::modem_syscon::ModemSysconClockResetClaim,),
+        ),
+        (
             (
-                super::modem_syscon::ModemSysconClockResetClaim,
                 super::modem_syscon::ModemSysconRadioClaim,
                 super::fe::PhyAgcOracleFeClaim,
-            ),
-            (
                 super::wifi_bb::PhyAgcOracleWifiBbClaim,
                 super::wifi_bb_brx::PhyAgcOracleWifiBbBrxClaim,
-                super::wifi_bb::PhyAgcRecoveredGapsClaim,
             ),
             (
+                super::wifi_bb::PhyAgcRecoveredGapsClaim,
                 super::fe::PhyBasebandConfigOracleFeClaim,
                 super::wifi_mac::PhyBasebandConfigOracleWifiMacClaim,
                 super::wifi_bb::PhyBasebandConfigOracleWifiBbClaim,
@@ -306611,35 +309627,31 @@ pub mod ownership {
                 super::wifi_bb::PhyBbRecoveredGapsClaim,
                 super::wifi_bb_brx::PhyBrxRecoveredGapsClaim,
                 super::bt_bb::PhyBtagcRecoveredClaim,
+                super::fe::PhyClockOracleFeClaim,
             ),
             (
-                super::fe::PhyClockOracleFeClaim,
                 super::wifi_bb::PhyClockOracleWifiBbClaim,
                 super::fe::PhyFectrlRecoveredClaim,
-            ),
-            (
                 super::fe::PhyAdcDumpRecoveredFeClaim,
                 super::bt_bb::PhyAdcDumpRecoveredBtBbClaim,
-                super::wifi_bb::PhyAdcDumpRecoveredWifiBbClaim,
             ),
             (
+                super::wifi_bb::PhyAdcDumpRecoveredWifiBbClaim,
                 super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpClaim,
                 super::fe::PhyFedataRecoveredClaim,
                 super::fe::PhyFedataWifiRecoveredClaim,
             ),
-        ),
-        (
             (
                 super::fe::PhyFrequencyChannelOracleFeClaim,
                 super::wifi_mac::PhyFrequencyChannelOracleWifiMacClaim,
                 super::wifi_bb::PhyFrequencyChannelOracleWifiBbClaim,
-            ),
-            (
                 super::fe::PhyIqEstimatorOracleClaim,
-                super::modem_lpcon::BluetoothLpTimerClockClaim,
-                super::modem_lpcon::CoexLpClockClaim,
             ),
+            (super::modem_lpcon::BluetoothLpTimerClockClaim,),
+        ),
+        (
             (
+                super::modem_lpcon::CoexLpClockClaim,
                 super::modem_lpcon::ModemLpconPowerClaim,
                 super::modem_lpcon::ModemLpconPhyTickClaim,
                 super::lp_aonclkrst::LpAonRadioClockClaim,
@@ -306648,18 +309660,16 @@ pub mod ownership {
                 super::lp_aonclkrst::LpAonClkrstClaim,
                 super::lp_peri_clkrst::LpPericlkrstClaim,
                 super::tsens::LpTsensClaim,
+                super::fe::PhyMemoryClaim,
             ),
             (
-                super::fe::PhyMemoryClaim,
                 super::wifi_bb::PhyNrxRecoveredGapsClaim,
                 super::fe::PhyPbusClaim,
-            ),
-            (
                 super::fe::PhyRxDcoOracleClaim,
                 super::coex::CoexPolicyTimersClaim,
-                super::coex::PhyGrantProtectTimerClaim,
             ),
             (
+                super::coex::PhyGrantProtectTimerClaim,
                 super::coex::CoexExternalClaim,
                 super::fe::PhyFecoexRecoveredClaim,
                 super::bt_mac::BleControllerAddressSlotsClaim,
@@ -306668,35 +309678,31 @@ pub mod ownership {
                 super::ble_accelerator::BleHwAcceleratorClaim,
                 super::bt_mac::BleHwCteRingControlClaim,
                 super::bt_mac::BleHwResolvingListClaim,
-            ),
-        ),
-        (
-            (
                 super::bt_mac::BleHwRuntimeControlClaim,
+            ),
+            (
                 super::bt_mac::BleIsoSchedulerNotifyClaim,
                 super::bt_mac::BleHwPositionalWord1ff0Claim,
-            ),
-            (
                 super::modem_etm::BleHwPositionalWord891cClaim,
                 super::bt_mac::BleScanBackoffClaim,
-                super::bt_mac::BleSyncPublicationClaim,
             ),
+            (super::bt_mac::BleSyncPublicationClaim,),
+        ),
+        (
             (
                 super::bt_mac::BluetoothControllerCoreClaim,
                 super::bt_mac::BluetoothResetIdleStatus0Claim,
                 super::btdm::BtdmSchedulerTableClaim,
+                super::bt_mac::BtmacBlePhyInitClaim,
             ),
             (
-                super::bt_mac::BtmacBlePhyInitClaim,
                 super::bt_bb::BtV32CteClaim,
                 super::modem_pwr::BtdmRuntimeControlClaim,
-            ),
-            (
                 super::modem_pwr::BtdmLpTimerStatusClaim,
                 super::bt_mac::BluetoothInterruptBankClaim,
-                super::bt_mac::BluetoothSchedulerInterruptRuntimeClaim,
             ),
             (
+                super::bt_mac::BluetoothSchedulerInterruptRuntimeClaim,
                 super::bt_bb::BtV32BasebandClaim,
                 super::bt_bb::BtV32BasebandRxInfoClaim,
                 super::wifi_mac::SharedRadioInitControlClaim,
@@ -306705,54 +309711,54 @@ pub mod ownership {
                 super::ieee802154::SharedBasebandResetIdleStatusClaim,
                 super::bt_bb::SharedBasebandTxTimingClaim,
                 super::bt_bb::ZbbbRadioControlClaim,
+                super::modem_lpcon::ModemLpconChipClocksClaim,
             ),
             (
-                super::modem_lpcon::ModemLpconChipClocksClaim,
                 super::hp_sys_clkrst::HpSysClkrstPll160Claim,
                 super::hp_sys_clkrst::HpSysClkrstBootClockClaim,
-            ),
-        ),
-        (
-            (
                 super::lp_aonclkrst::LpAonClkrstCpllClaim,
                 super::pmu::PmuBootClockClaim,
-                super::hp_alive_sys::HpAliveSysPllClockClaim,
             ),
             (
+                super::hp_alive_sys::HpAliveSysPllClockClaim,
                 super::spi_mem_c::Spi0FlashClaim,
                 super::spi1_mem_c::Spi1FlashClaim,
                 super::spi_mem_s::Memspi2PsramClaim,
             ),
+            (super::spi1_mem_s::Memspi3PsramClaim,),
+        ),
+        (
             (
-                super::spi1_mem_s::Memspi3PsramClaim,
                 super::iomux_mspi_pin::IomuxMspiPsramPinsClaim,
                 super::lp_ana::LpAnaBrownoutClaim,
+                super::i2c_ana_mst::I2cAnaMstClaim,
             ),
             (
-                super::i2c_ana_mst::I2cAnaMstClaim,
                 super::i2c_ana_mst_mem::PhyI2cCommandRamClaim,
                 super::bus_monitor::DebugModeStatusClaim,
-            ),
-            (
                 super::hp_sys_clkrst::CryptoClockClaim,
-                super::aes::AesProgramClaim,
-                super::aes::AesInterruptClaim,
             ),
             (
+                super::hp_sys_clkrst::AxiDmaClockClaim,
+                super::axi_dma::AxiDmaChannel0Claim,
+                super::aes::AesProgramClaim,
+            ),
+            (
+                super::aes::AesInterruptClaim,
                 super::trng::TrngDivisionClaim,
                 super::usb_serial_jtag::UsbDeviceDivisionClaim,
+            ),
+            (
                 super::systimer::SystimerDivisionClaim,
+                super::clic::ClicDivisionClaim,
+                super::clic::ClicDivisionClaim,
             ),
             (
-                super::clic::ClicDivisionClaim,
-                super::clic::ClicDivisionClaim,
                 super::interrupt_core::InterruptCore0DivisionClaim,
-            ),
-            (
                 super::cache::CacheDivisionClaim,
                 super::modem_etm::ModemEtmDivisionClaim,
-                super::ieee802154::Ieee802154DivisionClaim,
             ),
+            (super::ieee802154::Ieee802154DivisionClaim,),
         ),
     );
 
@@ -306761,84 +309767,76 @@ pub mod ownership {
     pub fn partition(claims: Claims) -> Partitions {
         let (
             (
-                (claim_0, claim_1, claim_2),
-                (claim_4, claim_5, claim_8),
-                (claim_9, claim_10, claim_11),
-                (claim_12, claim_13, claim_14),
-                (claim_15, claim_17, claim_18),
-                (claim_19, claim_20, claim_21),
-                (claim_22, claim_23, claim_24),
-                (claim_25, claim_26, claim_27),
+                (claim_0, claim_1, claim_2, claim_4),
+                (claim_5, claim_8, claim_9, claim_10),
+                (claim_11, claim_12, claim_13, claim_14),
+                (claim_15, claim_17, claim_18, claim_19),
+                (claim_20, claim_21, claim_22, claim_23),
+                (claim_24, claim_25, claim_26, claim_27),
+                (claim_28,),
             ),
             (
-                (claim_28, claim_29, claim_33),
-                (claim_34, claim_35, claim_36),
-                (claim_41, claim_42, claim_43),
-                (claim_44, claim_45, claim_46),
-                (claim_47, claim_48, claim_49),
-                (claim_50, claim_51, claim_52),
-                (claim_53, claim_54, claim_55),
-                (claim_56, claim_57, claim_58),
+                (claim_29, claim_33, claim_34, claim_35),
+                (claim_36, claim_41, claim_42, claim_43),
+                (claim_44, claim_45, claim_46, claim_47),
+                (claim_48, claim_49, claim_50, claim_51),
+                (claim_52, claim_53, claim_54, claim_55),
+                (claim_56, claim_57, claim_58, claim_59),
+                (claim_60,),
             ),
             (
-                (claim_59, claim_60, claim_61),
-                (claim_62, claim_63, claim_64),
-                (claim_65, claim_66, claim_67),
-                (claim_68, claim_69, claim_70),
-                (claim_71, claim_72, claim_73),
-                (claim_74, claim_75, claim_76),
-                (claim_77, claim_78, claim_79),
-                (claim_80, claim_81, claim_82),
+                (claim_61, claim_62, claim_63, claim_64),
+                (claim_65, claim_66, claim_67, claim_68),
+                (claim_69, claim_70, claim_71, claim_72),
+                (claim_73, claim_74, claim_75, claim_76),
+                (claim_77, claim_78, claim_79, claim_80),
+                (claim_81, claim_82, claim_83, claim_84),
+                (claim_85,),
             ),
             (
-                (claim_83, claim_84, claim_85),
-                (claim_86, claim_87, claim_88),
-                (claim_89, claim_90, claim_91),
-                (claim_92, claim_93, claim_94),
-                (claim_95, claim_96, claim_97),
-                (claim_98, claim_99, claim_100),
-                (claim_101, claim_102, claim_103),
-                (claim_104, claim_105, claim_107),
+                (claim_86, claim_87, claim_88, claim_89),
+                (claim_90, claim_91, claim_92, claim_93),
+                (claim_94, claim_95, claim_96, claim_97),
+                (claim_98, claim_99, claim_100, claim_101),
+                (claim_102, claim_103, claim_104, claim_105),
+                (claim_107, claim_108, claim_109, claim_110),
+                (claim_111,),
             ),
             (
-                (claim_108, claim_109, claim_110),
-                (claim_111, claim_112, claim_113),
-                (claim_114, claim_115, claim_116),
-                (claim_117, claim_118, claim_119),
-                (claim_120, claim_121, claim_122),
-                (claim_123, claim_124, claim_125),
-                (claim_126, claim_127, claim_128),
-                (claim_129, claim_130, claim_131),
+                (claim_112, claim_113, claim_114, claim_115),
+                (claim_116, claim_117, claim_118, claim_119),
+                (claim_120, claim_121, claim_122, claim_123),
+                (claim_124, claim_125, claim_126, claim_127),
+                (claim_128, claim_129, claim_130, claim_131),
+                (claim_132, claim_133, claim_134, claim_135),
+                (claim_136,),
             ),
             (
-                (claim_132, claim_133, claim_134),
-                (claim_135, claim_136, claim_137),
-                (claim_138, claim_139, claim_140),
-                (claim_141, claim_142, claim_143),
-                (claim_144, claim_145, claim_146),
-                (claim_147, claim_148, claim_149),
-                (claim_150, claim_151, claim_152),
-                (claim_153, claim_154, claim_155),
+                (claim_137, claim_138, claim_139, claim_140),
+                (claim_141, claim_142, claim_143, claim_144),
+                (claim_145, claim_146, claim_147, claim_148),
+                (claim_149, claim_150, claim_151, claim_152),
+                (claim_153, claim_154, claim_155, claim_156),
+                (claim_157, claim_158, claim_159, claim_160),
+                (claim_161,),
             ),
             (
-                (claim_156, claim_157, claim_158),
-                (claim_159, claim_160, claim_161),
-                (claim_162, claim_163, claim_164),
-                (claim_165, claim_166, claim_167),
-                (claim_168, claim_169, claim_170),
-                (claim_171, claim_172, claim_173),
-                (claim_174, claim_175, claim_176),
-                (claim_182, claim_183, claim_184),
+                (claim_162, claim_163, claim_164, claim_165),
+                (claim_166, claim_167, claim_168, claim_169),
+                (claim_170, claim_171, claim_172, claim_173),
+                (claim_174, claim_175, claim_176, claim_182),
+                (claim_183, claim_184, claim_185, claim_186),
+                (claim_187, claim_189, claim_190, claim_191),
+                (claim_192,),
             ),
             (
-                (claim_185, claim_186, claim_187),
-                (claim_189, claim_190, claim_191),
-                (claim_192, claim_193, claim_194),
-                (claim_195, claim_196, claim_197),
-                (claim_198, claim_199, claim_200),
-                (division_0, division_1, division_2),
-                (division_3_0, division_3_1, division_4),
-                (division_5, division_6, division_7),
+                (claim_193, claim_194, claim_195),
+                (claim_196, claim_197, claim_198),
+                (claim_199, claim_200, claim_201),
+                (claim_202, division_0, division_1),
+                (division_2, division_3_0, division_3_1),
+                (division_4, division_5, division_6),
+                (division_7,),
             ),
         ) = claims;
         let owner_0 = super::lp_apm::LpApmFilter::new(claim_0);
@@ -307022,8 +310020,10 @@ pub mod ownership {
         let owner_196 = super::i2c_ana_mst_mem::PhyI2cCommandRam::new(claim_196);
         let owner_197 = super::bus_monitor::DebugModeStatus::new(claim_197);
         let owner_198 = super::hp_sys_clkrst::CryptoClock::new(claim_198);
-        let owner_199 = super::aes::AesProgram::new(claim_199);
-        let owner_200 = super::aes::AesInterrupt::new(claim_200);
+        let owner_199 = super::hp_sys_clkrst::AxiDmaClock::new(claim_199);
+        let owner_200 = super::axi_dma::AxiDmaChannel0::new(claim_200);
+        let owner_201 = super::aes::AesProgram::new(claim_201);
+        let owner_202 = super::aes::AesInterrupt::new(claim_202);
         let (owner_3, owner_16) = super::trng::trng_divide(division_0);
         let (owner_6, owner_7) = super::usb_serial_jtag::usb_device_divide(division_1);
         let (owner_30, owner_31, owner_32) = super::systimer::systimer_divide(division_2);
@@ -307303,9 +310303,13 @@ pub mod ownership {
             crypto_clock: CryptoClockPeripherals {
                 crypto_clock: owner_198,
             },
+            axi_dma: AxiDmaPeripherals {
+                axi_dma_clock: owner_199,
+                axi_dma_channel0: owner_200,
+            },
             aes: AesPeripherals {
-                aes_program: owner_199,
-                aes_interrupt: owner_200,
+                aes_program: owner_201,
+                aes_interrupt: owner_202,
             },
         }
     }
@@ -307313,11 +310317,11 @@ pub mod ownership {
     // Each hart reaches its own copy of a hart-local block at one address, so
     // each hart's context is checked alone: every other block with that hart's copies.
     const _: () = assert!(
-oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpSysCoreControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg0Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0Timer0Words as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1Timer0Words as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuWakeStatusWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemWakeStatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpWakeStubWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheAccessCountersWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheGeometryWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconClockResetWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::BluetoothLpTimerClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::CoexLpClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPowerWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonRadioClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexPolicyTimersWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::PhyGrantProtectTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmLpTimerStatusWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconChipClocksWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstPll160Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::CryptoClockWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesProgramWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesInterruptWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Division as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicDivision as oer_mmio::Registers>::WORDS)]),
+oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpSysCoreControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg0Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0Timer0Words as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1Timer0Words as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuWakeStatusWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemWakeStatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpWakeStubWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheAccessCountersWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheGeometryWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconClockResetWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::BluetoothLpTimerClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::CoexLpClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPowerWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonRadioClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexPolicyTimersWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::PhyGrantProtectTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmLpTimerStatusWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconChipClocksWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstPll160Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::CryptoClockWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::AxiDmaClockWords as oer_mmio::Registers>::WORDS), (0x20348000, <super::axi_dma::AxiDmaChannel0Words as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesProgramWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesInterruptWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Division as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicDivision as oer_mmio::Registers>::WORDS)]),
 "no two claimed blocks of hart 0's context list the same word"
 );
     const _: () = assert!(
-oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpSysCoreControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg0Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0Timer0Words as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1Timer0Words as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuWakeStatusWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemWakeStatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpWakeStubWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheAccessCountersWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheGeometryWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconClockResetWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::BluetoothLpTimerClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::CoexLpClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPowerWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonRadioClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexPolicyTimersWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::PhyGrantProtectTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmLpTimerStatusWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconChipClocksWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstPll160Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::CryptoClockWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesProgramWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesInterruptWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Division as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicDivision as oer_mmio::Registers>::WORDS)]),
+oer_mmio::check::disjoint_blocks(&[(0x20706c00, <super::lp_apm::LpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504400, <super::hp_apm::HpApmFilterWords as oer_mmio::Registers>::WORDS), (0x20504800, <super::hp_mem_apm::HpMemApmFilterWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstRngInitWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstSystimerWords as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbSerialJtagPadsWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuCpuStallWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::HpSysCoreStallStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstCoreWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCoreResetWords as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpSysCoreControlWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstUart0Words as oer_mmio::Registers>::WORDS), (0x20715000, <super::efuse::EfuseWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonResetCauseWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0WdtWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1WdtWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg0Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstTimg1Words as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtWords as oer_mmio::Registers>::WORDS), (0x20801000, <super::rtc_wdt::LpWdtSwdWords as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0Timer0Words as oer_mmio::Registers>::WORDS), (0x20580000, <super::timg::Timg0InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1Timer0Words as oer_mmio::Registers>::WORDS), (0x20581000, <super::timg::Timg1InterruptBankWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerWords as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerCounterWords as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu0Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu1Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu2Words as oer_mmio::Registers>::WORDS), (0x20586000, <super::hp_system::FromCpu3Words as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0StatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1StatusWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::WifiPhyRateOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::WifiPhyRateOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacAntennaInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacAuxTsfControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeaconIeCrcWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingFeedbackTestWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBeamformingReportWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacBssidPolicyWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoexInitWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacCoexRuntimeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacColdHandshakeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCoreEnableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCryptoControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacCsiDumpWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacDiagnosticStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeBufferStatusWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeColorCollisionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeInitSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeMuEdcaTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeObssNarrowBandRuWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTbStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacHeTriggerRxDiagnosticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInternalTxBlockAckWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacKeyTableWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacLastRxBufferWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRegdmaControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacRtcTimerUpdateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxBssidListWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCsiControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxCustomTypeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxEndStateWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxFilterWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxHangStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxPowerSaveWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxRuntimeResultsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacStaBeaconFilterWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacStaTbttTargetWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfLoadWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfStatusWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacTsfTimerWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxCallbacksWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxPrefixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxrxSuffixWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCommonWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxCompletionWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxPowerInitWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueControlWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxQueueVectorWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacTxStatisticsWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterfaceAddressWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacRxDmaWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::WifiMacInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacPowerInterruptWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::WifiMacLocalTimeWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuWakeStatusWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemWakeStatusWords as oer_mmio::Registers>::WORDS), (0x20585800, <super::interrupt_core::InterruptCore1Words as oer_mmio::Registers>::WORDS), (0x20700000, <super::lp_system_reg::LpWakeStubWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheAccessCountersWords as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheGeometryWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstRadioWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuRadioWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconClockResetWords as oer_mmio::Registers>::WORDS), (0x20109c00, <super::modem_syscon::ModemSysconRadioWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAgcOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyAgcOracleWifiBbBrxWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAgcRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyBasebandConfigOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyBasebandConfigOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBasebandConfigOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyBbRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20108000, <super::wifi_bb_brx::PhyBrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyBtagcRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyClockOracleFeWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyClockOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFectrlRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyAdcDumpRecoveredFeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::PhyAdcDumpRecoveredBtBbWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyAdcDumpRecoveredWifiBbWords as oer_mmio::Registers>::WORDS), (0x20109000, <super::modem_datadump::PhyAdcDumpRecoveredModemDatadumpWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFedataWifiRecoveredWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFrequencyChannelOracleFeWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::PhyFrequencyChannelOracleWifiMacWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyFrequencyChannelOracleWifiBbWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyIqEstimatorOracleWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::BluetoothLpTimerClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::CoexLpClockWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPowerWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconPhyTickWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonRadioClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstWords as oer_mmio::Registers>::WORDS), (0x20710000, <super::lp_peri_clkrst::LpPericlkrstWords as oer_mmio::Registers>::WORDS), (0x20818000, <super::tsens::LpTsensWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyMemoryWords as oer_mmio::Registers>::WORDS), (0x20107000, <super::wifi_bb::PhyNrxRecoveredGapsWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyPbusWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyRxDcoOracleWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexPolicyTimersWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::PhyGrantProtectTimerWords as oer_mmio::Registers>::WORDS), (0x2010f400, <super::coex::CoexExternalWords as oer_mmio::Registers>::WORDS), (0x20100000, <super::fe::PhyFecoexRecoveredWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleControllerAddressSlotsWords as oer_mmio::Registers>::WORDS), (0x20109800, <super::ble_accelerator::BleHwAcceleratorWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwCteRingControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwResolvingListWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleIsoSchedulerNotifyWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleHwPositionalWord1ff0Words as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::BleHwPositionalWord891cWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleScanBackoffWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BleSyncPublicationWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothControllerCoreWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothResetIdleStatus0Words as oer_mmio::Registers>::WORDS), (0x2010a000, <super::btdm::BtdmSchedulerTableWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BtmacBlePhyInitWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32CteWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmRuntimeControlWords as oer_mmio::Registers>::WORDS), (0x2010d000, <super::modem_pwr::BtdmLpTimerStatusWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothInterruptBankWords as oer_mmio::Registers>::WORDS), (0x20101000, <super::bt_mac::BluetoothSchedulerInterruptRuntimeWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::BtV32BasebandRxInfoWords as oer_mmio::Registers>::WORDS), (0x20104000, <super::wifi_mac::SharedRadioInitControlWords as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::SharedBasebandResetIdleStatusWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::SharedBasebandTxTimingWords as oer_mmio::Registers>::WORDS), (0x20102000, <super::bt_bb::ZbbbRadioControlWords as oer_mmio::Registers>::WORDS), (0x2010f000, <super::modem_lpcon::ModemLpconChipClocksWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstPll160Words as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::HpSysClkrstBootClockWords as oer_mmio::Registers>::WORDS), (0x20701000, <super::lp_aonclkrst::LpAonClkrstCpllWords as oer_mmio::Registers>::WORDS), (0x20704000, <super::pmu::PmuBootClockWords as oer_mmio::Registers>::WORDS), (0x20589000, <super::hp_alive_sys::HpAliveSysPllClockWords as oer_mmio::Registers>::WORDS), (0x20500000, <super::spi_mem_c::Spi0FlashWords as oer_mmio::Registers>::WORDS), (0x20501000, <super::spi1_mem_c::Spi1FlashWords as oer_mmio::Registers>::WORDS), (0x20502000, <super::spi_mem_s::Memspi2PsramWords as oer_mmio::Registers>::WORDS), (0x20503000, <super::spi1_mem_s::Memspi3PsramWords as oer_mmio::Registers>::WORDS), (0x20584000, <super::iomux_mspi_pin::IomuxMspiPsramPinsWords as oer_mmio::Registers>::WORDS), (0x20702000, <super::lp_ana::LpAnaBrownoutWords as oer_mmio::Registers>::WORDS), (0x2010f800, <super::i2c_ana_mst::I2cAnaMstWords as oer_mmio::Registers>::WORDS), (0x2010fc00, <super::i2c_ana_mst_mem::PhyI2cCommandRamWords as oer_mmio::Registers>::WORDS), (0x2d002000, <super::bus_monitor::DebugModeStatusWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::CryptoClockWords as oer_mmio::Registers>::WORDS), (0x20587000, <super::hp_sys_clkrst::AxiDmaClockWords as oer_mmio::Registers>::WORDS), (0x20348000, <super::axi_dma::AxiDmaChannel0Words as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesProgramWords as oer_mmio::Registers>::WORDS), (0x20508000, <super::aes::AesInterruptWords as oer_mmio::Registers>::WORDS), (0x20814000, <super::trng::TrngDivision as oer_mmio::Registers>::WORDS), (0x20391000, <super::usb_serial_jtag::UsbDeviceDivision as oer_mmio::Registers>::WORDS), (0x20399000, <super::systimer::SystimerDivision as oer_mmio::Registers>::WORDS), (0x20585000, <super::interrupt_core::InterruptCore0Division as oer_mmio::Registers>::WORDS), (0x2c000000, <super::cache::CacheDivision as oer_mmio::Registers>::WORDS), (0x20108800, <super::modem_etm::ModemEtmDivision as oer_mmio::Registers>::WORDS), (0x20103000, <super::ieee802154::Ieee802154Division as oer_mmio::Registers>::WORDS), (0x10800000, <super::clic::ClicDivision as oer_mmio::Registers>::WORDS)]),
 "no two claimed blocks of hart 1's context list the same word"
 );
 }
@@ -311592,6 +314596,10 @@ pub mod layouts {
         type Window = DmaWindow;
     }
 
+    impl oer_memory::DmaLayout for AxiDmaDescriptor {
+        type Window = DmaWindow;
+    }
+
     impl oer_memory::DmaLayout for BleBufferHeader {
         type Window = DmaWindow;
     }
@@ -313571,6 +316579,380 @@ pub mod layouts {
                 Some(reference) => reference.bits(),
                 None => 0,
             })
+        }
+    }
+
+    /// The 16-byte node an AXI-DMA channel follows: the control word, the buffer
+    /// address and the link to the next node of a chain, aligned to 8 bytes.
+    ///
+    /// 16 bytes, aligned to 8; its zero bytes are an all-zero structure.
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+    #[repr(C, align(8))]
+    #[derive(bytemuck::Zeroable)]
+    pub struct AxiDmaDescriptor {
+        control: AxiDmaDescriptorControlCell,
+        buffer: AxiDmaDescriptorBufferCell,
+        next: AxiDmaDescriptorNextCell,
+        padding: AxiDmaDescriptorPaddingCell,
+    }
+
+    const _: () = {
+        assert!(core::mem::size_of::<AxiDmaDescriptor>() == 16);
+        assert!(core::mem::align_of::<AxiDmaDescriptor>() == 8);
+    };
+
+    impl AxiDmaDescriptor {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 16;
+        /// The alignment the hardware requires, in bytes.
+        pub const ALIGN: usize = 8;
+        /// The RAM regions the structure must lie in.
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[DMA_WINDOW];
+
+        /// The all-zero structure.
+        pub const fn zeroed() -> Self {
+            Self {
+                control: AxiDmaDescriptorControlCell(oer_memory::VolatileCell::new(0)),
+                buffer: AxiDmaDescriptorBufferCell(oer_memory::VolatileCell::new(0)),
+                next: AxiDmaDescriptorNextCell(oer_memory::VolatileCell::new(0)),
+                padding: AxiDmaDescriptorPaddingCell(oer_memory::VolatileCell::new(0)),
+            }
+        }
+
+        /// The `CONTROL` word at offset 0x0.
+        pub const fn control(&self) -> &AxiDmaDescriptorControlCell {
+            &self.control
+        }
+
+        /// The `BUFFER` word at offset 0x4.
+        pub const fn buffer(&self) -> &AxiDmaDescriptorBufferCell {
+            &self.buffer
+        }
+
+        /// The `NEXT` word at offset 0x8.
+        pub const fn next(&self) -> &AxiDmaDescriptorNextCell {
+            &self.next
+        }
+
+        /// The `PADDING` word at offset 0xc.
+        pub const fn padding(&self) -> &AxiDmaDescriptorPaddingCell {
+            &self.padding
+        }
+    }
+
+    /// The `AXI_DMA_DESCRIPTOR.CONTROL` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct AxiDmaDescriptorControlCell(oer_memory::VolatileCell<u32>);
+
+    impl AxiDmaDescriptorControlCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> AxiDmaDescriptorControl {
+            AxiDmaDescriptorControl(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: AxiDmaDescriptorControl) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// A value of the `AXI_DMA_DESCRIPTOR.CONTROL` word.
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct AxiDmaDescriptorControl(u32);
+
+    impl AxiDmaDescriptorControl {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `SIZE` in bits.
+        pub const SIZE_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `SIZE`.
+        pub const SIZE_MAX: u32 = 0xfff;
+        /// The buffer's capacity in bytes.
+        ///
+        /// `SIZE`, bits 11:0; written by the CPU.
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn size(self) -> u16 {
+            (self.0 & 0xfff) as u16
+        }
+
+        /// This value with `SIZE` set to `value`, or `None` when `value` does not
+        /// fit its 12 bits.
+        pub const fn with_size(self, value: u16) -> Option<Self> {
+            if value > 0xfff {
+                None
+            } else {
+                Some(Self((self.0 & 0xfffff000) | value as u32))
+            }
+        }
+
+        /// This value with `SIZE` set to `VALUE`, checked at compile time.
+        pub const fn with_size_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xfffff000) | value as u32)
+        }
+
+        /// Width of `LENGTH` in bits.
+        pub const LENGTH_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `LENGTH`.
+        pub const LENGTH_MAX: u32 = 0xfff;
+        /// The valid bytes of the buffer: written by software for OUT, by the DMA for IN.
+        ///
+        /// `LENGTH`, bits 23:12; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `transfer`: the hardware.
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn length(self) -> u16 {
+            ((self.0 >> 12) & 0xfff) as u16
+        }
+
+        /// This value with `LENGTH` set to `value`, or `None` when `value` does not
+        /// fit its 12 bits.
+        pub const fn with_length(self, value: u16) -> Option<Self> {
+            if value > 0xfff {
+                None
+            } else {
+                Some(Self((self.0 & 0xff000fff) | (value as u32) << 12))
+            }
+        }
+
+        /// This value with `LENGTH` set to `VALUE`, checked at compile time.
+        pub const fn with_length_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xff000fff) | (value as u32) << 12)
+        }
+
+        /// Width of `ERR_EOF` in bits.
+        pub const ERR_EOF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ERR_EOF`.
+        pub const ERR_EOF_MAX: u32 = 0x1;
+        /// Set by an IN channel when the received data contains an error.
+        ///
+        /// `ERR_EOF`, bit 28; written by the hardware.
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn err_eof(self) -> bool {
+            self.0 & 0x10000000 != 0
+        }
+
+        /// This value with `ERR_EOF` set to `value`.
+        pub const fn with_err_eof(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x10000000)
+            } else {
+                Self(self.0 & 0xefffffff)
+            }
+        }
+
+        /// Width of `SUC_EOF` in bits.
+        pub const SUC_EOF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SUC_EOF`.
+        pub const SUC_EOF_MAX: u32 = 0x1;
+        /// Set on the last descriptor of a chain; the IN channel sets it on the descriptor that ends a received frame.
+        ///
+        /// `SUC_EOF`, bit 30; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `transfer`: the hardware.
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn suc_eof(self) -> bool {
+            self.0 & 0x40000000 != 0
+        }
+
+        /// This value with `SUC_EOF` set to `value`.
+        pub const fn with_suc_eof(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x40000000)
+            } else {
+                Self(self.0 & 0xbfffffff)
+            }
+        }
+
+        /// Width of `OWNER` in bits.
+        pub const OWNER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OWNER`.
+        pub const OWNER_MAX: u32 = 0x1;
+        /// Set by software to hand the descriptor to the DMA; the DMA clears it when it is done with the buffer.
+        ///
+        /// `OWNER`, bit 31; written by the participants in the declared phases. Phase `arm`: the CPU. Phase `transfer`: the hardware.
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn owner(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+
+        /// This value with `OWNER` set to `value`.
+        pub const fn with_owner(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x80000000)
+            } else {
+                Self(self.0 & 0x7fffffff)
+            }
+        }
+    }
+
+    /// The `AXI_DMA_DESCRIPTOR.BUFFER` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct AxiDmaDescriptorBufferCell(oer_memory::VolatileCell<u32>);
+
+    impl AxiDmaDescriptorBufferCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> AxiDmaDescriptorBuffer {
+            AxiDmaDescriptorBuffer(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: AxiDmaDescriptorBuffer) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// A value of the `AXI_DMA_DESCRIPTOR.BUFFER` word.
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct AxiDmaDescriptorBuffer(u32);
+
+    impl AxiDmaDescriptorBuffer {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `ADDRESS` in bits.
+        pub const ADDRESS_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ADDRESS`.
+        pub const ADDRESS_MAX: u32 = 0xffffffff;
+        /// The buffer's address.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU. The address lies in [`DMA_WINDOW`].
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: DmaWindowAddress) -> Self {
+            Self(value.get())
+        }
+    }
+
+    /// The `AXI_DMA_DESCRIPTOR.NEXT` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct AxiDmaDescriptorNextCell(oer_memory::VolatileCell<u32>);
+
+    impl AxiDmaDescriptorNextCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> AxiDmaDescriptorNext {
+            AxiDmaDescriptorNext(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: AxiDmaDescriptorNext) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// A value of the `AXI_DMA_DESCRIPTOR.NEXT` word.
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct AxiDmaDescriptorNext(u32);
+
+    impl AxiDmaDescriptorNext {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `ADDRESS` in bits.
+        pub const ADDRESS_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ADDRESS`.
+        pub const ADDRESS_MAX: u32 = 0xffffffff;
+        /// The next descriptor's address, or zero at the end.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU. The address of a [`AxiDmaDescriptor`], or zero.
+        /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: Option<DmaRef<AxiDmaDescriptor>>) -> Self {
+            Self(match value {
+                Some(reference) => reference.bits(),
+                None => 0,
+            })
+        }
+    }
+
+    /// The `AXI_DMA_DESCRIPTOR.PADDING` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct AxiDmaDescriptorPaddingCell(oer_memory::VolatileCell<u32>);
+
+    impl AxiDmaDescriptorPaddingCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> AxiDmaDescriptorPadding {
+            AxiDmaDescriptorPadding(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: AxiDmaDescriptorPadding) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// The padding to the 8-byte alignment of the next descriptor; no engine reads it.
+    ///
+    /// A value of the `AXI_DMA_DESCRIPTOR.PADDING` word.
+    /// SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct AxiDmaDescriptorPadding(u32);
+
+    impl AxiDmaDescriptorPadding {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
         }
     }
 

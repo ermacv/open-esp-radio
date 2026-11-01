@@ -408,7 +408,11 @@ the AES program and DMA IRQ parts and the complete
 `Silent<AesInterrupt>` proof; `into_interrupting` instead hands the
 `AesInterrupt` part to the image's router for a handler, which acknowledges
 it (`AesInterrupt::clear`), and returns an `InterruptingAes` owner that may
-enable the interrupt. Both owners expose the same register atoms;
+enable the interrupt and runs DMA-AES (ECB, CBC, CTR) over the AES's AXI-DMA
+channel 0 (`peripherals::aes_dma`: the channel, its placed descriptors and
+three buffer pairs in the DMA window, no cache maintenance as internal SRAM
+is outside the L1 cache; SOURCE: ESP_IDF_4D80C1B2_S31_AES_DMA). Both owners
+expose the same Typical register atoms;
 `oer-esp32s31-crypto` owns the sequence and waits. Clock/reset writes preserve
 sibling and reserved bits; no fixed whole-word clock image is granted.
 SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES in the register model.

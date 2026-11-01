@@ -193,6 +193,7 @@ impl Root {
             timer_group1,
             aes,
             crypto_clock,
+            axi_dma,
             secondary_launch,
             cache_counters,
         } = self.partitions;
@@ -241,7 +242,7 @@ impl Root {
                 super_watchdog,
             },
             resources: RuntimeResources {
-                aes: crate::peripherals::aes::AesParts::new(aes, crypto_clock),
+                aes: crate::peripherals::aes::AesParts::new(aes, crypto_clock, axi_dma),
                 system_timer: SystemTimer::new(system_timer),
                 timg0_alarm: Timg0AlarmParts::new(timer_group0),
                 timg1_alarm: Timg1AlarmParts::new(timer_group1),

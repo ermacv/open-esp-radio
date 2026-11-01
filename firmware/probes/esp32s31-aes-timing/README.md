@@ -18,6 +18,8 @@ each timed with `mcycle` around the operation:
 | `flag` | The accelerator, polling `STATE` until it reads idle |
 | `interrupt` | The accelerator with `INT_ENA` set, spinning until the handler counts an entry |
 | `wifi` | The Wi-Fi station's engine (`oer-esp32s31-crypto`): a timer-woken sample every 1 µs through the system timer |
+| `dma-flag` | DMA-AES over AXI-DMA channel 0, polling `STATE` for `DONE` and the output descriptor's `OWNER` (`INT_ENA` cleared) |
+| `dma-interrupt` | DMA-AES with `INT_ENA` set, spinning until the handler counts the completion, then the same check |
 
 | Operation | Inputs |
 | --- | --- |
@@ -27,6 +29,18 @@ each timed with `mcycle` around the operation:
 | `cmac` | BIP's AES-CMAC (RFC 4493) of 64 and 512 bytes, key load included |
 | `start-to-idle` | From the start of a block to `STATE` reading idle |
 | `start-to-handler` | From the start of a block to the AES handler's entry |
+| `start-to-done` | From the start of a one-block DMA transfer to `DONE` read |
+
+The DMA modes run `block` and `unwrap` as one one-block ECB transfer per
+block, `ccm-seal` as a CBC-MAC transfer (B0, the AAD and the body) and a
+CTR transfer (the MAC and the body) and `cmac` as an ECB transfer for the
+subkey and a CBC transfer (`ops::ccm_seal_passes`, `ops::cmac_passes`,
+host-tested against the block-by-block code). The HAL's placed DMA storage
+(`peripherals::aes_dma`) holds three buffer pairs (16, 128 and 1568 bytes)
+so a transfer copies about its own length in and out. After each DMA case
+a `split` line gives the mean cycles per run of its phases: `load` (the
+copy into the DMA buffer), `start` (IV, descriptors, channel reset and
+start, AES start), `wait` and `finish` (`DMA_EXIT` and the copy out).
 
 `unwrap`, `ccm-seal` and `cmac` run the same code over every block
 (`src/ops.rs`, checked on the host against RustCrypto's `ccm` and `cmac`);

@@ -1,0 +1,525 @@
+# SOURCE: ESP_IDF_4D80C1B2_S31_AXI_DMA and ESP_IDF_4D80C1B2_S31_AXI_DMA_LL: the
+# registers of AXI-DMA channel 0 and the common words the AES's DMA uses,
+# curated from the pinned header; the other channels and words are outside
+# the partial extent.
+schema = 3
+[type]
+name = "AXI_DMA"
+sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA", "ESP_IDF_4D80C1B2_S31_AXI_DMA_LL"]
+description = "The AXI general-purpose DMA controller: channel 0's IN (peripheral to memory) and OUT (memory to peripheral) halves and the controller's memory ranges and clock."
+[review]
+sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"]
+provenance = "imported"
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"
+
+[[registers]]
+name = "IN_INT_RAW_CH0"
+offset = 0x0
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "IN_DONE_CH0_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "IN_SUC_EOF_CH0_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "IN_ERR_EOF_CH0_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "IN_DSCR_ERR_CH0_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "IN_DSCR_EMPTY_CH0_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "INFIFO_L1_OVF_CH0_INT_RAW"
+bits = "5"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "INFIFO_L1_UDF_CH0_INT_RAW"
+bits = "6"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "INFIFO_L2_OVF_CH0_INT_RAW"
+bits = "7"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "INFIFO_L2_UDF_CH0_INT_RAW"
+bits = "8"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "INFIFO_L3_OVF_CH0_INT_RAW"
+bits = "9"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "INFIFO_L3_UDF_CH0_INT_RAW"
+bits = "10"
+class = "write-one-to-clear"
+
+[[registers]]
+name = "IN_INT_CLR_CH0"
+offset = 0xc
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "IN_DONE_CH0_INT_CLR"
+bits = "0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "IN_SUC_EOF_CH0_INT_CLR"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "IN_ERR_EOF_CH0_INT_CLR"
+bits = "2"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "IN_DSCR_ERR_CH0_INT_CLR"
+bits = "3"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "IN_DSCR_EMPTY_CH0_INT_CLR"
+bits = "4"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INFIFO_L1_OVF_CH0_INT_CLR"
+bits = "5"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INFIFO_L1_UDF_CH0_INT_CLR"
+bits = "6"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INFIFO_L2_OVF_CH0_INT_CLR"
+bits = "7"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INFIFO_L2_UDF_CH0_INT_CLR"
+bits = "8"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INFIFO_L3_OVF_CH0_INT_CLR"
+bits = "9"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INFIFO_L3_UDF_CH0_INT_CLR"
+bits = "10"
+class = "write-trigger"
+
+[[registers]]
+name = "IN_CONF0_CH0"
+offset = 0x10
+reset = { value = 0x0 }
+reserved = { mask = 0xfffffc00, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "IN_RST_CH0"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "IN_LOOP_TEST_CH0"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "MEM_TRANS_EN_CH0"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "IN_ETM_EN_CH0"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "IN_BURST_SIZE_SEL_CH0"
+bits = "6:4"
+class = "plain"
+
+[[registers.fields]]
+name = "IN_CMD_DISABLE_CH0"
+bits = "7"
+class = "plain"
+
+[[registers.fields]]
+name = "IN_ECC_AEC_EN_CH0"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "INDSCR_BURST_EN_CH0"
+bits = "9"
+class = "plain"
+
+[[registers]]
+name = "IN_LINK1_CH0"
+offset = 0x20
+reset = { value = 0x11 }
+reserved = { mask = 0xffffffe0, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "INLINK_AUTO_RET_CH0"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "INLINK_STOP_CH0"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INLINK_START_CH0"
+bits = "2"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INLINK_RESTART_CH0"
+bits = "3"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "INLINK_PARK_CH0"
+bits = "4"
+class = "read-only"
+
+[[registers]]
+name = "IN_LINK2_CH0"
+offset = 0x24
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "INLINK_ADDR_CH0"
+bits = "31:0"
+class = "plain"
+pointer = { points-to = "AXI_DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA_LL"] }
+
+[[registers]]
+name = "IN_PERI_SEL_CH0"
+offset = 0x44
+reset = { value = 0x3f }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "PERI_IN_SEL_CH0"
+bits = "5:0"
+class = "plain"
+values = [{ name = "AES", value = 4, sources = ["ESP_IDF_4D80C1B2_S31_GDMA_AES_TRIGGER"] }, { name = "NONE", value = 63, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA_LL"] }]
+
+[[registers]]
+name = "OUT_INT_RAW_CH0"
+offset = 0x138
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "OUT_DONE_CH0_INT_RAW"
+bits = "0"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUT_EOF_CH0_INT_RAW"
+bits = "1"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUT_DSCR_ERR_CH0_INT_RAW"
+bits = "2"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUT_TOTAL_EOF_CH0_INT_RAW"
+bits = "3"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUTFIFO_L1_OVF_CH0_INT_RAW"
+bits = "4"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUTFIFO_L1_UDF_CH0_INT_RAW"
+bits = "5"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUTFIFO_L2_OVF_CH0_INT_RAW"
+bits = "6"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUTFIFO_L2_UDF_CH0_INT_RAW"
+bits = "7"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUTFIFO_L3_OVF_CH0_INT_RAW"
+bits = "8"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUTFIFO_L3_UDF_CH0_INT_RAW"
+bits = "9"
+class = "write-one-to-clear"
+
+[[registers.fields]]
+name = "OUT_LINK_SWITCH_CH0_INT_RAW"
+bits = "10"
+class = "write-one-to-clear"
+
+[[registers]]
+name = "OUT_INT_CLR_CH0"
+offset = 0x144
+reset = { value = 0x0 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "OUT_DONE_CH0_INT_CLR"
+bits = "0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUT_EOF_CH0_INT_CLR"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUT_DSCR_ERR_CH0_INT_CLR"
+bits = "2"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUT_TOTAL_EOF_CH0_INT_CLR"
+bits = "3"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTFIFO_L1_OVF_CH0_INT_CLR"
+bits = "4"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTFIFO_L1_UDF_CH0_INT_CLR"
+bits = "5"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTFIFO_L2_OVF_CH0_INT_CLR"
+bits = "6"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTFIFO_L2_UDF_CH0_INT_CLR"
+bits = "7"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTFIFO_L3_OVF_CH0_INT_CLR"
+bits = "8"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTFIFO_L3_UDF_CH0_INT_CLR"
+bits = "9"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUT_LINK_SWITCH_CH0_INT_CLR"
+bits = "10"
+class = "write-trigger"
+
+[[registers]]
+name = "OUT_CONF0_CH0"
+offset = 0x148
+reset = { value = 0x8 }
+reserved = { mask = 0xfffff800, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "OUT_RST_CH0"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_LOOP_TEST_CH0"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_AUTO_WRBACK_CH0"
+bits = "2"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_EOF_MODE_CH0"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_ETM_EN_CH0"
+bits = "4"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_BURST_SIZE_SEL_CH0"
+bits = "7:5"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_CMD_DISABLE_CH0"
+bits = "8"
+class = "plain"
+
+[[registers.fields]]
+name = "OUT_ECC_AEC_EN_CH0"
+bits = "9"
+class = "plain"
+
+[[registers.fields]]
+name = "OUTDSCR_BURST_EN_CH0"
+bits = "10"
+class = "plain"
+
+[[registers]]
+name = "OUT_LINK1_CH0"
+offset = 0x158
+reset = { value = 0x8 }
+reserved = { mask = 0xfffffff0, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "OUTLINK_STOP_CH0"
+bits = "0"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTLINK_START_CH0"
+bits = "1"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTLINK_RESTART_CH0"
+bits = "2"
+class = "write-trigger"
+
+[[registers.fields]]
+name = "OUTLINK_PARK_CH0"
+bits = "3"
+class = "read-only"
+
+[[registers]]
+name = "OUT_LINK2_CH0"
+offset = 0x15c
+reset = { value = 0x0 }
+
+[[registers.fields]]
+name = "OUTLINK_ADDR_CH0"
+bits = "31:0"
+class = "plain"
+pointer = { points-to = "AXI_DMA_DESCRIPTOR", placement = "dma-window", encoding = { width = 0x20, shift = 0x0 }, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA_LL"] }
+
+[[registers]]
+name = "OUT_PERI_SEL_CH0"
+offset = 0x17c
+reset = { value = 0x3f }
+reserved = { mask = 0xffffffc0, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "PERI_OUT_SEL_CH0"
+bits = "5:0"
+class = "plain"
+values = [{ name = "AES", value = 4, sources = ["ESP_IDF_4D80C1B2_S31_GDMA_AES_TRIGGER"] }, { name = "NONE", value = 63, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA_LL"] }]
+
+[[registers]]
+name = "INTR_MEM_START_ADDR"
+offset = 0x27c
+reset = { value = 0x30100000 }
+
+[[registers.fields]]
+name = "ACCESS_INTR_MEM_START_ADDR"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "INTR_MEM_END_ADDR"
+offset = 0x280
+reset = { value = 0x8fffffff }
+
+[[registers.fields]]
+name = "ACCESS_INTR_MEM_END_ADDR"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "EXTR_MEM_START_ADDR"
+offset = 0x284
+reset = { value = 0x30100000 }
+
+[[registers.fields]]
+name = "ACCESS_EXTR_MEM_START_ADDR"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "EXTR_MEM_END_ADDR"
+offset = 0x288
+reset = { value = 0x8fffffff }
+
+[[registers.fields]]
+name = "ACCESS_EXTR_MEM_END_ADDR"
+bits = "31:0"
+class = "plain"
+
+[[registers]]
+name = "MISC_CONF"
+offset = 0x2a8
+reset = { value = 0x0 }
+reserved = { mask = 0xffffffe4, sources = ["ESP_IDF_4D80C1B2_S31_AXI_DMA"] }
+
+[[registers.fields]]
+name = "AXIM_RST_WR_INTER"
+bits = "0"
+class = "plain"
+
+[[registers.fields]]
+name = "AXIM_RST_RD_INTER"
+bits = "1"
+class = "plain"
+
+[[registers.fields]]
+name = "ARB_PRI_DIS"
+bits = "3"
+class = "plain"
+
+[[registers.fields]]
+name = "CLK_EN"
+bits = "4"
+class = "plain"
