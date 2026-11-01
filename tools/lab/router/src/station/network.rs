@@ -1,7 +1,9 @@
 //! The dedicated station BSS network. All non-station network sections are fingerprinted
 //! before and after applying it; no LAN address, port or route is rewritten.
-//! Forwarding is rejected both ways, except UDP between the station network
-//! and one host address when a run asks for it (its load traffic).
+//! Forwarding is rejected both ways, except UDP and TCP between the station
+//! network and one host address when a run asks for it (its load generator or
+//! a scenario's TCP peer). The network's DHCP server can be stopped and
+//! served again while the network stays applied ([`serve_dhcp`]).
 
 use crate::{
     router::quote,
@@ -127,7 +129,7 @@ fn settings(host: Option<Ipv4Addr>) -> Vec<Setting> {
             ("firewall.oer_station_host_in.src", "*"),
             ("firewall.oer_station_host_in.src_ip", host.as_str()),
             ("firewall.oer_station_host_in.dest", NAME),
-            ("firewall.oer_station_host_in.proto", "udp"),
+            ("firewall.oer_station_host_in.proto", "tcp udp"),
             ("firewall.oer_station_host_in.family", "ipv4"),
             ("firewall.oer_station_host_in.target", "ACCEPT"),
             ("firewall.oer_station_host_out", "rule"),
@@ -135,7 +137,7 @@ fn settings(host: Option<Ipv4Addr>) -> Vec<Setting> {
             ("firewall.oer_station_host_out.src", NAME),
             ("firewall.oer_station_host_out.dest", "*"),
             ("firewall.oer_station_host_out.dest_ip", host.as_str()),
-            ("firewall.oer_station_host_out.proto", "udp"),
+            ("firewall.oer_station_host_out.proto", "tcp udp"),
             ("firewall.oer_station_host_out.family", "ipv4"),
             ("firewall.oer_station_host_out.target", "ACCEPT"),
         ] {
@@ -163,7 +165,7 @@ const SECTIONS: &[&str] = &[
     "firewall.oer_station_host_out",
 ];
 
-/// The station network, forwarding UDP to and from `host` when given.
+/// The station network, forwarding UDP and TCP to and from `host` when given.
 pub fn render(host: Option<Ipv4Addr>) -> Result<String> {
     let mut script = String::from("set -e\n");
     for section in SECTIONS {
@@ -287,7 +289,9 @@ fn verify_script(interface: &str, host: Option<Ipv4Addr>) -> Result<String> {
     Ok(script)
 }
 
-/// Verify the applied network, the forwarding for `host` included.
+/// Verify the applied network, the forwarding for `host` included. It
+/// checks the network as [`render`] made it, its DHCP server serving: a
+/// network whose DHCP [`serve_dhcp`] stopped fails it.
 pub fn verify(
     remote: &mut dyn Remote,
     interface: &str,
@@ -341,6 +345,38 @@ pub fn verify(
     Err("station DHCP instance did not become ready".into())
 }
 
+fn dhcp_script(serve: bool) -> Result<String> {
+    let ignore = if serve { "0" } else { "1" };
+    Ok(format!(
+        "set -e\n\
+         if [ \"$(uci -q get dhcp.oer_station || :)\" != dhcp ]; then printf 'absent\\n'; exit 0; fi\n\
+         if [ -n \"$(uci changes dhcp)\" ]; then printf 'staged\\n'; exit 0; fi\n\
+         uci set {}\n\
+         uci commit dhcp\n\
+         /etc/init.d/dnsmasq reload >/dev/null\n\
+         printf 'ignore=%s\\n' \"$(uci get dhcp.oer_station.ignore)\"\n",
+        quote(&format!("dhcp.oer_station.ignore={ignore}"))?
+    ))
+}
+
+/// Have the applied station network's DHCP server serve (`serve`) or stop
+/// answering, and read back that it does. Refused when no station profile
+/// applied the network, or when the router has staged DHCP changes, which
+/// the commit would take along. A later station profile renders the
+/// network again, serving. Returns whether it serves.
+pub fn serve_dhcp(remote: &mut dyn Remote, serve: bool) -> Result<bool> {
+    let answer = remote
+        .run(&dhcp_script(serve)?)
+        .map_err(|error| format!("switching the station DHCP server: {error}"))?;
+    match answer.trim() {
+        "absent" => Err("the station network is not applied: apply a station profile first".into()),
+        "staged" => Err("staged DHCP changes refuse switching the station DHCP server".into()),
+        "ignore=0" if serve => Ok(true),
+        "ignore=1" if !serve => Ok(false),
+        _ => Err("the station DHCP server did not take the asked state".into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn a_host_gets_udp_forwarding_both_ways_ahead_of_the_rejections() {
+    fn a_host_gets_udp_and_tcp_forwarding_both_ways_ahead_of_the_rejections() {
         let host = Ipv4Addr::new(192, 168, 178, 129);
         let script = render(Some(host)).unwrap();
         for line in [
@@ -403,8 +439,8 @@ mod tests {
         ] {
             assert!(script.contains(line), "{line}");
         }
-        assert!(script.contains("firewall.oer_station_host_in.proto=udp"));
-        assert!(script.contains("firewall.oer_station_host_out.proto=udp"));
+        assert!(script.contains("'firewall.oer_station_host_in.proto=tcp udp'"));
+        assert!(script.contains("'firewall.oer_station_host_out.proto=tcp udp'"));
         // Reordered to the front after the rejections were.
         assert!(
             script.find("reorder firewall.oer_station_in=0").unwrap()
@@ -415,6 +451,7 @@ mod tests {
         let verify = verify_script("phy0-ap0", Some(host)).unwrap();
         assert!(verify.contains("grep -qF oer-station-host-out"));
         assert!(verify.contains("uci get firewall.oer_station_host_in.src_ip"));
+        assert!(verify.contains("= 'tcp udp'"));
     }
 
     struct Fake {
@@ -493,5 +530,36 @@ mod tests {
         };
         assert!(verify(&mut remote, "made-up-interface", &hash, None).is_err());
         assert!(!remote.scripts.iter().any(|s| s.contains("dnsmasq reload")));
+    }
+
+    #[test]
+    fn the_dhcp_server_stops_and_serves_again_and_reads_back_its_state() {
+        for (serve, reply, ignore) in [(false, "ignore=1\n", "1"), (true, "ignore=0\n", "0")] {
+            let mut remote = Fake {
+                replies: [reply.into()].into(),
+                scripts: vec![],
+            };
+            assert_eq!(serve_dhcp(&mut remote, serve).unwrap(), serve);
+            let [script] = remote.scripts.as_slice() else {
+                panic!("one script");
+            };
+            assert!(script.contains(&format!("uci set 'dhcp.oer_station.ignore={ignore}'")));
+            assert!(
+                script.find("uci commit dhcp").unwrap()
+                    < script.find("/etc/init.d/dnsmasq reload").unwrap()
+            );
+            assert!(script.contains("uci get dhcp.oer_station.ignore"));
+        }
+    }
+
+    #[test]
+    fn the_dhcp_switch_refuses_an_absent_network_staged_changes_and_a_mismatch() {
+        for reply in ["absent\n", "staged\n", "ignore=0\n", ""] {
+            let mut remote = Fake {
+                replies: [reply.into()].into(),
+                scripts: vec![],
+            };
+            assert!(serve_dhcp(&mut remote, false).is_err(), "{reply:?}");
+        }
     }
 }

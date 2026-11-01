@@ -120,8 +120,10 @@ the air, shared at least.
   (`iwinfo nl80211 phyname`). Both views must answer; one that fails
   leaves the router unavailable, never parked. A run's profile enables the
   section again. Its operations are the logic of
-  `oer-lab-router`: the AP profile on a channel the stand file allows, the
-  station, DHCP and ping views, the WPA2 checks, a deauthentication, the
+  `oer-lab-router`: the AP profile on a channel the stand file allows (its
+  isolated network forwarding UDP and TCP with one host when the run names
+  it), the station, DHCP and ping views, the station network's DHCP server
+  stopped or serving, the WPA2 checks, a deauthentication, the
   routed network's check and the echo and departure observers. The service
   probes the equipment it reaches over SSH (the router, the air observer)
   under a lease that holds the router; the host's own radios are probed by

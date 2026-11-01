@@ -392,9 +392,10 @@ pub struct HolderStatus {
 pub enum RouterOperation {
     /// Apply the WPA2 station profile with `ssid` and `passphrase` on
     /// `channel`, one the stand file's `[router]` allows, to the stand's AP;
-    /// its isolated network forwards UDP between its stations and
-    /// `forward_host` when given (a run's load generator on the host).
-    /// Result: the applied profile's description.
+    /// its isolated network forwards UDP and TCP between its stations and
+    /// `forward_host` when given (a run's load generator or TCP peer on the
+    /// host), and its DHCP server serves. Result: the applied profile's
+    /// description.
     ApplyStationProfile {
         ssid: String,
         passphrase: String,
@@ -416,6 +417,11 @@ pub enum RouterOperation {
     Ping { address: Ipv4Addr, count: u16 },
     /// Ask the AP to deauthenticate station `mac`.
     Deauthenticate { mac: String },
+    /// Have the isolated station network's DHCP server serve (`serve`) or
+    /// stop answering; refused before a station profile applied the
+    /// network. A later station profile serves again. Result:
+    /// `{ "serving": bool }`, as read back from the router.
+    StationDhcp { serve: bool },
     /// Prepare the routed network's check. Result: the state before.
     PrepareNetwork,
     /// Check the routed network against its state `before`.

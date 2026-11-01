@@ -118,7 +118,7 @@ pub struct Profile {
     ssid: Zeroizing<String>,
     security: Security,
     group_rekey_seconds: u32,
-    /// The host whose UDP the station network forwards both ways.
+    /// The host whose UDP and TCP the station network forwards both ways.
     forward_host: Option<std::net::Ipv4Addr>,
 }
 
@@ -205,8 +205,8 @@ impl Profile {
         Ok(profile)
     }
 
-    /// This profile, whose station network forwards UDP between its
-    /// stations and `host`, a run's load generator.
+    /// This profile, whose station network forwards UDP and TCP between
+    /// its stations and `host`, a run's load generator or TCP peer.
     pub fn forwarding_host(mut self, host: std::net::Ipv4Addr) -> Self {
         self.forward_host = Some(host);
         self
