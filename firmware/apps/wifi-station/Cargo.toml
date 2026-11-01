@@ -10,7 +10,12 @@ description = "Wi-Fi station of a build profile; without a profile it reports No
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi"] }
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31"] }
+
+[features]
+# The station of a profile: the SDK's Wi-Fi. A build with a profile needs it,
+# one without builds the NotConfigured image, which links no Wi-Fi.
+station = ["oer-espressif/wifi"]
 
 [dev-dependencies]
 toml = "=1.1.4"

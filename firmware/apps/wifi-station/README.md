@@ -7,8 +7,11 @@ over TCP with the gateway's echo port, again after every reconnection. It
 declares no interrupt, DMA or service task of its own.
 
 ```console
-OER_WIFI_STATION_PROFILE=/path/station.toml cargo fw build wifi-station
+OER_WIFI_STATION_PROFILE=/path/station.toml cargo fw build wifi-station --features station
 ```
+
+The `station` feature takes the SDK's Wi-Fi. A profile without it, or the
+feature without a profile, fails the build.
 
 The variable holds the absolute path of a TOML file kept outside git:
 
@@ -31,9 +34,10 @@ constant. `profiles/open-ci.toml` is a neutral Open profile without
 credentials; it checks the Open path only, and WPA2 needs a profile that
 selects it.
 
-Without `OER_WIFI_STATION_PROFILE` the image reports
-`OER-RESULT: not-configured wifi-station`, takes no RF owner and enables no
-radio interrupt; the library only feeds the RTC watchdog.
+Without `OER_WIFI_STATION_PROFILE` (and the feature) the image reports
+`OER-RESULT: not-configured wifi-station`, takes no RF owner, enables no
+radio interrupt and links no Wi-Fi code; the library only feeds the RTC
+watchdog.
 
 A configured image's boot checks the profile's domain, channel and power
 limit before any radio owner starts, then starts the shared AES service, the

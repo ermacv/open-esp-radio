@@ -163,7 +163,7 @@ jobs:
           cargo fw build radio-root
           cargo fw build wifi-station
           OER_WIFI_STATION_PROFILE="$PWD/firmware/apps/wifi-station/profiles/open-ci.toml" \
-            cargo fw build wifi-station
+            cargo fw build wifi-station --features station
       - name: HIL image builds
         # Every image the HIL scenarios share, with the linked image's checks.
         run: |
