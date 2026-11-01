@@ -361,7 +361,11 @@ pub fn decode(bytes: &[u8]) -> Result<Record<'_>, DecodeError> {
             let overflow = name_count & 0x80 != 0;
             let name_count = name_count & 0x7f;
             let (words, names) = (usize::from(count), usize::from(name_count));
-            let (extra_words, extra_names) = if topic.has_path() {
+            // A line's shape gives its counts, checked once its words are
+            // read; a line may say it overflowed.
+            let (extra_words, extra_names) = if topic.is_line() {
+                (MAX_WORDS.saturating_sub(1), MAX_NAMES)
+            } else if topic.has_path() {
                 (MAX_PATH_WORDS, MAX_PATH_NAMES)
             } else {
                 (0, 0)
@@ -381,13 +385,23 @@ pub fn decode(bytes: &[u8]) -> Result<Record<'_>, DecodeError> {
                     .contains(&names)
                 || words > MAX_WORDS
                 || names > MAX_NAMES
-                || (overflow && !topic.has_path())
+                || (overflow && !topic.has_path() && !topic.is_line())
             {
                 return Err(DecodeError::Payload);
             }
             let mut words = [0; MAX_WORDS];
             for word in words.iter_mut().take(usize::from(count)) {
                 *word = u32::from_le_bytes(fields.array()?);
+            }
+            if topic.is_line() {
+                let shape = crate::line::Shape::of(words.first().copied().unwrap_or(0))
+                    .ok_or(DecodeError::Payload)?;
+                if !shape.fits(
+                    usize::from(count).saturating_sub(1),
+                    usize::from(name_count),
+                ) {
+                    return Err(DecodeError::Payload);
+                }
             }
             let mut names = [""; MAX_NAMES];
             let mut name_bytes = 0_usize;

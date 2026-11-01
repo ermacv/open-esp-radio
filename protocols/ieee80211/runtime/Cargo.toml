@@ -13,6 +13,7 @@ placement = ["oer-ieee80211-core-roles-sta/placement"]
 
 [dependencies]
 oer-events = { path = "../../../portable/events" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-sync = { path = "../../../portable/sync" }
 oer-network-port = { path = "../../network/port" }
 heapless = "0.9.3"

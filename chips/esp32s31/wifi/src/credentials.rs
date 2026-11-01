@@ -9,6 +9,15 @@ pub enum CredentialsError {
     PassphraseLength,
 }
 
+impl oer_diagnostics::DiagnosticPath for CredentialsError {
+    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+        path.name(match self {
+            Self::SsidLength => "SsidLength",
+            Self::PassphraseLength => "PassphraseLength",
+        });
+    }
+}
+
 /// Validated SSID and affine credentials. No secret supports Clone or Copy.
 ///
 /// ```compile_fail
