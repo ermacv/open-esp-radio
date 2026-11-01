@@ -116,7 +116,7 @@ impl Hardware {
 impl TxHardware for Hardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -128,14 +128,14 @@ impl TxHardware for Hardware {
 
     fn start_bound_legacy_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -146,14 +146,14 @@ impl TxHardware for Hardware {
 
     fn start_bound_ht_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
@@ -164,7 +164,7 @@ impl TxHardware for Hardware {
 
     fn start_bound_he_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }

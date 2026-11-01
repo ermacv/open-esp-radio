@@ -52,11 +52,11 @@ fn storage() -> PinnedTxDmaStorage<Lease> {
     storage
 }
 
-fn prepared_head(authority: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
+fn prepared_head(authority: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
     authority.descriptor_head().bits()
 }
 
-fn hardware_owned_head(authority: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
+fn hardware_owned_head(authority: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
     authority.descriptor_head().bits()
 }
 

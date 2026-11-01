@@ -468,7 +468,7 @@ impl MacColdRxBufferHardware for MockMmio {
 impl TxHardware for MockMmio {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -479,7 +479,7 @@ impl TxHardware for MockMmio {
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -490,7 +490,7 @@ impl TxHardware for MockMmio {
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: oer_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {
@@ -501,7 +501,7 @@ impl TxHardware for MockMmio {
 
     fn start_bound_legacy_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
         self.record_fence();
@@ -510,7 +510,7 @@ impl TxHardware for MockMmio {
 
     fn start_bound_ht_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
         self.record_fence();

@@ -39,7 +39,7 @@ struct CompletionHardware {
 impl TxHardware for CompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
     ) -> bool {
@@ -48,14 +48,14 @@ impl TxHardware for CompletionHardware {
 
     fn start_bound_legacy_tx(
         &mut self,
-        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: MacHtTxProgram,
     ) -> bool {
@@ -64,7 +64,7 @@ impl TxHardware for CompletionHardware {
 
     fn start_bound_ht_tx(
         &mut self,
-        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
@@ -156,7 +156,7 @@ impl DetachingCompletionHardware {
 impl TxHardware for DetachingCompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
-        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
     ) -> bool {
@@ -165,14 +165,14 @@ impl TxHardware for DetachingCompletionHardware {
 
     fn start_bound_legacy_tx(
         &mut self,
-        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -184,14 +184,14 @@ impl TxHardware for DetachingCompletionHardware {
 
     fn start_bound_ht_tx(
         &mut self,
-        _: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _: oer_esp32s31_hal::types::MacTxQueueIndex,
         program: oer_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {

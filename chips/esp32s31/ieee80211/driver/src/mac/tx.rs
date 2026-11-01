@@ -189,20 +189,20 @@ pub trait TxHardware {
 
     fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool;
 
     fn start_bound_legacy_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     );
 
     fn prepare_bound_ht_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: MacTxQueueIndex,
         _program: MacHtTxProgram,
     ) -> bool {
@@ -211,14 +211,14 @@ pub trait TxHardware {
 
     fn start_bound_ht_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
-        _dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: MacTxQueueIndex,
         _program: MacHeTxProgram,
     ) -> bool {
@@ -227,7 +227,7 @@ pub trait TxHardware {
 
     fn start_bound_he_tx(
         &mut self,
-        _dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         _queue: MacTxQueueIndex,
     ) {
     }
@@ -268,7 +268,7 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -277,7 +277,7 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn start_bound_legacy_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
@@ -285,7 +285,7 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn prepare_bound_ht_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -294,7 +294,7 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn start_bound_ht_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
@@ -302,7 +302,7 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn prepare_bound_he_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
@@ -311,7 +311,7 @@ impl TxHardware for WifiMacHal<'_> {
 
     fn start_bound_he_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         WifiMacHal::start_bound_tx(self, dma, queue);
@@ -359,7 +359,7 @@ impl TxHardware for RadioAccess {
 
     fn prepare_bound_legacy_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -368,7 +368,7 @@ impl TxHardware for RadioAccess {
 
     fn start_bound_legacy_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         TxHardware::start_bound_legacy_tx(&mut self.wifi_mac_hal(), dma, queue);
@@ -376,7 +376,7 @@ impl TxHardware for RadioAccess {
 
     fn prepare_bound_ht_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -385,7 +385,7 @@ impl TxHardware for RadioAccess {
 
     fn start_bound_ht_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         TxHardware::start_bound_ht_tx(&mut self.wifi_mac_hal(), dma, queue);
@@ -393,7 +393,7 @@ impl TxHardware for RadioAccess {
 
     fn prepare_bound_he_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
@@ -402,7 +402,7 @@ impl TxHardware for RadioAccess {
 
     fn start_bound_he_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         TxHardware::start_bound_he_tx(&mut self.wifi_mac_hal(), dma, queue);

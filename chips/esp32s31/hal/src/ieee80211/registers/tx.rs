@@ -251,7 +251,7 @@ impl MacLegacyTxProgram {
 
     /// Bind one semantic legacy publication to its prepared DMA authority.
     pub fn new(
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         parameters: MacLegacyTxParameters,
     ) -> Option<Self> {
         if parameters.signal > 0x0fff
@@ -482,7 +482,7 @@ impl MacHtTxProgram {
 
     /// Bind one semantic HT publication to its prepared DMA authority.
     pub fn new(
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         parameters: MacHtTxParameters,
     ) -> Option<Self> {
         if parameters.length == 0
@@ -635,7 +635,7 @@ impl MacHeTxProgram {
     }
 
     pub fn new(
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         parameters: MacHeTxParameters,
     ) -> Option<Self> {
         if parameters.apep_length == 0
@@ -937,7 +937,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Prepare one legacy queue whose descriptor chain is retained by `dma`.
     pub fn prepare_bound_legacy_mac_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
@@ -959,7 +959,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Prepare one HT queue whose descriptor chain is retained by `dma`.
     pub fn prepare_bound_ht_mac_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
@@ -981,7 +981,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Prepare one HE queue whose descriptor chain is retained by `dma`.
     pub fn prepare_bound_he_mac_tx(
         &mut self,
-        dma: &dyn PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
@@ -1003,7 +1003,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Publish the final ENABLE|VALID edge for a hardware-owned TX chain.
     pub fn start_bound_mac_tx(
         &mut self,
-        dma: &dyn HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
+        dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
     ) {
         let control = self
