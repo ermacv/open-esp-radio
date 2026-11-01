@@ -352,7 +352,9 @@ application runs. A test image differs only by the SDK features it adds
 the handlers of its services; it serves them through the HIL agent on the
 entry (`hil-scenarios/hil-agent/espressif`). An image on the SDK depends on
 nothing the SDK places (compositions, facades, platform, interrupt table)
-besides it; `oer-test-layers` checks this. Probes and images whose function
+besides it; `oer-test-layers` checks these direct dependencies, not that two
+`boot` functions take the same steps in the same order, which review keeps.
+Probes and images whose function
 or layout the SDK does not offer select their entries, priorities and task
 spawning through the compositions directly.
 These crates are outside the sans-IO layer. `oer-espressif-watchdog` is

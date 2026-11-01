@@ -10,7 +10,8 @@ declares no interrupt, DMA or service task of its own. Its boot is the
 [station example's](../../../firmware/apps/wifi-station/README.md) with
 two differences: the `console` feature and `Console::open`, and every
 channel scanned (`wifi::Config::all_channels`) in place of the profile's
-one.
+one. Review keeps the two boots in step; `oer-test-layers` checks only that
+the image takes nothing the SDK places.
 
 | Service | Handler |
 | --- | --- |

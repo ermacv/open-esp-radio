@@ -49,7 +49,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = A
         evidence,
         services::IMAGE,
         outbox,
-        worker.run(),
+        move || worker.run(),
     )))
 }
 

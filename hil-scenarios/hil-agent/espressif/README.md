@@ -15,7 +15,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = A
     let console = Console::open(p.console, &mut boot)?;
     let evidence = boot.evidence();
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
-    Ok(boot.run(serve(console, evidence, IMAGE, outbox, worker(inbox))))
+    Ok(boot.run(serve(console, evidence, IMAGE, outbox, move || worker(inbox))))
 }
 
 async fn worker(mut inbox: Inbox<'static, Request>) -> Infallible {
@@ -28,7 +28,7 @@ async fn worker(mut inbox: Inbox<'static, Request>) -> Infallible {
 
 | Part | What it does |
 | --- | --- |
-| `serve` | Runs the HIL console over the library's USB console and the image's worker side by side until the chip resets. The console answers the base module: Hello with the image's keys, its largest payload and the stage-two payload CRC-32, the boot evidence and link health. A transport fault ends the application with `Error::Console`. |
+| `serve` | Runs the HIL console over the library's USB console and the image's worker side by side until the chip resets. It takes the worker as a function that makes its future, so the application's future holds that future once, inside the select. The console answers the base module: Hello with the image's keys, its largest payload and the stage-two payload CRC-32, the boot evidence and link health. A transport fault ends the application with `Error::Console`. |
 | `Mailbox` | Room for one request between the console and the worker. The console hands a request over without waiting; a second one while the worker has not taken the first is answered `Rejected(Busy)`. |
 | `answer` | Publishes a response to its request without waiting. |
 

@@ -53,16 +53,18 @@ pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
 /// Serve the host over `console` until the chip resets: the base module
 /// from this boot's identity and `evidence`, each request of the image's
 /// services handed to the worker through `outbox` (or refused as busy),
-/// and `worker`, which answers them, side by side.
+/// and the worker `start` makes, which answers them, side by side. The
+/// worker's future is made only where it runs, so the application's
+/// future holds it once.
 ///
 /// # Errors
 /// [`Error::Console`] when the console's transport broke its contract.
-pub async fn serve<R: Requests>(
+pub async fn serve<R: Requests, W: Future<Output = Infallible>>(
     console: UsbConsole,
     evidence: Evidence,
     image: Image,
     outbox: Outbox<'_, R>,
-    worker: impl Future<Output = Infallible>,
+    start: impl FnOnce() -> W,
 ) -> AppResult {
     let boot = oer_espressif::boot_id();
     CONSOLE.start(boot);
@@ -78,7 +80,7 @@ pub async fn serve<R: Requests>(
             answer(identity, &Rejected(RejectReason::Busy));
         }
     });
-    match embassy_futures::select::select(serve, worker).await {
+    match embassy_futures::select::select(serve, start()).await {
         embassy_futures::select::Either::First(_fault) => Err(Error::Console),
         embassy_futures::select::Either::Second(never) => match never {},
     }
