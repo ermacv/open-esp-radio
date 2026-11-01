@@ -420,6 +420,36 @@ fn sy_raw(s: &Session<'_>, n: usize) -> bool {
         r.target1_int_raw()
     }
 }
+/// SYSTIMER unit 0's count through its latch; `None` when the latch never
+/// turned valid within `LIMIT` cycles.
+pub(super) fn systimer_now(s: &Session<'_>) -> Option<u64> {
+    sy_now(s)
+}
+
+/// Open SYSTIMER's clock and run unit 0, as the SYSTIMER leaves do.
+/// SOURCE: production peripherals::system_timer::open_clock. Only this block
+/// is reset; no timer-group/watchdog reset or RF operation occurs.
+pub(super) fn systimer_open(s: &mut Session<'_>) {
+    let clock = &mut s.generic.systimer_clock;
+    clock.modify_systimer_ctrl0(|w| {
+        w.set_reg_systimer_apb_clk_en(true);
+    });
+    clock.modify_systimer_ctrl0(|w| {
+        w.set_reg_systimer_rst_en(true);
+    });
+    clock.modify_systimer_ctrl0(|w| {
+        w.set_reg_systimer_rst_en(false);
+    });
+    clock.modify_systimer_ctrl0(|w| {
+        w.set_reg_systimer_clk_en(true);
+    });
+    s.generic.systimer.systimer.modify_conf(|w| {
+        w.set_timer_unit0_work_en(true)
+            .set_timer_unit0_core0_stall_en(false)
+            .set_timer_unit0_core1_stall_en(false);
+    });
+}
+
 fn sy_now(s: &Session<'_>) -> Option<u64> {
     let counter = &s.generic.systimer.systimer_counter;
     counter.trigger_unit0_op_timer_unit0_update();
@@ -509,26 +539,7 @@ fn systimer(s: &mut Session<'_>, n: usize) {
             pac::Interrupt::SYSTIMER_TARGET1
         },
     );
-    // SOURCE: production peripherals::system_timer::open_clock. Only this block
-    // is reset; no timer-group/watchdog reset or RF operation occurs.
-    let clock = &mut s.generic.systimer_clock;
-    clock.modify_systimer_ctrl0(|w| {
-        w.set_reg_systimer_apb_clk_en(true);
-    });
-    clock.modify_systimer_ctrl0(|w| {
-        w.set_reg_systimer_rst_en(true);
-    });
-    clock.modify_systimer_ctrl0(|w| {
-        w.set_reg_systimer_rst_en(false);
-    });
-    clock.modify_systimer_ctrl0(|w| {
-        w.set_reg_systimer_clk_en(true);
-    });
-    s.generic.systimer.systimer.modify_conf(|w| {
-        w.set_timer_unit0_work_en(true)
-            .set_timer_unit0_core0_stall_en(false)
-            .set_timer_unit0_core1_stall_en(false);
-    });
+    systimer_open(s);
     let i = if n == 0 {
         Index::constant::<0>()
     } else {
