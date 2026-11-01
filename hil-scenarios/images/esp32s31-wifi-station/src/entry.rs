@@ -81,8 +81,8 @@ struct Hart1Parts {
 oer_espressif_staged_runtime::secondary_entry!(1, HART1: oer_esp32s31_hal::platform::Port, Hart1Parts => hart1_main);
 
 /// The hart `secondary_entry!` above roots and the manifest's `harts`
-/// declares: the image links its task stack at the stack policy's launch
-/// size, not at the chip's zero default for a hart no image starts.
+/// declares: the image links its task stack at its proven bound, not at the
+/// chip's zero default for a hart no image starts.
 const SECONDARY_HART: oer_esp32s31_hal::platform::Hart =
     oer_esp32s31_hal::platform::Hart::constant::<1>();
 
@@ -500,9 +500,12 @@ fn validate_runtime_layout() {
         .all(|(hart, range)| {
             let [bottom, top] = bounds(range);
             let bytes = top.checked_sub(bottom);
-            // A started secondary hart's stack is sized by the image's
-            // link; every other hart keeps the chip's default allocation.
-            let sized = if hart == SECONDARY_HART.get() {
+            // The image declares its task stacks proven: the link sizes
+            // the stack of every hart it runs from that hart's bound; every
+            // other hart keeps the chip's default allocation.
+            let sized = if hart == oer_esp32s31_hal::platform::BOOT_HART.get()
+                || hart == SECONDARY_HART.get()
+            {
                 bytes.is_some_and(|bytes| bytes != 0 && bytes.is_multiple_of(16))
             } else {
                 bytes
