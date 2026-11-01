@@ -227,21 +227,19 @@ impl<
 > AggregateView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
 {
     /// [`LowerMacCore::service_ampdu`].
-    #[allow(
-        clippy::result_large_err,
-        reason = "a fault retains the complete publication in quarantine"
-    )]
+    ///
+    /// # Errors
+    ///
+    /// The step failed; [`PublishedAmpdu::into_progress`] retains the
+    /// publication in quarantine.
     #[inline]
     pub fn service<H: HtAmpduHardware, L: PlacedBacking, const SLOTS: usize>(
         &mut self,
         hardware: &mut H,
-        published: PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
+        published: &mut PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
         wake: WifiTxWake,
         returned: impl FnMut(L),
-    ) -> Result<
-        AmpduProgress<'core, 'slot, L, SLOTS, Path>,
-        ampdu::AmpduFault<'core, 'slot, L, SLOTS, Path>,
-    > {
+    ) -> Result<AmpduServed, crate::mac::tx::ampdu::HtAmpduTxError> {
         self.core.service_ampdu(hardware, published, wake, returned)
     }
 

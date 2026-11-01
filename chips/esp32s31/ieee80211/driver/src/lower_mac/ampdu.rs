@@ -510,6 +510,56 @@ pub struct PublishedAmpdu<
     deadline: oer_time::Instant,
     settling: bool,
     admitted_at: [oer_time::Instant; SLOTS],
+    /// How it ended, once a service edge saw the hardware leave the chain,
+    /// or the fault that stopped its service.
+    end: Option<Result<AmpduOutcome, HtAmpduTxError>>,
+}
+
+/// What one service edge left of a published aggregate served in place.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AmpduServed {
+    /// It is still the hardware's, or settles its abort.
+    Pending,
+    /// It ended and released its subframes:
+    /// [`PublishedAmpdu::into_progress`] detaches it.
+    Ended,
+}
+
+impl<'core, 'slot, B, const SLOTS: usize, Path: PoolPath>
+    PublishedAmpdu<'core, 'slot, B, SLOTS, Path>
+{
+    /// The publication after its service: detached once it ended, retained
+    /// in quarantine once its service failed, and itself while it runs.
+    ///
+    /// # Errors
+    ///
+    /// Its service failed: the fault retains every owner.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a fault retains the complete publication in quarantine"
+    )]
+    pub fn into_progress(
+        self,
+    ) -> Result<AmpduProgress<'core, 'slot, B, SLOTS, Path>, AmpduFault<'core, 'slot, B, SLOTS, Path>>
+    {
+        match self.end {
+            None => Ok(AmpduProgress::Pending(self)),
+            Some(Ok(outcome)) => Ok(AmpduProgress::Complete(CompletedAmpdu {
+                outcome,
+                owner: self.owner,
+                queue: self.queue,
+                admission: self.admission,
+                admitted_at: self.admitted_at,
+            })),
+            Some(Err(error)) => Err(AmpduFault {
+                error,
+                _owner: self.owner,
+                _queue: self.queue,
+                _admission: self.admission,
+                _admitted_at: self.admitted_at,
+            }),
+        }
+    }
 }
 
 impl<B, const SLOTS: usize, Path: PoolPath> PublishedAmpdu<'_, '_, B, SLOTS, Path> {
@@ -534,6 +584,7 @@ impl<B, const SLOTS: usize, Path: PoolPath> PublishedAmpdu<'_, '_, B, SLOTS, Pat
 }
 
 /// How a published aggregate ended.
+#[derive(Clone, Copy)]
 pub enum AmpduOutcome {
     Completed(HtAmpduTxCompletion),
     Collision,
@@ -819,6 +870,7 @@ where
             admitted_at,
             queue,
             admission,
+            end: None,
         }),
         Err(error) => Err(AmpduStartError::Fault(AmpduFault {
             error,
@@ -839,45 +891,49 @@ where
 /// begun only while no other queue's abort forces CCA.
 /// Diagnostic-only completion does not consume the step: latched events and
 /// an expired watchdog remain actionable even on an interrupt wake.
-#[allow(
-    clippy::result_large_err,
-    reason = "a fault retains the complete publication in quarantine"
-)]
-pub fn service<'core, 'slot, B, H, const SLOTS: usize, Path: PoolPath>(
+///
+/// The publication is served where it lies: only its end moves it, through
+/// [`PublishedAmpdu::into_progress`]. An ended or failed publication
+/// touches no hardware again and answers as before.
+///
+/// # Errors
+///
+/// The step failed; [`PublishedAmpdu::into_progress`] then retains the
+/// publication in quarantine.
+pub fn service<B, H, const SLOTS: usize, Path: PoolPath>(
     hardware: &mut H,
-    mut published: PublishedAmpdu<'core, 'slot, B, SLOTS, Path>,
+    published: &mut PublishedAmpdu<'_, '_, B, SLOTS, Path>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
     now: oer_time::Instant,
     returned: impl FnMut(B),
-) -> Result<AmpduProgress<'core, 'slot, B, SLOTS, Path>, AmpduFault<'core, 'slot, B, SLOTS, Path>>
+) -> Result<AmpduServed, HtAmpduTxError>
 where
     B: PlacedBacking,
     H: HtAmpduHardware,
 {
+    match published.end {
+        Some(Ok(_)) => return Ok(AmpduServed::Ended),
+        Some(Err(error)) => return Err(error),
+        None => {}
+    }
     match service_step(
         hardware,
-        &mut published,
+        published,
         wake,
         may_begin_timeout_abort,
         now,
         returned,
     ) {
-        Ok(None) => Ok(AmpduProgress::Pending(published)),
-        Ok(Some(outcome)) => Ok(AmpduProgress::Complete(CompletedAmpdu {
-            outcome,
-            owner: published.owner,
-            queue: published.queue,
-            admission: published.admission,
-            admitted_at: published.admitted_at,
-        })),
-        Err(error) => Err(AmpduFault {
-            error,
-            _owner: published.owner,
-            _queue: published.queue,
-            _admission: published.admission,
-            _admitted_at: published.admitted_at,
-        }),
+        Ok(None) => Ok(AmpduServed::Pending),
+        Ok(Some(outcome)) => {
+            published.end = Some(Ok(outcome));
+            Ok(AmpduServed::Ended)
+        }
+        Err(error) => {
+            published.end = Some(Err(error));
+            Err(error)
+        }
     }
 }
 

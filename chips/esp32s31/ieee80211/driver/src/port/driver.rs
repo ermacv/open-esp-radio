@@ -615,6 +615,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         wake: WifiTxWake,
         stopping: bool,
     ) -> Result<(), Fault> {
+        if !self.aggregate_running(None) {
+            // No aggregate: the MPDUs' settles are the core's own.
+            let mut sink = Sink::default();
+            core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink)?;
+            return self.collect(held, &mut sink, stopping);
+        }
         let settling = |driver: &mut Self| {
             driver
                 .core

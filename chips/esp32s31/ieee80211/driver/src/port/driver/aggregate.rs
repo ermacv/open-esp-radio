@@ -3,7 +3,9 @@
 //! service and their one terminal. An aggregate is one attempt; the planner
 //! above the port resends what its BlockAck report misses.
 use super::*;
-use crate::lower_mac::{AmpduProgress, AmpduValues, Esp32s31AmpduBuffer, PublishedAmpdu};
+use crate::lower_mac::{
+    AmpduProgress, AmpduServed, AmpduValues, Esp32s31AmpduBuffer, PublishedAmpdu,
+};
 use crate::mac::tx::{TxPhyRate, ampdu::HtAmpduTxError};
 use crate::port::aggregate::{AggregateExecution, Subframes, TX_AMPDU_SUBFRAMES};
 use oer_memory::StableDmaBacking as _;
@@ -398,7 +400,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 
     /// Offer one TX edge to every published aggregate; `true` when an
     /// aggregate's timeout abort settled, so the MPDUs' latched timeouts
-    /// are offered again.
+    /// are offered again. A publication is served where it lies; only its
+    /// end takes it from its queue.
     pub(super) fn service_aggregates(
         &mut self,
         held: &Held<'_, 'id, Id, D, B, O>,
@@ -407,42 +410,52 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<bool, Fault> {
         let mut settled = false;
         for index in 0..self.running.len() {
-            let Some(running) = self.running.get_mut(index) else {
-                continue;
-            };
-            if !matches!(running, Some(Running::Aggregate { .. })) {
-                continue;
-            }
-            let Some(Running::Aggregate {
-                mut pending,
-                published,
-            }) = running.take()
+            let Some(Some(Running::Aggregate { pending, published })) = self.running.get_mut(index)
             else {
                 continue;
             };
             let settling = published.abort_settling();
             let Some(mut view) = self.core.view().aggregates() else {
-                core::mem::forget((pending, published));
                 return Err(Fault::Capacity);
             };
             let subframes = pending.operation.execute();
             let mut next = 0;
             let mut lost = false;
-            let progress = view.service(device.hardware()?, published, wake, |lease| {
+            let served = view.service(device.hardware()?, published, wake, |lease| {
                 lost |= !subframes.restore(next, lease, true);
                 next += 1;
             });
-            let completed = match progress {
-                Ok(AmpduProgress::Pending(published)) => {
-                    self.keep_running(index, Running::Aggregate { pending, published })?;
-                    continue;
+            match served {
+                Ok(AmpduServed::Pending) => continue,
+                Ok(AmpduServed::Ended) => {}
+                Err(error) => {
+                    // The failed publication leaves its queue's place
+                    // retained, never dropped.
+                    let _quarantined =
+                        core::mem::ManuallyDrop::new(self.running.get_mut(index).map(Option::take));
+                    return Err(Fault::Aggregate(error));
                 }
+            }
+            let Some(Some(Running::Aggregate { pending, published })) =
+                self.running.get_mut(index).map(Option::take)
+            else {
+                return Err(Fault::Capacity);
+            };
+            let completed = match published.into_progress() {
                 Ok(AmpduProgress::Complete(completed)) => completed,
+                Ok(AmpduProgress::Pending(published)) => {
+                    let _quarantined = core::mem::ManuallyDrop::new((pending, published));
+                    return Err(Fault::Capacity);
+                }
                 Err(fault) => {
                     let error = fault.error;
                     core::mem::forget((fault, pending));
                     return Err(Fault::Aggregate(error));
                 }
+            };
+            let Some(mut view) = self.core.view().aggregates() else {
+                core::mem::forget((completed, pending));
+                return Err(Fault::Capacity);
             };
             settled |= settling;
             let mut sink = Sink::default();

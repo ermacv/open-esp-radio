@@ -1895,7 +1895,7 @@ fn review_aggregate_no_effect_cannot_postpone_expired_watchdog() {
         .unwrap();
         let deadline = published.deadline();
         hardware.block_ack_completion[BE] = Some(block_ack_completion(1, 0, 0, false));
-        let result = ampdu::service(
+        let result = serve_ampdu(
             &mut hardware,
             published,
             WifiTxWake::Deadline,
@@ -3276,13 +3276,130 @@ fn publish_ampdu<'core>(
     .unwrap())
 }
 
+/// Serve one edge of `published` in place ([`ampdu::service`]), then take
+/// what its caller holds: the publication, its detached end, or its fault.
+#[allow(
+    clippy::result_large_err,
+    reason = "a fault retains the complete publication in quarantine"
+)]
+fn serve_ampdu<'core, 'slot, B: PlacedBacking, const SLOTS: usize>(
+    hardware: &mut Hardware,
+    mut published: PublishedAmpdu<'core, 'slot, B, SLOTS>,
+    wake: WifiTxWake,
+    may_begin_timeout_abort: bool,
+    now: oer_time::Instant,
+    returned: impl FnMut(B),
+) -> Result<AmpduProgress<'core, 'slot, B, SLOTS>, ampdu::AmpduFault<'core, 'slot, B, SLOTS>> {
+    let served = ampdu::service(
+        hardware,
+        &mut published,
+        wake,
+        may_begin_timeout_abort,
+        now,
+        returned,
+    );
+    let progress = published.into_progress();
+    match (&served, &progress) {
+        (Ok(AmpduServed::Pending), Ok(AmpduProgress::Pending(_)))
+        | (Ok(AmpduServed::Ended), Ok(AmpduProgress::Complete(_)))
+        | (Err(_), Err(_)) => {}
+        _ => panic!("the publication's end is the step's answer"),
+    }
+    progress
+}
+
+#[test]
+fn an_ended_or_failed_publication_touches_no_hardware_again() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let source = backings();
+        let mut published = publish_ampdu(
+            &mut core,
+            &mut hardware,
+            aggregate_of(source, 2, 26),
+            ampdu_values(ht_rate(7)),
+        )
+        .unwrap();
+        hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 3, true));
+        let complete = interrupt(EVENT_TX_COMPLETE);
+        let now = core.now();
+        let mut returned = 0;
+        assert_eq!(
+            ampdu::service(&mut hardware, &mut published, complete, true, now, |_| {
+                returned += 1
+            }),
+            Ok(AmpduServed::Ended)
+        );
+        assert_eq!(returned, 2);
+        let deadline = published.deadline();
+        assert_eq!(
+            ampdu::service(
+                &mut hardware,
+                &mut published,
+                complete,
+                true,
+                deadline,
+                |_| { returned += 1 }
+            ),
+            Ok(AmpduServed::Ended),
+            "an ended publication answers its end again"
+        );
+        assert_eq!(returned, 2);
+        let Ok(AmpduProgress::Complete(completed)) = published.into_progress() else {
+            panic!("an ended publication detaches");
+        };
+        let mut events = Events::default();
+        let _owner = core
+            .complete_ampdu(&mut hardware, completed, &mut events)
+            .unwrap();
+        core.reclaim(&mut events);
+
+        let mut published = publish_ampdu(
+            &mut core,
+            &mut hardware,
+            aggregate_of(source, 2, 26),
+            ampdu_values(ht_rate(7)),
+        )
+        .unwrap();
+        let deadline = published.deadline();
+        hardware.block_ack_completion[BE] = Some(block_ack_completion(1, 0, 0, false));
+        let error = ampdu::service(
+            &mut hardware,
+            &mut published,
+            WifiTxWake::Deadline,
+            true,
+            deadline,
+            drop,
+        )
+        .unwrap_err();
+        hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 3, true));
+        assert_eq!(
+            ampdu::service(
+                &mut hardware,
+                &mut published,
+                complete,
+                true,
+                deadline,
+                drop
+            ),
+            Err(error),
+            "a failed publication keeps its fault"
+        );
+        let fault = published.into_progress().err().unwrap();
+        assert_eq!(fault.error, error);
+        drop(fault);
+        assert!(source.free() < BACKINGS, "the fault retains its subframes");
+    });
+}
+
 /// Serve a completion edge of the published aggregate: how it ended.
 fn end_ampdu<'core>(
     core: &mut Core<'core>,
     hardware: &mut Hardware,
     published: PublishedAmpdu<'core, 'static, Backing, SUBFRAMES>,
 ) -> PublicationEnd {
-    match ampdu::service(
+    match serve_ampdu(
         hardware,
         published,
         interrupt(EVENT_TX_COMPLETE),
@@ -3410,7 +3527,7 @@ fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
         let color = crate::mac::irq::event_mask(
             oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
         );
-        let published = match ampdu::service(
+        let published = match serve_ampdu(
             &mut hardware,
             published,
             interrupt(color),
@@ -3425,7 +3542,7 @@ fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
         };
         assert_eq!(source.free(), BACKINGS - 3);
         hardware.collision_pending[BE] = true;
-        match ampdu::service(
+        match serve_ampdu(
             &mut hardware,
             published,
             interrupt(0),
@@ -3986,7 +4103,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             assert!(hardware.cleared_keys.is_empty());
             if poison {
                 let deadline = published.deadline();
-                let fault = ampdu::service(
+                let fault = serve_ampdu(
                     &mut hardware,
                     published,
                     WifiTxWake::Deadline,
@@ -4008,7 +4125,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                 assert!(source.free() < BACKINGS);
             } else {
                 hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 0b11, true));
-                let AmpduProgress::Complete(completed) = ampdu::service(
+                let AmpduProgress::Complete(completed) = serve_ampdu(
                     &mut hardware,
                     published,
                     interrupt(EVENT_TX_COMPLETE),

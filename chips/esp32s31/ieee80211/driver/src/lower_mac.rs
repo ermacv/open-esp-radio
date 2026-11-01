@@ -219,9 +219,10 @@ pub use keys::{
 use keys::{KeyUseCount, TransmitKeyToken};
 
 pub use ampdu::{
-    AmpduFormat, AmpduOutcome, AmpduPlan, AmpduProgress, AmpduPublication, ESP32S31_AMPDU_LENGTHS,
-    ESP32S31_AMPDU_MAX_LENGTH, ESP32S31_HE_AMPDU_MAX_LENGTH, Esp32s31AmpduBuffer,
-    Esp32s31AmpduOwner, PublishedAmpdu, esp32s31_ampdu_capabilities, esp32s31_ampdu_length,
+    AmpduFormat, AmpduOutcome, AmpduPlan, AmpduProgress, AmpduPublication, AmpduServed,
+    ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH, ESP32S31_HE_AMPDU_MAX_LENGTH,
+    Esp32s31AmpduBuffer, Esp32s31AmpduOwner, PublishedAmpdu, esp32s31_ampdu_capabilities,
+    esp32s31_ampdu_length,
 };
 
 use crate::{
@@ -1510,32 +1511,27 @@ where
     /// while no other abort, an MPDU's or another aggregate's, forces CCA,
     /// and the core counts its own settle among them. The subframes'
     /// buffers go to `returned` in subframe order once the hardware left
-    /// the chain.
+    /// the chain. The publication is served where it lies
+    /// ([`ampdu::service`]).
     ///
     /// # Errors
     ///
-    /// A fault retains the complete publication in quarantine.
-    #[allow(
-        clippy::result_large_err,
-        reason = "a fault retains the complete publication in quarantine"
-    )]
+    /// The step failed; [`PublishedAmpdu::into_progress`] retains the
+    /// publication in quarantine.
     pub fn service_ampdu<H: HtAmpduHardware, L: PlacedBacking, const SLOTS: usize>(
         &mut self,
         hardware: &mut H,
-        published: PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
+        published: &mut PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
         wake: WifiTxWake,
         returned: impl FnMut(L),
-    ) -> Result<
-        AmpduProgress<'core, 'slot, L, SLOTS, Path>,
-        ampdu::AmpduFault<'core, 'slot, L, SLOTS, Path>,
-    > {
+    ) -> Result<AmpduServed, crate::mac::tx::ampdu::HtAmpduTxError> {
         // A queue index below eight names one bit.
         let bit = 1_u8
             .checked_shl(published.queue_index() as u32)
             .unwrap_or(0);
         self.ampdu_settling &= !bit;
         let may_begin_timeout_abort = !self.abort_settling();
-        let progress = ampdu::service(
+        let served = ampdu::service(
             hardware,
             published,
             wake,
@@ -1543,12 +1539,10 @@ where
             self.now(),
             returned,
         );
-        if let Ok(AmpduProgress::Pending(published)) = &progress
-            && published.abort_settling()
-        {
+        if served == Ok(AmpduServed::Pending) && published.abort_settling() {
             self.ampdu_settling |= bit;
         }
-        progress
+        served
     }
 
     /// Publish a planned aggregate once ([`ampdu::publish`]) at the core's

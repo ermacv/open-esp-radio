@@ -171,7 +171,7 @@ fn a_published_aggregate_returns_its_original_admission_samples_after_age() {
         .unwrap();
         core.tx.timer.advance_to(at(100));
         hardware.block_ack_completion[BE] = Some(block_ack_completion(0, 100, 3, true));
-        let AmpduProgress::Complete(completed) = ampdu::service(
+        let AmpduProgress::Complete(completed) = serve_ampdu(
             &mut hardware,
             published,
             interrupt(EVENT_TX_COMPLETE),
