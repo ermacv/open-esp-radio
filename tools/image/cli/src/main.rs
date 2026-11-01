@@ -107,8 +107,8 @@ enum Command {
         board: String,
     },
     /// Write an image's hot-code list from a PC profile in a scenario's
-    /// results: the image's cached functions with the most samples of one
-    /// measurement, within a byte budget. Builds and flashes nothing.
+    /// results: the image's cached or already moved functions with the most
+    /// samples of one measurement, within a byte budget. Builds and flashes nothing.
     HotCode {
         /// The results file holding the profile (`target/hil/results/…`).
         #[arg(long)]

@@ -12,7 +12,8 @@
 //! other placement.
 //!
 //! [`HotCode::from_samples`] writes such a list from a PC profile: the
-//! cached functions with the most samples per byte, until the budget. The
+//! cached or already moved functions with the most samples per byte, until
+//! the budget. The
 //! hottest functions of a busy path are often large (a task's whole future
 //! inlined into one), so ranking by samples alone would spend the budget on
 //! one of them; ranking by density covers the most samples per SRAM byte.
@@ -35,9 +36,17 @@ pub const FRAGMENT: &str = "hot-text.x";
 /// the section moves.
 pub const ALIGNMENT_RESERVE: u64 = 512;
 
-/// The output section that holds an image's cached code: a profile ranks
-/// only its functions, the rest already execute from SRAM.
+/// The output section that holds an image's cached code.
 pub const CACHED_TEXT: &str = ".text";
+
+/// The output section the list moves its functions into.
+pub const HOT_TEXT: &str = ".hot.text";
+
+/// The output sections a profile ranks: the cached code and the functions
+/// an earlier list already moved, so a list regenerated from an image that
+/// applied one keeps them on their samples. Strict handler code, which
+/// executes from SRAM whatever the list says, is left out.
+pub const RANKED_TEXT: [&str; 2] = [CACHED_TEXT, HOT_TEXT];
 
 /// The samples a function needs to be listed: one sample is noise.
 pub const MINIMUM_SAMPLES: u64 = 2;
@@ -60,7 +69,7 @@ impl HotCode {
 
     /// The list a PC profile ranks: `pcs` sampled in the image whose
     /// functions are `functions`, one entry per sample. Functions outside
-    /// [`CACHED_TEXT`] or with fewer than [`MINIMUM_SAMPLES`] are left out;
+    /// [`RANKED_TEXT`] or with fewer than [`MINIMUM_SAMPLES`] are left out;
     /// the rest go in by samples per byte (then samples, then name), each
     /// while its size fits the remaining `budget_bytes`.
     pub fn from_samples(
@@ -70,7 +79,9 @@ impl HotCode {
     ) -> Self {
         let mut by_address: Vec<&ProfiledFunction> = functions
             .iter()
-            .filter(|function| function.section == CACHED_TEXT && function.size > 0)
+            .filter(|function| {
+                RANKED_TEXT.contains(&function.section.as_str()) && function.size > 0
+            })
             .collect();
         by_address.sort_by_key(|function| function.address);
         let mut samples: BTreeMap<&str, (u64, u64)> = BTreeMap::new();

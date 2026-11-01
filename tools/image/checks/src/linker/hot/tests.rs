@@ -55,6 +55,27 @@ fn a_profile_lists_the_densest_cached_functions_until_the_budget() {
 }
 
 #[test]
+fn a_function_an_earlier_list_moved_ranks_on_its_samples_and_handler_code_does_not() {
+    let functions = [
+        function("step", 0x5000_0000, 0x100, ".text"),
+        function("moved", 0x2f01_0000, 0x40, ".hot.text"),
+        function("handler", 0x2f00_0000, 0x40, ".isr.text"),
+    ];
+    let pcs = [
+        0x2f01_0000,
+        0x2f01_0010,
+        0x2f01_0020,
+        0x5000_0000,
+        0x5000_0010,
+        0x2f00_0000,
+        0x2f00_0004,
+        0x2f00_0008,
+    ];
+    let list = HotCode::from_samples(&functions, pcs, 0x400);
+    assert_eq!(list.functions, ["moved", "step"]);
+}
+
+#[test]
 fn a_list_reads_back_from_the_file_it_renders() {
     let list = HotCode {
         budget_bytes: 4096,

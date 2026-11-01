@@ -31,7 +31,8 @@ pub fn write(
     };
     let origin = format!(
         "Written by `cargo fw hot-code` from {} ({measurement}, {} samples) and its {}:\n\
-         the cached functions with the most samples per byte within the budget, densest first.\n\
+         the cached or already moved functions with the most samples per byte within the budget,\n\
+         densest first.\n\
          The image linker moves them into SRAM; regenerate after the hot path changes.",
         name(results),
         pcs.len(),
