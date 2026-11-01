@@ -79,7 +79,10 @@ where
 /// The channels' notify types of `N`.
 type Ch<N> = <N as Notifies>::Channels;
 
-pub const RX_DEPTH: usize = 8;
+/// The station's received MSDUs waiting for the network: two receive Block
+/// Ack windows, so one window's burst fits while the network takes the
+/// previous one (a queue of one window dropped a 16-MPDU aggregate's tail).
+pub const RX_DEPTH: usize = 32;
 pub const FRAME_CAPACITY: usize = 1664;
 #[cfg(target_arch = "riscv32")]
 type Caps = oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
@@ -224,7 +227,7 @@ type LentRx<N> = <N as Notifies>::LentRx;
 /// The received buffers the station may lend the network at once: the
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
-pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::device::lent_rx(chip::Q);
+pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::lent_rx(chip::Q);
 /// The host build has no receive buffer to lend.
 #[cfg(not(target_arch = "riscv32"))]
 pub enum Unlent {}
@@ -593,6 +596,23 @@ pub mod radio;
 pub mod station;
 #[cfg(target_arch = "riscv32")]
 pub use dma::{DmaError, DmaResources};
+/// One reading of the S31 receive driver's counters.
+#[cfg(target_arch = "riscv32")]
+pub use oer_esp32s31_ieee80211_driver::rx::counters::WifiRxReport;
+
+/// The receive driver's counters, once the station's receive path is bound:
+/// a trace build's diagnostic reading, never a product value.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) static RX_COUNTERS: oer_memory::OnceValue<
+    &'static oer_esp32s31_ieee80211_driver::rx::counters::WifiRxCounters,
+> = oer_memory::OnceValue::new();
+
+/// The receive driver's counters now; `None` before the station's receive
+/// path was first bound. Only a trace build reads them.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub fn rx_counters() -> Option<WifiRxReport> {
+    RX_COUNTERS.get().map(|counters| counters.report())
+}
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{

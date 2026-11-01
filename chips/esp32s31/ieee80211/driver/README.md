@@ -207,8 +207,11 @@ network: its queued receive events and the MPDUs its receive Block Ack
 agreements keep, a 32-MPDU reorder window. P2 queues at most eight units P1
 has not taken yet; at that bound it asks to be woken, and P1's next take of
 a received event wakes it. A burst therefore keeps P1 from running for at
-most eight units, however many P1 retains. The units come from one pool: P1
-and the network share what the pool holds.
+most eight units, however many P1 retains. The units outside the ring come
+from one stage pool; the network may hold all of it but `RX_HELD` and the
+admission's critical reserve (`port::lent_rx`). The admission discards bulk
+input, which the hardware already acknowledged, once only the reserve is
+left, so this split keeps a full reorder window's hole-closing MPDU staged.
 
 One received frame and the owner of its DMA buffer at each step:
 

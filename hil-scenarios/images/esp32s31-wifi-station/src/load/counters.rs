@@ -1,17 +1,24 @@
 //! The window's counters: the boot hart's (the radio's and the station's)
 //! cycles and retired instructions, the L1 cache's access counts by bus,
-//! what the network bridge did with the station's frames and what the IP
-//! stack took.
+//! what the network bridge did with the station's frames, what the IP
+//! stack took, and the receive path's counts: the S31 driver's and the
+//! station service's receive decisions (the facade's `StationRx` events).
 //!
 //! The bridge reports each frame through `oer_trace::observe!`, so only an
 //! `oer_trace` build counts them; hart 1's network task is their one writer
-//! and the load server, in the same task, their reader. The boot hart's
-//! counters and the cache's (read on the boot hart by its relay, which owns
-//! the cache's counters) and the stack's are read at the window's ends; the
-//! cache's are cleared just before its start. Bridge and cache counts wrap
-//! at 2^32 (a cache bus reports its overflow); the stack's saturate there.
+//! and the load server, in the same task, their reader. The station's
+//! receive decisions reach the image's observer from the station service,
+//! on the boot hart, and count there; the driver's counters are the
+//! radio's, on the boot hart too. The boot hart's relay, which owns the
+//! cache's counters, reads the boot hart's counters, the cache's and the
+//! receive path's there at the window's ends and sends them to the server;
+//! the stack's are read on hart 1. The cache's are cleared just before the
+//! window's start. Bridge, cache and receive counts wrap at 2^32 (a cache
+//! bus reports its overflow); the stack's saturate there.
 
-use oer_services_load::{CacheCounts, CacheGeometry, Counters, DataBus, InstructionBus};
+use oer_services_load::{
+    CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, InstructionBus, RxCounts, StationRx,
+};
 
 /// What the network bridge did with one frame from the station.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,6 +107,127 @@ pub(crate) fn observe(frame: BridgeFrame) {
     }
 }
 
+/// The station's receive decisions by kind, and the latest agreement's
+/// window.
+#[cfg(target_arch = "riscv32")]
+static STATION: [core::sync::atomic::AtomicU32; STATION_KINDS] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; STATION_KINDS];
+#[cfg(target_arch = "riscv32")]
+static WINDOW: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(target_arch = "riscv32")]
+const STATION_KINDS: usize = oer_esp32s31_wifi::observation::StationRxKind::ALL.len();
+
+/// Count one receive decision; only the station service, on the boot
+/// hart, calls it, and only the boot hart's relay reads the counts.
+#[cfg(all(target_arch = "riscv32", oer_trace))]
+pub(crate) fn observe_station(decision: oer_esp32s31_wifi::observation::StationRx) {
+    use core::sync::atomic::Ordering;
+    use oer_esp32s31_wifi::observation::StationRxKind;
+    let bump = |count: &core::sync::atomic::AtomicU32, by: u32| {
+        count.store(
+            count.load(Ordering::Relaxed).wrapping_add(by),
+            Ordering::Relaxed,
+        );
+    };
+    if decision.kind == StationRxKind::AgreementStarted {
+        bump(&STARTED, 1);
+        WINDOW.store(decision.count, Ordering::Relaxed);
+    } else if let Some(count) = STATION.get(usize::from(decision.kind as u8)) {
+        bump(count, decision.count);
+    }
+}
+
+/// The station's receive decisions now, by kind, as the wire names them;
+/// the started-agreement kind counts agreements, its window aside.
+#[cfg(target_arch = "riscv32")]
+fn station_rx() -> StationRx {
+    use core::sync::atomic::Ordering;
+    use oer_esp32s31_wifi::observation::StationRxKind as Kind;
+    let at = |kind: Kind| {
+        STATION
+            .get(usize::from(kind as u8))
+            .map_or(0, |count| count.load(Ordering::Relaxed))
+    };
+    StationRx {
+        port_events_lost: at(Kind::PortEventsLost),
+        dropped_header: at(Kind::DroppedHeader),
+        dropped_frame_kind: at(Kind::DroppedFrameKind),
+        dropped_address: at(Kind::DroppedAddress),
+        dropped_fragmented: at(Kind::DroppedFragmented),
+        dropped_protection: at(Kind::DroppedProtection),
+        dropped_integrity: at(Kind::DroppedIntegrity),
+        dropped_replay: at(Kind::DroppedReplay),
+        dropped_payload: at(Kind::DroppedPayload),
+        dropped_not_connected: at(Kind::DroppedNotConnected),
+        dropped_security: at(Kind::DroppedSecurity),
+        dropped_draining: at(Kind::DroppedDraining),
+        refused_too_long: at(Kind::RefusedTooLong),
+        refused_queue_full: at(Kind::RefusedQueueFull),
+        refused_no_network: at(Kind::RefusedNoNetwork),
+        copied_aggregated: at(Kind::CopiedAggregated),
+        copied_kept: at(Kind::CopiedKept),
+        mpdus_in_ampdu: at(Kind::MpduInAmpdu),
+        mpdus_single: at(Kind::MpduSingle),
+        mpdus_unknown: at(Kind::MpduUnknown),
+        released_in_order: at(Kind::ReleasedInOrder),
+        released_by_timeout: at(Kind::ReleasedByTimeout),
+        released_by_bar: at(Kind::ReleasedByBar),
+        released_by_stop: at(Kind::ReleasedByStop),
+        missing_by_timeout: at(Kind::MissingByTimeout),
+        missing_other: at(Kind::MissingOther),
+        duplicates: at(Kind::Duplicate),
+        rejected: at(Kind::Rejected),
+        agreements_started: STARTED.load(Ordering::Relaxed),
+        agreements_stopped: at(Kind::AgreementStopped),
+        agreement_window: u16::try_from(WINDOW.load(Ordering::Relaxed)).unwrap_or(u16::MAX),
+        rsn_inputs_dropped: at(Kind::RsnInputDropped),
+    }
+}
+
+/// Receive agreements started: a started agreement's count is its window.
+#[cfg(target_arch = "riscv32")]
+static STARTED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// The driver's receive counters now, as the wire names them; unavailable
+/// before the receive path was bound or without a trace build.
+#[cfg(target_arch = "riscv32")]
+fn driver_rx() -> DriverRx {
+    #[cfg(oer_trace)]
+    if let Some(report) = oer_esp32s31_wifi::rx_counters() {
+        let prefix = report.prefix;
+        return DriverRx {
+            available: true,
+            mac_irqs: report.mac_irqs,
+            units: report.units,
+            bytes: report.bytes,
+            overload_drops: report.overload_drops,
+            admission_blocks: report.admission_blocks,
+            stage_capacity_blocks: report.stage_capacity_blocks,
+            chained_drops: report.chained_drops,
+            oversized_drops: report.oversized_drops,
+            empty_drops: report.empty_drops,
+            too_long_drops: report.too_long_drops,
+            service_passes: report.service_passes,
+            service_errors: report.service_errors,
+            capacity_drains: report.capacity_drains,
+            continued_immediately: report.continuations.immediate,
+            continued_after_wait: report.continuations.timed,
+            rx_failures: prefix.rx_failure,
+            mic_failures: prefix.mic_failure,
+            quarantined: prefix.quarantined,
+            prefix_other: prefix
+                .invalid
+                .wrapping_add(prefix.chain)
+                .wrapping_add(prefix.bounds)
+                .wrapping_add(prefix.output_small)
+                .wrapping_add(prefix.metadata)
+                .wrapping_add(prefix.ignored)
+                .wrapping_add(prefix.unsupported),
+        };
+    }
+    DriverRx::default()
+}
+
 /// What one end of the window read.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Snapshot {
@@ -109,6 +237,7 @@ pub(crate) struct Snapshot {
     pub stack_received: u32,
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
+    pub rx: RxCounts,
 }
 
 /// The cache's counters of every bus.
@@ -116,8 +245,9 @@ pub(crate) struct Snapshot {
 pub(crate) type Cache = oer_esp32s31_hal::peripherals::cache_counters::CacheCounters;
 
 /// What the boot hart's relay reads there for the load server: the boot
-/// hart's cycles and retired instructions and the cache's counts and
-/// geometry.
+/// hart's cycles and retired instructions, the cache's counts and
+/// geometry, and the receive path's counts, which only the boot hart
+/// writes.
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Hart {
@@ -125,6 +255,7 @@ pub(crate) struct Hart {
     pub instructions: u64,
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
+    pub rx: RxCounts,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -148,12 +279,17 @@ impl Hart {
                 dbus1: data(counts.dbus1),
             },
             cache_geometry: geometry(cache.geometry()),
+            rx: RxCounts {
+                driver: driver_rx(),
+                station: station_rx(),
+            },
         }
     }
 }
 
-/// The counters now: the boot hart's `hart` with the cache's, the
-/// bridge's, and the stack's received frames `stack_received`.
+/// The counters now: the boot hart's `hart` with the cache's and the
+/// receive path's, the bridge's, and the stack's received frames
+/// `stack_received`.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn snapshot(hart: Hart, stack_received: u32) -> Snapshot {
     use core::sync::atomic::Ordering;
@@ -164,6 +300,7 @@ pub(crate) fn snapshot(hart: Hart, stack_received: u32) -> Snapshot {
         stack_received,
         cache: hart.cache,
         cache_geometry: hart.cache_geometry,
+        rx: hart.rx,
     }
 }
 
@@ -260,6 +397,10 @@ pub(crate) fn window(start: &Snapshot, end: &Snapshot) -> Counters {
             dbus1: data_window(&start.cache.dbus1, &end.cache.dbus1),
         },
         cache_geometry: end.cache_geometry,
+        rx: RxCounts {
+            driver: DriverRx::window(&start.rx.driver, &end.rx.driver),
+            station: StationRx::window(&start.rx.station, &end.rx.station),
+        },
     }
 }
 
@@ -391,6 +532,30 @@ mod tests {
                 .ibus1
                 .overflowed
         );
+    }
+
+    #[test]
+    fn a_window_takes_the_receive_path_s_differences() {
+        let reading = |units, timeout, window| Snapshot {
+            rx: RxCounts {
+                driver: DriverRx {
+                    available: true,
+                    units,
+                    ..DriverRx::default()
+                },
+                station: StationRx {
+                    released_by_timeout: timeout,
+                    agreement_window: window,
+                    ..StationRx::default()
+                },
+            },
+            ..Snapshot::default()
+        };
+        let rx = window(&reading(10, 1, 16), &reading(25, 4, 16)).rx;
+        assert!(rx.driver.available);
+        assert_eq!(rx.driver.units, 15);
+        assert_eq!(rx.station.released_by_timeout, 3);
+        assert_eq!(rx.station.agreement_window, 16);
     }
 
     #[test]

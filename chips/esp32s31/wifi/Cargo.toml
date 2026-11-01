@@ -30,6 +30,7 @@ oer-espressif-coex = { path = "../../../chips/espressif/coex" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../portable/time" }
 oer-trace = { path = "../../../portable/trace" }
+oer-events = { path = "../../../portable/events" }
 oer-memory = { path = "../../../portable/memory" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]

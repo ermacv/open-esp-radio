@@ -377,8 +377,10 @@ fn polls(parts: &[PartWindow], window_us: u64) -> serde_json::Value {
 /// instructions with their rate per microsecond (MHz) and per cycle, what
 /// the network bridge did with the station's frames, the frames the IP
 /// stack took with the hart's instructions over them, and the L1 cache's
-/// accesses by bus ([`cache`]). The hart's counts include all its work,
-/// interrupts and the load service's own included.
+/// accesses by bus ([`cache`]), and the receive path's counts as the image
+/// took them: the S31 driver's and the station service's receive
+/// decisions, each the window's difference. The hart's counts include all
+/// its work, interrupts and the load service's own included.
 fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
     let window = window_us.max(1) as f64;
     let cycles = counters.cycles as f64;
@@ -399,6 +401,7 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
         "instructions_per_stack_frame": (counters.stack_received != 0)
             .then(|| round(instructions / f64::from(counters.stack_received))),
         "cache": cache(counters),
+        "rx": counters.rx,
     })
 }
 
@@ -1081,6 +1084,8 @@ mod tests {
         assert_eq!(value["instructions_per_stack_frame"], 960_000.0);
         assert_eq!(value["bridge"]["refused_pool"], 400);
         let none = counters(&Counters::default(), 5_000_000);
+        assert_eq!(none["rx"]["driver"]["available"], false);
+        assert_eq!(none["rx"]["station"]["agreement_window"], 0);
         assert!(none["instructions_per_cycle"].is_null());
         assert!(none["instructions_per_stack_frame"].is_null());
     }

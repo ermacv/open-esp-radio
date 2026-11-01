@@ -170,6 +170,13 @@ when it decided it.
   the boot hart), and reads each bus's hits, misses, conflicts, next-level
   reads (a data bus also its next-level writes) and overflow bit at both
   ends, with the configured cache geometry at the end.
+  The receive path's counts come from the same relay readings on the boot
+  hart: the S31 driver's receive counters, the radio's, which a trace build
+  of the Wi-Fi facade lends (`oer_esp32s31_wifi::rx_counters`), and the
+  station service's receive decisions, which the facade's
+  `TracedStationEvents` sink reports as `StationRx` events to the image's
+  observer in the station service on the boot hart, where they count.
+  Without `oer_trace` that sink is disabled and the service builds no event.
 - **Samples** (`src/load/sampler.rs`). A run whose `Start` has a `profile`
   starts `oer_esp32s31_compose::sampler` on TIMG1 T0 of the boot hart,
   which it samples, at the window's start and asks it to stop at the

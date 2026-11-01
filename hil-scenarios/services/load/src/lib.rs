@@ -326,6 +326,207 @@ pub struct Counters {
     pub cache: CacheCounts,
     /// The cache geometry at the window's end.
     pub cache_geometry: CacheGeometry,
+    /// The receive path's counts within the window: the S31 driver's and
+    /// the station service's. Only a trace build counts them; others report
+    /// zeros.
+    pub rx: RxCounts,
+}
+
+/// The receive path's counts within one window, from the window's start
+/// and end readings.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct RxCounts {
+    pub driver: DriverRx,
+    pub station: StationRx,
+}
+
+/// What the S31 receive driver counted (its `WifiRxCounters`): received
+/// units, their drops by reason, admission and staging blocks, service
+/// passes and the RX-control prefix decode's refusals. It keeps no count
+/// of the MAC's hardware buffer-full events.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct DriverRx {
+    /// Whether the driver's counters were readable at both ends.
+    pub available: bool,
+    pub mac_irqs: u32,
+    /// Units staged to the station and their bytes.
+    pub units: u32,
+    pub bytes: u32,
+    /// Bulk units the admission dropped, with only its critical reserve
+    /// of staging left (after the hardware acknowledged them).
+    pub overload_drops: u32,
+    /// Units left at the ring head for want of a staging credit.
+    pub admission_blocks: u32,
+    /// Service passes that ended blocked on staging capacity.
+    pub stage_capacity_blocks: u32,
+    pub chained_drops: u32,
+    pub oversized_drops: u32,
+    pub empty_drops: u32,
+    pub too_long_drops: u32,
+    pub service_passes: u32,
+    pub service_errors: u32,
+    /// Drains a returned lease's capacity started.
+    pub capacity_drains: u32,
+    /// Drains continued by an immediate self-wake or after a timer.
+    pub continued_immediately: u32,
+    pub continued_after_wait: u32,
+    /// Prefix refusals: a failed RX state (FCS and other errors), a MIC
+    /// failure, a quarantined frame, and every other reason together.
+    pub rx_failures: u32,
+    pub mic_failures: u32,
+    pub quarantined: u32,
+    pub prefix_other: u32,
+}
+
+/// What the station service decided about received frames (its events),
+/// by decision. MSDU counts count MSDUs, the others MPDUs or events.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct StationRx {
+    /// The port reported lost events.
+    pub port_events_lost: u32,
+    /// Frames the station dropped, by reason.
+    pub dropped_header: u32,
+    pub dropped_frame_kind: u32,
+    pub dropped_address: u32,
+    pub dropped_fragmented: u32,
+    pub dropped_protection: u32,
+    pub dropped_integrity: u32,
+    pub dropped_replay: u32,
+    pub dropped_payload: u32,
+    pub dropped_not_connected: u32,
+    pub dropped_security: u32,
+    pub dropped_draining: u32,
+    /// MSDUs not delivered: too long, the full queue to the application,
+    /// no network.
+    pub refused_too_long: u32,
+    pub refused_queue_full: u32,
+    pub refused_no_network: u32,
+    /// MSDUs copied instead of lent: of a frame with several, or whose
+    /// buffer the backend kept.
+    pub copied_aggregated: u32,
+    pub copied_kept: u32,
+    /// MPDUs the receive agreements admitted, by whether they came in an
+    /// A-MPDU (unknown without evidence).
+    pub mpdus_in_ampdu: u32,
+    pub mpdus_single: u32,
+    pub mpdus_unknown: u32,
+    /// MPDUs the reorder released: on receive, by the gap timeout, by a
+    /// BlockAckReq, by an agreement's end or clear.
+    pub released_in_order: u32,
+    pub released_by_timeout: u32,
+    pub released_by_bar: u32,
+    pub released_by_stop: u32,
+    /// Sequences the reorder skipped without an MPDU: by the gap timeout,
+    /// otherwise.
+    pub missing_by_timeout: u32,
+    pub missing_other: u32,
+    /// Buffered duplicates and other rejected input of the reorder.
+    pub duplicates: u32,
+    pub rejected: u32,
+    pub agreements_started: u32,
+    pub agreements_stopped: u32,
+    /// The window of the latest receive agreement at the window's end;
+    /// zero without one.
+    pub agreement_window: u16,
+    /// Connected RSN inputs the station dropped.
+    pub rsn_inputs_dropped: u32,
+}
+
+impl DriverRx {
+    /// The counts between readings `start` and `end`, wrapping at 2^32.
+    pub const fn window(start: &Self, end: &Self) -> Self {
+        Self {
+            available: start.available && end.available,
+            mac_irqs: end.mac_irqs.wrapping_sub(start.mac_irqs),
+            units: end.units.wrapping_sub(start.units),
+            bytes: end.bytes.wrapping_sub(start.bytes),
+            overload_drops: end.overload_drops.wrapping_sub(start.overload_drops),
+            admission_blocks: end.admission_blocks.wrapping_sub(start.admission_blocks),
+            stage_capacity_blocks: end
+                .stage_capacity_blocks
+                .wrapping_sub(start.stage_capacity_blocks),
+            chained_drops: end.chained_drops.wrapping_sub(start.chained_drops),
+            oversized_drops: end.oversized_drops.wrapping_sub(start.oversized_drops),
+            empty_drops: end.empty_drops.wrapping_sub(start.empty_drops),
+            too_long_drops: end.too_long_drops.wrapping_sub(start.too_long_drops),
+            service_passes: end.service_passes.wrapping_sub(start.service_passes),
+            service_errors: end.service_errors.wrapping_sub(start.service_errors),
+            capacity_drains: end.capacity_drains.wrapping_sub(start.capacity_drains),
+            continued_immediately: end
+                .continued_immediately
+                .wrapping_sub(start.continued_immediately),
+            continued_after_wait: end
+                .continued_after_wait
+                .wrapping_sub(start.continued_after_wait),
+            rx_failures: end.rx_failures.wrapping_sub(start.rx_failures),
+            mic_failures: end.mic_failures.wrapping_sub(start.mic_failures),
+            quarantined: end.quarantined.wrapping_sub(start.quarantined),
+            prefix_other: end.prefix_other.wrapping_sub(start.prefix_other),
+        }
+    }
+}
+
+impl StationRx {
+    /// The counts between readings `start` and `end`, wrapping at 2^32;
+    /// the agreement window is the end's.
+    pub const fn window(start: &Self, end: &Self) -> Self {
+        Self {
+            port_events_lost: end.port_events_lost.wrapping_sub(start.port_events_lost),
+            dropped_header: end.dropped_header.wrapping_sub(start.dropped_header),
+            dropped_frame_kind: end
+                .dropped_frame_kind
+                .wrapping_sub(start.dropped_frame_kind),
+            dropped_address: end.dropped_address.wrapping_sub(start.dropped_address),
+            dropped_fragmented: end
+                .dropped_fragmented
+                .wrapping_sub(start.dropped_fragmented),
+            dropped_protection: end
+                .dropped_protection
+                .wrapping_sub(start.dropped_protection),
+            dropped_integrity: end.dropped_integrity.wrapping_sub(start.dropped_integrity),
+            dropped_replay: end.dropped_replay.wrapping_sub(start.dropped_replay),
+            dropped_payload: end.dropped_payload.wrapping_sub(start.dropped_payload),
+            dropped_not_connected: end
+                .dropped_not_connected
+                .wrapping_sub(start.dropped_not_connected),
+            dropped_security: end.dropped_security.wrapping_sub(start.dropped_security),
+            dropped_draining: end.dropped_draining.wrapping_sub(start.dropped_draining),
+            refused_too_long: end.refused_too_long.wrapping_sub(start.refused_too_long),
+            refused_queue_full: end
+                .refused_queue_full
+                .wrapping_sub(start.refused_queue_full),
+            refused_no_network: end
+                .refused_no_network
+                .wrapping_sub(start.refused_no_network),
+            copied_aggregated: end.copied_aggregated.wrapping_sub(start.copied_aggregated),
+            copied_kept: end.copied_kept.wrapping_sub(start.copied_kept),
+            mpdus_in_ampdu: end.mpdus_in_ampdu.wrapping_sub(start.mpdus_in_ampdu),
+            mpdus_single: end.mpdus_single.wrapping_sub(start.mpdus_single),
+            mpdus_unknown: end.mpdus_unknown.wrapping_sub(start.mpdus_unknown),
+            released_in_order: end.released_in_order.wrapping_sub(start.released_in_order),
+            released_by_timeout: end
+                .released_by_timeout
+                .wrapping_sub(start.released_by_timeout),
+            released_by_bar: end.released_by_bar.wrapping_sub(start.released_by_bar),
+            released_by_stop: end.released_by_stop.wrapping_sub(start.released_by_stop),
+            missing_by_timeout: end
+                .missing_by_timeout
+                .wrapping_sub(start.missing_by_timeout),
+            missing_other: end.missing_other.wrapping_sub(start.missing_other),
+            duplicates: end.duplicates.wrapping_sub(start.duplicates),
+            rejected: end.rejected.wrapping_sub(start.rejected),
+            agreements_started: end
+                .agreements_started
+                .wrapping_sub(start.agreements_started),
+            agreements_stopped: end
+                .agreements_stopped
+                .wrapping_sub(start.agreements_stopped),
+            agreement_window: end.agreement_window,
+            rsn_inputs_dropped: end
+                .rsn_inputs_dropped
+                .wrapping_sub(start.rsn_inputs_dropped),
+        }
+    }
 }
 
 /// The L1 cache's access counts within one window, by bus: the image

@@ -333,3 +333,179 @@ fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
     assert_eq!(super::count(&released), RX_HELD + 1);
     assert!(most_untaken <= 8, "{most_untaken} units queued untaken");
 }
+
+/// P1 lends every received unit to a network that returns it at once, as a
+/// station delivering UDP does; it takes each event only after the driver's
+/// turn, which queued it, has ended.
+struct LendingReceive {
+    observed: Rc<RefCell<Observed>>,
+    released: super::Released,
+    rx_interrupt: Waker,
+    taken: Rc<Cell<usize>>,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for LendingReceive {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = owner.enable().await.ok().expect("model enable");
+        {
+            let mut phase = owner.phase();
+            phase.station().configure(
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            assert!(matches!(
+                phase.next_event().await,
+                Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
+            ));
+            self.observed
+                .borrow_mut()
+                .received
+                .extend((0..LENT_FRAMES).map(|_| TestReceive {
+                    bytes: super::super::data_frame(STATION),
+                    view: 0..26,
+                    released: self.released.clone(),
+                }));
+            self.rx_interrupt.wake_by_ref();
+            for _ in 0..LENT_FRAMES {
+                match phase.next_event().await {
+                    Ok(Ok(LowerMacEvent::Received { frame, .. })) => {
+                        // P2 preempts P1 as soon as a take wakes it: the
+                        // driver runs between the take and the lend.
+                        yield_once().await;
+                        let Ok(lent) = phase.lend(frame) else {
+                            panic!("the network takes the unit");
+                        };
+                        drop(lent);
+                    }
+                    _ => panic!("a lent RX frame"),
+                }
+                self.taken.set(self.taken.get() + 1);
+            }
+        }
+        let owner = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+            .ok()
+            .expect("model disable");
+        radio::Ended::uninstall(owner, (), ())
+    }
+}
+
+/// Pending once, after waking its task: the executor runs whatever else
+/// is ready first.
+async fn yield_once() {
+    let mut yielded = false;
+    core::future::poll_fn(|cx| {
+        if core::mem::replace(&mut yielded, true) {
+            Poll::Ready(())
+        } else {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+    .await;
+}
+
+/// More units than P2 queues untaken.
+const LENT_FRAMES: usize = 64;
+
+#[test]
+fn units_beyond_the_untaken_bound_reach_p1_through_wakes_alone() {
+    let (parts, observed, clock) = installed(Vec::new());
+    clock.1.set(true);
+    let released = super::Released::default();
+    let taken = Rc::new(Cell::new(0));
+    let p1_ready = Arc::new(Ready(AtomicBool::new(true)));
+    let p2_ready = Arc::new(Ready(AtomicBool::new(true)));
+    let p1_waker = Waker::from(p1_ready.clone());
+    let p2_waker = Waker::from(p2_ready.clone());
+    // Timer dispatches while units still wait in the device: each one is a
+    // wake the driver should have had and did not.
+    let mut stalls = 0;
+    block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (front, registration) = slot
+            .register(Backend::new(parts).ok().expect("model backend"))
+            .ok()
+            .expect("one installation");
+        let mut p2 = Some(Box::pin(crate::port::Registration::new(registration).run()));
+        let mut p1 = Box::pin(radio::run_port(
+            front,
+            LendingReceive {
+                observed: observed.clone(),
+                released: released.clone(),
+                rx_interrupt: p2_waker.clone(),
+                taken: taken.clone(),
+            },
+        ));
+        let (mut p1_done, mut p2_done) = (false, false);
+        for _ in 0..4000 {
+            if !p2_done && p2_ready.0.swap(false, Ordering::Relaxed) {
+                if let Poll::Ready(retired) = p2
+                    .as_mut()
+                    .expect("registered P2 task")
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&p2_waker))
+                {
+                    drop(p2.take());
+                    retired.expect("clean driver retirement").unregistered();
+                    p2_done = true;
+                }
+            } else if !p1_done && p1_ready.0.swap(false, Ordering::Relaxed) {
+                if let Poll::Ready(end) = p1.as_mut().poll(&mut Context::from_waker(&p1_waker)) {
+                    let radio::PortEnd::Uninstalled { joined, .. } = end else {
+                        panic!("clean RX uninstall");
+                    };
+                    drop(joined);
+                    p1_done = true;
+                }
+            } else {
+                let waiting = !observed.borrow().received.is_empty();
+                stalls += usize::from(waiting && taken.get() < LENT_FRAMES);
+                assert!(
+                    clock.0.advance_to_next_deadline().is_some(),
+                    "a sleeping task has a virtual deadline"
+                );
+                p2_ready.0.store(true, Ordering::Relaxed);
+                p1_ready.0.store(true, Ordering::Relaxed);
+            }
+            if p1_done && p2_done {
+                break;
+            }
+        }
+        assert!(
+            p1_done && p2_done,
+            "both priorities finish in bounded steps"
+        );
+    }));
+    assert_eq!(taken.get(), LENT_FRAMES);
+    assert_eq!(super::count(&released), LENT_FRAMES);
+    assert_eq!(stalls, 0, "units waited for a timer instead of a wake");
+}
+
+#[test]
+fn the_network_leaves_the_pool_a_full_reorder_window_and_the_critical_reserve() {
+    use crate::rx::transaction::DEFAULT_CRITICAL_RESERVE;
+    for units in [RX_HELD + DEFAULT_CRITICAL_RESERVE + 1, 64, 96] {
+        // P1 holds a window but its hole, the network all it may: the
+        // hole's MPDU still finds a credit beyond the critical reserve.
+        let outside = crate::port::lent_rx(units) + (RX_HELD - 1);
+        assert!(units - outside > DEFAULT_CRITICAL_RESERVE, "{units} units");
+    }
+    assert_eq!(crate::port::lent_rx(RX_HELD), 0);
+}

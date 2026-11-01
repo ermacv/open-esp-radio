@@ -85,9 +85,9 @@ pub enum AgreementStop {
 }
 
 /// The most frames one agreement retains, and the most in-order releases
-/// waiting for delivery: a 32-MPDU window. The image chooses the number of
+/// waiting for delivery: a 16-MPDU window. The image chooses the number of
 /// banks and the retained frames independently, at most this many.
-pub const RX_BLOCK_ACK_WINDOW: usize = 32;
+pub const RX_BLOCK_ACK_WINDOW: usize = 16;
 const WINDOW: usize = RX_BLOCK_ACK_WINDOW;
 /// Encoded replies waiting for a control transmit credit.
 const PENDING: usize = 8;

@@ -20,7 +20,22 @@ use oer_trace::Observer;
 pub const N: usize = 96;
 pub const B: usize = crate::FRAME_CAPACITY;
 pub const S: usize = B;
+/// The receive units outside the ring at once: the station's 16 (its
+/// events and reorder window), the admission's critical reserve and the
+/// network's lent units. The other 64 of the 96 stay armed with the
+/// hardware, two Block Ack windows of margin, as in the archive.
 pub const Q: usize = 32;
+const _: () = {
+    if crate::RX_DEPTH < 2 * oer_esp32s31_ieee80211_driver::port::RX_HELD {
+        panic!("the network queue holds two receive windows");
+    }
+    if Q >= N {
+        panic!("the receive ring keeps descriptors armed beside the staged units");
+    }
+    if oer_esp32s31_ieee80211_driver::port::lent_rx(Q) == 0 {
+        panic!("the staged units leave the network none beside the station's");
+    }
+};
 pub const TX: usize = crate::FRAME_CAPACITY;
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 pub(crate) type Rng = oer_esp32s31_compose::platform::Entropy;
