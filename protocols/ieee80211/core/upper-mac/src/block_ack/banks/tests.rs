@@ -533,8 +533,9 @@ fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
         .unwrap();
     let reply = view.next_reply().unwrap();
     view.sent(reply.place);
-    // Two released in order wait for their consumer.
-    for sequence in 100..102 {
+    // Two released in order wait for their consumer: 101 waits for the
+    // hole at 100, which releases both.
+    for sequence in [101, 100] {
         assert!(matches!(
             view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
             RxDisposition::Retained
@@ -555,6 +556,52 @@ fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
         [qos_data(0, 100).0, qos_data(0, 101).0, qos_data(5, 9).0]
     );
     assert!(!view.has_ready());
+}
+
+#[test]
+fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    let reply = view.next_reply().unwrap();
+    view.sent(reply.place);
+    // The window's start, with nothing buffered behind it, is delivered
+    // without taking a slot or a place in delivery order.
+    for sequence in 100..103 {
+        assert!(matches!(
+            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            RxDisposition::Deliver((frame, _)) if frame.0 == qos_data(0, sequence).0
+        ));
+    }
+    assert!(!view.has_ready());
+    // 104 waits for 103; 103 then releases both in order.
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 104), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 103), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    // The next in-order MPDU waits behind the released ones.
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 105), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
+        .map(|(frame, _)| frame.0)
+        .collect();
+    assert_eq!(
+        order,
+        [qos_data(0, 103).0, qos_data(0, 104).0, qos_data(0, 105).0]
+    );
+    // A duplicate of a delivered MPDU is behind the window and recycled.
+    assert!(matches!(
+        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        RxDisposition::Recycle(_)
+    ));
 }
 
 #[test]

@@ -282,6 +282,28 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         matches!(action, BlockAckAction::Delba { tid, initiator: true, .. } if tid == self.tid)
     }
 
+    /// Take the common in-order MPDU without a release list: `true` when
+    /// it is the window's start and no buffered MPDU follows it, so it goes
+    /// out at once and the window moves past it. Otherwise nothing changed
+    /// and the MPDU needs [`Self::ingest`]. The agreement's inactivity
+    /// restarts as for an ingested MPDU; no hole opens or closes.
+    pub fn try_ingest_immediate(
+        &mut self,
+        now: Instant,
+        frame: RxReorderMpdu,
+    ) -> Result<bool, RxBlockAckError> {
+        let inactivity = self.next_inactivity(now)?;
+        let taken = self
+            .reorder
+            .try_ingest_immediate(frame)
+            .map_err(RxBlockAckError::Reorder)?
+            .is_some();
+        if taken {
+            self.inactivity = inactivity;
+        }
+        Ok(taken)
+    }
+
     pub fn ingest(
         &mut self,
         now: Instant,
