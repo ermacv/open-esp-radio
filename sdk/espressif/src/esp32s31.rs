@@ -39,7 +39,7 @@ pub use oer_esp32s31_compose::Esp32s31;
 pub use embassy_time as time;
 
 mod aes;
-pub use aes::{Aes, AesClient, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
+pub use aes::{Aes, AesClient, AesSeats, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
 
 /// The Wi-Fi station and its IP service.
 #[cfg(feature = "wifi")]
@@ -92,13 +92,10 @@ oer_espressif_executor::tasks! {
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
         /// The shared AES service.
-        aes_service(engine: aes::Engine) = aes::serve;
+        aes_service(launch: aes::AesStart) = aes::serve;
         #[cfg(feature = "wifi")]
         /// The Wi-Fi station's runner.
         station(launch: wifi::StationStart) = wifi::serve_station;
-        #[cfg(feature = "wifi")]
-        /// The IP service over the station.
-        ip(network: wifi::IpStart) = wifi::serve_ip;
     }
 }
 
@@ -124,7 +121,11 @@ pub struct AesPeripheral(pub(crate) AesParts);
 /// interrupt router before interrupts are enabled, and the library's
 /// service tasks to start once the executor runs. It exists only while the
 /// boot function runs, before any executor.
-pub struct Boot {
+///
+/// `N` is the IP service the boot started, whose pool sizes are the
+/// image's: [`NoNet`] until `wifi::Net::start` consumes the boot and
+/// returns it with the service.
+pub struct Boot<N = NoNet> {
     adopted: Adopted<InterruptController>,
     pub(crate) pending: Pending,
     /// The system timer, until a driver installs it or the boot ends.
@@ -140,9 +141,45 @@ pub struct Boot {
     /// The boot's identity, once a station drew it.
     pub(crate) boot_id: Option<u64>,
     evidence: Evidence,
+    /// The IP service to start with the executor.
+    net: N,
 }
 
+/// No IP service: the boot started none.
+pub struct NoNet;
+
 impl Boot {
+    /// The same boot with `net` as its IP service.
+    #[cfg(feature = "wifi")]
+    pub(crate) fn with_net<M>(self, net: M) -> Boot<M> {
+        let Self {
+            adopted,
+            pending,
+            timer,
+            app_alarm,
+            radio,
+            urgent,
+            entropy,
+            boot_id,
+            evidence,
+            net: NoNet,
+        } = self;
+        Boot {
+            adopted,
+            pending,
+            timer,
+            app_alarm,
+            radio,
+            urgent,
+            entropy,
+            boot_id,
+            evidence,
+            net,
+        }
+    }
+}
+
+impl<N> Boot<N> {
     pub(crate) fn router(
         &mut self,
     ) -> &mut oer_espressif_interrupt_table::Router<InterruptController> {
@@ -199,25 +236,71 @@ pub(crate) fn draw_boot_id(rng: &mut oer_esp32s31_compose::platform::Entropy) ->
 /// Service tasks a boot step prepared, started with the executor.
 #[derive(Default)]
 pub(crate) struct Pending {
-    pub(crate) aes: Option<aes::Engine>,
+    pub(crate) aes: Option<aes::AesStart>,
     #[cfg(feature = "wifi")]
     pub(crate) station: Option<wifi::StationStart>,
-    #[cfg(feature = "wifi")]
-    pub(crate) ip: Option<wifi::IpStart>,
 }
 
-impl Boot {
+impl<N: NetTask> Boot<N> {
     /// End the boot: run `app` on hart 0 beside the library's service
     /// tasks once the executor starts.
-    pub fn run<F: core::future::Future<Output = AppResult>>(self, app: F) -> Started<F> {
-        Started { boot: self, app }
+    pub fn run<F: core::future::Future<Output = AppResult>>(self, app: F) -> Run<F, N> {
+        Run { boot: self, app }
     }
 }
 
-/// A finished boot and the application it runs.
-pub struct Started<F> {
-    boot: Boot,
+/// A finished boot and the application it runs: what an image's boot
+/// returns, as `impl Started`.
+pub trait Started: started::Sealed {
+    /// The application's future.
+    type App: core::future::Future<Output = AppResult>;
+    /// The IP service the boot started, or [`NoNet`].
+    type Net: NetTask;
+    #[doc(hidden)]
+    fn into_parts(self) -> (Boot<Self::Net>, Self::App);
+}
+
+mod started {
+    pub trait Sealed {}
+}
+
+/// The finished boot [`Boot::run`] returns.
+pub struct Run<F, N> {
+    boot: Boot<N>,
     app: F,
+}
+
+impl<F, N> started::Sealed for Run<F, N> {}
+
+impl<F: core::future::Future<Output = AppResult>, N: NetTask> Started for Run<F, N> {
+    type App = F;
+    type Net = N;
+    fn into_parts(self) -> (Boot<N>, F) {
+        (self.boot, self.app)
+    }
+}
+
+/// An IP service's task, which the image's task set declares with the
+/// image's pool sizes; not an API.
+#[doc(hidden)]
+pub trait NetTask: 'static {
+    /// Whether there is a service to start.
+    const STARTED: bool;
+    /// The service, for good.
+    fn serve(self) -> impl core::future::Future<Output = ()>;
+}
+
+impl NetTask for NoNet {
+    const STARTED: bool = false;
+    fn serve(self) -> impl core::future::Future<Output = ()> {
+        core::future::ready(())
+    }
+}
+
+/// Run the IP service; not an API.
+#[doc(hidden)]
+pub async fn run_net(net: impl NetTask) {
+    net.serve().await;
 }
 
 /// Why the boot or the application stopped; the library records it and
@@ -305,10 +388,11 @@ pub type AppResult = Result<core::convert::Infallible, Error>;
 /// call `boot` with the peripherals, start the executor with the library's
 /// service tasks and the application's future. Any error records and resets.
 #[doc(hidden)]
-pub fn start<T, F>(
+pub fn start<T, S: Started>(
     handoff: Handoff<Port>,
-    boot: fn(Peripherals, Boot) -> Result<Started<F>, Error>,
-    spawn_app: fn(&Spawner<T>, F) -> Result<(), AlreadyStarted>,
+    boot: fn(Peripherals, Boot) -> Result<S, Error>,
+    spawn_app: fn(&Spawner<T>, S::App) -> Result<(), AlreadyStarted>,
+    spawn_net: fn(&Spawner<T>, S::Net) -> Result<(), AlreadyStarted>,
 ) -> !
 where
     T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>,
@@ -399,6 +483,7 @@ where
             previous_panic: previous,
             previous_exception,
         },
+        net: NoNet,
     };
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
@@ -407,10 +492,9 @@ where
         #[cfg(feature = "console")]
         console: ConsolePeripheral(interrupts.console_usb),
     };
-    let Started {
-        boot: mut setup,
-        app,
-    } = boot(peripherals, setup).unwrap_or_else(|error| fail(error.name()));
+    let (mut setup, app) = boot(peripherals, setup)
+        .unwrap_or_else(|error| fail(error.name()))
+        .into_parts();
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
         let _ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
@@ -441,7 +525,10 @@ where
     #[cfg(feature = "wifi")]
     let urgent = setup.urgent.take();
     let Boot {
-        adopted, pending, ..
+        adopted,
+        pending,
+        net,
+        ..
     } = setup;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -453,6 +540,8 @@ where
         pending,
         app,
         spawn_app,
+        net,
+        spawn_net,
     };
     #[cfg(feature = "wifi")]
     if let Some(urgent) = urgent {
@@ -483,15 +572,20 @@ where
         .unwrap_or_else(|failure| failure.reset()) {}
 }
 
-/// The tasks the executor starts: the library's, then the application's.
-struct Starts<T: Tasks, F> {
+/// The tasks the executor starts: the library's, then the image's IP
+/// service and application.
+struct Starts<T: Tasks, F, N> {
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
     pending: Pending,
     app: F,
     spawn_app: fn(&Spawner<T>, F) -> Result<(), AlreadyStarted>,
+    net: N,
+    spawn_net: fn(&Spawner<T>, N) -> Result<(), AlreadyStarted>,
 }
 
-impl<T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>, F> Starts<T, F> {
+impl<T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>, F, N: NetTask>
+    Starts<T, F, N>
+{
     fn spawn(self, spawner: &Spawner<T>) {
         let library = spawner.base();
         let Self {
@@ -499,6 +593,8 @@ impl<T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>, F> Starts<
             pending,
             app,
             spawn_app,
+            net,
+            spawn_net,
         } = self;
         let mut started = SdkTasks::watchdog(&library, watchdog).is_ok()
             && pending
@@ -509,11 +605,10 @@ impl<T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>, F> Starts<
             started = started
                 && pending
                     .station
-                    .is_none_or(|start| SdkTasks::station(&library, start).is_ok())
-                && pending
-                    .ip
-                    .is_none_or(|service| SdkTasks::ip(&library, service).is_ok());
+                    .is_none_or(|start| SdkTasks::station(&library, start).is_ok());
         }
+        // A boot without an IP service leaves its task unstarted.
+        started = started && (!N::STARTED || spawn_net(spawner, net).is_ok());
         started = started && spawn_app(spawner, app).is_ok();
         if !started {
             fail(Error::AlreadyStarted.name());
@@ -562,7 +657,7 @@ pub(crate) fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
 /// What [`main!`](crate::main) expands to needs; not an API.
 #[doc(hidden)]
 pub mod __private {
-    pub use super::{run_app, start};
+    pub use super::{NetTask, run_app, run_net, start};
     pub use oer_esp32s31_compose::exception::capture as exception;
     pub use oer_esp32s31_hal::platform::Port;
     pub use oer_espressif_executor::tasks;

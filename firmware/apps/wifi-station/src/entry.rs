@@ -3,7 +3,6 @@
 // network's gateway, again after every reconnection.
 mod profile;
 
-use core::future::Future;
 use oer_espressif::{
     AppResult, Aes, Boot, Error, Peripherals, Started,
     print::{DiagPath, DiagnosticPath, Ipv4},
@@ -13,13 +12,13 @@ use oer_espressif::{
 };
 use profile::{PROFILE, Security};
 
-oer_espressif::main!(boot);
+oer_espressif::entry!(boot);
 
-fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
+fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;
     let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
-    let net = Net::start(device, NetConfig::Dhcpv4, &mut boot)?;
+    let (net, boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
     Ok(boot.run(app(station, net)))
 }
 

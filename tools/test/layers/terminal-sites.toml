@@ -461,6 +461,12 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "hil-scenarios/images/esp32s31-wifi-station/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["software-invariant"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["software-invariant"] }
 
+# firmware/apps/wifi-station/src/entry.rs
+"firmware/apps/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/wifi-station", classes = ["rust-panic", "cpu-exception"] }
+# firmware/apps/wifi-station/src/not_configured.rs
+"firmware/apps/wifi-station/src/not_configured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/wifi-station", classes = ["rust-panic", "cpu-exception"] }
+# hil-scenarios/images/esp32s31-sdk-station/src/entry.rs
+"hil-scenarios/images/esp32s31-sdk-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil-scenarios/images/esp32s31-sdk-station", classes = ["rust-panic", "cpu-exception"] }
 # sdk/espressif/src/esp32s31.rs
 "sdk/espressif/src/esp32s31.rs:crate::esp32s31::start:terminal-entry:start:1" = { owner = "sdk/espressif", classes = ["configuration-boot"] }
 "sdk/espressif/src/esp32s31.rs:crate::esp32s31::fail:terminal-entry:fail:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }

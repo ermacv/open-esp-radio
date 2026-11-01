@@ -1,5 +1,6 @@
-//! The shared AES service: one owner of the hardware engine and up to `C`
-//! clients of one execution context.
+//! The shared AES service: one owner of the hardware engine and the
+//! clients of one execution context, as many as its seats' storage holds
+//! ([`AesSeats`], 1 to 32).
 //!
 //! [`AesService::serve`] owns the engine and serves one request at a time,
 //! the next pending client after the last one served. A client
@@ -25,8 +26,9 @@
 //!
 //! Seats are claimed atomically, so a client can be issued before `X`'s
 //! executor runs (an image's boot hands one to the Wi-Fi station). Requests
-//! and responses live in one [`ContextCell`] of context `X`: every access
-//! checks that it runs in `X` and returns [`AesError::Foreign`] otherwise.
+//! and responses live in one [`ContextCell`] of context `X` per seat, the
+//! service's round in another: every access checks that it runs in `X` and
+//! returns [`AesError::Foreign`] otherwise.
 //! Wakers are woken after the cell's borrow ends, never inside it, and never
 //! leave `X`'s executor.
 
@@ -67,7 +69,7 @@ pub struct Exhausted;
 
 /// One seat's request state; whether a client holds it is the service's
 /// claim mask.
-enum Seat<const N: usize> {
+enum SeatState<const N: usize> {
     /// No request.
     Idle,
     /// The request numbered `ticket` waits for the service.
@@ -91,50 +93,89 @@ enum Seat<const N: usize> {
     },
 }
 
-struct State<const N: usize, const C: usize> {
-    seats: [Seat<N>; C],
-    /// The seat after the one served last.
-    next: usize,
-    server: Option<Waker>,
-}
+/// One client seat of an AES service of context `X`: its request state,
+/// lent only in `X`.
+pub struct AesSeat<X: ExecutionContext, const N: usize>(ContextCell<SeatState<N>, Entered<X>>);
 
-/// The shared AES service of context `X`: `C` client seats, requests with
-/// key data of capacity `N`.
-pub struct AesService<X: ExecutionContext, const N: usize, const C: usize> {
-    /// One bit per seat a client holds.
-    claimed: AtomicU32,
-    state: ContextCell<State<N, C>, Entered<X>>,
-}
+/// The client seats of one AES service: `C` of them, 1 to 32. A static of
+/// this type is the storage [`AesService::new`] serves; its size is
+/// `C` seats, each holding one request or response of capacity `N`.
+pub struct AesSeats<X: ExecutionContext, const N: usize, const C: usize>([AesSeat<X, N>; C]);
 
-impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
+impl<X: ExecutionContext, const N: usize, const C: usize> AesSeats<X, N, C> {
     pub const fn new() -> Self {
         const {
             if C == 0 || C > 32 {
                 panic!("an AES service has 1 to 32 client seats");
             }
         };
+        Self([const { AesSeat(ContextCell::new(SeatState::Idle)) }; C])
+    }
+}
+
+impl<X: ExecutionContext, const N: usize, const C: usize> Default for AesSeats<X, N, C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The service's own state: where its round continues and its waker.
+struct Shared {
+    /// The seat after the one served last.
+    next: usize,
+    server: Option<Waker>,
+}
+
+/// The shared AES service of context `X`: the client seats of one
+/// [`AesSeats`], requests with key data of capacity `N`. The seat count is
+/// the storage's, not the service's type: clients of services with
+/// different counts have one type.
+pub struct AesService<X: ExecutionContext + 'static, const N: usize> {
+    /// One bit per seat a client holds.
+    claimed: AtomicU32,
+    seats: &'static [AesSeat<X, N>],
+    state: ContextCell<Shared, Entered<X>>,
+}
+
+impl<X: ExecutionContext, const N: usize> AesService<X, N> {
+    /// The service of `seats`.
+    pub const fn new<const C: usize>(seats: &'static AesSeats<X, N, C>) -> Self {
         Self {
             claimed: AtomicU32::new(0),
-            state: ContextCell::new(State {
-                seats: [const { Seat::Idle }; C],
+            seats: &seats.0,
+            state: ContextCell::new(Shared {
                 next: 0,
                 server: None,
             }),
         }
     }
 
-    /// Borrow the state in `X`.
-    fn with<R>(&self, f: impl FnOnce(&mut State<N, C>) -> R) -> Result<R, AesError> {
-        let entered = Entered::<X>::enter().ok_or(AesError::Foreign)?;
-        self.state.with(&entered, f).ok_or(AesError::Foreign)
+    /// The seats' claim bits: one per seat, at most 32.
+    fn all(&self) -> u32 {
+        u32::MAX
+            .checked_shr(32_u32.saturating_sub(self.seats.len() as u32))
+            .unwrap_or(0)
+    }
+
+    /// Borrow seat `index` in `X`; `None` for a seat the storage has not.
+    fn with_seat<R>(
+        &self,
+        entered: &Entered<X>,
+        index: usize,
+        f: impl FnOnce(&mut SeatState<N>) -> R,
+    ) -> Result<Option<R>, AesError> {
+        match self.seats.get(index) {
+            Some(seat) => seat.0.with(entered, f).map(Some).ok_or(AesError::Foreign),
+            None => Ok(None),
+        }
     }
 
     /// A client on the first free seat; any context may take one.
     ///
     /// # Errors
     /// Every seat has a client.
-    pub fn client(&self) -> Result<AesClient<'_, X, N, C>, Exhausted> {
-        let all = u32::MAX >> (32 - C);
+    pub fn client(&self) -> Result<AesClient<'_, X, N>, Exhausted> {
+        let all = self.all();
         let previous = self
             .claimed
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |claimed| {
@@ -180,62 +221,81 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
 
     /// Take the next pending request, after the seat served last.
     fn take_pending(&self, cx: &Context<'_>) -> Poll<Result<(usize, AesRequest<N>), AesError>> {
-        let taken = self.with(|state| {
-            for offset in 0..C {
-                let index = state.next.wrapping_add(offset) % C;
-                let Some(seat) = state.seats.get_mut(index) else {
-                    continue;
-                };
-                if !matches!(seat, Seat::Pending { .. }) {
-                    continue;
-                }
-                let Seat::Pending {
-                    request,
-                    waker,
-                    ticket,
-                } = core::mem::replace(seat, Seat::Idle)
-                else {
-                    continue;
-                };
-                *seat = Seat::Running { waker, ticket };
-                state.next = index.wrapping_add(1) % C;
-                return Some((index, request));
-            }
-            state.server = Some(cx.waker().clone());
-            None
-        });
-        match taken {
+        match self.next_pending(cx) {
             Ok(Some(taken)) => Poll::Ready(Ok(taken)),
             Ok(None) => Poll::Pending,
             Err(error) => Poll::Ready(Err(error)),
         }
     }
 
+    fn next_pending(&self, cx: &Context<'_>) -> Result<Option<(usize, AesRequest<N>)>, AesError> {
+        let entered = Entered::<X>::enter().ok_or(AesError::Foreign)?;
+        let count = self.seats.len();
+        let next = self
+            .state
+            .with(&entered, |state| state.next)
+            .ok_or(AesError::Foreign)?;
+        for offset in 0..count {
+            let Some(index) = next.wrapping_add(offset).checked_rem(count) else {
+                break;
+            };
+            let taken = self.with_seat(&entered, index, |seat| {
+                if !matches!(seat, SeatState::Pending { .. }) {
+                    return None;
+                }
+                let SeatState::Pending {
+                    request,
+                    waker,
+                    ticket,
+                } = core::mem::replace(seat, SeatState::Idle)
+                else {
+                    return None;
+                };
+                *seat = SeatState::Running { waker, ticket };
+                Some(request)
+            })?;
+            if let Some(Some(request)) = taken {
+                self.state
+                    .with(&entered, |state| {
+                        state.next = index.wrapping_add(1).checked_rem(count).unwrap_or(0);
+                    })
+                    .ok_or(AesError::Foreign)?;
+                return Ok(Some((index, request)));
+            }
+        }
+        self.state
+            .with(&entered, |state| state.server = Some(cx.waker().clone()))
+            .ok_or(AesError::Foreign)?;
+        Ok(None)
+    }
+
     /// Hand `response` to its seat's client, or erase it when nobody waits.
     fn finish(&self, index: usize, response: AesResponse<N>) -> Result<(), AesError> {
-        let (waker, erased, released) = self.with(|state| {
-            let Some(seat) = state.seats.get_mut(index) else {
-                return (None, Some(response), false);
-            };
-            match core::mem::replace(seat, Seat::Idle) {
-                Seat::Running { waker, ticket } => {
-                    *seat = Seat::Done { response, ticket };
-                    (waker, None, false)
+        let entered = Entered::<X>::enter().ok_or(AesError::Foreign)?;
+        let mut response = Some(response);
+        let handed = self.with_seat(&entered, index, |seat| {
+            match core::mem::replace(seat, SeatState::Idle) {
+                SeatState::Running { waker, ticket } => {
+                    if let Some(response) = response.take() {
+                        *seat = SeatState::Done { response, ticket };
+                    }
+                    (waker, false)
                 }
-                Seat::Discarding { waker } => (waker, Some(response), false),
-                Seat::Released => (None, Some(response), true),
+                SeatState::Discarding { waker } => (waker, false),
+                SeatState::Released => (None, true),
                 // Only the service leaves `Running`: no other state holds a
                 // request it ran. The response is erased and the seat kept.
                 other => {
                     *seat = other;
-                    (None, Some(response), false)
+                    (None, false)
                 }
             }
         })?;
+        let (waker, released) = handed.unwrap_or((None, false));
         if released {
             self.unclaim(index);
         }
-        drop(erased);
+        drop(response);
         if let Some(waker) = waker {
             waker.wake();
         }
@@ -253,89 +313,99 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
         request: &mut Option<AesRequest<N>>,
         cx: &Context<'_>,
     ) -> Poll<Result<AesResponse<N>, AesError>> {
-        let polled = self.with(|state| {
-            let Some(slot) = state.seats.get_mut(seat) else {
-                return (Poll::Ready(Err(AesError::Foreign)), None, None);
-            };
+        let Some(entered) = Entered::<X>::enter() else {
+            return Poll::Ready(Err(AesError::Foreign));
+        };
+        let polled = self.with_seat(&entered, seat, |slot| {
             let waker = Some(cx.waker().clone());
             let stale = match slot {
-                Seat::Pending { ticket: held, .. } | Seat::Done { ticket: held, .. }
+                SeatState::Pending { ticket: held, .. } | SeatState::Done { ticket: held, .. }
                     if *held != ticket =>
                 {
-                    match core::mem::replace(slot, Seat::Idle) {
-                        Seat::Pending { request, .. } => Some(Dropped::Request(request)),
-                        Seat::Done { response, .. } => Some(Dropped::Response(response)),
+                    match core::mem::replace(slot, SeatState::Idle) {
+                        SeatState::Pending { request, .. } => Some(Dropped::Request(request)),
+                        SeatState::Done { response, .. } => Some(Dropped::Response(response)),
                         _ => None,
                     }
                 }
-                Seat::Running { ticket: held, .. } if *held != ticket => {
-                    *slot = Seat::Discarding { waker: None };
+                SeatState::Running { ticket: held, .. } if *held != ticket => {
+                    *slot = SeatState::Discarding { waker: None };
                     None
                 }
                 _ => None,
             };
-            let (poll, server) = match slot {
-                Seat::Idle => match request.take() {
+            let (poll, submitted) = match slot {
+                SeatState::Idle => match request.take() {
                     Some(request) => {
-                        *slot = Seat::Pending {
+                        *slot = SeatState::Pending {
                             request,
                             waker,
                             ticket,
                         };
-                        (Poll::Pending, state.server.take())
+                        (Poll::Pending, true)
                     }
                     // The request moved in and its response was taken.
-                    None => (Poll::Ready(Err(AesError::Foreign)), None),
+                    None => (Poll::Ready(Err(AesError::Foreign)), false),
                 },
-                Seat::Pending { waker: stored, .. }
-                | Seat::Running { waker: stored, .. }
-                | Seat::Discarding { waker: stored } => {
+                SeatState::Pending { waker: stored, .. }
+                | SeatState::Running { waker: stored, .. }
+                | SeatState::Discarding { waker: stored } => {
                     *stored = waker;
-                    (Poll::Pending, None)
+                    (Poll::Pending, false)
                 }
-                Seat::Done { .. } => match core::mem::replace(slot, Seat::Idle) {
-                    Seat::Done { response, .. } => (Poll::Ready(Ok(response)), None),
+                SeatState::Done { .. } => match core::mem::replace(slot, SeatState::Idle) {
+                    SeatState::Done { response, .. } => (Poll::Ready(Ok(response)), false),
                     other => {
                         *slot = other;
-                        (Poll::Pending, None)
+                        (Poll::Pending, false)
                     }
                 },
-                Seat::Released => (Poll::Ready(Err(AesError::Foreign)), None),
+                SeatState::Released => (Poll::Ready(Err(AesError::Foreign)), false),
             };
-            (poll, server, stale)
+            (poll, submitted, stale)
         });
-        match polled {
-            Ok((poll, server, stale)) => {
-                drop(stale);
-                if let Some(server) = server {
-                    server.wake();
-                }
-                poll
+        let (poll, submitted, stale) = match polled {
+            Ok(Some(polled)) => polled,
+            Ok(None) | Err(_) => return Poll::Ready(Err(AesError::Foreign)),
+        };
+        drop(stale);
+        // A new request wakes the service, outside the seat's borrow.
+        let server = if submitted {
+            match self.state.with(&entered, |state| state.server.take()) {
+                Some(server) => server,
+                None => return Poll::Ready(Err(AesError::Foreign)),
             }
-            Err(error) => Poll::Ready(Err(error)),
+        } else {
+            None
+        };
+        if let Some(server) = server {
+            server.wake();
         }
+        poll
     }
 
     /// The wait for request `ticket` on `seat` ended before its response:
     /// withdraw it pending, let it be erased running, erase its untaken
     /// response. A seat that holds another request is left as it is.
     fn withdraw(&self, seat: usize, ticket: u32) {
-        let dropped = self.with(|state| {
-            let slot = state.seats.get_mut(seat)?;
+        let Some(entered) = Entered::<X>::enter() else {
+            return;
+        };
+        let dropped = self.with_seat(&entered, seat, |slot| {
             match slot {
-                Seat::Pending { ticket: held, .. }
-                | Seat::Running { ticket: held, .. }
-                | Seat::Done { ticket: held, .. }
+                SeatState::Pending { ticket: held, .. }
+                | SeatState::Running { ticket: held, .. }
+                | SeatState::Done { ticket: held, .. }
                     if *held == ticket => {}
                 _ => return None,
             }
-            match core::mem::replace(slot, Seat::Idle) {
-                Seat::Pending { request, .. } => Some(Dropped::Request(request)),
-                Seat::Running { .. } => {
-                    *slot = Seat::Discarding { waker: None };
+            match core::mem::replace(slot, SeatState::Idle) {
+                SeatState::Pending { request, .. } => Some(Dropped::Request(request)),
+                SeatState::Running { .. } => {
+                    *slot = SeatState::Discarding { waker: None };
                     None
                 }
-                Seat::Done { response, .. } => Some(Dropped::Response(response)),
+                SeatState::Done { response, .. } => Some(Dropped::Response(response)),
                 other => {
                     *slot = other;
                     None
@@ -349,32 +419,31 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
     /// service finished its running request. Outside `X` the seat cannot
     /// be inspected and stays claimed.
     fn release(&self, seat: usize) {
-        let released = self.with(|state| {
-            let Some(slot) = state.seats.get_mut(seat) else {
-                return (true, None);
-            };
-            match core::mem::replace(slot, Seat::Idle) {
-                Seat::Running { .. } | Seat::Discarding { .. } | Seat::Released => {
-                    *slot = Seat::Released;
+        let Some(entered) = Entered::<X>::enter() else {
+            return;
+        };
+        let released = self.with_seat(&entered, seat, |slot| {
+            match core::mem::replace(slot, SeatState::Idle) {
+                SeatState::Running { .. } | SeatState::Discarding { .. } | SeatState::Released => {
+                    *slot = SeatState::Released;
                     (false, None)
                 }
-                Seat::Pending { request, .. } => (true, Some(Dropped::Request(request))),
-                Seat::Done { response, .. } => (true, Some(Dropped::Response(response))),
-                Seat::Idle => (true, None),
+                SeatState::Pending { request, .. } => (true, Some(Dropped::Request(request))),
+                SeatState::Done { response, .. } => (true, Some(Dropped::Response(response))),
+                SeatState::Idle => (true, None),
             }
         });
-        if let Ok((free, dropped)) = released {
-            drop(dropped);
-            if free {
-                self.unclaim(seat);
+        match released {
+            Ok(Some((free, dropped))) => {
+                drop(dropped);
+                if free {
+                    self.unclaim(seat);
+                }
             }
+            // A seat the storage has not was never claimed by a client.
+            Ok(None) => self.unclaim(seat),
+            Err(_) => {}
         }
-    }
-}
-
-impl<X: ExecutionContext, const N: usize, const C: usize> Default for AesService<X, N, C> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -385,16 +454,16 @@ enum Dropped<const N: usize> {
 }
 
 /// One client of an [`AesService`]: its seat.
-pub struct AesClient<'s, X: ExecutionContext, const N: usize, const C: usize> {
-    service: &'s AesService<X, N, C>,
+pub struct AesClient<'s, X: ExecutionContext + 'static, const N: usize> {
+    service: &'s AesService<X, N>,
     seat: usize,
     /// The number of the client's last request.
     ticket: u32,
 }
 
-impl<'s, X: ExecutionContext, const N: usize, const C: usize> AesClient<'s, X, N, C> {
+impl<'s, X: ExecutionContext, const N: usize> AesClient<'s, X, N> {
     /// Compute `request`; the future ends with its response.
-    pub fn execute(&mut self, request: AesRequest<N>) -> Execute<'_, 's, X, N, C> {
+    pub fn execute(&mut self, request: AesRequest<N>) -> Execute<'_, 's, X, N> {
         let ticket = self.next_ticket();
         Execute {
             client: self,
@@ -412,7 +481,7 @@ impl<'s, X: ExecutionContext, const N: usize, const C: usize> AesClient<'s, X, N
     }
 }
 
-impl<X: ExecutionContext, const N: usize, const C: usize> Drop for AesClient<'_, X, N, C> {
+impl<X: ExecutionContext, const N: usize> Drop for AesClient<'_, X, N> {
     fn drop(&mut self) {
         self.service.release(self.seat);
     }
@@ -420,14 +489,14 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Drop for AesClient<'_,
 
 /// The wait for one request's response.
 #[must_use = "the request moves into the service only when the wait is polled"]
-pub struct Execute<'c, 's, X: ExecutionContext, const N: usize, const C: usize> {
-    client: &'c mut AesClient<'s, X, N, C>,
+pub struct Execute<'c, 's, X: ExecutionContext + 'static, const N: usize> {
+    client: &'c mut AesClient<'s, X, N>,
     request: Option<AesRequest<N>>,
     ticket: u32,
     ended: bool,
 }
 
-impl<X: ExecutionContext, const N: usize, const C: usize> Future for Execute<'_, '_, X, N, C> {
+impl<X: ExecutionContext, const N: usize> Future for Execute<'_, '_, X, N> {
     type Output = Result<AesResponse<N>, AesError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -441,7 +510,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Future for Execute<'_,
     }
 }
 
-impl<X: ExecutionContext, const N: usize, const C: usize> Drop for Execute<'_, '_, X, N, C> {
+impl<X: ExecutionContext, const N: usize> Drop for Execute<'_, '_, X, N> {
     fn drop(&mut self) {
         if !self.ended && self.request.is_none() {
             self.client.service.withdraw(self.client.seat, self.ticket);
@@ -451,10 +520,8 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Drop for Execute<'_, '
 
 /// A client is a key-unwrap engine: it moves into its operation and comes
 /// back with the response, which is how the Wi-Fi station takes it.
-impl<X: ExecutionContext, const N: usize, const C: usize> KeyUnwrap<N>
-    for AesClient<'static, X, N, C>
-{
-    type Operation = Unwrap<X, N, C>;
+impl<X: ExecutionContext, const N: usize> KeyUnwrap<N> for AesClient<'static, X, N> {
+    type Operation = Unwrap<X, N>;
 
     fn unwrap_key(mut self, request: KeyUnwrapRequest<N>) -> Self::Operation {
         let ticket = self.next_ticket();
@@ -467,14 +534,14 @@ impl<X: ExecutionContext, const N: usize, const C: usize> KeyUnwrap<N>
 }
 
 /// One key unwrap of a client that owns itself for the operation.
-pub struct Unwrap<X: ExecutionContext + 'static, const N: usize, const C: usize> {
-    client: Option<AesClient<'static, X, N, C>>,
+pub struct Unwrap<X: ExecutionContext + 'static, const N: usize> {
+    client: Option<AesClient<'static, X, N>>,
     request: Option<AesRequest<N>>,
     ticket: u32,
 }
 
-impl<X: ExecutionContext, const N: usize, const C: usize> Future for Unwrap<X, N, C> {
-    type Output = KeyUnwrapDone<AesClient<'static, X, N, C>, N>;
+impl<X: ExecutionContext, const N: usize> Future for Unwrap<X, N> {
+    type Output = KeyUnwrapDone<AesClient<'static, X, N>, N>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
@@ -501,7 +568,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> Future for Unwrap<X, N
     }
 }
 
-impl<X: ExecutionContext, const N: usize, const C: usize> Drop for Unwrap<X, N, C> {
+impl<X: ExecutionContext, const N: usize> Drop for Unwrap<X, N> {
     fn drop(&mut self) {
         if let Some(client) = &self.client
             && self.request.is_none()

@@ -8,13 +8,13 @@ defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
 
 ```rust
-oer_espressif::main!(boot);
+oer_espressif::entry!(boot);
 
-fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
+fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::new(*b"DE", 6, 10)?;
     let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
-    let net = Net::start(device, NetConfig::Dhcpv4, &mut boot)?;
+    let (net, boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
     Ok(boot.run(app(station, net)))
 }
 
@@ -29,7 +29,7 @@ async fn app(mut station: Station, net: Net) -> AppResult {
 
 ## Boot and run
 
-`main!(boot)` declares the image's entry. After stage-two adoption the
+`entry!(boot)` declares the image's entry. After stage-two adoption the
 library reports the previous boot's retained faults (what it read, hart 0's
 reset cause, the previous panic and the previous CPU exception, stays
 readable through `Boot::evidence`) and the task stack's watchpoint, then
@@ -41,7 +41,29 @@ nowhere else. `Boot::run` ends the boot with the application's future. The
 library then installs the system timer (the radio executor writes it when
 a station started, the application executor otherwise), enables interrupts
 and runs the application executor in thread mode with its service tasks
-(`SdkTasks`) and the image's task (`main!`'s set extends `SdkTasks`).
+(`SdkTasks`) and the image's tasks: `entry!`'s set extends `SdkTasks` with
+the IP service, at the image's pool sizes, and the application. `boot`
+returns `impl Started`, which names both future types: `Boot::run` makes
+it, and `wifi::Net::start` returns the boot with its IP service.
+
+## Defaults and settings
+
+Every constructor works with the library's defaults; an image that needs
+other values states them in its own `boot`, the same way an example and
+a HIL image of one function build it:
+
+| Setting | Default | Override |
+| --- | --- | --- |
+| Reconnect after a lost association | every 1 s (`wifi::RECONNECT`) | `wifi::Config::with_reconnect(interval)`, `without_reconnect()` |
+| Drain at a stop after a failure | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
+| AES client seats | 4 (`AES_CLIENTS`) | `static SEATS: AesSeats<C>`, `Aes::start_with(p.aes, &SEATS, &mut boot)` |
+| IP pools (receive, transmit, general frames) | 8, 8, 8 (`wifi::RX`, `TX`, `GENERAL`) | `static POOLS: wifi::Pools<RX, TX, GENERAL>`, `Net::start_with(device, &POOLS, config, boot)` |
+
+A zero interval or deadline is refused (`ConfigError`). The seats' count
+(1 to 32) is the storage's, not a type's: `Aes` and `AesClient` are the same
+for every count. The pools' sizes are types (`Net<RX, TX>`, `Stack<RX, TX>`),
+defaulting to the library's. Each storage is taken once; a second start
+returns `Error::AlreadyStarted`.
 Before the executor starts the library draws the boot's identity
 (`boot_id`, nonzero, random) from the entropy source: a station draws it
 with the source it takes, otherwise the library does once the timer runs.
@@ -92,7 +114,7 @@ across a link loss, `wait_link_down` ends on a loss or a new link epoch,
 and both end with `NetError::Stopped` or `Failed` when the service ends.
 Sockets open on `net.stack()` (`embassy_net`, re-exported). The
 station lends received frames to the IP service in place; when the station
-stops (after a failure, within 2 s) the IP service stops first and returns
+stops (after a failure, within the drain deadline) the IP service stops first and returns
 every buffer it holds. A station whose device no `Net::start` took tells
 the station that no network takes its frames.
 

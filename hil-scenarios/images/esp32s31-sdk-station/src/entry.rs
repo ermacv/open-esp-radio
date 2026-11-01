@@ -3,8 +3,6 @@
 // base module and the SDK station service, and one worker that answers the
 // service's requests in order.
 
-use core::future::Future;
-
 use oer_espressif::{
     Aes, AppResult, Boot, Console, Error, Peripherals, Started,
     time::{Duration, with_timeout},
@@ -33,13 +31,19 @@ type Requests = Either<Request, oer_services_fault::Request>;
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 
-oer_espressif::main!(boot);
+/// The IP service's pools: receive slots, transmit credits and general
+/// slots, larger than the library's defaults for the stand's TCP load.
+const RX: usize = 32;
+const TX: usize = 16;
+static POOLS: wifi::Pools<RX, TX, 32> = wifi::Pools::new();
 
-fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
+oer_espressif::entry!(boot);
+
+fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?;
     let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
-    let net = Net::start(device, NetConfig::Dhcpv4, &mut boot)?;
+    let (net, mut boot) = Net::start_with(device, &POOLS, NetConfig::Dhcpv4, boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let evidence = boot.evidence();
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
@@ -60,7 +64,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = A
 /// Answers the service's requests one at a time.
 struct Worker {
     station: Station,
-    net: Net,
+    net: Net<RX, TX>,
     requests: Inbox<'static, Requests>,
 }
 
@@ -177,7 +181,7 @@ fn ipv4(configuration: Ipv4Configuration) -> Ipv4 {
 }
 
 /// Send the line to the peer and read as many bytes back.
-async fn echo(net: &Net, exchange: &Exchange) -> Exchanged {
+async fn echo(net: &Net<RX, TX>, exchange: &Exchange) -> Exchanged {
     let mut rx = [0; 128];
     let mut tx = [0; 128];
     let Ok(mut socket) = embassy_net::tcp::TcpSocket::new(net.stack(), &mut rx, &mut tx) else {

@@ -203,9 +203,21 @@ pub(crate) struct RadioBoot {
     pub(crate) wifi: WifiToken,
 }
 
-/// The station's regulatory configuration and reconnect policy.
+/// The station's regulatory configuration, reconnect policy and stop
+/// deadline. The constructors give the defaults: a reconnect every second
+/// after a lost association ([`RECONNECT`]) and two seconds for the IP
+/// service to return its receive buffers at a stop after a failure
+/// ([`DRAIN`]); the `with_` methods override them.
 #[derive(Clone, Copy)]
 pub struct Config(wifi::Config);
+
+/// The default interval of a reconnect after a lost association.
+pub const RECONNECT: embassy_time::Duration = embassy_time::Duration::from_secs(1);
+
+/// The default bound of a stop after a failure: how long the IP service
+/// may take to return the receive buffers it holds. The library's choice,
+/// not a measured need.
+pub const DRAIN: embassy_time::Duration = embassy_time::Duration::from_secs(2);
 
 /// Why a configuration was refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -216,11 +228,13 @@ pub enum ConfigError {
     Channel,
     /// The reconnect interval is zero.
     Reconnect,
+    /// The stop deadline is zero.
+    Drain,
 }
 
 impl Config {
-    /// The 2.4 GHz `channel` of `country` at `cap_dbm`, reconnecting every
-    /// second after a lost association.
+    /// The 2.4 GHz `channel` of `country` at `cap_dbm`, with the default
+    /// reconnect and stop deadline.
     ///
     /// # Errors
     /// The country or channel is refused.
@@ -229,8 +243,8 @@ impl Config {
     }
 
     /// Every 2.4 GHz channel `country` permits, scanned at each connect, at
-    /// `cap_dbm`, reconnecting every second after a lost association: for
-    /// an image that learns its network's channel only when it connects.
+    /// `cap_dbm`, with the default reconnect and stop deadline: for an
+    /// image that learns its network's channel only when it connects.
     ///
     /// # Errors
     /// The country is refused, or it permits no 2.4 GHz channel.
@@ -249,27 +263,54 @@ impl Config {
         cap_dbm: i8,
         all_channels: bool,
     ) -> Result<Self, ConfigError> {
-        let config =
-            wifi::Config::new(channel, country, cap_dbm, all_channels, STOP).map_err(|error| {
-                match error {
-                    wifi::InitializationError::Country | wifi::InitializationError::Domain => {
-                        ConfigError::Country
-                    }
-                    _ => ConfigError::Channel,
+        let config = wifi::Config::new(channel, country, cap_dbm, all_channels, stop(DRAIN)?)
+            .map_err(|error| match error {
+                wifi::InitializationError::Country | wifi::InitializationError::Domain => {
+                    ConfigError::Country
                 }
+                _ => ConfigError::Channel,
             })?;
-        let reconnect = wifi::ReconnectPolicy::every(oer_time::Duration::from_secs(1))
+        Self(config).with_reconnect(RECONNECT)
+    }
+
+    /// Reconnect every `interval` after a lost association.
+    ///
+    /// # Errors
+    /// [`ConfigError::Reconnect`] for a zero interval.
+    pub fn with_reconnect(self, interval: embassy_time::Duration) -> Result<Self, ConfigError> {
+        let policy = wifi::ReconnectPolicy::every(oer_duration(interval))
             .map_err(|wifi::ZeroReconnectInterval| ConfigError::Reconnect)?;
-        Ok(Self(config.with_reconnect(reconnect)))
+        Ok(Self(self.0.with_reconnect(policy)))
+    }
+
+    /// Stay idle after a lost association until the next connect.
+    pub fn without_reconnect(self) -> Self {
+        Self(self.0.with_reconnect(wifi::ReconnectPolicy::DISABLED))
+    }
+
+    /// Give the IP service `drain` to return its receive buffers at a stop
+    /// after a failure.
+    ///
+    /// # Errors
+    /// [`ConfigError::Drain`] for a zero deadline.
+    pub fn with_drain(self, drain: embassy_time::Duration) -> Result<Self, ConfigError> {
+        Ok(Self(self.0.with_stop(stop(drain)?)))
     }
 }
 
-/// How long a station's stop gives the IP service to return the receive
-/// buffers it holds: the bound of a stop after a failure. The library's
-/// choice, not a measured need.
-const STOP: wifi::StopPolicy = wifi::StopPolicy {
-    drain: oer_time::Duration::from_secs(2),
-};
+/// The stop policy with `drain`; zero is refused, since no network could
+/// return a buffer by it.
+fn stop(drain: embassy_time::Duration) -> Result<wifi::StopPolicy, ConfigError> {
+    let micros = crate::boot::drain_micros(drain.as_micros()).ok_or(ConfigError::Drain)?;
+    Ok(wifi::StopPolicy {
+        drain: oer_time::Duration::from_micros(micros.get()),
+    })
+}
+
+/// The station's duration of an application's.
+fn oer_duration(duration: embassy_time::Duration) -> oer_time::Duration {
+    oer_time::Duration::from_micros(duration.as_micros())
+}
 
 /// A network to join: its SSID and credentials, validated, secrets erased
 /// on drop.
@@ -376,11 +417,11 @@ impl Station {
     /// # Errors
     /// The AES service has no free client, the station started already, or
     /// a binding or storage was refused.
-    pub fn start(
+    pub fn start<N>(
         wifi: WifiPeripheral,
         aes: &super::Aes,
         config: Config,
-        boot: &mut Boot,
+        boot: &mut Boot<N>,
     ) -> Result<(Self, Device), Error> {
         let engine = aes.client()?;
         let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
@@ -535,63 +576,118 @@ fn control(error: wifi::ControlError) -> ConnectError {
     }
 }
 
-/// Packet pool sizes of the IP service: receive slots, transmit credits and
-/// general slots, each holding one 1514-byte Ethernet frame.
-const RX: usize = 8;
-const TX: usize = 8;
-const GENERAL: usize = 8;
+/// The default packet pools of the IP service: receive slots, transmit
+/// credits and general slots, each holding one 1514-byte Ethernet frame.
+pub const RX: usize = 8;
+pub const TX: usize = 8;
+pub const GENERAL: usize = 8;
 
 type Context = ThreadContext<0>;
-type IpResources = Resources<Context, RX, TX, GENERAL>;
-pub(crate) type IpService = Service<Context, RX, TX, wifi::Network<'static>, { wifi::LENT_RX }>;
+type IpResources<const RX: usize, const TX: usize, const GENERAL: usize> =
+    Resources<Context, RX, TX, GENERAL>;
+type IpService<const RX: usize, const TX: usize> =
+    Service<Context, RX, TX, wifi::Network<'static>, { wifi::LENT_RX }>;
+
+/// The IP service's packet pools: `RX` receive slots, `TX` transmit
+/// credits and `GENERAL` general slots, each one 1514-byte frame. A static
+/// of this type is the storage [`Net::start_with`] takes once; [`Net::start`]
+/// takes the library's own of [`RX`], [`TX`] and [`GENERAL`].
+pub struct Pools<const RX: usize, const TX: usize, const GENERAL: usize> {
+    resources: StaticCell<IpResources<RX, TX, GENERAL>>,
+    control: StaticCell<ip::Control<'static>>,
+}
+
+impl<const RX: usize, const TX: usize, const GENERAL: usize> Pools<RX, TX, GENERAL> {
+    pub const fn new() -> Self {
+        Self {
+            resources: StaticCell::new(),
+            control: StaticCell::new(),
+        }
+    }
+}
+
+impl<const RX: usize, const TX: usize, const GENERAL: usize> Default for Pools<RX, TX, GENERAL> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+static POOLS: Pools<RX, TX, GENERAL> = Pools::new();
 
 /// What the IP service's task runs: the service, the station's stop
-/// request, and the service's control to stop it with.
-pub(crate) struct IpStart {
-    service: IpService,
+/// request, and the service's control to stop it with. The image's task
+/// set declares the task with the image's pool sizes.
+#[doc(hidden)]
+pub struct IpStart<const RX: usize, const TX: usize> {
+    service: IpService<RX, TX>,
     stopper: wifi::NetworkStopper<'static>,
     control: &'static ip::Control<'static>,
+}
+
+impl<const RX: usize, const TX: usize> super::NetTask for IpStart<RX, TX> {
+    const STARTED: bool = true;
+    fn serve(self) -> impl core::future::Future<Output = ()> {
+        serve_ip(self)
+    }
 }
 
 /// The packets of the frames the station lends in place: as many as its
 /// receive buffers the network may hold.
 static LENT: LentSlots<wifi::ReceivedStorage, { wifi::LENT_RX }> = LentSlots::new();
-static IP_CONTROL: StaticCell<ip::Control<'static>> = StaticCell::new();
 
-/// The IP stack's device, which sockets name.
-pub type IpDevice = oer_embassy_net::OwnedNetworkDevice<'static, Context, RX, TX>;
+/// The IP stack's device, which sockets name, over pools of `RX` and `TX`.
+pub type IpDevice<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
+    oer_embassy_net::OwnedNetworkDevice<'static, Context, RX, TX>;
 
 /// The IP stack sockets open on.
-pub type Stack = embassy_net::Stack<'static, IpDevice>;
+pub type Stack<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
+    embassy_net::Stack<'static, IpDevice<RX, TX>>;
 
-static IP: StaticCell<IpResources> = StaticCell::new();
 static WATCHERS: Watchers<Context, 4> = Watchers::new();
 
 /// How the stack takes its IPv4 configuration.
 pub use oer_embassy_net::ip::Configuration as NetConfig;
 
-/// The IP service over the station's device.
-pub struct Net {
+/// The IP service over the station's device, with pools of `RX` receive
+/// slots and `TX` transmit credits; the defaults are the library's.
+pub struct Net<const RX: usize = { self::RX }, const TX: usize = { self::TX }> {
     control: &'static ip::Control<'static>,
-    stack: Stack,
+    stack: Stack<RX, TX>,
 }
 
 impl Net {
     /// Start the IP service over `device` with `configuration`
-    /// (`NetConfig::Dhcpv4` or a static address); its task runs once the
+    /// (`NetConfig::Dhcpv4` or a static address) and the library's pools;
+    /// the boot returns with the service, whose task runs once the
     /// executor does.
     ///
     /// # Errors
     /// The service started already or refused its configuration.
     pub fn start(
-        mut device: Device,
+        device: Device,
         configuration: Configuration,
-        boot: &mut Boot,
-    ) -> Result<Self, Error> {
+        boot: Boot,
+    ) -> Result<(Self, Boot<IpStart<RX, TX>>), Error> {
+        Self::start_with(device, &POOLS, configuration, boot)
+    }
+}
+
+impl<const RX: usize, const TX: usize> Net<RX, TX> {
+    /// As [`Net::start`], with the image's own `pools`.
+    ///
+    /// # Errors
+    /// As [`Net::start`]; the pools were taken already.
+    pub fn start_with<const GENERAL: usize>(
+        mut device: Device,
+        pools: &'static Pools<RX, TX, GENERAL>,
+        configuration: Configuration,
+        boot: Boot,
+    ) -> Result<(Self, Boot<IpStart<RX, TX>>), Error> {
         let (network, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
-        let resources = IP
+        let resources = pools
+            .resources
             .try_uninit()
-            .map(|place| place.write(const { IpResources::new() }))
+            .map(|place| place.write(const { IpResources::<RX, TX, GENERAL>::new() }))
             .ok_or(Error::AlreadyStarted)?;
         let (control, service) = resources
             .start(
@@ -604,18 +700,20 @@ impl Net {
             )
             .map_err(|refused| Error::Net(refused.reason))?;
         let control: &'static ip::Control<'static> =
-            IP_CONTROL.try_init(control).ok_or(Error::Storage)?;
+            pools.control.try_init(control).ok_or(Error::Storage)?;
         let stack = service.stack();
-        boot.pending.ip = Some(IpStart {
-            service,
-            stopper,
-            control,
-        });
-        Ok(Self { control, stack })
+        Ok((
+            Self { control, stack },
+            boot.with_net(IpStart {
+                service,
+                stopper,
+                control,
+            }),
+        ))
     }
 
     /// The stack sockets open on.
-    pub fn stack(&self) -> Stack {
+    pub fn stack(&self) -> Stack<RX, TX> {
         self.stack
     }
 
@@ -645,7 +743,7 @@ impl Net {
 /// The IP service's task: every status change wakes the waits. Once the
 /// station asks its network to stop, the service stops and returns every
 /// receive buffer it holds, then the station hears that it stopped.
-pub(crate) async fn serve_ip(start: IpStart) {
+async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
     let IpStart {
         mut service,
         stopper,

@@ -8,9 +8,11 @@ Serial/JTAG console; the library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
 declares no interrupt, DMA or service task of its own. Its boot is the
 [station example's](../../../firmware/apps/wifi-station/README.md) with
-two differences: the `console` feature and `Console::open`, and every
+three differences: the `console` feature and `Console::open`, every
 channel scanned (`wifi::Config::all_channels`) in place of the profile's
-one. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-test-layers` checks only that
+one, and its own IP pools, 32 receive, 16 transmit and 32 general frames
+(`Net::start_with` with a static `wifi::Pools`), in place of the library's
+8, 8 and 8. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-test-layers` checks only that
 the image takes nothing the SDK places.
 
 | Service | Handler |

@@ -19,7 +19,7 @@ use oer_memory::{HostContext, Never};
 use std::{boxed::Box, rc::Rc};
 
 const N: usize = 32;
-type Service = AesService<HostContext, N, 2>;
+type Service = AesService<HostContext, N>;
 
 /// RustCrypto's AES-128 as the engine's block primitive.
 struct Rust;
@@ -116,7 +116,13 @@ fn poll<F: Future + ?Sized>(future: Pin<&mut F>) -> Poll<F::Output> {
 }
 
 fn service() -> &'static Service {
-    Box::leak(Box::new(Service::new()))
+    seated::<2>()
+}
+
+/// A service of `C` seats, both leaked for the test.
+fn seated<const C: usize>() -> &'static Service {
+    let seats: &'static AesSeats<HostContext, N, C> = Box::leak(Box::new(AesSeats::new()));
+    Box::leak(Box::new(Service::new(seats)))
 }
 
 #[test]
@@ -247,7 +253,8 @@ fn a_client_is_a_key_unwrap_engine_that_comes_back_with_its_response() {
 
 #[test]
 fn outside_its_context_a_client_is_issued_but_nothing_is_served() {
-    let service = Box::leak(Box::new(AesService::<Never, N, 1>::new()));
+    let seats: &'static AesSeats<Never, N, 1> = Box::leak(Box::new(AesSeats::new()));
+    let service = Box::leak(Box::new(AesService::new(seats)));
     // A seat is claimed without the context: a boot hands clients out.
     let mut client = service.client().expect("a seat");
     let mut wait = pin!(client.execute(request(&RFC3394_4_1_CIPHERTEXT)));
@@ -373,4 +380,45 @@ fn an_unwrap_never_takes_the_response_a_wait_left_in_its_seat() {
         done.response.plaintext(),
         Err(oer_crypto::KeyUnwrapError::IntegrityCheckFailed)
     );
+}
+
+#[test]
+fn the_seats_storage_sets_the_client_count_and_clients_of_any_count_share_one_type() {
+    // Six seats, as an image with more clients than the default keeps.
+    let six = seated::<6>();
+    let clients: std::vec::Vec<AesClient<'static, HostContext, N>> =
+        (0..6).map(|_| six.client().expect("a seat")).collect();
+    assert!(matches!(six.client(), Err(Exhausted)));
+    // A one-seat service's client has the same type.
+    let one: AesClient<'static, HostContext, N> = seated::<1>().client().expect("a seat");
+    drop(one);
+    drop(clients);
+    assert!(six.client().is_ok());
+    // All 32 seats of the largest storage are claimable.
+    let full = seated::<32>();
+    let all: std::vec::Vec<_> = (0..32).map(|_| full.client().expect("a seat")).collect();
+    assert!(matches!(full.client(), Err(Exhausted)));
+    drop(all);
+}
+
+#[test]
+fn a_request_on_the_last_of_six_seats_is_served() {
+    let service = seated::<6>();
+    let mut clients: std::vec::Vec<_> = (0..6).map(|_| service.client().expect("a seat")).collect();
+    let last = clients.last_mut().expect("six clients");
+    let mut wait = pin!(last.execute(request(&RFC3394_4_1_CIPHERTEXT)));
+    assert!(poll(wait.as_mut()).is_pending());
+    let (engine, _, ran) = engine();
+    let mut serve = pin!(service.serve(engine));
+    assert!(poll(serve.as_mut()).is_pending());
+    match poll(wait.as_mut()) {
+        Poll::Ready(Ok(response)) => {
+            assert_eq!(
+                plaintext(response).expect("unwrapped"),
+                RFC3394_4_1_KEY_DATA
+            )
+        }
+        _ => panic!("the sixth seat's request was not served"),
+    }
+    assert_eq!(ran.get(), 1);
 }
