@@ -9,19 +9,26 @@ description = "The HIL image of the SDK station scenario: an oer-espressif Wi-Fi
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi", "console", "hart1", "observe"] }
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi", "console", "hart1", "observe", "udp"] }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-agent-espressif = { path = "../../hil-agent/espressif" }
 oer-hil-protocol = { workspace = true }
 oer-services-fault = { path = "../../services/fault" }
+oer-services-load = { path = "../../services/load" }
 oer-services-sdk-station = { path = "../../services/sdk-station" }
 oer-services-wifi-station = { path = "../../services/wifi-station" }
+oer-trace = { path = "../../../portable/trace" }
+embassy-futures = "0.1.2"
+heapless = "0.9.3"
 static_cell.workspace = true
 
 [dev-dependencies]
+oer-espressif = { path = "../../../sdk/espressif", features = ["observe"] }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-protocol = { workspace = true }
+oer-services-load = { path = "../../services/load" }
 oer-services-sdk-station = { path = "../../services/sdk-station" }
+oer-trace = { path = "../../../portable/trace" }
 oer-services-wifi-station = { path = "../../services/wifi-station" }
 heapless = "0.9.3"
 postcard = { version = "1.1.3", default-features = false }

@@ -2,7 +2,7 @@
 //! service tasks and boot sequence behind [`main!`](crate::main).
 //!
 //! Layout, fixed for every image (lines and levels from the chip's
-//! measured arbitration, as the Wi-Fi station image had them):
+//! measured arbitration):
 //!
 //! | Context | Level | Entries |
 //! |---|---|---|
@@ -797,10 +797,13 @@ pub fn start<S: Started, H: Hart1Started>(
     #[cfg(not(feature = "hart1"))]
     observed_root!(net, Ip);
     #[cfg(not(feature = "hart1"))]
-    let mut second = core::pin::pin!(run_app(second));
+    let mut second = core::pin::pin!(second);
+    #[cfg(not(feature = "hart1"))]
+    let mut second = core::pin::pin!(run_app(second.as_mut()));
     #[cfg(not(feature = "hart1"))]
     observed_root!(second, Second);
-    let mut app = core::pin::pin!(run_app(app));
+    let mut app = core::pin::pin!(app);
+    let mut app = core::pin::pin!(run_app(app.as_mut()));
     observed_root!(app, Application);
     #[cfg(not(feature = "hart1"))]
     let roots = (
@@ -899,8 +902,10 @@ pub type Hart1Mailbox = &'static oer_espressif_staged_runtime::Mailbox<
 #[cfg(not(feature = "hart1"))]
 pub type Hart1Mailbox = ();
 
-/// Run the application's future; an error ends the image.
-async fn run_app(app: impl core::future::Future<Output = AppResult>) {
+/// Run the application's future, pinned where its root lives: an async
+/// function that took it by value would keep a second copy beside the one
+/// it awaits. An error ends the image.
+async fn run_app<F: core::future::Future<Output = AppResult>>(app: core::pin::Pin<&mut F>) {
     match app.await {
         Ok(never) => match never {},
         Err(error) => fail(error.name()),

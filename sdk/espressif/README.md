@@ -2,7 +2,7 @@
 
 The Espressif family's application entry. An image selects its chip by
 feature (`esp32s31`, exactly one) and the capabilities it uses (`wifi`,
-`console`, `hart1`, `observe`),
+`console`, `hart1`, `observe`, `udp`),
 takes the peripherals it needs once and builds drivers and services with
 defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
@@ -57,7 +57,10 @@ nowhere else. `Boot::run` ends the boot with the application's future.
 handed it (`Hart1Peripherals`: the station's network device, which
 `Station::start` keeps for it) and its own context (`Hart1Boot`). `boot1`
 starts the IP service (`wifi::Net::start`), whose stack and sockets stay in
-its future, and ends with `Hart1Boot::run`. Data of the image's own reaches
+its future, and ends with `Hart1Boot::run`. The stack has TCP sockets; with
+`udp` also UDP sockets, each queueing up to 16 received datagrams. A
+stopped IP service closes every UDP socket, which returns its queued
+datagrams' lent receive buffers to the station. Data of the image's own reaches
 it through its statics: a `Channel` links the application's future and the
 second boot's. `entry!(boot)` declares no second boot; a station's device
 it would take tells the station that no network takes its frames.
@@ -247,7 +250,7 @@ It uses the early writer, which waits for room within its budget per line.
 ```console
 cargo test -p oer-espressif
 cargo clippy -p oer-espressif --all-targets
-cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1
+cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,udp
 RUSTFLAGS="--cfg oer_trace" CARGO_TARGET_DIR=target/instrumented/oer-espressif \
-  cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,observe
+  cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,observe,udp
 ```

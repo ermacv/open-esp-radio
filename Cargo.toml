@@ -43,7 +43,6 @@ members = [
     "tools/lab/fixture-install",
     "hil-scenarios/images/esp32s31-rpc",
     "hil-scenarios/images/esp32s31-sdk-station",
-    "hil-scenarios/images/esp32s31-wifi-station",
     "tools/image/build",
     "tools/image/bundle",
     "tools/image/large-values",

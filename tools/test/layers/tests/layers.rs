@@ -980,7 +980,6 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
     ("hil-scenarios/images/esp32s31-sdk-station", Role::HilImage),
-    ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
     ("hil-scenarios/services/fault", Role::HilBinding),
     ("hil-scenarios/services/load", Role::HilBinding),
@@ -2222,16 +2221,12 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
                 || path == "sdk/espressif"
         }
         "embassy-time-driver" => path == "chips/espressif/executor",
-        // The Wi-Fi station image opens the pinned stack's UDP sockets for
-        // the HIL load service.
         // The application entry names the stack its IP service pins, for
-        // its applications' sockets.
+        // its applications' sockets, and the stack's socket receive queue.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net"
-                || (path == "sdk/espressif" && dependency == "embassy-net")
+                || (path == "sdk/espressif" && dependency != "xarxa-driver")
                 || path.starts_with("firmware/")
-                || (path == "hil-scenarios/images/esp32s31-wifi-station"
-                    && dependency != "xarxa-driver")
         }
         "trouble-host" => path == "portable/embassy/trouble" || path.starts_with("firmware/"),
         "bt-hci" => {
@@ -3075,16 +3070,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
     ),
     (
         "hil-scenarios/images/esp32s31-rpc",
-        "portable/riscv",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "hil-scenarios/images/esp32s31-wifi-station",
-        "chips/esp32s31/hal",
-        "the Wi-Fi station image on the facade and compose (#848)",
-    ),
-    (
-        "hil-scenarios/images/esp32s31-wifi-station",
         "portable/riscv",
         "the Wi-Fi station image on the facade and compose (#848)",
     ),

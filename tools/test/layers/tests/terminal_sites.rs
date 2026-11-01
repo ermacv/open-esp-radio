@@ -39,10 +39,6 @@ const REASON_ENUMS: &[(&str, &str)] = &[
         "FaultReason",
     ),
     ("hil-scenarios/images/esp32s31-rpc/src/fatal.rs", "Failure"),
-    (
-        "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs",
-        "Failure",
-    ),
 ];
 
 // Numeric codecs without a reason enum: every numeric arm in their next-boot
@@ -374,11 +370,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
                     && item.ident == "INVALID_HART")
                     || (self.file == "chips/espressif/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
                     || (self.file == "chips/espressif/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
-                    || ([
-                        "hil-scenarios/images/esp32s31-rpc/src/fatal.rs",
-                        "hil-scenarios/images/esp32s31-wifi-station/src/fatal.rs",
-                    ]
-                    .contains(&self.file)
+                    || (self.file == "hil-scenarios/images/esp32s31-rpc/src/fatal.rs"
                         && ["EXCEPTION", "FAILURE"]
                             .iter()
                             .any(|name| item.ident == name))

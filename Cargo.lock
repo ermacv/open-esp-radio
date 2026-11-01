@@ -1941,6 +1941,7 @@ dependencies = [
  "oer-time",
  "oer-trace",
  "static_cell",
+ "xarxa",
 ]
 
 [[package]]
@@ -2441,6 +2442,7 @@ dependencies = [
 name = "oer-hil-scenarios-images-esp32s31-sdk-station"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "heapless",
  "oer-esp32s31-layout",
  "oer-espressif",
@@ -2448,42 +2450,12 @@ dependencies = [
  "oer-hil-agent-espressif",
  "oer-hil-protocol",
  "oer-services-fault",
+ "oer-services-load",
  "oer-services-sdk-station",
  "oer-services-wifi-station",
- "postcard",
- "static_cell",
-]
-
-[[package]]
-name = "oer-hil-scenarios-images-esp32s31-wifi-station"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-futures",
- "embassy-net",
- "heapless",
- "oer-diagnostics",
- "oer-embassy-net",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-esp32s31-wifi",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-hil-agent",
- "oer-hil-protocol",
- "oer-memory",
- "oer-riscv",
- "oer-services-load",
- "oer-services-wifi-station",
- "oer-time",
  "oer-trace",
  "postcard",
  "static_cell",
- "xarxa",
 ]
 
 [[package]]

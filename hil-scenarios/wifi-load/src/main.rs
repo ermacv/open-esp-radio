@@ -35,7 +35,7 @@ use oer_services_load::{
 use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
 /// The image the scenario runs.
-const IMAGE: &str = "esp32s31-wifi-station";
+const IMAGE: &str = "esp32s31-sdk-station";
 
 const SCENARIO: Scenario = Scenario::new(
     "wifi-load",
