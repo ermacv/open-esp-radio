@@ -174,7 +174,7 @@ impl wifi::Events for Events {
 
 /// Answer the join with its connect operation's terminal. A service end
 /// leaves the answer to the station's exit.
-async fn answer_connect(join: RequestIdentity, operation: Option<wifi::Operation<'static>>) {
+async fn answer_connect(join: RequestIdentity, operation: Option<wifi::Operation<'static, radio::Notifies>>) {
     let Some(operation) = operation else {
         return;
     };
@@ -457,7 +457,7 @@ const STOP: wifi::StopPolicy = wifi::StopPolicy {
 /// Serve the running station; a leave stops it gracefully.
 async fn serve_running(
     requests: &mut Receiver,
-    control: &mut wifi::Control<'static>,
+    control: &mut wifi::Control<'static, radio::Notifies>,
     leaving: &Cell<Option<RequestIdentity>>,
     status: impl Fn() -> Status,
 ) -> Infallible {

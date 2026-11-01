@@ -29,6 +29,15 @@ pub(crate) type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 /// Hart 1's network executor (P2 of hart 1, `FROM_CPU1`).
 pub(crate) type NetworkExecutor = InterruptExecutor<Esp32s31, 1>;
 
+/// The notify of hart 1's network task, as each of its queue ends names it.
+pub(crate) type NetworkNotify = &'static PeerNotify<NetworkExecutor>;
+/// The notify of the boot hart's station work.
+pub(crate) type StationNotify = &'static PeerNotify<AppExecutor>;
+/// The notify of the boot hart's relay task.
+pub(crate) type RelayNotify = &'static PeerNotify<AppExecutor>;
+/// The notify of the boot hart's radio driver.
+pub(crate) type DriverNotify = &'static PeerNotify<RadioExecutor>;
+
 oer_espressif_staged_runtime::placed_static! {
     static NETWORK_SIGNAL: IrqSignal<NetworkExecutor> = IrqSignal::new::<FromPeerHart<AppExecutor, crate::ExecutorWake>, crate::NetworkToken>(), in critical_data "hart_peers";
     static STATION_SIGNAL: IrqSignal<AppExecutor> = IrqSignal::new::<FromPeerHart<NetworkExecutor, crate::NetworkToken>, crate::ExecutorWake>(), in critical_data "hart_peers";

@@ -16,7 +16,9 @@ use oer_embassy_net::ethernet::{LentCopy, LentSlots};
 use oer_embassy_net::ip::{
     Configuration, Control, Error, Ipv4Status, Resources, Service, StatusChanged,
 };
-use oer_esp32s31_wifi::{Network, ReceivedStorage};
+use crate::station::radio::Notifies;
+type Network = oer_esp32s31_wifi::Network<'static, Notifies>;
+type ReceivedStorage = oer_esp32s31_wifi::ReceivedStorage<Notifies>;
 use oer_services_wifi_station::Ipv4;
 use oer_memory::{PlacedFuture, StaticPlace};
 use static_cell::{ConstStaticCell, StaticCell};
@@ -49,7 +51,7 @@ static RUNNING: ConstStaticCell<StaticPlace<Running>> = ConstStaticCell::new(Sta
 pub(crate) fn start(
     address: [u8; 6],
     seed: u64,
-    net: Network<'static>,
+    net: Network,
 ) -> Result<(Control<'static>, Interface, PlacedFuture<'static, Running>), Error> {
     // Written from a constant, so the pools are never a value on the stack.
     let resources = IP
@@ -112,7 +114,9 @@ fn ipv4(status: Ipv4Status) -> Option<Ipv4> {
 }
 
 #[define_opaque(Running)]
-fn running_future(mut service: Service<Context, RX, TX, Network<'static>>) -> Running {
+fn running_future(
+    mut service: Service<Context, RX, TX, Network, { oer_esp32s31_wifi::LENT_RX }>,
+) -> Running {
     async move {
         // Only an access from another context than its executor's fails it.
         if service

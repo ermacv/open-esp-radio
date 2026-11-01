@@ -36,12 +36,15 @@ wifi::bind_station! {
         fail: crate::station::radio::failure,
         // The network end runs on hart 1 (`crate::network`).
         across_harts: {
-            network: &crate::peers::NETWORK,
-            station: &crate::peers::STATION,
-            driver: &crate::peers::DRIVER,
+            network: crate::peers::NetworkNotify = &crate::peers::NETWORK,
+            station: crate::peers::StationNotify = &crate::peers::STATION,
+            driver: crate::peers::DriverNotify = &crate::peers::DRIVER,
         },
     }
 }
+
+/// Where the station's network end runs: hart 1, through the peers' signals.
+pub(crate) type Notifies = <binding::Binding as wifi::Binding>::Notifies;
 
 pub(crate) async fn drive(driver: wifi::Driver<binding::Binding>) {
     Polled {

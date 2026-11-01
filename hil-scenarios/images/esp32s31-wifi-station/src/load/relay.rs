@@ -28,7 +28,7 @@ use super::counters::{Cache, Hart};
 use super::parts::{Part, Polled};
 use super::sampler::Profiler;
 use crate::fatal::Failure;
-use crate::peers;
+use crate::peers::{self, NetworkNotify, RelayNotify};
 use crate::station::emit;
 
 /// An answer the load server publishes.
@@ -92,9 +92,9 @@ struct Counted {
 /// Answers the server sends while its relay serves an earlier command.
 const COMMANDS: usize = 4;
 
-type CommandQueue = WakingSpscQueue<Command, COMMANDS>;
-type SampledQueue = WakingSpscQueue<Sampled, 1>;
-type CountedQueue = WakingSpscQueue<Counted, 1>;
+type CommandQueue = WakingSpscQueue<Command, COMMANDS, RelayNotify, NetworkNotify>;
+type SampledQueue = WakingSpscQueue<Sampled, 1, NetworkNotify, RelayNotify>;
+type CountedQueue = WakingSpscQueue<Counted, 1, NetworkNotify, RelayNotify>;
 static QUEUE: ConstStaticCell<CommandQueue> = ConstStaticCell::new(WakingSpscQueue::across_harts(
     &peers::RELAY,
     &peers::NETWORK,
@@ -135,9 +135,9 @@ pub(crate) fn split(profiler: Profiler, cache: Cache) -> (Relay, Client) {
 
 /// The boot hart's end: the relay task's.
 pub(crate) struct Relay {
-    commands: WakingSpscReceiver<'static, Command, COMMANDS>,
-    sampled: WakingSpscSender<'static, Sampled, 1>,
-    counted: WakingSpscSender<'static, Counted, 1>,
+    commands: WakingSpscReceiver<'static, Command, COMMANDS, RelayNotify, NetworkNotify>,
+    sampled: WakingSpscSender<'static, Sampled, 1, NetworkNotify, RelayNotify>,
+    counted: WakingSpscSender<'static, Counted, 1, NetworkNotify, RelayNotify>,
     profiler: Profiler,
     cache: Cache,
 }
@@ -201,9 +201,9 @@ async fn serve(relay: Relay) -> core::convert::Infallible {
 
 /// Hart 1's end: the load server's, in hart 1's network task.
 pub(crate) struct Client {
-    commands: WakingSpscSender<'static, Command, COMMANDS>,
-    sampled: WakingSpscReceiver<'static, Sampled, 1>,
-    counted: WakingSpscReceiver<'static, Counted, 1>,
+    commands: WakingSpscSender<'static, Command, COMMANDS, RelayNotify, NetworkNotify>,
+    sampled: WakingSpscReceiver<'static, Sampled, 1, NetworkNotify, RelayNotify>,
+    counted: WakingSpscReceiver<'static, Counted, 1, NetworkNotify, RelayNotify>,
     /// The number of the last call.
     calls: Cell<u32>,
 }

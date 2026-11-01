@@ -22,14 +22,14 @@ use embassy_futures::{join::join as both, select::select};
 use oer_espressif_interrupt_table::signal::PeerNotify;
 use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_wifi as wifi;
-use oer_memory::{StaticPlace, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_memory::{PlacedFuture, StaticPlace, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use static_cell::ConstStaticCell;
 
 use crate::fatal::Failure;
 use crate::handoff::{Exit, Lease};
 use crate::load::parts::{Part, Polled};
 use crate::load::{relay, serve};
-use crate::peers;
+use crate::peers::{self, NetworkNotify, StationNotify};
 use crate::station::future::{Boundary, Tracked};
 
 oer_espressif_executor::tasks! {
@@ -43,8 +43,8 @@ oer_espressif_executor::tasks! {
 
 /// What the station hands the network once its join constructed it.
 pub(crate) struct Start {
-    pub net: wifi::Network<'static>,
-    pub stopper: wifi::NetworkStopper<'static>,
+    pub net: wifi::Network<'static, crate::station::radio::Notifies>,
+    pub stopper: wifi::NetworkStopper<'static, crate::station::radio::Notifies>,
     pub address: [u8; 6],
     pub seed: u64,
 }
@@ -52,8 +52,8 @@ pub(crate) struct Start {
 /// Whether the IP stack started over the station's network end.
 type Started = Result<(), oer_embassy_net::ip::Error>;
 
-type StartQueue = WakingSpscQueue<Start, 1>;
-type StartedQueue = WakingSpscQueue<Started, 1>;
+type StartQueue = WakingSpscQueue<Start, 1, NetworkNotify, StationNotify>;
+type StartedQueue = WakingSpscQueue<Started, 1, StationNotify, NetworkNotify>;
 static START: ConstStaticCell<StartQueue> =
     ConstStaticCell::new(WakingSpscQueue::across_harts(&peers::NETWORK, &peers::STATION));
 static STARTED: ConstStaticCell<StartedQueue> =
@@ -68,14 +68,14 @@ pub(crate) static LEASE: Lease<'static, PeerNotify<peers::AppExecutor>> =
 
 /// The station work's ends, on the boot hart.
 pub(crate) struct Station {
-    start: WakingSpscSender<'static, Start, 1>,
-    started: WakingSpscReceiver<'static, Started, 1>,
+    start: WakingSpscSender<'static, Start, 1, NetworkNotify, StationNotify>,
+    started: WakingSpscReceiver<'static, Started, 1, StationNotify, NetworkNotify>,
 }
 
 /// Hart 1's network task's ends.
 pub(crate) struct Inputs {
-    start: WakingSpscReceiver<'static, Start, 1>,
-    started: WakingSpscSender<'static, Started, 1>,
+    start: WakingSpscReceiver<'static, Start, 1, NetworkNotify, StationNotify>,
+    started: WakingSpscSender<'static, Started, 1, StationNotify, NetworkNotify>,
     load: serve::Receiver,
     hart0: relay::Client,
 }
@@ -136,15 +136,23 @@ static WORK: ConstStaticCell<StaticPlace<Work>> = ConstStaticCell::new(StaticPla
 /// Hart 1's network task: its work lives in its own static place, written
 /// at the task's first poll.
 async fn run(inputs: Inputs) {
-    let work = WORK
-        .try_take()
-        .unwrap_or_else(|| crate::fail(Failure::Storage))
-        .future(|| work_future(inputs));
+    let work = place(inputs);
     Polled {
         part: Part::Network,
         future: work,
     }
     .await;
+}
+
+/// Write the work in its static place. The future passes through this
+/// function's frame on its way there, once: kept out of line, that frame is
+/// not on the path of the task's later polls, which run on hart 1's
+/// interrupt stack.
+#[inline(never)]
+fn place(inputs: Inputs) -> PlacedFuture<'static, Work> {
+    WORK.try_take()
+        .unwrap_or_else(|| crate::fail(Failure::Storage))
+        .future(|| work_future(inputs))
 }
 
 #[define_opaque(Work)]
@@ -173,8 +181,8 @@ fn work_future(inputs: Inputs) -> Work {
 /// Wait for the station's network end, start the IP stack over it and run
 /// it until the station's exit; then stop it and report its end.
 async fn network_end(
-    mut start: WakingSpscReceiver<'static, Start, 1>,
-    started: WakingSpscSender<'static, Started, 1>,
+    mut start: WakingSpscReceiver<'static, Start, 1, NetworkNotify, StationNotify>,
+    started: WakingSpscSender<'static, Started, 1, StationNotify, NetworkNotify>,
     network: &serve::Network,
 ) -> Infallible {
     let Start {
@@ -230,7 +238,7 @@ async fn network_end(
 }
 
 /// Answer the station's start; its queue holds the one answer.
-fn answer(started: &WakingSpscSender<'static, Started, 1>, outcome: Started) {
+fn answer(started: &WakingSpscSender<'static, Started, 1, StationNotify, NetworkNotify>, outcome: Started) {
     if started.try_send(outcome).is_err() {
         crate::fail(Failure::Storage);
     }
@@ -239,7 +247,7 @@ fn answer(started: &WakingSpscSender<'static, Started, 1>, outcome: Started) {
 /// Once the station asks, close the load's socket and stop the IP service,
 /// then report the network stopped. Without the request it never ends.
 async fn stop_network(
-    stopper: wifi::NetworkStopper<'static>,
+    stopper: wifi::NetworkStopper<'static, crate::station::radio::Notifies>,
     network: &serve::Network,
     ip: &oer_embassy_net::ip::Control<'static>,
     done: &Cell<bool>,

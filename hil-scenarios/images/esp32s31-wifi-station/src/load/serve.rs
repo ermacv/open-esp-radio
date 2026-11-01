@@ -42,6 +42,7 @@ use super::relay::{self, Client};
 use super::{counters, cpu, parts};
 use crate::fatal::Failure;
 use crate::network::ip::{Device, Interface};
+use crate::peers::{NetworkNotify, RelayNotify};
 use crate::station::emit;
 
 /// Each socket queues at most this many received datagrams (the stack's
@@ -61,7 +62,7 @@ const TALLY_WORDS: usize = 8192;
 /// image may move, so each run clears it in place.
 static TALLY: ConstStaticCell<Tally<TALLY_WORDS>> = ConstStaticCell::new(Tally::new());
 
-type Queue = WakingSpscQueue<(RequestIdentity, Request), 1>;
+type Queue = WakingSpscQueue<(RequestIdentity, Request), 1, NetworkNotify, RelayNotify>;
 /// The console on the boot hart sends, the server on hart 1 receives. The
 /// console never waits for room: a taken request raises the relay's signal
 /// instead, which finds nothing to do.
@@ -70,9 +71,11 @@ static REQUESTS: ConstStaticCell<Queue> = ConstStaticCell::new(WakingSpscQueue::
     &crate::peers::RELAY,
 ));
 /// The console's end of the load requests.
-pub(crate) type Sender = WakingSpscSender<'static, (RequestIdentity, Request), 1>;
+pub(crate) type Sender =
+    WakingSpscSender<'static, (RequestIdentity, Request), 1, NetworkNotify, RelayNotify>;
 /// The load server's end.
-pub(crate) type Receiver = WakingSpscReceiver<'static, (RequestIdentity, Request), 1>;
+pub(crate) type Receiver =
+    WakingSpscReceiver<'static, (RequestIdentity, Request), 1, NetworkNotify, RelayNotify>;
 
 /// The load request queue's two ends, split once.
 pub(crate) fn requests() -> (Sender, Receiver) {
