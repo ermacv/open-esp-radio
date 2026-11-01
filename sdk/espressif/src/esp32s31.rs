@@ -40,10 +40,7 @@ pub use embassy_time as time;
 #[cfg(feature = "observe")]
 macro_rules! observed {
     ($part:ident, $future:expr) => {
-        $crate::esp32s31::observed::library(
-            $crate::observe::parts::LibraryPart::$part,
-            $future,
-        )
+        $crate::esp32s31::observed::library($crate::observe::parts::LibraryPart::$part, $future)
     };
 }
 /// `$future` itself.
@@ -62,7 +59,10 @@ use observed::executor_observer;
 #[cfg(not(feature = "observe"))]
 #[cfg_attr(
     not(oer_trace),
-    allow(dead_code, reason = "only a trace build asks a task set for its observer")
+    allow(
+        dead_code,
+        reason = "only a trace build asks a task set for its observer"
+    )
 )]
 const fn executor_observer<const SLOT: usize>() -> oer_trace::Noop {
     oer_trace::Noop

@@ -234,10 +234,7 @@ impl ImageNames {
     /// Name the first free part `name`: its number among every part, none
     /// when the image named every one of its parts.
     pub fn claim(&self, name: &'static str) -> Option<usize> {
-        let slot = self
-            .names
-            .iter()
-            .position(|slot| slot.set(name).is_ok())?;
+        let slot = self.names.iter().position(|slot| slot.set(name).is_ok())?;
         LIBRARY_PARTS.checked_add(slot)
     }
 

@@ -239,7 +239,11 @@ impl LinkCounter {
             AMPDU_BINS.saturating_add(size_bin(settled.members)),
             1,
         );
-        bump_at(&self.ampdu, AMPDU_ACKNOWLEDGED, u32::from(settled.acknowledged));
+        bump_at(
+            &self.ampdu,
+            AMPDU_ACKNOWLEDGED,
+            u32::from(settled.acknowledged),
+        );
         bump_at(
             &self.ampdu,
             AMPDU_ACKNOWLEDGED.saturating_add(1),

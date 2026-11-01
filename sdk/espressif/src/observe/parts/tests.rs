@@ -79,7 +79,9 @@ fn an_image_names_each_of_its_parts_once_after_the_library_s() {
         .collect();
     assert_eq!(
         numbers,
-        (LIBRARY_PARTS..PARTS).map(Some).collect::<std::vec::Vec<_>>()
+        (LIBRARY_PARTS..PARTS)
+            .map(Some)
+            .collect::<std::vec::Vec<_>>()
     );
     assert_eq!(names.claim("more"), None, "every image part is named");
     assert_eq!(names.name(LIBRARY_PARTS + 2), Some("load"));

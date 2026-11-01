@@ -141,7 +141,10 @@ impl StationRxCounts {
     /// The decisions of `kind`; zero for [`StationRxKind::AgreementStarted`],
     /// counted in [`Self::agreements_started`].
     pub fn count(&self, kind: StationRxKind) -> u32 {
-        self.counts.get(usize::from(kind as u8)).copied().unwrap_or(0)
+        self.counts
+            .get(usize::from(kind as u8))
+            .copied()
+            .unwrap_or(0)
     }
 }
 
@@ -245,8 +248,7 @@ impl<const SLOT: usize> oer_trace::Observer for ExecutorObserver<SLOT> {
                 panic!("the observer's executor is one of the library's");
             }
         }
-        if let (Some(activity), Some(counter)) =
-            (Activity::of(&event), EXECUTOR_COUNTERS.get(SLOT))
+        if let (Some(activity), Some(counter)) = (Activity::of(&event), EXECUTOR_COUNTERS.get(SLOT))
         {
             counter.observe(Boundary {
                 at_us: activity.at_micros,
@@ -595,7 +597,8 @@ pub(crate) fn hart0(
     boot: &mut Boot,
     token: SamplerToken,
 ) -> Hart0 {
-    let (Some(sampler), Some(buffer)) = (SAMPLER.init(timg1, boot.router(), token), BUFFER.try_take())
+    let (Some(sampler), Some(buffer)) =
+        (SAMPLER.init(timg1, boot.router(), token), BUFFER.try_take())
     else {
         super::fail(Error::Storage.name());
     };
