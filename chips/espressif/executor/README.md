@@ -104,7 +104,10 @@ receiving hart (H2).
 ## Harts
 
 Each executor starts with its hart's `Hart<H>` (from that hart's interrupt
-enable) and const-checks that its table entry names hart `H`; an executor
+enable) and const-checks that its table entry names hart `H`. An
+interrupt-mode executor's entry names the type `Round<Tasks>` as its handler,
+and `InterruptExecutor::start` binds only an entry whose round is that of the
+tasks it starts, a type check (`tests/chip-ui/executor_round.rs`); an executor
 runs on any hart that has its own router, including a secondary hart's
 interrupt-mode executor on its own `FROM_CPU` line routed to that hart's
 bank. Each executor's running context, ready mask and task slots are its

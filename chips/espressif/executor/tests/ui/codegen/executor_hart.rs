@@ -2,8 +2,6 @@
 mod hart_binding;
 
 oer_espressif_interrupt_table::__fake_parts!();
-pub fn on_wake(_: &mut RadioIrq) {}
-pub fn on_peer(_: &mut AbsentIrq) {}
 
 macro_rules! table {
     ($hart:literal) => {
@@ -11,9 +9,9 @@ macro_rules! table {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { executor: 1; peer_executor: 2; }
-            wake: Wake = RadioIrq => on_wake, line 17, context executor, hart $hart, Executor;
+            wake: Wake = RadioIrq => OnExecutor, line 17, context executor, hart $hart, Executor;
             // An executor on the non-boot hart, whose startup names hart 1.
-            peer: Peer = AbsentIrq => on_peer, line 18, context peer_executor, hart 1, Executor;
+            peer: Peer = AbsentIrq => OnExecutor, line 18, context peer_executor, hart 1, Executor;
         }
     };
 }

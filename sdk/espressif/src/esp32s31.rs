@@ -76,7 +76,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     #[cfg(feature = "wifi")]
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi::RadioTasks, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
+    radio: RadioToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_espressif_executor::Round<wifi::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
     #[cfg(feature = "wifi")]
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, line 21, context radio, hart 0, Hardware;

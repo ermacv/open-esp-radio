@@ -31,7 +31,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The boot hart's executor's timer alarm; it only acknowledges and pends.
     alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
     /// Hart 1's interrupt-mode executor on `FROM_CPU1`, routed to hart 1's bank.
-    hart1: Hart1Token = FromCpu1Irq => oer_espressif_executor::interrupt_handler::<Hart1Tasks, FromCpu1Irq>, line 16, context hart1_executor, hart 1, Executor;
+    hart1: Hart1Token = FromCpu1Irq => oer_espressif_executor::Round<Hart1Tasks>, line 16, context hart1_executor, hart 1, Executor;
 }
 
 /// The boot hart's thread-mode executor on `FROM_CPU0`, the time driver's
@@ -51,7 +51,7 @@ oer_espressif_executor::tasks! {
 
 oer_espressif_executor::tasks! {
     /// Hart 1's tasks.
-    Hart1Tasks: InterruptExecutor<Esp32s31, 1> {
+    pub Hart1Tasks: InterruptExecutor<Esp32s31, 1> {
         respond(server: Server) = respond;
         beat(responder: LivenessResponder) = answer_beats;
     }

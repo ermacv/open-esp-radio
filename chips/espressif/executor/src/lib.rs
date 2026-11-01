@@ -25,7 +25,7 @@
 //! - `Executor<B, SWI>` runs its tasks in thread mode, woken by its software
 //!   interrupt, whose entry names `wake_handler::<B, SWI, _>`.
 //! - `InterruptExecutor<B, SWI>` polls its tasks in its software interrupt's
-//!   handler (`interrupt_handler::<Tasks, _>`), at that interrupt's level: the
+//!   handler, whose table entry names the type `Round<Tasks>`, at that interrupt's level: the
 //!   radio executor (P2). Signal declarations and request bindings check
 //!   their direction against the entries' levels and harts when the image compiles.
 //! - `Doorbell<B, SWI, HandlerEntry, ExecutorEntry>` is a software interrupt at the radio interrupts' level
@@ -98,8 +98,7 @@ pub use binding::{Binding, Storage, TimeDriver};
 pub use doorbell::{Doorbell, DoorbellAcknowledger, DoorbellLine, LineAcknowledger};
 #[cfg(feature = "chip")]
 pub use executor::{
-    Executor, InterruptContext, InterruptExecutor, ThreadContext, interrupt_handler, ready_peers,
-    wake_handler,
+    Executor, InterruptContext, InterruptExecutor, Round, ThreadContext, ready_peers, wake_handler,
 };
 #[cfg(any(feature = "chip", test))]
 pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};

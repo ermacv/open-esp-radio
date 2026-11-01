@@ -632,8 +632,8 @@ use tests::ready;
 /// ```
 ///
 /// The set's executor is `InterruptExecutor<B, N>` or `Executor<B, N>` of
-/// the chip binding `B`; its interrupt handler is
-/// `interrupt_handler::<Set, _>`, its run is `Executor::<B, N>::run::<Set, …>`.
+/// the chip binding `B`; its table entry's handler is the type
+/// `Round<Set>`, its run is `Executor::<B, N>::run::<Set, …>`.
 #[macro_export]
 macro_rules! tasks {
     (

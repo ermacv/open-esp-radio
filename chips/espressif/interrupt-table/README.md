@@ -29,7 +29,10 @@ The sources come from the part's type (`oer_mmio::InterruptSources`: the one
 source of an `oer_mmio::InterruptSource`, which the PAC generator implements
 for a block's interrupt side, or the several sources of a part one handler
 serves together), never from the entry's text, and the handler is a
-`fn(&mut Part)`; it learns which source fired from its peripherals' status,
+`fn(&mut Part)` or, for an `Executor` entry, a type implementing
+`ExecutorHandler<Part>` (the executor's `Round<Tasks>`), which the entry's
+token states (`ExecutorEntry::Handler`) so that the executor's start can
+check the task set it binds at compile time; it learns which source fired from its peripherals' status,
 never from the matrix. A part made of several members builds its sources
 with `interrupt_sources![Member, ...]`, at compile time; a source listed
 twice fails to compile. For each entry the macro defines:

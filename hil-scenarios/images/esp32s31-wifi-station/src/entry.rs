@@ -24,7 +24,7 @@ oer_espressif_staged_runtime::interrupt_table! {
     /// The SAR/PWDET conversion steps between radio executor rounds.
     phy: PhyToken = Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::interrupt_handler::<station::RadioTasks, FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
+    radio: RadioToken = FromCpu2Irq => oer_espressif_executor::Round<station::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
     /// The radio executor's alarm (system timer comparator 0).
     radio_alarm: RadioAlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<station::RadioTasks, 0, SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
