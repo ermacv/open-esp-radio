@@ -63,6 +63,9 @@ pub(crate) trait Device {
     fn link(&self) -> Option<&Link>;
     /// Reset the device and return its new boot of the built image.
     fn reset(&mut self) -> Result<Boot, String>;
+    /// Return the new boot of the built image the device started by itself,
+    /// without a reset of the board.
+    fn follow_restart(&mut self) -> Result<Boot, String>;
     /// Run `request` on the lab router under the run's lease.
     fn router(
         &self,
@@ -81,27 +84,15 @@ impl Device for Dut<'_> {
         // The rung needs the console the link holds.
         self.link = None;
         self.board.reset()?;
-        let link = self.board.connect()?;
-        let answered = link.boot(self.hello);
-        // A frame names its boot also when the boot's Hello does not come.
-        self.seen = link.running_boot_id().or(previous);
-        let boot = answered.map_err(|error| format!("after the reset: {error}"))?;
-        if previous == Some(boot.boot_id) {
-            // The device runs on: its link serves the cases that follow.
-            self.link = Some(link);
-            return Err(format!(
-                "the reset did not restart the device: boot {:016x} answered again",
-                boot.boot_id
-            ));
-        }
-        if boot.hello.image_crc32 != self.image_crc32 {
-            return Err(format!(
-                "after the reset the board runs image {:08x}, not the built {:08x}",
-                boot.hello.image_crc32, self.image_crc32
-            ));
-        }
-        self.link = Some(link);
-        Ok(boot)
+        self.reconnect(previous, "the reset")
+    }
+
+    fn follow_restart(&mut self) -> Result<Boot, String> {
+        let previous = self.last_boot();
+        self.seen = previous;
+        // The console opens again on the device's new boot.
+        self.link = None;
+        self.reconnect(previous, "the device's restart")
     }
 
     fn router(
@@ -109,6 +100,34 @@ impl Device for Dut<'_> {
         request: oer_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String> {
         self.board.router(request)
+    }
+}
+
+impl Dut<'_> {
+    /// Open the console again and take the boot that answers: it counts only
+    /// when another boot answers than `previous` and runs the built image.
+    fn reconnect(&mut self, previous: Option<u64>, what: &str) -> Result<Boot, String> {
+        let link = self.board.connect()?;
+        let answered = link.boot(self.hello);
+        // A frame names its boot also when the boot's Hello does not come.
+        self.seen = link.running_boot_id().or(previous);
+        let boot = answered.map_err(|error| format!("after {what}: {error}"))?;
+        if previous == Some(boot.boot_id) {
+            // The device runs on: its link serves the cases that follow.
+            self.link = Some(link);
+            return Err(format!(
+                "{what} did not restart the device: boot {:016x} answered again",
+                boot.boot_id
+            ));
+        }
+        if boot.hello.image_crc32 != self.image_crc32 {
+            return Err(format!(
+                "after {what} the board runs image {:08x}, not the built {:08x}",
+                boot.hello.image_crc32, self.image_crc32
+            ));
+        }
+        self.link = Some(link);
+        Ok(boot)
     }
 }
 #[cfg(test)]

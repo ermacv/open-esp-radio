@@ -75,3 +75,37 @@ fn a_boot_seen_without_its_hello_is_the_one_a_later_reset_must_leave() {
         "{refused:?}"
     );
 }
+
+#[test]
+fn a_restart_of_the_device_continues_on_its_new_boot_without_a_board_reset() {
+    let board = FakeBoard::new(vec![rts(true, true)]);
+    board.image_up.set(true);
+    let link = board.connect().unwrap();
+    assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
+    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    // The device restarts by itself into boot 101.
+    board.boots.set(101);
+    assert_eq!(dut.follow_restart().map(|boot| boot.boot_id), Ok(101));
+    assert_eq!(board.resets.get(), 0);
+}
+
+#[test]
+fn a_device_that_did_not_restart_keeps_its_boot_and_link() {
+    let board = FakeBoard::new(vec![rts(true, true)]);
+    board.image_up.set(true);
+    let link = board.connect().unwrap();
+    assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
+    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let refused = dut.follow_restart();
+    assert!(
+        refused
+            .as_ref()
+            .is_err_and(|reason| reason.contains("did not restart")),
+        "{refused:?}"
+    );
+    assert_eq!(
+        dut.link().and_then(oer_hil_link::Link::running_boot_id),
+        Some(100)
+    );
+    assert_eq!(board.resets.get(), 0);
+}

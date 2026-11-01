@@ -769,8 +769,12 @@ The current mechanisms have narrower guarantees than the policy:
 - Staged runtime claims one terminal election in boot-initialized SRAM before
   stopping other harts or running a recorder. Reentry returns `Reentered`;
   a losing terminal skips the recorder and requests reset without waiting.
-  The winning claim remains held until reset. A panic hook borrows that same
-  claim for its additional observation slots; each committed slot remains held.
+  The winning claim remains held until reset. It draws the next nonzero
+  terminal number from a retained counter, which only a claim locks; a claim
+  that finds it held numbers no terminal. A panic or exception hook borrows
+  that same claim for its additional observation slots; each committed slot
+  remains held, and a record that copies the claim's number names its
+  terminal even when an earlier terminal left the same registers.
   Commit publishes its completion marker last. A fresh boot may overwrite
   stale, unconsumed bytes with its first terminal record.
 - Peek does not clear. Each reporter clears only after its complete output
@@ -778,12 +782,25 @@ The current mechanisms have narrower guarantees than the policy:
   platform panic and postmortem remain until the complete boot-evidence frame
   and CRLF reach the transport. A refused output retains the record.
 - Payloads preserve panic text, Wi-Fi RAW, IEEE 802.15.4 entry observations and completed service prefix, HIL
-  machine-state observations and postmortem data, and RX-chain observations.
+  failure records and postmortem data, the S31 exception observations, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
-  HIL and RX-chain exception supplements use the entry-time cause/PC/trap value;
-  HIL samples pending/routes after stop as additional observations. Neither
-  the frame nor those sequential samples are an atomic snapshot of all hardware.
+  Every S31 image on the staged runtime, the SDK's included, binds one
+  exception hook (`oer-esp32s31-compose::exception`). It repeats none of the
+  frame's registers: after the stop it samples the trapping hart's pending
+  sources and, for an interrupt of a line without a handler, the routes to
+  that line and its state, recording whether the stop held, and copies the
+  claim's terminal number, which the runtime's frame record also holds, and
+  the frame's identifying registers. The next boot prints the frame and
+  those observations as separate records, each cleared on its own once
+  printed whole; the frame's `fatal_terminal` and the observation notes name
+  the terminal, the observation notes also their trap's `mepc`. An SDK boot
+  serves both to HIL (`Fault::Exception`, the trap's registers apart from
+  the observations), attaching the observations only to the trap of the
+  same terminal and registers: a hook that faulted before its commit leaves
+  an earlier terminal's record behind, possibly with the same registers. The RX-chain supplement uses the entry-time
+  cause/PC/trap value. Neither the frame nor the sequential samples are an
+  atomic snapshot of all hardware.
   The route and line view (`fatal_view`) exists only in the boot hart's
   fatal path: hart 1's routes have no claimed observer and its CLIC lines
   are reachable only from hart 1, so a fault on hart 1 records the common

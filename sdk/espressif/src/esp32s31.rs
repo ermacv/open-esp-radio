@@ -50,10 +50,15 @@ mod console;
 #[cfg(feature = "console")]
 pub use console::{Console, ConsolePeripheral, UsbConsole};
 
+/// What the interrupt controller showed after the previous boot's
+/// exception trapped.
+pub use oer_esp32s31_compose::exception::{LineView, Observed, Terminal, TrapIdentity};
 /// Why a hart left reset.
 pub use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
 /// The record of the previous boot's panic.
 pub use oer_espressif_staged_runtime::panic::PanicRecord;
+/// The previous boot's exception as the trap left it.
+pub use oer_espressif_staged_runtime::trap::PreviousException;
 
 oer_espressif_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }
@@ -158,6 +163,21 @@ pub struct Evidence {
     pub reset_cause: ResetCause,
     /// The previous boot's panic, already printed and cleared.
     pub previous_panic: Option<PanicRecord>,
+    /// The previous boot's CPU exception, already printed and cleared.
+    pub previous_exception: Option<ExceptionEvidence>,
+}
+
+/// The previous boot's CPU exception: the registers the runtime retained at
+/// the trap, before it stopped the other hart, and what the library's
+/// exception hook read after that stop. The second is no snapshot of the
+/// trap's instant: a source may have become pending in between. It is
+/// `None` when no record of the hook follows this trap: the hook did not
+/// commit one, the boot printed and cleared it, or the record left is of an
+/// earlier terminal, even one with the same registers (`Observed::follows`).
+#[derive(Clone, Copy, Debug)]
+pub struct ExceptionEvidence {
+    pub trap: PreviousException,
+    pub observed: Option<Observed>,
 }
 
 static BOOT_ID: crate::boot::BootId = crate::boot::BootId::new();
@@ -294,6 +314,17 @@ where
     T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>,
 {
     let previous = oer_espressif_staged_runtime::panic::peek_previous();
+    // Read before adoption prints and clears them.
+    let previous_exception =
+        oer_espressif_staged_runtime::trap::peek_previous_exception().map(|trap| {
+            ExceptionEvidence {
+                trap,
+                // Only the observations of this trap: an earlier trap's
+                // record may outlive it.
+                observed: oer_esp32s31_compose::exception::peek_previous()
+                    .filter(|observed| observed.follows(&trap)),
+            }
+        });
     let Some(root) = Root::take() else {
         fail(oer_diagnostics::name!("root-taken"; 32));
     };
@@ -307,6 +338,7 @@ where
             |hardware| {
                 let causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 oer_esp32s31_compose::wifi_fault::report_previous();
+                oer_esp32s31_compose::exception::report_previous();
                 if let Some(record) = previous {
                     let mut console = oer_espressif_staged_runtime::diagnostics::Console::shared(
                         crate::print::whole,
@@ -337,6 +369,7 @@ where
             Ok(adopted) => adopted.into_parts(),
             Err(error) => fail(error.name()),
         };
+    oer_esp32s31_compose::exception::report_stack_guard();
     let Some(interrupts) = Interrupts::take() else {
         fail(Error::InterruptTaken.name());
     };
@@ -364,6 +397,7 @@ where
         evidence: Evidence {
             reset_cause: hardware.reset_cause,
             previous_panic: previous,
+            previous_exception,
         },
     };
     let peripherals = Peripherals {
@@ -529,6 +563,7 @@ pub(crate) fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
 #[doc(hidden)]
 pub mod __private {
     pub use super::{run_app, start};
+    pub use oer_esp32s31_compose::exception::capture as exception;
     pub use oer_esp32s31_hal::platform::Port;
     pub use oer_espressif_executor::tasks;
     pub use oer_espressif_staged_runtime::{Handoff, entry};

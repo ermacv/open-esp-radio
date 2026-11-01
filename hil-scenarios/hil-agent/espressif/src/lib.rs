@@ -23,7 +23,14 @@
 //! - on the chip, [`serve`]: the HIL console over the library's USB
 //!   console, which answers the base module (Hello, boot evidence, link
 //!   health) from the library's boot identity and evidence beside the
-//!   worker, and [`answer`], which publishes a response.
+//!   worker, and [`answer`], which publishes a response;
+//! - on the chip, [`answer_then_trap`]: the answer of a fault request, after
+//!   which the image traps on an illegal instruction, so that a scenario
+//!   checks the exception path from the trap to the next boot's evidence.
+//!
+//! The boot evidence carries the previous boot's exception, when the
+//! library read one, as its post-mortem (`Fault::Exception`): the trap's
+//! registers apart from what the exception hook read after the stop.
 
 mod mailbox;
 pub use mailbox::{Busy, Inbox, Mailbox, Outbox};
@@ -31,4 +38,4 @@ pub use mailbox::{Busy, Inbox, Mailbox, Outbox};
 #[cfg(target_arch = "riscv32")]
 mod esp32s31;
 #[cfg(target_arch = "riscv32")]
-pub use esp32s31::{Image, answer, serve};
+pub use esp32s31::{Image, answer, answer_then_trap, serve};

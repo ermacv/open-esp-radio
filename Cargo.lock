@@ -2337,6 +2337,7 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-protocol",
  "oer-memory",
+ "oer-riscv",
 ]
 
 [[package]]
@@ -2403,7 +2404,6 @@ dependencies = [
 name = "oer-hil-scenarios-images-esp32s31-rpc"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "critical-section",
  "embassy-sync",
  "embassy-time",
@@ -2439,6 +2439,7 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-agent-espressif",
  "oer-hil-protocol",
+ "oer-services-fault",
  "oer-services-sdk-station",
  "oer-services-wifi-station",
  "postcard",
@@ -2449,7 +2450,6 @@ dependencies = [
 name = "oer-hil-scenarios-images-esp32s31-wifi-station"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "critical-section",
  "embassy-futures",
  "embassy-net",
@@ -2485,7 +2485,9 @@ dependencies = [
  "heapless",
  "oer-hil-agent",
  "oer-hil-harness",
+ "oer-hil-protocol",
  "oer-lab-model",
+ "oer-services-fault",
  "oer-services-sdk-station",
  "serde_json",
 ]
@@ -3157,6 +3159,16 @@ dependencies = [
  "embassy-futures",
  "heapless",
  "oer-crypto",
+ "oer-hil-agent",
+ "oer-hil-protocol",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-services-fault"
+version = "0.1.0"
+dependencies = [
  "oer-hil-agent",
  "oer-hil-protocol",
  "postcard-schema",

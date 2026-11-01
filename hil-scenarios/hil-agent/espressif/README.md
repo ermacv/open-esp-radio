@@ -18,7 +18,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = A
     Ok(boot.run(serve(console, evidence, IMAGE, outbox, move || worker(inbox))))
 }
 
-async fn worker(mut inbox: Inbox<'static, Request>) -> Infallible {
+async fn worker(mut inbox: Inbox<'static, Request>) -> AppResult {
     loop {
         let (identity, request) = inbox.next().await;
         answer(identity, &handle(request).await);
@@ -31,12 +31,16 @@ async fn worker(mut inbox: Inbox<'static, Request>) -> Infallible {
 | `serve` | Runs the HIL console over the library's USB console and the image's worker side by side until the chip resets. It takes the worker as a function that makes its future, so the application's future holds that future once, inside the select. The console answers the base module: Hello with the image's keys, its largest payload and the stage-two payload CRC-32, the boot evidence and link health. A transport fault ends the application with `Error::Console`. |
 | `Mailbox` | Room for one request between the console and the worker. The console hands a request over without waiting; a second one while the worker has not taken the first is answered `Rejected(Busy)`. |
 | `answer` | Publishes a response to its request without waiting. |
+| `answer_then_trap` | Publishes the answer of a fault request, waits until the console wrote it and traps on an illegal instruction (`oer_riscv::illegal_instruction`). A write the console cannot confirm (its barrier's exhausted fan-out, a terminal fault by its contract) returns `Error::Console` without a trap; the worker ends the application with it, and the library records and resets. |
 
 The boot identity is the library's (`oer_espressif::boot_id`). The boot
 evidence is what the library read before the boot (`Boot::evidence`):
-hart 0's reset cause, with its raw code, and the previous boot's panic,
-which the library already printed and cleared. The library keeps no
-post-mortem checkpoints, so their pages are empty.
+hart 0's reset cause, with its raw code, the previous boot's panic, and the
+previous boot's CPU exception as the post-mortem (`Fault::Exception`, one
+boot, no checkpoints): the trap's registers as the runtime retained them
+before the stop, apart from what the exception hook read after it. The
+library printed and cleared each record before the boot; checkpoint pages
+are empty.
 
 The console holds eight notes and eight messages in `critical_data`;
 until the image opens it, notes go through the early USB writer, and what

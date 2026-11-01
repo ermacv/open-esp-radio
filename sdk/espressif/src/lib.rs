@@ -68,7 +68,11 @@ macro_rules! main {
             }
         }
 
-        $crate::__private::entry!(__oer_main, $crate::__private::Port);
+        $crate::__private::entry!(
+            __oer_main,
+            $crate::__private::Port,
+            exception = $crate::__private::exception
+        );
 
         fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
             $crate::__private::start::<__OerAppTasks, __OerApp>(

@@ -43,7 +43,7 @@ sdk/espressif/
 hil-scenarios/{aes, sdk-station, wifi-load, wifi-station}/
 hil-scenarios/hil-agent/espressif/
 hil-scenarios/images/{esp32s31-rpc, esp32s31-sdk-station, esp32s31-wifi-station}/
-hil-scenarios/services/{aes, load, sdk-station, wifi-station}/
+hil-scenarios/services/{aes, fault, load, sdk-station, wifi-station}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/

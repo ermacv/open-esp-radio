@@ -31,8 +31,9 @@ async fn app(mut station: Station, net: Net) -> AppResult {
 
 `main!(boot)` declares the image's entry. After stage-two adoption the
 library reports the previous boot's retained faults (what it read, hart 0's
-reset cause and the previous panic, stays readable through
-`Boot::evidence`), then calls `boot` once
+reset cause, the previous panic and the previous CPU exception, stays
+readable through `Boot::evidence`) and the task stack's watchpoint, then
+calls `boot` once
 on hart 0, before any executor and with interrupts disabled. `boot` moves
 peripherals into drivers and services through the boot context (`Boot`):
 their interrupt bindings, executors and service tasks are made there and
@@ -111,6 +112,7 @@ returns `false`; a fatal note still reaches the host.
 | The entropy source fails its health check when the library draws the boot's identity | all owners stay where they are | record and reset |
 | The station runner exits other than an ordinary stop (failed, poisoned, quarantined, retirement or release failure, abandoned, initialization) | the runner keeps every owner | record and reset |
 | A fatal MAC assertion, a PHY transaction fault, nonce exhaustion | owners quarantined by their fault owner | record and reset |
+| A CPU exception | all owners stay where they are | the runtime records the trap frame before it stops the other hart, the library's hook (`oer-esp32s31-compose::exception`) what the interrupt controller showed after the stop; reset. The next boot prints both and serves them in `Boot::evidence` (`previous_exception`) |
 | The IP service is refused its context | the service keeps its owners | record and reset |
 | `connect` refused or failed, `wait_ipv4` timed out by the caller, a TCP error | unchanged | handled `Result` |
 

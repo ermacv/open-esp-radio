@@ -12,6 +12,7 @@ build = "build.rs"
 oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi", "console"] }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-agent-espressif = { path = "../../hil-agent/espressif" }
+oer-services-fault = { path = "../../services/fault" }
 oer-services-sdk-station = { path = "../../services/sdk-station" }
 oer-services-wifi-station = { path = "../../services/wifi-station" }
 static_cell.workspace = true

@@ -10,6 +10,26 @@ owned partitions; they do not claim replacement hardware or hide a fallback.
 `phy_fault::Failure` carries a copied failure observation to an image-selected
 retained reset, without exposing the HAL's fault type in the Wi-Fi API.
 
+`exception::capture` is the exception hook every S31 image passes to
+`entry!`. The runtime has already retained the trap frame before it stopped
+the other hart; the hook adds only what it reads afterwards: the trapping
+hart's pending sources, `mtvec` and `mtvt`, and, for an interrupt of a line
+without a handler, the routes to that line and its state, which it reads
+only when the stop held. The record also copies the claim's terminal
+number, which the runtime's frame record holds too, and the frame's
+identifying registers (`mcause`, `mepc`, `mtval`, `ra`, `sp`): the two
+records are committed and cleared independently, and a later trap at the
+same place may leave the same registers, so an image pairs the observations
+with a retained trap only when `Observed::follows` it, by terminal and
+registers. The printed notes start with their trap's terminal, `mepc` and
+the trap vector registers (`fatal_trap_vectors`), also for an exception,
+which names no line; the frame's `fatal_terminal` names the same terminal. It
+allocates, waits and panics nowhere.
+`exception::report_previous` prints the record at the next boot and clears
+it only after every note was written whole; `peek_previous` reads it first
+without clearing, for an image that serves it. `report_stack_guard` prints
+the task stack's watchpoint.
+
 `secondary::launch_hart1` starts hart 1 during boot under its own deadline
 on the time driver's clock: it takes the installed time driver's
 `TimeDriverReady` as the proof that the counter latch is checked and

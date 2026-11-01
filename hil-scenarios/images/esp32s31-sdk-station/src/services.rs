@@ -1,10 +1,12 @@
 //! The HIL services the image mounts and the key set it reports: the union
-//! of the keys of the SDK station service and of the base module.
+//! of the keys of the SDK station service, of the fault service and of the
+//! base module.
 
 #[cfg(target_arch = "riscv32")]
 oer_hil_agent::image_keys! {
-    /// The SDK station image: the base module and the SDK station service.
-    pub(crate) KEYS = [oer_services_sdk_station::Request]
+    /// The SDK station image: the base module, the SDK station service and
+    /// the fault service.
+    pub(crate) KEYS = [oer_services_sdk_station::Request, oer_services_fault::Request]
 }
 
 /// The largest request payload the image takes: a connect with the longest

@@ -59,6 +59,9 @@ pub enum Domain {
     Postmortem = 11,
     CpuException = 12,
     Boot = 13,
+    /// What a CPU exception's hook read after the trap, beside the runtime's
+    /// trap-time record.
+    ExceptionObservation = 14,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

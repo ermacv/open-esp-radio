@@ -18,7 +18,6 @@ oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-trace = { path = "../../../portable/trace" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
-bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 critical-section = "1.2.0"
 embassy-futures = "0.1.2"
 oer-espressif-executor = { workspace = true, features = ["port-slots"] }

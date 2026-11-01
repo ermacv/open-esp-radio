@@ -273,6 +273,24 @@ impl<'a> Cx<'a> {
         self.unconfirmed = None;
         Ok(&self.boot)
     }
+
+    /// Continue on the new boot the device started by itself, as after a
+    /// fault it was asked to raise, without resetting the board; the earlier
+    /// boot's requests end. The same boot answering again fails the case:
+    /// the device did not restart. A console that does not answer leaves it
+    /// incomplete.
+    pub fn follow_restart(&mut self) -> Result<&Boot, Failure> {
+        let boot = self.dut.follow_restart().map_err(|reason| {
+            if reason.contains("did not restart") {
+                Failure::Fail(reason)
+            } else {
+                Failure::Incomplete(reason)
+            }
+        })?;
+        self.boot = boot;
+        self.unconfirmed = None;
+        Ok(&self.boot)
+    }
 }
 
 /// The failure a request's error makes of its case.

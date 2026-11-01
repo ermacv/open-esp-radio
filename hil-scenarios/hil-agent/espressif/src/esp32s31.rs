@@ -1,14 +1,15 @@
 //! The HIL console over the library's USB console on the ESP32-S31.
 
-use core::{convert::Infallible, future::Future};
+use core::future::Future;
 
-use oer_espressif::{AppResult, Error, Evidence, ResetCause, UsbConsole};
+use oer_espressif::{AppResult, Error, Evidence, ExceptionEvidence, ResetCause, UsbConsole};
 use oer_hil_agent::base::{Intake, Requests};
 use oer_hil_protocol::{
     Message, RequestIdentity,
     base::{
-        BootEvidence, ImageKeySet, PlatformPanic, PostMortemCheckpoints, RejectReason, Rejected,
-        ResetReason,
+        BootEvidence, ExceptionFault, Fault, ImageKeySet, PlatformPanic, PostMortemCheckpoints,
+        PostMortemSummary, RejectReason, Rejected, ResetReason, TrapLine, TrapObservation,
+        TrapState,
     },
 };
 
@@ -50,6 +51,27 @@ pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
     let _sequence = CONSOLE.publish(identity.session_id, identity.request_id, body);
 }
 
+/// Publish `body` as the answer to `identity`, wait until the console wrote
+/// it, then trap on an illegal instruction: the library's exception path
+/// records the exception and resets, and the next boot serves the record
+/// as its post-mortem. Never returns once the answer is written.
+///
+/// # Errors
+/// [`Error::Console`] when the console could not confirm the write: its
+/// barrier's fan-out ([`oer_hil_agent::console::progress::ReceiverLimit`])
+/// is exhausted, which its contract makes a terminal fault. The image does
+/// not trap; the application ends with the error, which the library records
+/// before it resets.
+pub async fn answer_then_trap<M: Message>(identity: RequestIdentity, body: &M) -> AppResult {
+    let sequence = CONSOLE
+        .publish_reliably(identity.session_id, identity.request_id, body)
+        .await;
+    match CONSOLE.written(sequence).await {
+        Ok(()) => oer_riscv::illegal_instruction(),
+        Err(_limit) => Err(Error::Console),
+    }
+}
+
 /// Serve the host over `console` until the chip resets: the base module
 /// from this boot's identity and `evidence`, each request of the image's
 /// services handed to the worker through `outbox` (or refused as busy),
@@ -58,8 +80,9 @@ pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
 /// future holds it once.
 ///
 /// # Errors
-/// [`Error::Console`] when the console's transport broke its contract.
-pub async fn serve<R: Requests, W: Future<Output = Infallible>>(
+/// [`Error::Console`] when the console's transport broke its contract, or
+/// the error the worker ended with.
+pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
     console: UsbConsole,
     evidence: Evidence,
     image: Image,
@@ -82,7 +105,7 @@ pub async fn serve<R: Requests, W: Future<Output = Infallible>>(
     });
     match embassy_futures::select::select(serve, start()).await {
         embassy_futures::select::Either::First(_fault) => Err(Error::Console),
-        embassy_futures::select::Either::Second(never) => match never {},
+        embassy_futures::select::Either::Second(ended) => ended,
     }
 }
 
@@ -95,7 +118,7 @@ impl oer_hil_agent::base::Platform for Platform {
         BootEvidence {
             reset_reason: reset_reason(cause),
             raw_reset_reason: cause.code(),
-            post_mortem: None,
+            post_mortem: self.0.previous_exception.as_ref().map(post_mortem),
             platform_panic: self.0.previous_panic.as_ref().map(|record| PlatformPanic {
                 hart: record.hart,
                 in_interrupt: record.in_interrupt,
@@ -112,12 +135,47 @@ impl oer_hil_agent::base::Platform for Platform {
     /// boot.
     fn boot_evidence_written(&self) {}
 
-    /// Every page is empty: the library keeps no post-mortem checkpoints.
+    /// Every page is empty: the post-mortem of an exception holds no
+    /// checkpoints.
     fn post_mortem_checkpoints(&self, first: u8) -> PostMortemCheckpoints {
         PostMortemCheckpoints {
             first,
             checkpoints: Default::default(),
         }
+    }
+}
+
+/// The previous boot's exception as the base module's post-mortem: the one
+/// boot that wrote it, no checkpoints.
+fn post_mortem(exception: &ExceptionEvidence) -> PostMortemSummary {
+    let trap = exception.trap;
+    PostMortemSummary {
+        boot_count: 1,
+        checkpoints: 0,
+        fault: Some(Fault::Exception(ExceptionFault {
+            trap: TrapState {
+                // A hart number the runtime retained; never above one.
+                hart: u8::try_from(trap.hart).unwrap_or(u8::MAX),
+                mcause: trap.mcause,
+                mepc: trap.mepc,
+                mtval: trap.mtval,
+                ra: trap.ra,
+                sp: trap.sp,
+                mscratch: trap.mscratch,
+            },
+            observed: exception.observed.map(|observed| TrapObservation {
+                stopped: observed.stopped,
+                mtvec: observed.mtvec,
+                mtvt: observed.mtvt,
+                pending: observed.pending,
+                line: observed.line.map(|line| TrapLine {
+                    vector: line.vector,
+                    slot: line.slot,
+                    state: line.state,
+                    routed: line.routed,
+                }),
+            }),
+        })),
     }
 }
 
