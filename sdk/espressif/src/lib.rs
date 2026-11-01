@@ -22,7 +22,7 @@
 
 pub mod aes;
 pub mod net;
-mod print;
+pub mod print;
 
 #[cfg(all(target_arch = "riscv32", not(feature = "esp32s31")))]
 compile_error!("select the application's chip: the `esp32s31` feature");
@@ -33,16 +33,16 @@ mod esp32s31;
 pub use esp32s31::*;
 
 /// The image's entry: `boot` runs once before any executor, with the
-/// peripherals and the boot context; it builds drivers and services and
-/// returns the application's future, which the library runs beside its
-/// service tasks. Every error records and resets.
+/// peripherals and the boot context; it builds drivers and services and ends
+/// with [`Boot::run`] and the application's future, which the library runs
+/// beside its service tasks. Every error records and resets.
 ///
 /// ```ignore
 /// oer_espressif::main!(boot);
 ///
-/// fn boot(p: Peripherals, boot: &mut Boot) -> Result<Harts<impl Future<Output = AppResult>>, Error> {
-///     let aes = Aes::start(p.aes, boot)?;
-///     Ok(Harts::one(app(aes)))
+/// fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
+///     let aes = Aes::start(p.aes, &mut boot)?;
+///     Ok(boot.run(app(aes)))
 /// }
 /// ```
 #[macro_export]
@@ -53,8 +53,8 @@ macro_rules! main {
         #[define_opaque(__OerApp)]
         fn __oer_boot(
             peripherals: $crate::Peripherals,
-            boot: &mut $crate::Boot,
-        ) -> ::core::result::Result<$crate::Harts<__OerApp>, $crate::Error> {
+            boot: $crate::Boot,
+        ) -> ::core::result::Result<$crate::Started<__OerApp>, $crate::Error> {
             $boot(peripherals, boot)
         }
 

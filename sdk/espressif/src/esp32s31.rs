@@ -34,15 +34,36 @@ use oer_espressif_staged_runtime::{Adopted, Handoff};
 
 pub use oer_esp32s31_compose::Esp32s31;
 
+/// Time on the executors' clock: timers, timeouts, instants.
+pub use embassy_time as time;
+
 mod aes;
 pub use aes::{Aes, AesClient, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
 
+/// The Wi-Fi station and its IP service.
+#[cfg(feature = "wifi")]
+pub mod wifi;
+
 oer_espressif_staged_runtime::interrupt_table! {
-    contexts { app_wake: 1; }
+    contexts { app_wake: 1; radio_executor: 2; radio: 3; }
     /// The application executor's wake (thread mode).
     wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     /// The application executor's alarm (system timer comparator 1).
     alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    #[cfg(feature = "wifi")]
+    /// The radio executor's alarm (system timer comparator 0).
+    radio_alarm: RadioAlarmToken = oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
+    // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
+    #[cfg(feature = "wifi")]
+    /// The SAR/PWDET pilot, between radio executor rounds.
+    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    #[cfg(feature = "wifi")]
+    /// The radio executor (P2), polled in its handler.
+    radio: RadioToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_espressif_executor::interrupt_handler::<wifi::RadioTasks, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq>, line 17, context radio_executor, hart 0, Executor;
+    #[cfg(feature = "wifi")]
+    /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
+    wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, line 21, context radio, hart 0, Hardware;
 }
 
 oer_espressif_executor::tasks! {
@@ -53,6 +74,12 @@ oer_espressif_executor::tasks! {
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
         /// The shared AES service.
         aes_service(engine: aes::Engine) = aes::serve;
+        #[cfg(feature = "wifi")]
+        /// The Wi-Fi station's runner.
+        station(launch: wifi::StationStart) = wifi::serve_station;
+        #[cfg(feature = "wifi")]
+        /// The IP service over the station.
+        ip(network: wifi::IpStart) = wifi::serve_ip;
     }
 }
 
@@ -63,6 +90,9 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 pub struct Peripherals {
     /// The AES accelerator: [`Aes::start`] makes it the shared service.
     pub aes: AesPeripheral,
+    /// The radio: [`wifi::Station::start`] takes it.
+    #[cfg(feature = "wifi")]
+    pub wifi: wifi::WifiPeripheral,
 }
 
 /// The AES accelerator's owner.
@@ -75,6 +105,14 @@ pub struct AesPeripheral(pub(crate) AesParts);
 pub struct Boot {
     adopted: Adopted<InterruptController>,
     pub(crate) pending: Pending,
+    /// The system timer, until a driver installs it or the boot ends.
+    timer: Option<SystemTimer>,
+    app_alarm: Option<AppAlarmToken>,
+    #[cfg(feature = "wifi")]
+    radio: Option<wifi::RadioBoot>,
+    /// The doorbell's urgent source, once a station started.
+    #[cfg(feature = "wifi")]
+    urgent: Option<wifi::Urgent>,
 }
 
 impl Boot {
@@ -89,18 +127,24 @@ impl Boot {
 #[derive(Default)]
 pub(crate) struct Pending {
     pub(crate) aes: Option<aes::Engine>,
+    #[cfg(feature = "wifi")]
+    pub(crate) station: Option<wifi::StationStart>,
+    #[cfg(feature = "wifi")]
+    pub(crate) ip: Option<wifi::IpStart>,
 }
 
-/// What runs on each hart once the boot finished.
-pub struct Harts<F> {
-    hart0: F,
-}
-
-impl<F> Harts<F> {
-    /// One application future on hart 0.
-    pub const fn one(hart0: F) -> Self {
-        Self { hart0 }
+impl Boot {
+    /// End the boot: run `app` on hart 0 beside the library's service
+    /// tasks once the executor starts.
+    pub fn run<F: core::future::Future<Output = AppResult>>(self, app: F) -> Started<F> {
+        Started { boot: self, app }
     }
+}
+
+/// A finished boot and the application it runs.
+pub struct Started<F> {
+    boot: Boot,
+    app: F,
 }
 
 /// Why the boot or the application stopped; the library records it and
@@ -115,6 +159,43 @@ pub enum Error {
     InterruptRouted,
     /// The AES service has no free client seat.
     AesClients,
+    /// A static storage was taken already.
+    Storage,
+    /// The entropy source failed its health check.
+    Entropy,
+    /// The IP service refused its configuration.
+    #[cfg(feature = "wifi")]
+    Net(oer_embassy_net::ip::Error),
+    /// The station's configuration was refused.
+    #[cfg(feature = "wifi")]
+    WifiConfig(wifi::ConfigError),
+    /// A network profile was refused.
+    #[cfg(feature = "wifi")]
+    WifiProfile(wifi::ProfileError),
+    /// A wait on the IP service ended without its condition.
+    #[cfg(feature = "wifi")]
+    NetWait(crate::net::NetError),
+}
+
+#[cfg(feature = "wifi")]
+impl From<wifi::ConfigError> for Error {
+    fn from(error: wifi::ConfigError) -> Self {
+        Self::WifiConfig(error)
+    }
+}
+
+#[cfg(feature = "wifi")]
+impl From<wifi::ProfileError> for Error {
+    fn from(error: wifi::ProfileError) -> Self {
+        Self::WifiProfile(error)
+    }
+}
+
+#[cfg(feature = "wifi")]
+impl From<crate::net::NetError> for Error {
+    fn from(error: crate::net::NetError) -> Self {
+        Self::NetWait(error)
+    }
 }
 
 impl Error {
@@ -125,6 +206,16 @@ impl Error {
             Self::InterruptTaken => oer_diagnostics::name!("sdk-interrupt-taken"; 32),
             Self::InterruptRouted => oer_diagnostics::name!("sdk-interrupt-routed"; 32),
             Self::AesClients => oer_diagnostics::name!("sdk-aes-clients"; 32),
+            Self::Storage => oer_diagnostics::name!("sdk-storage"; 32),
+            Self::Entropy => oer_diagnostics::name!("sdk-entropy"; 32),
+            #[cfg(feature = "wifi")]
+            Self::Net(_) => oer_diagnostics::name!("sdk-net"; 32),
+            #[cfg(feature = "wifi")]
+            Self::WifiConfig(_) => oer_diagnostics::name!("sdk-wifi-config"; 32),
+            #[cfg(feature = "wifi")]
+            Self::WifiProfile(_) => oer_diagnostics::name!("sdk-wifi-profile"; 32),
+            #[cfg(feature = "wifi")]
+            Self::NetWait(_) => oer_diagnostics::name!("sdk-net-wait"; 32),
         }
     }
 }
@@ -138,7 +229,7 @@ pub type AppResult = Result<core::convert::Infallible, Error>;
 #[doc(hidden)]
 pub fn start<T, F>(
     handoff: Handoff<Port>,
-    boot: fn(Peripherals, &mut Boot) -> Result<Harts<F>, Error>,
+    boot: fn(Peripherals, Boot) -> Result<Started<F>, Error>,
     spawn_app: fn(&Spawner<T>, F) -> Result<(), AlreadyStarted>,
 ) -> !
 where
@@ -172,6 +263,15 @@ where
                     system_timer: hardware.system_timer,
                     software: hardware.software_interrupts,
                     watchdog: hardware.watchdogs.rtc,
+                    #[cfg(feature = "wifi")]
+                    wifi: wifi::WifiPeripheral {
+                        radio: hardware.radio,
+                        clocks: hardware.clocks,
+                        timg0_alarm: hardware.timg0_alarm,
+                        interrupts: hardware.wifi_interrupts,
+                        efuse: hardware.efuse,
+                        entropy: hardware.entropy,
+                    },
                 }
             },
         ) {
@@ -181,37 +281,79 @@ where
     let Some(interrupts) = Interrupts::take() else {
         fail(Error::InterruptTaken.name());
     };
-    let mut setup = Boot {
+    let software: SoftwareInterrupts = hardware.software;
+    let setup = Boot {
         adopted,
         pending: Pending::default(),
+        timer: Some(hardware.system_timer),
+        app_alarm: Some(interrupts.alarm),
+        #[cfg(feature = "wifi")]
+        radio: Some(wifi::RadioBoot {
+            line2: software.line2,
+            irq2: software.irq2,
+            line3: software.line3,
+            irq3: software.irq3,
+            radio_alarm: interrupts.radio_alarm,
+            phy: interrupts.phy,
+            radio: interrupts.radio,
+            wifi: interrupts.wifi,
+        }),
+        #[cfg(feature = "wifi")]
+        urgent: None,
     };
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
+        #[cfg(feature = "wifi")]
+        wifi: hardware.wifi,
     };
-    let harts = boot(peripherals, &mut setup).unwrap_or_else(|error| fail(error.name()));
+    let Started {
+        boot: mut setup,
+        app,
+    } = boot(peripherals, setup).unwrap_or_else(|error| fail(error.name()));
+    // Without a radio executor the application executor writes the timer.
+    if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
+        let _ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+            oer_espressif_executor::systimer::SystemTimer {
+                comparators: timer.comparators,
+                counter: timer.counter,
+            },
+            setup.adopted.router(),
+            alarm,
+            timer.alarm1,
+        )
+        .unwrap_or_else(|failure| failure.reset());
+    }
+    #[cfg(feature = "wifi")]
+    let urgent = setup.urgent.take();
     let Boot {
-        mut adopted,
-        pending,
+        adopted, pending, ..
     } = setup;
-    let timer = hardware.system_timer;
-    let _ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
-            comparators: timer.comparators,
-            counter: timer.counter,
-        },
-        adopted.router(),
-        interrupts.alarm,
-        timer.alarm1,
-    )
-    .unwrap_or_else(|failure| failure.reset());
-    let software: SoftwareInterrupts = hardware.software;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(enabled) => enabled,
         Err(error) => fail(error.name()),
     };
-    let watchdog = hardware.watchdog;
-    let app = harts.hart0;
+    let starts = Starts {
+        watchdog: hardware.watchdog,
+        pending,
+        app,
+        spawn_app,
+    };
+    #[cfg(feature = "wifi")]
+    if let Some(urgent) = urgent {
+        match executor
+            .run(
+                &hart,
+                &mut router,
+                interrupts.wake,
+                software.irq0,
+                urgent,
+                |spawner| {
+                    starts.spawn(spawner);
+                },
+            )
+            .unwrap_or_else(|failure| failure.reset()) {}
+    }
     match executor
         .run(
             &hart,
@@ -219,19 +361,49 @@ where
             interrupts.wake,
             software.irq0,
             (),
-            move |spawner: &Spawner<T>| {
-                let library = spawner.base();
-                let started = SdkTasks::watchdog(&library, watchdog).is_ok()
-                    && pending
-                        .aes
-                        .is_none_or(|engine| SdkTasks::aes_service(&library, engine).is_ok())
-                    && spawn_app(spawner, app).is_ok();
-                if !started {
-                    fail(Error::AlreadyStarted.name());
-                }
+            |spawner| {
+                starts.spawn(spawner);
             },
         )
         .unwrap_or_else(|failure| failure.reset()) {}
+}
+
+/// The tasks the executor starts: the library's, then the application's.
+struct Starts<T: Tasks, F> {
+    watchdog: ArmedRtcWatchdog<RwdtRegisters>,
+    pending: Pending,
+    app: F,
+    spawn_app: fn(&Spawner<T>, F) -> Result<(), AlreadyStarted>,
+}
+
+impl<T: Tasks<Binding = Esp32s31, Mode = Thread> + Extends<SdkTasks>, F> Starts<T, F> {
+    fn spawn(self, spawner: &Spawner<T>) {
+        let library = spawner.base();
+        let Self {
+            watchdog,
+            pending,
+            app,
+            spawn_app,
+        } = self;
+        let mut started = SdkTasks::watchdog(&library, watchdog).is_ok()
+            && pending
+                .aes
+                .is_none_or(|engine| SdkTasks::aes_service(&library, engine).is_ok());
+        #[cfg(feature = "wifi")]
+        {
+            started = started
+                && pending
+                    .station
+                    .is_none_or(|start| SdkTasks::station(&library, start).is_ok())
+                && pending
+                    .ip
+                    .is_none_or(|service| SdkTasks::ip(&library, service).is_ok());
+        }
+        started = started && spawn_app(spawner, app).is_ok();
+        if !started {
+            fail(Error::AlreadyStarted.name());
+        }
+    }
 }
 
 /// The parts the boot keeps from the runtime's hardware.
@@ -240,6 +412,8 @@ struct Owned {
     system_timer: SystemTimer,
     software: SoftwareInterrupts,
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
+    #[cfg(feature = "wifi")]
+    wifi: wifi::WifiPeripheral,
 }
 
 /// Run the application's future; an error ends the image.

@@ -172,7 +172,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
     fn take_pending(&self, cx: &Context<'_>) -> Poll<Result<(usize, AesRequest<N>), AesError>> {
         let taken = self.with(|state| {
             for offset in 0..C {
-                let index = (state.next + offset) % C;
+                let index = state.next.wrapping_add(offset) % C;
                 let Some(seat) = state.seats.get_mut(index) else {
                     continue;
                 };
@@ -185,7 +185,7 @@ impl<X: ExecutionContext, const N: usize, const C: usize> AesService<X, N, C> {
                     continue;
                 };
                 *seat = Seat::Running { waker };
-                state.next = (index + 1) % C;
+                state.next = index.wrapping_add(1) % C;
                 return Some((index, request));
             }
             state.server = Some(cx.waker().clone());

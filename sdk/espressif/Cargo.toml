@@ -11,8 +11,11 @@ description = "The Espressif family's application entry: peripherals, drivers an
 [features]
 ## The ESP32-S31 implementation. Exactly one chip feature is selected.
 esp32s31 = []
+## The Wi-Fi station and its IP service.
+wifi = []
 
 [dependencies]
+heapless = "0.9.3"
 oer-crypto = { path = "../../portable/crypto" }
 oer-embassy-net = { path = "../../portable/embassy/net" }
 oer-memory = { path = "../../portable/memory" }
@@ -30,6 +33,14 @@ oer-espressif-executor = { path = "../../chips/espressif/executor", features = [
 oer-espressif-interrupt-table = { path = "../../chips/espressif/interrupt-table" }
 oer-espressif-staged-runtime = { path = "../../chips/espressif/staged-runtime" }
 oer-ieee80211-core-roles-sta = { path = "../../protocols/ieee80211/core/roles/sta" }
+oer-ieee80211-runtime = { path = "../../protocols/ieee80211/runtime" }
+oer-esp32s31-wifi = { path = "../../chips/esp32s31/wifi" }
+oer-trace = { path = "../../portable/trace" }
+static_cell.workspace = true
+embassy-futures = "0.1.2"
+embassy-time = { workspace = true }
+# The stack the IP service pins (`oer-embassy-net`), with TCP sockets.
+embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "935de4d28f1178ff9731b41e94fb1cab54f5fd2d", default-features = false, features = ["tcp"] }
 
 [dev-dependencies]
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }

@@ -238,32 +238,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "firmware/apps/radio-root/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "firmware/apps/radio-root/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/radio-root", classes = ["configuration-boot"] }
 
-# firmware/apps/wifi-station/src/entry.rs
-"firmware/apps/wifi-station/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/apps/wifi-station/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/apps/wifi-station/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot"] }
-"firmware/apps/wifi-station/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"firmware/apps/wifi-station/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
-"firmware/apps/wifi-station/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
-"firmware/apps/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/wifi-station", classes = ["rust-panic"] }
-"firmware/apps/wifi-station/src/entry.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "firmware/apps/wifi-station", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/apps/wifi-station/src/entry.rs:crate:terminal-reference:reset:1" = { owner = "firmware/apps/wifi-station", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 
-# firmware/apps/wifi-station/src/irq.rs
-"firmware/apps/wifi-station/src/irq.rs:crate::irq::on_wifi:terminal-reference:reset:1" = { owner = "firmware/apps/wifi-station", classes = ["unexpected-hardware"] }
 
-# firmware/apps/wifi-station/src/not_configured.rs
-"firmware/apps/wifi-station/src/not_configured.rs:crate::main:reset-method:reset:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/apps/wifi-station/src/not_configured.rs:crate::main:reset-method:reset:2" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"firmware/apps/wifi-station/src/not_configured.rs:crate::main:terminal-entry:main:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot"] }
-"firmware/apps/wifi-station/src/not_configured.rs:crate::fail:terminal-entry:fail:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot"] }
-"firmware/apps/wifi-station/src/not_configured.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot"] }
-"firmware/apps/wifi-station/src/not_configured.rs:crate:terminal-binding:entry:1" = { owner = "firmware/apps/wifi-station", classes = ["rust-panic"] }
 
-# firmware/apps/wifi-station/src/station.rs
-"firmware/apps/wifi-station/src/station.rs:crate::station::failure:terminal-entry:failure:1" = { owner = "firmware/apps/wifi-station", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
-"firmware/apps/wifi-station/src/station.rs:crate::station::failure:reset-method:reset:1" = { owner = "firmware/apps/wifi-station", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"firmware/apps/wifi-station/src/station.rs:crate::station::failure:terminal-reference:reset_request:1" = { owner = "firmware/apps/wifi-station", classes = ["cancellation"] }
 
 # firmware/bootstrap/esp32s31/src/entry.rs
 "firmware/bootstrap/esp32s31/src/entry.rs:crate::bootstrap_main:terminal-entry:bootstrap_main:1" = { owner = "firmware/bootstrap/esp32s31", classes = ["configuration-boot"] }
@@ -479,5 +456,17 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # hil-scenarios/images/esp32s31-wifi-station/src/transport.rs
 "hil-scenarios/images/esp32s31-wifi-station/src/transport.rs:crate::transport::console_fault:terminal-entry:console_fault:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["software-invariant"] }
 "hil-scenarios/images/esp32s31-wifi-station/src/transport.rs:crate::transport::console_fault:terminal-reference:reset_fault:1" = { owner = "hil-scenarios/images/esp32s31-wifi-station", classes = ["software-invariant"] }
+
+# sdk/espressif/src/esp32s31.rs
+"sdk/espressif/src/esp32s31.rs:crate::esp32s31::start:terminal-entry:start:1" = { owner = "sdk/espressif", classes = ["configuration-boot"] }
+"sdk/espressif/src/esp32s31.rs:crate::esp32s31::fail:terminal-entry:fail:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"sdk/espressif/src/esp32s31.rs:crate::esp32s31::fail:terminal-reference:boot_failure:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"sdk/espressif/src/esp32s31.rs:crate::esp32s31:terminal-binding:phy_fault_reporter:1" = { owner = "sdk/espressif", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"sdk/espressif/src/esp32s31.rs:crate::esp32s31:terminal-reference:reset:1" = { owner = "sdk/espressif", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+# sdk/espressif/src/esp32s31/wifi.rs
+"sdk/espressif/src/esp32s31/wifi.rs:crate::esp32s31::wifi::on_wifi:terminal-reference:reset:1" = { owner = "sdk/espressif", classes = ["unexpected-hardware"] }
+"sdk/espressif/src/esp32s31/wifi.rs:crate::esp32s31::wifi::failure:terminal-entry:failure:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"sdk/espressif/src/esp32s31/wifi.rs:crate::esp32s31::wifi::failure:terminal-reference:reset_request:1" = { owner = "sdk/espressif", classes = ["cancellation"] }
+"sdk/espressif/src/esp32s31/wifi.rs:crate::esp32s31::wifi::impl Station::start:terminal-reference:reset_binding:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
 [nonterminal]

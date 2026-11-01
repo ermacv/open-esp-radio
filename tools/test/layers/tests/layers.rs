@@ -2190,13 +2190,19 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         ),
         "embassy-sync" => false,
         "embassy-time" => {
-            path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc"
+            path == "portable/embassy/time"
+                || path == "hil-scenarios/images/esp32s31-rpc"
+                // The application entry re-exports the executors' clock.
+                || path == "sdk/espressif"
         }
         "embassy-time-driver" => path == "chips/espressif/executor",
         // The Wi-Fi station image opens the pinned stack's UDP sockets for
         // the HIL load service.
+        // The application entry names the stack its IP service pins, for
+        // its applications' sockets.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net"
+                || (path == "sdk/espressif" && dependency == "embassy-net")
                 || path.starts_with("firmware/")
                 || (path == "hil-scenarios/images/esp32s31-wifi-station"
                     && dependency != "xarxa-driver")
