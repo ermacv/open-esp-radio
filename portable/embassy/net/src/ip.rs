@@ -396,8 +396,9 @@ trait Interface {
     fn restart_dhcp(&self);
     fn lease(&self) -> Option<Ipv4Configuration>;
     fn clear(&self) -> Result<(), Error>;
-    /// Drop every received packet the stack has not taken yet and every
-    /// reply it retains: a lent one returns to its device.
+    /// Drop every received packet the stack has not taken yet, every reply
+    /// it retains and every packet its sockets queue: a lent one returns to
+    /// its device.
     fn drop_received(&self) {}
 }
 impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
@@ -410,6 +411,9 @@ impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
         self.with_driver(|driver| while driver.receive().is_some() {});
         // A reply reuses its request's packet: a lent one goes back too.
         self.release_retained();
+        // A UDP or raw socket queues the received packets themselves: the
+        // stopped stack closes them, whoever still holds the socket.
+        self.stack().close_packet_sockets();
     }
     fn lease(&self) -> Option<Ipv4Configuration> {
         self.dhcpv4_lease().map(|lease| Ipv4Configuration {
