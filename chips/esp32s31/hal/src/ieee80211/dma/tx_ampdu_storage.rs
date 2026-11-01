@@ -6,7 +6,12 @@
 
 use crate::ieee80211::dma::space::DmaSpace;
 use crate::memory::dma_address::{PlacedRegion, PlacedSlots, PlacedTable};
-use core::{marker::PhantomPinned, mem, mem::ManuallyDrop, pin::Pin};
+use core::{
+    marker::{PhantomData, PhantomPinned},
+    mem,
+    mem::ManuallyDrop,
+    pin::Pin,
+};
 
 use crate::memory::dma_static::{Placed, PlacedBacking};
 use crate::types::MacTxQueueDetached;
@@ -37,6 +42,10 @@ pub enum AmpduDmaStorageError {
     InvalidLength,
     StaleBacking,
     State,
+    /// A [`RetainedAmpduDma`] no longer holds its arenas. Only
+    /// [`RetainedAmpduDma::try_into_parts`], which consumes the owner, takes
+    /// them, so no method of a live owner meets it.
+    Retired,
 }
 
 /// One internal A-MPDU descriptor entry, excluding its derived addresses.
@@ -595,22 +604,27 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         }
     }
 
+    /// The arena's state; an owner without its arena (never a live one,
+    /// see [`AmpduDmaStorageError::Retired`]) publishes nothing and reads
+    /// as [`AmpduDmaState::ResetRequired`].
     pub fn state(&self) -> AmpduDmaState {
-        self.dma().state()
+        self.dma
+            .as_ref()
+            .map_or(AmpduDmaState::ResetRequired, PinnedAmpduDmaStorage::state)
     }
 
     pub const fn held_backing_count(&self) -> usize {
         self.held
     }
 
-    pub fn descriptor_head(&self) -> u32 {
-        self.dma().binding().descriptor_head()
+    pub fn descriptor_head(&self) -> Result<u32, AmpduDmaStorageError> {
+        Ok(self.dma()?.binding().descriptor_head())
     }
 
     pub fn begin(&mut self) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut().begin()?;
+        self.dma_mut()?.begin()?;
         for (index, slot) in self
-            .retention_mut()
+            .retention_mut()?
             .active_backing_indices
             .iter_mut()
             .enumerate()
@@ -628,7 +642,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
     /// the retry reaches its final detach/release edge.
     #[cfg(any(test, feature = "test-support"))]
     pub fn begin_retry(&mut self) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut()
+        self.dma_mut()?
             .transition(AmpduDmaState::Detached, AmpduDmaState::Reserved)
     }
 
@@ -650,12 +664,19 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
             return Err(AmpduDmaStorageError::Count);
         }
         self.validate_backing(&backing)?;
-        let value = self.retention_mut().backings[index]
-            .take()
+        let retention = self.retention_mut()?;
+        let value = retention
+            .backings
+            .get_mut(index)
+            .and_then(Option::take)
             .map(ManuallyDrop::into_inner)
             .ok_or(AmpduDmaStorageError::Count)?;
-        self.retention_mut().backing_identities[index] = None;
-        self.retention_mut().backing_descriptors[index] = None;
+        if let Some(identity) = retention.backing_identities.get_mut(index) {
+            *identity = None;
+        }
+        if let Some(descriptor) = retention.backing_descriptors.get_mut(index) {
+            *descriptor = None;
+        }
         self.held = index;
         Ok(value)
     }
@@ -668,7 +689,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
             return Err(AmpduDmaStorageError::State);
         }
         self.validate_backing(backing)?;
-        self.retention_mut()
+        self.retention_mut()?
             .backings
             .get_mut(usize::from(backing.index))
             .and_then(Option::as_mut)
@@ -684,7 +705,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
             return Err(AmpduDmaStorageError::State);
         }
         self.validate_backing(backing)?;
-        self.retention_mut()
+        self.retention_mut()?
             .backings
             .get_mut(usize::from(backing.index))
             .and_then(Option::as_mut)
@@ -695,20 +716,20 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
     /// Cancel the reserved chain and hand every retained lease to
     /// `returned`, in the order they were pushed.
     pub fn cancel(&mut self, returned: impl FnMut(B)) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut().cancel()?;
+        self.dma_mut()?.cancel()?;
         self.return_backings(returned);
         Ok(())
     }
 
     pub fn mark_completed(&mut self) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut().mark_completed()
+        self.dma_mut()?.mark_completed()
     }
 
     pub fn mark_detached(
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut().mark_detached(detached)
+        self.dma_mut()?.mark_detached(detached)
     }
 
     /// Release the detached chain and hand every retained lease to
@@ -717,7 +738,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         &mut self,
         returned: impl FnMut(B),
     ) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut().release_detached()?;
+        self.dma_mut()?.release_detached()?;
         self.return_backings(returned);
         Ok(())
     }
@@ -729,13 +750,15 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         detached: MacTxQueueDetached<'_>,
         returned: impl FnMut(B),
     ) -> Result<(), AmpduDmaStorageError> {
-        self.dma_mut().release_aborted(detached)?;
+        self.dma_mut()?.release_aborted(detached)?;
         self.return_backings(returned);
         Ok(())
     }
 
     pub fn quarantine(&mut self) {
-        self.dma_mut().quarantine();
+        if let Some(dma) = self.dma.as_mut() {
+            dma.quarantine();
+        }
     }
 
     #[allow(clippy::result_large_err)]
@@ -751,53 +774,58 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         if self.state() != AmpduDmaState::Free || self.held != 0 {
             return Err(self);
         }
-        let dma = self
-            .dma
-            .take()
-            .expect("retained aggregate owner contains its DMA arena");
-        let retention = self
-            .retention
-            .take()
-            .expect("retained aggregate owner contains its lease arena");
-        Ok((dma, retention))
+        match (self.dma.take(), self.retention.take()) {
+            (Some(dma), Some(retention)) => Ok((dma, retention)),
+            (dma, retention) => {
+                self.dma = dma;
+                self.retention = retention;
+                Err(self)
+            }
+        }
     }
 
-    fn dma(&self) -> &PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE> {
-        self.dma
-            .as_ref()
-            .expect("retained aggregate owner contains its DMA arena")
+    fn dma(&self) -> Result<&PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
+        self.dma.as_ref().ok_or(AmpduDmaStorageError::Retired)
     }
 
-    fn dma_mut(&mut self) -> &mut PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE> {
-        self.dma
-            .as_mut()
-            .expect("retained aggregate owner contains its DMA arena")
+    fn dma_mut(
+        &mut self,
+    ) -> Result<&mut PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
+        self.dma.as_mut().ok_or(AmpduDmaStorageError::Retired)
     }
 
-    fn retention(&self) -> &RetainedAmpduDmaStorage<B, SLOTS> {
+    fn retention(&self) -> Result<&RetainedAmpduDmaStorage<B, SLOTS>, AmpduDmaStorageError> {
         self.retention
             .as_deref()
-            .expect("retained aggregate owner contains its lease arena")
+            .ok_or(AmpduDmaStorageError::Retired)
     }
 
-    fn retention_mut(&mut self) -> &mut RetainedAmpduDmaStorage<B, SLOTS> {
+    fn retention_mut(
+        &mut self,
+    ) -> Result<&mut RetainedAmpduDmaStorage<B, SLOTS>, AmpduDmaStorageError> {
         self.retention
             .as_deref_mut()
-            .expect("retained aggregate owner contains its lease arena")
+            .ok_or(AmpduDmaStorageError::Retired)
     }
 
     /// Hand every retained lease to `returned` in push order; only after
     /// the chain left the hardware.
     fn return_backings(&mut self, mut returned: impl FnMut(B)) {
-        for index in 0..self.held {
-            if let Some(backing) = self.retention_mut().backings[index]
-                .take()
-                .map(ManuallyDrop::into_inner)
+        let held = self.held;
+        if let Some(retention) = self.retention.as_deref_mut() {
+            for ((backing, identity), descriptor) in retention
+                .backings
+                .iter_mut()
+                .zip(retention.backing_identities.iter_mut())
+                .zip(retention.backing_descriptors.iter_mut())
+                .take(held)
             {
-                returned(backing);
+                if let Some(backing) = backing.take().map(ManuallyDrop::into_inner) {
+                    returned(backing);
+                }
+                *identity = None;
+                *descriptor = None;
             }
-            self.retention_mut().backing_identities[index] = None;
-            self.retention_mut().backing_descriptors[index] = None;
         }
         self.held = 0;
         self.active_count = 0;
@@ -812,12 +840,21 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         reason = "a backing the hardware may still read is leaked, never returned or freed"
     )]
     fn forget_backings(&mut self) {
-        for index in 0..self.held {
-            if let Some(backing) = self.retention_mut().backings[index].take() {
-                mem::forget(ManuallyDrop::into_inner(backing));
+        let held = self.held;
+        if let Some(retention) = self.retention.as_deref_mut() {
+            for ((backing, identity), descriptor) in retention
+                .backings
+                .iter_mut()
+                .zip(retention.backing_identities.iter_mut())
+                .zip(retention.backing_descriptors.iter_mut())
+                .take(held)
+            {
+                if let Some(backing) = backing.take() {
+                    mem::forget(ManuallyDrop::into_inner(backing));
+                }
+                *identity = None;
+                *descriptor = None;
             }
-            self.retention_mut().backing_identities[index] = None;
-            self.retention_mut().backing_descriptors[index] = None;
         }
         self.held = 0;
         self.active_count = 0;
@@ -827,11 +864,11 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         &self,
         backing: &RetainedDmaBacking,
     ) -> Result<RetainedDmaBackingIdentity, AmpduDmaStorageError> {
-        if backing.descriptor_head != self.descriptor_head() {
+        if backing.descriptor_head != self.descriptor_head()? {
             return Err(AmpduDmaStorageError::StaleBacking);
         }
         let identity = self
-            .retention()
+            .retention()?
             .backing_identities
             .get(usize::from(backing.index))
             .copied()
@@ -844,7 +881,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
     }
 
     fn next_lease_generation(&mut self) -> Result<u64, AmpduDmaStorageError> {
-        let dma = self.dma_mut();
+        let dma = self.dma_mut()?;
         let generation = dma
             .storage
             .as_ref()
@@ -862,7 +899,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
 {
     fn prepare_backings_for_dma_read(&mut self) -> Result<(), AmpduDmaStorageError> {
         let held = self.held;
-        for backing in &mut self.retention_mut().backings[..held] {
+        for backing in self.retention_mut()?.backings.iter_mut().take(held) {
             backing
                 .as_mut()
                 .ok_or(AmpduDmaStorageError::StaleBacking)?
@@ -903,46 +940,57 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         }
         let backing_index = u8::try_from(index).map_err(|_| AmpduDmaStorageError::Count)?;
         // `held` is private and advances only when a moved backing enters
-        // this owner; pop/release clear its identity and descriptor together.
-        // The next bounded slot therefore cannot already have an owner.
-        assert!(
-            self.retention().backings[index].is_none()
-                && self.retention().backing_identities[index].is_none()
-                && self.retention().backing_descriptors[index].is_none(),
-            "retained append owns its next vacant backing slot"
-        );
-        let descriptor_head = self.descriptor_head();
+        // this owner; pop/release clear its identity and descriptor together,
+        // so the next bounded slot has no owner. A slot that has one refuses
+        // the backing.
+        let retention = self.retention()?;
+        let vacant = retention.backings.get(index).is_some_and(Option::is_none)
+            && retention
+                .backing_identities
+                .get(index)
+                .is_some_and(Option::is_none)
+            && retention
+                .backing_descriptors
+                .get(index)
+                .is_some_and(Option::is_none);
+        if !vacant {
+            return Err(AmpduDmaStorageError::StaleBacking);
+        }
+        let descriptor_head = self.descriptor_head()?;
         let generation = self.next_lease_generation()?;
         let region = backing.dma_region();
-        self.retention_mut().backings[index] = Some(ManuallyDrop::new(backing));
+        let slot = self
+            .retention_mut()?
+            .backings
+            .get_mut(index)
+            .ok_or(AmpduDmaStorageError::Count)?;
+        *slot = Some(ManuallyDrop::new(backing));
         // Count the lease before borrowing its region. If a backing's unsafe
         // implementation panics while producing the region, Drop still owns
         // and releases the inserted value. Split the retention fields so the
         // exact slice returned by the single stability call can also be
         // returned to the encoder without sampling the backing twice.
-        self.held += 1;
+        self.held = index.saturating_add(1);
         let dma_region = match region {
             Ok(region) => region,
             Err(_) => {
                 self.held = index;
-                let retention = self.retention_mut();
-                let rejected = retention.backings[index]
-                    .take()
+                let retention = self.retention_mut()?;
+                let rejected = retention
+                    .backings
+                    .get_mut(index)
+                    .and_then(Option::take)
                     .map(ManuallyDrop::into_inner);
-                retention.backing_identities[index] = None;
-                retention.backing_descriptors[index] = None;
                 drop(rejected);
                 return Err(AmpduDmaStorageError::Address);
             }
         };
-        let retention = self
-            .retention
-            .as_deref_mut()
-            .expect("retained aggregate owner contains its lease arena");
+        let retention = self.retention_mut()?;
         let (backings, identities) = (&mut retention.backings, &mut retention.backing_identities);
-        let bytes = backings[index]
-            .as_mut()
-            .expect("retained backing was inserted")
+        let bytes = backings
+            .get_mut(index)
+            .and_then(Option::as_mut)
+            .ok_or(AmpduDmaStorageError::StaleBacking)?
             .stable_dma_region()
             .into_mut_slice();
         let identity = RetainedDmaBackingIdentity {
@@ -951,7 +999,9 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             len: bytes.len(),
             dma_region,
         };
-        identities[index] = Some(identity);
+        *identities
+            .get_mut(index)
+            .ok_or(AmpduDmaStorageError::Count)? = Some(identity);
         Ok((
             RetainedDmaBacking {
                 descriptor_head,
@@ -980,12 +1030,17 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             .checked_add(capacity)
             .filter(|end| *end <= identity.len)
             .ok_or(AmpduDmaStorageError::Address)?;
-        let bytes = self.retention_mut().backings[usize::from(backing.index)]
-            .as_mut()
+        let bytes = self
+            .retention_mut()?
+            .backings
+            .get_mut(usize::from(backing.index))
+            .and_then(Option::as_mut)
             .ok_or(AmpduDmaStorageError::StaleBacking)?
             .stable_dma_region()
             .into_mut_slice();
-        Ok(&mut bytes[offset..end])
+        bytes
+            .get_mut(offset..end)
+            .ok_or(AmpduDmaStorageError::Address)
     }
 
     /// Bind the validated descriptor image to a retained backing once.
@@ -1036,20 +1091,24 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         let buffer_address = external_dma_address(identity, offset)?;
         let word0 = tx_owned_word(buffer_capacity, transfer_length)
             .ok_or(AmpduDmaStorageError::InvalidLength)?;
+        let active_count = self
+            .active_count
+            .checked_add(1)
+            .ok_or(AmpduDmaStorageError::Count)?;
         let slot = self
-            .retention_mut()
+            .retention_mut()?
             .backing_descriptors
             .get_mut(usize::from(backing.index))
             .ok_or(AmpduDmaStorageError::Count)?;
-        assert!(
-            slot.is_none(),
-            "consumed backing identity binds its descriptor once"
-        );
+        // A consumed backing identity binds its descriptor once.
+        if slot.is_some() {
+            return Err(AmpduDmaStorageError::StaleBacking);
+        }
         *slot = Some(RetainedDmaDescriptor {
             buffer_address,
             word0,
         });
-        self.active_count += 1;
+        self.active_count = active_count;
         Ok(())
     }
 
@@ -1065,13 +1124,13 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         }
         let backing_index = usize::from(
             *self
-                .retention()
+                .retention()?
                 .active_backing_indices
                 .get(logical_index)
                 .ok_or(AmpduDmaStorageError::Count)?,
         );
         let identity = self
-            .retention()
+            .retention()?
             .backing_identities
             .get(backing_index)
             .copied()
@@ -1084,12 +1143,17 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             .checked_add(capacity)
             .filter(|end| *end <= identity.len)
             .ok_or(AmpduDmaStorageError::Address)?;
-        let bytes = self.retention_mut().backings[backing_index]
-            .as_mut()
+        let bytes = self
+            .retention_mut()?
+            .backings
+            .get_mut(backing_index)
+            .and_then(Option::as_mut)
             .ok_or(AmpduDmaStorageError::StaleBacking)?
             .stable_dma_region()
             .into_mut_slice();
-        Ok(&mut bytes[offset..end])
+        bytes
+            .get_mut(offset..end)
+            .ok_or(AmpduDmaStorageError::Address)
     }
 
     /// Reorder logical MPDUs after a detached selective BlockAck result.
@@ -1104,7 +1168,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         if source_indices.is_empty() || source_indices.len() > SLOTS {
             return Err(AmpduDmaStorageError::Count);
         }
-        let mut next = self.retention().active_backing_indices;
+        let mut next = self.retention()?.active_backing_indices;
         for (destination, source) in source_indices.iter().copied().enumerate() {
             let source = usize::from(source);
             if source >= self.active_count
@@ -1112,9 +1176,9 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             {
                 return Err(AmpduDmaStorageError::Count);
             }
-            next[destination] = self.retention().active_backing_indices[source];
+            next[destination] = self.retention()?.active_backing_indices[source];
         }
-        self.retention_mut().active_backing_indices = next;
+        self.retention_mut()?.active_backing_indices = next;
         self.active_count = source_indices.len();
         Ok(())
     }
@@ -1129,7 +1193,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             return Err(AmpduDmaStorageError::State);
         }
         let held = self.held;
-        for backing in &mut self.retention_mut().backings[..held] {
+        for backing in self.retention_mut()?.backings.iter_mut().take(held) {
             let Some(backing) = backing.as_mut() else {
                 continue;
             };
@@ -1140,8 +1204,8 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             let Some(end) = offset.checked_add(capacity) else {
                 continue;
             };
-            if end <= bytes.len() {
-                return Ok(&mut bytes[offset..end]);
+            if let Some(range) = bytes.get_mut(offset..end) {
+                return Ok(range);
             }
         }
         Err(AmpduDmaStorageError::Address)
@@ -1182,7 +1246,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
                 .ok_or(AmpduDmaStorageError::Address)?;
             buffer_addresses[index] = Some(external_dma_address(identity, offset)?);
             descriptor_addresses[index] = Some(
-                self.dma()
+                self.dma()?
                     .binding
                     .descriptor(index)
                     .ok_or(AmpduDmaStorageError::Address)?,
@@ -1205,12 +1269,16 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
             };
             let word0 = words[index].with_tx_last(next.is_none());
             let buffer = buffer_addresses[index].ok_or(AmpduDmaStorageError::Address)?;
-            self.dma().storage.as_ref().get_ref().descriptors[index]
+            self.dma()?.storage.as_ref().get_ref().descriptors[index]
                 .publish_owned(word0, buffer, next);
         }
-        *self.dma_mut().storage.as_mut().project().published_count = entries.len();
+        let dma = self.dma_mut()?;
+        *dma.storage.as_mut().project().published_count = entries.len();
 
-        Ok(RetainedAmpduDmaPublication { owner: self })
+        Ok(RetainedAmpduDmaPublication {
+            dma,
+            _owner: PhantomData,
+        })
     }
 
     /// Publish descriptor images previously bound to current retained leases.
@@ -1229,16 +1297,20 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         }
 
         let mut descriptors = [None; SLOTS];
-        for (logical_index, destination) in descriptors.iter_mut().enumerate().take(count) {
-            let backing_index = usize::from(self.retention().active_backing_indices[logical_index]);
-            let descriptor = self
-                .retention()
+        let retention = self.retention()?;
+        for ((logical_index, destination), backing_index) in descriptors
+            .iter_mut()
+            .enumerate()
+            .zip(retention.active_backing_indices.iter().copied())
+            .take(count)
+        {
+            let descriptor = retention
                 .backing_descriptors
-                .get(backing_index)
+                .get(usize::from(backing_index))
                 .copied()
                 .flatten()
                 .ok_or(AmpduDmaStorageError::StaleBacking)?;
-            self.dma()
+            self.dma()?
                 .binding
                 .descriptor_address(logical_index)
                 .ok_or(AmpduDmaStorageError::Address)?;
@@ -1249,26 +1321,35 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         // publication (not only the first one) must re-establish visibility.
         self.prepare_backings_for_dma_read()?;
 
-        for (logical_index, descriptor) in descriptors[..count].iter().copied().enumerate() {
+        let dma = self.dma_mut()?;
+        let arena = dma.storage.as_ref().get_ref();
+        for (logical_index, (descriptor, slot)) in descriptors
+            .iter()
+            .copied()
+            .zip(arena.descriptors.iter())
+            .take(count)
+            .enumerate()
+        {
             let descriptor = descriptor.ok_or(AmpduDmaStorageError::StaleBacking)?;
-            let next = if logical_index + 1 == count {
+            let following = logical_index.saturating_add(1);
+            let next = if following == count {
                 None
             } else {
                 Some(
-                    self.dma()
-                        .binding
-                        .descriptor(logical_index + 1)
+                    dma.binding
+                        .descriptor(following)
                         .ok_or(AmpduDmaStorageError::Address)?,
                 )
             };
             let word0 = descriptor.word0.with_tx_last(next.is_none());
-            let buffer = descriptor.buffer_address;
-            self.dma().storage.as_ref().get_ref().descriptors[logical_index]
-                .publish_owned(word0, buffer, next);
+            slot.publish_owned(word0, descriptor.buffer_address, next);
         }
-        *self.dma_mut().storage.as_mut().project().published_count = count;
+        *dma.storage.as_mut().project().published_count = count;
 
-        Ok(RetainedAmpduDmaPublication { owner: self })
+        Ok(RetainedAmpduDmaPublication {
+            dma,
+            _owner: PhantomData,
+        })
     }
 }
 
@@ -1321,7 +1402,9 @@ pub struct RetainedAmpduDmaPublication<
     const SLOTS: usize,
     const BUFFER_SIZE: usize,
 > {
-    owner: &'owner mut RetainedAmpduDma<'retention, B, SLOTS, BUFFER_SIZE>,
+    /// The arena of the owner this token mutably borrows for its life.
+    dma: &'owner mut PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>,
+    _owner: PhantomData<&'owner mut RetainedAmpduDma<'retention, B, SLOTS, BUFFER_SIZE>>,
 }
 
 #[allow(
@@ -1329,14 +1412,15 @@ pub struct RetainedAmpduDmaPublication<
     reason = "publication token is coupled to the owner retaining every external lease"
 )]
 // SAFETY: this token exists only after the retaining owner published the
-// complete aggregate chain; it mutably borrows that owner, which retains
-// every external lease, and hardware cannot own the chain before `commit`.
+// complete aggregate chain; it mutably borrows that owner's arena, so the
+// owner, which retains every external lease, can neither release nor change
+// one while it lives, and hardware cannot own the chain before `commit`.
 unsafe impl<B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
     PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>
     for RetainedAmpduDmaPublication<'_, '_, B, SLOTS, BUFFER_SIZE>
 {
     fn descriptor_head(&self) -> DmaRef<WifiTxDmaDescriptor> {
-        self.owner.dma().binding.descriptors.first()
+        self.dma.binding.descriptors.first()
     }
 }
 
@@ -1347,8 +1431,7 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize>
     where
         F: FnOnce(&AmpduDmaStart<'_>),
     {
-        let owner = self.owner;
-        let dma = owner.dma_mut();
+        let dma = self.dma;
         *dma.storage.as_mut().project().state = AmpduDmaState::HardwareOwned;
         start(&AmpduDmaStart {
             binding: &dma.binding,

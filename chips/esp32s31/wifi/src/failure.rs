@@ -128,6 +128,8 @@ pub enum ChainStorageError {
     InvalidLength,
     StaleBacking,
     State,
+    /// The chain's owner no longer held its arenas.
+    Retired,
 }
 /// Why an aggregate cannot go as one publication.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

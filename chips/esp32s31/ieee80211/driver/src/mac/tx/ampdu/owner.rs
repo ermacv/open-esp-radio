@@ -687,7 +687,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head();
+        let descriptor_head = self.dma_mut().descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut();
             hardware.with_tx_queue_detached(
@@ -727,7 +727,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head();
+        let descriptor_head = self.dma_mut().descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut();
             hardware.with_tx_queue_detached(
@@ -764,7 +764,7 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut().descriptor_head();
+        let descriptor_head = self.dma_mut().descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut();
             hardware.with_tx_queue_detached(

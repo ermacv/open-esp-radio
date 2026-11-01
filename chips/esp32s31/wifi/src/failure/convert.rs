@@ -157,6 +157,7 @@ pub(super) fn chain_storage_error(
         Source::InvalidLength => ChainStorageError::InvalidLength,
         Source::StaleBacking => ChainStorageError::StaleBacking,
         Source::State => ChainStorageError::State,
+        Source::Retired => ChainStorageError::Retired,
     }
 }
 

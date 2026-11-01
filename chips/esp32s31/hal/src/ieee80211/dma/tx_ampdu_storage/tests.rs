@@ -344,10 +344,10 @@ fn late_external_word_overflow_does_not_partially_publish_the_chain() {
         Err(AmpduDmaStorageError::InvalidLength)
     ));
     assert_eq!(
-        owner.dma().descriptor_word0(0),
+        owner.dma().unwrap().descriptor_word0(0),
         Some(WifiTxDmaDescriptorControl::ZERO)
     );
-    assert_eq!(owner.dma().descriptor_buffer_address(0), Some(0));
+    assert_eq!(owner.dma().unwrap().descriptor_buffer_address(0), Some(0));
     owner.cancel(drop).unwrap();
 }
 
@@ -693,17 +693,17 @@ fn retained_publication_fails_closed_when_descriptor_image_is_missing() {
     // Model corrupted retained metadata directly. The safe publication
     // boundary must reject it before mutating even an earlier valid
     // descriptor or handing the arena to hardware.
-    owner.retention_mut().backing_descriptors[second_index] = None;
+    owner.retention_mut().unwrap().backing_descriptors[second_index] = None;
     assert!(matches!(
         owner.publish_retained_chain(2),
         Err(AmpduDmaStorageError::StaleBacking)
     ));
     assert_eq!(owner.state(), AmpduDmaState::Reserved);
     assert_eq!(
-        owner.dma().descriptor_word0(0),
+        owner.dma().unwrap().descriptor_word0(0),
         Some(WifiTxDmaDescriptorControl::ZERO)
     );
-    assert_eq!(owner.dma().descriptor_buffer_address(0), Some(0));
+    assert_eq!(owner.dma().unwrap().descriptor_buffer_address(0), Some(0));
     owner.cancel(drop).unwrap();
     assert_eq!(drops.get(), 2);
 }
@@ -865,10 +865,10 @@ fn stale_external_chain_is_not_partially_published_after_slot_reuse() {
     assert_eq!(owner.state(), AmpduDmaState::Reserved);
     assert_eq!(owner.held_backing_count(), 1);
     assert_eq!(
-        owner.dma().descriptor_word0(0),
+        owner.dma().unwrap().descriptor_word0(0),
         Some(WifiTxDmaDescriptorControl::ZERO)
     );
-    assert_eq!(owner.dma().descriptor_buffer_address(0), Some(0));
+    assert_eq!(owner.dma().unwrap().descriptor_buffer_address(0), Some(0));
     assert_eq!(drops.get(), 1);
 
     owner.cancel(drop).unwrap();
@@ -1031,11 +1031,11 @@ fn external_chain_publishes_each_lease_at_its_address_in_the_arena_space() {
 
     // A host lease is its own arena: its first byte is the window base.
     assert_eq!(
-        owner.dma().descriptor_buffer_address(0),
+        owner.dma().unwrap().descriptor_buffer_address(0),
         Some(HOST_ARENA_BASE + 8)
     );
     assert_eq!(
-        owner.dma().descriptor_buffer_address(1),
+        owner.dma().unwrap().descriptor_buffer_address(1),
         Some(HOST_ARENA_BASE + 16)
     );
     owner.mark_completed().unwrap();
@@ -1059,7 +1059,7 @@ fn an_empty_backing_is_removed_without_leaving_a_lifo_hole() {
     ));
     assert_eq!(owner.held, 0);
     assert_eq!(drops.get(), 1);
-    assert!(owner.retention().backings[0].is_none());
+    assert!(owner.retention().unwrap().backings[0].is_none());
     let next = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
     assert_eq!(next.index, 0);
     drop(owner.pop_last_backing(next).unwrap());
@@ -1082,12 +1082,66 @@ fn a_failed_insertion_between_successes_preserves_backing_indices() {
     ));
     assert_eq!(owner.held, 1);
     assert_eq!(drops.get(), 1);
-    assert!(owner.retention().backings[1].is_none());
-    assert!(owner.retention().backing_identities[1].is_none());
-    assert!(owner.retention().backing_descriptors[1].is_none());
+    assert!(owner.retention().unwrap().backings[1].is_none());
+    assert!(owner.retention().unwrap().backing_identities[1].is_none());
+    assert!(owner.retention().unwrap().backing_descriptors[1].is_none());
     let second = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
     assert_eq!((first.index, second.index), (0, 1));
     drop(owner.pop_last_backing(second).unwrap());
     drop(owner.pop_last_backing(first).unwrap());
     assert_eq!(drops.get(), 3);
+}
+
+#[test]
+fn an_owned_next_slot_refuses_the_append_without_changing_the_owner() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let first = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    // Model corrupted retained metadata: the next slot already names an
+    // identity. The append refuses the backing instead of panicking.
+    let identity = owner.retention().unwrap().backing_identities[0];
+    owner.retention_mut().unwrap().backing_identities[1] = identity;
+    assert!(matches!(
+        owner.push_backing(TestBacking::new(drops.clone())),
+        Err(AmpduDmaStorageError::StaleBacking)
+    ));
+    assert_eq!(owner.held, 1);
+    assert_eq!(drops.get(), 1);
+    owner.retention_mut().unwrap().backing_identities[1] = None;
+    drop(owner.pop_last_backing(first).unwrap());
+    assert_eq!(drops.get(), 2);
+}
+
+#[test]
+fn a_bound_descriptor_refuses_a_second_binding() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let backing = owner.push_backing(TestBacking::new(drops.clone())).unwrap();
+    let address = owner
+        .reserved_backing_mut(&backing)
+        .unwrap()
+        .bytes
+        .as_ptr()
+        .addr();
+    let index = usize::from(backing.index());
+    // Model corrupted retained metadata: the slot is already bound.
+    let bound = RetainedDmaDescriptor {
+        buffer_address: owner.retention().unwrap().backing_identities[index]
+            .unwrap()
+            .dma_region
+            .at(0)
+            .unwrap(),
+        word0: WifiTxDmaDescriptorControl::ZERO,
+    };
+    owner.retention_mut().unwrap().backing_descriptors[index] = Some(bound);
+    let (backing, error) = owner
+        .commit_backing_descriptor(backing, address, 64, 32)
+        .unwrap_err();
+    assert_eq!(error, AmpduDmaStorageError::StaleBacking);
+    assert_eq!(owner.active_count, 0);
+    owner.retention_mut().unwrap().backing_descriptors[index] = None;
+    drop(owner.pop_last_backing(backing).unwrap());
+    assert_eq!(drops.get(), 1);
 }
