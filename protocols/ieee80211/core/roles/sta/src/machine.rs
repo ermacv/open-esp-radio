@@ -5872,6 +5872,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         if let Some(action) = self.owe_rekey(connected, pairwise_purpose, events) {
             return owed(connected, action);
         }
+        // Without a background scan and an owed wake, the background owes
+        // nothing: the connected link's every turn ends here, its action's
+        // place untouched.
+        if connected.background.is_none()
+            && !(connected.wake && !connected.power.asleep() && !connected.sending)
+        {
+            return (Change::Keep, ActionProgress::Wait);
+        }
         match self.owe_background(connected, now, events) {
             Ok(progress) => (Change::Keep, progress),
             Err(reason) => (
