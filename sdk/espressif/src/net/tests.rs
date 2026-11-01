@@ -186,18 +186,59 @@ fn a_link_wait_ends_on_loss_or_on_a_new_epoch() {
 }
 
 #[test]
-fn waiters_beyond_the_slots_are_refused_and_one_waker_takes_one_slot() {
+fn waiters_beyond_the_slots_are_refused_and_a_wait_keeps_its_one_slot() {
     let watchers = Watchers::<HostContext, 1>::new();
     let current = Cell::new(DOWN);
     let (first, _) = counting();
+    let (other, _) = counting();
     let (second, _) = counting();
     let mut a = pin!(wait_ipv4(&watchers, || current.get()));
     let mut b = pin!(wait_ipv4(&watchers, || current.get()));
     assert!(poll(a.as_mut(), &first).is_pending());
-    // The same waker again keeps its one slot.
+    // The same wait again, with the same or another waker, keeps its slot.
     assert!(poll(a.as_mut(), &first).is_pending());
+    assert!(poll(a.as_mut(), &other).is_pending());
     assert_eq!(
         poll(b.as_mut(), &second),
         Poll::Ready(Err(NetError::Waiters))
     );
+}
+
+#[test]
+fn a_dropped_or_ended_wait_frees_its_slot_for_the_next_one() {
+    let watchers = Watchers::<HostContext, 2>::new();
+    let current = Cell::new(DOWN);
+    // More cancelled waits than slots, each with its own waker.
+    for _ in 0..4 {
+        let (waker, _) = counting();
+        let mut cancelled = pin!(wait_ipv4(&watchers, || current.get()));
+        assert!(poll(cancelled.as_mut(), &waker).is_pending());
+    }
+    // Waits that ended free theirs too.
+    for epoch in 1..=4 {
+        let (waker, _) = counting();
+        current.set(status(
+            LinkState::Up,
+            epoch,
+            Ipv4Status::Unconfigured,
+            Lifecycle::Running,
+        ));
+        let mut lost = pin!(wait_link_down(&watchers, || current.get()));
+        assert!(poll(lost.as_mut(), &waker).is_pending());
+        current.set(DOWN);
+        assert_eq!(poll(lost.as_mut(), &waker), Poll::Ready(Ok(())));
+    }
+    // A live wait finds a slot, and its waker is the one woken.
+    let (live, count) = counting();
+    let mut wait = pin!(wait_ipv4(&watchers, || current.get()));
+    assert!(poll(wait.as_mut(), &live).is_pending());
+    current.set(status(
+        LinkState::Up,
+        5,
+        Ipv4Status::Lease(LEASE),
+        Lifecycle::Running,
+    ));
+    watchers.wake_all();
+    assert_eq!(count.0.load(Ordering::Relaxed), 1);
+    assert_eq!(poll(wait.as_mut(), &live), Poll::Ready(Ok(LEASE)));
 }
