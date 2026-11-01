@@ -200,7 +200,7 @@ const TX_AMPDU_COUNTS: usize = 13;
 
 /// The histogram bin of an aggregate of `members`: 1, 2, 3 to 4, 5 to 8,
 /// 9 to 16, 17 to 32 (and more).
-#[cfg(any(target_arch = "riscv32", test))]
+#[cfg(any(all(target_arch = "riscv32", oer_trace), test))]
 const fn size_bin(members: u8) -> usize {
     match members {
         0 | 1 => 0,
