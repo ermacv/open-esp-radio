@@ -7,11 +7,11 @@
 
 use std::{sync::atomic::Ordering, time::Duration};
 
-use oer_lab_client::protocol::RouterOperation;
+use oer_lab_client::protocol::{RouterChannelWidth, RouterOperation};
 use oer_lab_model::Stand;
 use oer_lab_router::{
     mac::Mac,
-    router::Profile,
+    router::{ChannelWidth, Profile},
     ssh::{Remote, Ssh},
     station::{self, stream},
     station_wpa2,
@@ -79,6 +79,7 @@ pub(crate) fn run(
             ssid,
             passphrase,
             channel,
+            width,
             forward_host,
         } => {
             if !router.channels.contains(channel) {
@@ -94,7 +95,11 @@ pub(crate) fn run(
                 *channel,
                 ssid,
                 passphrase,
-            )?;
+            )?
+            .width(match width {
+                RouterChannelWidth::Ht20 => ChannelWidth::Ht20,
+                RouterChannelWidth::Ht40 => ChannelWidth::Ht40,
+            });
             let profile = match forward_host {
                 Some(host) => profile.forwarding_host(*host),
                 None => profile,
