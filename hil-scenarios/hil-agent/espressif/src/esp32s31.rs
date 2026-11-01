@@ -1,12 +1,9 @@
 //! The HIL console over the library's USB console on the ESP32-S31.
 
-use core::{convert::Infallible, future::Future};
+use core::future::Future;
 
 use oer_espressif::{AppResult, Error, Evidence, ExceptionEvidence, ResetCause, UsbConsole};
-use oer_hil_agent::{
-    base::{Intake, Requests},
-    console::progress::ReceiverLimit,
-};
+use oer_hil_agent::base::{Intake, Requests};
 use oer_hil_protocol::{
     Message, RequestIdentity,
     base::{
@@ -60,17 +57,19 @@ pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
 /// as its post-mortem. Never returns once the answer is written.
 ///
 /// # Errors
-/// The console's [`ReceiverLimit`] when it could not confirm the write; the
-/// image then does not trap.
-pub async fn answer_then_trap<M: Message>(
-    identity: RequestIdentity,
-    body: &M,
-) -> Result<Infallible, ReceiverLimit> {
+/// [`Error::Console`] when the console could not confirm the write: its
+/// barrier's fan-out ([`oer_hil_agent::console::progress::ReceiverLimit`])
+/// is exhausted, which its contract makes a terminal fault. The image does
+/// not trap; the application ends with the error, which the library records
+/// before it resets.
+pub async fn answer_then_trap<M: Message>(identity: RequestIdentity, body: &M) -> AppResult {
     let sequence = CONSOLE
         .publish_reliably(identity.session_id, identity.request_id, body)
         .await;
-    CONSOLE.written(sequence).await?;
-    oer_riscv::illegal_instruction()
+    match CONSOLE.written(sequence).await {
+        Ok(()) => oer_riscv::illegal_instruction(),
+        Err(_limit) => Err(Error::Console),
+    }
 }
 
 /// Serve the host over `console` until the chip resets: the base module
@@ -81,8 +80,9 @@ pub async fn answer_then_trap<M: Message>(
 /// future holds it once.
 ///
 /// # Errors
-/// [`Error::Console`] when the console's transport broke its contract.
-pub async fn serve<R: Requests, W: Future<Output = Infallible>>(
+/// [`Error::Console`] when the console's transport broke its contract, or
+/// the error the worker ended with.
+pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
     console: UsbConsole,
     evidence: Evidence,
     image: Image,
@@ -105,7 +105,7 @@ pub async fn serve<R: Requests, W: Future<Output = Infallible>>(
     });
     match embassy_futures::select::select(serve, start()).await {
         embassy_futures::select::Either::First(_fault) => Err(Error::Console),
-        embassy_futures::select::Either::Second(never) => match never {},
+        embassy_futures::select::Either::Second(ended) => ended,
     }
 }
 

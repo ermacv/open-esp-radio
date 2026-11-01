@@ -3,7 +3,7 @@
 // base module and the SDK station service, and one worker that answers the
 // service's requests in order.
 
-use core::{convert::Infallible, future::Future};
+use core::future::Future;
 
 use oer_espressif::{
     Aes, AppResult, Boot, Console, Error, Peripherals, Started,
@@ -65,7 +65,7 @@ struct Worker {
 }
 
 impl Worker {
-    async fn run(mut self) -> Infallible {
+    async fn run(mut self) -> AppResult {
         loop {
             let (identity, request) = self.requests.next().await;
             match request {
@@ -82,11 +82,10 @@ impl Worker {
                     answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
                 Either::First(Request::GetStatus(_)) => answer(identity, &self.status()),
-                // Traps once the answer is written; without a confirmed
-                // write the boot goes on and the request stays unanswered.
+                // Traps once the answer is written; a write the console
+                // cannot confirm ends the application, which records it.
                 Either::Second(oer_services_fault::Request::RaiseException(_)) => {
-                    let _unconfirmed =
-                        answer_then_trap(identity, &oer_services_fault::Raising).await;
+                    match answer_then_trap(identity, &oer_services_fault::Raising).await? {}
                 }
             }
         }
