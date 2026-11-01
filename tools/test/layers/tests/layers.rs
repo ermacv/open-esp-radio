@@ -900,6 +900,9 @@ enum Role {
     Composition,
     /// A product facade over a protocol runtime and its chip backend.
     Facade,
+    /// A family's application entry: for the chip its feature selects, it
+    /// places drivers, services, facades and their tasks for an image.
+    Sdk,
     /// An instrumentation event vocabulary: values, no owner.
     ObservationContract,
     /// The HIL framing, envelope and message skeleton.
@@ -908,6 +911,9 @@ enum Role {
     HilAgent,
     /// The HIL dictionary beside one facade.
     HilBinding,
+    /// The HIL agent on a family's application entry: the console, boot
+    /// evidence and request hand-over of a test image built on the SDK.
+    HilSdkAgent,
     /// A HIL test image.
     HilImage,
     Protocol(ProtocolRole),
@@ -967,15 +973,21 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/layout", Role::Platform),
     ("chips/esp32s31/compose", Role::Composition),
     ("chips/esp32s31/wifi", Role::Facade),
+    ("sdk/espressif", Role::Sdk),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
+    ("hil-scenarios/hil-agent/espressif", Role::HilSdkAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("hil-scenarios/images/esp32s31-rpc", Role::HilImage),
+    ("hil-scenarios/images/esp32s31-sdk-station", Role::HilImage),
     ("hil-scenarios/images/esp32s31-wifi-station", Role::HilImage),
     ("hil-scenarios/services/aes", Role::HilBinding),
+    ("hil-scenarios/services/fault", Role::HilBinding),
     ("hil-scenarios/services/load", Role::HilBinding),
+    ("hil-scenarios/services/sdk-station", Role::HilBinding),
     ("hil-scenarios/services/wifi-station", Role::HilBinding),
     ("hil-scenarios/aes", Role::Tool),
+    ("hil-scenarios/sdk-station", Role::Tool),
     ("hil-scenarios/wifi-station", Role::Tool),
     ("hil-scenarios/wifi-load", Role::Tool),
 ];
@@ -1114,8 +1126,24 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         }
         Role::Composition => assembled,
         Role::Facade => assembled || to == Role::Composition,
+        Role::Sdk => assembled || matches!(to, Role::Composition | Role::Facade),
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
+        // It serves the HIL console over the SDK's console and evidence; the
+        // composition writes notes before the console opens, the platform
+        // places the console and names the image, and `oer-riscv` raises the
+        // fault a test requests.
+        Role::HilSdkAgent => {
+            matches!(
+                to,
+                Role::Sdk
+                    | Role::HilAgent
+                    | Role::HilProtocol
+                    | Role::Platform
+                    | Role::Composition
+                    | Role::Portable
+            ) || (to == Role::HardwareAccess && to_path == "portable/riscv")
+        }
         // A bridge stands only on the codecs it joins.
         Role::Bridge => matches!(
             to,
@@ -1135,10 +1163,13 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
                 && !["portable/time", "portable/time-virtual"].contains(&to_path))
         }
         // An image composes: it declares its interrupt table, entry, tasks
-        // and observation collectors and never bypasses the facade.
+        // and observation collectors and never bypasses the facade, or it
+        // runs on the application entry.
         Role::HilImage => matches!(
             to,
-            Role::Composition
+            Role::Sdk
+                | Role::HilSdkAgent
+                | Role::Composition
                 | Role::Facade
                 | Role::ObservationContract
                 | Role::HilBinding
@@ -2185,13 +2216,19 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         ),
         "embassy-sync" => false,
         "embassy-time" => {
-            path == "portable/embassy/time" || path == "hil-scenarios/images/esp32s31-rpc"
+            path == "portable/embassy/time"
+                || path == "hil-scenarios/images/esp32s31-rpc"
+                // The application entry re-exports the executors' clock.
+                || path == "sdk/espressif"
         }
         "embassy-time-driver" => path == "chips/espressif/executor",
         // The Wi-Fi station image opens the pinned stack's UDP sockets for
         // the HIL load service.
+        // The application entry names the stack its IP service pins, for
+        // its applications' sockets.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net"
+                || (path == "sdk/espressif" && dependency == "embassy-net")
                 || path.starts_with("firmware/")
                 || (path == "hil-scenarios/images/esp32s31-wifi-station"
                     && dependency != "xarxa-driver")
@@ -3339,6 +3376,24 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
         ],
     );
     assert_role_cases(
+        Role::HilSdkAgent,
+        &[
+            (Role::Sdk, "sdk/espressif", true),
+            (Role::HilAgent, "protocols/hil/agent", true),
+            (Role::Composition, "chips/esp32s31/compose", true),
+            (Role::Platform, "chips/espressif/staged-runtime", true),
+            (Role::HardwareAccess, "portable/riscv", true),
+            (Role::HardwareAccess, "portable/mmio", false),
+            (Role::Facade, "chips/esp32s31/wifi", false),
+            (
+                Role::HilBinding,
+                "hil-scenarios/services/sdk-station",
+                false,
+            ),
+            (Role::Hal, "chips/esp32s31/hal", false),
+        ],
+    );
+    assert_role_cases(
         Role::HilBinding,
         &[
             (Role::HilAgent, "protocols/hil/agent", true),
@@ -3357,6 +3412,7 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::Composition, "chips/esp32s31/compose", true),
             (Role::Facade, "chips/esp32s31/wifi", true),
             (Role::HilBinding, "protocols/ieee80211/hil", true),
+            (Role::HilSdkAgent, "hil-scenarios/hil-agent/espressif", true),
             (Role::Platform, "chips/espressif/executor", true),
             (Role::EmbassyAdapter, "portable/embassy/net", true),
             (
@@ -3374,6 +3430,89 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (PROTOCOL_WIRE, "protocols/ieee80211/wire", false),
             (Role::Image, "firmware/apps/radio-root", false),
         ],
+    );
+}
+
+/// What an image built on the application entry may take besides it. The
+/// entry places the compositions, facades, platform and interrupt table,
+/// so an example and a HIL test image of one function build it the same
+/// way; a HIL image adds only the HIL agent on the entry, the HIL protocol
+/// and agent, and its services' dictionaries.
+fn beside_the_entry(from: Role, to: Role) -> bool {
+    match to {
+        Role::Sdk | Role::Portable | Role::EmbassyAdapter => true,
+        Role::HilSdkAgent | Role::HilAgent | Role::HilProtocol | Role::HilBinding => {
+            from == Role::HilImage
+        }
+        _ => false,
+    }
+}
+
+/// An image's direct normal dependency beside the application entry that
+/// [`beside_the_entry`] does not allow.
+fn outside_the_entry(members: &[Member]) -> BTreeSet<Edge> {
+    let sdk = members
+        .iter()
+        .filter(|member| role(&member.path) == Some(Role::Sdk))
+        .map(|member| member.name.clone())
+        .collect::<BTreeSet<_>>();
+    let on_the_entry = |member: &Member| {
+        matches!(role(&member.path), Some(Role::Image | Role::HilImage))
+            && !member.dependencies.is_disjoint(&sdk)
+    };
+    forbidden_edges(members, |from, to| {
+        on_the_entry(from)
+            && match (role(&from.path), role(&to.path)) {
+                (Some(from_role), Some(to_role)) => !beside_the_entry(from_role, to_role),
+                _ => true,
+            }
+    })
+}
+
+#[test]
+fn an_image_on_the_application_entry_takes_nothing_the_entry_places() {
+    let members = workspace_members();
+    assert_eq!(outside_the_entry(&members), BTreeSet::new());
+    for (from, to, allowed) in [
+        (Role::HilImage, Role::HilSdkAgent, true),
+        (Role::HilImage, Role::HilBinding, true),
+        (Role::HilImage, Role::EmbassyAdapter, true),
+        (Role::Image, Role::Sdk, true),
+        (Role::Image, Role::HilSdkAgent, false),
+        (Role::HilImage, Role::Composition, false),
+        (Role::HilImage, Role::Facade, false),
+        (Role::HilImage, Role::Platform, false),
+        (Role::HilImage, Role::PlatformContract, false),
+        (Role::Image, Role::Facade, false),
+    ] {
+        assert_eq!(beside_the_entry(from, to), allowed, "{from:?} -> {to:?}");
+    }
+}
+
+#[test]
+fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
+    let members = [
+        member(
+            "hil-scenarios/images/esp32s31-sdk-station",
+            "image",
+            true,
+            &["oer-espressif", "oer-esp32s31-compose"],
+        ),
+        member(
+            "hil-scenarios/images/esp32s31-rpc",
+            "hand-built",
+            true,
+            &["oer-esp32s31-compose"],
+        ),
+        member("sdk/espressif", "oer-espressif", false, &[]),
+        member("chips/esp32s31/compose", "oer-esp32s31-compose", false, &[]),
+    ];
+    assert_eq!(
+        outside_the_entry(&members),
+        BTreeSet::from([(
+            "hil-scenarios/images/esp32s31-sdk-station".to_owned(),
+            "chips/esp32s31/compose".to_owned(),
+        )])
     );
 }
 

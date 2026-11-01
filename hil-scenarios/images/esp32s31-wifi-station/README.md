@@ -248,14 +248,16 @@ to 3, the image classes 4 to 6).
 The boot reads the reset causes and peeks the previous boot's platform panic
 before serving boot evidence; complete output clears the record. It prints
 the previous boot's PHY, Wi-Fi MAC and radio tracking fault records. A
-failed boot check of either hart, an exception, a construction error the
-facade cannot return, an exhausted nonce stream or an IP stack failure is
-retained and resets (`src/fatal.rs`); a failed periodic PHY tracking tick,
-or a tracking deadline the clock cannot hold, ends the shared RF actor's
-run with its keeping every owner, and the actor's task records the fault's
-class and variant path (`oer_esp32s31_compose::radio_fault`) and resets; a failure of hart 1's launch after its release records its
-stage and resets (`previous fault SecondaryLaunch` or
-`SecondaryEarlyFault`); the
+failed boot check of either hart, a construction error the facade cannot
+return, an exhausted nonce stream or an IP stack failure is retained and
+resets (`src/fatal.rs`); a failed periodic PHY tracking tick, or a tracking
+deadline the clock cannot hold, ends the shared RF actor's run with its
+keeping every owner, and the actor's task records the fault's class and
+variant path (`oer_esp32s31_compose::radio_fault`) and resets; a failure of
+hart 1's launch after its release records its stage and resets (`previous
+fault SecondaryLaunch` or `SecondaryEarlyFault`). An exception keeps the
+runtime's trap-time frame and the platform's observations after the trap
+(`oer_esp32s31_compose::exception`), both printed by the next boot; the
 console's transport faults reset through the platform's retained path.
 
 `cargo fw build esp32s31-wifi-station` builds it; a scenario's harness builds

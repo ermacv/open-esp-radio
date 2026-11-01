@@ -15,7 +15,6 @@ oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-memory = { path = "../../../portable/memory" }
 oer-riscv = { path = "../../../portable/riscv" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
-bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 embassy-sync.workspace = true
 embassy-time.workspace = true
 critical-section = "1.2.0"

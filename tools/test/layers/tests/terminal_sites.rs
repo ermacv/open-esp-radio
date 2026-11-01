@@ -665,6 +665,7 @@ fn scan(root: &Path) -> ScannedSites {
         "hil-scenarios",
         "portable",
         "protocols",
+        "sdk",
     ] {
         sources(&root.join(directory), &mut files);
     }
@@ -830,6 +831,7 @@ fn admitted_owner(id: &str) -> Option<&str> {
         "chips/espressif/staged-runtime",
         "chips/espressif/staged-bootstrap",
         "chips/espressif/executor",
+        "sdk/espressif",
     ]
     .contains(&home)
         || image_file(home)

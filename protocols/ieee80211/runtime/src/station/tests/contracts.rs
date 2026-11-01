@@ -52,7 +52,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let (config, _) = config(StaSecurity::Open);
         let observed: Observed = &*Box::leak(Box::new(Observations::default()));
-        let (station, credits) = Station::new_open(
+        let (station, credits) = Station::new(
             config,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,
@@ -70,6 +70,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 ),
                 group_permission: station_group_permission,
             },
+            GroupCapacity::new(),
         );
         let mut service = Runner::<ServicePort<Id>, _, _, 1, Observed>::new(
             (station, credits),

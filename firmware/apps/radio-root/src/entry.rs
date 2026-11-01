@@ -133,6 +133,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             interrupts.wake,
             software.irq0,
             (),
+            (),
             move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
                     fail(oer_diagnostics::name!("task-start"; 32));

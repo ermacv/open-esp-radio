@@ -382,6 +382,9 @@ scripts and proc macros run ordinary rustc with unchanged arguments. The
 wrapper preserves Cargo artifact hashes and the image compiler flags.
 `rustc-dev` is a component of the pinned toolchain for both host and chip CI.
 
+CI uploads the `*.txt` and `*.json` reports of every image it builds as its
+run's `image-reports` artifact, also when a later build fails.
+
 Every staged app and HIL image has `large-values.json` and `large-values.txt`
 beside its ELFs; probe reports are in `target/fw/probes/<package>/`. These
 report monomorphized MIR locals, temporaries, arguments, return slots and

@@ -213,8 +213,9 @@ and retention contracts.
 
 `oer-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
 operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
-debug triggers, waits and barriers. Its safe functions have no memory
-precondition. Installing trap vectors and `mscratch` is unsafe because the
+debug triggers, waits and barriers, and `illegal_instruction`, the
+illegal-instruction trap a HIL test image raises on request to check its
+exception path. Its safe functions have no memory precondition. Installing trap vectors and `mscratch` is unsafe because the
 entries, table and exclusive interrupt stack must implement a live trap ABI.
 Entering stage two is unsafe: `jump_to_entry` requires the checked entry of a
 published image that installs its own stack. Its inlined assembly disables

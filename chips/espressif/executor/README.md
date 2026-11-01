@@ -6,9 +6,16 @@ runtimes expose futures; images choose which executor polls them.
 
 ## Tasks
 
-Each executor's tasks are declared once in the image, by `tasks!`, as a set
-bound to that executor by type (`InterruptExecutor<B, N>` or `Executor<B, N>`
-of the chip binding `B`).
+Each executor's tasks are declared by `tasks!`, as a set bound to that
+executor by type (`InterruptExecutor<B, N>` or `Executor<B, N>` of the chip
+binding `B`). A set may extend one other set of the same executor and mode
+(`App: Executor<B, 0> extends Library { … }`): the base's tasks keep their
+indices, the extending set's follow them, and running the executor with the
+extending set polls both through direct calls. `Spawner::base` gives the
+base's start right from the extending set's spawner, so a library declares
+its service tasks once and an image adds its own after them. A base on
+another executor fails const evaluation and one of another binding or mode
+fails the `Extends` bound.
 Each task lives in a static slot of its own type; a start writes the task's
 start (its arguments and how to make its future) in place, once: a second
 start is refused (`AlreadyStarted`). The executor makes the future in place
@@ -22,8 +29,18 @@ writes the start and only then sets its bit; only the start crosses
 contexts, so it is `Send`, and the future need not be. Every waker has one vtable, the binding's, whose data is the executor and the task's
 index, never a pointer; the timer queue keeps one deadline per task by that
 index. Each task's poll is one direct call of its never-inlined instance of
-`task::poll_task`, which the declaration exports as a `#[used]` record,
-`__OER_TASK_POLL.<module path>`, for the image checks. Both executors
+`task::poll_task`, whose zero-sized first parameter, `task::PollBoundary`,
+marks it in the DWARF for the image checks; a task set whose executor the
+image never runs links no boundary and none of its tasks' code.
+A thread-mode executor's `run` also takes roots (`task::Roots`, `()` for
+none): futures pinned in the frame of the function that runs it, which
+never returns, for the futures whose types only the image knows. Each
+root is a task at the index after its set's tasks (the set and its roots
+fit `MAX_TASKS`, checked at monomorphization): its waker names it, its
+signals and timers are a task's, and every root is ready for the first
+round. A root is polled through its own never-inlined `task::poll_root`
+with the same `PollBoundary` parameter, so the image checks find it as a
+task root; a finished root is not polled again. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 `TaskId`. An executor's context is the executor that runs on the core and
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt
@@ -96,7 +113,10 @@ receiving hart (H2).
 ## Harts
 
 Each executor starts with its hart's `Hart<H>` (from that hart's interrupt
-enable) and const-checks that its table entry names hart `H`; an executor
+enable) and const-checks that its table entry names hart `H`. An
+interrupt-mode executor's entry names the type `Round<Tasks>` as its handler,
+and `InterruptExecutor::start` binds only an entry whose round is that of the
+tasks it starts, a type check (`tests/chip-ui/executor_round.rs`); an executor
 runs on any hart that has its own router, including a secondary hart's
 interrupt-mode executor on its own `FROM_CPU` line routed to that hart's
 bank. Each executor's running context, ready mask and task slots are its

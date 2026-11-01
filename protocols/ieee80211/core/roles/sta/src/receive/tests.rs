@@ -90,7 +90,7 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
     let now = Instant::from_micros(7_000);
     let meta = on_channel(6, RxEvidence::HardwareObserved(-40));
     assert_eq!(
-        observe_scan(&mut scan, now, classified_management(&beacon), &meta),
+        observe_scan(&mut scan, now, classified_management(&beacon), &meta, None),
         ScanObservation::Inserted { index: 0 }
     );
     let record = scan.records().next().unwrap();
@@ -103,7 +103,7 @@ fn observe_scan_takes_the_configured_channel_without_a_ds_element() {
     // With a DS Parameter Set the element names the channel.
     let mut scan = ScanTable::<2>::new();
     let beacon = management(8, &[3, 1, 11]);
-    let _ = observe_scan(&mut scan, now, classified_management(&beacon), &meta);
+    let _ = observe_scan(&mut scan, now, classified_management(&beacon), &meta, None);
     assert_eq!(scan.observations().next().unwrap().channel, 11);
 }
 
@@ -122,6 +122,7 @@ fn observe_scan_records_an_unavailable_signal_as_none() {
             now,
             classified_management(&beacon),
             &on_channel(1, rssi),
+            None,
         );
         assert_eq!(scan.observations().next().unwrap().rssi, recorded);
     }
@@ -138,6 +139,7 @@ fn observe_scan_ignores_management_that_is_no_beacon_or_probe_response() {
             Instant::from_micros(1),
             classified_management(&authentication),
             &on_channel(1, RxEvidence::HardwareObserved(-40)),
+            None,
         ),
         ScanObservation::Ignored
     );
@@ -164,7 +166,7 @@ fn classify_and_observe_never_panic(count: usize) {
             Ok(Received::Management(management)) => {
                 let _ = (management.subtype(), management.header().body());
                 assert_eq!(management.frame(), frame);
-                let _ = observe_scan(&mut scan, Instant::from_micros(1), management, &meta);
+                let _ = observe_scan(&mut scan, Instant::from_micros(1), management, &meta, None);
             }
             Ok(Received::Data(header)) => assert!(header.control().is_data()),
             Err(reason) => assert_eq!(reason, RxDropReason::Header),

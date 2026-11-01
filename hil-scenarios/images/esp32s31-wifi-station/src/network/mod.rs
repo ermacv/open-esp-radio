@@ -35,7 +35,7 @@ use crate::station::future::{Boundary, Tracked};
 oer_espressif_executor::tasks! {
     /// Hart 1's tasks (P2 of hart 1): the station's network end, its IP
     /// stack and the load server.
-    pub(crate) NetworkTasks: InterruptExecutor<Esp32s31, 1> {
+    pub NetworkTasks: InterruptExecutor<Esp32s31, 1> {
         @observer: crate::load::cpu::Observer::<{ crate::load::cpu::NETWORK }>;
         network(inputs: Inputs) = run;
     }

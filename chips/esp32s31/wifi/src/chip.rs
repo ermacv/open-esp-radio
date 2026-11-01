@@ -155,6 +155,12 @@ impl Config {
         self.ht40 = true;
         self
     }
+    /// Replace the deadline of a stop no request timed, which
+    /// [`Self::new`] took.
+    pub fn with_stop(mut self, stop: runtime::StopPolicy) -> Self {
+        self.stop = stop;
+        self
+    }
     /// Name the access point whose frames a trace build observes; without
     /// it, none is selected.
     #[cfg(oer_trace)]
@@ -214,13 +220,11 @@ impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
         oer_ieee80211_core_upper_mac::protection::HePacketPadding::None
     }
 }
-pub(crate) enum Security {
-    Open,
-    Wpa2Personal(oer_ieee80211_core_security_rsn::Pmk),
-}
+/// What the station runner starts with: the station's own address, scan
+/// channels and callbacks. The network each connection joins comes later,
+/// with its connect ([`crate::Control::connect`]).
 pub struct Profile<W: Binding> {
     pub(crate) station: StaConfig<Caps, CoreCallbacks<W::Callbacks>>,
-    pub(crate) security: Security,
     pub(crate) observer: W::Observer,
     pub(crate) sink: W::Sink,
 }
@@ -228,7 +232,6 @@ impl<W: Binding> Profile<W> {
     pub fn new(
         config: &Config,
         address: [u8; 6],
-        credentials: crate::PreparedCredentials,
         callbacks: W::Callbacks,
         observer: W::Observer,
         sink: W::Sink,
@@ -284,7 +287,6 @@ impl<W: Binding> Profile<W> {
                     IndividualAddress::for_interface(address)
                         .map_err(|_| InitializationError::Address)?,
                 ),
-                ssid: credentials.ssid,
                 channels,
                 wide_channels,
                 dwell: Duration::from_millis(250),
@@ -300,10 +302,6 @@ impl<W: Binding> Profile<W> {
                     oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
                 },
                 callbacks: CoreCallbacks(callbacks),
-            },
-            security: match credentials.pmk {
-                None => Security::Open,
-                Some(pmk) => Security::Wpa2Personal(pmk),
             },
             observer,
             sink,

@@ -7,20 +7,11 @@ const GROUPS: usize = 0;
 #[cfg(not(ui_reject))]
 const GROUPS: usize = 1;
 
-pub const CAPACITY: GroupCapacity<GROUPS> = GroupCapacity::new(); // ui-error@outside: E0080: evaluation panicked: a protected station needs at least one group slot
+pub const CAPACITY: GroupCapacity<GROUPS> = GroupCapacity::new(); // ui-error@outside: E0080: evaluation panicked: a station needs a group slot for any protected profile
 
 pub fn build<'id>(
     config: StaConfig<Caps, Callbacks>,
-    password: oer_ieee80211_core_security_rsn::sae::SaePassword,
-    pmk: oer_ieee80211_core_security_rsn::Pmk,
     resources: StationResources<'id, Tokens<'id, GROUPS>, 1, 1, GROUPS>,
 ) -> (Station<'id, Tokens<'id, GROUPS>, Caps, Callbacks>, oer_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>) {
-    Station::new_personal(config, password, pmk, resources, CAPACITY)
-}
-
-pub fn open_without_group_slots<'id>(
-    config: StaConfig<Caps, Callbacks>,
-    resources: StationResources<'id, Tokens<'id, 0>, 1, 1, 0>,
-) -> (Station<'id, Tokens<'id, 0>, Caps, Callbacks>, oer_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>) {
-    Station::new_open(config, resources)
+    Station::new(config, resources, CAPACITY)
 }

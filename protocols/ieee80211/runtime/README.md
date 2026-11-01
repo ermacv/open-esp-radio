@@ -28,7 +28,16 @@ topology is checked by `oer-ieee80211-core-arbiter`'s `configuration`.
 cooperative stop connection. Control and its neutral network end can exist
 before installation: connect, disconnect and scan submit only a kind and an
 internal correlation, and return an `Operation` that resolves exactly once to
-that request's `OperationEnd`. Each kind has one permission: an admitted
+that request's `OperationEnd`. `connect(profile)` also names the network: the
+`StaProfile` (SSID and security) is published to `State` in the same poll as
+its request, so a connect cancelled while it waits for queue room leaves no
+profile behind, and Runner takes it with that request. Runner gives it to the
+core station before the Connect; a station that is not idle refuses it and
+the Connect then gets the same refusal (`AlreadyConnected` or
+`Transitioning`). A refused, stopped or cancelled connect drops its profile,
+whose secrets erase themselves; a service end or a new control epoch drops
+an unserved one. The station keeps the profile it took for later
+connections; a station that never took one refuses Connect with `NoProfile`. Each kind has one permission: an admitted
 request holds it until its terminal, so a second request of the kind waits
 for it instead of posting a duplicate. Dropping the operation detaches its
 observer without returning the permission; the late terminal returns it and
@@ -142,8 +151,11 @@ terminal or `ServiceEnded`, and the epoch is refused with
 `ControlCreateError::Unread` while an earlier epoch's retired result of the
 same kind is still unread. `CommandStarted` precedes the core call after
 credit admission.
+The policy never connects first: it becomes active at the application's
+first admitted connect, which named the network, and its reconnections use
+the profile the station kept; they publish none.
 Explicit Disconnect pauses the policy and Connect resumes it. Graceful Stop
 has its own wake, admits one disconnect and retires after link-down. The raw
 runtime `Control::stop` still requests immediate cooperative retirement.
-Policy deadline exhaustion is a typed service failure. No policy timer or
-initial automatic request exists when reconnect is disabled.
+Policy deadline exhaustion is a typed service failure. No policy timer
+exists when reconnect is disabled.

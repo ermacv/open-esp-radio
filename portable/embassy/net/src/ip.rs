@@ -328,12 +328,13 @@ struct Initialized<X: ExecutionContext + 'static, const RX: usize, const TX: usi
 
 /// Permanent bridge and stack runner. Reconnect never reconstructs this value.
 /// After stop/error it remains terminal, retaining the stack and device owners.
+/// `LENT` counts the packet slots of the device's lent frames.
 pub struct Service<
     X: ExecutionContext + 'static,
     const RX: usize,
     const TX: usize,
     D: NetDevice,
-    const LENT: usize = 0,
+    const LENT: usize,
 > {
     iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
     runner: owned_embassy_net::Runner<'static, OwnedNetworkDevice<'static, X, RX, TX>>,

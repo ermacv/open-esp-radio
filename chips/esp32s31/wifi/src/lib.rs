@@ -126,11 +126,17 @@ impl<'a, N: Notifies> Control<'a, N> {
     pub fn stopped(&self) -> bool {
         self.inner.status().stopped
     }
-    /// Admit a connect once the previous connect's terminal returned its
-    /// permission; the operation resolves exactly once to this request's
-    /// terminal. Dropping it detaches the observer: the request continues.
-    pub async fn connect(&mut self) -> Result<Operation<'a, N>, ControlError> {
-        self.inner.connect().await
+    /// Admit a connect to the network `credentials` name once the previous
+    /// connect's terminal returned its permission; the operation resolves
+    /// exactly once to this request's terminal. Dropping it detaches the
+    /// observer: the request continues. Only an idle station takes the
+    /// network; it keeps it for its reconnections. A refused, stopped or
+    /// cancelled connect drops the credentials, erasing the PMK.
+    pub async fn connect(
+        &mut self,
+        credentials: PreparedCredentials,
+    ) -> Result<Operation<'a, N>, ControlError> {
+        self.inner.connect(credentials.into_profile()).await
     }
     /// Admit a disconnect, as [`Self::connect`].
     pub async fn disconnect(&mut self) -> Result<Operation<'a, N>, ControlError> {
@@ -731,7 +737,10 @@ mod tests {
         assert_eq!(refused.reason, oer_network_port::TransmitError::LinkDown);
         assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
         assert_eq!(dropped.get(), 0);
-        let _connect = embassy_futures::block_on(control.connect()).unwrap();
+        let credentials =
+            embassy_futures::block_on(crate::StationSettings::open(b"lab").unwrap().prepare())
+                .unwrap();
+        let _connect = embassy_futures::block_on(control.connect(credentials)).unwrap();
         let _disconnect = embassy_futures::block_on(control.disconnect()).unwrap();
         {
             // Both command cells are taken: the scan waits for room.

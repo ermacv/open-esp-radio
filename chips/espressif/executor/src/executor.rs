@@ -230,11 +230,14 @@ fn as_running<B: Binding, T: Tasks<Binding = B>>(swi: u8, poll: impl FnOnce()) {
 
 /// One poll round of executor `T::EXECUTOR`, in its context: whether a task
 /// is ready again.
-fn poll_tasks<B: Binding, T: Tasks<Binding = B>>() -> bool {
+fn poll_tasks<B: Binding, T: Tasks<Binding = B>, R: crate::task::Roots>(roots: &mut R) -> bool {
     let swi = T::EXECUTOR;
-    crate::task::poll_round::<T>(&READY[usize::from(swi)], &CURRENT[usize::from(swi)], || {
-        stamp_poll::<B>(swi)
-    })
+    crate::task::poll_round::<T, R>(
+        &READY[usize::from(swi)],
+        &CURRENT[usize::from(swi)],
+        roots,
+        || stamp_poll::<B>(swi),
+    )
 }
 
 /// Claim executor `swi` for the current core.
@@ -267,24 +270,30 @@ pub struct Executor<B, const SWI: u8> {
 }
 
 impl<B: Binding, const SWI: u8> Executor<B, SWI> {
-    /// Run the tasks `T` on the calling core, woken through the executor's
-    /// software interrupt: `wake` is that source's token of the image's
-    /// interrupt table, whose entry names
+    /// Run the tasks `T` and `roots` on the calling core, woken through the
+    /// executor's software interrupt: `wake` is that source's token of the
+    /// image's interrupt table, whose entry names
     /// [`wake_handler::<B, SWI, _>`](wake_handler) on this core. `init`
-    /// starts the first tasks.
+    /// starts the first tasks; every root is ready for the first round
+    /// ([`Roots`](crate::task::Roots), `()` for none).
     /// `urgent` comes from the composition's doorbell constructor, or `()`
     /// when it has no urgent sources.
     ///
     /// # Errors
     /// A refused route returns its token and part in quarantine. A foreign
     /// hart's entry fails at compile time; duplicate startup records a fault.
-    pub fn run<T, W, C, const H: u8, U: UrgentSources>(
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "each is one capability the run consumes"
+    )]
+    pub fn run<T, R: crate::task::Roots, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
         router: &mut oer_espressif_interrupt_table::Router<C>,
         wake: W,
         part: W::Part,
         _urgent: U,
+        mut roots: R,
         init: impl FnOnce(&Spawner<T>),
     ) -> Result<
         core::convert::Infallible,
@@ -317,6 +326,10 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
             .set(U::SOURCES)
             .unwrap_or_else(|_| Fault::UrgentPublished { executor: SWI }.reset::<PortOf<B>>());
         init(&Spawner::new());
+        let ready = const { SoftwareInterrupt::constant::<SWI>() }.at(&READY);
+        for root in T::COUNT..crate::task::root_end::<T, R>() {
+            ready.mark(root);
+        }
         loop {
             WORK_PENDING.0[usize::from(SWI)].store(0, Ordering::Release);
             as_running::<B, T>(SWI, || {
@@ -324,7 +337,7 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
                 // Raised signals wake their tasks before the round; a signal
                 // raised meanwhile marks the work flag again.
                 oer_espressif_interrupt_table::signal::service::<Self>();
-                let _ = poll_tasks::<B, T>();
+                let _ = poll_tasks::<B, T, R>(&mut roots);
             });
             wait_for_work::<B, T, SWI>();
         }
@@ -396,8 +409,8 @@ unsafe impl<const SWI: u8> ExecutionContext for ThreadContext<SWI> {
 
 impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     /// Start polling the tasks `T` in the handler of `wake`'s source, whose
-    /// table entry names [`interrupt_handler::<T, _>`](interrupt_handler) on
-    /// this core. Signal declarations and request bindings check their
+    /// table entry names [`Round<T>`](Round) on this core: an entry with
+    /// another handler, or another set's round, fails to compile. Signal declarations and request bindings check their
     /// direction from the table entries. The spawner starts `T`'s tasks.
     /// `urgent` comes from the composition's doorbell constructor, or `()`
     /// when it has no urgent sources.
@@ -415,7 +428,7 @@ impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     ) -> Result<Spawner<T>, Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<W>>>
     where
         T: Tasks<Binding = B, Mode = InterruptMode>,
-        W: Entry,
+        W: oer_espressif_interrupt_table::ExecutorEntry<Handler = Round<T>>,
         W::Part: oer_espressif_interrupt_table::InterruptSource,
         C: oer_espressif_interrupt_table::Controller,
     {
@@ -546,11 +559,29 @@ pub fn wake_handler<
     serve_interrupt::<B, _>(const { SoftwareInterrupt::constant::<SWI>() }, || ());
 }
 
-/// The interrupt-table handler of the interrupt-mode executor of the tasks
-/// `T` (its software interrupt, `FROM_CPU_INTR<N>`), which holds the line's
-/// interrupt part: it serves the executor's timers and signals and polls one
-/// round of its ready tasks.
-pub fn interrupt_handler<
+/// The handler type the interrupt-table entry of the interrupt-mode executor
+/// of the tasks `T` names (its software interrupt, `FROM_CPU_INTR<N>`, whose
+/// line's interrupt part the entry holds): each run serves the executor's
+/// timers and signals and polls one round of its ready tasks. The entry's
+/// token states it ([`oer_espressif_interrupt_table::ExecutorEntry`]), and
+/// [`InterruptExecutor::start`] binds only the entry whose handler is
+/// `Round<T>` for the tasks `T` it starts, checked at compile time. It is a
+/// type, never constructed.
+pub struct Round<T>(PhantomData<fn() -> T>);
+
+impl<T, P> oer_espressif_interrupt_table::ExecutorHandler<P> for Round<T>
+where
+    T: Tasks<Mode = InterruptMode>,
+    T::Binding: Binding,
+    P: oer_espressif_interrupt_table::InterruptSource,
+{
+    fn handle(part: &mut P) {
+        interrupt_handler::<T, P>(part);
+    }
+}
+
+/// One run of the handler of the interrupt-mode executor of the tasks `T`.
+fn interrupt_handler<
     T: Tasks<Mode = InterruptMode>,
     P: oer_espressif_interrupt_table::InterruptSource,
 >(
@@ -587,7 +618,7 @@ fn round<B: Binding, T: Tasks<Binding = B, Mode = InterruptMode>>(swi: SoftwareI
         }
         // A task woken during the round is polled in the next run of this
         // handler, after the timers and signals.
-        if poll_tasks::<B, T>() {
+        if poll_tasks::<B, T, ()>(&mut ()) {
             raise_interrupt::<B>(swi);
         }
     });

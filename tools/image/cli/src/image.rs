@@ -14,17 +14,31 @@ pub fn build(
     image: &str,
     enforced: Enforced,
     binary: Option<&str>,
+    features: &[String],
 ) -> Result<ImageBundle> {
-    let mut specification = images::spec(root, image, enforced)?;
-    if let Some(binary) = binary {
-        specification.application.binary = binary.to_owned();
-    }
-    let bundle = oer_image_build::build(&specification)?;
+    let bundle = oer_image_build::build(&specification(root, image, enforced, binary, features)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
     write_analysis_reports(&bundle, &mut std::io::stderr().lock())?;
     Ok(bundle)
+}
+
+/// The pipeline's spec of `image`: its package's `binary` instead of the
+/// default one, and its default features plus `features`.
+fn specification(
+    root: &Path,
+    image: &str,
+    enforced: Enforced,
+    binary: Option<&str>,
+    features: &[String],
+) -> Result<oer_image_build::ImageSpec> {
+    let mut specification = images::spec(root, image, enforced)?;
+    if let Some(binary) = binary {
+        specification.application.binary = binary.to_owned();
+    }
+    specification.application.features = features.to_vec();
+    Ok(specification)
 }
 
 /// Print the frame and panic inventories, including every reported location.
@@ -80,6 +94,31 @@ mod tests {
             .unwrap();
         }
         directory
+    }
+
+    #[test]
+    fn the_features_join_the_package_defaults() {
+        let directory = repository();
+        let features = ["station".to_owned()];
+        let spec = specification(
+            directory.path(),
+            "boot-smoke",
+            Enforced::Reported,
+            None,
+            &features,
+        )
+        .unwrap();
+        assert_eq!(spec.application.features, features);
+        assert!(spec.application.default_features);
+        let plain = specification(
+            directory.path(),
+            "boot-smoke",
+            Enforced::Reported,
+            None,
+            &[],
+        )
+        .unwrap();
+        assert!(plain.application.features.is_empty());
     }
 
     #[test]

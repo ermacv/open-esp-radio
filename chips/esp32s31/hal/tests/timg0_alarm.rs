@@ -3,11 +3,15 @@ use oer_esp32s31_hal::{
     platform::interrupt_controller::facts::LINES,
 };
 use oer_esp32s31_pac::Interrupt;
-use oer_espressif_interrupt_table::{Class, Entry};
+use oer_espressif_interrupt_table::{Class, Entry, ExecutorHandler};
 use oer_mmio::InterruptSource;
 
 pub fn on_timer(_: &mut Timg0AlarmInterrupt) {}
-pub fn on_executor(_: &mut FromCpu2Irq) {}
+/// The executor entry's round: nothing, in a test composition.
+pub struct OnExecutor;
+impl ExecutorHandler<FromCpu2Irq> for OnExecutor {
+    fn handle(_: &mut FromCpu2Irq) {}
+}
 
 // A test composition only: no production handler, cells, actor or vectors.
 // SOURCE: chips/espressif/platform/family.toml [interrupts], CLIC spec
@@ -24,7 +28,7 @@ oer_espressif_interrupt_table::interrupt_table! {
     contexts { radio: 2; }
     timer: TimerEntry = Timg0AlarmInterrupt => on_timer, line 20, context radio, hart 0,
         Exempt(ExecutorLevel, "PHY steps between executor rounds");
-    executor: ExecutorEntry = FromCpu2Irq => on_executor, line 21, context radio, hart 0, Executor;
+    executor: ExecutorEntry = FromCpu2Irq => OnExecutor, line 21, context radio, hart 0, Executor;
 }
 
 #[test]

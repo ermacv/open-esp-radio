@@ -19,8 +19,9 @@ pub mod class {
     /// [`DisconnectReason`](super::DisconnectReason) ([`super::connect_failed`]).
     pub const CONNECT_FAILED: u8 = 1;
     /// The station refused the connect command; the kind is the
-    /// [`CommandRefusal`](super::CommandRefusal), or 3 for a terminal of
-    /// another command ([`super::refused`]).
+    /// [`CommandRefusal`](super::CommandRefusal) (0 to 2, 4 for
+    /// `NoProfile`), or 3 for a terminal of another command
+    /// ([`super::refused`]).
     pub const CONNECT_REFUSED: u8 = 2;
     /// The station's control did not admit the connect command; the kind is
     /// the [`ControlError`](super::ControlError) ([`super::not_admitted`]).
@@ -99,6 +100,7 @@ pub fn refused(reason: CommandRefusal) -> StationError {
         CommandRefusal::AlreadyConnected => 0,
         CommandRefusal::NotConnected => 1,
         CommandRefusal::Transitioning => 2,
+        CommandRefusal::NoProfile => 4,
     };
     StationError::failed(class::CONNECT_REFUSED, kind, 0)
 }

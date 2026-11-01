@@ -86,10 +86,12 @@ pub enum LentCopy {
 /// payload and adopt its storage as the packet, without copying the
 /// payload. When that is impossible the frame is copied, as a copied
 /// device frame is, after `copied` reports why. A storage that broke its
-/// stable-bytes contract is refused as `OutsideStorage`.
-pub fn publish_lent<const RX: usize, S: FrameStorage, const N: usize>(
+/// stable-bytes contract is refused as `OutsideStorage`. `slots` are the
+/// image's `LENT` packet slots, named by type so that their adoption is a
+/// direct call.
+pub fn publish_lent<const RX: usize, S: FrameStorage, const LENT: usize>(
     publisher: &mut crate::OwnedRxPublisher<'_, RX>,
-    slots: Option<&'static LentSlots<S, N>>,
+    slots: Option<&'static LentSlots<S, LENT>>,
     frame: LentFrame<S>,
     copied: &mut impl FnMut(LentCopy),
 ) -> Result<(), crate::RxEnqueueError> {
@@ -194,7 +196,7 @@ pub struct EthernetBridge<
     const RX: usize,
     const TX: usize,
     D: NetDevice,
-    const LENT: usize = 0,
+    const LENT: usize,
 > {
     radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
     device: D,
@@ -215,8 +217,8 @@ impl<
     const LENT: usize,
 > EthernetBridge<'r, X, RX, TX, D, LENT>
 {
-    /// `lent` adopts the frames the device lends; without it the bridge
-    /// copies them.
+    /// `lent`, the image's `LENT` packet slots, adopts the frames the device
+    /// lends; without it the bridge copies them.
     pub fn new(
         radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
         device: D,

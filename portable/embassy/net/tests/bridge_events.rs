@@ -183,7 +183,7 @@ fn hil_bridge_parks_retains_credit_and_services_rx_until_tx_credit_event() {
     let mut bridge = EthernetBridge::new(
         radio,
         Port(state.clone(), LinkSnapshot::DOWN),
-        None::<&'static oer_embassy_net::ethernet::LentSlots<_, 0>>,
+        None::<&'static oer_embassy_net::ethernet::LentSlots<_, 1>>,
     );
     let mut task = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
         cx,

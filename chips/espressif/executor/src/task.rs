@@ -24,10 +24,12 @@
 //! context: only the start crosses contexts, so an interrupt-mode
 //! executor's starts are `Send` ([`Admits`]) and its futures need not be.
 //!
-//! Each declared task exports its poll boundary ([`PollBoundary`]) as
-//! `__OER_TASK_POLL.<module path>` for the image checks, which find every
-//! task poll as a direct call of a recorded boundary and fail on an image
-//! whose executor polls without one.
+//! Each task's poll boundary, its instance of the never-inlined `poll_task`,
+//! takes a zero-sized [`PollBoundary`] parameter: the image checks find
+//! every boundary by that parameter's type in the image's DWARF, every task
+//! poll as a direct call of one, and fail on an inlined boundary or an image
+//! whose executor polls without one. A task set whose executor the image
+//! never runs links no boundary and none of its tasks' code.
 #![allow(
     unsafe_code,
     reason = "task slots hold their futures in static storage polled in place, and the \
@@ -123,6 +125,21 @@ pub trait Tasks: Sized + 'static {
     fn poll(index: u8, token: &PollToken<Self>, cx: &mut Context<'_>);
 }
 
+/// A task set that extends `Base`: declared by [`tasks!`](crate::tasks)
+/// with `extends Base`, on `Base`'s executor and mode, it holds `Base`'s
+/// tasks first, at their own indices, and its own after them. Running the
+/// executor with the extending set polls both; `Base`'s tasks start through
+/// [`Spawner::base`].
+///
+/// The trait alone grants nothing: every conversion of a right to `Base`'s
+/// ([`PollToken::base`], [`Spawner::base`]) checks at compile time that
+/// both sets name one executor and that `Base`'s indices lie in the
+/// extending set's, so an implementation for a set of another executor
+/// fails the build where a right would cross.
+/// (`tests/extends.rs` builds a set that implements it for another
+/// executor's set and sees the build fail.)
+pub trait Extends<Base: Tasks>: Tasks<Binding = Base::Binding, Mode = Base::Mode> {}
+
 /// The right to poll the tasks of `T`, which only `T`'s executor holds, for
 /// one poll at a time.
 pub struct PollToken<T> {
@@ -134,6 +151,26 @@ impl<T: Tasks> PollToken<T> {
         Self {
             _executor: PhantomData,
         }
+    }
+
+    /// The right to poll the tasks of the set `T` extends, which `T`'s
+    /// executor holds with `T`'s: [`tasks!`](crate::tasks) delegates the
+    /// base's indices with it.
+    #[doc(hidden)]
+    pub const fn base<B: Tasks>(&self) -> PollToken<B>
+    where
+        T: Extends<B>,
+    {
+        // One executor, and `B`'s indices inside `T`'s.
+        const {
+            if T::EXECUTOR != B::EXECUTOR {
+                panic!("a set extends only a set of its own executor");
+            }
+            if B::COUNT > T::COUNT {
+                panic!("an extending set holds its base's indices");
+            }
+        };
+        PollToken::new()
     }
 }
 
@@ -152,6 +189,24 @@ impl<T: Tasks> Spawner<T> {
         Self {
             _tasks: PhantomData,
         }
+    }
+
+    /// The start right of the tasks of the set `T` extends, which run on
+    /// `T`'s executor, in the same mode.
+    pub const fn base<B: Tasks>(&self) -> Spawner<B>
+    where
+        T: Extends<B>,
+    {
+        // One executor, and `B`'s indices inside `T`'s.
+        const {
+            if T::EXECUTOR != B::EXECUTOR {
+                panic!("a set extends only a set of its own executor");
+            }
+            if B::COUNT > T::COUNT {
+                panic!("an extending set holds its base's indices");
+            }
+        };
+        Spawner::new()
     }
 
     /// Start `task` with `start`, written in place: the executor calls it at
@@ -214,7 +269,9 @@ pub struct Task<M: MakeFuture, T> {
 // to `CLAIMED`), until it publishes the start (`STARTED`, release), and then
 // only by the poll that takes it (`STARTED` or `LIVE` to `POLLING`,
 // acquire) until it returns it. A poll needs `T`'s token, which only `T`'s
-// executor holds, in its one context, which makes the future from the start
+// executor holds (directly, or as the base token of a set extending `T`,
+// which `PollToken::base` gives only where both sets name one executor, a
+// check at monomorphization), in its one context, which makes the future from the start
 // and polls it there. A start comes from another context than that only
 // through a `Send` spawner, of an interrupt-mode executor, which takes only a
 // `Send` start (`Admits`); the future never leaves the executor's context.
@@ -231,10 +288,6 @@ impl<M: MakeFuture, T: Tasks> Task<M, T> {
             _tasks: PhantomData,
         }
     }
-
-    /// The task's poll boundary, which its declaration exports for the
-    /// image checks.
-    pub const BOUNDARY: PollBoundary = PollBoundary(poll_task::<M>);
 
     /// Take the empty slot for one start.
     fn claim(&'static self) -> Result<Claim<M, T>, AlreadyStarted> {
@@ -270,7 +323,7 @@ impl<M: MakeFuture, T: Tasks> Task<M, T> {
         // which holds the start the starter published (`STARTED`) on the
         // first poll and the future made from it (`LIVE`) after; the slot is
         // static, so the future never moves.
-        let finished = unsafe { poll_task::<M>(self.stage.get().cast(), first, cx) };
+        let finished = unsafe { poll_task::<M>(PollBoundary, self.stage.get().cast(), first, cx) };
         self.state
             .store(if finished { DONE } else { LIVE }, Ordering::Release);
     }
@@ -295,28 +348,26 @@ impl<M: MakeFuture, T> Claim<M, T> {
     }
 }
 
-/// A task's poll boundary: the instance of the executor's one poll of a
-/// task's future, [`poll_task`], for that task's future type.
+/// The mark of a task's poll boundary: the zero-sized first parameter of
+/// [`poll_task`], whose every instance is the executor's one poll of one
+/// task's future type.
 ///
-/// Each task declared by [`tasks!`](crate::tasks) exports its boundary,
-/// `#[used]`, as `__OER_TASK_POLL.<module path of the task's slot>`. The
-/// image checks read these records, not a function name: every direct call
-/// of a recorded boundary is a task poll and the boundary is the task's
-/// root; a recorded boundary without a direct call (inlined or never
-/// polled), or an image with the executor's waker and no record, fails the
-/// analysis.
+/// The image checks read the boundaries from the image's DWARF by this
+/// type's path, `oer_espressif_executor::task::PollBoundary`, not from a
+/// function name or a kept record: every direct call of a boundary is a
+/// task poll and the boundary is the task's root; a boundary without a
+/// direct call, an inlined copy of one, or an image with the executor's
+/// waker and no boundary fails the analysis. It costs no argument register
+/// and no instruction.
 #[derive(Clone, Copy)]
-pub struct PollBoundary(
-    #[allow(dead_code, reason = "the image checks read the record from the image")]
-    unsafe fn(*mut (), bool, &mut Context<'_>) -> bool,
-);
+struct PollBoundary;
 
 /// The boundary between an executor and its tasks: one poll of a task's
 /// future, made from its start at the `first` poll, and, when it finishes,
 /// its drop. Everything this function reaches, the making of the future
 /// included, is the task's code. It is never inlined, so each executor's
-/// poll of a task is one direct call of the task's instance, which the
-/// task's [`PollBoundary`] record names.
+/// poll of a task is one direct call of the task's instance, which its
+/// [`PollBoundary`] parameter marks.
 ///
 /// # Safety
 /// `stage` is a `Stage<M>` at a fixed address that holds the start when
@@ -324,7 +375,12 @@ pub struct PollBoundary(
 /// only access to it until this returns. After `true` the future is
 /// dropped.
 #[inline(never)]
-unsafe fn poll_task<M: MakeFuture>(stage: *mut (), first: bool, cx: &mut Context<'_>) -> bool {
+unsafe fn poll_task<M: MakeFuture>(
+    _: PollBoundary,
+    stage: *mut (),
+    first: bool,
+    cx: &mut Context<'_>,
+) -> bool {
     let stage = stage.cast::<Stage<M>>();
     if first {
         // SAFETY: the caller's contract: the stage holds the start.
@@ -501,16 +557,18 @@ pub(crate) fn signal_wake(task: TaskId) {
 }
 
 /// One poll round of executor `T::EXECUTOR`: each task ready when the round
-/// starts is polled once, in index order, after `before_poll`. Returns
-/// whether a task is ready again.
-pub(crate) fn poll_round<T: Tasks>(
+/// starts is polled once, in index order, after `before_poll`: the set's
+/// tasks, then `roots` at the indices after them. Returns whether a task is
+/// ready again.
+pub(crate) fn poll_round<T: Tasks, R: Roots>(
     ready: &Ready,
     current: &Current,
+    roots: &mut R,
     mut before_poll: impl FnMut(),
 ) -> bool {
     let token = PollToken::<T>::new();
     let round = ready.0.load(Ordering::Acquire);
-    for index in 0..T::COUNT {
+    for index in 0..root_end::<T, R>() {
         if round & (1 << index) == 0 || !ready.take(index) {
             continue;
         }
@@ -526,10 +584,101 @@ pub(crate) fn poll_round<T: Tasks>(
             index,
         }
         .waker::<T::Binding>();
-        T::poll(index, &token, &mut Context::from_waker(&waker));
+        let cx = &mut Context::from_waker(&waker);
+        match index.checked_sub(T::COUNT) {
+            None => T::poll(index, &token, cx),
+            Some(root) => roots.poll(root, cx),
+        }
         current.0.store(NO_TASK, Ordering::Relaxed);
     }
     ready.any()
+}
+
+/// The index after the last root of `R` on `T`'s executor, checked at
+/// monomorphization against the ready mask's width.
+pub(crate) const fn root_end<T: Tasks, R: Roots>() -> u8 {
+    const {
+        if T::COUNT as usize + R::COUNT as usize > MAX_TASKS as usize {
+            panic!("an executor runs at most MAX_TASKS tasks and roots");
+        }
+        T::COUNT + R::COUNT
+    }
+}
+
+/// Futures a thread-mode executor polls where they are: pinned in the frame
+/// of the function that runs it, which never returns. They are the image's
+/// own futures, whose types only the image knows (its application and the
+/// services sized for it), so no static slot names them.
+///
+/// Each root is a task of the executor at the indices after its set's tasks:
+/// its waker names it ([`TaskId`]), its signals and timers are a task's, and
+/// it is polled in the same rounds through its own boundary
+/// ([`poll_root`]). A root that finished is not polled again. Roots compose
+/// as pairs: `(Root<A>, Root<B>)`.
+pub trait Roots {
+    /// How many roots.
+    const COUNT: u8;
+    /// Poll root `index` once, unless it finished.
+    #[doc(hidden)]
+    fn poll(&mut self, index: u8, cx: &mut Context<'_>);
+}
+
+/// No roots: an executor of its set's tasks alone.
+impl Roots for () {
+    const COUNT: u8 = 0;
+    fn poll(&mut self, _: u8, _: &mut Context<'_>) {}
+}
+
+/// One root: a pinned future, polled until it finishes.
+pub struct Root<'a, F: Future<Output = ()>> {
+    /// `None` once it finished.
+    future: Option<Pin<&'a mut F>>,
+}
+
+impl<'a, F: Future<Output = ()>> Root<'a, F> {
+    pub fn new(future: Pin<&'a mut F>) -> Self {
+        Self {
+            future: Some(future),
+        }
+    }
+}
+
+impl<F: Future<Output = ()>> Roots for Root<'_, F> {
+    const COUNT: u8 = 1;
+    fn poll(&mut self, index: u8, cx: &mut Context<'_>) {
+        if index != 0 {
+            return;
+        }
+        if let Some(future) = self.future.as_mut()
+            && poll_root(PollBoundary, future.as_mut(), cx)
+        {
+            self.future = None;
+        }
+    }
+}
+
+impl<A: Roots, B: Roots> Roots for (A, B) {
+    const COUNT: u8 = A::COUNT + B::COUNT;
+    fn poll(&mut self, index: u8, cx: &mut Context<'_>) {
+        match index.checked_sub(A::COUNT) {
+            None => self.0.poll(index, cx),
+            Some(index) => self.1.poll(index, cx),
+        }
+    }
+}
+
+/// The boundary between an executor and one of its roots: one poll of the
+/// root's future. Everything it reaches is the root's code. It is never
+/// inlined, so each poll of a root is one direct call of its instance,
+/// which its [`PollBoundary`] parameter marks for the image checks, as a
+/// task's [`poll_task`].
+#[inline(never)]
+fn poll_root<F: Future<Output = ()>>(
+    _: PollBoundary,
+    future: Pin<&mut F>,
+    cx: &mut Context<'_>,
+) -> bool {
+    future.poll(cx).is_ready()
 }
 
 /// Executor `executor`'s ready mask, when it is one.
@@ -576,24 +725,43 @@ use tests::ready;
 /// ```
 ///
 /// The set's executor is `InterruptExecutor<B, N>` or `Executor<B, N>` of
-/// the chip binding `B`; its interrupt handler is
-/// `interrupt_handler::<Set, _>`, its run is `Executor::<B, N>::run::<Set, …>`.
+/// the chip binding `B`; its table entry's handler is the type
+/// `Round<Set>`, its run is `Executor::<B, N>::run::<Set, …>`.
 #[macro_export]
 macro_rules! tasks {
     (
         $(#[$set_attr:meta])*
-        $vis:vis $set:ident : InterruptExecutor < $binding:ty, $executor:literal > { $($tasks:tt)* }
+        $vis:vis $set:ident : InterruptExecutor < $binding:ty, $executor:literal > $(extends $base:path)? { $($tasks:tt)* }
     ) => {
-        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Interrupt] $executor { $($tasks)* });
+        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Interrupt] $executor [$($base)?] { $($tasks)* });
     };
     (
         $(#[$set_attr:meta])*
-        $vis:vis $set:ident : Executor < $binding:ty, $executor:literal > { $($tasks:tt)* }
+        $vis:vis $set:ident : Executor < $binding:ty, $executor:literal > $(extends $base:path)? { $($tasks:tt)* }
     ) => {
-        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Thread] $executor { $($tasks)* });
+        $crate::tasks!(@set [$(#[$set_attr])*] [$vis] $set [$binding] [$crate::task::Thread] $executor [$($base)?] { $($tasks)* });
+    };
+    // The base's tasks come first; its index range and poll are delegated.
+    (@first []) => { 0 };
+    (@first [$base:path]) => { <$base as $crate::task::Tasks>::COUNT };
+    (@base_poll [] $index:ident $token:ident $cx:ident) => {};
+    (@base_poll [$base:path] $index:ident $token:ident $cx:ident) => {
+        if $index < <$base as $crate::task::Tasks>::COUNT {
+            <$base as $crate::task::Tasks>::poll($index, &$token.base::<$base>(), $cx);
+            return;
+        }
+    };
+    (@extends [] $set:ident [$binding:ty] [$mode:ty] $executor:literal) => {};
+    (@extends [$base:path] $set:ident [$binding:ty] [$mode:ty] $executor:literal) => {
+        impl $crate::task::Extends<$base> for $set {}
+        const _: () = {
+            if <$base as $crate::task::Tasks>::EXECUTOR != $executor {
+                panic!("a set extends a set of its own executor");
+            }
+        };
     };
     (
-        @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$binding:ty] [$mode:ty] $executor:literal {
+        @set [$($set_attr:tt)*] [$vis:vis] $set:ident [$binding:ty] [$mode:ty] $executor:literal [$($base:path)?] {
             $(@observer: $observer:expr;)?
             $(
                 $(#[$attr:meta])*
@@ -614,13 +782,14 @@ macro_rules! tasks {
                 fn observer() -> impl $crate::__trace::Observer { $observer }
             )?
             const EXECUTOR: u8 = $executor;
-            const COUNT: u8 = 0 $(+ { let _ = stringify!($name); 1 })*;
+            const COUNT: u8 = Self::FIRST_TASK $(+ { let _ = stringify!($name); 1 })*;
             #[allow(unused_doc_comments, unused_variables)]
             fn poll(
                 index: u8,
                 token: &$crate::task::PollToken<Self>,
                 cx: &mut ::core::task::Context<'_>,
             ) {
+                $crate::tasks!(@base_poll [$($base)?] index token cx);
                 $(
                     $(#[$attr])*
                     {
@@ -658,7 +827,13 @@ macro_rules! tasks {
             )*
         }
 
-        $crate::tasks!(@slots $set [0] $($(#[$attr])* $name;)*);
+        impl $set {
+            /// The index of the set's first own task: after its base's.
+            const FIRST_TASK: u8 = $crate::tasks!(@first [$($base)?]);
+        }
+
+        $crate::tasks!(@extends [$($base)?] $set [$binding] [$mode] $executor);
+        $crate::tasks!(@slots $set [super::$set::FIRST_TASK] $($(#[$attr])* $name;)*);
     };
     (@slots $set:ident [$index:expr]) => {};
     (@slots $set:ident [$index:expr] $(#[$attr:meta])* $name:ident; $($rest:tt)*) => {
@@ -668,12 +843,6 @@ macro_rules! tasks {
             pub(super) const TASK_INDEX: u8 = $index;
             pub(super) static TASK: $crate::task::Task<Start, super::$set> =
                 $crate::task::Task::new(TASK_INDEX);
-            /// The task's poll boundary, for the image checks. `#[used]`
-            /// keeps the record and the exported name lets the tools find it.
-            #[used]
-            #[unsafe(export_name = concat!("__OER_TASK_POLL.", module_path!()))]
-            static POLL_BOUNDARY: $crate::task::PollBoundary =
-                $crate::task::Task::<Start, super::$set>::BOUNDARY;
         }
         $crate::tasks!(@slots $set [$index + 1] $($rest)*);
     };

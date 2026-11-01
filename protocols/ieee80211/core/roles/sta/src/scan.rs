@@ -110,6 +110,36 @@ impl<const N: usize> ScanTable<N> {
         rssi: Option<i8>,
         received_at: Option<Instant>,
     ) -> ScanObservation {
+        self.observe(frame, receive_channel, rssi, received_at, |_| true)
+    }
+
+    /// As [`Self::observe_management`], but a BSS the table does not hold
+    /// yet enters it only when it names `ssid`: a connect's scan keeps its
+    /// capacity for its own network wherever other networks crowd the air.
+    /// A held BSS is still updated by any of its frames, so a hidden
+    /// network's empty-SSID beacon refreshes the record its probe response
+    /// made.
+    pub fn observe_network(
+        &mut self,
+        frame: &[u8],
+        receive_channel: u8,
+        rssi: Option<i8>,
+        received_at: Option<Instant>,
+        ssid: &[u8],
+    ) -> ScanObservation {
+        self.observe(frame, receive_channel, rssi, received_at, |record| {
+            record.ssid_bytes() == ssid
+        })
+    }
+
+    fn observe(
+        &mut self,
+        frame: &[u8],
+        receive_channel: u8,
+        rssi: Option<i8>,
+        received_at: Option<Instant>,
+        admit: impl FnOnce(&ScanRecord) -> bool,
+    ) -> ScanObservation {
         let Some(frame) = ScanFrame::parse(frame) else {
             return ScanObservation::Ignored;
         };
@@ -178,6 +208,9 @@ impl<const N: usize> ScanTable<N> {
             }
         }
 
+        if !admit(&record) {
+            return ScanObservation::Ignored;
+        }
         let index = self.length;
         // Every cell below `length` is occupied, so the first vacant one is
         // `length`; there is none when the table holds `N` records.

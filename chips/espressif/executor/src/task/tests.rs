@@ -54,7 +54,16 @@ fn pends(executor: u8) -> u32 {
 const EXECUTOR: u8 = 2;
 
 fn round<T: Tasks>(current: &Current) -> bool {
-    poll_round::<T>(ready(T::EXECUTOR).expect("a test executor"), current, || {})
+    round_with::<T, ()>(current, &mut ())
+}
+
+fn round_with<T: Tasks, R: Roots>(current: &Current, roots: &mut R) -> bool {
+    poll_round::<T, R>(
+        ready(T::EXECUTOR).expect("a test executor"),
+        current,
+        roots,
+        || {},
+    )
 }
 
 /// What a probe task saw: its polls, the argument it started with, and
@@ -517,6 +526,62 @@ fn declared_tasks_start_once_with_their_arguments_and_poll_by_index() {
     assert_eq!(Declared::second(&spawner, &seen.1), Err(AlreadyStarted));
 }
 
+/// A library's set and the image's set extending it, on one executor.
+mod extended {
+    use super::*;
+
+    pub(super) async fn library(seen: &'static AtomicU32) {
+        seen.fetch_add(1, Ordering::Relaxed);
+        core::future::pending::<()>().await;
+    }
+
+    pub(super) async fn application(seen: &'static AtomicU32) {
+        seen.fetch_add(10, Ordering::Relaxed);
+    }
+
+    crate::tasks! {
+        /// The library's tasks.
+        pub(super) Library: InterruptExecutor<super::TestBinding, 2> {
+            service(seen: &'static AtomicU32) = library;
+            other(seen: &'static AtomicU32) = library;
+        }
+    }
+
+    crate::tasks! {
+        /// The image's tasks, after the library's.
+        pub(super) Application: InterruptExecutor<super::TestBinding, 2> extends Library {
+            main(seen: &'static AtomicU32) = application;
+        }
+    }
+
+    pub(super) fn main_index() -> u8 {
+        main::TASK_INDEX
+    }
+}
+
+#[test]
+fn an_extending_set_numbers_its_tasks_after_its_base_and_polls_both() {
+    use extended::{Application, Library};
+    assert_eq!(<Library as Tasks>::COUNT, 2);
+    assert_eq!(<Application as Tasks>::COUNT, 3);
+    assert_eq!(extended::main_index(), 2);
+    let seen: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
+    let spawner = Spawner::<Application>::new();
+    // The base's tasks start through the extending set's spawner.
+    Library::service(&spawner.base(), seen).expect("library start");
+    Application::main(&spawner, seen).expect("application start");
+    let current = current();
+    // The executor runs the extending set: one round polls both sets' tasks.
+    assert!(!round::<Application>(current));
+    assert_eq!(seen.load(Ordering::Relaxed), 11);
+    // Each slot still starts once, through either spawner.
+    assert_eq!(Library::service(&spawner.base(), seen), Err(AlreadyStarted));
+    // A base task's wake marks its own index on the shared executor.
+    ready(EXECUTOR).expect("a test executor").mark(0);
+    assert!(!round::<Application>(current));
+    assert_eq!(seen.load(Ordering::Relaxed), 11);
+}
+
 /// A thread-mode executor's signal side on the test thread, made of the same
 /// parts as the chip's `Executor<B, SWI>`: the core's running context
 /// ([`crate::context::Running`]) at the level the test thread runs at, the
@@ -705,4 +770,92 @@ fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_sign
     let seized = seized.borrow();
     assert_eq!(seized.own, Some(Poll::Ready(Ok(0b1))));
     assert_eq!(seized.take, Some(Err(ForeignContext)));
+}
+
+/// A root that counts its polls, records the task its waker names and
+/// finishes at its `finish_at`-th poll.
+struct Counted<'a> {
+    polls: &'a Cell<u32>,
+    named: &'a Cell<Option<TaskId>>,
+    finish_at: u32,
+}
+
+impl Future for Counted<'_> {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        self.polls.set(self.polls.get() + 1);
+        self.named.set(TaskId::of::<TestBinding>(cx.waker()));
+        if self.polls.get() >= self.finish_at {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
+#[test]
+fn roots_are_tasks_after_the_set_and_a_finished_root_is_not_polled_again() {
+    probe_set!(Set, Thread);
+    let current = current();
+    let (first_polls, second_polls) = (Cell::new(0), Cell::new(0));
+    let (first_named, second_named) = (Cell::new(None), Cell::new(None));
+    let mut first = core::pin::pin!(Counted {
+        polls: &first_polls,
+        named: &first_named,
+        finish_at: 1,
+    });
+    let mut second = core::pin::pin!(Counted {
+        polls: &second_polls,
+        named: &second_named,
+        finish_at: u32::MAX,
+    });
+    let mut roots = (Root::new(first.as_mut()), Root::new(second.as_mut()));
+    let ready = ready(EXECUTOR).expect("a test executor");
+    // The set's three tasks hold indices 0 to 2: the roots are 3 and 4.
+    assert_eq!(
+        root_end::<Set, (Root<'_, Counted<'_>>, Root<'_, Counted<'_>>)>(),
+        5
+    );
+    ready.mark(3);
+    ready.mark(4);
+    assert!(!round_with::<Set, _>(current, &mut roots));
+    assert_eq!((first_polls.get(), second_polls.get()), (1, 1));
+    let task = |index| TaskId {
+        executor: SoftwareInterrupt::from_index(EXECUTOR).expect("an executor"),
+        index,
+    };
+    assert_eq!(first_named.get(), Some(task(3)));
+    assert_eq!(second_named.get(), Some(task(4)));
+    // The finished root stays finished; the other is polled when woken.
+    ready.mark(3);
+    ready.mark(4);
+    assert!(!round_with::<Set, _>(current, &mut roots));
+    assert_eq!((first_polls.get(), second_polls.get()), (1, 2));
+    // An unwoken root is not polled.
+    assert!(!round_with::<Set, _>(current, &mut roots));
+    assert_eq!(second_polls.get(), 2);
+}
+
+#[test]
+fn a_root_polls_beside_the_sets_started_tasks_in_index_order() {
+    probe_set!(Set, Thread);
+    let current = current();
+    let seen: [Rc<Seen>; 3] = Default::default();
+    Spawner::<Set>::new()
+        .start(Set::slot(1), start_probe(&seen[1], 0, current))
+        .expect("first start");
+    let polls = Cell::new(0);
+    let named = Cell::new(None);
+    let mut root = core::pin::pin!(Counted {
+        polls: &polls,
+        named: &named,
+        finish_at: u32::MAX,
+    });
+    let mut roots = Root::new(root.as_mut());
+    ready(EXECUTOR).expect("a test executor").mark(3);
+    round_with::<Set, _>(current, &mut roots);
+    assert_eq!(seen[1].polls.get(), 1);
+    assert_eq!(polls.get(), 1);
+    // The root's waker is its own task: it does not wake the set's task.
+    assert_eq!(named.get().map(|task| task.index), Some(3));
 }

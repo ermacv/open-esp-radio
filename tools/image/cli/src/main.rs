@@ -35,6 +35,9 @@ enum Command {
         /// Package an unqualified firmware/probes image with reported checks.
         #[arg(long)]
         diagnostic: bool,
+        /// Cargo features of the image package, comma-separated or repeated.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
     },
     /// Compare sizes.json files in two output directories; builds nothing.
     /// Exit 0 for same/report, 1 for incompatible provenance or unreadable input.
@@ -81,6 +84,9 @@ enum Command {
         /// default is 30 s.
         #[arg(long, value_parser = parse_duration)]
         timeout: Option<Duration>,
+        /// Cargo features of the image package, comma-separated or repeated.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
     },
     /// Print a board's console without resetting it, or after a reset into
     /// its flashed image with `--start`. A board rests in its ROM's download
@@ -147,7 +153,8 @@ fn main() -> ExitCode {
                 image,
                 bin,
                 diagnostic,
-            } => command::build(&root, &image, bin.as_deref(), diagnostic)?,
+                features,
+            } => command::build(&root, &image, bin.as_deref(), diagnostic, &features)?,
             Command::Sizes {
                 base,
                 head,
@@ -181,9 +188,10 @@ fn main() -> ExitCode {
                 image,
                 board,
                 timeout,
+                features,
             } => {
                 let timeout = timeout.unwrap_or(Duration::from_secs(30));
-                return command::run(&root, &image, &board, timeout);
+                return command::run(&root, &image, &board, timeout, &features);
             }
             Command::Monitor { board, start } => command::monitor(&board, start)?,
             Command::Boards => command::list_boards()?,
@@ -242,6 +250,20 @@ mod tests {
             parse("fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware --diagnostic").unwrap().command,
             Command::Build { bin: Some(_), diagnostic: true, .. }
         ));
+        match parse("fw build wifi-station --features station,extra --features third")
+            .unwrap()
+            .command
+        {
+            Command::Build { features, .. } => assert_eq!(features, ["station", "extra", "third"]),
+            _ => panic!("a build"),
+        }
+        match parse("fw run wifi-station --board s31-a --features station")
+            .unwrap()
+            .command
+        {
+            Command::Run { features, .. } => assert_eq!(features, ["station"]),
+            _ => panic!("a run"),
+        }
         assert!(matches!(
             parse("fw sizes base head").unwrap().command,
             Command::Sizes { .. }

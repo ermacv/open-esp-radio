@@ -116,7 +116,7 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
     Station<'id, Tokens<'id, G>, Caps, Callbacks>,
     oer_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>,
 ) {
-    Station::new_open::<T, B, G>(
+    Station::new::<T, B, G>(
         config,
         StationResources {
             configure,
@@ -128,6 +128,7 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
             keys: [(); G],
             group_permission: (),
         },
+        oer_ieee80211_core_roles_sta::machine::GroupCapacity::new(),
     )
 }
 

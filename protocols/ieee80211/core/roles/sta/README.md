@@ -88,7 +88,11 @@ MFPC under management protection, MFPR and the H2E RSNXE under SAE), whose
 RSN element and RSNXE `oer-ieee80211-wire` encodes (`station::SelectedRsn::rsn`).
 The scan table keeps each observation's signal level (`None` when the
 receiver reported none, ranked below every known level) and reception time
-beside its decoded `ScanRecord` (`scan::BssObservation`).
+beside its decoded `ScanRecord` (`scan::BssObservation`). A connect's scan
+admits a BSS into its table (16 records) only when it names the profile's
+SSID, so other networks heard on earlier channels never crowd out its own;
+a held record is updated by any frame of its BSSID. A background scan
+records every BSS.
 
 SAE observations consume the exchange and return it only while it continues.
 Commit and confirm have checked absolute deadlines, including time waiting
@@ -225,7 +229,7 @@ and hardware ownership belong in the chip driver; clocks, tasks, DMA wakeups
 and network leases belong to the radio runtime; final resource claims and
 board composition belong to integration.
 
-The station's SSID and SAE bodies own their bounded lengths in heapless
+The profile's SSID and SAE bodies own their bounded lengths in heapless
 vectors. The SSID bound comes from MAC's `MAX_SSID_LEN`. Scan channels form
 a bounded, contiguous vector of checked `SupportedChannel` values, so a
 hole cannot terminate a scan before its remaining channels. If a received BSS
@@ -282,13 +286,22 @@ after checking its subtype and all three header addresses.
 `StaSecurity::Personal` carries both the SAE password and PSK PMK; AKM
 selection follows the BSS qualification.
 
-`Station::new_open` and `Station::new_personal` return the machine and its
-three command credits. They require one to eight tickets and small buffers
-at compile time. Resources must match the backend token
-type's `StaTokens::GROUP_SLOTS`. Open mode accepts zero group slots; the
-personal constructor requires at least one: it takes a `GroupCapacity`
-proof, which a `const` item evaluates (a zero capacity fails the build), and the
-SAE password and PSK PMK separately from the common configuration. Authentication and Association reserve an owned
+`Station::new` (and `init` in place) returns the machine and its three
+command credits. It requires one to eight tickets and small buffers at
+compile time. Resources must match the backend token type's
+`StaTokens::GROUP_SLOTS`, and the constructor takes a `GroupCapacity` proof,
+which a `const` item evaluates: a zero capacity fails the build, since any
+later profile may protect its link.
+
+The station has no network until `Station::set_profile` gives it a
+`StaProfile`: the SSID and `StaSecurity`. Connect without one returns
+`CommandRefusal::NoProfile`. Only an idle station takes a profile; otherwise
+`StaProfileRefused` returns the same profile with the refusal a Connect would
+get (`AlreadyConnected` or `Transitioning`). The profile stays for every later
+Connect until the next replaces it; the previous profile's PMK and SAE
+password erase on drop, and the PMKSA cache forgets that SSID's
+associations. Every connection phase reads the profile its Connect was
+admitted with. Authentication and Association reserve an owned
 ticket/buffer credit before beginning a request or consuming its sequence
 number. Authentication's retry owner becomes an active exchange only after
 that reservation. A beacon, Probe Response or Authentication Response while

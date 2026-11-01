@@ -258,20 +258,20 @@ fn port() -> (Port, Rc<RefCell<PortState>>) {
     }));
     (Port(state.clone()), state)
 }
+/// The lent packet slots of the services these tests start.
+const LENT: usize = 4;
+
 fn start<X: ExecutionContext>(
     configuration: Configuration,
 ) -> (
     Control<'static>,
-    Service<X, 2, 1, Port>,
+    Service<X, 2, 1, Port, LENT>,
     Rc<RefCell<PortState>>,
 ) {
-    start_lent(
-        configuration,
-        None::<&'static crate::ethernet::LentSlots<Lent, 0>>,
-    )
+    start_lent(configuration, None)
 }
 
-fn start_lent<X: ExecutionContext, const LENT: usize>(
+fn start_lent<X: ExecutionContext>(
     configuration: Configuration,
     lent: Option<&'static crate::ethernet::LentSlots<Lent, LENT>>,
 ) -> (
@@ -656,7 +656,7 @@ fn invalid_static_configuration_returns_the_original_device() {
         let refused = resources
             .start(
                 port,
-                None::<&'static crate::ethernet::LentSlots<_, 0>>,
+                None::<&'static crate::ethernet::LentSlots<Lent, LENT>>,
                 NetworkInterfaceId::new(0),
                 [2; 6],
                 1,
@@ -674,7 +674,7 @@ fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
     let slots: &'static crate::ethernet::LentSlots<Lent, 4> =
         Box::leak(Box::new(crate::ethernet::LentSlots::new()));
     let (control, mut service, port) =
-        start_lent::<HostContext, 4>(Configuration::Static(CONFIG), Some(slots));
+        start_lent::<HostContext>(Configuration::Static(CONFIG), Some(slots));
     let iface = service.interface();
     let pool = allocator();
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));

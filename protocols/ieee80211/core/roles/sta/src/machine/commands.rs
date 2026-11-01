@@ -134,6 +134,8 @@ pub enum CommandRefusal {
     /// A connection or teardown is still in progress. Wait for the Connect
     /// terminal or the lifecycle `StaNotice::Disconnected` before retrying.
     Transitioning,
+    /// Connect before any profile named the network to join.
+    NoProfile,
 }
 
 /// Why a background scan ended before covering its channel list.

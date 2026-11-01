@@ -62,7 +62,9 @@ pub fn classify(frame: &[u8]) -> Result<Received<'_>, RxDropReason> {
     })
 }
 
-/// Record `management`, received at `now`, in `scan`.
+/// Record `management`, received at `now`, in `scan`; with `network`, a
+/// BSS the table does not hold yet enters it only when it names that SSID
+/// ([`ScanTable::observe_network`]).
 ///
 /// A record without a DS Parameter Set element takes the channel the
 /// receiver was configured to. A frame without a received signal level is
@@ -72,13 +74,18 @@ pub fn observe_scan<const N: usize>(
     now: Instant,
     management: Management<'_>,
     meta: &impl RxMetadata,
+    network: Option<&[u8]>,
 ) -> ScanObservation {
     let common = meta.common();
     let rssi = match common.rssi_dbm {
         RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
         RxEvidence::Unavailable => None,
     };
-    scan.observe_management(management.frame(), common.channel.number(), rssi, Some(now))
+    let channel = common.channel.number();
+    match network {
+        Some(ssid) => scan.observe_network(management.frame(), channel, rssi, Some(now), ssid),
+        None => scan.observe_management(management.frame(), channel, rssi, Some(now)),
+    }
 }
 
 #[cfg(test)]

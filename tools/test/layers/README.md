@@ -132,7 +132,8 @@ InvalidHart proof is conditional on the stated rev0 model, correct CSR
 observation and intact code/data. It proves no radio event ordering.
 
 Reset owners are admitted explicitly: HAL, chip composition, staged runtime,
-staged bootstrap, executor and the image containing the site. The family
+staged bootstrap, executor, the application entry (`sdk/espressif`, on the
+image's behalf) and the image containing the site. The family
 IEEE 802.15.4 engine's typed reasons belong to PHY HIL's terminal policy;
 their declaration grants the engine no reset dependency. An ordinary driver
 or sans-IO source cannot gain an owner merely by adding a registry entry.

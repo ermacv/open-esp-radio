@@ -123,6 +123,23 @@ impl<P: Copy + Eq, C> PmksaCache<P, C> {
         }
     }
 
+    /// Forget every association cached in `context`, keeping the others in
+    /// order; their PMKs erase on drop.
+    pub fn forget_context<Q: ?Sized>(&mut self, context: &Q)
+    where
+        C: PartialEq<Q>,
+    {
+        let entries = core::mem::replace(&mut self.entries, [const { None }; PMKSA_CAPACITY]);
+        let mut places = self.entries.iter_mut();
+        for entry in entries.into_iter().flatten() {
+            if entry.context != *context
+                && let Some(place) = places.next()
+            {
+                *place = Some(entry);
+            }
+        }
+    }
+
     /// Empty `hole` and move every later entry one place towards it.
     fn forget<'a>(
         mut hole: &'a mut Option<Pmksa<P, C>>,
