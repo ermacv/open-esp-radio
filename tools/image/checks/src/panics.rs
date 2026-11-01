@@ -232,13 +232,16 @@ pub fn sites(
     sites
 }
 
-/// One root of an ELF and the panic sites it reaches.
+/// One root of an ELF, the functions its bound reaches and the panic
+/// sites among them.
 #[derive(Clone, Debug)]
 pub struct Root {
     pub label: String,
     /// A `Hardware` interrupt context: it may reach no panic site.
     pub hardware: bool,
     pub sites: BTreeSet<Site>,
+    /// The functions the root's bound reaches, by address.
+    pub reached: BTreeSet<u32>,
 }
 
 impl Root {
@@ -254,6 +257,7 @@ impl Root {
             label: label.into(),
             hardware,
             sites: sites(analysis, names, reached),
+            reached: reached.clone(),
         }
     }
 }
