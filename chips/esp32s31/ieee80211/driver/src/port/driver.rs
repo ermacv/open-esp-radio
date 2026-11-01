@@ -716,7 +716,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // may run short. Otherwise the next interrupt's poll counts them.
         let network = &held.storage.shared.network;
         let starved = held.rx_out.get() >= RX_HELD && network.want_room();
-        let short = network.held() >= D::LENT_RX / 2 && network.want_units();
+        let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
         // P1's next take wakes a driver its queued units hold back; one it
         // took meanwhile leaves room now.
         let mut waiting = false;

@@ -104,7 +104,14 @@ impl NetworkCredit {
 
     /// Ask the next return to wake the driver, while the network holds many
     /// units. Whether a return came first: the driver then polls again.
-    pub(super) fn want_units(&self) -> bool {
+    ///
+    /// `cx` is the driver's: a network on another hart wakes it through the
+    /// driver's executor signal ([`NetworkPeers::driver`]), which the driver
+    /// registers here, before it asks.
+    pub(super) fn want_units(&self, cx: &mut Context<'_>) -> bool {
+        if let Some(peers) = self.peers {
+            peers.driver.register(cx);
+        }
         self.wants_units.store(true, Ordering::Release);
         self.returned.load(Ordering::Acquire)
     }
@@ -210,5 +217,95 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
             unit,
             returned: ReturnOnDrop { credit, driver },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::task::Waker;
+    use std::boxed::Box;
+
+    /// A notify that counts its registrations and notifications.
+    struct Counted {
+        registered: AtomicUsize,
+        notified: AtomicUsize,
+    }
+
+    impl Counted {
+        const fn new() -> Self {
+            Self {
+                registered: AtomicUsize::new(0),
+                notified: AtomicUsize::new(0),
+            }
+        }
+        fn counts(&self) -> (usize, usize) {
+            (
+                self.registered.load(Ordering::Relaxed),
+                self.notified.load(Ordering::Relaxed),
+            )
+        }
+    }
+
+    impl oer_memory::QueueNotify for Counted {
+        fn register(&self, _: &mut Context<'_>) {
+            self.registered.fetch_add(1, Ordering::Relaxed);
+        }
+        fn notify(&self) {
+            self.notified.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn leaked<T>(value: T) -> &'static T {
+        Box::leak(Box::new(value))
+    }
+
+    /// One unit's return, as the network's drop of its lent unit makes it.
+    fn return_one(credit: &'static NetworkCredit) {
+        credit.held.fetch_add(1, Ordering::AcqRel);
+        drop(ReturnOnDrop {
+            credit,
+            driver: leaked(PriorityWaker::new()),
+        });
+    }
+
+    #[test]
+    fn a_driver_asking_for_units_registers_its_signal_which_a_return_on_another_hart_raises() {
+        let driver = leaked(Counted::new());
+        let returned = leaked(Counted::new());
+        let credit = leaked(NetworkCredit::across_harts(NetworkPeers {
+            driver,
+            returned,
+        }));
+        let mut cx = Context::from_waker(Waker::noop());
+
+        // A return the driver did not ask for raises only the waiting task.
+        return_one(credit);
+        assert_eq!((driver.counts(), returned.counts()), ((0, 0), (0, 1)));
+        assert!(credit.take_returned());
+
+        // Asking registers the driver's signal before the request is
+        // published, so the next return's raise reaches the driver's task.
+        assert!(!credit.want_units(&mut cx), "no return since");
+        assert_eq!(driver.counts(), (1, 0));
+        return_one(credit);
+        assert_eq!((driver.counts(), returned.counts()), ((1, 1), (0, 2)));
+        // The request is spent: a further return leaves the driver alone.
+        return_one(credit);
+        assert_eq!(driver.counts(), (1, 1));
+    }
+
+    #[test]
+    fn a_return_before_the_request_is_reported_to_the_asking_driver() {
+        let driver = leaked(Counted::new());
+        let returned = leaked(Counted::new());
+        let credit = leaked(NetworkCredit::across_harts(NetworkPeers {
+            driver,
+            returned,
+        }));
+        let mut cx = Context::from_waker(Waker::noop());
+        return_one(credit);
+        assert!(credit.want_units(&mut cx), "the driver polls again itself");
+        assert_eq!(driver.counts(), (1, 0));
     }
 }
