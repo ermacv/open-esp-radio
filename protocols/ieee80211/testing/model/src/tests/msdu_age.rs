@@ -84,14 +84,13 @@ fn active_originator(
     now: Instant,
 ) -> oer_ieee80211_core_upper_mac::block_ack::TxBlockAckOriginator<1> {
     use oer_ieee80211_core_upper_mac::block_ack::{
-        TxBlockAckOriginator, TxBlockAckOriginatorConfig, TxBlockAckOriginatorPolicy,
-        next_nonzero_dialog_token,
+        DialogTokenSequence, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
+        TxBlockAckOriginatorPolicy,
     };
     let mut core = TxBlockAckOriginator::new(
         TxBlockAckOriginatorPolicy {
             tids: &[0],
-            first_dialog_token: 1,
-            next_dialog_token: next_nonzero_dialog_token,
+            dialog_tokens: DialogTokenSequence::NONZERO,
         },
         TxBlockAckOriginatorConfig {
             window: 32,

@@ -52,9 +52,9 @@ use oer_ieee80211_wire::security::{
 };
 use {
     oer_ieee80211_core_upper_mac::block_ack::{
-        AddbaRequest, OperationalTxBlockAck, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
-        TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy, TxBlockAckResponse,
-        TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
+        AddbaRequest, DialogTokenSequence, OperationalTxBlockAck, TxBlockAckOriginator,
+        TxBlockAckOriginatorConfig, TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy,
+        TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry,
     },
     oer_ieee80211_wire::block_ack::BlockAckAction,
 };
@@ -652,8 +652,7 @@ impl ApPeerBinding {
 /// The access point's one TX Block Ack TID, its Dialog Tokens skipping zero.
 const AP_TX_BLOCK_ACK_POLICY: TxBlockAckOriginatorPolicy = TxBlockAckOriginatorPolicy {
     tids: &[AP_TX_BLOCK_ACK_TID],
-    first_dialog_token: 1,
-    next_dialog_token: next_nonzero_dialog_token,
+    dialog_tokens: DialogTokenSequence::NONZERO,
 };
 
 fn new_ap_tx_block_ack() -> Result<TxBlockAckOriginator<1>, ApServiceError> {

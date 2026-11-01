@@ -12,9 +12,9 @@
 //! whose attempts ran out, is offered no more in that association.
 
 use oer_ieee80211_core_upper_mac::block_ack::{
-    OperationalTxBlockAck, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckConfig, TxBlockAckOriginator,
-    TxBlockAckOriginatorConfig, TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy,
-    TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
+    DialogTokenSequence, OperationalTxBlockAck, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckConfig,
+    TxBlockAckOriginator, TxBlockAckOriginatorConfig, TxBlockAckOriginatorError,
+    TxBlockAckOriginatorPolicy, TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry,
 };
 use oer_ieee80211_wire::block_ack::frame::BlockAckAction;
 use oer_time::{Duration, Instant};
@@ -125,8 +125,7 @@ impl StaTxBlockAck {
         let originator = TxBlockAckOriginator::new(
             TxBlockAckOriginatorPolicy {
                 tids: &ALL_TIDS,
-                first_dialog_token: 1,
-                next_dialog_token: next_nonzero_dialog_token,
+                dialog_tokens: DialogTokenSequence::NONZERO,
             },
             TxBlockAckOriginatorConfig {
                 window: policy.window,
