@@ -340,6 +340,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         } else {
             None
         };
+        // Without a global cause, a configuration or a key removal, no
+        // owner is withdrawn (`withdrawal` names none): the common turn.
+        let selective = self.configuring.is_some()
+            || matches!(
+                self.pending_command,
+                Some(Command::Remove { .. })
+                    | Some(Command::Group {
+                        command: GroupCommand::Remove { .. },
+                        ..
+                    })
+            );
+        if global.is_none() && !selective {
+            return true;
+        }
         for index in 0..4 {
             if self.running[index].is_some() {
                 continue;
@@ -691,7 +705,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             }
         }
-        if again || served_tx {
+        // Lends and returns wake the driver only when it asks: out of
+        // receive room, or with many units in the network, where the radio
+        // may run short. Otherwise the next interrupt's poll counts them.
+        let network = &held.storage.shared.network;
+        let starved = held.rx_out.get() >= TX_TICKETS && network.want_room();
+        let short = network.held() >= D::LENT_RX / 2 && network.want_units();
+        if again || served_tx || starved || short {
             cx.waker().wake_by_ref();
         }
         if self.configuring.is_some() {

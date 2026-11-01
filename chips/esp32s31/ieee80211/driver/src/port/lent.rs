@@ -25,6 +25,10 @@ pub(super) struct NetworkCredit {
     transferred: AtomicUsize,
     /// A lent unit was dropped since the driver last looked.
     returned: AtomicBool,
+    /// The driver ran out of receive room: the next lend wakes it.
+    wants_room: AtomicBool,
+    /// The network holds many units: the next return wakes the driver.
+    wants_units: AtomicBool,
     /// The task that waits for the network's units. Their owners drop in
     /// tasks of the network's executor, never in an interrupt handler.
     network: AtomicWaker,
@@ -36,6 +40,8 @@ impl NetworkCredit {
             held: AtomicUsize::new(0),
             transferred: AtomicUsize::new(0),
             returned: AtomicBool::new(false),
+            wants_room: AtomicBool::new(false),
+            wants_units: AtomicBool::new(false),
             network: AtomicWaker::new(),
         }
     }
@@ -65,11 +71,27 @@ impl NetworkCredit {
         }
     }
 
+    /// Ask the next lend to wake the driver, which has no receive room.
+    /// Whether a lend came first: the driver then polls again itself.
+    pub(super) fn want_room(&self) -> bool {
+        self.wants_room.store(true, Ordering::Release);
+        self.transferred.load(Ordering::Acquire) != 0
+    }
+
+    /// Ask the next return to wake the driver, while the network holds many
+    /// units. Whether a return came first: the driver then polls again.
+    pub(super) fn want_units(&self) -> bool {
+        self.wants_units.store(true, Ordering::Release);
+        self.returned.load(Ordering::Acquire)
+    }
+
     /// Start a new installation's count. The caller has seen the previous
     /// installation return every unit.
     pub(super) fn reset(&self) {
         self.transferred.store(0, Ordering::Release);
         self.returned.store(false, Ordering::Release);
+        self.wants_room.store(false, Ordering::Release);
+        self.wants_units.store(false, Ordering::Release);
     }
 }
 
@@ -91,11 +113,11 @@ struct ReturnOnDrop {
 impl Drop for ReturnOnDrop {
     fn drop(&mut self) {
         self.credit.held.fetch_sub(1, Ordering::AcqRel);
-        // The driver takes the flag on its next poll: only the return that
-        // raises it wakes the driver, the later ones join that poll.
-        let pending = self.credit.returned.swap(true, Ordering::AcqRel);
+        // The driver takes the flag on its next poll, which an interrupt
+        // brings: a return wakes it only when it asked, holding few units.
+        self.credit.returned.store(true, Ordering::Release);
         self.credit.network.wake();
-        if !pending {
+        if self.credit.wants_units.swap(false, Ordering::AcqRel) {
             self.driver.wake();
         }
     }
@@ -142,11 +164,11 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
         }
         // Credit first: the network counts the unit before the driver stops.
         credit.held.fetch_add(1, Ordering::AcqRel);
-        // As for returns: the first transfer since the driver's last count
-        // wakes it; the later ones join that poll.
-        let pending = credit.transferred.fetch_add(1, Ordering::AcqRel);
+        // The driver takes the count on its next poll: a lend wakes it only
+        // when it asked, out of receive room.
+        credit.transferred.fetch_add(1, Ordering::AcqRel);
         let (unit, driver) = self.into_unit();
-        if pending == 0 {
+        if credit.wants_room.swap(false, Ordering::AcqRel) {
             driver.wake();
         }
         Ok(LentReceive {

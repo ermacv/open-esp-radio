@@ -1631,6 +1631,10 @@ where
         loop {
             let mut abort_ended = false;
             for index in 0..LOWER_MAC_TX_QUEUES {
+                // An idle queue is skipped without moving its slot.
+                if self.queues[index].is_none() {
+                    continue;
+                }
                 let Some(attempt) = self.queues[index].take() else {
                     continue;
                 };
