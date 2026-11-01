@@ -353,13 +353,14 @@ impl<M: MakeFuture, T> Claim<M, T> {
 /// A task's poll boundary: the instance of the executor's one poll of a
 /// task's future, [`poll_task`], for that task's future type.
 ///
-/// Each task declared by [`tasks!`](crate::tasks) exports its boundary,
-/// `#[used]`, as `__OER_TASK_POLL.<module path of the task's slot>`. The
-/// image checks read these records, not a function name: every direct call
-/// of a recorded boundary is a task poll and the boundary is the task's
-/// root; a recorded boundary without a direct call (inlined or never
-/// polled), or an image with the executor's waker and no record, fails the
-/// analysis.
+/// Each task declared by [`tasks!`](crate::tasks) exports its boundary as
+/// `__OER_TASK_POLL.<module path of the task's slot>`. The task's start
+/// function refers to the record, so an image holds it exactly when it can
+/// start the task: a task it never starts is never polled and leaves no
+/// record. The image checks read these records, not a function name: every
+/// direct call of a recorded boundary is a task poll and the boundary is the
+/// task's root; a recorded boundary without a direct call (an inlined poll),
+/// or an image with the executor's waker and no record, fails the analysis.
 #[derive(Clone, Copy)]
 pub struct PollBoundary(
     #[allow(dead_code, reason = "the image checks read the record from the image")]
@@ -728,6 +729,10 @@ macro_rules! tasks {
                     fn start($($argument: $type),*) -> $name::Start {
                         $crate::task::once(move || $body($($argument),*))
                     }
+                    // The task's poll record stays in the image exactly
+                    // when the image can start the task: a task it never
+                    // starts is never polled and leaves no record.
+                    ::core::hint::black_box(&$name::POLL_BOUNDARY);
                     spawner.start(&$name::TASK, start($($argument),*))
                 }
             )*
@@ -749,11 +754,12 @@ macro_rules! tasks {
             pub(super) const TASK_INDEX: u8 = $index;
             pub(super) static TASK: $crate::task::Task<Start, super::$set> =
                 $crate::task::Task::new(TASK_INDEX);
-            /// The task's poll boundary, for the image checks. `#[used]`
-            /// keeps the record and the exported name lets the tools find it.
-            #[used]
+            /// The task's poll boundary, for the image checks. The task's
+            /// start function refers to it, which keeps it in an image that
+            /// can start the task, and the exported name lets the tools
+            /// find it.
             #[unsafe(export_name = concat!("__OER_TASK_POLL.", module_path!()))]
-            static POLL_BOUNDARY: $crate::task::PollBoundary =
+            pub(super) static POLL_BOUNDARY: $crate::task::PollBoundary =
                 $crate::task::Task::<Start, super::$set>::BOUNDARY;
         }
         $crate::tasks!(@slots $set [$index + 1] $($rest)*);

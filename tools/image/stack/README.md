@@ -356,8 +356,8 @@ call list substitutes for these machine and location facts.
 
 `task_poll_resolutions` finds the executor's task polls: the executor
 (`oer-espressif-executor`) polls each declared task by a direct call of its
-never-inlined poll boundary, whose address each task exports in a `#[used]`
-record (`TASK_POLL_RECORD`, `__OER_TASK_POLL.<module path>`, one relocated
+never-inlined poll boundary, whose address each task an image can start
+exports in a record (`TASK_POLL_RECORD`, `__OER_TASK_POLL.<module path>`, one relocated
 read-only word). Every direct call of a recorded boundary is a task poll site
 (`Resolutions::task_polls`) and the boundary is the task's root
 (`Resolutions::task_roots`); no function name is read. A record whose

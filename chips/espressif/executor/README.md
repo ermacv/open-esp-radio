@@ -29,8 +29,11 @@ writes the start and only then sets its bit; only the start crosses
 contexts, so it is `Send`, and the future need not be. Every waker has one vtable, the binding's, whose data is the executor and the task's
 index, never a pointer; the timer queue keeps one deadline per task by that
 index. Each task's poll is one direct call of its never-inlined instance of
-`task::poll_task`, which the declaration exports as a `#[used]` record,
-`__OER_TASK_POLL.<module path>`, for the image checks. Both executors
+`task::poll_task`, which the declaration exports as a record,
+`__OER_TASK_POLL.<module path>`, for the image checks. The task's start
+function refers to the record, so an image holds it exactly when it can start
+the task; a task it never starts, such as a radio task of an image that
+starts no station, leaves no record. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 `TaskId`. An executor's context is the executor that runs on the core and
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt
