@@ -184,6 +184,51 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
 }
 
 #[test]
+fn a_64_mpdu_request_gets_the_32_mpdu_window_its_frames_hold_and_reorders_across_it() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 32>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    let body = encode_addba_request(5, 0, 64, 0, false, SequenceNumber::new(100).unwrap()).unwrap();
+    let request = parse_block_ack_action(&body).unwrap();
+    view.offer(now(1), 7, bssid(), request, true, &mut port, &mut ())
+        .unwrap();
+    assert_eq!(
+        port.0,
+        [Call::Add {
+            slot: 10,
+            tid: 0,
+            window: 32
+        }]
+    );
+    let reply = view.next_reply().unwrap();
+    match parse_block_ack_action(&reply.body).unwrap() {
+        BlockAckAction::AddbaResponse { status, window, .. } => {
+            assert_eq!((status, window), (status_code::SUCCESS, 32));
+        }
+        other => panic!("expected an ADDBA Response, got {other:?}"),
+    }
+    view.sent(reply.place);
+    // The first MPDU of a 32-MPDU aggregate is missing: the other 31 wait,
+    // then all 32 leave in sequence order when it arrives.
+    for sequence in 101..132 {
+        assert!(matches!(
+            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            RxDisposition::Retained
+        ));
+    }
+    assert!(view.pop_ready().is_none());
+    assert!(matches!(
+        view.receive(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
+        .map(|(frame, _)| frame.0)
+        .collect();
+    let expected: Vec<_> = (100..132).map(|sequence| qos_data(0, sequence).0).collect();
+    assert_eq!(order, expected);
+}
+
+#[test]
 fn a_station_without_agreements_declines_through_the_reply_queue() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();

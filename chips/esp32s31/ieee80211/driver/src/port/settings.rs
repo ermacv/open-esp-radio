@@ -2,7 +2,7 @@
 
 use super::*;
 use atomic_words::AtomicWords;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicUsize, Ordering};
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
     extensions::wmm::{WmmAcParameters, WmmParameterSet},
@@ -23,6 +23,50 @@ impl Flag {
     }
     pub(super) fn replace(&self, value: bool) -> bool {
         self.0.swap(value, Ordering::SeqCst)
+    }
+}
+
+/// The received units P2 queued for P1 that P1 has not taken, and whether
+/// P2 waits for P1 to take one. P2 asks before it reads the count again,
+/// and P1 takes before it reads the ask, so a take after P2 saw the queue
+/// full always finds the ask, on one hart or across two.
+pub(super) struct ReceivedInFlight {
+    queued: AtomicUsize,
+    wanted: AtomicBool,
+}
+impl ReceivedInFlight {
+    pub(super) const fn new() -> Self {
+        Self {
+            queued: AtomicUsize::new(0),
+            wanted: AtomicBool::new(false),
+        }
+    }
+    /// P2 queued one unit.
+    pub(super) fn queue(&self) {
+        self.queued.fetch_add(1, Ordering::SeqCst);
+    }
+    /// The units P2 may still queue under `bound`.
+    pub(super) fn room(&self, bound: usize) -> usize {
+        bound.saturating_sub(self.queued.load(Ordering::SeqCst))
+    }
+    /// P2 waits for P1 to take a unit: P1's next take wakes it.
+    pub(super) fn want(&self) {
+        self.wanted.store(true, Ordering::SeqCst);
+    }
+    /// P1 took one unit: whether P2 waits for it. A take of a unit never
+    /// queued is refused and leaves the count as it was.
+    pub(super) fn take(&self) -> Result<bool, SettingFault> {
+        if self.queued.fetch_sub(1, Ordering::SeqCst) == 0 {
+            // The count wrapped below zero for one step; P2 read no room.
+            self.queued.fetch_add(1, Ordering::SeqCst);
+            return Err(SettingFault::ReceivedUnqueued);
+        }
+        Ok(self.wanted.swap(false, Ordering::SeqCst))
+    }
+    /// A new installation queued nothing yet.
+    pub(super) fn reset(&self) {
+        self.queued.store(0, Ordering::SeqCst);
+        self.wanted.store(false, Ordering::SeqCst);
     }
 }
 
@@ -50,6 +94,8 @@ pub enum SettingFault {
     EdcaLifetime,
     /// A published Block Ack record holds no sequence number.
     BlockAckSequence,
+    /// P1 took a received unit P2 never queued.
+    ReceivedUnqueued,
 }
 
 /// One 2.4 GHz channel, 20 or 40 MHz wide: its number and its width in
@@ -347,6 +393,26 @@ mod tests {
         let five_ghz = Channel::ghz5(36, ChannelWidth::Mhz20).expect("channel 36");
         assert_eq!(setting.set(five_ghz), Err(SettingFault::UnsupportedChannel));
         assert_eq!(setting.get(), Ok(six));
+    }
+
+    #[test]
+    fn a_take_reports_a_waiting_driver_once_and_refuses_a_unit_never_queued() {
+        let received = ReceivedInFlight::new();
+        assert_eq!(received.take(), Err(SettingFault::ReceivedUnqueued));
+        assert_eq!(received.room(8), 8);
+        for _ in 0..8 {
+            received.queue();
+        }
+        assert_eq!(received.room(8), 0);
+        assert_eq!(received.take(), Ok(false));
+        received.want();
+        assert_eq!(received.take(), Ok(true));
+        assert_eq!(received.take(), Ok(false));
+        assert_eq!(received.room(8), 3);
+        received.reset();
+        assert_eq!(received.room(8), 8);
+        assert_eq!(received.take(), Err(SettingFault::ReceivedUnqueued));
+        assert_eq!(received.room(8), 8);
     }
 
     #[test]

@@ -342,7 +342,7 @@ type Io<'c, W> =
 type Running<'s, 'c: 's, 'p: 's, 'id: 'p, W: Binding> =
     impl Future<Output = Placed<'s, Completed<'p, 'id, W>>>;
 const RX_BA_BANKS: usize = 8;
-const RX_BA_FRAMES: usize = port::TX_TICKETS;
+const RX_BA_FRAMES: usize = port::RX_HELD;
 pub(crate) struct ServiceStorage<W: Binding> {
     service: StaticPlace<Service<'static, W>>,
     receive: StaticPlace<RxBlockAckStorage<'static, Family<W::Id, W>, RX_BA_BANKS, RX_BA_FRAMES>>,

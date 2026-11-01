@@ -534,7 +534,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         device: &mut D,
         unit: D::Receive,
     ) -> Result<(), Fault> {
-        if held.rx_out.get() >= TX_TICKETS {
+        if held.rx_out.get() >= RX_HELD {
             core::mem::forget(unit);
             return Err(Fault::Capacity);
         }
@@ -575,6 +575,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 core::mem::forget(event);
                 return Err(Fault::Capacity);
             }
+            held.storage.shared.received.queue();
             held.storage.shared.wake_body();
         } else {
             device.recycle(unit);
@@ -668,11 +669,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // One turn serves up to `EVENTS_PER_POLL` events. A turn that ends
         // on `Pending` is registered for the next one; a turn that used its
         // budget, or served a TX wake whose completions freed queues, polls
-        // again.
+        // again. Received units wait in the ring while P1 holds
+        // `RX_HELD` or has not taken `RX_IN_FLIGHT` queued ones.
         let mut again = true;
         let mut served_tx = false;
+        let received = &held.storage.shared.received;
         for _ in 0..EVENTS_PER_POLL {
-            match device.poll_receive(TX_TICKETS - held.rx_out.get(), cx) {
+            let room = RX_HELD
+                .saturating_sub(held.rx_out.get())
+                .min(received.room(RX_IN_FLIGHT));
+            match device.poll_receive(room, cx) {
                 Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
                     let mut sink = Sink::default();
                     core_views::service::<Id, D, B>(
@@ -709,9 +715,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // receive room, or with many units in the network, where the radio
         // may run short. Otherwise the next interrupt's poll counts them.
         let network = &held.storage.shared.network;
-        let starved = held.rx_out.get() >= TX_TICKETS && network.want_room();
+        let starved = held.rx_out.get() >= RX_HELD && network.want_room();
         let short = network.held() >= D::LENT_RX / 2 && network.want_units();
-        if again || served_tx || starved || short {
+        // P1's next take wakes a driver its queued units hold back; one it
+        // took meanwhile leaves room now.
+        let mut waiting = false;
+        if received.room(RX_IN_FLIGHT) == 0 && held.rx_out.get() < RX_HELD {
+            received.want();
+            waiting = received.room(RX_IN_FLIGHT) != 0;
+        }
+        if again || served_tx || starved || short || waiting {
             cx.waker().wake_by_ref();
         }
         if self.configuring.is_some() {
@@ -854,7 +867,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         self.pending_command = Some(Command::Group { at, command });
                         break;
                     }
-                    match device.poll_rx_cut(TX_TICKETS - held.rx_out.get(), cx) {
+                    match device.poll_rx_cut(RX_HELD - held.rx_out.get(), cx) {
                         Poll::Ready(Ok(Some(unit))) => {
                             self.receive(held, device, unit)?;
                             self.pending_command = Some(Command::Group { at, command });

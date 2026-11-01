@@ -181,3 +181,155 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
     assert!(observed.borrow().rx_saturated_polls > 0);
     assert_eq!(super::count(&released), FRAMES);
 }
+
+/// P1 keeps every received unit, as a reorder window with a hole does,
+/// until it holds `RX_HELD`, then returns them all.
+struct RetainingReceive {
+    observed: Rc<RefCell<Observed>>,
+    released: super::Released,
+    rx_interrupt: Waker,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RetainingReceive {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = owner.enable().await.ok().expect("model enable");
+        {
+            let mut phase = owner.phase();
+            phase.station().configure(
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            assert!(matches!(
+                phase.next_event().await,
+                Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
+            ));
+            {
+                let mut observed = self.observed.borrow_mut();
+                observed.continuous_rx = true;
+                observed.received.extend((0..=RX_HELD).map(|_| TestReceive {
+                    bytes: super::super::data_frame(STATION),
+                    view: 0..26,
+                    released: self.released.clone(),
+                }));
+            }
+            self.rx_interrupt.wake_by_ref();
+            let mut kept = Vec::new();
+            for _ in 0..RX_HELD {
+                match phase.next_event().await {
+                    Ok(Ok(LowerMacEvent::Received { frame, .. })) => kept.push(frame),
+                    _ => panic!("a retained RX frame"),
+                }
+            }
+            // P1 holds its bound: the last unit stays with the radio.
+            assert_eq!(self.observed.borrow().received.len(), 1);
+            for frame in kept {
+                phase.recycle(frame);
+            }
+            match phase.next_event().await {
+                Ok(Ok(LowerMacEvent::Received { frame, .. })) => phase.recycle(frame),
+                _ => panic!("the unit after the held ones"),
+            }
+            let mut observed = self.observed.borrow_mut();
+            assert!(observed.received.is_empty());
+            observed.continuous_rx = false;
+        }
+        let owner = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+            .ok()
+            .expect("model disable");
+        radio::Ended::uninstall(owner, (), ())
+    }
+}
+
+#[test]
+fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
+    let (parts, observed, clock) = installed(Vec::new());
+    clock.1.set(true);
+    observed.borrow_mut().check_context = true;
+    observed.borrow_mut().context = 2;
+    let released = super::Released::default();
+    let p1_ready = Arc::new(Ready(AtomicBool::new(true)));
+    let p2_ready = Arc::new(Ready(AtomicBool::new(true)));
+    let p1_waker = Waker::from(p1_ready.clone());
+    let p2_waker = Waker::from(p2_ready.clone());
+    let mut most_untaken = 0;
+    block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let (front, registration) = slot
+            .register(Backend::new(parts).ok().expect("model backend"))
+            .ok()
+            .expect("one installation");
+        let mut p2 = Some(Box::pin(crate::port::Registration::new(registration).run()));
+        let mut p1 = Box::pin(radio::run_port(
+            front,
+            RetainingReceive {
+                observed: observed.clone(),
+                released: released.clone(),
+                rx_interrupt: p2_waker.clone(),
+            },
+        ));
+        let (mut p1_done, mut p2_done) = (false, false);
+        for _ in 0..2000 {
+            if !p2_done && p2_ready.0.swap(false, Ordering::Relaxed) {
+                observed.borrow_mut().context = 2;
+                observed.borrow_mut().rx_poll_steps = 0;
+                let before = observed.borrow().rx_delivered;
+                if let Poll::Ready(retired) = p2
+                    .as_mut()
+                    .expect("registered P2 task")
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&p2_waker))
+                {
+                    drop(p2.take());
+                    retired.expect("clean driver retirement").unregistered();
+                    p2_done = true;
+                }
+                // P1 takes nothing while P2 runs: one P2 poll queues what
+                // P1 has not taken.
+                most_untaken = most_untaken.max(observed.borrow().rx_delivered - before);
+            } else if !p1_done && p1_ready.0.swap(false, Ordering::Relaxed) {
+                observed.borrow_mut().context = 1;
+                if let Poll::Ready(end) = p1.as_mut().poll(&mut Context::from_waker(&p1_waker)) {
+                    let radio::PortEnd::Uninstalled { joined, .. } = end else {
+                        panic!("clean RX uninstall");
+                    };
+                    drop(joined);
+                    p1_done = true;
+                }
+            } else {
+                assert!(
+                    clock.0.advance_to_next_deadline().is_some(),
+                    "a sleeping task has a virtual deadline"
+                );
+                p2_ready.0.store(true, Ordering::Relaxed);
+                p1_ready.0.store(true, Ordering::Relaxed);
+            }
+            if p1_done && p2_done {
+                break;
+            }
+        }
+        assert!(
+            p1_done && p2_done,
+            "both priorities finish in bounded steps"
+        );
+    }));
+    assert_eq!(observed.borrow().rx_delivered, RX_HELD + 1);
+    assert_eq!(super::count(&released), RX_HELD + 1);
+    assert!(most_untaken <= 8, "{most_untaken} units queued untaken");
+}
