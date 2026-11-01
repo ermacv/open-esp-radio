@@ -449,18 +449,16 @@ fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
             maintenance.owner, maintenance.reason
         );
     }
+    let without_profile = described
+        .get("without_profile")
+        .and_then(serde_json::Value::as_str);
     println!(
-        "  reset paths: rts, jtag{}",
-        if target
-            .board
-            .reset
-            .contains(&oer_lab_model::ResetStep::Power)
-        {
-            ", power (hub port)"
-        } else {
-            ""
-        }
+        "  reset paths: {}",
+        reset_paths(&target.board, without_profile.is_none())
     );
+    if let Some(why) = without_profile {
+        println!("  chip profile: none: {why}");
+    }
     // A text-protocol peer answers SYNC; a HIL runtime answers only its binary
     // protocol, which the runner speaks; a board between leases waits in its
     // ROM's download mode and answers nothing.
@@ -486,9 +484,53 @@ fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
     Ok(())
 }
 
+/// The reset paths the service takes for `board`: RTS and JTAG need its
+/// chip's profile, a power cycle only its hub port.
+fn reset_paths(board: &oer_lab_model::Board, profiled: bool) -> String {
+    let power = board.reset.contains(&oer_lab_model::ResetStep::Power);
+    let paths = [
+        (profiled, "rts"),
+        (profiled, "jtag"),
+        (profiled && power, "download"),
+        (power, "power (hub port)"),
+    ];
+    let paths = paths
+        .iter()
+        .filter(|(reached, _)| *reached)
+        .map(|(_, path)| *path)
+        .collect::<Vec<_>>();
+    if paths.is_empty() {
+        "none".to_owned()
+    } else {
+        paths.join(", ")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_board_without_a_chip_profile_reaches_only_its_hub_power() {
+        let stand = |chip: &str, reset: &str| {
+            oer_lab_model::Stand::parse(&format!(
+                "schema = 2\n[[board]]\nid = \"b\"\nusb-serial = \"02:00:00:00:00:01\"\n\
+                 chip = \"{chip}\"\nreset = {reset}\n"
+            ))
+            .unwrap()
+            .boards
+            .remove(0)
+        };
+        let powered = stand("esp32c5", r#"["jtag", "power"]"#);
+        assert_eq!(reset_paths(&powered, false), "power (hub port)");
+        assert_eq!(
+            reset_paths(&powered, true),
+            "rts, jtag, download, power (hub port)"
+        );
+        let unpowered = stand("esp32c5", r#"["jtag"]"#);
+        assert_eq!(reset_paths(&unpowered, false), "none");
+        assert_eq!(reset_paths(&unpowered, true), "rts, jtag");
+    }
 
     #[test]
     fn a_soak_counts_only_resets_that_boot_from_flash() {
