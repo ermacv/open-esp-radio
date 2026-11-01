@@ -8,20 +8,33 @@ defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
 
 ```rust
-oer_espressif::entry!(boot);
+oer_espressif::entry!(boot, hart1 = network);
+
+static LINK: Channel<Request, Reply, 1> = Channel::new();
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::new(*b"DE", 6, 10)?;
-    let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
-    let (net, boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
-    Ok(boot.run(app(station, net)))
+    let (station, status) = Station::start(p.wifi, &aes, config, &mut boot)?;
+    let link = LINK.application(&mut boot)?;
+    Ok(boot.run(app(station, status, link)))
 }
 
-async fn app(mut station: Station, net: Net) -> AppResult {
+fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
+    let device = p.device.ok_or(Error::NoDevice)?;
+    let (net, mut boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
+    let link = LINK.second(&mut boot)?;
+    Ok(boot.run(sockets(net, link)))
+}
+
+async fn app(mut station: Station, status: NetStatus, link: ApplicationEnd<Request, Reply, 1>) -> AppResult {
     station.connect(wifi::Profile::wpa2(b"ssid", b"passphrase")?).await?;
-    let ipv4 = net.wait_ipv4().await?;
-    // sockets on `net.stack()`
+    let ipv4 = status.wait_ipv4().await?;
+    // requests to the sockets' future over `link`
+}
+
+async fn sockets(net: Net, link: SecondEnd<Request, Reply, 1>) -> AppResult {
+    // sockets on `net.stack()`, answering `link`
 }
 ```
 
@@ -37,17 +50,30 @@ calls `boot` once
 on hart 0, before any executor and with interrupts disabled. `boot` moves
 peripherals into drivers and services through the boot context (`Boot`):
 their interrupt bindings, executors and service tasks are made there and
-nowhere else. `Boot::run` ends the boot with the application's future. The
-library then installs the system timer (the radio executor writes it when
-a station started, the application executor otherwise), enables interrupts
-and runs the application executor in thread mode with its service tasks
-(`SdkTasks`) and the image's two futures as the executor's roots: the IP
-service, at the image's pool sizes, and the application. They stay in the
-frame of the library's run, which never returns, and are tasks of the
-executor after `SdkTasks`; no static slot names their types, so an image
-declares no task set and needs no unstable feature. `boot` returns `impl
-Started`, which names both future types: `Boot::run` makes it, and
-`wifi::Net::start` returns the boot with its IP service.
+nowhere else. `Boot::run` ends the boot with the application's future.
+
+`entry!(boot, hart1 = boot1)` names the second boot. The library calls
+`boot1` once `boot` returned, still before any executor, with what the boot
+handed it (`Hart1Peripherals`: the station's network device, which
+`Station::start` keeps for it) and its own context (`Hart1Boot`). `boot1`
+starts the IP service (`wifi::Net::start`), whose stack and sockets stay in
+its future, and ends with `Hart1Boot::run`. Data of the image's own reaches
+it through its statics: a `Channel` links the application's future and the
+second boot's. `entry!(boot)` declares no second boot; a station's device
+it would take tells the station that no network takes its frames.
+
+The library then installs the system timer (the radio executor writes it
+when a station started, the application executor otherwise), enables
+interrupts and runs the application executor in thread mode with its
+service tasks (`SdkTasks`) and the image's three futures as the executor's
+roots: the second boot's IP service, at the image's pool sizes, the second
+boot's future and the application. They stay in the frame of the library's
+run, which never returns, and are tasks of the executor after `SdkTasks`; no
+static slot names their types, so an image declares no task set and needs
+no unstable feature. `boot` returns `impl Started` and `boot1` `impl
+Hart1Started`, which name the future types: `Boot::run` and
+`Hart1Boot::run` make them, and `wifi::Net::start` returns the second
+boot's context with its IP service.
 
 ## Defaults and settings
 
@@ -60,7 +86,7 @@ a HIL image of one function build it:
 | Reconnect after a lost association | every 1 s (`wifi::RECONNECT`) | `wifi::Config::with_reconnect(interval)`, `without_reconnect()` |
 | Drain at a stop | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
 | AES client seats | 4 (`AES_CLIENTS`) | `static SEATS: AesSeats<C>`, `Aes::start_with(p.aes, &SEATS, &mut boot)` |
-| IP pools (receive, transmit, general frames) | 8, 8, 8 (`wifi::RX`, `TX`, `GENERAL`) | `static POOLS: wifi::Pools<RX, TX, GENERAL>`, `Net::start_with(device, &POOLS, config, boot)` |
+| IP pools (receive, transmit, general frames) | 8, 8, 8 (`wifi::RX`, `TX`, `GENERAL`) | `static POOLS: wifi::Pools<RX, TX, GENERAL>`, `Net::start_with(device, &POOLS, config, boot)` in the second boot |
 
 A zero interval or deadline is refused (`ConfigError`). The seats' count
 (1 to 32) is the storage's, not a type's: `Aes` and `AesClient` are the same
@@ -115,12 +141,18 @@ for the application's next connect, with the same or another profile.
 `stop()` leaves the network and stops the station for good: the future ends
 once the radio retired, with `StopError::Failed` when the station ended by
 a failure instead, and a later connect answers `ConnectError::Stopped`.
-`wifi::Net::start`
-runs the existing IP service (`oer-embassy-net`) over the station's device;
+`Station::start` returns the station and the IP service's status for the
+application (`NetStatus`), and keeps the station's network device for the
+second boot. `wifi::Net::start`, in the second boot,
+runs the existing IP service (`oer-embassy-net`) over that device;
 `wait_ipv4` ends with the configuration over an up link and keeps waiting
 across a link loss, `wait_link_down` ends on a loss or a new link epoch,
 and both end with `NetError::Stopped` or `Failed` when the service ends.
-Sockets open on `net.stack()` (`embassy_net`, re-exported). The
+`Net` has these waits for the second boot's future, `NetStatus` the same
+and `status()` for the application's: the service publishes each status
+whole for it and wakes it. A `NetStatus` stays with the application's
+future (`!Send`), the one task its waits wake. Sockets open on
+`net.stack()` (`embassy_net`, re-exported) in the second boot's future. The
 station lends received frames to the IP service in place; when the station
 stops (by `stop()` or after a failure, within the drain deadline) the IP
 service stops first and returns every buffer it holds, and its waits end
@@ -159,6 +191,19 @@ returns `false`; a fatal note still reaches the host.
 | An `AesClient::execute` or key unwrap that ended without its response (polled outside the service's context, or leaked) | its request or response stays in the seat under its request number; the client's next request withdraws or erases it, or waits for it while it runs, and never takes its response |
 | An `AesClient` with a running request | its seat is freed once the service finished it; in the boot, before the executor runs, a dropped client keeps its seat |
 | `Net::wait_ipv4` or `wait_link_down` | it frees its waiter slot; dropped outside the application's context, its waker stays until the next change takes it |
+| `NetStatus::status`, `wait_ipv4` or `wait_link_down` | nothing to free: the application's waker stays registered until the next publication wakes it |
+| `ApplicationEnd`/`SecondEnd::send` or `receive` | the value not sent stays with the caller; a received value is never lost: it stays in the queue until a receive returns it |
+
+## Channels
+
+`static LINK: Channel<A, B, N>` links the application's future and the
+second boot's: `A` values go to the second boot, `B` values back, each way
+a queue of `N` (`A` and `B` are `Send`). The boot takes the application's
+end (`LINK.application(&mut boot)`), which splits the channel; the second
+boot takes its end after it (`LINK.second(&mut boot1)`). Each end is taken
+once (`Error::Channel`). `send` waits for room and `receive` for a value;
+`try_send` and `try_receive` do not wait. An end stays with the future that
+polls it (`!Send`).
 
 ## Limits
 

@@ -52,7 +52,7 @@ impl Aes {
     /// # Errors
     /// [`Error::InterruptRouted`] when the table routes IRQ55,
     /// [`Error::AlreadyStarted`] for a second service.
-    pub fn start<N>(aes: AesPeripheral, boot: &mut Boot<N>) -> Result<Self, Error> {
+    pub fn start(aes: AesPeripheral, boot: &mut Boot) -> Result<Self, Error> {
         Self::start_with(aes, &SEATS, boot)
     }
 
@@ -60,10 +60,10 @@ impl Aes {
     ///
     /// # Errors
     /// As [`Self::start`].
-    pub fn start_with<const C: usize, N>(
+    pub fn start_with<const C: usize>(
         aes: AesPeripheral,
         seats: &'static AesSeats<C>,
-        boot: &mut Boot<N>,
+        boot: &mut Boot,
     ) -> Result<Self, Error> {
         if boot.pending.aes.is_some() {
             return Err(Error::AlreadyStarted);

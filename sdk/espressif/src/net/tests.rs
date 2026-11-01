@@ -242,3 +242,72 @@ fn a_dropped_or_ended_wait_frees_its_slot_for_the_next_one() {
     assert_eq!(count.0.load(Ordering::Relaxed), 1);
     assert_eq!(poll(wait.as_mut(), &live), Poll::Ready(Ok(LEASE)));
 }
+
+/// A notify that counts registrations, standing in for the application's.
+#[derive(Default)]
+struct CountedNotify(AtomicU32);
+
+impl QueueNotify for CountedNotify {
+    fn register(&self, _: &mut Context<'_>) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+    fn notify(&self) {}
+}
+
+#[test]
+fn a_published_wait_registers_before_it_reads_and_ends_with_the_lease() {
+    let published = Published::new();
+    let notify = CountedNotify::default();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut wait = pin!(published_ipv4(&published, &notify));
+    assert!(wait.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(notify.0.load(Ordering::Relaxed), 1);
+    published.publish(status(
+        LinkState::Up,
+        1,
+        Ipv4Status::Unconfigured,
+        Lifecycle::Running,
+    ));
+    assert!(wait.as_mut().poll(&mut cx).is_pending(), "no lease yet");
+    published.publish(status(
+        LinkState::Up,
+        1,
+        Ipv4Status::Lease(LEASE),
+        Lifecycle::Running,
+    ));
+    assert_eq!(wait.as_mut().poll(&mut cx), Poll::Ready(Ok(LEASE)));
+}
+
+#[test]
+fn a_published_link_wait_ends_on_a_new_epoch_and_a_stop_ends_every_wait() {
+    let published = Published::new();
+    let notify = CountedNotify::default();
+    let mut cx = Context::from_waker(Waker::noop());
+    published.publish(status(
+        LinkState::Up,
+        4,
+        Ipv4Status::Lease(LEASE),
+        Lifecycle::Running,
+    ));
+    let mut down = pin!(published_link_down(&published, &notify));
+    assert!(down.as_mut().poll(&mut cx).is_pending());
+    published.publish(status(
+        LinkState::Up,
+        5,
+        Ipv4Status::Lease(LEASE),
+        Lifecycle::Running,
+    ));
+    assert_eq!(down.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+
+    let mut ipv4 = pin!(published_ipv4(&published, &notify));
+    published.publish(status(
+        LinkState::Down,
+        5,
+        Ipv4Status::Unconfigured,
+        Lifecycle::Stopped,
+    ));
+    assert_eq!(
+        ipv4.as_mut().poll(&mut cx),
+        Poll::Ready(Err(NetError::Stopped))
+    );
+}

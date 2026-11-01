@@ -1,14 +1,16 @@
 // The SDK station image: the boot of the library's station example with
 // the console added and every channel scanned, the HIL agent serving the
 // base module, the SDK station and Wi-Fi station services, and one worker
-// that answers their requests in order.
+// that answers their requests in order. The second boot runs the IP
+// service and the line exchanges on its sockets.
 
 use oer_espressif::{
-    Aes, AppResult, Boot, Console, Error, Peripherals, Started,
+    Aes, AppResult, ApplicationEnd, Boot, Channel, Console, Error, Hart1Boot, Hart1Peripherals,
+    Hart1Started, Peripherals, SecondEnd, Started,
     time::{Duration, with_timeout},
     wifi::{
-        self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, Station,
-        StopError, embassy_net,
+        self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, NetStatus,
+        Station, StopError, embassy_net,
     },
 };
 use oer_hil_agent::base::Either;
@@ -43,19 +45,24 @@ const RX: usize = 32;
 const TX: usize = 16;
 static POOLS: wifi::Pools<RX, TX, 32> = wifi::Pools::new();
 
-oer_espressif::entry!(boot);
+/// The worker hands each line exchange to the second boot's future and
+/// hears how it ended.
+static EXCHANGES: Channel<Exchange, Exchanged, 1> = Channel::new();
+
+oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?;
-    let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
-    let (net, mut boot) = Net::start_with(device, &POOLS, NetConfig::Dhcpv4, boot)?;
+    let (station, net) = Station::start(p.wifi, &aes, config, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
+    let exchanges = EXCHANGES.application(&mut boot)?;
     let evidence = boot.evidence();
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
     let worker = Worker {
         station,
         net,
+        exchanges,
         phase: Phase::Idle,
         requests: inbox,
     };
@@ -68,10 +75,35 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     )))
 }
 
+/// The second boot: the IP service with the image's pools over the
+/// station's device, and the line exchanges on its sockets.
+fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
+    let device = p.device.ok_or(Error::NoDevice)?;
+    let (net, mut boot) = Net::start_with(device, &POOLS, NetConfig::Dhcpv4, boot)?;
+    let requests = EXCHANGES.second(&mut boot)?;
+    Ok(boot.run(exchanges(net, requests)))
+}
+
+/// Answer each line exchange the worker asks for.
+async fn exchanges(net: Net<RX, TX>, mut requests: SecondEnd<Exchange, Exchanged, 1>) -> AppResult {
+    loop {
+        let exchange = requests.receive().await;
+        let exchanged = if leased(net.status().ipv4).is_none() {
+            Exchanged::NoAddress
+        } else {
+            with_timeout(milliseconds(exchange.timeout_ms), echo(&net, &exchange))
+                .await
+                .unwrap_or(Exchanged::TimedOut)
+        };
+        requests.send(exchanged).await;
+    }
+}
+
 /// Answers the services' requests one at a time.
 struct Worker {
     station: Station,
-    net: Net<RX, TX>,
+    net: NetStatus,
+    exchanges: ApplicationEnd<Exchange, Exchanged, 1>,
     /// Where the Wi-Fi station service's one join per boot is.
     phase: Phase,
     requests: Inbox<'static, Requests>,
@@ -94,7 +126,9 @@ impl Worker {
                 Either::First(Either::First(Request::WaitLinkDown(WaitLinkDown { timeout_ms }))) => {
                     answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
-                Either::First(Either::First(Request::GetStatus(_))) => answer(identity, &self.status()),
+                Either::First(Either::First(Request::GetStatus(_))) => {
+                    answer(identity, &self.status().await);
+                }
                 Either::First(Either::Second(request)) => self.station_request(identity, request).await,
                 // Traps once the answer is written; a write the console
                 // cannot confirm ends the application, which records it.
@@ -130,7 +164,7 @@ impl Worker {
         match wifi_station::phase::action(self.phase, request) {
             Action::Answer(Answer::Joined(joined)) => answer(identity, &joined),
             Action::Answer(Answer::Left(left)) => answer(identity, &left),
-            Action::Status => answer(identity, &self.station_status()),
+            Action::Status => answer(identity, &self.station_status().await),
             Action::Join(join) => {
                 let joined = self.join(join).await;
                 answer(identity, &joined);
@@ -174,14 +208,14 @@ impl Worker {
         left
     }
 
-    fn station_status(&self) -> wifi_station::Status {
+    async fn station_status(&self) -> wifi_station::Status {
         wifi_station::Status {
             address: self.station.address(),
             link: self.station.linked().map(|linked| wifi_station::Link {
                 bssid: linked.bssid,
                 channel: linked.channel,
             }),
-            ipv4: leased(self.net.status().ipv4).map(|configuration| wifi_station::Ipv4 {
+            ipv4: leased(self.net.status().await.ipv4).map(|configuration| wifi_station::Ipv4 {
                 address: configuration.address,
                 prefix: configuration.prefix_length,
                 gateway: configuration.gateway,
@@ -205,23 +239,14 @@ impl Worker {
         }
     }
 
-    async fn exchange(&self, exchange: Exchange) -> Exchanged {
-        if leased(self.net.status().ipv4).is_none() {
-            return Exchanged::NoAddress;
-        }
-        match with_timeout(
-            milliseconds(exchange.timeout_ms),
-            echo(&self.net, &exchange),
-        )
-        .await
-        {
-            Ok(exchanged) => exchanged,
-            Err(_) => Exchanged::TimedOut,
-        }
+    /// The second boot's future runs the exchange on its sockets.
+    async fn exchange(&mut self, exchange: Exchange) -> Exchanged {
+        self.exchanges.send(exchange).await;
+        self.exchanges.receive().await
     }
 
-    fn status(&self) -> Status {
-        let net = self.net.status();
+    async fn status(&self) -> Status {
+        let net = self.net.status().await;
         Status {
             address: self.station.address(),
             link_up: self.station.link().state == LinkState::Up,

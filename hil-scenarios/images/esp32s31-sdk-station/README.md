@@ -12,8 +12,10 @@ declares no interrupt, DMA or service task of its own. Its boot is the
 three differences: the `console` feature and `Console::open`, every
 channel scanned (`wifi::Config::all_channels`) in place of the profile's
 one, and its own IP pools, 32 receive, 16 transmit and 32 general frames
-(`Net::start_with` with a static `wifi::Pools`), in place of the library's
-8, 8 and 8. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-test-layers` checks only that
+(`Net::start_with` with a static `wifi::Pools` in the second boot), in
+place of the library's 8, 8 and 8. Like the example, its second boot
+(`entry!(boot, hart1 = network)`) starts the IP service and runs the line
+exchanges on its sockets; the worker reaches them over a `Channel`. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-test-layers` checks only that
 the image takes nothing the SDK places.
 
 | Service | Handler |
@@ -35,9 +37,11 @@ side. The boot identity is the library's (`oer_espressif::boot_id`).
   link leaves it idle for the next one.
 - **WaitIpv4** and **WaitLinkDown** bound the IP service's waits by the
   request's timeout.
-- **Exchange** opens one TCP socket (128-byte buffers) on the IP stack,
-  sends the line, reads as many bytes back and closes, within the request's
-  timeout; without an address it answers `NoAddress`.
+- **Exchange** goes to the second boot's future over the channel, which
+  opens one TCP socket (128-byte buffers) on the IP stack, sends the line,
+  reads as many bytes back and closes, within the request's timeout;
+  without an address it answers `NoAddress`. The worker waits for its
+  answer.
 - **GetStatus** answers the station's MAC address, whether its link is up
   and the IPv4 configuration over it.
 

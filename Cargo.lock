@@ -1917,6 +1917,7 @@ name = "oer-espressif"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "atomic-waker",
  "embassy-futures",
  "embassy-net",
  "embassy-time",

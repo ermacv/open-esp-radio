@@ -27,10 +27,15 @@ use core::{
 };
 
 use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
-use oer_memory::{ContextCell, Entered, ExecutionContext};
+use oer_memory::{ContextCell, Entered, ExecutionContext, QueueNotify};
 use oer_network_port::LinkState;
 
 pub use oer_embassy_net::ip::Error as ServiceError;
+
+#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
+pub(crate) mod published;
+#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(unused_imports))]
+pub(crate) use published::Published;
 
 /// Why a wait ended without its condition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -227,6 +232,70 @@ pub async fn wait_link_down<X: ExecutionContext, const K: usize>(
         })
     })
     .await
+}
+
+/// The application's waits on a [`Published`] status: each registers with
+/// `notify`, which the writer tells after every publication, then reads.
+/// A read concurrent with a write waits for that write's notify.
+#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
+pub(crate) async fn published_status(published: &Published, notify: &impl QueueNotify) -> Status {
+    core::future::poll_fn(|cx| {
+        notify.register(cx);
+        published.read().map_or(Poll::Pending, Poll::Ready)
+    })
+    .await
+}
+
+/// Wait for an IPv4 configuration over an up link in `published`.
+///
+/// # Errors
+/// The service stopped or failed.
+#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
+pub(crate) async fn published_ipv4(
+    published: &Published,
+    notify: &impl QueueNotify,
+) -> Result<Ipv4Configuration, NetError> {
+    core::future::poll_fn(|cx| poll_published(published, notify, cx, configured)).await
+}
+
+/// Wait until the link up when the wait starts goes down or comes up again
+/// in a later epoch.
+///
+/// # Errors
+/// As [`published_ipv4`].
+#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
+pub(crate) async fn published_link_down(
+    published: &Published,
+    notify: &impl QueueNotify,
+) -> Result<(), NetError> {
+    let start = published_status(published, notify).await.link;
+    core::future::poll_fn(|cx| {
+        poll_published(published, notify, cx, |current| {
+            let link = current.link;
+            (link.state == LinkState::Down || link.epoch != start.epoch).then_some(())
+        })
+    })
+    .await
+}
+
+#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
+fn poll_published<T>(
+    published: &Published,
+    notify: &impl QueueNotify,
+    cx: &mut Context<'_>,
+    done: impl Fn(&Status) -> Option<T>,
+) -> Poll<Result<T, NetError>> {
+    notify.register(cx);
+    let Ok(current) = published.read() else {
+        return Poll::Pending;
+    };
+    if let Some(value) = done(&current) {
+        return Poll::Ready(Ok(value));
+    }
+    match ended(&current) {
+        Some(error) => Poll::Ready(Err(error)),
+        None => Poll::Pending,
+    }
 }
 
 #[cfg(test)]
