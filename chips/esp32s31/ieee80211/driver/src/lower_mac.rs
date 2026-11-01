@@ -366,7 +366,27 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
         rx_block_ack_max_tid: RESOURCES.rx_block_ack_max_tid,
         rx_block_ack_max_window: RESOURCES.rx_block_ack_max_window,
         // The receive MAC acknowledges an MPDU carrying an A-MSDU inside an
-        // agreement's A-MPDU but never delivers it to the receive DMA.
+        // agreement's A-MPDU but never completes it in the receive DMA: it
+        // writes the whole MPDU, decrypted, into a ring buffer, then sets no
+        // end of frame on its descriptor, so no unit is ever completed.
+        // SOURCE: stand HIL `wifi-load` on s31-a, OpenWrt mt76 AP, HT40
+        // channel 13, WPA2-CCMP, A-MSDUs granted, RX 10 Mbit/s with RTT
+        // probes, 2026-11-01 (diagnostic builds, uncommitted). Each 5 s window
+        // lost 99 to 100 probes; a scan of the ring's not-completed buffers
+        // found 34 to 54 distinct QoS Data MPDUs with A-MSDU Present, none
+        // completed: their 802.11 header, CCMP header, decrypted subframes
+        // (both subframe headers, LLC/SNAP, IP), MIC and FCS were in place
+        // and their RX-control tail was zero. The station's SPP decision was
+        // NotNegotiated; programming the interface SPP A-MSDU bit to either
+        // value lost the same probes with the payload decrypted the same.
+        // No `dbg_read_rx_count` counter (abort, FCS-pass abort, TKIP error,
+        // buffer full and the rest) separated these MPDUs, and no RX-control
+        // refusal (MIC failure, RX failure) or chained unit was counted.
+        // That does not exclude a failed MIC: with every installed key's
+        // first word flipped for 200 ms under the same load, the MAC staged
+        // no protected unit (12 units, all unprotected), about 200 more
+        // datagrams were lost, and neither a MIC nor an RX failure was
+        // counted either.
         // SOURCE: stand HIL `wifi-load`, ESP32-S31 station, HT20 channel 13,
         // OpenWrt mt76 AP, WPA2-CCMP, 2026-11-01. An air capture showed
         // every RTT probe aggregated with a load datagram into one A-MSDU
