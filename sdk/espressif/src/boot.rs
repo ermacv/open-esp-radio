@@ -55,9 +55,26 @@ pub(crate) fn lowest_channel<T, E>(
     Err(None)
 }
 
+#[cfg(any(test, feature = "wifi"))]
+/// A station's stop deadline of `micros`: none for zero, which no network
+/// could meet.
+pub(crate) fn drain_micros(micros: u64) -> Option<core::num::NonZeroU64> {
+    core::num::NonZeroU64::new(micros)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_zero_stop_deadline_is_refused_and_any_other_kept() {
+        assert_eq!(drain_micros(0), None);
+        assert_eq!(drain_micros(1).map(core::num::NonZeroU64::get), Some(1));
+        assert_eq!(
+            drain_micros(2_000_000).map(core::num::NonZeroU64::get),
+            Some(2_000_000)
+        );
+    }
 
     #[test]
     fn a_published_identity_reads_back_whole() {

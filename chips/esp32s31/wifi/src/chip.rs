@@ -127,6 +127,12 @@ impl Config {
         self.reconnect = policy;
         self
     }
+    /// Replace the deadline of a stop no request timed, which
+    /// [`Self::new`] took.
+    pub fn with_stop(mut self, stop: runtime::StopPolicy) -> Self {
+        self.stop = stop;
+        self
+    }
     /// Name the access point whose frames a trace build observes; without
     /// it, none is selected.
     #[cfg(oer_trace)]

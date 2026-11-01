@@ -39,7 +39,7 @@ pub use oer_esp32s31_compose::Esp32s31;
 pub use embassy_time as time;
 
 mod aes;
-pub use aes::{Aes, AesClient, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
+pub use aes::{Aes, AesClient, AesSeats, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
 
 /// The Wi-Fi station and its IP service.
 #[cfg(feature = "wifi")]
@@ -92,7 +92,7 @@ oer_espressif_executor::tasks! {
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
         /// The shared AES service.
-        aes_service(engine: aes::Engine) = aes::serve;
+        aes_service(launch: aes::AesStart) = aes::serve;
         #[cfg(feature = "wifi")]
         /// The Wi-Fi station's runner.
         station(launch: wifi::StationStart) = wifi::serve_station;
@@ -199,7 +199,7 @@ pub(crate) fn draw_boot_id(rng: &mut oer_esp32s31_compose::platform::Entropy) ->
 /// Service tasks a boot step prepared, started with the executor.
 #[derive(Default)]
 pub(crate) struct Pending {
-    pub(crate) aes: Option<aes::Engine>,
+    pub(crate) aes: Option<aes::AesStart>,
     #[cfg(feature = "wifi")]
     pub(crate) station: Option<wifi::StationStart>,
     #[cfg(feature = "wifi")]

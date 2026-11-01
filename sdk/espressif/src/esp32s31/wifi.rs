@@ -203,9 +203,21 @@ pub(crate) struct RadioBoot {
     pub(crate) wifi: WifiToken,
 }
 
-/// The station's regulatory configuration and reconnect policy.
+/// The station's regulatory configuration, reconnect policy and stop
+/// deadline. The constructors give the defaults: a reconnect every second
+/// after a lost association ([`RECONNECT`]) and two seconds for the IP
+/// service to return its receive buffers at a stop after a failure
+/// ([`DRAIN`]); the `with_` methods override them.
 #[derive(Clone, Copy)]
 pub struct Config(wifi::Config);
+
+/// The default interval of a reconnect after a lost association.
+pub const RECONNECT: embassy_time::Duration = embassy_time::Duration::from_secs(1);
+
+/// The default bound of a stop after a failure: how long the IP service
+/// may take to return the receive buffers it holds. The library's choice,
+/// not a measured need.
+pub const DRAIN: embassy_time::Duration = embassy_time::Duration::from_secs(2);
 
 /// Why a configuration was refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -216,11 +228,13 @@ pub enum ConfigError {
     Channel,
     /// The reconnect interval is zero.
     Reconnect,
+    /// The stop deadline is zero.
+    Drain,
 }
 
 impl Config {
-    /// The 2.4 GHz `channel` of `country` at `cap_dbm`, reconnecting every
-    /// second after a lost association.
+    /// The 2.4 GHz `channel` of `country` at `cap_dbm`, with the default
+    /// reconnect and stop deadline.
     ///
     /// # Errors
     /// The country or channel is refused.
@@ -229,8 +243,8 @@ impl Config {
     }
 
     /// Every 2.4 GHz channel `country` permits, scanned at each connect, at
-    /// `cap_dbm`, reconnecting every second after a lost association: for
-    /// an image that learns its network's channel only when it connects.
+    /// `cap_dbm`, with the default reconnect and stop deadline: for an
+    /// image that learns its network's channel only when it connects.
     ///
     /// # Errors
     /// The country is refused, or it permits no 2.4 GHz channel.
@@ -249,27 +263,54 @@ impl Config {
         cap_dbm: i8,
         all_channels: bool,
     ) -> Result<Self, ConfigError> {
-        let config =
-            wifi::Config::new(channel, country, cap_dbm, all_channels, STOP).map_err(|error| {
-                match error {
-                    wifi::InitializationError::Country | wifi::InitializationError::Domain => {
-                        ConfigError::Country
-                    }
-                    _ => ConfigError::Channel,
+        let config = wifi::Config::new(channel, country, cap_dbm, all_channels, stop(DRAIN)?)
+            .map_err(|error| match error {
+                wifi::InitializationError::Country | wifi::InitializationError::Domain => {
+                    ConfigError::Country
                 }
+                _ => ConfigError::Channel,
             })?;
-        let reconnect = wifi::ReconnectPolicy::every(oer_time::Duration::from_secs(1))
+        Self(config).with_reconnect(RECONNECT)
+    }
+
+    /// Reconnect every `interval` after a lost association.
+    ///
+    /// # Errors
+    /// [`ConfigError::Reconnect`] for a zero interval.
+    pub fn with_reconnect(self, interval: embassy_time::Duration) -> Result<Self, ConfigError> {
+        let policy = wifi::ReconnectPolicy::every(oer_duration(interval))
             .map_err(|wifi::ZeroReconnectInterval| ConfigError::Reconnect)?;
-        Ok(Self(config.with_reconnect(reconnect)))
+        Ok(Self(self.0.with_reconnect(policy)))
+    }
+
+    /// Stay idle after a lost association until the next connect.
+    pub fn without_reconnect(self) -> Self {
+        Self(self.0.with_reconnect(wifi::ReconnectPolicy::DISABLED))
+    }
+
+    /// Give the IP service `drain` to return its receive buffers at a stop
+    /// after a failure.
+    ///
+    /// # Errors
+    /// [`ConfigError::Drain`] for a zero deadline.
+    pub fn with_drain(self, drain: embassy_time::Duration) -> Result<Self, ConfigError> {
+        Ok(Self(self.0.with_stop(stop(drain)?)))
     }
 }
 
-/// How long a station's stop gives the IP service to return the receive
-/// buffers it holds: the bound of a stop after a failure. The library's
-/// choice, not a measured need.
-const STOP: wifi::StopPolicy = wifi::StopPolicy {
-    drain: oer_time::Duration::from_secs(2),
-};
+/// The stop policy with `drain`; zero is refused, since no network could
+/// return a buffer by it.
+fn stop(drain: embassy_time::Duration) -> Result<wifi::StopPolicy, ConfigError> {
+    let micros = crate::boot::drain_micros(drain.as_micros()).ok_or(ConfigError::Drain)?;
+    Ok(wifi::StopPolicy {
+        drain: oer_time::Duration::from_micros(micros.get()),
+    })
+}
+
+/// The station's duration of an application's.
+fn oer_duration(duration: embassy_time::Duration) -> oer_time::Duration {
+    oer_time::Duration::from_micros(duration.as_micros())
+}
 
 /// A network to join: its SSID and credentials, validated, secrets erased
 /// on drop.
