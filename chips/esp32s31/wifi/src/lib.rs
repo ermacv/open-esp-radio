@@ -532,6 +532,8 @@ pub mod radio;
 pub mod station;
 #[cfg(target_arch = "riscv32")]
 pub use dma::{DmaError, DmaResources};
+#[cfg(target_arch = "riscv32")]
+pub use oer_esp32s31_ieee80211_driver::port::NetworkPeers;
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
@@ -546,17 +548,28 @@ pub use chip::{
 #[macro_export]
 macro_rules! bind_station {
  ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,engine:$engine,events:$events,fail:$fail}
+   peers: None, storage: $crate::Storage::new());
+ };
+ // The network end runs on another hart: `network` raises the network
+ // task's signal, `station` the station task's, `driver` the driver's.
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path,across_harts:{network:$network:expr,station:$station:expr,driver:$driver:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,radio:$radio,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,engine:$engine,events:$events,fail:$fail}
+   peers: Some($crate::NetworkPeers{driver:$driver,returned:$station}), storage: $crate::Storage::across_harts($network,$station));
+ };
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,radio:$radio:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,engine:$engine:ty,events:$events:ty,fail:$fail:path} peers: $peers:expr, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_espressif_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type Radio=$radio;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Engine=$engine;type Events=$events;
+    const NETWORK_PEERS:Option<$crate::NetworkPeers>=$peers;
     fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
    }
    pub fn storage()->&'static mut $crate::Storage<Binding>{
-    static STORAGE:static_cell::ConstStaticCell<$crate::Storage<Binding>>=static_cell::ConstStaticCell::new($crate::Storage::new());
+    static STORAGE:static_cell::ConstStaticCell<$crate::Storage<Binding>>=static_cell::ConstStaticCell::new($storage);
     STORAGE.try_take().unwrap_or_else(||<Binding as $crate::Binding>::fail($crate::InitializationError::Storage))
    }
   }

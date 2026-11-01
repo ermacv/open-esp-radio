@@ -44,7 +44,7 @@ pub trait Binding: Sized + 'static {
     /// The executor signals a network on another hart raises when it
     /// returns a lent receive buffer; `None` while the network runs on the
     /// station's hart.
-    const NETWORK_PEERS: Option<oer_esp32s31_ieee80211_driver::port::NetworkPeers> = None;
+    const NETWORK_PEERS: Option<crate::NetworkPeers> = None;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
@@ -329,6 +329,21 @@ pub struct Storage<W: Binding> {
     pub(crate) retire: static_cell::StaticCell<radio::RetireSlot<W>>,
 }
 impl<W: Binding> Storage<W> {
+    /// The storage of a station whose network end runs on another hart
+    /// ([`Channels::across_harts`]).
+    pub const fn across_harts(
+        network: &'static dyn oer_memory::QueueNotify,
+        station: &'static dyn oer_memory::QueueNotify,
+    ) -> Self {
+        Self {
+            channels: Channels::across_harts(network, station),
+            driver: radio::DriverStorage::new(),
+            service: service::ServiceStorage::new(),
+            bell: oer_memory::Doorbell::new(),
+            ready: static_cell::StaticCell::new(),
+            retire: static_cell::StaticCell::new(),
+        }
+    }
     pub const fn new() -> Self {
         Self {
             channels: Channels::new(),
