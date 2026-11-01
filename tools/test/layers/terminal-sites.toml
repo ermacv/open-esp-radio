@@ -488,6 +488,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "sdk/espressif/src/esp32s31.rs:crate::esp32s31::fail:terminal-reference:boot_failure:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
 "sdk/espressif/src/esp32s31.rs:crate::esp32s31:terminal-binding:phy_fault_reporter:1" = { owner = "sdk/espressif", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "sdk/espressif/src/esp32s31.rs:crate::esp32s31:terminal-reference:reset:1" = { owner = "sdk/espressif", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+# sdk/espressif/src/esp32s31/hart1.rs
+"sdk/espressif/src/esp32s31/hart1.rs:crate::esp32s31::hart1::hart1_main:terminal-entry:hart1_main:1" = { owner = "sdk/espressif", classes = ["configuration-boot"] }
 # sdk/espressif/src/esp32s31/wifi.rs
 "sdk/espressif/src/esp32s31/wifi.rs:crate::esp32s31::wifi::on_wifi:terminal-reference:reset:1" = { owner = "sdk/espressif", classes = ["unexpected-hardware"] }
 "sdk/espressif/src/esp32s31/wifi.rs:crate::esp32s31::wifi::failure:terminal-entry:failure:1" = { owner = "sdk/espressif", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }

@@ -10,7 +10,7 @@ description = "Wi-Fi station of a build profile; without a profile it reports No
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31"] }
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "hart1"] }
 
 [features]
 # The station of a profile: the SDK's Wi-Fi. A build with a profile needs it,
@@ -35,6 +35,9 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The harts this image runs: hart 1 starts during boot and runs the second
+# boot's IP service and TCP exchange on its own executor.
+harts = ["boot", 1]
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each a

@@ -9,7 +9,7 @@ description = "The HIL image of the SDK station scenario: an oer-espressif Wi-Fi
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi", "console"] }
+oer-espressif = { path = "../../../sdk/espressif", features = ["esp32s31", "wifi", "console", "hart1"] }
 oer-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-agent-espressif = { path = "../../hil-agent/espressif" }
 oer-hil-protocol = { workspace = true }
@@ -34,6 +34,9 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The harts this image runs: hart 1 starts during boot and runs the second
+# boot's IP service and line exchanges on its own executor.
+harts = ["boot", 1]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
 

@@ -47,7 +47,10 @@ pub use esp32s31::*;
 /// with what the boot handed it ([`Hart1Peripherals`]: the station's
 /// network device), starts the IP service ([`wifi::Net::start`]) and ends
 /// with [`Hart1Boot::run`] and the future that uses its sockets. That
-/// future and the IP service run on hart 0, the application's executor.
+/// future and the IP service run on hart 0, the application's executor, or
+/// with the `hart1` feature on hart 1, which the library launches for them
+/// once the boot ended; hart 0 waits for the second boot's end before any
+/// executor runs.
 ///
 /// ```ignore
 /// oer_espressif::entry!(boot, hart1 = network);
@@ -75,9 +78,60 @@ macro_rules! entry {
             $crate::__private::Port,
             exception = $crate::__private::exception
         );
+        $crate::__hart1_entry!($hart1);
 
         fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
-            $crate::__private::start(handoff, $boot, $hart1)
+            $crate::__private::start(handoff, $boot, $hart1, $crate::__hart1_mailbox!())
         }
+    };
+}
+
+/// Hart 1's mailbox and root, which call the second boot on hart 1: what
+/// [`entry!`] expands to with the `hart1` feature. Not an API.
+#[cfg(feature = "hart1")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __hart1_entry {
+    ($hart1:path) => {
+        $crate::__private::secondary_entry!(
+            1,
+            __OER_HART1: $crate::__private::Port,
+            $crate::Hart1Parts => __oer_hart1_main
+        );
+
+        fn __oer_hart1_main(
+            handoff: $crate::__private::SecondaryHandoff<$crate::__private::Port, 1>,
+            parts: $crate::Hart1Parts,
+        ) -> ! {
+            $crate::hart1_main(handoff, parts, $hart1)
+        }
+    };
+}
+
+/// Without the `hart1` feature: nothing. Not an API.
+#[cfg(not(feature = "hart1"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __hart1_entry {
+    ($hart1:path) => {};
+}
+
+/// The mailbox `entry!` passes the library. Not an API.
+#[cfg(feature = "hart1")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __hart1_mailbox {
+    () => {
+        &__OER_HART1
+    };
+}
+
+/// Without the `hart1` feature: none. Not an API.
+#[cfg(not(feature = "hart1"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __hart1_mailbox {
+    () => {
+        ()
     };
 }

@@ -34,7 +34,10 @@ pub use oer_embassy_net::ip::Error as ServiceError;
 
 #[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
 pub(crate) mod published;
-#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(unused_imports))]
+#[cfg_attr(
+    not(all(target_arch = "riscv32", feature = "wifi")),
+    allow(unused_imports)
+)]
 pub(crate) use published::Published;
 
 /// Why a wait ended without its condition.
