@@ -213,7 +213,10 @@ mod tests {
             }
             assert!(page.samples.len() <= MAX_PAGE_SAMPLES);
             for sample in &page.samples {
-                let ra = sample.tick.is_multiple_of(2).then_some(0x4200_0000 + sample.tick);
+                let ra = sample
+                    .tick
+                    .is_multiple_of(2)
+                    .then_some(0x4200_0000 + sample.tick);
                 assert_eq!(sample.ra, ra, "tick {}", sample.tick);
             }
             seen.extend(page.samples.iter().map(|sample| sample.tick));
