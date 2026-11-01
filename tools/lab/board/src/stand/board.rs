@@ -3,6 +3,12 @@
 //! and every operation on it (a write, a start, a reset, a console, its
 //! power). Only the LAB service, the one owner of the stand's hardware,
 //! runs them.
+//!
+//! A [`Board`] needs only the stand file and the host: its hub port's
+//! power, its console without a reset and where it is. Every operation that
+//! depends on its chip (a write, an RTS, JTAG or download reset, a console
+//! opened by a reset, the reset ladder, the proof of power loss) belongs to
+//! a [`ProfiledBoard`], which only a chip with a profile yields.
 
 use std::{
     path::{Path, PathBuf},
@@ -45,53 +51,95 @@ pub enum Via {
     Jtag,
 }
 
-/// A board of the stand file: what it is, where it was last seen, and its
-/// operations.
+/// A board of the stand file: what it is, where it was last seen, its reset
+/// ladder and its hub power; the operations that need no chip profile.
 #[derive(Clone, Debug)]
 pub struct Board {
     pub reference: BoardRef,
     /// Where the board was last seen; a reset or power cycle can move it.
     port: PathBuf,
-    /// The chip as espflash names it.
-    espflash_chip: String,
     reset: Vec<ResetStep>,
     power: Option<HubPower>,
+}
+
+/// A board whose chip has a profile: the operations of its [`Board`] and
+/// those that depend on its chip.
+#[derive(Clone, Debug)]
+pub struct ProfiledBoard {
+    board: Board,
+    /// The chip as espflash names it.
+    espflash_chip: String,
     /// Where the chip holds why it last reset, which a power cycle reads.
     reset_cause: Option<ResetCauseField>,
 }
 
+impl std::ops::Deref for ProfiledBoard {
+    type Target = Board;
+
+    fn deref(&self) -> &Board {
+        &self.board
+    }
+}
+
 impl Board {
-    /// `board` of `stand`, last seen at `port`, with its chip's profile from
-    /// the repository at `root`.
+    /// `board` of `stand`, last seen at `port`, with the hub port that
+    /// powers it when its reset ladder includes `power`. No chip profile is
+    /// read; [`Self::profiled`] reads it.
     pub fn new(
-        root: &Path,
         stand: &Stand,
         board: &oer_lab_model::Board,
         port: PathBuf,
     ) -> crate::stand::Result<Self> {
-        let profile = oer_chip_profile::Profile::load(root, &board.chip)?;
+        Self::with_power(
+            board,
+            port,
+            crate::power::hub_port(stand, board).map(HubPower::new),
+        )
+    }
+
+    fn with_power(
+        board: &oer_lab_model::Board,
+        port: PathBuf,
+        power: Option<HubPower>,
+    ) -> crate::stand::Result<Self> {
+        Ok(Self {
+            reference: board.reference()?,
+            port,
+            reset: board.reset.clone(),
+            power,
+        })
+    }
+
+    /// The attached board of `stand` that `query` names (an id, a chip with
+    /// one board, or a MAC), at its `/dev/serial/by-id` port.
+    pub fn attached(stand: &Stand, query: &str) -> crate::stand::Result<Self> {
+        let board = stand.resolve(query)?;
+        let port = crate::discovery::port_of(&board.device_id()?)?;
+        Self::new(stand, board, port)
+    }
+
+    /// The board with its chip's profile from the repository at `root`;
+    /// refused for a chip without one, naming what still works.
+    pub fn profiled(self, root: &Path) -> crate::stand::Result<ProfiledBoard> {
+        let profile =
+            oer_chip_profile::Profile::load(root, &self.reference.chip).map_err(|error| {
+                format!(
+                    "board `{}`: {error}; without a chip profile only its hub port's power, \
+                     its console without a reset and its description work",
+                    self.reference.id
+                )
+            })?;
         let reset_cause = profile
             .facts
             .reset_cause
             .as_ref()
             .map(|field| ResetCauseField::resolve(root, &profile.facts.id, field))
             .transpose()?;
-        Ok(Self {
-            reference: board.reference()?,
-            port,
+        Ok(ProfiledBoard {
+            board: self,
             espflash_chip: profile.facts.espflash_chip,
-            reset: board.reset.clone(),
-            power: crate::power::hub_port(stand, board).map(HubPower::new),
             reset_cause,
         })
-    }
-
-    /// The attached board of `stand` that `query` names (an id, a chip with
-    /// one board, or a MAC), at its `/dev/serial/by-id` port.
-    pub fn attached(root: &Path, stand: &Stand, query: &str) -> crate::stand::Result<Self> {
-        let board = stand.resolve(query)?;
-        let port = crate::discovery::port_of(&board.device_id()?)?;
-        Self::new(root, stand, board, port)
     }
 
     pub fn mac(&self) -> &DeviceId {
@@ -185,6 +233,60 @@ impl Board {
         crate::image::carries(store, self.mac(), bundle)
     }
 
+    /// The board's console read for `watch` without resetting it, once its
+    /// port is back.
+    pub fn console(&self, watch: Duration) -> String {
+        self.current_port(REATTACH)
+            .and_then(|port| reset::open_without_reset(&port).ok())
+            .map(|serial| console::read_for(serial, watch))
+            .unwrap_or_default()
+    }
+
+    /// Open the board's console without a reset, retrying while the port is
+    /// still held by the reader of a previous reset or returning after one.
+    pub fn open_console(&self) -> crate::stand::Result<BoardConsole> {
+        let port = self
+            .current_port(REATTACH)
+            .ok_or("the board's port is gone")?;
+        let port = retrying(PORT_ACCESS, || reset::open_without_reset(&port))?;
+        Ok(BoardConsole { port })
+    }
+
+    fn require_power(&self) -> crate::stand::Result<&HubPower> {
+        self.power.as_ref().ok_or_else(|| {
+            "the board does not reset by power; add `power` to its `reset` in the stand file".into()
+        })
+    }
+
+    /// Power the board off and on, watching it leave USB and return.
+    pub fn power_cycle_observed(&self) -> crate::stand::Result<PowerCycle> {
+        self.require_power()?.cycle_observed(self.mac())
+    }
+
+    /// Power the board off and on and wait until its port is back and open
+    /// to the stand's user: a power-on reset into the image in its flash.
+    pub fn power_on(&self) -> crate::stand::Result<()> {
+        self.power_cycle_observed()?.verdict()?;
+        let port = self
+            .current_port(REATTACH)
+            .ok_or("the board's port did not return after its power")?;
+        // udev hands the returned port to the stand's group a moment after
+        // it appears.
+        retrying(PORT_ACCESS, || reset::open_without_reset(&port))
+            .map(drop)
+            .map_err(|_| format!("{} stayed closed after its power", port.display()).into())
+    }
+
+    /// Cycle the power of the board's hub port: the one reset that needs no
+    /// chip profile. A power-on reset re-enumerates the port, so the ROM's
+    /// reset line is read from the console once the port is back.
+    pub fn power_reset(&self) -> crate::stand::Result<Option<String>> {
+        Power(self).reset()?;
+        Ok(oer_lab_model::rom::reset_line(&self.console(BANNER)))
+    }
+}
+
+impl ProfiledBoard {
     /// Write `bundle`, known as `image`, into the board's flash through
     /// `via` by the one write operation (`crate::image`, which publishes
     /// the receipt into `store`), start it and confirm the start; `by` is
@@ -300,10 +402,7 @@ impl Board {
         let banner = match path {
             ResetPath::Rts => Rts(self).reset()?,
             ResetPath::Jtag => Jtag(self).reset()?,
-            ResetPath::Power => {
-                self.require_power()?;
-                Power(self).reset()?
-            }
+            ResetPath::Power => return self.power_reset(),
             ResetPath::Download => Some(self.download_entry()?),
         };
         // A chip whose USB Serial/JTAG port re-enumerates prints its banner
@@ -328,25 +427,6 @@ impl Board {
             .or_else(|| oer_lab_model::rom::reset_line(&self.console(BANNER))))
     }
 
-    /// The board's console read for `watch` without resetting it, once its
-    /// port is back.
-    pub fn console(&self, watch: Duration) -> String {
-        self.current_port(REATTACH)
-            .and_then(|port| reset::open_without_reset(&port).ok())
-            .map(|serial| console::read_for(serial, watch))
-            .unwrap_or_default()
-    }
-
-    /// Open the board's console without a reset, retrying while the port is
-    /// still held by the reader of a previous reset or returning after one.
-    pub fn open_console(&self) -> crate::stand::Result<BoardConsole> {
-        let port = self
-            .current_port(REATTACH)
-            .ok_or("the board's port is gone")?;
-        let port = retrying(PORT_ACCESS, || reset::open_without_reset(&port))?;
-        Ok(BoardConsole { port })
-    }
-
     /// Reset the board into its flashed application over RTS and return
     /// its console, open from the reset on, so no line of the boot is
     /// missed.
@@ -358,15 +438,12 @@ impl Board {
         Ok(BoardConsole { port })
     }
 
-    fn require_power(&self) -> crate::stand::Result<&HubPower> {
-        self.power.as_ref().ok_or_else(|| {
-            "the board does not reset by power; add `power` to its `reset` in the stand file".into()
-        })
-    }
-
-    /// Power the board off and on, watching it leave USB and return.
-    pub fn power_cycle_observed(&self) -> crate::stand::Result<PowerCycle> {
-        self.require_power()?.cycle_observed(self.mac())
+    /// Open the board's console and reset it into its image over its USB
+    /// Serial/JTAG, which discards what the port held before.
+    pub fn open_console_from_reset(&self) -> crate::stand::Result<BoardConsole> {
+        let mut port = self.open_console()?.into_port();
+        reset::reset_usb_serial_jtag(&mut port)?;
+        Ok(BoardConsole { port })
     }
 
     /// Power the board off and on, watching it leave USB and return, then
@@ -399,20 +476,6 @@ impl Board {
             }
             Err(last.unwrap_or_else(|| "no attempt was made".into()))
         })
-    }
-
-    /// Power the board off and on and wait until its port is back and open
-    /// to the stand's user: a power-on reset into the image in its flash.
-    pub fn power_on(&self) -> crate::stand::Result<()> {
-        self.power_cycle_observed()?.verdict()?;
-        let port = self
-            .current_port(REATTACH)
-            .ok_or("the board's port did not return after its power")?;
-        // udev hands the returned port to the stand's group a moment after
-        // it appears.
-        retrying(PORT_ACCESS, || reset::open_without_reset(&port))
-            .map(drop)
-            .map_err(|_| format!("{} stayed closed after its power", port.display()).into())
     }
 
     /// Power the board off and on and, as soon as its USB returns, reset it
@@ -486,3 +549,6 @@ impl Rung for Power<'_> {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests;

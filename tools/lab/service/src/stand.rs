@@ -24,12 +24,9 @@ use oer_lab_arbiter::{
     journal::{ImageIdentity, Journal},
     readiness::{Confirmation, Emission, ROUTER, Recovery},
 };
-use oer_lab_board::{
-    reset,
-    stand::{Board, Via},
-};
+use oer_lab_board::stand::{Board, BoardConsole, ProfiledBoard, Via};
 use oer_lab_client::protocol::{FlashVia, Operation};
-use oer_lab_model::{ResetStep, Stand};
+use oer_lab_model::{ResetStep, Stand, rom::ResetPath};
 
 use crate::service::{Drivers, OperationIo};
 
@@ -164,9 +161,15 @@ impl StandDrivers {
         let port = oer_lab_board::discovery::wait_for(&entry.device_id().map_err(text)?, REATTACH)
             .ok_or_else(|| format!("board `{}` is not attached", entry.id))?;
         Ok((
-            Board::new(&self.root, &stand, entry, port).map_err(text)?,
+            Board::new(&stand, entry, port).map_err(text)?,
             entry.mac.clone(),
         ))
+    }
+
+    /// `board` with its chip's profile, which every chip-dependent operation
+    /// needs; refused for a chip without one.
+    fn profiled(&self, board: Board) -> Result<ProfiledBoard> {
+        board.profiled(&self.root).map_err(text)
     }
 
     /// The board `query` names, which `claims` must hold, on this
@@ -194,7 +197,7 @@ impl StandDrivers {
                 .take(&AtomicBool::new(false))
                 .and_then(|_turn| {
                     let (board, _) = self.described(mac, &[Claim::board(mac)])?;
-                    board.restart().map_err(text)
+                    self.profiled(board)?.restart().map_err(text)
                 });
             if let Err(error) = reset {
                 eprintln!("lab-service: board {mac} was not reset after its lease: {error}");
@@ -233,7 +236,7 @@ impl StandDrivers {
 
     fn flash(
         &self,
-        board: &Board,
+        board: &ProfiledBoard,
         bundle: &str,
         image: &ImageIdentity,
         owner: &str,
@@ -268,14 +271,9 @@ impl StandDrivers {
         Ok(serde_json::json!({ "written": true, "receipt": receipt }))
     }
 
-    /// Stream `board`'s console both ways until `io.stop`; when `start`,
-    /// after a reset into its image that discards what the port held
-    /// before.
-    fn console(&self, board: &Board, start: bool, io: &OperationIo) -> Result<()> {
-        let mut port = board.open_console().map_err(text)?.into_port();
-        if start {
-            reset::reset_usb_serial_jtag(&mut port).map_err(text)?;
-        }
+    /// Stream `console` both ways until `io.stop`.
+    fn console(&self, console: BoardConsole, io: &OperationIo) -> Result<()> {
+        let mut port = console.into_port();
         port.set_timeout(POLL).map_err(text)?;
         let mut buffer = vec![0u8; 4096];
         while !io.stop.load(Ordering::SeqCst) {
@@ -432,21 +430,31 @@ impl Drivers for StandDrivers {
                 skip_carried,
             } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
+                let board = self.profiled(board)?;
                 self.flash(&board, bundle, image, owner, *via, *skip_carried)
             }
             Operation::Reset { board, path } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
+                // A hub port's power cycle needs no chip profile.
                 Ok(serde_json::json!(
                     match path {
-                        Some(path) => board.reset(*path),
-                        None => board.restart(),
+                        Some(ResetPath::Power) => board.power_reset(),
+                        Some(path) => self.profiled(board)?.reset(*path),
+                        None => self.profiled(board)?.restart(),
                     }
                     .map_err(text)?
                 ))
             }
             Operation::Console { board, reset } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
-                self.console(&board, *reset, &io)?;
+                // A start resets into the image, which needs the chip profile.
+                let console = if *reset {
+                    self.profiled(board)?.open_console_from_reset()
+                } else {
+                    board.open_console()
+                }
+                .map_err(text)?;
+                self.console(console, &io)?;
                 Ok(serde_json::Value::Null)
             }
             Operation::ReadConsole { board, watch_ms } => {
@@ -462,7 +470,11 @@ impl Drivers for StandDrivers {
             }
             Operation::ProvePowerLoss { board } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
-                let returned = board.prove_power_loss().map_err(text)?.verdict()?;
+                let returned = self
+                    .profiled(board)?
+                    .prove_power_loss()
+                    .map_err(text)?
+                    .verdict()?;
                 Ok(serde_json::json!(returned.as_millis() as u64))
             }
             Operation::Router { request } => {
@@ -488,7 +500,14 @@ impl Drivers for StandDrivers {
                 let (board, _) = self.described(board, claims)?;
                 let port = oer_lab_board::discovery::port_of(board.mac())
                     .map_or_else(|_| "no port".to_owned(), |port| port.display().to_string());
-                Ok(serde_json::json!({ "port": port, "image": carried(&board)? }))
+                let image = carried(&board)?;
+                // Why the chip-dependent operations are refused, if they are.
+                let without_profile = self.profiled(board).err();
+                Ok(serde_json::json!({
+                    "port": port,
+                    "image": image,
+                    "without_profile": without_profile,
+                }))
             }
             Operation::HubPort {
                 hub,
