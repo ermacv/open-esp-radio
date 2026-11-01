@@ -95,8 +95,8 @@ pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
 mod control;
 mod network;
 pub use network::{
-    NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost, NoNetwork,
-    Received, RxMsdusCopied, StopPolicy,
+    CopiedMark, NetworkDrainCause, NetworkDrainFailure, NetworkRx, NetworkStop, NetworkStopLost,
+    NoNetwork, RX_COPIED_DEPTH, Received, RxMsdusCopied, StopPolicy,
 };
 mod reconnect;
 use commands::CommandCredits;
@@ -613,13 +613,15 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
+/// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
+/// let (receive_copied, _) = copies.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let mut control_queue = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
 /// let (application, _) = control_queue.split();
 /// let state = State::new();
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands: commands.dyn_receiver(), transmit, receive, output: &mut output, control,
+///     commands: commands.dyn_receiver(), transmit, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// ```
@@ -638,11 +640,13 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let (application, commands) = commands.split();
 /// let (_, transmit) = tx.split();
 /// let (receive, _) = rx.split();
+/// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
+/// let (receive_copied, _) = copies.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands, transmit, receive, output: &mut output, control,
+///     commands, transmit, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
 /// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
@@ -664,6 +668,8 @@ pub struct ServiceIo<
     pub transmit: WakingSpscReceiver<'c, TxMsdu, TX_DEPTH>,
     /// The MSDUs the station received for the network stack.
     pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH>,
+    /// The copies `receive`'s [`Received::Copied`] marks stand for, in order.
+    pub receive_copied: WakingSpscSender<'c, EthernetFrame, RX_COPIED_DEPTH>,
     /// What the service tells the application.
     pub output: &'c mut O,
     /// Affine cooperative stop and completion connection to Control.
@@ -2714,12 +2720,17 @@ impl<
         frame: &[u8],
         plan: &MsduPlan,
     ) -> Option<MsduRefusal> {
+        // The mark follows its copy: room for both, or neither is sent.
+        if io.receive.free_capacity() == 0 || io.receive_copied.free_capacity() == 0 {
+            return Some(MsduRefusal::QueueFull);
+        }
         match EthernetFrame::copy_planned(frame, plan) {
-            Ok(frame) => io
-                .receive
-                .try_send(Received::Copied(frame))
-                .is_err()
-                .then_some(MsduRefusal::QueueFull),
+            Ok(frame) => (io.receive_copied.try_send(frame).is_err()
+                || io
+                    .receive
+                    .try_send(Received::Copied(CopiedMark::new()))
+                    .is_err())
+            .then_some(MsduRefusal::QueueFull),
             // The station located the payload in this frame.
             Err(PlannedCopyError::TooLong(_) | PlannedCopyError::OutsideFrame) => {
                 Some(MsduRefusal::TooLong)

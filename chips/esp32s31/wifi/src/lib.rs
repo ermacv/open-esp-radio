@@ -182,15 +182,19 @@ impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
     }
 }
 type Frame = runtime::Received<LentRx>;
+type EthernetCopy = oer_ieee80211_core_roles_sta::data::EthernetFrame;
 
 /// Affine neutral Ethernet end. The concrete station frame is private.
 pub struct Network<'a> {
     inner: runtime::Device<'a, LentRx, 2, RX_DEPTH>,
 }
-/// One received MSDU: in the station's receive buffer, or copied.
+/// One received MSDU: in the station's receive buffer, or the mark of a
+/// copy [`Network`] keeps.
 pub struct Received {
     inner: Frame,
 }
+/// What stands for a copied [`Received`] that [`Network`] keeps.
+pub struct Copied(runtime::CopiedMark);
 /// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
 /// returns the buffer to the radio.
 pub struct ReceivedStorage(runtime::NetworkRx<LentRx>);
@@ -205,19 +209,13 @@ impl oer_network_port::FrameStorage for ReceivedStorage {
         self.0.advance(by)
     }
 }
-impl EthernetFrame for Received {
-    fn view(
-        &self,
-    ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
-        self.inner.view()
-    }
-}
 impl oer_network_port::ReceivedFrame for Received {
     type Storage = ReceivedStorage;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage>, Self> {
+    type Copied = Copied;
+    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage>, Copied> {
         match self.inner {
             runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
-            copied => Err(Self { inner: copied }),
+            runtime::Received::Copied(mark) => Err(Copied(mark)),
         }
     }
 }
@@ -237,6 +235,13 @@ impl NetDevice for Network<'_> {
     }
     fn try_receive(&mut self) -> Option<Received> {
         self.inner.try_receive().map(|inner| Received { inner })
+    }
+    fn read_copied<R>(
+        &mut self,
+        copied: Copied,
+        read: impl FnOnce(oer_network_port::EthernetFrameView<'_>) -> R,
+    ) -> Result<R, oer_network_port::FrameLengthError> {
+        self.inner.read_copied(copied.0, read)
     }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_transmit_ready(cx)
@@ -379,6 +384,7 @@ pub struct Channels {
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
     tx: WakingSpscQueue<TxMsdu, 2>,
     rx: WakingSpscQueue<Frame, RX_DEPTH>,
+    rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }>,
     state: runtime::State,
 }
 impl Channels {
@@ -390,6 +396,7 @@ impl Channels {
             commands: WakingSpscQueue::new(),
             tx: WakingSpscQueue::new(),
             rx: WakingSpscQueue::new(),
+            rx_copied: WakingSpscQueue::new(),
             state: runtime::State::new(),
         }
     }
@@ -403,8 +410,9 @@ impl Channels {
         let (send, commands) = self.commands.split();
         let (tx, transmit) = self.tx.split();
         let (receive, rx) = self.rx.split();
+        let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = runtime::Device::new(tx, rx, &self.state);
+        let network = runtime::Device::new(tx, rx, rx_copied, &self.state);
         Ok((
             Control {
                 inner: control,
@@ -422,6 +430,7 @@ impl Channels {
                     commands,
                     transmit,
                     receive,
+                    receive_copied,
                     runner,
                 },
                 stop: StopGuard(&self.stop),
@@ -447,6 +456,7 @@ struct ServiceConnection<'a> {
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
     transmit: oer_memory::WakingSpscReceiver<'a, TxMsdu, 2>,
     receive: oer_memory::WakingSpscSender<'a, Frame, RX_DEPTH>,
+    receive_copied: oer_memory::WakingSpscSender<'a, EthernetCopy, { runtime::RX_COPIED_DEPTH }>,
     runner: runtime::RunnerControl<'a>,
 }
 
@@ -594,6 +604,7 @@ mod tests {
                     commands,
                     transmit: _,
                     receive: _,
+                    receive_copied: _,
                     runner,
                 },
             stop,

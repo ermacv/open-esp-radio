@@ -573,6 +573,7 @@ struct World<'b> {
     stack: RefCell<WakingSpscSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
+    delivered_copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
     /// How many delivered frames the backend lent in place.
     lent: Cell<usize>,
     /// How long the key-unwrap engine takes; zero is ready on the first poll.
@@ -899,15 +900,23 @@ impl Application<'_, '_, '_> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            if matches!(msdu, Received::Lent(_)) {
-                self.lent.set(self.lent.get() + 1);
-            }
-            let parts = oer_network_port::EthernetFrame::view(&msdu).unwrap();
-            let mut bytes = Vec::from(parts.destination);
-            bytes.extend_from_slice(&parts.source);
-            bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
-            bytes.extend_from_slice(parts.payload);
-            frames.push(bytes);
+            let bytes = |parts: oer_network_port::EthernetFrameView<'_>| {
+                let mut bytes = Vec::from(parts.destination);
+                bytes.extend_from_slice(&parts.source);
+                bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
+                bytes.extend_from_slice(parts.payload);
+                bytes
+            };
+            frames.push(match msdu {
+                Received::Lent(frame) => {
+                    self.lent.set(self.lent.get() + 1);
+                    bytes(frame.view().unwrap())
+                }
+                Received::Copied(_) => {
+                    let copy = self.delivered_copies.borrow().try_receive().unwrap();
+                    bytes(oer_network_port::EthernetFrame::view(&copy).unwrap())
+                }
+            });
         }
         frames
     }
@@ -1026,6 +1035,7 @@ struct Body<'w, 'b, S, O, const GROUPS: usize> {
     sink: PhantomData<O>,
     transmit: WakingSpscReceiver<'b, TxMsdu, 2>,
     receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
+    receive_copied: WakingSpscSender<'b, EthernetFrame, RX_COPIED_DEPTH>,
     config: TestConfig,
     script: S,
     refuse_initial_enable: bool,
@@ -1187,6 +1197,7 @@ where
                 control,
                 transmit: self.transmit,
                 receive: self.receive,
+                receive_copied: self.receive_copied,
                 output: &mut output,
                 network: &world.network,
                 stop: StopPolicy {
@@ -1558,6 +1569,8 @@ where
         let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
         let (stack, transmit) = transmit.split();
         let (receive, delivered) = receive.split();
+        let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+        let (receive_copied, delivered_copies) = copies.split();
         let world = World {
             air,
             clock,
@@ -1575,6 +1588,7 @@ where
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
             delivered: RefCell::new(delivered),
+            delivered_copies: RefCell::new(delivered_copies),
             lent: Cell::new(0),
             unwrap_delay: Cell::new(Duration::ZERO),
             unwraps: RefCell::new(Vec::new()),
@@ -1595,6 +1609,7 @@ where
                             sink: PhantomData,
                             transmit,
                             receive,
+                            receive_copied,
                             config,
                             script,
                             refuse_initial_enable,

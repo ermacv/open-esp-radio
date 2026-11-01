@@ -5,7 +5,7 @@ use super::contract::{Command, Notice};
 pub use operation::{Operation, OperationEnd, UnreadOperation};
 
 mod operation;
-use super::Received;
+use super::{CopiedMark, RX_COPIED_DEPTH, Received};
 use super::{ServiceCommand, ServiceOutput, ServiceOutputSink};
 use core::{
     cell::Cell,
@@ -15,7 +15,7 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_ieee80211_core_roles_sta::data::TxMsdu;
+use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
 use oer_memory::{WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
 use oer_sync::PriorityWaker;
@@ -471,6 +471,7 @@ impl<K, O: ServiceOutputSink<K>> ServiceOutputSink<K> for Events<'_, O> {
 pub struct Device<'c, L, const TX: usize, const RX: usize> {
     transmit: WakingSpscSender<'c, TxMsdu, TX>,
     receive: WakingSpscReceiver<'c, Received<L>, RX>,
+    copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
     state: &'c State,
     observed: LinkSnapshot,
 }
@@ -478,11 +479,13 @@ impl<'c, L, const TX: usize, const RX: usize> Device<'c, L, TX, RX> {
     pub fn new(
         transmit: WakingSpscSender<'c, TxMsdu, TX>,
         receive: WakingSpscReceiver<'c, Received<L>, RX>,
+        copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH>,
         state: &'c State,
     ) -> Self {
         Self {
             transmit,
             receive,
+            copied,
             state,
             observed: LinkSnapshot::DOWN,
         }
@@ -513,6 +516,19 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
     }
     fn try_receive(&mut self) -> Option<Self::RxFrame> {
         self.receive.try_receive()
+    }
+    fn read_copied<R>(
+        &mut self,
+        _: CopiedMark,
+        read: impl FnOnce(oer_network_port::EthernetFrameView<'_>) -> R,
+    ) -> Result<R, oer_network_port::FrameLengthError> {
+        // Rare (an A-MSDU, or a buffer the backend kept): the copy leaves
+        // its queue by value.
+        let copy = self
+            .copied
+            .try_receive()
+            .ok_or(oer_network_port::FrameLengthError::MissingCopy)?;
+        oer_network_port::EthernetFrame::view(&copy).map(read)
     }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.state.link_waker.register(cx.waker());

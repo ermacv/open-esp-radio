@@ -17,6 +17,7 @@
 #![forbid(unsafe_code)]
 
 pub mod codegen;
+pub mod copies;
 pub mod critical_section;
 pub mod interrupts;
 pub mod linker;
@@ -531,6 +532,14 @@ impl Gates {
                                 )),
                             };
                         self.panics_of(&image, input, CheckedElf::Runtime, roots, &mut outcome);
+                        // A report beside the panic sites, from the same
+                        // analysis; it decides nothing.
+                        match copies::write(&image, input.root, input.output) {
+                            Ok(()) => outcome.reports.push(copies::RUNTIME_REPORT.to_owned()),
+                            Err(error) => outcome
+                                .warnings
+                                .push(format!("{}: {error}", copies::RUNTIME_REPORT)),
+                        }
                     }
                 }
                 Err(error) => {

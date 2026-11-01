@@ -11,6 +11,7 @@ struct Port(LinkSnapshot, bool);
 struct Frame;
 impl oer_network_port::ReceivedFrame for Frame {
     type Storage = core::convert::Infallible;
+    type Copied = Self;
     fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
         Err(self)
     }
@@ -36,6 +37,13 @@ impl NetDevice for Port {
     }
     fn try_receive(&mut self) -> Option<Frame> {
         None
+    }
+    fn read_copied<R>(
+        &mut self,
+        copied: Frame,
+        read: impl FnOnce(EthernetFrameView<'_>) -> R,
+    ) -> Result<R, FrameLengthError> {
+        copied.view().map(read)
     }
     fn poll_transmit_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
         Poll::Ready(())

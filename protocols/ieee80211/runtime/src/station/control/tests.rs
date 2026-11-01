@@ -36,7 +36,9 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     let (_control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, receiver) = tx.split();
     let (_, receive) = rx.split();
-    let mut device = Device::new(sender, receive, &state);
+    let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+    let (_, copied) = copies.split();
+    let mut device = Device::new(sender, receive, copied, &state);
     let dropped = Rc::new(Cell::new(0));
     let first = Frame {
         owner: dropped.clone(),
@@ -124,7 +126,9 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, _) = tx.split();
     let (received, receive) = rx.split();
-    let mut device = Device::new(sender, receive, &state);
+    let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+    let (copy, copied) = copies.split();
+    let mut device = Device::new(sender, receive, copied, &state);
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
     let waker = core::task::Waker::from(wake.clone());
     let mut cx = Context::from_waker(&waker);
@@ -170,12 +174,25 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         payload: &[3; 4],
     })
     .unwrap();
-    assert!(received.try_send(Received::Copied(frame)).is_ok());
+    assert!(copy.try_send(frame).is_ok());
+    assert!(
+        received
+            .try_send(Received::Copied(CopiedMark::new()))
+            .is_ok()
+    );
     assert!(device.poll_receive_ready(&mut cx).is_ready());
-    let Some(Received::Copied(frame)) = device.try_receive() else {
-        panic!("the copied frame");
+    let Some(Received::Copied(mark)) = device.try_receive() else {
+        panic!("the copied frame's mark");
     };
-    assert_eq!(frame.parts().payload, &[3; 4]);
+    // The copy is read where it lies, once.
+    assert_eq!(
+        device.read_copied(mark, |view| view.payload.to_vec()),
+        Ok(std::vec![3; 4])
+    );
+    assert_eq!(
+        device.read_copied(CopiedMark::new(), |_| ()),
+        Err(FrameLengthError::MissingCopy)
+    );
     assert!(device.try_receive().is_none());
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
@@ -209,7 +226,9 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
     let (_control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, receiver) = tx.split();
     let (_, receive) = rx.split();
-    let mut device = Device::new(sender, receive, &state);
+    let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+    let (_, copied) = copies.split();
+    let mut device = Device::new(sender, receive, copied, &state);
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,

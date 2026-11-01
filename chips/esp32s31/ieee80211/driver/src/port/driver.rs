@@ -394,7 +394,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     fn collect(
         &mut self,
         held: &Held<'_, 'id, Id, D, B, O>,
-        mut sink: Sink<'id, Id, B>,
+        sink: &mut Sink<'id, Id, B>,
         stopping: bool,
     ) -> Result<(), Fault> {
         if let Some(fault) = sink.fault() {
@@ -502,7 +502,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 return Err(Fault::Capacity);
             }
         }
-        if let Some(tbtt) = sink.tbtt {
+        if let Some(tbtt) = sink.tbtt.take() {
             if held.events.push(owned::OwnedEvent::Tbtt(tbtt)).is_err() {
                 held.loss.set(true);
             }
@@ -649,9 +649,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 WifiTxWake::Deadline,
                 &mut sink,
             )?;
-            self.collect(held, sink, stopping)?;
+            self.collect(held, &mut sink, stopping)?;
         }
-        for _ in 0..4 {
+        // One turn serves up to `EVENTS_PER_POLL` events. A turn that ends
+        // on `Pending` is registered for the next one; a turn that used its
+        // budget, or served a TX wake whose completions freed queues, polls
+        // again.
+        let mut again = true;
+        let mut served_tx = false;
+        for _ in 0..EVENTS_PER_POLL {
             match device.poll_receive(TX_TICKETS - held.rx_out.get(), cx) {
                 Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
                     let mut sink = Sink::default();
@@ -661,12 +667,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         wake,
                         &mut sink,
                     )?;
-                    self.collect(held, sink, stopping)?;
-                    cx.waker().wake_by_ref();
+                    self.collect(held, &mut sink, stopping)?;
+                    served_tx = true;
                 }
                 Poll::Ready(Ok(DeviceEvent::Receive(unit))) => {
                     self.receive(held, device, unit)?;
-                    cx.waker().wake_by_ref();
                 }
                 Poll::Ready(Ok(DeviceEvent::Tbtt)) => {
                     let mut sink = Sink::default();
@@ -677,11 +682,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                             .ok_or(Fault::Capacity)?
                             .station_tbtt(device.hardware()?, &mut sink);
                     }
-                    self.collect(held, sink, stopping)?;
+                    self.collect(held, &mut sink, stopping)?;
                 }
                 Poll::Ready(Err(cause)) => return Err(cause),
-                Poll::Pending => break,
+                Poll::Pending => {
+                    again = false;
+                    break;
+                }
             }
+        }
+        if again || served_tx {
+            cx.waker().wake_by_ref();
         }
         if self.configuring.is_some() {
             if core_views::configuring::<Id, D, B>(self.core.view()) {
@@ -691,7 +702,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     device.hardware()?,
                     &mut sink,
                 );
-                self.collect(held, sink, stopping)?;
+                self.collect(held, &mut sink, stopping)?;
                 if !done {
                     return Ok(());
                 }
@@ -758,7 +769,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             if self.configuring.is_some() {
                 break;
             }
-            self.pending_command = self.pending_command.take().or_else(|| held.commands.pop());
+            if self.pending_command.is_none() {
+                self.pending_command = held.commands.pop();
+            }
             let drained = self.withdraw(held);
             let Some(command) = self.pending_command.take() else {
                 break;
@@ -784,7 +797,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     let mut sink = Sink::default();
                     core_views::open::<Id, D, B>(self.core.view(), device.hardware()?, &mut sink)?;
                     self.closed = false;
-                    self.collect(held, sink, stopping)?;
+                    self.collect(held, &mut sink, stopping)?;
                 }
                 Command::Install {
                     identity,
@@ -900,10 +913,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         {
             let mut sink = Sink::default();
             core_views::disable::<Id, D, B>(self.core.view(), device.hardware()?, &mut sink);
-            self.collect(held, sink, true)?;
+            self.collect(held, &mut sink, true)?;
             let mut sink = Sink::default();
             let disabled = core_views::finish_disable::<Id, D, B>(self.core.view(), &mut sink);
-            self.collect(held, sink, true)?;
+            self.collect(held, &mut sink, true)?;
             if disabled {
                 match device.poll_stop(cx) {
                     Poll::Ready(Ok(())) => {

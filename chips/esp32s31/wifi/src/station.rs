@@ -440,6 +440,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             commands,
             transmit,
             receive,
+            receive_copied,
             runner: control,
         } = connection;
         let ServiceStorage {
@@ -455,6 +456,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             commands,
             transmit,
             receive,
+            receive_copied,
             control,
             output: &mut output,
             network: network_stop,

@@ -62,6 +62,10 @@ pub use settings::SettingFault;
 /// Shared admission capacity across the four access categories.
 pub const TX_TICKETS: usize = 8;
 
+/// The device events one driver turn serves before it polls again: a ring's
+/// worth of received units, so a burst costs one turn, not one per unit.
+const EVENTS_PER_POLL: usize = 32;
+
 // A blocked RX handoff needs P1 to return a lease. Its retry timer must not
 // keep P2 polling an already reached deadline while that consumer cannot run.
 pub(super) fn suspend_rx_continuation(receive_room: usize, continuation: &mut Option<Instant>) {
