@@ -336,12 +336,15 @@ and unanswered request resets bind through that same platform.
 `oer-espressif` (`sdk/espressif`) is the family's application entry above
 the compositions and facades; the `esp32s31` feature selects the chip, and a
 second chip would add its implementation beside it without changing the API.
-An image built on it writes `main!(boot)`: the synchronous `boot` runs once
+An image built on it writes `entry!(boot)`: the synchronous `boot` runs once
 before any executor, takes the peripherals it needs and builds drivers and
-services with defaults through the boot context, and returns the
-application's future. The SDK owns the default interrupt table, the
+services with defaults through the boot context, overriding a default only
+by an explicit setting or a static storage of its own (reconnect, drain,
+AES seats, IP pools), and returns the application's future (`impl
+Started`). The SDK owns the default interrupt table, the
 executors and its service tasks (`SdkTasks`, which the image's task set
-extends on the same executor), and applies record and reset on the image's
+extends on the same executor with the IP service at the image's pool sizes
+and the application), and applies record and reset on the image's
 behalf to every boot error, application error and unrecoverable service
 exit; handled errors stay values. The SDK runs the application on hart 0.
 

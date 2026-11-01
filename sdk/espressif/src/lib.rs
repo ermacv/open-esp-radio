@@ -40,31 +40,33 @@ pub use esp32s31::*;
 /// beside its service tasks. Every error records and resets.
 ///
 /// ```ignore
-/// oer_espressif::main!(boot);
+/// oer_espressif::entry!(boot);
 ///
-/// fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
+/// fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 ///     let aes = Aes::start(p.aes, &mut boot)?;
 ///     Ok(boot.run(app(aes)))
 /// }
 /// ```
 #[macro_export]
-macro_rules! main {
+macro_rules! entry {
     ($boot:path) => {
-        type __OerApp = impl ::core::future::Future<Output = $crate::AppResult>;
+        type __OerStarted = impl $crate::Started;
 
-        #[define_opaque(__OerApp)]
+        #[define_opaque(__OerStarted)]
         fn __oer_boot(
             peripherals: $crate::Peripherals,
             boot: $crate::Boot,
-        ) -> ::core::result::Result<$crate::Started<__OerApp>, $crate::Error> {
+        ) -> ::core::result::Result<__OerStarted, $crate::Error> {
             $boot(peripherals, boot)
         }
 
         $crate::__private::tasks! {
-            /// The image's task on the application executor, after the
-            /// library's service tasks.
+            /// The image's tasks on the application executor, after the
+            /// library's service tasks: the IP service with the image's
+            /// pools, and the application.
             __OerAppTasks: Executor<$crate::Esp32s31, 0> extends $crate::SdkTasks {
-                app(future: __OerApp) = $crate::__private::run_app;
+                net(service: <__OerStarted as $crate::Started>::Net) = $crate::__private::run_net;
+                app(future: <__OerStarted as $crate::Started>::App) = $crate::__private::run_app;
             }
         }
 
@@ -75,10 +77,11 @@ macro_rules! main {
         );
 
         fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
-            $crate::__private::start::<__OerAppTasks, __OerApp>(
+            $crate::__private::start::<__OerAppTasks, __OerStarted>(
                 handoff,
                 __oer_boot,
                 __OerAppTasks::app,
+                __OerAppTasks::net,
             )
         }
     };

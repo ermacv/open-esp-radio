@@ -1,7 +1,7 @@
 # oer-hil-agent-espressif
 
 The HIL agent on the `oer-espressif` application entry. A HIL test image
-builds its drivers and services through the same `main!(boot)` as the
+builds its drivers and services through the same `entry!(boot)` as the
 example of its function; it adds the SDK's `console` feature, settings in
 place of the library's defaults where the test needs them, and the handlers
 of its services. This crate holds what every such image serves besides its
@@ -10,7 +10,7 @@ handlers.
 ```rust
 static MAILBOX: ConstStaticCell<Mailbox<Request>> = ConstStaticCell::new(Mailbox::new());
 
-fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
+fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     // ... the example's boot ...
     let console = Console::open(p.console, &mut boot)?;
     let evidence = boot.evidence();
