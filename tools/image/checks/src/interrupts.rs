@@ -689,9 +689,14 @@ pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result
 }
 
 /// A core without an interrupt stack takes no interrupt: an entry that routes
-/// a source to it would run a handler on a stack nobody bounded.
+/// a source to it would run a handler on a stack nobody bounded. An entry the
+/// build left out (no handler) routes nothing, as the router binds only
+/// entries with a handler.
 fn reject_unstacked_cores(table: &[oer_image_stack::TableEntry], harts: &[u32]) -> Result<()> {
-    match table.iter().find(|entry| !harts.contains(&entry.core)) {
+    match table
+        .iter()
+        .find(|entry| entry.handler.is_some() && !harts.contains(&entry.core))
+    {
         Some(entry) => Err(format!(
             "the interrupt table routes source {} (level {}) to core {}, whose interrupt \
              stack the image declares unused or the chip does not have",
@@ -1223,6 +1228,12 @@ pub(crate) mod tests {
             error.contains("source 7") && error.contains("to core 1"),
             "{error}"
         );
+        let left_out = TableEntry {
+            source: 0,
+            handler: None,
+            ..entry(1)
+        };
+        reject_unstacked_cores(&[entry(0), left_out], &[0]).unwrap();
     }
 
     use super::*;
