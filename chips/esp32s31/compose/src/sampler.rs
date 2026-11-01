@@ -348,10 +348,10 @@ mod chip {
 
         /// Stop and mask the timer, discard a stale event and bind the
         /// handler. `None` when the storage was initialized before.
-        pub fn init(
+        pub fn init<const H: u8>(
             &'static self,
             parts: Timg1AlarmParts,
-            router: &mut Router<impl Controller>,
+            router: &mut Router<impl Controller, H>,
             token: I,
         ) -> Option<Sampler<Timer<I>>> {
             let Timg1AlarmParts {

@@ -18,6 +18,7 @@ mod executor {
     pub(crate) fn ready(_: u8) -> Option<&'static crate::task::Ready> {
         None
     }
+    pub(crate) fn admit_wake<B: crate::Binding>(_: crate::SoftwareInterrupt) {}
     pub(crate) fn pend_task<B: crate::Binding>(_: crate::SoftwareInterrupt) {}
 }
 

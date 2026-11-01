@@ -49,8 +49,8 @@ impl OpenError {
 /// Opens the console over the block the early writer retires: the router
 /// moves the interrupt's part to its handler and routes it. The pads stay
 /// apart, held so that nothing switches them off.
-pub(crate) fn open<C: Controller>(
-    router: &mut Router<C>,
+pub(crate) fn open<const H: u8, C: Controller>(
+    router: &mut Router<C, H>,
     token: crate::ConsoleUsb,
 ) -> Result<(Console, UsbPads), OpenError> {
     let (endpoint, interrupt, pads) =

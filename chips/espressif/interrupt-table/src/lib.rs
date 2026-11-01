@@ -23,7 +23,7 @@
 //!
 //! ```compile_fail,E0308
 //! # oer_espressif_interrupt_table::__fake_table!();
-//! # let mut router = fake_router(0);
+//! # let mut router = fake_router::<0>();
 //! let tokens = Interrupts::take().unwrap();
 //! // The timer's entry binds the timer's part, not the radio's.
 //! let _ = router.bind(tokens.timer, RadioIrq);
@@ -31,7 +31,7 @@
 //!
 //! ```compile_fail,E0382
 //! # oer_espressif_interrupt_table::__fake_table!();
-//! # let mut router = fake_router(0);
+//! # let mut router = fake_router::<0>();
 //! # let tokens = Interrupts::take().unwrap();
 //! // A part moves into its one binding.
 //! let part = TimerIrq::default();
@@ -58,7 +58,7 @@
 //!
 //! ```
 //! # oer_espressif_interrupt_table::__fake_table!();
-//! # let mut router = fake_router(0);
+//! # let mut router = fake_router::<0>();
 //! let tokens = Interrupts::take().unwrap();
 //! let bound = router.bind(tokens.timer, TimerIrq::default()).unwrap();
 //! fn enable_timer_interrupt(_bound: &oer_espressif_interrupt_table::Bound<TimerToken>) {}
@@ -1217,9 +1217,9 @@ macro_rules! __fake_table {
             absent: AbsentToken = AbsentIrq => on_absent, line 16, context app_wake, hart 0, Hardware;
         }
 
-        /// A router of `hart` over a fresh fake controller and the table.
-        pub fn fake_router(hart: u8) -> $crate::Router<FakeController> {
-            $crate::Router::install(FakeController::new(hart), INTERRUPT_TABLE)
+        /// A router of hart `H` over a fresh fake controller and the table.
+        pub fn fake_router<const H: u8>() -> $crate::Router<FakeController, H> {
+            $crate::Router::install(FakeController::new(H), INTERRUPT_TABLE)
                 .expect("a fresh fake installs")
         }
     };

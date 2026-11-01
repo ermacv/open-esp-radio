@@ -289,7 +289,7 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
     pub fn run<T, R: crate::task::Roots, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_espressif_interrupt_table::Router<C>,
+        router: &mut oer_espressif_interrupt_table::Router<C, H>,
         wake: W,
         part: W::Part,
         _urgent: U,
@@ -421,7 +421,7 @@ impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     pub fn start<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_espressif_interrupt_table::Router<C>,
+        router: &mut oer_espressif_interrupt_table::Router<C, H>,
         wake: W,
         part: W::Part,
         _urgent: U,
@@ -638,6 +638,16 @@ pub(crate) fn pend<B: Binding>(swi: SoftwareInterrupt) {
     let target_core = ChipStamp::assigned_core(core.load(Ordering::Acquire));
     if target_core.is_some_and(|core| core != current_core::<B>()) {
         raise_interrupt::<B>(swi);
+    }
+}
+
+/// Admit a wake of a task of executor `swi` on the running hart. A waker
+/// stays on its executor's hart; a wake on another records
+/// `WakerCrossedHarts` and resets, before the task is marked.
+pub(crate) fn admit_wake<B: Binding>(swi: SoftwareInterrupt) {
+    let owner = ChipStamp::assigned_core(swi.at(&EXECUTOR_CORE).load(Ordering::Acquire));
+    if let Some(fault) = crate::Fault::crossed_wake(swi as u8, owner, current_core::<B>()) {
+        fault.reset::<PortOf<B>>();
     }
 }
 

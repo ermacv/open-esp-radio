@@ -120,7 +120,9 @@ tasks it starts, a type check (`tests/chip-ui/executor_round.rs`); an executor
 runs on any hart that has its own router, including a secondary hart's
 interrupt-mode executor on its own `FROM_CPU` line routed to that hart's
 bank. Each executor's running context, ready mask and task slots are its
-own, and its task wakers stay on its hart. A task on one hart reaches a
+own, and its task wakers stay on its hart: a wake on another hart than
+the task's executor's records `WakerCrossedHarts` (the executor, its hart
+and the waking hart) and resets, before the task is marked. A task on one hart reaches a
 task on another only by raising the other executor's `IrqSignal`, declared
 with a `FromPeerHart` raiser. [`peer`](src/peer.rs) carries one request and
 its answer between two such tasks over an `oer-memory` in-place request

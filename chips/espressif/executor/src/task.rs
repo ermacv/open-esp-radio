@@ -101,6 +101,9 @@ pub const fn once<M: FnOnce() -> F, F: Future<Output = ()>>(start: M) -> M {
 pub trait Wakes: 'static {
     /// The binding's one waker vtable.
     fn vtable() -> &'static RawWakerVTable;
+    /// Admit a wake of a task of `executor` on the running hart: a wake on
+    /// another hart than the executor's records and resets.
+    fn admit_wake(executor: SoftwareInterrupt);
     /// Pend executor `executor` for a ready task.
     fn pend_task(executor: SoftwareInterrupt);
 }
@@ -482,8 +485,9 @@ fn wake_data<W: Wakes>(data: *const ()) {
 
 fn drop_data(_: *const ()) {}
 
-/// Mark `task` ready and pend its executor.
+/// Mark `task` ready and pend its executor, on the executor's hart.
 pub(crate) fn wake<W: Wakes>(task: TaskId) {
+    W::admit_wake(task.executor);
     if let Some(ready) = ready(task.executor as u8) {
         ready.mark(task.index);
         W::pend_task(task.executor);
@@ -692,6 +696,9 @@ impl<B: crate::Binding> Wakes for B {
     #[inline(always)]
     fn vtable() -> &'static RawWakerVTable {
         B::waker_vtable()
+    }
+    fn admit_wake(executor: SoftwareInterrupt) {
+        crate::executor::admit_wake::<B>(executor);
     }
     fn pend_task(executor: SoftwareInterrupt) {
         crate::executor::pend_task::<B>(executor);

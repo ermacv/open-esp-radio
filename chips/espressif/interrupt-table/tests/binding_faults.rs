@@ -60,7 +60,6 @@ impl Controller for Injected {
     fn route(&mut self, source: u16, line: u8) -> Result<(), Error> {
         if matches!(self.refusal, Some(Refuse::Route)) && source == 7 {
             return Err(Error::WrongHart {
-                source,
                 hart: 0,
                 current: u8::MAX,
             });
@@ -83,9 +82,9 @@ impl Controller for Injected {
         self.inner.lock().unwrap().line(line)
     }
 }
-fn router(refusal: Option<Refuse>) -> (Router<Injected>, Arc<Mutex<FakeController>>) {
+fn router(refusal: Option<Refuse>) -> (Router<Injected, 0>, Arc<Mutex<FakeController>>) {
     let inner = Arc::new(Mutex::new(FakeController::new(0)));
-    let router = Router::install(
+    let router = Router::<_, 0>::install(
         Injected {
             inner: Arc::clone(&inner),
             refusal,
@@ -162,10 +161,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     ));
     assert_eq!(
         error.diagnostic(),
-        (
-            BindFaultCode::RouteRefused,
-            [(23 << 16) | 7, 4, 7, 255 << 8]
-        )
+        (BindFaultCode::RouteRefused, [(23 << 16) | 7, 4, 0, 255])
     );
     drop(error);
     assert_eq!(route_drops.load(Ordering::Relaxed), 0);
@@ -186,7 +182,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     );
 }
 
-fn router_with(refusal: Refuse) -> (Router<Injected>, Arc<Mutex<FakeController>>) {
+fn router_with(refusal: Refuse) -> (Router<Injected, 0>, Arc<Mutex<FakeController>>) {
     // Installation writes line 22 too, so enable the failure only on a bound line.
     router(Some(refusal))
 }

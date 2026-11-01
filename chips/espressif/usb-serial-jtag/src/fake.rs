@@ -111,7 +111,7 @@ oer_espressif_interrupt_table::__fake_controller!();
 
 /// A real router-issued proof over the fake's unrouted source.
 pub(crate) fn silent() -> oer_espressif_interrupt_table::Silent<Irq> {
-    oer_espressif_interrupt_table::Router::install(FakeController::new(0), &[])
+    oer_espressif_interrupt_table::Router::<_, 0>::install(FakeController::new(0), &[])
         .and_then(|router| router.silent())
         .expect("the empty table leaves the fake USB source silent")
 }

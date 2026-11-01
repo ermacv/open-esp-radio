@@ -97,7 +97,9 @@ disconnects the released hart's bank; each router silences its own at
 `install`) and each router routes only its hart's entries, so a source no
 entry binds is routed on no bank:
 
-- `Router::install` checks the controller's implemented geometry and level
+- `Router<C, H>` names its hart in its type. `Router::install` refuses a
+  controller of another hart than `H` (`Error::WrongHart`) before any
+  write, checks the controller's implemented geometry and level
   bits against its chip facts (`Controller::verify_configuration`), refuses
   an entry of the hart whose source, line or level lies outside the
   controller (`Error::NoSuchSource`, `NoSuchLine`, `NoSuchLevel`) before any
@@ -109,8 +111,9 @@ entry binds is routed on no bank:
   byte, `oer_riscv::clic::Control`) and only then routes each of the part's
   sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
-  interrupt; an entry of another hart or one the table lacks comes back with
-  its token and part, and an entry outside the controller fails to compile;
+  interrupt; an entry the table lacks comes back with its token and part,
+  and an entry of another hart than the router's or outside the controller
+  fails to compile;
 - `Router::silent` returns `Silent<Part>`, the proof that each of the part's
   sources is routed nowhere and no entry of the table binds it, which a driver that
   polls the part's events takes instead of `Bound` (both implement the

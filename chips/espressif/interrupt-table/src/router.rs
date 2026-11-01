@@ -77,8 +77,8 @@ pub enum Error {
     WrongInterruptCount { actual: u16, expected: u16 },
     /// Selected MNLBITS differ from the chip facts.
     WrongLevelBits { actual: u8, expected: u8 },
-    /// The entry of `source` belongs to `hart`; the router writes `current`.
-    WrongHart { source: u16, hart: u8, current: u8 },
+    /// A router of `hart` was installed over the controller of `current`.
+    WrongHart { hart: u8, current: u8 },
     /// The table holds no entry of the token's source, line, level and hart.
     NotInTable { source: u16 },
     /// The token and table assign different handler classes to this source.
@@ -172,8 +172,9 @@ mod sealed {
     impl<P: super::InterruptSources> Sealed for super::Silent<P> {}
 }
 
-/// The one writer of a hart's routes and lines, by the image's table.
-pub struct Router<C: Controller> {
+/// The one writer of hart `H`'s routes and lines, by the image's table. A
+/// binding of an entry of another hart fails to compile.
+pub struct Router<C: Controller, const H: u8> {
     pub(crate) controller: C,
     table: &'static Table,
 }
@@ -201,7 +202,7 @@ fn present(table: &Table, hart: u8) -> impl Iterator<Item = &Binding> {
         .filter(move |binding| binding.handler.is_some() && binding.hart == hart)
 }
 
-impl<C: Controller> Router<C> {
+impl<C: Controller, const H: u8> Router<C, H> {
     /// Take `controller`'s hart for `table`, the image's
     /// `INTERRUPT_TABLE`: silence every source and disable every line of the
     /// hart, then [`verify`](Self::verify). Interrupts must stay disabled on
@@ -209,13 +210,18 @@ impl<C: Controller> Router<C> {
     ///
     /// # Errors
     ///
-    /// [`Error::NoSuchSource`], [`Error::NoSuchLine`] or
+    /// [`Error::WrongHart`] when `controller` is another hart's than `H`,
+    /// before any write; [`Error::NoSuchSource`], [`Error::NoSuchLine`] or
     /// [`Error::NoSuchLevel`] when an entry of the hart lies outside the
     /// controller, before any write; otherwise as
     /// [`verify`](Self::verify): the controller did not take a write.
     pub fn install(mut controller: C, table: &'static Table) -> Result<Self, Error> {
         const { assert!(C::LINES <= 64, "a controller has at most 64 lines") };
-        for binding in present(table, controller.hart()) {
+        let current = controller.hart();
+        if current != H {
+            return Err(Error::WrongHart { hart: H, current });
+        }
+        for binding in present(table, H) {
             Self::inside(binding.source, binding.line, binding.level)?;
         }
         controller.verify_configuration()?;
@@ -236,7 +242,6 @@ impl<C: Controller> Router<C> {
     ///
     /// # Errors
     ///
-    /// [`Error::WrongHart`] when the entry belongs to another hart and
     /// [`Error::NotInTable`] when the router's table lacks the entry;
     /// nothing changes and `BindError::Refused` returns the token and part.
     /// An admitted binding that cannot claim storage, install its handler or
@@ -257,7 +262,7 @@ impl<C: Controller> Router<C> {
     ///     contexts { radio: 3; }
     ///     timer: TimerToken = TimerIrq => on_timer, line 60, context radio, hart 0, Hardware;
     /// }
-    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController>) {
+    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController, 0>) {
     ///     let tokens = Interrupts::take().unwrap();
     ///     let _ = router.bind(tokens.timer, TimerIrq::default());
     /// }
@@ -279,9 +284,29 @@ impl<C: Controller> Router<C> {
     ///     contexts { radio: 3; }
     ///     far: FarToken = FarIrq => on_far, line 20, context radio, hart 0, Hardware;
     /// }
-    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController>) {
+    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController, 0>) {
     ///     let tokens = Interrupts::take().unwrap();
     ///     let _ = router.bind(tokens.far, FarIrq);
+    /// }
+    /// # bind(&mut oer_espressif_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// ```
+    ///
+    /// An entry of another hart than the router's fails to compile too:
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_espressif_interrupt_table::__fake_parts!();
+    /// # oer_espressif_interrupt_table::__fake_controller!();
+    /// # pub fn on_timer(_: &mut TimerIrq) {}
+    /// oer_espressif_interrupt_table::interrupt_table! {
+    ///     lines: FAKE_LINES,
+    ///     handler_attributes: [];
+    ///     contexts { radio: 3; }
+    ///     timer: TimerToken = TimerIrq => on_timer, line 20, context radio, hart 1, Hardware;
+    /// }
+    /// // Hart zero's router.
+    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController, 0>) {
+    ///     let tokens = Interrupts::take().unwrap();
+    ///     let _ = router.bind(tokens.timer, TimerIrq::default());
     /// }
     /// # bind(&mut oer_espressif_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
@@ -299,6 +324,7 @@ impl<C: Controller> Router<C> {
                 E::LEVEL >= 1 && E::LEVEL as u16 <= C::LEVEL_BITS.levels(),
                 "the entry's level is no level of the controller's lines"
             );
+            assert!(E::HART == H, "the entry belongs to the router's hart");
         };
         let sources = <E::Part as InterruptSources>::SOURCES;
         // A part has a source (checked at compile time).
@@ -306,22 +332,10 @@ impl<C: Controller> Router<C> {
             [first, ..] => *first,
             [] => 0,
         };
-        let current = self.controller.hart();
         let refuse = |error, token, part| Err(BindError::Refused { error, token, part });
-        if E::HART != current {
-            return refuse(
-                Error::WrongHart {
-                    source,
-                    hart: E::HART,
-                    current,
-                },
-                token,
-                part,
-            );
-        }
         let proof = E::PROOF;
         for &source in sources {
-            let Some(binding) = present(self.table, current).find(|binding| {
+            let Some(binding) = present(self.table, H).find(|binding| {
                 binding.source == source && binding.line == E::LINE && binding.level == E::LEVEL
             }) else {
                 return refuse(Error::NotInTable { source }, token, part);
@@ -348,7 +362,7 @@ impl<C: Controller> Router<C> {
         let fault = |source, kind| BindFault {
             source,
             line: E::LINE,
-            hart: current,
+            hart: H,
             kind,
         };
         let Some(storage) = E::storage().try_uninit() else {
@@ -454,7 +468,7 @@ impl<C: Controller> Router<C> {
     /// The first disagreement.
     pub fn verify(&self) -> Result<(), Error> {
         self.controller.verify_configuration()?;
-        let hart = self.controller.hart();
+        let hart = H;
         // Bit `line` of the lines a routed source holds; a line past 63
         // is no line of a controller (`LINES` is at most 64).
         let mut routed_lines = 0u64;
@@ -497,7 +511,7 @@ impl<C: Controller> Router<C> {
     }
 
     /// The hart this router writes.
-    pub fn hart(&self) -> u8 {
-        self.controller.hart()
+    pub const fn hart(&self) -> u8 {
+        H
     }
 }

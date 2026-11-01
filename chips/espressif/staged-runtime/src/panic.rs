@@ -569,11 +569,11 @@ mod tests {
     }
     #[test]
     fn every_numeric_fault_preserves_exact_words() {
-        for retired in [5, 10, 30] {
+        for retired in [5, 10, 13, 30] {
             assert_eq!(FaultReason::from_code(retired), None);
         }
-        for code in (1..=36)
-            .filter(|code| ![5, 10, 30].contains(code))
+        for code in (1..=40)
+            .filter(|code| ![5, 10, 13, 30].contains(code))
             .chain(256..=260)
         {
             let reason = FaultReason::from_code(code).unwrap();

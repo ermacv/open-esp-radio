@@ -5,9 +5,9 @@ pub(crate) type Client = pilot::Client<crate::PhyToken>;
 oer_espressif_staged_runtime::placed_static! {
     static PILOT: pilot::Storage<crate::PhyToken> = pilot::Storage::new::<crate::RadioToken>(), in critical_data "phy_pilot";
 }
-pub(crate) fn init(
+pub(crate) fn init<const H: u8>(
     parts: oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmParts,
-    router: &mut Router<impl Controller>,
+    router: &mut Router<impl Controller, H>,
     token: crate::PhyToken,
 ) -> Client {
     PILOT.init(parts, router, token)

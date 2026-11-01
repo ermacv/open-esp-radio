@@ -41,6 +41,8 @@ impl Wakes for TestBinding {
     fn vtable() -> &'static RawWakerVTable {
         &TEST_VTABLE
     }
+    // A host test runs one hart: every wake is on its executor's.
+    fn admit_wake(_: SoftwareInterrupt) {}
     fn pend_task(executor: SoftwareInterrupt) {
         pend(executor as u8);
     }

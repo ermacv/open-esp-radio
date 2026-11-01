@@ -46,10 +46,10 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
         }
     }
     /// Stop/mask and discard stale RAW through the PHY driver before bind.
-    pub fn init(
+    pub fn init<const H: u8>(
         &'static self,
         parts: Timg0AlarmParts,
-        router: &mut Router<impl Controller>,
+        router: &mut Router<impl Controller, H>,
         token: I,
     ) -> Client<I> {
         let mut interrupt = parts.interrupt;

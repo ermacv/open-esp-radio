@@ -272,7 +272,7 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
 /// [`SecondaryHandoff`]); each hart has one, over its own controller.
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
 pub struct Adopted<C: oer_espressif_interrupt_table::Controller, const H: u8 = DEFAULT_HART> {
-    router: oer_espressif_interrupt_table::Router<C>,
+    router: oer_espressif_interrupt_table::Router<C, H>,
     #[cfg(chip_vectors)]
     admission: PreAdmission<H>,
 }
@@ -286,12 +286,12 @@ const DEFAULT_HART: u8 = 0;
 impl<C: oer_espressif_interrupt_table::Controller, const H: u8> Adopted<C, H> {
     /// Borrow the local execution identity and router together before admission.
     #[cfg(chip_vectors)]
-    pub fn parts(&mut self) -> (&Hart<H>, &mut oer_espressif_interrupt_table::Router<C>) {
+    pub fn parts(&mut self) -> (&Hart<H>, &mut oer_espressif_interrupt_table::Router<C, H>) {
         (self.admission.hart(), &mut self.router)
     }
 
     /// The hart's router: bind entries before interrupts are enabled.
-    pub fn router(&mut self) -> &mut oer_espressif_interrupt_table::Router<C> {
+    pub fn router(&mut self) -> &mut oer_espressif_interrupt_table::Router<C, H> {
         &mut self.router
     }
 
@@ -310,7 +310,7 @@ impl<C: oer_espressif_interrupt_table::Controller, const H: u8> Adopted<C, H> {
     #[cfg(target_arch = "riscv32")]
     pub fn enable_interrupts(
         self,
-    ) -> Result<(oer_espressif_interrupt_table::Router<C>, Hart<H>), BootError> {
+    ) -> Result<(oer_espressif_interrupt_table::Router<C, H>, Hart<H>), BootError> {
         stacks::verify_current_hart_vectors()?;
         self.router.verify()?;
         oer_riscv::enable_interrupts();

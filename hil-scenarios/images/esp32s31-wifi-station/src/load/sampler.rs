@@ -81,9 +81,9 @@ mod chip {
     }
 
     /// Stop and mask TIMG1 T0, bind its handler and install the buffer.
-    pub(crate) fn init(
+    pub(crate) fn init<const H: u8>(
         parts: Timg1AlarmParts,
-        router: &mut Router<impl Controller>,
+        router: &mut Router<impl Controller, H>,
         token: SamplerToken,
     ) -> Profiler {
         let (Some(sampler), Some(buffer)) = (SAMPLER.init(parts, router, token), BUFFER.try_take())

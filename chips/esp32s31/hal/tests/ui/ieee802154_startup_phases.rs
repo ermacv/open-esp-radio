@@ -7,8 +7,8 @@ use oer_esp32s31_hal::ieee802154::{
 use oer_espressif_ieee802154_mac_values::{Ieee802154EventMask, Ieee802154InterruptStartup};
 use oer_espressif_interrupt_table::{Bound, Controller, Entry, Router, Silent};
 
-pub fn setup_is_not_bindable<C: Controller, I: Entry<Part = Ieee802154InterruptOwner>>(
-    router: &mut Router<C>, token: I, setup: Ieee802154InterruptSetupOwner,
+pub fn setup_is_not_bindable<const H: u8, C: Controller, I: Entry<Part = Ieee802154InterruptOwner>>(
+    router: &mut Router<C, H>, token: I, setup: Ieee802154InterruptSetupOwner,
 ) {
     #[cfg(ui_reject)]
     let _ = router.bind(token, setup); // ui-error: E0308

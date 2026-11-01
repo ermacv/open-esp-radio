@@ -109,7 +109,7 @@ impl oer_espressif_interrupt_table::Controller for NoRoutes {
 /// without entries.
 pub(crate) fn silent<'a>()
 -> oer_espressif_interrupt_table::Silent<super::Ieee802154InterruptOwner<Host<'a>>> {
-    oer_espressif_interrupt_table::Router::install(NoRoutes, &[])
+    oer_espressif_interrupt_table::Router::<_, 0>::install(NoRoutes, &[])
         .and_then(|router| router.silent())
         .expect("a table without entries leaves the MAC's source silent")
 }

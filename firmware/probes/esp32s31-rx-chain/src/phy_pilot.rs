@@ -23,9 +23,9 @@ oer_espressif_staged_runtime::placed_static! {
 }
 /// Install once while interrupts are disabled. `split` masks and CLR-clears
 /// stale RAW before any request can enable peripheral delivery.
-pub(crate) fn init(
+pub(crate) fn init<const H: u8>(
     parts: Timg0AlarmParts,
-    router: &mut Router<impl Controller>,
+    router: &mut Router<impl Controller, H>,
     token: crate::PhyToken,
 ) -> Client {
     let mut interrupt = parts.interrupt;

@@ -238,9 +238,9 @@ pub struct TimeDriverReady<B: Binding> {
 /// # Errors
 /// A stuck counter latch or refused route returns the supplied inputs in
 /// quarantine. Duplicate installation records a fault and resets.
-pub fn init<B: Binding, const WRITER_SWI: u8, A, C>(
+pub fn init<B: Binding, const WRITER_SWI: u8, A, C, const H: u8>(
     systimer: SystemTimer<PortOf<B>>,
-    router: &mut oer_espressif_interrupt_table::Router<C>,
+    router: &mut oer_espressif_interrupt_table::Router<C, H>,
     alarm: A,
     part: A::Part,
 ) -> Result<TimeDriverReady<B>, SetupFailure<B, A>>
@@ -279,11 +279,10 @@ where
     {
         Fault::TimerInstalled { writer }.reset::<PortOf<B>>();
     }
-    here::<B, A>(alarm, part)
-        .and_then(|(alarm, mut part)| {
-            assign::<B, WRITER_SWI, A>(identity, &mut part);
-            route::<B, WRITER_SWI, A, C>(router, alarm, part)
-        })
+    crate::hart_binding::check::<H, A>();
+    let mut part = part;
+    assign::<B, WRITER_SWI, A>(identity, &mut part);
+    route::<B, WRITER_SWI, A, C, H>(router, alarm, part)
         .map(|()| TimeDriverReady {
             writer: identity,
             _binding: PhantomData,
@@ -304,9 +303,9 @@ where
 /// # Errors
 /// A refused route returns its token and part in quarantine. Duplicate
 /// assignment or an unavailable timer bank records a fault and resets.
-pub fn bind<B: Binding, const SWI: u8, A, C>(
+pub fn bind<B: Binding, const SWI: u8, A, C, const H: u8>(
     ready: &mut TimeDriverReady<B>,
-    router: &mut oer_espressif_interrupt_table::Router<C>,
+    router: &mut oer_espressif_interrupt_table::Router<C, H>,
     alarm: A,
     part: A::Part,
 ) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
@@ -315,9 +314,10 @@ where
     A::Part: AlarmPart,
     C: oer_espressif_interrupt_table::Controller,
 {
-    let (alarm, mut part) = here::<B, A>(alarm, part)?;
+    crate::hart_binding::check::<H, A>();
+    let mut part = part;
     assign::<B, SWI, A>(ready.writer, &mut part);
-    route::<B, SWI, A, C>(router, alarm, part)
+    route::<B, SWI, A, C, H>(router, alarm, part)
 }
 
 /// Executor `SWI`'s comparator, bound by the writer and ready to be routed
@@ -373,14 +373,13 @@ where
     pub fn bind<const H: u8, C>(
         self,
         _hart: &oer_espressif_staged_runtime::Hart<H>,
-        router: &mut oer_espressif_interrupt_table::Router<C>,
+        router: &mut oer_espressif_interrupt_table::Router<C, H>,
     ) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
     where
         C: oer_espressif_interrupt_table::Controller,
     {
         crate::hart_binding::check::<H, A>();
-        let (alarm, part) = here::<B, A>(self.alarm, self.part)?;
-        route::<B, SWI, A, C>(router, alarm, part)
+        route::<B, SWI, A, C, H>(router, self.alarm, self.part)
     }
 }
 
@@ -448,43 +447,9 @@ where
     }
 }
 
-/// Refuse an alarm whose table entry names another hart than the running one.
-#[allow(
-    clippy::type_complexity,
-    reason = "the refusal carries the same quarantined inputs as a refused route"
-)]
-fn here<B: Binding, A>(
-    alarm: A,
-    part: A::Part,
-) -> Result<(A, A::Part), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
-where
-    A: Entry,
-    A::Part: AlarmPart,
-{
-    let actual = crate::chip::current_core::<B>();
-    if A::HART as usize == actual {
-        return Ok((alarm, part));
-    }
-    Err(Failure::new(
-        Fault::AlarmHart {
-            expected: A::HART,
-            actual,
-        },
-        oer_espressif_interrupt_table::BindError::Refused {
-            error: oer_espressif_interrupt_table::Error::WrongHart {
-                source: <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
-                hart: A::HART,
-                current: actual as u8,
-            },
-            token: alarm,
-            part,
-        },
-    ))
-}
-
 /// Route `alarm` with the running hart's router.
-fn route<B: Binding, const SWI: u8, A, C>(
-    router: &mut oer_espressif_interrupt_table::Router<C>,
+fn route<B: Binding, const SWI: u8, A, C, const H: u8>(
+    router: &mut oer_espressif_interrupt_table::Router<C, H>,
     alarm: A,
     part: A::Part,
 ) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>

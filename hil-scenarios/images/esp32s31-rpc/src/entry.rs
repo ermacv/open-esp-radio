@@ -120,7 +120,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
         runtime_aes,
         silent,
     ));
-    let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _>(
+    let _timer_ready = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
         oer_espressif_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,

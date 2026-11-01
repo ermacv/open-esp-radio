@@ -9,7 +9,7 @@ use oer_espressif_staged_runtime::Hart;
 pub fn start<B, Polled, Other, W, C>(
     executor: InterruptExecutor<B, 2>,
     hart: &Hart<0>,
-    router: &mut Router<C>,
+    router: &mut Router<C, 0>,
     wake: W,
     part: W::Part,
 ) where

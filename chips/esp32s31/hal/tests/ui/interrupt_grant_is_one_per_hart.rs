@@ -31,5 +31,5 @@ pub fn stays_local() {
     #[cfg(ui_reject)]
     send::<Hart1Controller>(); // ui-error: E0277
     #[cfg(ui_reject)]
-    send::<Router<InterruptController>>(); // ui-error: E0277
+    send::<Router<InterruptController, 0>>(); // ui-error: E0277
 }
