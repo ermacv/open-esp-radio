@@ -79,6 +79,11 @@ pub struct StaTxBlockAck {
     request: [Option<oer_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
     /// The current association admits agreements: an HT access point of a QoS BSS.
     admitted: bool,
+    /// The earliest instant the agreements' timing (a response deadline, an
+    /// inactivity end) may change, so [`Self::poll`] scans it only then;
+    /// `None` while none is set. Every change that may set an earlier one
+    /// moves it earlier.
+    timing: Option<Instant>,
 }
 
 impl StaTxBlockAck {
@@ -135,6 +140,7 @@ impl StaTxBlockAck {
             delba: 0,
             request: [None; TX_BLOCK_ACK_MAX_TIDS],
             admitted: false,
+            timing: None,
         })
     }
 
@@ -147,6 +153,24 @@ impl StaTxBlockAck {
         self.delba = 0;
         self.request = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.admitted = admitted;
+        self.retime();
+    }
+
+    /// Take the timing again after a change of the agreements.
+    fn retime(&mut self) {
+        self.timing = self.next_timing();
+    }
+
+    /// The earliest response deadline or inactivity end.
+    fn next_timing(&self) -> Option<Instant> {
+        let idle = ALL_TIDS
+            .into_iter()
+            .filter_map(|tid| self.idle_until(tid))
+            .min();
+        [self.originator.earliest_alarm_deadline(), idle]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// One terminal settled `marks` of a TID's sequence numbers: the
@@ -210,6 +234,11 @@ impl StaTxBlockAck {
             return;
         };
         *last = Some(now);
+        // An operational agreement's inactivity ends no earlier than this.
+        if self.originator.operational(tid).is_some() {
+            let idle = now.saturating_add(self.inactivity);
+            self.timing = Some(self.timing.map_or(idle, |at| at.min(idle)));
+        }
         // A live, queued or closed TID refuses; that is its normal state.
         let _queued: bool = self.originator.queue(tid, self.retry);
     }
@@ -233,19 +262,22 @@ impl StaTxBlockAck {
     /// attempts. `can_send` is false while the station has no transmission
     /// to give; nothing is taken then.
     pub(crate) fn poll(&mut self, now: Instant, can_send: bool) -> Option<TxBlockAckOwed> {
-        // At most one expiry per agreement.
-        for _ in ALL_TIDS {
-            if self.originator.expire_next(now).is_none() {
-                break;
+        if self.timing.is_some_and(|at| now >= at) {
+            // At most one expiry per agreement.
+            for _ in ALL_TIDS {
+                if self.originator.expire_next(now).is_none() {
+                    break;
+                }
             }
-        }
-        for tid in ALL_TIDS {
-            if self.idle_until(tid).is_some_and(|until| now >= until)
-                && self.originator.stop(tid)
-                && let Some(bit) = 1_u8.checked_shl(u32::from(tid))
-            {
-                self.delba |= bit;
+            for tid in ALL_TIDS {
+                if self.idle_until(tid).is_some_and(|until| now >= until)
+                    && self.originator.stop(tid)
+                    && let Some(bit) = 1_u8.checked_shl(u32::from(tid))
+                {
+                    self.delba |= bit;
+                }
             }
+            self.timing = self.next_timing();
         }
         if !can_send {
             return None;
@@ -284,13 +316,16 @@ impl StaTxBlockAck {
         now: Instant,
     ) -> Result<oer_ieee80211_core_upper_mac::block_ack::AddbaRequest, TxBlockAckOriginatorError>
     {
-        self.originator.begin(tid, starting_sequence, now)
+        let request = self.originator.begin(tid, starting_sequence, now);
+        self.retime();
+        request
     }
 
     /// `tid`'s request did not leave: its next attempt is due after the
     /// retry interval while attempts remain.
     pub(crate) fn request_failed(&mut self, tid: u8, now: Instant) {
         self.originator.transmit_failed(tid, now);
+        self.retime();
     }
 
     /// Take the access point's answer to the station's agreements: an ADDBA
@@ -299,6 +334,12 @@ impl StaTxBlockAck {
     /// breaks the agreement's rules ends the TID's negotiation, closes it
     /// and owes a DELBA, so the access point keeps no agreement of its own.
     pub(crate) fn on_action(&mut self, action: BlockAckAction, now: Instant) -> bool {
+        let taken = self.take_action(action, now);
+        self.retime();
+        taken
+    }
+
+    fn take_action(&mut self, action: BlockAckAction, now: Instant) -> bool {
         match action {
             BlockAckAction::AddbaResponse { tid, .. } => {
                 match self.originator.on_response_action(action) {
@@ -335,10 +376,6 @@ impl StaTxBlockAck {
     /// deadline, an agreement's inactivity end, and while `can_send` a due
     /// negotiation or an owed DELBA.
     pub(crate) fn deadline(&self, can_send: bool) -> Option<Instant> {
-        let idle = ALL_TIDS
-            .into_iter()
-            .filter_map(|tid| self.idle_until(tid))
-            .min();
         let due = if !can_send {
             None
         } else if self.delba != 0 || self.request.iter().any(Option::is_some) {
@@ -346,10 +383,7 @@ impl StaTxBlockAck {
         } else {
             self.originator.next_pending_deadline()
         };
-        [self.originator.earliest_alarm_deadline(), idle, due]
-            .into_iter()
-            .flatten()
-            .min()
+        [self.timing, due].into_iter().flatten().min()
     }
 
     /// When `tid`'s operational agreement ends for inactivity.
