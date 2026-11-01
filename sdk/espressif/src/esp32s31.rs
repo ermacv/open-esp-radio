@@ -52,7 +52,7 @@ pub use console::{Console, ConsolePeripheral, UsbConsole};
 
 /// What the interrupt controller showed after the previous boot's
 /// exception trapped.
-pub use oer_esp32s31_compose::exception::{LineView, Observed, TrapIdentity};
+pub use oer_esp32s31_compose::exception::{LineView, Observed, Terminal, TrapIdentity};
 /// Why a hart left reset.
 pub use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
 /// The record of the previous boot's panic.
@@ -173,7 +173,7 @@ pub struct Evidence {
 /// trap's instant: a source may have become pending in between. It is
 /// `None` when no record of the hook follows this trap: the hook did not
 /// commit one, the boot printed and cleared it, or the record left is of an
-/// earlier trap (`Observed::follows`).
+/// earlier terminal, even one with the same registers (`Observed::follows`).
 #[derive(Clone, Copy, Debug)]
 pub struct ExceptionEvidence {
     pub trap: PreviousException,

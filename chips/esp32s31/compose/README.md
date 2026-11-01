@@ -15,12 +15,15 @@ retained reset, without exposing the HAL's fault type in the Wi-Fi API.
 the other hart; the hook adds only what it reads afterwards: the trapping
 hart's pending sources, `mtvec` and `mtvt`, and, for an interrupt of a line
 without a handler, the routes to that line and its state, which it reads
-only when the stop held. The record also copies the frame's identifying
-registers (`mcause`, `mepc`, `mtval`, `ra`, `sp`): the two records are
-committed and cleared independently, so an image pairs the observations
-with a retained trap only when `Observed::follows` it, and the printed notes
-start with their trap's `mepc` and the trap vector registers
-(`fatal_trap_vectors`), also for an exception, which names no line. It
+only when the stop held. The record also copies the claim's terminal
+number, which the runtime's frame record holds too, and the frame's
+identifying registers (`mcause`, `mepc`, `mtval`, `ra`, `sp`): the two
+records are committed and cleared independently, and a later trap at the
+same place may leave the same registers, so an image pairs the observations
+with a retained trap only when `Observed::follows` it, by terminal and
+registers. The printed notes start with their trap's terminal, `mepc` and
+the trap vector registers (`fatal_trap_vectors`), also for an exception,
+which names no line; the frame's `fatal_terminal` names the same terminal. It
 allocates, waits and panics nowhere.
 `exception::report_previous` prints the record at the next boot and clears
 it only after every note was written whole; `peek_previous` reads it first

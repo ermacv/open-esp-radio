@@ -15,6 +15,7 @@ const TRAP: TrapIdentity = TrapIdentity {
 fn interrupt(stopped: bool) -> Observed {
     Observed {
         hart: 0,
+        terminal: Terminal::from_word(5),
         trap: TrapIdentity {
             mcause: 0x8000_0017,
             ..TRAP
@@ -35,6 +36,7 @@ fn interrupt(stopped: bool) -> Observed {
 fn exception() -> Observed {
     Observed {
         hart: 1,
+        terminal: Terminal::from_word(7),
         trap: TRAP,
         stopped: true,
         mtvec: 0x4000_0003,
@@ -99,6 +101,7 @@ fn an_exception_names_no_line_and_reports_its_vector_registers_and_pending_sourc
 fn previous(
     hart: u32,
     trap: TrapIdentity,
+    terminal: u32,
 ) -> oer_espressif_staged_runtime::trap::PreviousException {
     oer_espressif_staged_runtime::trap::PreviousException {
         hart,
@@ -108,15 +111,16 @@ fn previous(
         ra: trap.ra,
         sp: trap.sp,
         mscratch: 0x5019_f080,
+        terminal: Terminal::from_word(terminal),
     }
 }
 
 #[test]
 fn observations_follow_only_the_trap_whose_registers_they_copied() {
     let observed = exception();
-    assert!(observed.follows(&previous(1, TRAP)));
+    assert!(observed.follows(&previous(1, TRAP, 7)));
     // Another hart, or another trap that left an older record behind.
-    assert!(!observed.follows(&previous(0, TRAP)));
+    assert!(!observed.follows(&previous(0, TRAP, 7)));
     for other in [
         TrapIdentity {
             mepc: 0x5013_0000,
@@ -133,8 +137,41 @@ fn observations_follow_only_the_trap_whose_registers_they_copied() {
         TrapIdentity { mtval: 4, ..TRAP },
         TrapIdentity { ra: 0, ..TRAP },
     ] {
-        assert!(!observed.follows(&previous(1, other)), "{other:?}");
+        assert!(!observed.follows(&previous(1, other, 7)), "{other:?}");
     }
+}
+
+#[test]
+fn an_earlier_trap_s_observations_follow_no_later_trap_with_the_same_registers() {
+    // Terminal 7 trapped and its hook committed; the next boot printed and
+    // cleared only the trap. Terminal 8 then trapped at the same place, and
+    // its hook faulted before its commit: both records name the same hart
+    // and registers, and only the terminal tells them apart.
+    let earlier = exception();
+    let mut record = earlier.record().unwrap();
+    let left = Observed::from_record(&record.peek().unwrap()).unwrap();
+    assert!(left.follows(&previous(1, TRAP, 7)));
+    assert!(!left.follows(&previous(1, TRAP, 8)));
+    // Its notes name terminal 7, not the trap that follows it.
+    let mut vectors = Vec::new();
+    report(&mut record, |note| {
+        if note.topic == Topic::FatalTrapVectors {
+            vectors.extend_from_slice(note.words());
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(vectors.first(), Some(&7));
+    assert_eq!(vectors.get(1), Some(&TRAP.mepc));
+    // A trap or a record that numbered no terminal pairs with nothing.
+    assert!(!earlier.follows(&previous(1, TRAP, 0)));
+    let unnumbered = Observed {
+        terminal: None,
+        ..earlier
+    };
+    let unnumbered = Observed::from_record(&unnumbered.record().unwrap().peek().unwrap()).unwrap();
+    assert_eq!(unnumbered.terminal, None);
+    assert!(!unnumbered.follows(&previous(1, TRAP, 0)));
 }
 
 #[test]

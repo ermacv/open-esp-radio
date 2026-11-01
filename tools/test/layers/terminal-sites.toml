@@ -133,6 +133,9 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/espressif/staged-runtime/src/lib.rs:crate::entry:terminal-binding:__exception_handler:1" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
 "chips/espressif/staged-runtime/src/lib.rs:crate::entry:terminal-binding:__exception_handler:2" = { owner = "chips/espressif/staged-runtime", classes = ["cpu-exception"] }
 
+# chips/espressif/staged-runtime/src/retained_fault.rs
+"chips/espressif/staged-runtime/src/retained_fault.rs:crate::retained_fault:retained-slot:retained_static:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
+
 # chips/espressif/staged-runtime/src/panic.rs
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic:retained-slot:retained_static:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/espressif/staged-runtime/src/panic.rs:crate::panic::reset_fault:terminal-entry:reset_fault:1" = { owner = "chips/espressif/staged-runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }

@@ -769,8 +769,12 @@ The current mechanisms have narrower guarantees than the policy:
 - Staged runtime claims one terminal election in boot-initialized SRAM before
   stopping other harts or running a recorder. Reentry returns `Reentered`;
   a losing terminal skips the recorder and requests reset without waiting.
-  The winning claim remains held until reset. A panic hook borrows that same
-  claim for its additional observation slots; each committed slot remains held.
+  The winning claim remains held until reset. It draws the next nonzero
+  terminal number from a retained counter, which only a claim locks; a claim
+  that finds it held numbers no terminal. A panic or exception hook borrows
+  that same claim for its additional observation slots; each committed slot
+  remains held, and a record that copies the claim's number names its
+  terminal even when an earlier terminal left the same registers.
   Commit publishes its completion marker last. A fresh boot may overwrite
   stale, unconsumed bytes with its first terminal record.
 - Peek does not clear. Each reporter clears only after its complete output
@@ -786,13 +790,15 @@ The current mechanisms have narrower guarantees than the policy:
   frame's registers: after the stop it samples the trapping hart's pending
   sources and, for an interrupt of a line without a handler, the routes to
   that line and its state, recording whether the stop held, and copies the
-  frame's identifying registers. The next boot prints the frame and those
-  observations as separate records, each cleared on its own once printed
-  whole; the observation notes name their trap's `mepc`. An SDK boot serves
-  both to HIL (`Fault::Exception`, the trap's registers apart from the
-  observations), attaching the observations only to the trap whose
-  registers they copied: a hook that faulted before its commit leaves an
-  earlier trap's record behind. The RX-chain supplement uses the entry-time
+  claim's terminal number, which the runtime's frame record also holds, and
+  the frame's identifying registers. The next boot prints the frame and
+  those observations as separate records, each cleared on its own once
+  printed whole; the frame's `fatal_terminal` and the observation notes name
+  the terminal, the observation notes also their trap's `mepc`. An SDK boot
+  serves both to HIL (`Fault::Exception`, the trap's registers apart from
+  the observations), attaching the observations only to the trap of the
+  same terminal and registers: a hook that faulted before its commit leaves
+  an earlier terminal's record behind, possibly with the same registers. The RX-chain supplement uses the entry-time
   cause/PC/trap value. Neither the frame nor the sequential samples are an
   atomic snapshot of all hardware.
   The route and line view (`fatal_view`) exists only in the boot hart's

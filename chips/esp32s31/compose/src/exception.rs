@@ -14,11 +14,14 @@
 //!
 //! The two records are committed and cleared independently: a hook that
 //! faults before its commit leaves an earlier trap's observations behind,
-//! and a print may clear one record and keep the other. The record therefore
-//! copies the frame's identifying registers ([`TrapIdentity`]); an image
-//! pairs it with a retained trap only when they match
-//! ([`Observed::follows`]), and its printed notes start with the `mepc` of
-//! their trap (`fatal_trap_vectors`).
+//! and a print may clear one record and keep the other. A later trap at the
+//! same place may leave the same registers, so the record copies the trap's
+//! [`Terminal`] number, which the runtime's record also holds and every
+//! terminal draws anew, beside the frame's identifying registers
+//! ([`TrapIdentity`]). An image pairs it with a retained trap only when both
+//! match ([`Observed::follows`]); its printed notes start with the number
+//! and the `mepc` of their trap (`fatal_trap_vectors`), which the runtime's
+//! `fatal_terminal` names.
 //!
 //! Every step is a register read through a typed accessor or a bounded
 //! copy, without allocation, waiting or a panic path, so the hook stays a
@@ -32,6 +35,7 @@ use oer_diagnostics::fault::Record;
 use oer_diagnostics::fault::{Class, Domain};
 #[cfg(target_arch = "riscv32")]
 use oer_espressif_staged_runtime::retained_fault;
+pub use oer_espressif_staged_runtime::retained_fault::Terminal;
 
 /// The interrupt matrix's sources, in 32-bit words.
 pub const SOURCE_WORDS: usize = 6;
@@ -58,9 +62,13 @@ oer_espressif_staged_runtime::retained_static! {
 pub struct Observed {
     /// The hart that trapped.
     pub hart: u32,
+    /// The terminal the trap claimed; `None` when it numbered none, and
+    /// then these observations follow no trap.
+    pub terminal: Option<Terminal>,
     /// The trap these observations follow, copied from the frame the
     /// runtime retained first: the observations belong to a retained trap
-    /// only when it holds the same values ([`Observed::follows`]).
+    /// only when it holds the same values and terminal
+    /// ([`Observed::follows`]).
     pub trap: TrapIdentity,
     /// Whether the fatal path stopped the other hart before the reads.
     pub stopped: bool,
@@ -105,6 +113,7 @@ pub struct LineView {
 #[repr(C)]
 struct Payload {
     flags: u32,
+    terminal: u32,
     mcause: u32,
     mepc: u32,
     mtval: u32,
@@ -121,11 +130,15 @@ struct Payload {
 
 impl Observed {
     /// Whether these observations follow `trap`, the runtime's retained
-    /// frame: the same hart and the same identifying registers. Records of
+    /// frame: the same terminal, hart and identifying registers. Records of
     /// two traps are cleared independently, so a record of an earlier trap
-    /// can outlive it; it then follows no later trap.
+    /// can outlive it; it carries the earlier terminal's number and follows
+    /// no later trap, even one with the same registers. Without a number on
+    /// either side nothing follows.
     pub fn follows(&self, trap: &oer_espressif_staged_runtime::trap::PreviousException) -> bool {
-        self.hart == trap.hart
+        self.terminal.is_some()
+            && self.terminal == trap.terminal
+            && self.hart == trap.hart
             && self.trap
                 == TrapIdentity {
                     mcause: trap.mcause,
@@ -144,6 +157,7 @@ impl Observed {
         Payload {
             flags: (if self.stopped { STOPPED } else { 0 })
                 | (if self.line.is_some() { INTERRUPT } else { 0 }),
+            terminal: Terminal::word(self.terminal),
             mcause: self.trap.mcause,
             mepc: self.trap.mepc,
             mtval: self.trap.mtval,
@@ -181,6 +195,7 @@ impl Observed {
         };
         Some(Self {
             hart: view.hart,
+            terminal: Terminal::from_word(payload.terminal),
             trap: TrapIdentity {
                 mcause: payload.mcause,
                 mepc: payload.mepc,
@@ -216,13 +231,14 @@ pub fn capture(
     frame: &oer_espressif_staged_runtime::trap::TrapFrame,
     stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
 ) {
-    if let Ok(record) = observe(frame, stop).record() {
+    if let Ok(record) = observe(claim.terminal(), frame, stop).record() {
         let _committed = claim.commit(&SLOT, record);
     }
 }
 
 #[cfg(target_arch = "riscv32")]
 fn observe(
+    terminal: Option<Terminal>,
     frame: &oer_espressif_staged_runtime::trap::TrapFrame,
     stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
 ) -> Observed {
@@ -271,6 +287,7 @@ fn observe(
     });
     Observed {
         hart: registers.hart as u32,
+        terminal,
         trap: TrapIdentity {
             mcause: frame.mcause,
             mepc: frame.mepc,
@@ -358,8 +375,10 @@ fn report(
     record
         .report(|view| {
             let observed = Observed::from_record(&view).ok_or(())?;
-            // Names the trap, by its `mepc`, that the other notes follow.
+            // Names the trap, by its terminal and `mepc`, that the other
+            // notes follow.
             emit(&Note::fatal_trap_vectors(
+                Terminal::word(observed.terminal),
                 observed.trap.mepc,
                 observed.mtvec,
                 observed.mtvt,
