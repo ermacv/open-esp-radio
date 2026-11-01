@@ -47,6 +47,7 @@ impl Registers for Fake {
     fn disable_interrupt(&mut self) {}
     fn disable_dma(&mut self) {}
     fn decrypt128(&mut self) {}
+    fn encrypt128(&mut self) {}
     fn disable_pseudo_rounds(&mut self) {}
     fn hold(&mut self) {}
     fn write_key(&mut self, words: &KeyWords) {
