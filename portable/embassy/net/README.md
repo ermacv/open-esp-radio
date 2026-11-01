@@ -37,7 +37,8 @@ Up with a new epoch. A changed renewal is observed after each stack poll.
 Pools, stack, bridge and socket handles remain in place across reconnects.
 
 `Control::stop` wakes the runner independently of data-plane capacity. The
-service lowers its stack link, reclaims pending/queued software TX, clears IP
+service lowers its stack link, reclaims pending/queued software TX, closes
+every UDP and raw socket of its stack (dropping what each queued), clears IP
 addresses/routes and returns its typed stop/error. It retains its owners in
 terminal state; subsequent runs return that same terminal without polling the
 stack. Control and runner stay on the same executor/hart. The neutral device's
@@ -63,9 +64,11 @@ A lent frame becomes a packet in its own storage when the image gives the
 bridge its `LentSlots`. The packet's drop only releases its slot; the bridge
 drops the owner, which returns the storage to its device, at its next poll
 (xarxa's `reclaim`, a direct call), after each stack poll and once more when
-the service ends. A lent packet still held after the service ended, such as
-one in an application's socket queue, is never returned: close such sockets
-before stopping the service. The adapter forbids unsafe code.
+the service ends, after its stop closed the sockets that queue packets: a
+socket's queued datagrams are lent packets too, and a socket the application
+still holds stays closed. A lent packet the application took out of a socket
+and still holds after the service ended is never returned. The adapter
+forbids unsafe code.
 
 ## Initialization and TX state
 

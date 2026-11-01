@@ -719,3 +719,62 @@ fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
         "the stop returns the retained reply's lent buffer"
     );
 }
+
+/// A UDP datagram from the peer to `port` of the static address.
+fn udp_datagram(port: u16, payload: &[u8]) -> Vec<u8> {
+    let length = 8 + payload.len();
+    let mut ip = std::vec![0x45, 0, 0, (20 + length) as u8, 0, 1, 0, 0, 64, 17, 0, 0];
+    ip.extend_from_slice(&PEER);
+    ip.extend_from_slice(&CONFIG.address);
+    let sum = checksum(&ip);
+    ip[10..12].copy_from_slice(&sum);
+    // The UDP checksum is optional over IPv4: zero carries none.
+    ip.extend_from_slice(&4321_u16.to_be_bytes());
+    ip.extend_from_slice(&port.to_be_bytes());
+    ip.extend_from_slice(&(length as u16).to_be_bytes());
+    ip.extend_from_slice(&[0, 0]);
+    ip.extend_from_slice(payload);
+    ip
+}
+
+#[test]
+fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
+    let slots: &'static crate::ethernet::LentSlots<Lent, 4> =
+        Box::leak(Box::new(crate::ethernet::LentSlots::new()));
+    let (control, mut service, port) =
+        start_lent::<HostContext>(Configuration::Static(CONFIG), Some(slots));
+    let mut socket = owned_embassy_net::udp::UdpSocket::new(service.stack()).unwrap();
+    socket
+        .bind(1234, owned_embassy_net::wire::ListenSocketAddr::UNSPECIFIED)
+        .unwrap();
+    let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
+    let waker = Waker::from(scheduled.clone());
+    let mut cx = core::task::Context::from_waker(&waker);
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    settle(&mut task, &scheduled, &mut cx);
+    let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    for payload in [[1, 2, 3], [4, 5, 6]] {
+        port.borrow_mut()
+            .rx
+            .push_back(lent(0x0800, &udp_datagram(1234, &payload), &returned));
+    }
+    PortState::wake(&port.borrow().rx_waker);
+    settle(&mut task, &scheduled, &mut cx);
+    assert!(
+        port.borrow().rx.is_empty(),
+        "the bridge took both datagrams"
+    );
+    assert_eq!(
+        returned.load(Ordering::Relaxed),
+        0,
+        "the socket queues both datagrams in their lent buffers"
+    );
+    control.stop();
+    assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
+    assert_eq!(
+        returned.load(Ordering::Relaxed),
+        2,
+        "the stop returns the lent buffers of the socket the image still holds"
+    );
+    assert!(!socket.is_open());
+}

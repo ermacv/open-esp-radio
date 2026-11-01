@@ -673,7 +673,7 @@ checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 [[package]]
 name = "embassy-net"
 version = "0.9.1"
-source = "git+https://github.com/ermacv/embassy.git?rev=f11388d0af7c43347f8ccd9f26a6505dedf098da#f11388d0af7c43347f8ccd9f26a6505dedf098da"
+source = "git+https://github.com/ermacv/embassy.git?rev=073d3fc49234db76005cb0ea1a86097d5f633c2d#073d3fc49234db76005cb0ea1a86097d5f633c2d"
 dependencies = [
  "document-features",
  "embassy-futures",
