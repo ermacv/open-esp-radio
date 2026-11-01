@@ -1,19 +1,19 @@
-// The SDK station image: the library's station and IP service, the HIL
-// console serving the base module and the SDK station service, and one
-// worker that answers the service's requests in order.
+// The SDK station image: the boot of the library's station example with
+// the console added and every channel scanned, the HIL agent serving the
+// base module and the SDK station service, and one worker that answers the
+// service's requests in order.
 
 use core::{convert::Infallible, future::Future};
 
 use oer_espressif::{
-    Aes, AppResult, Boot, Console, Error, Evidence, Peripherals, ResetCause, Started, UsbConsole,
+    Aes, AppResult, Boot, Console, Error, Peripherals, Started,
     time::{Duration, with_timeout},
     wifi::{
         self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, Station,
         embassy_net,
     },
 };
-use oer_hil_protocol::RequestIdentity;
-use oer_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_hil_agent_espressif::{Inbox, Mailbox, answer};
 use oer_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, Ipv4, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
@@ -27,6 +27,8 @@ const COUNTRY: [u8; 2] = *b"DE";
 /// The owner's transmit power cap, below the domain's ceiling.
 const TX_CAP_DBM: i8 = 10;
 
+static MAILBOX: ConstStaticCell<Mailbox<Request>> = ConstStaticCell::new(Mailbox::new());
+
 oer_espressif::main!(boot);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = AppResult>>, Error> {
@@ -35,174 +37,43 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<Started<impl Future<Output = A
     let (station, device) = Station::start(p.wifi, &aes, config, &mut boot)?;
     let net = Net::start(device, NetConfig::Dhcpv4, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
-    let evidence = Platform(boot.evidence());
-    let (sender, receiver) = REQUESTS.try_take().ok_or(Error::Storage)?.split();
-    Ok(boot.run(app(
+    let evidence = boot.evidence();
+    let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
+    let worker = Worker {
+        station,
+        net,
+        requests: inbox,
+    };
+    Ok(boot.run(oer_hil_agent_espressif::serve(
         console,
         evidence,
-        sender,
-        Worker {
-            station,
-            net,
-            requests: receiver,
-        },
+        services::IMAGE,
+        outbox,
+        move || worker.run(),
     )))
-}
-
-/// Serve the host and the worker side by side until the chip resets.
-async fn app(
-    console: UsbConsole,
-    evidence: Platform,
-    requests: Sender,
-    worker: Worker,
-) -> AppResult {
-    let boot = oer_espressif::boot_id();
-    CONSOLE.start(boot);
-    let intake = oer_hil_agent::base::Intake::new(
-        boot,
-        services::KEYS,
-        services::MAXIMUM_PAYLOAD_BYTES,
-        oer_espressif_staged_runtime::layout::payload_crc32(),
-    );
-    let serve = CONSOLE.run(
-        console,
-        intake,
-        &evidence,
-        move |identity, request: Request| {
-            queue(&requests, identity, request);
-        },
-    );
-    match embassy_futures::select::select(serve, worker.run()).await {
-        // The console's transport broke its contract.
-        embassy_futures::select::Either::First(_fault) => Err(Error::Console),
-        embassy_futures::select::Either::Second(never) => match never {},
-    }
-}
-
-// ---------------------------------------------------------------- console
-
-const NOTES: usize = 8;
-const MESSAGES: usize = 8;
-
-/// Writes a note through the early USB writer, until the console opens.
-struct EarlyUsb;
-
-impl oer_hil_agent::console::Immediate for EarlyUsb {
-    fn note(note: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
-        oer_esp32s31_compose::console::early(note)
-    }
-
-    fn take_lost() -> u32 {
-        oer_esp32s31_compose::console::take_early_lost()
-    }
-}
-
-type HilConsole = oer_hil_agent::console::Console<NOTES, MESSAGES, EarlyUsb>;
-
-oer_espressif_staged_runtime::placed_static! {
-    static CONSOLE: HilConsole = oer_hil_agent::console::Console::new(), in critical_data "logging";
-}
-
-/// Publish `body` as the answer to `identity`, without waiting.
-fn emit<M: oer_hil_protocol::Message>(identity: RequestIdentity, body: &M) {
-    let _sequence = CONSOLE.publish(identity.session_id, identity.request_id, body);
-}
-
-/// The boot evidence the base module serves, as the library read it.
-struct Platform(Evidence);
-
-impl oer_hil_agent::base::Platform for Platform {
-    fn boot_evidence(&self) -> oer_hil_protocol::base::BootEvidence {
-        use oer_hil_protocol::base::{BootEvidence, PlatformPanic, ResetReason};
-        let cause = self.0.reset_cause;
-        BootEvidence {
-            reset_reason: match cause {
-                ResetCause::CoreSoftware => ResetReason::Software,
-                ResetCause::CoreMainWatchdog1 => ResetReason::MainWatchdog1,
-                ResetCause::ChipPowerOn => ResetReason::PowerOn,
-                ResetCause::SystemBrownOut => ResetReason::Brownout,
-                ResetCause::CoreMainWatchdog0 => ResetReason::MainWatchdog0,
-                ResetCause::CoreRtcWatchdog
-                | ResetCause::CpuRtcWatchdog
-                | ResetCause::SystemRtcWatchdog => ResetReason::RtcWatchdog,
-                ResetCause::SystemSuperWatchdog => ResetReason::SuperWatchdog,
-                ResetCause::CoreUsbJtag | ResetCause::CoreUsbUart => ResetReason::UsbSerialJtag,
-                ResetCause::CpuJtag => ResetReason::Jtag,
-                ResetCause::CpuLockup => ResetReason::CpuLockup,
-                _ => ResetReason::Other,
-            },
-            raw_reset_reason: cause.code(),
-            post_mortem: None,
-            platform_panic: self.0.previous_panic.as_ref().map(|record| PlatformPanic {
-                hart: record.hart,
-                in_interrupt: record.in_interrupt,
-                interrupted_pc: record.interrupted_pc,
-                // At most 48 bytes, the protocol's bound.
-                file: record.file().try_into().unwrap_or_default(),
-                line: record.line,
-                column: record.column,
-            }),
-        }
-    }
-
-    /// The library printed and cleared the previous boot's panic before the
-    /// boot.
-    fn boot_evidence_written(&self) {}
-
-    /// Every page is empty: the image keeps no post-mortem checkpoints.
-    fn post_mortem_checkpoints(&self, first: u8) -> oer_hil_protocol::base::PostMortemCheckpoints {
-        oer_hil_protocol::base::PostMortemCheckpoints {
-            first,
-            checkpoints: Default::default(),
-        }
-    }
-}
-
-// ---------------------------------------------------------------- requests
-
-type Queue = WakingSpscQueue<(RequestIdentity, Request), 1>;
-static REQUESTS: ConstStaticCell<Queue> = ConstStaticCell::new(WakingSpscQueue::new());
-type Sender = WakingSpscSender<'static, (RequestIdentity, Request), 1>;
-type Receiver = WakingSpscReceiver<'static, (RequestIdentity, Request), 1>;
-
-/// Hand `request` to the worker, or refuse it while one waits.
-fn queue(requests: &Sender, identity: RequestIdentity, request: Request) {
-    if requests.try_send((identity, request)).is_err() {
-        use oer_hil_protocol::base::{RejectReason, Rejected};
-        emit(identity, &Rejected(RejectReason::Busy));
-    }
 }
 
 /// Answers the service's requests one at a time.
 struct Worker {
     station: Station,
     net: Net,
-    requests: Receiver,
+    requests: Inbox<'static, Request>,
 }
 
 impl Worker {
     async fn run(mut self) -> Infallible {
         loop {
-            let (identity, request) = self.next().await;
+            let (identity, request) = self.requests.next().await;
             match request {
-                Request::Connect(connect) => emit(identity, &self.connect(connect).await),
+                Request::Connect(connect) => answer(identity, &self.connect(connect).await),
                 Request::WaitIpv4(WaitIpv4 { timeout_ms }) => {
-                    emit(identity, &self.wait_ipv4(timeout_ms).await);
+                    answer(identity, &self.wait_ipv4(timeout_ms).await);
                 }
-                Request::Exchange(exchange) => emit(identity, &self.exchange(exchange).await),
+                Request::Exchange(exchange) => answer(identity, &self.exchange(exchange).await),
                 Request::WaitLinkDown(WaitLinkDown { timeout_ms }) => {
-                    emit(identity, &self.wait_link_down(timeout_ms).await);
+                    answer(identity, &self.wait_link_down(timeout_ms).await);
                 }
-                Request::GetStatus(_) => emit(identity, &self.status()),
-            }
-        }
-    }
-
-    async fn next(&mut self) -> (RequestIdentity, Request) {
-        loop {
-            self.requests.ready().await;
-            if let Some(request) = self.requests.try_receive() {
-                return request;
+                Request::GetStatus(_) => answer(identity, &self.status()),
             }
         }
     }
