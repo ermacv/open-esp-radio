@@ -36,11 +36,15 @@ pub use oer_esp32s31_compose::Esp32s31;
 /// Time on the executors' clock: timers, timeouts, instants.
 pub use embassy_time as time;
 
-/// `$future`, observed as the library's part `$part` (`observe`).
+/// `$future`, pinned in place for the statement that awaits it and
+/// observed as the library's part `$part` (`observe`).
 #[cfg(feature = "observe")]
 macro_rules! observed {
     ($part:ident, $future:expr) => {
-        $crate::esp32s31::observed::library($crate::observe::parts::LibraryPart::$part, $future)
+        $crate::esp32s31::observed::Polled::library(
+            $crate::observe::parts::LibraryPart::$part,
+            core::pin::pin!($future),
+        )
     };
 }
 /// `$future` itself.
@@ -49,6 +53,23 @@ macro_rules! observed {
     ($part:ident, $future:expr) => {
         $future
     };
+}
+
+/// Shadow the pinned root `$root` with itself observed as the library's
+/// part `$part` (`observe`).
+#[cfg(feature = "observe")]
+macro_rules! observed_root {
+    ($root:ident, $part:ident) => {
+        let mut $root = core::pin::pin!($crate::esp32s31::observed::Polled::library(
+            $crate::observe::parts::LibraryPart::$part,
+            $root.as_mut(),
+        ));
+    };
+}
+/// Nothing.
+#[cfg(not(feature = "observe"))]
+macro_rules! observed_root {
+    ($root:ident, $part:ident) => {};
 }
 
 #[cfg(feature = "observe")]
@@ -772,10 +793,15 @@ pub fn start<S: Started, H: Hart1Started>(
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
     #[cfg(not(feature = "hart1"))]
-    let mut net = core::pin::pin!(observed!(Ip, run_net(net)));
+    let mut net = core::pin::pin!(run_net(net));
     #[cfg(not(feature = "hart1"))]
-    let mut second = core::pin::pin!(observed!(Second, run_app(second)));
-    let mut app = core::pin::pin!(observed!(Application, run_app(app)));
+    observed_root!(net, Ip);
+    #[cfg(not(feature = "hart1"))]
+    let mut second = core::pin::pin!(run_app(second));
+    #[cfg(not(feature = "hart1"))]
+    observed_root!(second, Second);
+    let mut app = core::pin::pin!(run_app(app));
+    observed_root!(app, Application);
     #[cfg(not(feature = "hart1"))]
     let roots = (
         (

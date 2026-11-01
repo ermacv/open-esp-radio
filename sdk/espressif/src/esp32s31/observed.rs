@@ -194,33 +194,35 @@ impl Part {
             .ok_or(Error::ImageParts)
     }
 
-    /// Run `future`, observing each of its polls as this part's.
-    pub async fn polled<F: Future>(self, future: F) -> F::Output {
+    /// `future`, pinned where it was made, with each of its polls observed
+    /// as this part's: `part.polled(core::pin::pin!(future)).await`.
+    pub fn polled<F: Future>(self, future: Pin<&mut F>) -> Polled<'_, F> {
         Polled {
             number: self.number,
-            future: core::pin::pin!(future),
+            future,
         }
-        .await
     }
 }
 
-/// Run `future`, observing each of its polls as the library's `part`.
-pub(crate) async fn library<F: Future>(part: LibraryPart, future: F) -> F::Output {
-    Polled {
-        number: part as usize,
-        future: core::pin::pin!(future),
-    }
-    .await
-}
-
-/// A future whose polls part `number` observes; the executor that polls
-/// it is the part's one writer.
-struct Polled<F> {
+/// A future whose polls one part observes; the executor that polls it is
+/// the part's one writer. It holds the future it observes by its pin, so
+/// that future stays where it was made.
+pub struct Polled<'a, F> {
     number: usize,
-    future: F,
+    future: Pin<&'a mut F>,
 }
 
-impl<F: Future + Unpin> Future for Polled<F> {
+impl<'a, F> Polled<'a, F> {
+    /// `future`, observed as the library's `part`.
+    pub(crate) fn library(part: LibraryPart, future: Pin<&'a mut F>) -> Self {
+        Self {
+            number: part as usize,
+            future,
+        }
+    }
+}
+
+impl<F: Future> Future for Polled<'_, F> {
     type Output = F::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<F::Output> {
@@ -228,7 +230,7 @@ impl<F: Future + Unpin> Future for Polled<F> {
         if let Some(counter) = counter {
             counter.observe(now_us(), false, EPOCH.load(Ordering::Relaxed));
         }
-        let poll = Pin::new(&mut self.future).poll(cx);
+        let poll = self.future.as_mut().poll(cx);
         if let Some(counter) = counter {
             counter.observe(now_us(), true, EPOCH.load(Ordering::Relaxed));
         }

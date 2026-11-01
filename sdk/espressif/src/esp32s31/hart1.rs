@@ -186,8 +186,10 @@ pub fn hart1_main<H: Hart1Started>(
         .enable_interrupts()
         .unwrap_or_else(|error| fail(error.name()));
     // The second boot's futures stay in this frame, which never returns.
-    let mut net = core::pin::pin!(observed!(Ip, run_net(net)));
-    let mut second = core::pin::pin!(observed!(Second, run_app(second)));
+    let mut net = core::pin::pin!(run_net(net));
+    observed_root!(net, Ip);
+    let mut second = core::pin::pin!(run_app(second));
+    observed_root!(second, Second);
     let roots = (Root::new(net.as_mut()), Root::new(second.as_mut()));
     match executor
         .run::<Hart1Tasks, _, _, _, 1, _>(&hart, &mut router, wake, irq, (), roots, |_| {})
