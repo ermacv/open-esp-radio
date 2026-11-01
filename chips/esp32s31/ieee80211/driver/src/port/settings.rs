@@ -70,7 +70,9 @@ impl ReceivedInFlight {
     }
 }
 
+#[cfg(oer_debug_control)]
 pub(super) struct Byte(AtomicU8);
+#[cfg(oer_debug_control)]
 impl Byte {
     pub(super) const fn new() -> Self {
         Self(AtomicU8::new(0))
