@@ -557,16 +557,18 @@ pub(crate) fn signal_wake(task: TaskId) {
 }
 
 /// One poll round of executor `T::EXECUTOR`: each task ready when the round
-/// starts is polled once, in index order, after `before_poll`. Returns
-/// whether a task is ready again.
-pub(crate) fn poll_round<T: Tasks>(
+/// starts is polled once, in index order, after `before_poll`: the set's
+/// tasks, then `roots` at the indices after them. Returns whether a task is
+/// ready again.
+pub(crate) fn poll_round<T: Tasks, R: Roots>(
     ready: &Ready,
     current: &Current,
+    roots: &mut R,
     mut before_poll: impl FnMut(),
 ) -> bool {
     let token = PollToken::<T>::new();
     let round = ready.0.load(Ordering::Acquire);
-    for index in 0..T::COUNT {
+    for index in 0..root_end::<T, R>() {
         if round & (1 << index) == 0 || !ready.take(index) {
             continue;
         }
@@ -582,10 +584,101 @@ pub(crate) fn poll_round<T: Tasks>(
             index,
         }
         .waker::<T::Binding>();
-        T::poll(index, &token, &mut Context::from_waker(&waker));
+        let cx = &mut Context::from_waker(&waker);
+        match index.checked_sub(T::COUNT) {
+            None => T::poll(index, &token, cx),
+            Some(root) => roots.poll(root, cx),
+        }
         current.0.store(NO_TASK, Ordering::Relaxed);
     }
     ready.any()
+}
+
+/// The index after the last root of `R` on `T`'s executor, checked at
+/// monomorphization against the ready mask's width.
+pub(crate) const fn root_end<T: Tasks, R: Roots>() -> u8 {
+    const {
+        if T::COUNT as usize + R::COUNT as usize > MAX_TASKS as usize {
+            panic!("an executor runs at most MAX_TASKS tasks and roots");
+        }
+        T::COUNT + R::COUNT
+    }
+}
+
+/// Futures a thread-mode executor polls where they are: pinned in the frame
+/// of the function that runs it, which never returns. They are the image's
+/// own futures, whose types only the image knows (its application and the
+/// services sized for it), so no static slot names them.
+///
+/// Each root is a task of the executor at the indices after its set's tasks:
+/// its waker names it ([`TaskId`]), its signals and timers are a task's, and
+/// it is polled in the same rounds through its own boundary
+/// ([`poll_root`]). A root that finished is not polled again. Roots compose
+/// as pairs: `(Root<A>, Root<B>)`.
+pub trait Roots {
+    /// How many roots.
+    const COUNT: u8;
+    /// Poll root `index` once, unless it finished.
+    #[doc(hidden)]
+    fn poll(&mut self, index: u8, cx: &mut Context<'_>);
+}
+
+/// No roots: an executor of its set's tasks alone.
+impl Roots for () {
+    const COUNT: u8 = 0;
+    fn poll(&mut self, _: u8, _: &mut Context<'_>) {}
+}
+
+/// One root: a pinned future, polled until it finishes.
+pub struct Root<'a, F: Future<Output = ()>> {
+    /// `None` once it finished.
+    future: Option<Pin<&'a mut F>>,
+}
+
+impl<'a, F: Future<Output = ()>> Root<'a, F> {
+    pub fn new(future: Pin<&'a mut F>) -> Self {
+        Self {
+            future: Some(future),
+        }
+    }
+}
+
+impl<F: Future<Output = ()>> Roots for Root<'_, F> {
+    const COUNT: u8 = 1;
+    fn poll(&mut self, index: u8, cx: &mut Context<'_>) {
+        if index != 0 {
+            return;
+        }
+        if let Some(future) = self.future.as_mut()
+            && poll_root(PollBoundary, future.as_mut(), cx)
+        {
+            self.future = None;
+        }
+    }
+}
+
+impl<A: Roots, B: Roots> Roots for (A, B) {
+    const COUNT: u8 = A::COUNT + B::COUNT;
+    fn poll(&mut self, index: u8, cx: &mut Context<'_>) {
+        match index.checked_sub(A::COUNT) {
+            None => self.0.poll(index, cx),
+            Some(index) => self.1.poll(index, cx),
+        }
+    }
+}
+
+/// The boundary between an executor and one of its roots: one poll of the
+/// root's future. Everything it reaches is the root's code. It is never
+/// inlined, so each poll of a root is one direct call of its instance,
+/// which its [`PollBoundary`] parameter marks for the image checks, as a
+/// task's [`poll_task`].
+#[inline(never)]
+fn poll_root<F: Future<Output = ()>>(
+    _: PollBoundary,
+    future: Pin<&mut F>,
+    cx: &mut Context<'_>,
+) -> bool {
+    future.poll(cx).is_ready()
 }
 
 /// Executor `executor`'s ready mask, when it is one.

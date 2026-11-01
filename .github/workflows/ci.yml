@@ -132,8 +132,9 @@ jobs:
                   | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
               | join(" ")' <<<"$meta"
           }
-          # The image crates that declare tasks take `type_alias_impl_trait`
-          # through RUSTC_BOOTSTRAP in .cargo/config.toml.
+          # The crates that declare tasks take `type_alias_impl_trait`
+          # through RUSTC_BOOTSTRAP in .cargo/config.toml; SDK images declare
+          # none.
           cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.

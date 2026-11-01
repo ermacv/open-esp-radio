@@ -150,6 +150,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             interrupts.wake,
             software.irq0,
             (),
+            (),
             move |spawner| {
                 if ImageTasks::console(spawner, usb, boot, evidence).is_err()
                     || ImageTasks::aes_service(spawner, engine).is_err()

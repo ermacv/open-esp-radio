@@ -614,9 +614,8 @@ impl<const RX: usize, const TX: usize, const GENERAL: usize> Default for Pools<R
 
 static POOLS: Pools<RX, TX, GENERAL> = Pools::new();
 
-/// What the IP service's task runs: the service, the station's stop
-/// request, and the service's control to stop it with. The image's task
-/// set declares the task with the image's pool sizes.
+/// What the IP service runs: the service, the station's stop request, and
+/// the service's control to stop it with, at the image's pool sizes.
 #[doc(hidden)]
 pub struct IpStart<const RX: usize, const TX: usize> {
     service: IpService<RX, TX>,
@@ -625,7 +624,6 @@ pub struct IpStart<const RX: usize, const TX: usize> {
 }
 
 impl<const RX: usize, const TX: usize> super::NetTask for IpStart<RX, TX> {
-    const STARTED: bool = true;
     fn serve(self) -> impl core::future::Future<Output = ()> {
         serve_ip(self)
     }

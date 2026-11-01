@@ -1,6 +1,5 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
-#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 
 //! A Wi-Fi station of its build profile, on the application entry
 //! (`oer-espressif`). Without `OER_WIFI_STATION_PROFILE` the image reports

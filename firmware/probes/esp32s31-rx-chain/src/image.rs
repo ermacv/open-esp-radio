@@ -243,6 +243,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             interrupts.wake,
             software.irq0,
             (),
+            (),
             move |spawner| {
                 if AppTasks::capture(spawner, boot).is_err()
                     || AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err()

@@ -101,7 +101,7 @@ pub use executor::{
     Executor, InterruptContext, InterruptExecutor, Round, ThreadContext, ready_peers, wake_handler,
 };
 #[cfg(any(feature = "chip", test))]
-pub use task::{AlreadyStarted, Spawner, TaskId, Tasks};
+pub use task::{AlreadyStarted, Root, Roots, Spawner, TaskId, Tasks};
 #[cfg(feature = "chip")]
 pub use time_driver::{AlarmGrant, TimeDriverReady, TimeSetup, alarm_interrupt, bind, grant, init};
 #[cfg(feature = "chip")]

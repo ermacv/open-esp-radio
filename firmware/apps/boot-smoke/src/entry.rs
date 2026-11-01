@@ -334,6 +334,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             interrupts.wake,
             software.irq0,
             (),
+            (),
             move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err()
                     || Tasks::supervise(spawner, supervisor).is_err()
