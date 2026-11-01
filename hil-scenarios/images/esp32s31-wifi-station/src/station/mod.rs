@@ -364,6 +364,10 @@ async fn work(inputs: Inputs, network: &crate::load::serve::Network) -> Infallib
             exit => emit(leave, &Left::Refused(ended(&exit))),
         }
     }
+    // The load's socket closes before the IP service's last reclaim, on
+    // every station exit: its queued datagrams hold lent receive buffers.
+    // After the station's own network stop it is already closed.
+    network.stop_load().await;
     ip.stop();
     Tracked {
         future: core::pin::Pin::new(&mut running),
