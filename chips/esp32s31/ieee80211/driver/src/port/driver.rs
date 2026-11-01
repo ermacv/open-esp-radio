@@ -914,7 +914,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             if self.configuring.is_some() {
                 break;
             }
+            // Without a held or an incoming command no command moves: the
+            // common turn checks the queue alone.
             if self.pending_command.is_none() {
+                if held.commands.empty() {
+                    self.withdraw(held);
+                    break;
+                }
                 self.pending_command = held.commands.pop();
             }
             let drained = self.withdraw(held);
