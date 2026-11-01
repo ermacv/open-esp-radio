@@ -382,6 +382,11 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
         // No `dbg_read_rx_count` counter (abort, FCS-pass abort, TKIP error,
         // buffer full and the rest) separated these MPDUs, and no RX-control
         // refusal (MIC failure, RX failure) or chained unit was counted.
+        // That does not exclude a failed MIC: with every installed key's
+        // first word flipped for 200 ms under the same load, the MAC staged
+        // no protected unit (12 units, all unprotected), about 200 more
+        // datagrams were lost, and neither a MIC nor an RX failure was
+        // counted either.
         // SOURCE: stand HIL `wifi-load`, ESP32-S31 station, HT20 channel 13,
         // OpenWrt mt76 AP, WPA2-CCMP, 2026-11-01. An air capture showed
         // every RTT probe aggregated with a load datagram into one A-MSDU
