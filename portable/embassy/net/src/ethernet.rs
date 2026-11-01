@@ -287,9 +287,13 @@ impl<
         {
             self.pending = None;
         }
-        // Preserve this bridge's existing drain-and-report-refusal RX policy.
-        // Register even when no frame is available.
-        while self.device.poll_receive_ready(cx).is_ready() {
+        // A frame stays with the device while the stack's queue is full:
+        // the stack's next take wakes this bridge, and the device's owner
+        // holds its frames back meanwhile. Register even when no frame is
+        // available.
+        while self.radio.rx_publisher().poll_queue_room(cx).is_ready()
+            && self.device.poll_receive_ready(cx).is_ready()
+        {
             let Some(frame) = self.device.try_receive() else {
                 break;
             };

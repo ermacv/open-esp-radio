@@ -417,6 +417,17 @@ impl<const RX_QUEUE_DEPTH: usize> OwnedRxPublisher<'_, RX_QUEUE_DEPTH> {
         RX_QUEUE_DEPTH.saturating_sub(self.rx.free_capacity())
     }
 
+    /// Ready while one more packet fits the stack's RX queue; otherwise the
+    /// stack's next take wakes `context`. A lent frame needs no more: its
+    /// packet is its own buffer.
+    pub fn poll_queue_room(&mut self, context: &mut Context<'_>) -> Poll<()> {
+        // Register only on a full queue: a take wakes nobody otherwise.
+        if self.rx.free_capacity() != 0 {
+            return Poll::Ready(());
+        }
+        core::pin::pin!(self.rx.ready()).poll(context).map(drop)
+    }
+
     /// Poll until one bounded RX queue entry can be published.
     pub fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<()> {
         self.link.register_radio_waker(context.waker());
