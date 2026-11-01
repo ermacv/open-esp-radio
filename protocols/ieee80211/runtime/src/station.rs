@@ -148,8 +148,8 @@ use oer_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
 use oer_network_port::LentFrame;
 use oer_radio_port::Slot;
 use oer_radio_port::{
-    DisableFailed, Disabled, Enabled, Ended, EventEnd, FailStopRequested, Failed, Owner,
-    PoisonedOwner, PortBackend,
+    DisableFailed, Disabled, Enabled, Ended, EventEnd, EventsLost, FailStopRequested, Failed,
+    Owner, PoisonedOwner, PortBackend,
 };
 use oer_time::{Instant, Timer};
 
@@ -1917,110 +1917,124 @@ impl<
                 })
                 .await
             };
-            let (event, command_ready, tick, transmit, unwrapped, now) =
-                if let Some(waiting) = waiting {
-                    (Some(waiting), None, false, false, None, turn)
+            if let Some(waiting) = waiting {
+                let took_event = matches!(waiting, Ok(Ok(_)));
+                if let Err(served) = self.serve_event(arbiter, turn, waiting, phase, io) {
+                    return served;
+                }
+                event_steps = if took_event {
+                    event_steps.saturating_add(1) % MAX_WAITING_EVENT_STEPS
                 } else {
-                    let machine_deadline = [
-                        arbiter.poll_deadline(),
-                        self.station.poll_deadline(),
-                        self.pending.receive.deadline(),
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .min();
-                    let deadline = [
-                        machine_deadline,
-                        if accepting_commands {
-                            io.control.policy_deadline()
+                    0
+                };
+                batch = batch.saturating_add(1);
+                if batch == MAX_INPUT_STEPS_PER_BATCH {
+                    batch = 0;
+                    yield_now().await;
+                }
+                continue;
+            }
+            let (event, command_ready, tick, transmit, unwrapped, now) = {
+                let machine_deadline = [
+                    arbiter.poll_deadline(),
+                    self.station.poll_deadline(),
+                    self.pending.receive.deadline(),
+                ]
+                .into_iter()
+                .flatten()
+                .min();
+                let deadline = [
+                    machine_deadline,
+                    if accepting_commands {
+                        io.control.policy_deadline()
+                    } else {
+                        None
+                    },
+                ]
+                .into_iter()
+                .flatten()
+                .min();
+                // The station's unwrap request goes to the engine; its response
+                // is one more input source.
+                if let Some((id, request)) = self.pending.unwrap.take()
+                    && let Err(waiting) = unwrap.start(id, request)
+                {
+                    self.pending.unwrap = Some(waiting);
+                }
+                let sending = self.data.accepts() && self.station.link().is_some();
+                // Frames wait in delivery order for the network's next return.
+                let parked = self.pending.receive.has_ready();
+                let (event, command_ready, tick, transmit, unwrapped) = {
+                    let command = async {
+                        match embassy_futures::select::select(
+                            io.control.wait_for_stop(),
+                            io.commands.ready(),
+                        )
+                        .await
+                        {
+                            embassy_futures::select::Either::First(()) => true,
+                            embassy_futures::select::Either::Second(()) => false,
+                        }
+                    };
+                    let alarm = async {
+                        match deadline {
+                            Some(deadline) => timer.wait_until(deadline).await,
+                            None => core::future::pending::<()>().await,
+                        }
+                    };
+                    let transmit_ready = io.transmit.ready();
+                    let mut transmit_ready = core::pin::pin!(transmit_ready);
+                    let mut command = core::pin::pin!(command);
+                    let mut alarm = core::pin::pin!(alarm);
+                    poll_fn(|cx| {
+                        B::span(ServiceSpan::Sources, false);
+                        // A cancelled wait loses no event, so each poll makes
+                        // its own and the phase stays free for the lend room.
+                        let event = match core::pin::pin!(phase.next_event()).poll(cx) {
+                            Poll::Ready(event) => Some(event),
+                            Poll::Pending => None,
+                        };
+                        let room = parked && phase.poll_lend_room(cx).is_ready();
+                        let command_ready = if accepting_commands {
+                            match command.as_mut().poll(cx) {
+                                Poll::Ready(stop) => Some(stop),
+                                Poll::Pending => None,
+                            }
                         } else {
                             None
-                        },
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .min();
-                    // The station's unwrap request goes to the engine; its response
-                    // is one more input source.
-                    if let Some((id, request)) = self.pending.unwrap.take()
-                        && let Err(waiting) = unwrap.start(id, request)
-                    {
-                        self.pending.unwrap = Some(waiting);
-                    }
-                    let sending = self.data.accepts() && self.station.link().is_some();
-                    // Frames wait in delivery order for the network's next return.
-                    let parked = self.pending.receive.has_ready();
-                    let (event, command_ready, tick, transmit, unwrapped) = {
-                        let command = async {
-                            match embassy_futures::select::select(
-                                io.control.wait_for_stop(),
-                                io.commands.ready(),
-                            )
-                            .await
-                            {
-                                embassy_futures::select::Either::First(()) => true,
-                                embassy_futures::select::Either::Second(()) => false,
-                            }
                         };
-                        let alarm = async {
-                            match deadline {
-                                Some(deadline) => timer.wait_until(deadline).await,
-                                None => core::future::pending::<()>().await,
-                            }
+                        io.control.policy_register(cx);
+                        let alarm_ready = alarm.as_mut().poll(cx).is_ready();
+                        // At most one clock read per poll of the sources.
+                        let mut read = None;
+                        let mut now = || *read.get_or_insert_with(|| timer.now());
+                        let policy_ready = accepting_commands && io.control.policy_ready(now());
+                        let tick = alarm_ready
+                            && machine_deadline.is_some_and(|deadline| now() >= deadline);
+                        let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
+                        let unwrapped = match unwrap.poll_done(cx) {
+                            Poll::Ready(done) => Some(done),
+                            Poll::Pending => None,
                         };
-                        let transmit_ready = io.transmit.ready();
-                        let mut transmit_ready = core::pin::pin!(transmit_ready);
-                        let mut command = core::pin::pin!(command);
-                        let mut alarm = core::pin::pin!(alarm);
-                        poll_fn(|cx| {
-                            B::span(ServiceSpan::Sources, false);
-                            // A cancelled wait loses no event, so each poll makes
-                            // its own and the phase stays free for the lend room.
-                            let event = match core::pin::pin!(phase.next_event()).poll(cx) {
-                                Poll::Ready(event) => Some(event),
-                                Poll::Pending => None,
-                            };
-                            let room = parked && phase.poll_lend_room(cx).is_ready();
-                            let command_ready = if accepting_commands {
-                                match command.as_mut().poll(cx) {
-                                    Poll::Ready(stop) => Some(stop),
-                                    Poll::Pending => None,
-                                }
-                            } else {
-                                None
-                            };
-                            io.control.policy_register(cx);
-                            let alarm_ready = alarm.as_mut().poll(cx).is_ready();
-                            // At most one clock read per poll of the sources.
-                            let mut read = None;
-                            let mut now = || *read.get_or_insert_with(|| timer.now());
-                            let policy_ready = accepting_commands && io.control.policy_ready(now());
-                            let tick = alarm_ready
-                                && machine_deadline.is_some_and(|deadline| now() >= deadline);
-                            let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
-                            let unwrapped = match unwrap.poll_done(cx) {
-                                Poll::Ready(done) => Some(done),
-                                Poll::Pending => None,
-                            };
-                            if event.is_some()
-                                || room
-                                || command_ready.is_some()
-                                || alarm_ready
-                                || policy_ready
-                                || transmit
-                                || unwrapped.is_some()
-                            {
-                                B::span(ServiceSpan::Sources, true);
-                                Poll::Ready((event, command_ready, tick, transmit, unwrapped))
-                            } else {
-                                B::span(ServiceSpan::Sources, true);
-                                Poll::Pending
-                            }
-                        })
-                        .await
-                    };
-                    (event, command_ready, tick, transmit, unwrapped, timer.now())
+                        if event.is_some()
+                            || room
+                            || command_ready.is_some()
+                            || alarm_ready
+                            || policy_ready
+                            || transmit
+                            || unwrapped.is_some()
+                        {
+                            B::span(ServiceSpan::Sources, true);
+                            Poll::Ready((event, command_ready, tick, transmit, unwrapped))
+                        } else {
+                            B::span(ServiceSpan::Sources, true);
+                            Poll::Pending
+                        }
+                    })
+                    .await
                 };
+                (event, command_ready, tick, transmit, unwrapped, timer.now())
+            };
             // The response returns the station's ticket before any other
             // input can end the phase.
             if let Some((id, result)) = unwrapped {
@@ -2031,27 +2045,10 @@ impl<
                 );
             }
             let took_event = matches!(event, Some(Ok(Ok(_))));
-            match event {
-                Some(Ok(Ok(event))) => match self.event(arbiter, now, B::event(event), phase, io) {
-                    Ok(Some(buffer)) => {
-                        B::span(ServiceSpan::Recycle, false);
-                        phase.recycle(buffer);
-                        B::span(ServiceSpan::Recycle, true);
-                    }
-                    Ok(None) => {}
-                    Err(fault) => return Served::Failed(fault.into()),
-                },
-                Some(Ok(Err(_))) => report(&mut self.events, || ServiceEvent::PortEventsLost),
-                None => {}
-                Some(Err(end)) => {
-                    let cause = match end {
-                        EventEnd::Drained { cause } | EventEnd::Quarantined { cause } => cause,
-                    };
-                    return Served::StreamEnd {
-                        end,
-                        fault: ServiceFault::Backend(cause),
-                    };
-                }
+            if let Some(event) = event
+                && let Err(served) = self.serve_event(arbiter, now, event, phase, io)
+            {
+                return served;
             }
             if tick {
                 self.station.input(now, StaInput::Tick, &mut self.events);
@@ -2629,6 +2626,66 @@ impl<
     }
 
     #[inline(never)]
+    /// Take one result of the port's event stream: an event, a loss, or
+    /// the stream's end, which ends the serve.
+    fn serve_event<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        &mut self,
+        arbiter: &mut PortArbiter<'id, B>,
+        now: Instant,
+        event: Result<
+            Result<LowerMacEvent<'id, B::Types<'id>>, EventsLost>,
+            EventEnd<<B::Types<'id> as PhaseTypes<'id>>::Fault>,
+        >,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            impl NetworkStop,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            impl Notifies,
+        >,
+    ) -> Result<(), Served<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        match event {
+            Ok(Ok(event)) => match self.event(arbiter, now, B::event(event), phase, io) {
+                Ok(Some(buffer)) => {
+                    B::span(ServiceSpan::Recycle, false);
+                    phase.recycle(buffer);
+                    B::span(ServiceSpan::Recycle, true);
+                    Ok(())
+                }
+                Ok(None) => Ok(()),
+                Err(fault) => Err(Served::Failed(fault.into())),
+            },
+            Ok(Err(EventsLost)) => {
+                report(&mut self.events, || ServiceEvent::PortEventsLost);
+                Ok(())
+            }
+            Err(end) => {
+                let cause = match end {
+                    EventEnd::Drained { cause } | EventEnd::Quarantined { cause } => cause,
+                };
+                Err(Served::StreamEnd {
+                    end,
+                    fault: ServiceFault::Backend(cause),
+                })
+            }
+        }
+    }
+
     fn receive_pending<
         'p,
         P,
