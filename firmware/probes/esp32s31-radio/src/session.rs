@@ -47,6 +47,18 @@ pub(crate) const WIFI_CLOCKS: u32 = 3;
 pub(crate) const INSTALLED: u32 = 4;
 /// The reset root could not install the platform owners.
 pub(crate) const ROOT_INIT: u32 = 5;
+/// The PHY's cold registration failed.
+pub(crate) const REGISTRATION: u32 = 6;
+/// The registration's place was taken: a second calibration.
+pub(crate) const REGISTRATION_PLACE: u32 = 7;
+
+/// The PHY's cold registration future, built at its final address: built
+/// in the calibration's own state, it was assembled on the radio
+/// executor's interrupt stack first and moved, which put its 8 KiB twice on
+/// that stack. `StaticPlace` checks its size when the image compiles.
+#[cfg(target_arch = "riscv32")]
+static REGISTRATION_FUTURE: static_cell::ConstStaticCell<oer_memory::StaticPlace<[u128; 544]>> =
+    static_cell::ConstStaticCell::new(oer_memory::StaticPlace::new());
 
 /// Start the session: [`STARTED`] or why it did not.
 pub(crate) fn init(
@@ -125,17 +137,24 @@ pub(crate) async fn calibrated(
             let _owners = failure;
             match report(fault) {}
         });
-    let (radio, registration) = register_concurrent_phy::<_, (), RomShortDelay, _>(
-        timer,
-        radio,
-        &mut (),
-        &clocks,
-        PhyRegisterConfig::new(identity),
-        NoopPhyTargetObserver,
-    )
-    .await;
+    let Some(place) = REGISTRATION_FUTURE.try_take() else {
+        return REGISTRATION_PLACE;
+    };
+    let mut port = ();
+    let (radio, registration) = place
+        .future(|| {
+            register_concurrent_phy::<_, (), RomShortDelay, _>(
+                timer,
+                radio,
+                &mut port,
+                &clocks,
+                PhyRegisterConfig::new(identity),
+                NoopPhyTargetObserver,
+            )
+        })
+        .await;
     if registration.is_err() {
-        return 6;
+        return REGISTRATION;
     }
     match powered(radio, partitions.wifi, clocks) {
         Ok(mut session) => {
