@@ -148,10 +148,28 @@ Module map:
   before handing over Block Ack management (`PendingRxBlockAck`), and uses
   its control TX credits for replies (`RxBlockAckReply`); the recipient
   agreements themselves are `oer-ieee80211-core-upper-mac`'s `block_ack::banks`;
+- `machine::tx_block_ack`: the station's transmit agreements
+  (`StaTxBlockAck`), one `TxBlockAckOriginator` of the eight TIDs that the
+  composition builds from its `StaTxBlockAckPolicy` and hands over in
+  `StaConfig::tx_block_ack` (`None` negotiates nothing). Each association
+  starts it afresh and admits agreements only with an HT access point of a
+  QoS BSS. Data of a TID (`Station::tx_block_ack_traffic`) queues that TID's
+  negotiation; the station sends the ADDBA Request with its control TX
+  credit, from the TID's next sequence number, and retries an unanswered or
+  unsent request after the policy's interval while attempts remain. A
+  refusal, spent attempts or a response outside the request (which owes a
+  DELBA) close the TID for the association. The access point's DELBA as the
+  recipient ends an agreement without an answer; an agreement idle for the
+  policy's inactivity ends with the station's DELBA (reason 39), and new
+  data negotiates again. `Station::tx_block_ack` reads an operational
+  agreement; other Block Ack actions stay with the receive agreements;
 - `data`: the connected station's data machine beside it: MSDUs into QoS or
-  non-QoS Data MPDUs in its own tickets and buffers, under the pairwise key
-  the station's `LinkView` lends, and the BSS's data MPDUs into MSDUs; no
-  A-MPDU, Block Ack, reorder, replay check or power save yet. It owns the
+  non-QoS Data MPDUs in its own buffers, under the pairwise key the
+  station's `LinkView` lends, and the BSS's data MPDUs into MSDUs. An owed
+  MPDU holds only its buffer; a ticket, at most eight, belongs to an attempt
+  and is taken when the MPDU goes to the port, so the buffers (up to the
+  machine's `CAP`) may outnumber the tickets. No A-MPDU, reorder, replay
+  check or power save yet. It owns the
   network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
   attempt's protection exchange, power and coexistence class;
 - `port`: the station's and data machine's tokens on a lower-MAC port
@@ -353,7 +371,8 @@ borrows the matching link's key at submission. A changed epoch or protection
 returns `TxRefusal::LinkChanged` with every resource, before preparation;
 a protected encoding cannot fall through to an open transmission. A submitted
 context owns an `AcPermit` from the pool sized by backend queue depth
-(and bounded by the tickets granted to Data). Returning the context returns
+(and bounded by the tickets granted to Data), and a ticket from Data's
+ticket pool. Returning the context returns
 that permission; there is no `at_port` counter, in-flight metadata FIFO or
 TID decoding at completion. Voice keeps the same data depth bound, so a
 station operation waits for at most that depth plus one on-air attempt. An unpublished return is inserted by its original order,

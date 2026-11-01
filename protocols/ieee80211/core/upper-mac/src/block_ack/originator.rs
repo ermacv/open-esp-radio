@@ -100,6 +100,10 @@ struct Agreement {
     due: Option<Instant>,
     /// Negotiations left; a peer's answer ends them.
     attempts: u8,
+    /// The peer refused the TID or its attempts ran out: [`TxBlockAckOriginator::queue`]
+    /// offers it no more until [`TxBlockAckOriginator::queue_initial`] or
+    /// [`TxBlockAckOriginator::stop_all`].
+    closed: bool,
 }
 
 /// One peer's TX Block Ack agreements, at most `TIDS`.
@@ -141,6 +145,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
                 alarm: None,
                 due: None,
                 attempts: 0,
+                closed: false,
             });
         }
         Ok(Self {
@@ -180,7 +185,54 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         for agreement in self.agreements.iter_mut().flatten() {
             agreement.due = (retry.attempts != 0).then_some(Instant::EPOCH);
             agreement.attempts = retry.attempts;
+            agreement.closed = false;
         }
+    }
+
+    /// Queue a negotiation of `tid` alone, due at once, with `retry`'s
+    /// attempts and interval, when the TID is idle: no agreement, no
+    /// negotiation, none queued and not closed by a refusal or by attempts
+    /// that ran out. Whether one was queued.
+    pub fn queue(&mut self, tid: u8, retry: TxBlockAckRetry) -> bool {
+        let Some(agreement) = self.agreement_mut(tid) else {
+            return false;
+        };
+        if agreement.closed
+            || retry.attempts == 0
+            || agreement.due.is_some()
+            || agreement.alarm.is_some()
+            || agreement.session.is_awaiting()
+            || agreement.session.operational().is_some()
+        {
+            return false;
+        }
+        agreement.due = Some(Instant::EPOCH);
+        agreement.attempts = retry.attempts;
+        self.retry_interval = retry.interval;
+        true
+    }
+
+    /// End the agreement or negotiation of `tid` and offer it no more:
+    /// [`Self::queue`] refuses it until [`Self::queue_initial`] or
+    /// [`Self::stop_all`]; `false` for a TID the originator does not own.
+    pub fn close(&mut self, tid: u8) -> bool {
+        match self.agreement_mut(tid) {
+            Some(agreement) => {
+                agreement.session.stop();
+                agreement.alarm = None;
+                agreement.due = None;
+                agreement.attempts = 0;
+                agreement.closed = true;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether `tid` is closed to [`Self::queue`].
+    pub fn is_closed(&self, tid: u8) -> bool {
+        self.agreement(tid)
+            .is_some_and(|agreement| agreement.closed)
     }
 
     /// Whether a negotiation waits to be sent, due or not.
@@ -303,6 +355,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         agreement.alarm = None;
         agreement.due = None;
         agreement.attempts = 0;
+        agreement.closed = matches!(response, TxBlockAckResponse::Rejected(_));
         Ok(TxBlockAckResponseDisposition::Matched(
             TxBlockAckOriginatorResponse { tid, response },
         ))
@@ -351,6 +404,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             agreement.alarm = None;
             agreement.due = None;
             agreement.attempts = 0;
+            agreement.closed = false;
         }
         active
     }
@@ -432,8 +486,10 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
 
 impl Agreement {
     /// Queue the next attempt `interval` after `now`, while one remains.
+    /// The last one closes the TID.
     fn retry(&mut self, now: Instant, interval: Duration) {
         self.due = (self.attempts != 0).then(|| now.saturating_add(interval));
+        self.closed = self.attempts == 0;
     }
 }
 

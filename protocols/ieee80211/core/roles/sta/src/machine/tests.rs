@@ -527,6 +527,7 @@ impl<'id> World<'id> {
             association: &CAPABILITIES,
             listen_interval: StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
+            tx_block_ack: None,
             callbacks: Callbacks { nonce_calls: 0 },
         };
         let resources = StationResources {

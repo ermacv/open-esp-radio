@@ -3,25 +3,25 @@
 use crate::events::StaEvent;
 use oer_events::{EventSink, report};
 
-/// The tokens of one kind a machine holds at most.
+/// The tokens of one kind a station machine holds at most.
 pub(crate) const POOL_CAPACITY: usize = 8;
 
-/// A bounded pool of tokens of one kind.
-pub(crate) struct Pool<X> {
-    items: [Option<X>; POOL_CAPACITY],
+/// A bounded pool of at most `N` tokens of one kind.
+pub(crate) struct Pool<X, const N: usize = POOL_CAPACITY> {
+    items: [Option<X>; N],
 }
 
-impl<X> Pool<X> {
-    /// A pool of `items`, at most [`POOL_CAPACITY`]: checked at compile
-    /// time, so no granted token is ever lost.
-    pub(crate) fn new<const N: usize>(items: [X; N]) -> Self {
+impl<X, const N: usize> Pool<X, N> {
+    /// A pool of `items`, at most `N`: checked at compile time, so no
+    /// granted token is ever lost.
+    pub(crate) fn new<const M: usize>(items: [X; M]) -> Self {
         const {
-            if N > POOL_CAPACITY {
-                panic!("a station holds at most 8 tokens of a kind");
+            if M > N {
+                panic!("a pool holds no more tokens than its capacity");
             }
         };
         let mut pool = Self {
-            items: [const { None }; POOL_CAPACITY],
+            items: [const { None }; N],
         };
         for (slot, item) in pool.items.iter_mut().zip(items) {
             *slot = Some(item);
@@ -29,7 +29,7 @@ impl<X> Pool<X> {
         pool
     }
 
-    pub(crate) fn from_collection(items: heapless::Vec<X, POOL_CAPACITY>) -> Self {
+    pub(crate) fn from_collection(items: heapless::Vec<X, N>) -> Self {
         let mut items = items.into_iter();
         Self {
             items: core::array::from_fn(|_| items.next()),
@@ -37,7 +37,7 @@ impl<X> Pool<X> {
     }
 
     /// Partition a bounded bank without collecting through a panicking Vec iterator.
-    pub(crate) fn partition(items: heapless::Vec<X, POOL_CAPACITY>, active: usize) -> (Self, Self) {
+    pub(crate) fn partition(items: heapless::Vec<X, N>, active: usize) -> (Self, Self) {
         let mut items = items.into_iter();
         let free = Self {
             items: core::array::from_fn(|index| if index < active { items.next() } else { None }),
@@ -49,7 +49,7 @@ impl<X> Pool<X> {
     }
 
     /// Drain into the same fixed capacity, retaining vacant cells as values.
-    pub(crate) fn take_all(&mut self) -> [Option<X>; POOL_CAPACITY] {
+    pub(crate) fn take_all(&mut self) -> [Option<X>; N] {
         self.items.each_mut().map(Option::take)
     }
 
@@ -204,7 +204,7 @@ mod partition_tests {
                 heapless::Vec::from_array(core::array::from_fn::<_, POOL_CAPACITY, _>(|i| {
                     Owner(i as u8)
                 }));
-            let (mut free, mut spare) = Pool::partition(values, active);
+            let (mut free, mut spare): (Pool<Owner>, _) = Pool::partition(values, active);
             assert_eq!(free.len(), active.min(POOL_CAPACITY));
             let values: std::vec::Vec<_> = free
                 .take_all()

@@ -417,9 +417,17 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
     }
 }
 
-/// The connected station's data machine. `CAP` sizes each TID's queues of
-/// owed MPDUs: each holds a ticket, so the machine's tickets
-/// fit (checked at build).
+/// An encoded MPDU waiting for its attempt: its operation and its buffer,
+/// without a ticket or an admission permission.
+struct OwedMpdu<'id, D: StaDataTokens, K> {
+    context: DataTxContext<'id, K, D::Class, (), D::EpochPath>,
+    buffer: ReturnedMpdu<D::Buffer, D::Sent>,
+}
+
+/// The connected station's data machine. `CAP` sizes its buffer pool and
+/// each TID's queue of owed MPDUs: each owed MPDU holds a buffer, so every
+/// buffer fits one queue (checked at build). Tickets, at most eight, belong
+/// to attempts: an owed MPDU takes one only when it goes to the port.
 ///
 /// Data has no timer: its queued work advances on inputs and returned credits.
 ///
@@ -453,10 +461,10 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
 /// ```
 pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
-    buffers: Pool<D::Buffer>,
-    /// The attempts owed, by TID (a non-QoS link's in the first), each in
+    buffers: Pool<D::Buffer, CAP>,
+    /// The MPDUs owed, by TID (a non-QoS link's in the first), each in
     /// its order.
-    owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
+    owed: [Fifo<OwedMpdu<'id, D, K>, CAP>; 8],
     admission: Admissions,
     /// The order of the next MSDU.
     next_order: u32,
@@ -468,8 +476,8 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
 /// admission, input or transmission methods and cannot begin another link.
 pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
-    buffers: Pool<D::Buffer>,
-    owed: [Fifo<DataTransmit<'id, D, K, ()>, CAP>; 8],
+    buffers: Pool<D::Buffer, CAP>,
+    owed: [Fifo<OwedMpdu<'id, D, K>, CAP>; 8],
     admission: Admissions,
     next_order: u32,
 }
@@ -566,8 +574,8 @@ impl<
         }
     }
 
-    /// The machine with the tickets and buffers the composition granted it,
-    /// at most eight of a kind and no more tickets than its queues hold,
+    /// The machine with the tickets and buffers the composition granted it:
+    /// at most eight tickets and no more buffers than its queues hold,
     /// checked at compile time.
     pub fn new<const TICKETS: usize, const BUFFERS: usize>(
         tickets: [D::Ticket; TICKETS],
@@ -575,8 +583,8 @@ impl<
         depth: core::num::NonZeroU8,
     ) -> Self {
         const {
-            if TICKETS > CAP {
-                panic!("each MPDU a data queue holds takes a ticket: the queues hold every ticket");
+            if BUFFERS > CAP {
+                panic!("each MPDU a data queue holds takes a buffer: the queues hold every buffer");
             }
         };
         Self {
@@ -598,8 +606,8 @@ impl<
         depth: core::num::NonZeroU8,
     ) -> &mut Self {
         const {
-            if TICKETS > CAP {
-                panic!("each MPDU a data queue holds takes a ticket: the queues hold every ticket");
+            if BUFFERS > CAP {
+                panic!("each MPDU a data queue holds takes a buffer: the queues hold every buffer");
             }
         };
         oer_memory::init_in_place!(storage, Self {
@@ -619,7 +627,6 @@ impl<
         for queue in &mut self.owed {
             while let Some(owed) = queue.pop() {
                 report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
-                self.tickets.put(owed.ticket, events);
                 self.buffers
                     .put(crate::events::fresh(owed.buffer, D::renew, events), events);
             }
@@ -627,23 +634,16 @@ impl<
         self.link = None;
     }
 
-    /// An MPDU a full queue did not take: its tokens come back, counted.
-    fn overflowed(
-        &mut self,
-        transmit: DataTransmit<'id, D, K, ()>,
-        events: &mut impl EventSink<StaEvent>,
-    ) {
+    /// An MPDU a full queue did not take: its buffer comes back, counted.
+    fn overflowed(&mut self, owed: OwedMpdu<'id, D, K>, events: &mut impl EventSink<StaEvent>) {
         report(events, || StaEvent::DataLost(DataLoss::Overflow));
-        self.tickets.put(transmit.ticket, events);
-        self.buffers.put(
-            crate::events::fresh(transmit.buffer, D::renew, events),
-            events,
-        );
+        self.buffers
+            .put(crate::events::fresh(owed.buffer, D::renew, events), events);
     }
 
-    /// Whether the machine takes one more MSDU now.
+    /// Whether the machine takes one more MSDU now: a buffer is free.
     pub fn accepts(&self) -> bool {
-        !self.tickets.is_empty() && !self.buffers.is_empty()
+        !self.buffers.is_empty()
     }
 
     /// Return an accepted terminal or a local refusal and all its owners.
@@ -706,12 +706,9 @@ impl<
                             | oer_ieee80211_contracts_port::WithdrawCause::Disabled
                     )
                 ) {
+                    self.tickets.put(ticket, events);
                     let tid = context.tid;
-                    let again = DataTransmit {
-                        ticket,
-                        buffer,
-                        context,
-                    };
+                    let again = OwedMpdu { buffer, context };
                     let next_order = self.next_order;
                     if let Err(again) = tid.select_mut(&mut self.owed).insert_by(again, |a, b| {
                         a.context.order.wrapping_sub(next_order)
@@ -728,8 +725,8 @@ impl<
         }
     }
 
-    /// Take one input. An MSDU goes on its link and becomes an attempt
-    /// owed.
+    /// Take one input. An MSDU goes on its link and becomes an MPDU owed;
+    /// the TID whose queue holds it.
     ///
     /// # Errors
     ///
@@ -738,7 +735,7 @@ impl<
         &mut self,
         input: DataInput<'_, '_, '_, 'id, T>,
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<(), DataRefusal> {
+    ) -> Result<WmmUserPriority, DataRefusal> {
         let DataInput { msdu, link } = input;
         if self.link != Some(link.epoch) {
             self.leave(events);
@@ -757,11 +754,7 @@ impl<
         } else {
             msdu
         };
-        let ticket = self.tickets.take().ok_or(DataRefusal::NoTokens)?;
-        let Some(mut buffer) = self.buffers.take() else {
-            self.tickets.put(ticket, events);
-            return Err(DataRefusal::NoTokens);
-        };
+        let mut buffer = self.buffers.take().ok_or(DataRefusal::NoTokens)?;
         let tid = msdu.priority;
         let admitted = msdu.admitted;
         // A non-QoS link has one queue, best effort.
@@ -777,13 +770,11 @@ impl<
             Ok(bytes) => bytes,
             Err(_) => {
                 report(events, || StaEvent::BufferMemoryUnavailable);
-                self.tickets.put(ticket, events);
                 self.buffers.put(buffer, events);
                 return Err(DataRefusal::BufferUnavailable);
             }
         };
         if mpdu_len(qos, protection, msdu.payload.len()).is_none_or(|length| length > bytes.len()) {
-            self.tickets.put(ticket, events);
             self.buffers.put(buffer, events);
             return Err(DataRefusal::TooLong);
         }
@@ -807,18 +798,16 @@ impl<
                     order,
                     admitted,
                 };
-                let owed = DataTransmit {
+                let owed = OwedMpdu {
                     context,
-                    ticket,
                     buffer: ReturnedMpdu::Fresh(buffer),
                 };
                 if let Err(owed) = slot.select_mut(&mut self.owed).push(owed) {
                     self.overflowed(owed, events);
                 }
-                Ok(())
+                Ok(slot)
             }
             None => {
-                self.tickets.put(ticket, events);
                 self.buffers.put(buffer, events);
                 Err(DataRefusal::TooLong)
             }
@@ -840,10 +829,14 @@ impl<
         Some(context.link) == self.link
     }
 
-    /// The next action whose category owns a free admission permission.
-    /// The context carries that permission until its return; queued work
-    /// consumes none. The service takes every action before waiting.
+    /// The next action whose category owns a free admission permission,
+    /// with a free ticket. The context carries that permission and the
+    /// action the ticket until their return; queued work consumes neither.
+    /// The service takes every action before waiting.
     pub fn poll_action(&mut self) -> Option<DataTransmit<'id, D, K>> {
+        if self.tickets.is_empty() {
+            return None;
+        }
         // The earliest MSDU of an admitted category first, whatever its TID.
         let tid = WmmUserPriority::ALL
             .into_iter()
@@ -859,14 +852,21 @@ impl<
         // normal polling states. Reserve and pop under the same exclusive
         // borrow; no actor can change either between these operations.
         let category = tid.select(&self.owed).front()?.context.access_category;
-        let permit = self.admission.take(category)?;
-        tid.select_mut(&mut self.owed).pop().map(|transmit| {
-            let (context, ()) = transmit.context.admission(permit);
-            DataTransmit {
-                context,
-                ticket: transmit.ticket,
-                buffer: transmit.buffer,
-            }
+        let ticket = self.tickets.take()?;
+        let Some(permit) = self.admission.take(category) else {
+            self.tickets.put(ticket, &mut ());
+            return None;
+        };
+        let Some(owed) = tid.select_mut(&mut self.owed).pop() else {
+            self.admission.put(category, permit);
+            self.tickets.put(ticket, &mut ());
+            return None;
+        };
+        let (context, ()) = owed.context.admission(permit);
+        Some(DataTransmit {
+            context,
+            ticket,
+            buffer: owed.buffer,
         })
     }
 }

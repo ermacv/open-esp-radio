@@ -256,8 +256,8 @@ fn epoch() -> CcmpRxReplayEpoch {
     CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap()
 }
 
-fn transmit(
-    data: &mut StaData<'static, Data<'static>, Caps, 8>,
+fn transmit<const CAP: usize>(
+    data: &mut StaData<'static, Data<'static>, Caps, CAP>,
 ) -> DataTransmit<'static, Data<'static>, Caps> {
     match data.poll_action() {
         Some(transmit) => transmit,
@@ -424,9 +424,9 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
     }
     assert_eq!(data.available(WmmAccessCategory::Voice), capacity);
     assert_eq!(data.available(WmmAccessCategory::Video), capacity);
-    for (ticket, tid, sequence) in [(1, 6, 0), (2, 4, 0), (3, 6, 1), (4, 7, 0)] {
+    // Tickets belong to attempts: a requeued MPDU takes a free one afresh.
+    for (tid, sequence) in [(6, 0), (4, 0), (6, 1), (7, 0)] {
         let operation = transmit(&mut data);
-        assert_eq!(operation.ticket, ticket);
         assert_eq!(operation.context.tid.value(), tid);
         // A returned MSDU keeps the age it was admitted with.
         assert_eq!(
@@ -855,6 +855,55 @@ fn msdus_wait_while_the_tokens_are_out() {
         &mut events,
     );
     assert!(data.accepts());
+}
+
+#[test]
+fn buffers_hold_owed_mpdus_and_tickets_only_attempts() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 16>::new(
+        [1, 2],
+        core::array::from_fn::<_, 16, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(8).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for priority in core::iter::repeat_n(5, 16) {
+        assert_eq!(
+            data.input(
+                DataInput {
+                    msdu: msdu(priority),
+                    link: &mut link,
+                },
+                &mut events,
+            )
+            .map(|tid| tid.value()),
+            Ok(5),
+            "every buffer takes an MSDU while two tickets are free"
+        );
+    }
+    assert!(!data.accepts());
+    let first = transmit(&mut data);
+    let second = transmit(&mut data);
+    assert!(data.poll_action().is_none(), "both tickets are attempts");
+    assert_eq!(data.available(WmmAccessCategory::Video), 0);
+    data.returned(
+        DataReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            buffer: first.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
+    assert!(data.accepts(), "the delivered MPDU's buffer is free");
+    let third = transmit(&mut data);
+    assert_eq!(
+        third.ticket, 1,
+        "the returned ticket goes with the next MPDU"
+    );
+    assert!(data.poll_action().is_none());
+    drop((second, third));
+    assert_eq!(tokens_lost(&events), 0);
 }
 
 fn received_frame(control: u16, ether_type: u16, packet_number: u8, key_id: u8) -> Vec<u8> {

@@ -358,6 +358,7 @@ fn config(security: StaSecurity) -> TestConfig {
             listen_interval: oer_ieee80211_core_roles_sta::request::StationListenInterval::new(10)
                 .unwrap(),
             phy: PhyMode::Legacy,
+            tx_block_ack: None,
             callbacks: Callbacks,
         },
         security,

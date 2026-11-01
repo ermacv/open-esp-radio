@@ -158,6 +158,7 @@ mod deferred_eapol;
 mod group_keys;
 mod key_unwrap;
 mod management;
+mod tx_block_ack;
 use crate::power_save::{NullOutcome, PowerSaveDecision, PowerSaveView};
 pub use block_ack::{
     BlockAckReplyRefusal, BlockAckReplyResult, PendingRxBlockAck, RxBlockAckReply,
@@ -173,6 +174,8 @@ use group_keys::{GroupKeys, GroupPlace, Installed as InstalledGroup, Replay as G
 use key_unwrap::KeyUnwrapLane;
 pub use key_unwrap::{KEY_DATA_CAPACITY, KeyUnwrapId, StaKeyUnwrapRequest, StaKeyUnwrapResponse};
 use management::{ManagementEvent, ManagementProtection};
+use tx_block_ack::TxBlockAckOwed;
+pub use tx_block_ack::{StaTxBlockAck, StaTxBlockAckPolicy, StaTxBlockAckPolicyError};
 
 use crate::join::{
     association::{
@@ -998,6 +1001,9 @@ pub struct StaConfig<K, C: StaCallbacks> {
     /// that advertises HT, else legacy ([`select_phy`]). Every other mode
     /// is the one the request carries.
     pub phy: PhyMode,
+    /// The station's transmit Block Ack originator, which the composition
+    /// builds from its policy; `None` negotiates no transmit agreement.
+    pub tx_block_ack: Option<StaTxBlockAck>,
     /// Entropy and HE padding policy supplied by this composition.
     pub callbacks: C,
 }
@@ -1774,6 +1780,7 @@ impl<T: StaTokens, K> State<T, K> {
                         background: None,
                         connected_notice: new.confirmation.is_none(),
                         block_ack: None,
+                        tx_block_ack: false,
                         rsn: oer_memory::InlinePlace::empty(),
                     }
                 )
@@ -2034,6 +2041,8 @@ struct Connected<T: StaTokens, K> {
     connected_notice: bool,
     /// Parsed management to hand to the service before the next RX input.
     block_ack: Option<oer_ieee80211_wire::block_ack::frame::BlockAckAction>,
+    /// The transmit Block Ack originator started this association.
+    tx_block_ack: bool,
     /// The supplicant of a protected link and its group key's handshake.
     rsn: oer_memory::InlinePlace<ConnectedRsn>,
 }
@@ -2055,6 +2064,50 @@ enum Sending {
     SaQuery,
     /// A response to the AP's receive Block Ack negotiation.
     BlockAck,
+    /// An ADDBA Request negotiating the station's transmit agreement of `tid`.
+    AddbaRequest { tid: u8 },
+    /// A DELBA ending one of the station's transmit agreements.
+    Delba,
+}
+
+/// The station's transmit agreements in `connected`'s association, started
+/// afresh at their first use in it.
+fn tx_agreements<'c, T: StaTokens, K>(
+    tx: &'c mut Option<StaTxBlockAck>,
+    connected: &mut Connected<T, K>,
+) -> Option<&'c mut StaTxBlockAck> {
+    let tx = tx.as_mut()?;
+    if !connected.tx_block_ack {
+        connected.tx_block_ack = true;
+        tx.associate(connected.qos && connected.peer.associated.phy != PhyMode::Legacy);
+    }
+    Some(tx)
+}
+
+/// Hand a received Block Ack action to the transmit agreements, or keep it
+/// for the receive agreements.
+fn route_block_ack<T: StaTokens, K>(
+    tx: &mut Option<StaTxBlockAck>,
+    connected: &mut Connected<T, K>,
+    action: oer_ieee80211_wire::block_ack::frame::BlockAckAction,
+    now: Instant,
+) {
+    if !tx_agreements(tx, connected).is_some_and(|tx| tx.on_action(action, now)) {
+        connected.block_ack = Some(action);
+    }
+}
+
+/// Whether the connected link carries data now: confirmed, home, awake and,
+/// on a protected link, keyed.
+fn data_link_up<T: StaTokens, K>(
+    connected: &Connected<T, K>,
+    absent: bool,
+    keys: &Keys<T>,
+) -> bool {
+    connected.confirmation.is_none()
+        && !absent
+        && !connected.power.asleep()
+        && (connected.rsn.as_ref().is_none() || matches!(keys.pairwise, KeyCell::Installed(_)))
 }
 
 /// A protected link's supplicant and its group key's handshake.
@@ -3443,10 +3496,49 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                                     && matches!(self.keys.pairwise, KeyCell::Installed(_))),
                         )
                     });
-                crate::time::earliest(background, management)
+                let can_send = !connected.sending
+                    && data_link_up(connected, self.absence.is_some(), &self.keys)
+                    && !self.tickets.is_empty()
+                    && !self.buffers.is_empty();
+                let tx_block_ack = self
+                    .config
+                    .tx_block_ack
+                    .as_ref()
+                    .filter(|_| connected.tx_block_ack)
+                    .and_then(|tx| tx.deadline(can_send));
+                crate::time::earliest(crate::time::earliest(background, management), tx_block_ack)
             }
             _ => None,
         }
+    }
+
+    /// Data of `tid` was taken for the connected link at `now`: an idle TID
+    /// negotiates its transmit agreement, a live one stays active.
+    pub fn tx_block_ack_traffic(&mut self, tid: WmmUserPriority, now: Instant) {
+        let State::Connected(connected) = &mut self.state else {
+            return;
+        };
+        let Some(connected) = connected.as_mut() else {
+            return;
+        };
+        if let Some(tx) = tx_agreements(&mut self.config.tx_block_ack, connected) {
+            tx.traffic(tid.value(), now);
+        }
+    }
+
+    /// The operational transmit agreement of `tid` with the access point.
+    pub fn tx_block_ack(
+        &self,
+        tid: WmmUserPriority,
+    ) -> Option<oer_ieee80211_core_upper_mac::block_ack::OperationalTxBlockAck> {
+        let State::Connected(connected) = &self.state else {
+            return None;
+        };
+        let connected = connected.as_ref()?;
+        if !connected.tx_block_ack {
+            return None;
+        }
+        self.config.tx_block_ack.as_ref()?.operational(tid.value())
     }
     fn transition(&mut self) -> (TransitionContext<'_, 'id, T, K, C>, &mut State<T, K>) {
         (
@@ -4317,7 +4409,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         rsn.advance_deferred();
                     }
                 }
-                Sending::Probe | Sending::SaQuery | Sending::BlockAck => {}
+                Sending::AddbaRequest { tid } => {
+                    if outcome != NullOutcome::Delivered
+                        && let Some(tx) = self.config.tx_block_ack.as_mut()
+                    {
+                        tx.request_failed(tid, now);
+                    }
+                }
+                Sending::Probe | Sending::SaQuery | Sending::BlockAck | Sending::Delba => {}
             }
             if let Some(background) = &connected.background
                 && background.step == BackgroundStep::NeedAbsence
@@ -4963,7 +5062,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         None
                     }
                     Some(ManagementEvent::BlockAck(action)) => {
-                        connected.block_ack = Some(action);
+                        route_block_ack(&mut self.config.tx_block_ack, connected, action, now);
                         None
                     }
                     None => {
@@ -4988,7 +5087,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 if let Some(action) =
                     block_ack::unprotected_action(management, self.config.address, connected.bssid)
                 {
-                    connected.block_ack = Some(action);
+                    route_block_ack(&mut self.config.tx_block_ack, connected, action, now);
                 }
                 peer_disconnect(frame, self.config.address, connected.bssid)
             }
@@ -5649,6 +5748,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         }
         if let Some(owed) = self
             .owe_sa_query(connected, now, events)
+            .or_else(|| self.owe_tx_block_ack(connected, now, events))
             .or_else(|| self.owe_duplicate_message4(connected, pairwise_purpose, events))
             .or_else(|| self.owe_rekey(connected, pairwise_purpose, events))
         {
@@ -5694,6 +5794,94 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 Some(Ok(Owed::TransmitProtected(transmit)))
             }
             Err(Unsent::NoTokens) => None,
+            Err(Unsent::Encode) => Some(Err(StaDisconnectReason::Encode)),
+            Err(Unsent::NoConnection) => Some(Err(StaDisconnectReason::TransmitRefused(
+                TxRefusal::LinkChanged,
+            ))),
+        }
+    }
+
+    /// The ADDBA Request or DELBA the station's transmit agreements owe.
+    fn owe_tx_block_ack(
+        &mut self,
+        connected: &mut Connected<T, K>,
+        now: Instant,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
+        let can_send = !connected.sending
+            && data_link_up(connected, self.absence.is_some(), &(*self.keys))
+            && !self.tickets.is_empty()
+            && !self.buffers.is_empty();
+        let tx = tx_agreements(&mut self.config.tx_block_ack, connected)?;
+        enum Body {
+            Delba(
+                u8,
+                [u8; oer_ieee80211_wire::block_ack::frame::DELBA_ACTION_BODY_LEN],
+            ),
+            Addba(
+                u8,
+                [u8; oer_ieee80211_wire::block_ack::frame::ADDBA_ACTION_BODY_LEN],
+            ),
+        }
+        let body = match tx.poll(now, can_send)? {
+            TxBlockAckOwed::Delba { tid } => {
+                let Ok(delba) = oer_ieee80211_wire::block_ack::frame::encode_delba(
+                    tid,
+                    true,
+                    reason_code::TIMEOUT,
+                ) else {
+                    return Some(Err(StaDisconnectReason::Encode));
+                };
+                Body::Delba(tid, delba)
+            }
+            TxBlockAckOwed::Negotiate { tid } => {
+                let starting_sequence = connected.qos_sequences.get(usize::from(tid))?.peek();
+                match tx.begin(tid, starting_sequence, now) {
+                    Ok(request) => Body::Addba(tid, request.body),
+                    Err(_) => {
+                        // Its attempt is spent; the next waits the interval.
+                        tx.request_failed(tid, now);
+                        return None;
+                    }
+                }
+            }
+        };
+        let (frame, sending): (&[u8], _) = match &body {
+            Body::Delba(_, delba) => (delba, Sending::Delba),
+            Body::Addba(tid, request) => (request, Sending::AddbaRequest { tid: *tid }),
+        };
+        let protected = connected
+            .rsn
+            .as_ref()
+            .is_some_and(|rsn| rsn.management.is_some());
+        match self.encode_management(
+            StaManagementSubtype::Action,
+            connected.bssid,
+            frame,
+            TxPurpose::Connected(sending),
+            protected,
+            events,
+        ) {
+            Ok(transmit) => {
+                connected.sending = true;
+                if let (Body::Delba(tid, _), Some(tx)) = (&body, self.config.tx_block_ack.as_mut())
+                {
+                    tx.delba_sent(*tid);
+                }
+                Some(Ok(if protected {
+                    Owed::TransmitProtected(transmit)
+                } else {
+                    Owed::Transmit(transmit)
+                }))
+            }
+            Err(Unsent::NoTokens) => {
+                if let (Sending::AddbaRequest { tid }, Some(tx)) =
+                    (sending, self.config.tx_block_ack.as_mut())
+                {
+                    tx.request_failed(tid, now);
+                }
+                None
+            }
             Err(Unsent::Encode) => Some(Err(StaDisconnectReason::Encode)),
             Err(Unsent::NoConnection) => Some(Err(StaDisconnectReason::TransmitRefused(
                 TxRefusal::LinkChanged,

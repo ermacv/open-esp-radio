@@ -436,3 +436,64 @@ fn policy_tid_validation_rejects_duplicates_and_out_of_range_values() {
     let originator = TxBlockAckOriginator::<3>::new(policy, config).unwrap();
     assert!(originator.tids().eq([7, 0, 5]));
 }
+
+const RETRY: TxBlockAckRetry = TxBlockAckRetry {
+    attempts: 2,
+    interval: Duration::from_micros(1_000),
+};
+
+#[test]
+fn queue_offers_one_idle_tid_and_never_a_live_one() {
+    let mut originator = originator(32, 0);
+    let at = Instant::from_micros(0);
+    assert!(!originator.queue(3, RETRY), "a TID outside the policy");
+    assert!(originator.queue(7, RETRY));
+    assert!(!originator.queue(7, RETRY), "already queued");
+    assert_eq!(originator.take_pending(at), Some(7));
+    assert_eq!(originator.take_pending(at), None, "only TID 7 was queued");
+    let request = originator.begin(7, sequence(9), at).unwrap();
+    assert!(!originator.queue(7, RETRY), "a negotiation is live");
+    originator
+        .on_response_action(response(request.dialog_token, 7, 0, 32))
+        .unwrap();
+    assert!(originator.operational(7).is_some());
+    assert!(!originator.queue(7, RETRY), "an agreement is live");
+    assert!(originator.stop(7));
+    assert!(
+        originator.queue(7, RETRY),
+        "a stopped TID may negotiate again"
+    );
+}
+
+#[test]
+fn a_refusal_or_spent_attempts_close_the_tid_until_stop_all() {
+    let mut originator = originator(32, 0);
+    let mut at = Instant::from_micros(0);
+    assert!(originator.queue(0, RETRY));
+    assert_eq!(originator.take_pending(at), Some(0));
+    let request = originator.begin(0, sequence(1), at).unwrap();
+    originator
+        .on_response_action(response(request.dialog_token, 0, 37, 32))
+        .unwrap();
+    assert!(originator.is_closed(0));
+    assert!(!originator.queue(0, RETRY));
+
+    // Two unanswered attempts close TID 5.
+    assert!(originator.queue(5, RETRY));
+    for _ in 0..2 {
+        assert_eq!(originator.take_pending(at), Some(5));
+        originator.begin(5, sequence(1), at).unwrap();
+        at = at.saturating_add(Duration::from_micros(100_000));
+        assert_eq!(originator.expire_next(at), Some(5));
+        at = at.saturating_add(Duration::from_micros(1_000));
+    }
+    assert!(!originator.has_pending());
+    assert!(originator.is_closed(5));
+    assert!(!originator.queue(5, RETRY));
+
+    assert!(originator.close(7));
+    assert!(!originator.queue(7, RETRY));
+    originator.stop_all();
+    assert!(originator.queue(0, RETRY) && originator.queue(5, RETRY));
+    assert!(originator.queue(7, RETRY));
+}

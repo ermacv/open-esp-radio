@@ -2135,6 +2135,7 @@ impl<
         } = io;
         let data = &mut self.data;
         let events = &mut self.events;
+        let mut taken = None;
         // The MSDU is read where the network wrote it: the data path
         // encodes it into its MPDU buffer, its one copy here.
         let _read = transmit.try_receive_with(|packet| {
@@ -2149,23 +2150,28 @@ impl<
             // Admission was polled immediately above under this same
             // exclusive service borrow. A too-long MSDU is refused without
             // changing bytes.
-            if let Err(reason) = data.input(
+            match data.input(
                 DataInput {
                     msdu,
                     link: &mut link,
                 },
                 events,
             ) {
+                Ok(tid) => taken = Some(tid),
                 // The available-pool observation is dynamic and the public
                 // data input can refuse it. The application gets the
                 // packet's copy back, rather than a manufactured terminal
                 // or lost bytes.
-                output.emit(ServiceOutput::MsduRefused {
+                Err(reason) => output.emit(ServiceOutput::MsduRefused {
                     packet: contract::TransmitPacket(packet.clone()),
                     reason: reason.into(),
-                });
+                }),
             }
         });
+        // The TID's transmit agreement hears its data.
+        if let Some(tid) = taken {
+            self.station.tx_block_ack_traffic(tid, now);
+        }
     }
 
     /// Carry out every action the machines owe at `now`.

@@ -299,6 +299,7 @@ impl<W: Binding> Profile<W> {
                 } else {
                     oer_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
                 },
+                tx_block_ack: None,
                 callbacks: CoreCallbacks(callbacks),
             },
             security: match credentials.pmk {
