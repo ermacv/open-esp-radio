@@ -182,6 +182,17 @@ fn refused_unwraps_return_the_cleared_buffer() {
 }
 
 #[test]
+fn an_engine_that_ran_nothing_returns_an_empty_engine_refusal() {
+    let response = KeyUnwrapResponse::<32>::engine_failed(crate::block::BlockError::Unavailable);
+    assert_eq!(
+        response.plaintext(),
+        Err(KeyUnwrapError::Engine(
+            crate::block::BlockError::Unavailable
+        ))
+    );
+}
+
+#[test]
 fn key_data_refuses_more_than_its_capacity() {
     assert_eq!(
         KeyData::<8>::try_copy(&[0; 9]).err(),
