@@ -41,10 +41,13 @@ nowhere else. `Boot::run` ends the boot with the application's future. The
 library then installs the system timer (the radio executor writes it when
 a station started, the application executor otherwise), enables interrupts
 and runs the application executor in thread mode with its service tasks
-(`SdkTasks`) and the image's tasks: `entry!`'s set extends `SdkTasks` with
-the IP service, at the image's pool sizes, and the application. `boot`
-returns `impl Started`, which names both future types: `Boot::run` makes
-it, and `wifi::Net::start` returns the boot with its IP service.
+(`SdkTasks`) and the image's two futures as the executor's roots: the IP
+service, at the image's pool sizes, and the application. They stay in the
+frame of the library's run, which never returns, and are tasks of the
+executor after `SdkTasks`; no static slot names their types, so an image
+declares no task set and needs no unstable feature. `boot` returns `impl
+Started`, which names both future types: `Boot::run` makes it, and
+`wifi::Net::start` returns the boot with its IP service.
 
 ## Defaults and settings
 

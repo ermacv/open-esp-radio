@@ -50,26 +50,6 @@ pub use esp32s31::*;
 #[macro_export]
 macro_rules! entry {
     ($boot:path) => {
-        type __OerStarted = impl $crate::Started;
-
-        #[define_opaque(__OerStarted)]
-        fn __oer_boot(
-            peripherals: $crate::Peripherals,
-            boot: $crate::Boot,
-        ) -> ::core::result::Result<__OerStarted, $crate::Error> {
-            $boot(peripherals, boot)
-        }
-
-        $crate::__private::tasks! {
-            /// The image's tasks on the application executor, after the
-            /// library's service tasks: the IP service with the image's
-            /// pools, and the application.
-            __OerAppTasks: Executor<$crate::Esp32s31, 0> extends $crate::SdkTasks {
-                net(service: <__OerStarted as $crate::Started>::Net) = $crate::__private::run_net;
-                app(future: <__OerStarted as $crate::Started>::App) = $crate::__private::run_app;
-            }
-        }
-
         $crate::__private::entry!(
             __oer_main,
             $crate::__private::Port,
@@ -77,12 +57,7 @@ macro_rules! entry {
         );
 
         fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
-            $crate::__private::start::<__OerAppTasks, __OerStarted>(
-                handoff,
-                __oer_boot,
-                __OerAppTasks::app,
-                __OerAppTasks::net,
-            )
+            $crate::__private::start(handoff, $boot)
         }
     };
 }

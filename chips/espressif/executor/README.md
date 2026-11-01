@@ -31,7 +31,16 @@ index, never a pointer; the timer queue keeps one deadline per task by that
 index. Each task's poll is one direct call of its never-inlined instance of
 `task::poll_task`, whose zero-sized first parameter, `task::PollBoundary`,
 marks it in the DWARF for the image checks; a task set whose executor the
-image never runs links no boundary and none of its tasks' code. Both executors
+image never runs links no boundary and none of its tasks' code.
+A thread-mode executor's `run` also takes roots (`task::Roots`, `()` for
+none): futures pinned in the frame of the function that runs it, which
+never returns, for the futures whose types only the image knows. Each
+root is a task at the index after its set's tasks (the set and its roots
+fit `MAX_TASKS`, checked at monomorphization): its waker names it, its
+signals and timers are a task's, and every root is ready for the first
+round. A root is polled through its own never-inlined `task::poll_root`
+with the same `PollBoundary` parameter, so the image checks find it as a
+task root; a finished root is not polled again. Both executors
 implement `SignalExecutor`, so an `IrqSignal` wakes a task of either by its
 `TaskId`. An executor's context is the executor that runs on the core and
 the interrupt level it entered at (`mintstatus.mil`): a hardware interrupt

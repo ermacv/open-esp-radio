@@ -54,7 +54,16 @@ fn pends(executor: u8) -> u32 {
 const EXECUTOR: u8 = 2;
 
 fn round<T: Tasks>(current: &Current) -> bool {
-    poll_round::<T>(ready(T::EXECUTOR).expect("a test executor"), current, || {})
+    round_with::<T, ()>(current, &mut ())
+}
+
+fn round_with<T: Tasks, R: Roots>(current: &Current, roots: &mut R) -> bool {
+    poll_round::<T, R>(
+        ready(T::EXECUTOR).expect("a test executor"),
+        current,
+        roots,
+        || {},
+    )
 }
 
 /// What a probe task saw: its polls, the argument it started with, and
@@ -761,4 +770,92 @@ fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_sign
     let seized = seized.borrow();
     assert_eq!(seized.own, Some(Poll::Ready(Ok(0b1))));
     assert_eq!(seized.take, Some(Err(ForeignContext)));
+}
+
+/// A root that counts its polls, records the task its waker names and
+/// finishes at its `finish_at`-th poll.
+struct Counted<'a> {
+    polls: &'a Cell<u32>,
+    named: &'a Cell<Option<TaskId>>,
+    finish_at: u32,
+}
+
+impl Future for Counted<'_> {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        self.polls.set(self.polls.get() + 1);
+        self.named.set(TaskId::of::<TestBinding>(cx.waker()));
+        if self.polls.get() >= self.finish_at {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
+#[test]
+fn roots_are_tasks_after_the_set_and_a_finished_root_is_not_polled_again() {
+    probe_set!(Set, Thread);
+    let current = current();
+    let (first_polls, second_polls) = (Cell::new(0), Cell::new(0));
+    let (first_named, second_named) = (Cell::new(None), Cell::new(None));
+    let mut first = core::pin::pin!(Counted {
+        polls: &first_polls,
+        named: &first_named,
+        finish_at: 1,
+    });
+    let mut second = core::pin::pin!(Counted {
+        polls: &second_polls,
+        named: &second_named,
+        finish_at: u32::MAX,
+    });
+    let mut roots = (Root::new(first.as_mut()), Root::new(second.as_mut()));
+    let ready = ready(EXECUTOR).expect("a test executor");
+    // The set's three tasks hold indices 0 to 2: the roots are 3 and 4.
+    assert_eq!(
+        root_end::<Set, (Root<'_, Counted<'_>>, Root<'_, Counted<'_>>)>(),
+        5
+    );
+    ready.mark(3);
+    ready.mark(4);
+    assert!(!round_with::<Set, _>(current, &mut roots));
+    assert_eq!((first_polls.get(), second_polls.get()), (1, 1));
+    let task = |index| TaskId {
+        executor: SoftwareInterrupt::from_index(EXECUTOR).expect("an executor"),
+        index,
+    };
+    assert_eq!(first_named.get(), Some(task(3)));
+    assert_eq!(second_named.get(), Some(task(4)));
+    // The finished root stays finished; the other is polled when woken.
+    ready.mark(3);
+    ready.mark(4);
+    assert!(!round_with::<Set, _>(current, &mut roots));
+    assert_eq!((first_polls.get(), second_polls.get()), (1, 2));
+    // An unwoken root is not polled.
+    assert!(!round_with::<Set, _>(current, &mut roots));
+    assert_eq!(second_polls.get(), 2);
+}
+
+#[test]
+fn a_root_polls_beside_the_sets_started_tasks_in_index_order() {
+    probe_set!(Set, Thread);
+    let current = current();
+    let seen: [Rc<Seen>; 3] = Default::default();
+    Spawner::<Set>::new()
+        .start(Set::slot(1), start_probe(&seen[1], 0, current))
+        .expect("first start");
+    let polls = Cell::new(0);
+    let named = Cell::new(None);
+    let mut root = core::pin::pin!(Counted {
+        polls: &polls,
+        named: &named,
+        finish_at: u32::MAX,
+    });
+    let mut roots = Root::new(root.as_mut());
+    ready(EXECUTOR).expect("a test executor").mark(3);
+    round_with::<Set, _>(current, &mut roots);
+    assert_eq!(seen[1].polls.get(), 1);
+    assert_eq!(polls.get(), 1);
+    // The root's waker is its own task: it does not wake the set's task.
+    assert_eq!(named.get().map(|task| task.index), Some(3));
 }

@@ -285,7 +285,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             Err(error) => fail(error.name()),
         };
         match executor
-            .run(&hart, &mut router, interrupts.wake, software.irq0, (), move |spawner| {
+            .run(&hart, &mut router, interrupts.wake, software.irq0, (), (), move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
                     fail(oer_diagnostics::name!("task-start"; 32));
                 }
@@ -318,7 +318,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
         Err(error) => fail(error.name()),
     };
     match executor
-        .run(&hart, &mut router, interrupts.wake, software.irq0, (), move |spawner| {
+        .run(&hart, &mut router, interrupts.wake, software.irq0, (), (), move |spawner| {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err()
                 || Tasks::supervise(spawner, supervisor).is_err()
                 || Tasks::abandon(spawner, client).is_err()

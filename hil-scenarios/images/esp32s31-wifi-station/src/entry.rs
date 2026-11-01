@@ -275,6 +275,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<oer_esp32s31_hal::platfor
             interrupts.wake,
             software.irq0,
             urgent,
+            (),
             move |spawner| {
                 let requests = Requests {
                     station: sender,

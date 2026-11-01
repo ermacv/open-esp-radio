@@ -342,9 +342,10 @@ services with defaults through the boot context, overriding a default only
 by an explicit setting or a static storage of its own (reconnect, drain,
 AES seats, IP pools), and returns the application's future (`impl
 Started`). The SDK owns the default interrupt table, the
-executors and its service tasks (`SdkTasks`, which the image's task set
-extends on the same executor with the IP service at the image's pool sizes
-and the application), and applies record and reset on the image's
+executors and its service tasks (`SdkTasks`, on the same executor as the
+image's IP service at the image's pool sizes and its application, which
+run as that executor's roots in the frame of the SDK's run), and applies
+record and reset on the image's
 behalf to every boot error, application error and unrecoverable service
 exit; handled errors stay values. The SDK runs the application on hart 0.
 
