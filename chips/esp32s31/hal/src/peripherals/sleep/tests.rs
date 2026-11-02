@@ -80,6 +80,12 @@ fn a_sleep_keeps_every_domain_and_oscillator_on_and_stalls_the_cpu() {
             u32::MAX
         );
         assert!(state.read_hp_sleep_sysclk().hp_sleep_icg_sys_clock_en());
+        assert!(
+            state.read_hp_active_sysclk().hp_active_icg_sys_clock_en(),
+            "the wake returns to an open system clock gate"
+        );
+        assert!(!state.read_hp_active_hp_sys_cntl().hp_active_dig_cpu_stall());
+        assert!(state.read_hp_active_bias().hp_active_xpd_bias());
     });
 }
 

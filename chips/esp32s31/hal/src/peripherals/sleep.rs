@@ -177,23 +177,58 @@ impl<P: Placement, Q: Placement, T: Placement> Registers for SleepRegisters<P, Q
         state.modify_hp_sleep_icg_modem(|w| {
             w.set_hp_sleep_dig_icg_modem_code(HpSleepDigIcgModemCode::Sleep);
         });
+        // The PLLs stay on, so the system clock keeps its source through
+        // the sleep: the PMU does not switch it to the crystal, and nothing
+        // restores the CPU clock after the wake. The vendor switches it
+        // (`sysclk_slp_sel` 1, `pmu_param.c:160-173`) because its sleep
+        // powers the PLLs down.
         state.modify_hp_sleep_sysclk(|w| {
             w.set_hp_sleep_dig_sys_clk_no_div(false)
                 .set_hp_sleep_icg_sys_clock_en(matches!(clocks, SleepClocks::Running))
-                .set_hp_sleep_sys_clk_slp_sel(true)
+                .set_hp_sleep_sys_clk_slp_sel(false)
                 .set_hp_sleep_icg_slp_sel(true)
                 .set_hp_sleep_dig_sys_clk_sel(HpSleepDigSysClkSel::Xtal);
         });
-        // No domain powers down: the pads keep their configuration and the
-        // C channel stays open; the watchdogs pause and the CPU stalls.
+        // No domain powers down: the pads keep their active configuration
+        // (the vendor selects their sleep configuration only with the
+        // PSRAM pins held, `pmu_sleep.c:354-366`) and the C channel stays
+        // open; the watchdogs pause and the CPU stalls.
         state.modify_hp_sleep_hp_sys_cntl(|w| {
             w.set_hp_sleep_c_channel(true)
                 .set_hp_sleep_uart_wakeup_en(true)
                 .set_hp_sleep_lp_pad_hold_all(false)
                 .set_hp_sleep_hp_pad_hold_all(false)
-                .set_hp_sleep_dig_pad_slp_sel(true)
+                .set_hp_sleep_dig_pad_slp_sel(false)
                 .set_hp_sleep_dig_pause_wdt(true)
                 .set_hp_sleep_dig_cpu_stall(true);
+        });
+        // The active state the PMU returns to on the wake, as the vendor's
+        // `pmu_init` leaves it before any sleep; the reset leaves the
+        // system clock's gate closed there.
+        //
+        // SOURCE: `pmu_param.c:128-142,186-197,233-238`
+        // (`PMU_HP_ACTIVE_CLOCK_CONFIG_DEFAULT`, `..._DIGITAL_...`,
+        // `..._ANALOG_...` bias) and `pmu_init.c:72-142`.
+        state.modify_hp_active_sysclk(|w| {
+            w.set_hp_active_dig_sys_clk_no_div(false)
+                .set_hp_active_icg_sys_clock_en(true)
+                .set_hp_active_sys_clk_slp_sel(false)
+                .set_hp_active_icg_slp_sel(false);
+        });
+        state.modify_hp_active_hp_sys_cntl(|w| {
+            w.set_hp_active_c_channel(true)
+                .set_hp_active_uart_wakeup_en(false)
+                .set_hp_active_lp_pad_hold_all(false)
+                .set_hp_active_hp_pad_hold_all(false)
+                .set_hp_active_dig_pad_slp_sel(false)
+                .set_hp_active_dig_pause_wdt(false)
+                .set_hp_active_dig_cpu_stall(false);
+        });
+        state.modify_hp_active_bias(|w| {
+            w.set_hp_active_xpd_bias(true)
+                .set_hp_active_dbg_atten(Bits::constant::<0>())
+                .set_hp_active_pd_cur(false)
+                .set_sleep(false);
         });
         // The CPU, baseband and MSPI PLLs and their analog I2C stay powered
         // as in the active state; the audio PLL stays off.

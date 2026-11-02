@@ -166745,7 +166745,7 @@ pub mod pmu {
 
     /// The `PmuSleepState` part of `PMU`.
     ///
-    /// The HP_SLEEP and LP_SLEEP state words the PMU applies when the HP system sleeps: domain power, clock gates, the system clock in sleep, PLL and oscillator power, regulators and bias.
+    /// The HP_SLEEP and LP_SLEEP state words the PMU applies when the HP system sleeps (domain power, clock gates, the system clock in sleep, PLL and oscillator power, regulators and bias), and the HP_ACTIVE system-control, bias and system-clock words it applies when the HP system wakes.
     ///
     /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_PMU_REG_H.
     #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -166759,15 +166759,15 @@ pub mod pmu {
     impl oer_portable_mmio::Registers for PmuSleepStateWords {
         type Sharing = oer_portable_mmio::sharing::Owned;
         const WORDS: &'static [usize] = &[
-            0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0,
-            0xc4, 0xcc, 0xd0, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec,
+            0x18, 0x20, 0x30, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xb0, 0xb4,
+            0xb8, 0xbc, 0xc0, 0xc4, 0xcc, 0xd0, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec,
         ];
     }
 
     impl oer_portable_mmio::Words for PmuSleepStateWords {
         const OWNED: &'static [usize] = &[
-            0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0,
-            0xc4, 0xcc, 0xd0, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec,
+            0x18, 0x20, 0x30, 0x80, 0x84, 0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xb0, 0xb4,
+            0xb8, 0xbc, 0xc0, 0xc4, 0xcc, 0xd0, 0xd8, 0xdc, 0xe0, 0xe4, 0xe8, 0xec,
         ];
         const OBSERVED: &'static [usize] = &[];
     }
@@ -166792,6 +166792,54 @@ pub mod pmu {
     }
 
     impl<P: oer_portable_mmio::Placement> PmuSleepState<P> {
+        /// Read `HP_ACTIVE_HP_SYS_CNTL`.
+        #[inline]
+        pub fn read_hp_active_hp_sys_cntl(&self) -> hp_active_hp_sys_cntl::R {
+            hp_active_hp_sys_cntl::R(self.0.read::<0x18>())
+        }
+
+        /// Read `HP_ACTIVE_HP_SYS_CNTL`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_hp_active_hp_sys_cntl(
+            &mut self,
+            change: impl FnOnce(&mut hp_active_hp_sys_cntl::W),
+        ) {
+            let mut value = hp_active_hp_sys_cntl::W(self.0.read::<0x18>());
+            change(&mut value);
+            self.0.write::<0x18>(value.0);
+        }
+
+        /// Read `HP_ACTIVE_BIAS`.
+        #[inline]
+        pub fn read_hp_active_bias(&self) -> hp_active_bias::R {
+            hp_active_bias::R(self.0.read::<0x20>())
+        }
+
+        /// Read `HP_ACTIVE_BIAS`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_hp_active_bias(&mut self, change: impl FnOnce(&mut hp_active_bias::W)) {
+            let mut value = hp_active_bias::W(self.0.read::<0x20>());
+            change(&mut value);
+            self.0.write::<0x20>(value.0);
+        }
+
+        /// Read `HP_ACTIVE_SYSCLK`.
+        #[inline]
+        pub fn read_hp_active_sysclk(&self) -> hp_active_sysclk::R {
+            hp_active_sysclk::R(self.0.read::<0x30>())
+        }
+
+        /// Read `HP_ACTIVE_SYSCLK`, change fields and write it back; every other bit keeps
+        /// the value read, every write-trigger field is zero.
+        #[inline]
+        pub fn modify_hp_active_sysclk(&mut self, change: impl FnOnce(&mut hp_active_sysclk::W)) {
+            let mut value = hp_active_sysclk::W(self.0.read::<0x30>());
+            change(&mut value);
+            self.0.write::<0x30>(value.0);
+        }
+
         /// Read `HP_SLEEP_DIG_POWER`.
         #[inline]
         pub fn read_hp_sleep_dig_power(&self) -> hp_sleep_dig_power::R {

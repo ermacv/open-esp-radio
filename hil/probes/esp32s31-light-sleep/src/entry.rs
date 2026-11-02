@@ -91,7 +91,10 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     )
     .unwrap_or_else(|failure| failure.reset());
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
-    let watchdog = watchdogs.rtc;
+    let mut watchdog = watchdogs.rtc;
+    // A sleep whose wake never comes ends in the watchdog's reset, not a
+    // board that sleeps for good.
+    watchdog.pause_in_sleep(false);
     text(b"OER-PROBE light-sleep ready\r\n");
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
