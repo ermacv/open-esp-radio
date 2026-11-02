@@ -42,6 +42,9 @@ pub struct AggregateSettled {
     pub dropped: u8,
     /// Whether the aggregate was refused before the port.
     pub refused: bool,
+    /// The rate its last transmission went at; `None` when none reached
+    /// the air.
+    pub rate: Option<oer_ieee80211_contracts_port::PhyRate>,
 }
 
 /// The returned buffer, renewed for a new MSDU. A buffer whose memory is

@@ -12,7 +12,13 @@ fn an_aggregate_counts_in_the_bin_of_its_subframes() {
 #[test]
 fn settlements_and_block_ack_requests_count_apart() {
     let counter = LinkCounter::new();
+    let ht40 = Rate::Ht {
+        mcs: 7,
+        width40: true,
+        short_gi: false,
+    };
     counter.settled(Settled {
+        rate: ht40,
         members: 5,
         refused: false,
         acknowledged: 4,
@@ -20,9 +26,12 @@ fn settlements_and_block_ack_requests_count_apart() {
         dropped: 1,
     });
     counter.settled(Settled {
+        rate: Rate::Unknown,
         members: 1,
         refused: true,
-        ..Settled::default()
+        acknowledged: 0,
+        retried: 0,
+        dropped: 0,
     });
     counter.block_ack_request();
     assert_eq!(
@@ -38,6 +47,11 @@ fn settlements_and_block_ack_requests_count_apart() {
             block_ack_requests: 1,
         }
     );
+    // The aggregate that went sent its subframes at its rate; the refused
+    // one sent none.
+    let sent = counter.link().tx.mpdus;
+    assert_eq!(sent.ht40_long_gi[7], 5);
+    assert_eq!(sent.unknown, 0);
 }
 
 #[test]

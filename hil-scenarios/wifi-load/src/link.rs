@@ -168,17 +168,17 @@ fn histogram(rates: &Rates) -> Value {
 }
 
 /// The image's counts of the link within its window: received data MPDUs
-/// by rate and A-MPDU containment, and the single data transmissions by
-/// their last rate, with their transmissions, retries and ends. The
-/// metadata holds no A-MPDU boundary and the image counts no transmitted
-/// aggregate: both A-MPDU sizes are null.
+/// by rate and A-MPDU containment, the data MPDUs sent by rate (single
+/// ones and aggregate subframes), and the single transmissions with their
+/// retries and ends. The metadata holds no A-MPDU boundary: both A-MPDU
+/// sizes are null; the level's `tx.ampdu` counts the aggregates.
 pub fn device(link: &Link) -> Value {
     let rx = &link.rx;
     let tx = &link.tx;
     let in_ampdu = u64::from(rx.in_ampdu);
     let contained = in_ampdu + u64::from(rx.single);
-    // An ended MPDU with a rate reported its transmissions.
-    let sent = total(&tx.mpdus).saturating_sub(u64::from(tx.mpdus.unknown));
+    // A single MPDU that ended on air reported its transmissions.
+    let sent = u64::from(tx.delivered) + u64::from(tx.ack_timeouts) + u64::from(tx.other_ends);
     let retries = u64::from(tx.transmissions).saturating_sub(sent);
     json!({
         "rx": {
@@ -194,7 +194,7 @@ pub fn device(link: &Link) -> Value {
             "mpdus": histogram(&tx.mpdus),
             "transmissions": tx.transmissions,
             "retries": retries,
-            "transmissions_per_mpdu": (sent != 0)
+            "transmissions_per_single": (sent != 0)
                 .then(|| round(f64::from(tx.transmissions) / sent as f64)),
             "delivered": tx.delivered,
             "ack_timeouts": tx.ack_timeouts,
@@ -205,40 +205,48 @@ pub fn device(link: &Link) -> Value {
     })
 }
 
-/// One line a reader takes in at a glance: the access point's last rates
-/// each way and its width, the image's commonest rate each way with its
-/// share, the A-MPDU share of what it received and its transmissions per
-/// MPDU.
+/// One line a reader takes in at a glance: the access point's channel and
+/// width, its last rates each way, then each way the image's MPDUs with
+/// every rate they went at and its share, the A-MPDU share of what it
+/// received and its transmissions per single MPDU.
 pub fn summary(router: &Value, device: &Value) -> String {
     let text = |value: &Value| value.as_str().unwrap_or("-").to_owned();
     let router = match router.get("unavailable") {
         Some(reason) => format!("AP view unavailable ({})", text(reason)),
         None => format!(
-            "AP {} MHz, AP→device {} (retries {}), device→AP {}",
+            "channel {}, AP {} MHz, AP→device {} (retries {}), device→AP {}",
+            at(router, &["channel"]),
             at(router, &["width_mhz"]),
             text(at(router, &["to_device", "last_bitrate", "text"])),
             at(router, &["to_device", "retries"]),
             text(at(router, &["from_device", "last_bitrate", "text"])),
         ),
     };
-    let top = |side: &str| {
+    let rates = |side: &str| {
         let mpdus = at(device, &[side, "mpdus"]);
-        match at(mpdus, &["rates"]).get(0) {
-            Some(first) => format!(
-                "{} MPDUs, {} {}%",
-                at(mpdus, &["total"]),
-                text(at(first, &["rate"])),
-                at(first, &["percent"])
-            ),
-            None => "no MPDU".to_owned(),
+        let named: Vec<String> = at(mpdus, &["rates"])
+            .as_array()
+            .map(|rates| {
+                rates
+                    .iter()
+                    .map(|rate| {
+                        format!("{} {}%", text(at(rate, &["rate"])), at(rate, &["percent"]))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if named.is_empty() {
+            "no MPDU".to_owned()
+        } else {
+            format!("{} MPDUs: {}", at(mpdus, &["total"]), named.join(", "))
         }
     };
     format!(
-        "{router}; device RX {} (in A-MPDU {}%), device TX {} ({} transmissions/MPDU)",
-        top("rx"),
+        "{router}; device RX {} (in A-MPDU {}%); device TX {} ({} transmissions per single MPDU)",
+        rates("rx"),
         at(device, &["rx", "in_ampdu_percent"]),
-        top("tx"),
-        at(device, &["tx", "transmissions_per_mpdu"]),
+        rates("tx"),
+        at(device, &["tx", "transmissions_per_single"]),
     )
 }
 
@@ -337,14 +345,20 @@ mod tests {
         assert!(rx["mpdus_per_ampdu"].is_null());
         let tx = &value["tx"];
         assert_eq!(tx["mpdus"]["total"], 1002);
-        assert_eq!(tx["retries"], 100, "1100 transmissions of 1000 sent MPDUs");
-        assert_eq!(tx["transmissions_per_mpdu"], 1.1);
+        assert_eq!(
+            tx["retries"], 100,
+            "1100 transmissions of 1000 single MPDUs on air"
+        );
+        assert_eq!(tx["transmissions_per_single"], 1.1);
         assert_eq!(tx["mpdus"]["ht40_percent"], 0.0);
         let line = summary(
             &router_window(&Ok(view(100, 10, 0)), &Ok(view(200, 20, 0)), SPAN),
             &value,
         );
-        assert!(line.contains("AP 40 MHz"), "{line}");
+        assert!(line.contains("channel 13, AP 40 MHz"), "{line}");
+        // Every rate with its share, not only the commonest.
+        assert!(line.contains("HT40 LGI MCS6 6"), "{line}");
+        assert!(line.contains("non-HT 4"), "{line}");
         assert!(line.contains("150.0 MBit/s MCS 7 40MHz short GI"), "{line}");
         assert!(line.contains("HT40 SGI MCS7 90"), "{line}");
         assert!(line.contains("HT20 LGI MCS7"), "{line}");
@@ -356,7 +370,7 @@ mod tests {
         assert_eq!(value["rx"]["mpdus"]["total"], 0);
         assert!(value["rx"]["mpdus"]["mcs7_percent"].is_null());
         assert!(value["rx"]["in_ampdu_percent"].is_null());
-        assert!(value["tx"]["transmissions_per_mpdu"].is_null());
+        assert!(value["tx"]["transmissions_per_single"].is_null());
         assert!(summary(&json!({"unavailable": "x"}), &value).contains("no MPDU"));
     }
 }

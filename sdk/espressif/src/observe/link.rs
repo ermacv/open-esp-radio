@@ -1,7 +1,8 @@
 //! The link's counts: the data MPDUs addressed to the station by their
-//! PPDU's rate and A-MPDU containment, the station's single data
-//! transmissions by their last rate and end, and its transmit agreements'
-//! settlements. The station service, on the boot hart, is their one
+//! PPDU's rate and A-MPDU containment, the station's data MPDUs sent by
+//! rate (a single one's last transmission, an aggregate's subframes at the
+//! aggregate's last), its single transmissions by end, and its transmit
+//! agreements' settlements. The station service, on the boot hart, is their one
 //! writer; a reader on any hart takes each word on its own, so counts read
 //! together may be a write apart. Counts wrap at 2^32.
 
@@ -62,8 +63,9 @@ pub enum Containment {
     InAmpdu,
 }
 
-/// The single data transmissions, by their last rate and end, and every
-/// transmission they took.
+/// The data MPDUs sent by rate: a single one by its last transmission's,
+/// an aggregate's subframes by the aggregate's last. The single
+/// transmissions by end and every transmission they took.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct TxLink {
     pub mpdus: Rates,
@@ -98,8 +100,10 @@ pub struct TxAmpdu {
 }
 
 /// One aggregate's settlement.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Settled {
+    /// The rate its last transmission went at.
+    pub rate: Rate,
     pub members: u8,
     /// The agreement refused the aggregate.
     pub refused: bool,
@@ -229,8 +233,16 @@ impl LinkCounter {
         bump(&self.tx_transmissions, u32::from(transmissions));
     }
 
-    /// Count an aggregate's settlement.
+    /// Count an aggregate's settlement; the subframes of one that went
+    /// count as sent at its rate.
     pub fn settled(&self, settled: Settled) {
+        if !settled.refused {
+            bump_at(
+                &self.tx_rates,
+                bucket(settled.rate),
+                u32::from(settled.members),
+            );
+        }
         bump_at(&self.ampdu, 0, 1);
         bump_at(&self.ampdu, 1, u32::from(settled.refused));
         bump_at(&self.ampdu, 2, u32::from(settled.members));

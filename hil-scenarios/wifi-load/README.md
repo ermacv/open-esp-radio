@@ -115,14 +115,19 @@ transmissions per MPDU. RX and TX stay the image's.
   `mcs7_percent`), and by A-MPDU containment (`in_ampdu`, `single`,
   `containment_unknown`, `in_ampdu_percent`). The metadata marks no
   A-MPDU boundary: `ampdus` and `mpdus_per_ampdu` stay null. `tx`: the
-  station's single data MPDUs whose transmission ended, by the rate of
-  their last transmission (`mpdus`, as above; one without a transmission
-  counts as `unknown`), their `transmissions`, `retries` (transmissions
-  beyond one per MPDU that went on air), `transmissions_per_mpdu`, and
-  their ends `delivered`, `ack_timeouts`, `other_ends` (protection
-  timeout, contention limit, coexistence denial) and `unsent` (expired,
-  withdrawn or of unknown outcome). Transmitted aggregates count in the
-  level's `tx.ampdu`, not here: `ampdu` is null.
+  station's data MPDUs sent, by rate (`mpdus`, as above): a single MPDU
+  by its last transmission's rate (one without a transmission counts as
+  `unknown`), an aggregate's subframes by the rate of the aggregate's
+  last transmission; then the single MPDUs' `transmissions`, `retries`
+  (transmissions beyond one per single MPDU that went on air),
+  `transmissions_per_single`, and their ends `delivered`, `ack_timeouts`,
+  `other_ends` (protection timeout, contention limit, coexistence denial)
+  and `unsent` (expired, withdrawn or of unknown outcome). The aggregates
+  themselves count in the level's `tx.ampdu`: `ampdu` here is null.
+  Each level also prints one `link` line: the router's channel and width,
+  its last rates each way, and each way the image's MPDUs with every rate
+  they went at (MCS, 20 or 40 MHz, short or long guard interval) and its
+  share.
 
 `cache` holds one entry per cache bus the image counts, cleared at the
 window's start: `ibus0` (hart 0's instruction fetches through L1-ICache0)

@@ -302,6 +302,7 @@ impl oer_trace::Observer for Observer {
                 LINK.block_ack_request();
             } else {
                 LINK.settled(Settled {
+                    rate: rate(settled.rate),
                     members: settled.members,
                     refused: settled.refused,
                     acknowledged: settled.acknowledged,
