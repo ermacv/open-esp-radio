@@ -88,12 +88,9 @@ a HIL image of one function build it:
 | Reconnect after a lost association | every 1 s (`wifi::RECONNECT`) | `wifi::Config::with_reconnect(interval)`, `without_reconnect()` |
 | Drain at a stop | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
 | Channel width of a join | 20 MHz | `wifi::Config::with_ht40()`: 40 MHz where the access point's HT elements name a secondary channel the domain permits |
-| AES client seats | 4 (`AES_CLIENTS`) | `static SEATS: AesSeats<C>`, `Aes::start_with(p.aes, &SEATS, &mut boot)` |
 | IP pools (receive, transmit, general frames) | 8, 8, 8 (`wifi::RX`, `TX`, `GENERAL`) | `static POOLS: wifi::Pools<RX, TX, GENERAL>`, `Net::start_with(device, &POOLS, config, boot)` in the second boot |
 
-A zero interval or deadline is refused (`ConfigError`). The seats' count
-(1 to 32) is the storage's, not a type's: `Aes` and `AesClient` are the same
-for every count. The pools' sizes are types (`Net<RX, TX>`, `Stack<RX, TX>`),
+A zero interval or deadline is refused (`ConfigError`). The pools' sizes are types (`Net<RX, TX>`, `Stack<RX, TX>`),
 defaulting to the library's. Each storage is taken once; a second start
 returns `Error::AlreadyStarted`.
 Before the executor starts the library draws the boot's identity
@@ -117,13 +114,12 @@ once the boot ended: it runs the second boot there and then its IP service
 and future on its own thread-mode executor, and hart 0 waits for the second
 boot's end before it enables its interrupts. The image declares
 `harts = ["boot", 1]`. Service tasks on the application executor: the RTC
-watchdog feed, the AES service when the image starts it, the station
-runner, the MAC driver beside it and the IP service. The radio executor
+watchdog feed, the station runner, the MAC driver beside it and the IP
+service. The radio executor
 runs the radio actor.
 
 | Default | Value |
 | --- | --- |
-| AES client seats | 4 (`AES_CLIENTS`); key data per request 512 bytes (`AES_CAPACITY`) |
 | IP packet pools | 8 receive, 8 transmit credits, 8 general, 1514 bytes each |
 | IP waiters | 4 tasks waiting at once |
 | Station reconnect | every second after a lost association |
@@ -131,17 +127,18 @@ runs the radio actor.
 
 ## Services
 
-`Aes::start` makes the accelerator the shared service: one engine owner,
-clients from `Aes::client` (in the boot or in a task). A request moves into
-the client's seat and its response comes back by value; the service runs
-one request at a time, the next pending client after the last served. A
-client is also a `KeyUnwrap` engine.
+`AesPeripheral::engine` makes the accelerator the image's synchronous
+AES-128 engine (`AesEngine`, an `oer_crypto::block::Aes128Engine`), owned by
+whoever holds it: each block waits on its `STATE` flag within its settle,
+and an operation borrows the engine for the length of its call
+(`oer_crypto::block::unwrap_now`), so no operation outlives it and nothing
+waits on another holder. The AES interrupt stays silent.
 
 `wifi::Station::start` takes the radio, the entropy source and the AES
 accelerator, which it owns for good: the station unwraps its EAPOL-Key data
 in its own step on the accelerator, each block waited for on its `STATE`
-flag. An image that starts the station therefore starts no AES service
-(the peripheral moves into one of them). Its configuration names one channel (`wifi::Config::new`) or every
+flag. An image that starts the station therefore takes no AES engine of its
+own (the peripheral moves into one of them). Its configuration names one channel (`wifi::Config::new`) or every
 2.4 GHz channel the country permits, scanned at each connect
 (`wifi::Config::all_channels`). `connect(profile)`
 ends with the result of that connection attempt: `Connected`, or a
@@ -200,10 +197,6 @@ returns `false`; a fatal note still reaches the host.
 | --- | --- |
 | `Station::connect` while its profile is prepared | the derivation and the passphrase are erased; nothing was sent |
 | `Station::connect` after admission | the attempt continues; the next connect waits for its end; `disconnect` leaves the network |
-| `AesClient::execute` before the service took the request | the request is withdrawn and erased |
-| `AesClient::execute` while the service runs it | the service finishes, erases the response; the client's next request waits for that |
-| An `AesClient::execute` or key unwrap that ended without its response (polled outside the service's context, or leaked) | its request or response stays in the seat under its request number; the client's next request withdraws or erases it, or waits for it while it runs, and never takes its response |
-| An `AesClient` with a running request | its seat is freed once the service finished it; in the boot, before the executor runs, a dropped client keeps its seat |
 | `Net::wait_ipv4` or `wait_link_down` | it frees its waiter slot; dropped outside the application's context, its waker stays until the next change takes it |
 | `NetStatus::status`, `wait_ipv4` or `wait_link_down` | nothing to free: the application's waker stays registered until the next publication wakes it |
 | `ApplicationEnd`/`SecondEnd::send` or `receive` | the value not sent stays with the caller; a received value is never lost: it stays in the queue until a receive returns it |
@@ -242,8 +235,9 @@ takes differences.
 
 ## Limits
 
-The application runs on hart 0. The AES service and the station compute
-RFC 3394 key unwrap only, on the accelerator in Typical mode without DMA. One station and one IP service per
+The application runs on hart 0. The AES engine runs the accelerator in
+Typical mode without DMA, one synchronous block at a time; the station
+computes RFC 3394 key unwrap on it. One station and one IP service per
 image. `println!("ipv4 {}/{}", Ipv4(address), prefix)` writes a typed line
 (`oer_diagnostics::typed_line!`): the format's static pieces and the
 values, which the host prints; the target formats nothing. A hole is a bare

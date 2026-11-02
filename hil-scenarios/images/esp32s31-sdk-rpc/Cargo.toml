@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 publish.workspace = true
-description = "The HIL image of the radio-free scenarios: the oer-espressif AES service served over the HIL console, without Wi-Fi"
+description = "The HIL image of the radio-free scenarios: the oer-espressif AES engine served over the HIL console, without Wi-Fi"
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]

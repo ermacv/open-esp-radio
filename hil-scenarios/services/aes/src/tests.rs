@@ -1,5 +1,5 @@
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
-use oer_crypto::block::{Aes128Blocks, Block, BlockCipher, BlockKeyUnwrap};
+use oer_crypto::block::{Aes128Blocks, Block, BlockCipher, BlockEngine};
 
 use super::*;
 use oer_hil_protocol::Message;
@@ -25,8 +25,8 @@ impl Aes128Blocks for Software {
     }
 }
 
-fn engine() -> Engine<BlockKeyUnwrap<Software>> {
-    Engine::new(BlockKeyUnwrap::new(Software))
+fn engine() -> Engine<Software> {
+    Engine::new(Software)
 }
 
 fn hex(text: &str) -> heapless::Vec<u8, MAX_WRAPPED> {
@@ -40,25 +40,46 @@ const KEK: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 ];
 
-fn unwrap(handler: &mut Engine<BlockKeyUnwrap<Software>>, wrapped: &str) -> Unwrapped {
+fn unwrap<E: Aes128Engine>(handler: &mut Engine<E>, wrapped: &str) -> Unwrapped {
     embassy_futures::block_on(handler.unwrap_key(UnwrapKey {
         kek: KEK,
         wrapped: hex(wrapped),
     }))
 }
 
+/// A hardware-like engine that refuses every key with an observed state.
+struct Refusing;
+
+struct Never;
+
+impl BlockEngine for Never {
+    fn encrypt(&mut self, _: &mut Block) -> Result<(), BlockError> {
+        Err(BlockError::Unavailable)
+    }
+    fn decrypt(&mut self, _: &mut Block) -> Result<(), BlockError> {
+        Err(BlockError::Unavailable)
+    }
+}
+
+impl Aes128Engine for Refusing {
+    type Keyed<'a> = Never;
+    fn load(&mut self, _: &Aes128Key) -> Result<Never, BlockError> {
+        Err(BlockError::InvalidState { observation: 5 })
+    }
+}
+
 #[test]
-fn an_engine_of_a_larger_capacity_unwraps_the_same_request() {
-    let mut handler: Engine<BlockKeyUnwrap<Software>, 512> =
-        Engine::new(BlockKeyUnwrap::new(Software));
-    let answer = embassy_futures::block_on(handler.unwrap_key(UnwrapKey {
-        kek: KEK,
-        wrapped: hex("1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5"),
-    }));
-    assert_eq!(
-        answer,
-        Unwrapped::Plaintext(hex("00112233445566778899aabbccddeeff"))
-    );
+fn an_engine_refusing_its_key_is_a_typed_answer_and_serves_the_next_request() {
+    let mut handler = Engine::new(Refusing);
+    for _ in 0..2 {
+        assert_eq!(
+            unwrap(
+                &mut handler,
+                "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5"
+            ),
+            Unwrapped::Refused(UnwrapError::EngineInvalidState { observation: 5 })
+        );
+    }
 }
 
 #[test]

@@ -90,7 +90,7 @@ const fn executor_observer<const SLOT: usize>() -> oer_trace::Noop {
 }
 
 mod aes;
-pub use aes::{Aes, AesClient, AesSeats, CAPACITY as AES_CAPACITY, CLIENTS as AES_CLIENTS};
+pub use aes::AesEngine;
 
 /// The Wi-Fi station and its IP service.
 #[cfg(feature = "wifi")]
@@ -159,8 +159,6 @@ oer_espressif_executor::tasks! {
         @observer: executor_observer::<0>();
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
-        /// The shared AES service.
-        aes_service(launch: aes::AesStart) = aes::serve;
         #[cfg(feature = "wifi")]
         /// The Wi-Fi station's runner.
         station(launch: wifi::StationStart) = wifi::serve_station;
@@ -175,7 +173,8 @@ oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
 
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
-    /// The AES accelerator: [`Aes::start`] makes it the shared service.
+    /// The AES accelerator: [`AesPeripheral::engine`] makes it the image's
+    /// synchronous AES engine, or [`wifi::Station::start`] takes it.
     pub aes: AesPeripheral,
     /// The radio: [`wifi::Station::start`] takes it.
     #[cfg(feature = "wifi")]
@@ -283,7 +282,6 @@ pub(crate) fn draw_boot_id(rng: &mut oer_esp32s31_compose::platform::Entropy) ->
 /// Service tasks a boot step prepared, started with the executor.
 #[derive(Default)]
 pub(crate) struct Pending {
-    pub(crate) aes: Option<aes::AesStart>,
     #[cfg(feature = "wifi")]
     pub(crate) station: Option<wifi::StationStart>,
     /// The Wi-Fi MAC driver, started beside the station.
@@ -493,8 +491,6 @@ pub enum Error {
     InterruptTaken,
     /// A peripheral's interrupt could not be held silent.
     InterruptRouted,
-    /// The AES service has no free client seat.
-    AesClients,
     /// A static storage was taken already.
     Storage,
     /// The entropy source failed its health check.
@@ -556,7 +552,6 @@ impl Error {
             Self::AlreadyStarted => oer_diagnostics::name!("sdk-already-started"; 32),
             Self::InterruptTaken => oer_diagnostics::name!("sdk-interrupt-taken"; 32),
             Self::InterruptRouted => oer_diagnostics::name!("sdk-interrupt-routed"; 32),
-            Self::AesClients => oer_diagnostics::name!("sdk-aes-clients"; 32),
             Self::Storage => oer_diagnostics::name!("sdk-storage"; 32),
             Self::Entropy => oer_diagnostics::name!("sdk-entropy"; 32),
             Self::Channel(_) => oer_diagnostics::name!("sdk-channel"; 32),
@@ -861,10 +856,7 @@ struct Starts {
 impl Starts {
     fn spawn(self, library: &Spawner<SdkTasks>) {
         let Self { watchdog, pending } = self;
-        let started = SdkTasks::watchdog(library, watchdog).is_ok()
-            && pending
-                .aes
-                .is_none_or(|engine| SdkTasks::aes_service(library, engine).is_ok());
+        let started = SdkTasks::watchdog(library, watchdog).is_ok();
         #[cfg(feature = "wifi")]
         let started = started
             && pending

@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_crypto::block::{Aes128Blocks, Block, BlockCipher, BlockKeyUnwrap};
-use oer_crypto::{Aes128Key, KeyData, KeyUnwrap as _, KeyUnwrapRequest};
+use oer_crypto::block::{Aes128Blocks, Block, BlockCipher};
+use oer_crypto::{Aes128Key, KeyData, KeyUnwrapRequest};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_compose::Esp32s31;
@@ -356,7 +356,6 @@ fn wrapped(plain: usize) -> ([u8; 504], KeyData<512>) {
 /// as the station does; whether every plaintext came back.
 fn unwrap_case<P: Aes128Blocks>(blocks: &mut P, plain: usize) -> (Stats, bool) {
     let (plaintext, wrapped) = wrapped(plain);
-    let mut engine = BlockKeyUnwrap::new(Borrowed(blocks));
     let mut stats = Stats::default();
     let mut agree = true;
     for _ in 0..runs(plain) {
@@ -365,27 +364,13 @@ fn unwrap_case<P: Aes128Blocks>(blocks: &mut P, plain: usize) -> (Stats, bool) {
         };
         let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&KEY), data);
         let start = oer_riscv::cycle32();
-        let response = engine.unwrap_now(request);
+        let response = oer_crypto::block::unwrap_now(blocks, request);
         stats.add(oer_riscv::cycle32().wrapping_sub(start));
         agree &= response
             .plaintext()
             .is_ok_and(|bytes| bytes == plaintext.get(..plain).unwrap_or(&[]));
     }
     (stats, agree)
-}
-
-/// A block primitive lent to an engine that takes one by value.
-struct Borrowed<'b, P>(&'b mut P);
-
-impl<P: Aes128Blocks> Aes128Blocks for Borrowed<'_, P> {
-    type Keyed<'k>
-        = P::Keyed<'k>
-    where
-        Self: 'k;
-
-    fn load_key(&mut self, key: &Aes128Key) -> P::Keyed<'_> {
-        self.0.load_key(key)
-    }
 }
 
 /// CCMP-128 seals of a `body`-byte payload, the key loaded each time; the

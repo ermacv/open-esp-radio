@@ -17,14 +17,14 @@
 //! defaults. The library places their interrupts, executors and service
 //! tasks and applies the record-and-reset policy on the image's behalf.
 //!
-//! - [`aes`]: the shared AES service, one engine owner and many clients;
+//! - `AesEngine` (`esp32s31`): the AES accelerator as one synchronous
+//!   AES-128 engine, owned by the image or by the Wi-Fi station;
 //! - [`channel`]: a typed channel between the application's future and the
 //!   second boot's;
 //! - [`net`]: waiting on the IP service for an address or a link loss;
 //! - `observe` (`observe` feature): what the library observes of its own
 //!   work, for an image that measures it.
 
-pub mod aes;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod boot;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]

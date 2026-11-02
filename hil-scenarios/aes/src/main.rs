@@ -1,5 +1,5 @@
 //! The HIL AES scenario: the SDK RPC image unwraps RFC 3394 key data with
-//! the product hardware engine behind the library's AES service; the host checks every answer against the RFC's
+//! the library's synchronous product hardware engine; the host checks every answer against the RFC's
 //! known answer and against its own reference wrap, which shares no code
 //! with the image's.
 #![forbid(unsafe_code)]

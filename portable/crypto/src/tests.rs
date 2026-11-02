@@ -1,16 +1,10 @@
 use crate::{
-    Aes128Key, KeyData, KeyDataCapacityError, KeyUnwrap, KeyUnwrapDone, KeyUnwrapError,
-    KeyUnwrapRequest, KeyUnwrapResponse,
-    block::{Aes128Blocks, Block, BlockCipher, BlockKeyUnwrap},
+    Aes128Key, KeyData, KeyDataCapacityError, KeyUnwrapError, KeyUnwrapRequest,
+    block::{Aes128Blocks, Block, BlockCipher, unwrap_now},
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
     rfc3394::{KeyWrapError, wrap},
 };
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
-use core::{
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
-};
 use zeroize::ZeroizeOnDrop;
 
 /// RustCrypto AES-128 as the synchronous block primitive.
@@ -37,61 +31,10 @@ impl Aes128Blocks for Rust {
     }
 }
 
-/// An engine whose operation is pending on its first poll and unwraps on the
-/// next, as a service client's would.
-struct Deferred;
-
-struct DeferredOperation {
-    yielded: bool,
-    request: Option<KeyUnwrapRequest<64>>,
-}
-
-impl Future for DeferredOperation {
-    type Output = KeyUnwrapDone<Deferred, 64>;
-    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        if !this.yielded {
-            this.yielded = true;
-            context.waker().wake_by_ref();
-            return Poll::Pending;
-        }
-        match this.request.take() {
-            Some(request) => Poll::Ready(KeyUnwrapDone {
-                engine: Deferred,
-                response: crate::block::unwrap_now(&mut Rust, request),
-            }),
-            None => Poll::Pending,
-        }
-    }
-}
-
-impl KeyUnwrap<64> for Deferred {
-    type Operation = DeferredOperation;
-    fn unwrap_key(self, request: KeyUnwrapRequest<64>) -> DeferredOperation {
-        DeferredOperation {
-            yielded: false,
-            request: Some(request),
-        }
-    }
-}
-
 #[test]
 fn the_synchronous_engine_passes_the_rfc3394_conformance_cases() {
-    let engine = BlockKeyUnwrap::new(Rust);
-    let engine = conformance::key_unwrap_rfc3394::<_, 32>(engine, || {
-        panic!("a synchronous operation is ready on its first poll")
-    });
-    let _ = conformance::key_unwrap_rfc3394::<_, 512>(engine, || {
-        panic!("a synchronous operation is ready on its first poll")
-    });
-}
-
-#[test]
-fn a_pending_engine_passes_the_same_cases_through_its_driver() {
-    let mut drives = 0;
-    let _ = conformance::key_unwrap_rfc3394(Deferred, || drives += 1);
-    // Each of the five conformance requests is pending once.
-    assert_eq!(drives, 5);
+    conformance::key_unwrap_rfc3394::<_, 32>(&mut Rust);
+    conformance::key_unwrap_rfc3394::<_, 512>(&mut Rust);
 }
 
 #[test]
@@ -103,10 +46,10 @@ fn wrap_produces_the_rfc3394_vector_and_unwrap_reverses_longer_key_data() {
     let plain: [u8; 40] = core::array::from_fn(|index| index as u8 ^ 0x5a);
     let wrapped = wrap::<48>(&mut cipher, &plain).unwrap();
     assert_eq!(wrapped.as_bytes().len(), 48);
-    let response = BlockKeyUnwrap::new(Rust).unwrap_now(KeyUnwrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        wrapped,
-    ));
+    let response = unwrap_now(
+        &mut Rust,
+        KeyUnwrapRequest::new(Aes128Key::copy_from(&RFC3394_4_1_KEK), wrapped),
+    );
     assert_eq!(response.plaintext(), Ok(&plain[..]));
 }
 
@@ -129,33 +72,28 @@ fn wrap_refuses_data_outside_rfc3394_and_its_capacity() {
 
 #[test]
 fn refused_unwraps_return_the_cleared_buffer() {
-    let mut engine = BlockKeyUnwrap::new(Rust);
+    let mut engine = Rust;
     let mut changed = RFC3394_4_1_CIPHERTEXT;
     changed[0] ^= 0x80;
-    let response = engine.unwrap_now(KeyUnwrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        KeyData::<32>::try_copy(&changed).unwrap(),
-    ));
+    let response = unwrap_now(
+        &mut engine,
+        KeyUnwrapRequest::new(
+            Aes128Key::copy_from(&RFC3394_4_1_KEK),
+            KeyData::<32>::try_copy(&changed).unwrap(),
+        ),
+    );
     assert_eq!(
         response.into_plaintext().err(),
         Some(KeyUnwrapError::IntegrityCheckFailed)
     );
-    let response = engine.unwrap_now(KeyUnwrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        KeyData::<32>::try_copy(&[]).unwrap(),
-    ));
-    assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
-}
-
-#[test]
-fn an_engine_that_ran_nothing_returns_an_empty_engine_refusal() {
-    let response = KeyUnwrapResponse::<32>::engine_failed(crate::block::BlockError::Unavailable);
-    assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::Engine(
-            crate::block::BlockError::Unavailable
-        ))
+    let response = unwrap_now(
+        &mut engine,
+        KeyUnwrapRequest::new(
+            Aes128Key::copy_from(&RFC3394_4_1_KEK),
+            KeyData::<32>::try_copy(&[]).unwrap(),
+        ),
     );
+    assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
 }
 
 /// A hardware-like engine: RustCrypto blocks until it refuses, either the
@@ -228,19 +166,19 @@ fn a_fallible_engine_unwraps_in_place_and_its_refusals_are_typed_engine_failures
     );
     assert_eq!(engine.blocks, 3, "no block after the refused one");
 
-    let mut engine = BlockKeyUnwrap::new(Refusing {
+    let mut engine = Refusing {
         refuse_key: Some(crate::block::BlockError::InvalidState { observation: 2 }),
         refuse_block: usize::MAX,
         blocks: 0,
-    });
-    let response = engine.unwrap_now(rfc3394_request());
+    };
+    let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
     assert_eq!(
         response.plaintext(),
         Err(KeyUnwrapError::Engine(
             crate::block::BlockError::InvalidState { observation: 2 }
         ))
     );
-    assert_eq!(engine.into_blocks().blocks, 0);
+    assert_eq!(engine.blocks, 0);
 }
 
 #[test]

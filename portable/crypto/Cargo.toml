@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Owned cryptographic operation contracts and resumable mode algorithms over owned block requests"
+description = "Owned cryptographic operation contracts and the mode algorithms over synchronous AES-128 engines"
 
 [features]
 default = []

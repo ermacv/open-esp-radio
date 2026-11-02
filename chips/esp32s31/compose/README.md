@@ -40,7 +40,7 @@ published, so an image initializes its timers, and may grant hart 1's
 executor its comparator (`oer_espressif_executor::grant`), before the
 launch hands hart 1 its parts. The image's composition places hardware on
 hart 1 by moving it into those parts: boot-smoke moves `AesParts` and builds
-`crypto::key_unwrap` there over hart 1's router's `Silent` proof, which
+`crypto::aes_engine` there over hart 1's router's `Silent` proof, which
 holds because every hart's router silences its own bank at install; images
 that do not launch hart 1 keep AES on the boot hart.
 

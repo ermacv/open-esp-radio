@@ -1667,7 +1667,6 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embedded-io-async",
- "oer-crypto",
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-crypto",
@@ -1915,12 +1914,10 @@ dependencies = [
 name = "oer-espressif"
 version = "0.1.0"
 dependencies = [
- "aes",
  "atomic-waker",
  "embassy-futures",
  "embassy-net",
  "embassy-time",
- "oer-crypto",
  "oer-diagnostics",
  "oer-embassy-net",
  "oer-embassy-time",

@@ -28,7 +28,6 @@ observe = []
 udp = ["embassy-net/udp", "dep:xarxa"]
 
 [dependencies]
-oer-crypto = { path = "../../portable/crypto" }
 oer-diagnostics = { path = "../../portable/diagnostics" }
 oer-embassy-net = { path = "../../portable/embassy/net" }
 oer-memory = { path = "../../portable/memory" }
@@ -61,8 +60,6 @@ embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "073d3fc492
 xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "5b6f11a793c3b07e5ef5be39f3ad5e9b6e0fa711", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
 
 [dev-dependencies]
-aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
-oer-crypto = { path = "../../portable/crypto", features = ["test-support"] }
 oer-memory = { path = "../../portable/memory", features = ["host-context"] }
 
 [lints]

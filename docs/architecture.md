@@ -161,14 +161,14 @@ MSDU; a numbered one keeps its TID.
 
 Cryptographic operations shared by protocols have one contract each in
 `portable/crypto` (`oer-crypto`). One operation is one request: the request
-owns its key and buffers and moves by value into an engine, which moves itself
-into the operation and returns with the response and the same buffers; there
-is no busy refusal, and consuming the request erases the key. Mode algorithms
+owns its key and buffers and runs to completion in one call over a
+synchronous engine the caller lends for that call (`block::unwrap_now`),
+which returns the response and the same buffers; no operation outlives the
+call, and consuming the request erases the key. Mode algorithms
 (RFC 3394) have one copy there, run to completion in place in the request's
 buffer over a synchronous block engine that finishes each block on return or
 refuses it with a typed error. A protocol's synchronous software primitive
-lives in its `cipher`; `BlockKeyUnwrap` is the `KeyUnwrap` engine of a
-synchronous one. The chip composition chooses the engine as a static type.
+lives in its `cipher`. The chip composition chooses the engine as a static type.
 The S31 Typical AES engine lives in `chips/esp32s31/crypto`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
 `compose::crypto` selects it and supplies it to the Wi-Fi facade in
@@ -183,8 +183,11 @@ is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
 `Silent`, waits for each Typical block on its `STATE` flag within a named
 settle and erases the hardware key and intermediates when its keyed view
 drops. A failed engine retains its owner and refuses further keys with a
-typed error. Its one owner is the Wi-Fi station, the library's AES service
-or boot-smoke's hart-1 task.
+typed error. Its one owner is the Wi-Fi station, the image that takes it
+from the library (`AesPeripheral::engine`) or boot-smoke's hart-1 task. An
+operation borrows it for the length of its call (`oer_crypto::block::unwrap_now`),
+so no operation outlives the call and no AES service, client or async
+operation exists.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They

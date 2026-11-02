@@ -24,9 +24,8 @@ pub enum LibraryPart {
     /// The application's future, on the application executor.
     Application,
     /// The library's tasks on the application executor: the RTC
-    /// watchdog's feed, the AES service and the station's runner.
+    /// watchdog's feed and the station's runner.
     Watchdog,
-    Aes,
     Station,
     /// The radio executor's tasks: the shared RF actor and the Wi-Fi driver.
     RadioActor,
@@ -50,7 +49,6 @@ impl LibraryPart {
     pub const ALL: [LibraryPart; LIBRARY_PARTS] = [
         LibraryPart::Application,
         LibraryPart::Watchdog,
-        LibraryPart::Aes,
         LibraryPart::Station,
         LibraryPart::RadioActor,
         LibraryPart::Driver,
@@ -71,7 +69,6 @@ impl LibraryPart {
         match self {
             LibraryPart::Application => "application",
             LibraryPart::Watchdog => "watchdog",
-            LibraryPart::Aes => "aes",
             LibraryPart::Station => "station",
             LibraryPart::RadioActor => "radio-actor",
             LibraryPart::Driver => "driver",
@@ -91,7 +88,7 @@ impl LibraryPart {
 }
 
 /// The library's parts.
-pub const LIBRARY_PARTS: usize = 17;
+pub const LIBRARY_PARTS: usize = 16;
 /// The parts an image names, after the library's.
 pub const IMAGE_PARTS: usize = 4;
 /// Every part: the library's, then the image's.
