@@ -1,4 +1,4 @@
-//! The application's (P1) handle on one receive epoch: a stop request in,
+//! The application's (the body) handle on one receive epoch: a stop request in,
 //! the exit report out.
 
 use core::{

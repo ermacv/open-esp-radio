@@ -97,7 +97,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'_,
     pub fn index(&self) -> u8 {
         self.place.index()
     }
-    /// When P1 admitted the MPDU in this memory, until it is renewed.
+    /// When the body admitted the MPDU in this memory, until it is renewed.
     #[cfg(test)]
     pub(crate) fn admitted_at(&self) -> Option<Instant> {
         self.admission
@@ -134,7 +134,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, I
     pub fn body(&self) -> Option<&D::Body> {
         self.mpdu.body.as_ref()
     }
-    /// When P1 admitted the MPDU; retransmission keeps it.
+    /// When the body admitted the MPDU; retransmission keeps it.
     #[cfg(test)]
     pub(crate) fn admitted_at(&self) -> Option<Instant> {
         self.mpdu.buffer.admission

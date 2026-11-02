@@ -117,8 +117,8 @@ and future on its own thread-mode executor, and hart 0 waits for the second
 boot's end before it enables its interrupts. The image declares
 `harts = ["boot", 1]`. Service tasks on the application executor: the RTC
 watchdog feed, the AES service when the image starts it, the station
-runner and the IP service. The
-radio executor runs the radio actor and the MAC driver.
+runner, the MAC driver beside it and the IP service. The radio executor
+runs the radio actor.
 
 | Default | Value |
 | --- | --- |

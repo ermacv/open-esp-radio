@@ -1,7 +1,7 @@
 //! Receive buffers lent to a network owner.
 //!
 //! A lend moves one received unit out of the installation's receive count to
-//! the network: the network's count rises first, then the P2 driver takes
+//! the network: the network's count rises first, then the driver takes
 //! the unit off its own count. Retirement therefore never sees a unit in
 //! neither count. Dropping the network owner, in a task, returns the unit's
 //! memory to its pool, lowers the network's count and wakes the driver to

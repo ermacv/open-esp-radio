@@ -24,7 +24,9 @@
 //! that executor's hart and level. Equal-level handlers cannot preempt the
 //! executor's round: the handler publishes facts and pends the next round,
 //! which services them in the executor's own context. [`FromTask`] admits
-//! tasks strictly below the receiver on its hart; [`FromPeerHart`] admits a
+//! tasks strictly below the receiver on its hart; [`FromOwnTask`] admits a
+//! task of the receiving executor itself, whose facts the next round
+//! services as it does an equal-level handler's; [`FromPeerHart`] admits a
 //! task of an executor on another hart, which pends the receiver through its
 //! software line (a cross-hart wake is a raise of the peer executor's
 //! signal, never a waker call). Construction checks the same-level class,
@@ -39,7 +41,9 @@
 //! there.
 
 mod binding;
-pub use binding::{FromExecutorLevel, FromHandler, FromPeerHart, FromTask, Raisers};
+pub use binding::{
+    FromExecutorLevel, FromHandler, FromOwnTask, FromPeerHart, FromTask, Raisers, executor_context,
+};
 
 use core::{
     marker::PhantomData,
@@ -142,7 +146,8 @@ pub struct ForeignTask;
 impl<E: SignalExecutor> IrqSignal<E> {
     /// A signal of `E` with no fact. `Target` is its executor's table entry;
     /// `R` names every raising handler or task (`FromHandler`,
-    /// `FromExecutorLevel`, `FromTask`, `FromPeerHart`, or nested pairs).
+    /// `FromExecutorLevel`, `FromTask`, `FromOwnTask`, `FromPeerHart`, or
+    /// nested pairs).
     /// The software source, class, hart and directions are checked
     /// at compile time. No scheduling metadata is stored in the signal.
     pub const fn new<R: Raisers, Target: crate::Entry>() -> Self

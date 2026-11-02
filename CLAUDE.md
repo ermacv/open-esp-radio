@@ -134,7 +134,9 @@ system these rules serve.
   A signal names its raisers at compile time. A raising handler sits strictly
   above the receiving executor; the one exception is an
   `Exempt(ExecutorLevel)` handler on that executor's hart and level
-  (`FromExecutorLevel`), whose signal the next round serves. A task on
+  (`FromExecutorLevel`), whose signal the next round serves. A task of the
+  receiving executor itself raises through `FromOwnTask`, whose facts the
+  next round serves too. A task on
   another hart raises through `FromPeerHart` (its hart differs, checked at
   compile time); a cross-hart wake raises the peer executor's signal, every
   software-interrupt raise fences `w, o` after its facts and every handler

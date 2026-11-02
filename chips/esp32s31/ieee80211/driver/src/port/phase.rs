@@ -16,7 +16,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> LowerMacSe
         let published = self.held.channel.set(channel.channel());
         self.held.publishing.set(false);
         match published {
-            // P1 alone writes the channel; its own view follows the store.
+            // The body alone writes the channel; its own view follows the store.
             Ok(()) => self.held.tuned.set(channel.channel()),
             Err(fault) => self.held.storage.poison(Fault::Setting(fault)),
         }
@@ -200,7 +200,7 @@ where
         attempt: InterfaceSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), radio::Poisoned<Fault>> {
         let mut attempt = attempt.into_parts(&self.loan);
-        // Admission happens on this call, before the P2 queue is serviced.
+        // Admission happens on this call, before the driver's queue is serviced.
         let buffer = &mut attempt.operation.execute().mpdu.buffer;
         if buffer.admission.is_none() {
             buffer.admission = Some(self.held.timer.now());
@@ -243,7 +243,7 @@ where
         peer: IndividualAddress,
         key: Ccmp128Key,
     ) -> <PortKeys<Id, R> as KeyTypes<'id>>::Identity {
-        // P2 activates the identity after the write and returns the key in
+        // The driver activates the identity after the write and returns the key in
         // the installation terminal; until then no attempt can name it.
         let identity = R::identity(
             association,
@@ -358,8 +358,8 @@ where
             TxProtection::Open => None,
             TxProtection::Ccmp(key) => Some(R::tx_identity(key).owned),
         };
-        // The builder checks its subframes under the TXOP limit P1 last
-        // published for this role; P2 plans under the same value.
+        // The builder checks its subframes under the TXOP limit the body last
+        // published for this role; the driver plans under the same value.
         let vif = if R::ROLE == VifRole::Station { 0 } else { 1 };
         let txop_limit_units_32_us = match self.held.edca.get(vif) {
             Some(table) => {
@@ -368,7 +368,7 @@ where
                     .wmm
                     .txop_limit_units_32_us
             }
-            // P1 alone publishes the table and is not publishing it now.
+            // The body alone publishes the table and is not publishing it now.
             None => {
                 self.held.storage.poison(Fault::Capacity);
                 0
@@ -393,7 +393,7 @@ where
         'id: 'k,
     {
         let mut attempt = attempt.into_parts(&self.loan);
-        // Admission happens on this call, before the P2 queue is serviced;
+        // Admission happens on this call, before the driver's queue is serviced;
         // a returned subframe keeps its first admission.
         let oldest = attempt.operation.execute().admit(self.held.timer.now());
         self.held

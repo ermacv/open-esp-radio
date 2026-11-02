@@ -17,6 +17,12 @@ pub struct FromExecutorLevel<E>(PhantomData<E>);
 /// A task of executor `X`, whose interrupt or thread-wake entry is `E`.
 pub struct FromTask<X, E>(PhantomData<(X, E)>);
 
+/// A task of the receiving executor `X` itself (interrupt or thread-wake
+/// entry `E`). It cannot preempt that executor's round: as an
+/// `Exempt(ExecutorLevel)` handler's, its facts are serviced by the next
+/// round, which the raise pends.
+pub struct FromOwnTask<X, E>(PhantomData<(X, E)>);
+
 /// A task of executor `X` (interrupt or thread-wake entry `E`) on another
 /// hart than the receiving executor's. No level relation holds across harts:
 /// the raise only publishes facts and pends the receiver, whose own handler
@@ -29,6 +35,10 @@ mod sealed {
     impl<E: crate::Entry> Sealed for super::FromHandler<E> {}
     impl<E: crate::Entry> Sealed for super::FromExecutorLevel<E> {}
     impl<X: super::SignalExecutor, E: crate::Entry> Sealed for super::FromTask<X, E> where
+        E::Part: crate::InterruptSource
+    {
+    }
+    impl<X: super::SignalExecutor, E: crate::Entry> Sealed for super::FromOwnTask<X, E> where
         E::Part: crate::InterruptSource
     {
     }
@@ -52,6 +62,7 @@ pub enum Raising {
     Handler(Context),
     ExecutorLevel(Context),
     Task(Context),
+    OwnTask(Context),
     PeerHart(Context),
     Pair(&'static Raising, &'static Raising),
 }
@@ -77,6 +88,13 @@ where
     const CONTEXTS: Raising = Raising::Task(executor_context::<X, E>());
 }
 
+impl<X: SignalExecutor, E: Entry> Raisers for FromOwnTask<X, E>
+where
+    E::Part: InterruptSource,
+{
+    const CONTEXTS: Raising = Raising::OwnTask(executor_context::<X, E>());
+}
+
 impl<X: SignalExecutor, E: Entry> Raisers for FromPeerHart<X, E>
 where
     E::Part: InterruptSource,
@@ -88,19 +106,23 @@ impl<A: Raisers, B: Raisers> Raisers for (A, B) {
     const CONTEXTS: Raising = Raising::Pair(&A::CONTEXTS, &B::CONTEXTS);
 }
 
-/// Link the scheduling entry to the executor's actual software source.
-pub(super) const fn executor_context<X: SignalExecutor, E: Entry>() -> Context
+/// The context executor `X`'s tasks run in, through its entry `E`: the
+/// entry must name `X`'s own software interrupt, an interrupt-mode
+/// executor's entry polls its tasks (class `Executor`) and a thread-mode
+/// executor's is its wake entry (class `Hardware`), whose tasks run at level
+/// zero. A raiser or requester names its executor through it.
+pub const fn executor_context<X: SignalExecutor, E: Entry>() -> Context
 where
     E::Part: InterruptSource,
 {
     assert!(
         <E::Part as InterruptSource>::SOURCE == X::SOURCE,
-        "the signal entry must name its executor's software interrupt"
+        "an executor's entry must name its software interrupt"
     );
     if X::INTERRUPT_MODE {
         assert!(
             matches!(E::CLASS, Class::Executor),
-            "the signal's executor entry must poll tasks"
+            "an interrupt-mode executor's entry must poll its tasks"
         );
         E::CONTEXT
     } else {
@@ -136,6 +158,12 @@ impl Raising {
                 assert!(
                     from.level < executor.level,
                     "a signal task must be below its executor"
+                );
+            }
+            Self::OwnTask(from) => {
+                assert!(
+                    from.hart == executor.hart && from.level == executor.level,
+                    "an own-task raiser must be a task of its receiving executor"
                 );
             }
             Self::ExecutorLevel(from) => {

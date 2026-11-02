@@ -42,7 +42,7 @@ pub(super) enum OwnedInstalledPairwise<'o, Id: SlotIdentity> {
     AccessPoint(PairwiseKey<'o, Id, AccessPoint>),
 }
 impl<'o, Id: SlotIdentity> OwnedInstalledPairwise<'o, Id> {
-    /// The installed owner of the identity P2 just activated, of its role.
+    /// The installed owner of the identity the driver just activated, of its role.
     pub(super) fn new(role: VifRole, identity: super::keys::RawKeyIdentity) -> Self {
         match role {
             VifRole::Station => Self::Station(PairwiseKey {

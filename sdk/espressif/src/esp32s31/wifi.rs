@@ -37,7 +37,7 @@ use oer_esp32s31_wifi::{self as wifi, InterruptTypes};
 use oer_espressif_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };
-use oer_espressif_interrupt_table::signal::{FromHandler, FromTask, IrqSignal};
+use oer_espressif_interrupt_table::signal::{FromHandler, FromOwnTask, IrqSignal};
 use oer_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use static_cell::StaticCell;
 
@@ -55,8 +55,8 @@ oer_memory::zeroed_static! {
     static LINE: wifi::Interrupts = zeroed in ".critical.bss.wifi_rx_line";
 }
 oer_espressif_staged_runtime::placed_static! {
-    static MAC_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(FromHandler<WifiToken>, FromTask<Executor<Esp32s31, 0>, WakeToken>), RadioToken>(), in critical_data "wifi_station";
-    static POWER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<FromHandler<WifiToken>, RadioToken>(), in critical_data "wifi_station";
+    static MAC_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(FromHandler<WifiToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "wifi_station";
+    static POWER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<FromHandler<WifiToken>, WakeToken>(), in critical_data "wifi_station";
     static PILOT: pilot::Storage<PhyToken> = pilot::Storage::new::<RadioToken>(), in critical_data "phy_pilot";
 }
 
@@ -89,7 +89,6 @@ oer_espressif_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
         @observer: super::executor_observer::<1>();
         radio_actor(actor: &'static mut Actor) = radio_actor;
-        driver(driver: wifi::Driver<binding::Binding>) = drive;
     }
 }
 
@@ -157,11 +156,11 @@ fn failure(error: wifi::InitializationError) -> ! {
 }
 
 #[cfg(not(feature = "hart1"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure}}
 // The station's network end runs on hart 1, with the second boot's IP
 // service.
 #[cfg(feature = "hart1")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,radio:RadioToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
@@ -174,7 +173,8 @@ type NetworkNotify =
 type StationNotify =
     &'static oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor>;
 #[cfg(feature = "hart1")]
-type DriverNotify = &'static oer_espressif_interrupt_table::signal::PeerNotify<RadioExecutor>;
+type DriverNotify =
+    &'static oer_espressif_interrupt_table::signal::PeerNotify<wifi::DriverExecutor>;
 
 // One signal wakes one task: the IP service's on hart 1 (every network end
 // and the network's stop), the station runner's on hart 0 (every station
@@ -184,10 +184,10 @@ type DriverNotify = &'static oer_espressif_interrupt_table::signal::PeerNotify<R
 oer_espressif_staged_runtime::placed_static! {
     static NETWORK_SIGNAL: IrqSignal<super::hart1::Hart1Executor> = IrqSignal::new::<oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::AppExecutor, WakeToken>, super::Hart1WakeToken>(), in critical_data "hart_peers";
     static STATION_SIGNAL: IrqSignal<super::hart1::AppExecutor> = IrqSignal::new::<oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
-    static DRIVER_SIGNAL: IrqSignal<RadioExecutor> = IrqSignal::new::<(oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromTask<Executor<Esp32s31, 0>, WakeToken>), RadioToken>(), in critical_data "hart_peers";
+    static DRIVER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "hart_peers";
     static NETWORK: oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&NETWORK_SIGNAL), in critical_data "hart_peers";
     static STATION: oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&STATION_SIGNAL), in critical_data "hart_peers";
-    static DRIVER: oer_espressif_interrupt_table::signal::PeerNotify<RadioExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&DRIVER_SIGNAL), in critical_data "hart_peers";
+    static DRIVER: oer_espressif_interrupt_table::signal::PeerNotify<wifi::DriverExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&DRIVER_SIGNAL), in critical_data "hart_peers";
 }
 
 /// Run the shared RF actor until its periodic PHY tracking fails; the PHY
@@ -196,7 +196,11 @@ async fn radio_actor(actor: &'static mut Actor) {
     observed!(RadioActor, actor.run()).await.reset()
 }
 
-async fn drive(driver: wifi::Driver<binding::Binding>) {
+/// The MAC driver, polled on the station's executor.
+pub(crate) type Driver = wifi::Driver<binding::Binding>;
+
+/// The MAC driver's task, on the station's executor.
+pub(crate) async fn drive(driver: Driver) {
     observed!(Driver, driver.run()).await;
 }
 
@@ -588,12 +592,11 @@ impl Station {
             },
             config.chip,
         );
-        if RadioTasks::radio_actor(&executor, actor).is_err()
-            || RadioTasks::driver(&executor, runners.driver).is_err()
-        {
+        if RadioTasks::radio_actor(&executor, actor).is_err() {
             return Err(Error::AlreadyStarted);
         }
         boot.urgent = Some(urgent);
+        boot.pending.driver = Some(runners.driver);
         boot.pending.station = Some(StationStart {
             runner: runners.station,
             config: config.chip,

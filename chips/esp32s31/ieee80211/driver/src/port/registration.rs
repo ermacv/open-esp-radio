@@ -1,10 +1,10 @@
-//! Hardware-owned P2 cancellation guard for the port registration.
+//! Hardware-owned driver cancellation guard for the port registration.
 use super::*;
 use oer_radio_port::{
     LifecycleError, SlotCompletion, SlotFrontend, SlotRegisterError, SlotRegistration,
 };
 
-/// Owns mandatory P2 cleanup independently of the portable driver loan.
+/// Owns mandatory driver cleanup independently of the portable driver loan.
 #[must_use = "retain the hardware owner's P2 cleanup guard"]
 pub struct Registration<
     's,
@@ -36,7 +36,7 @@ pub enum RegistrationError<
         /// Supplied ordinary join authority.
         joined: oer_radio_port::Joined<Id>,
     },
-    /// Construction failed after placement; cleanup stays on P2.
+    /// Construction failed after placement; cleanup stays in the driver's task.
     Initialization {
         /// Typed construction cause.
         cause: oer_radio_port::SlotInitError,
@@ -131,7 +131,7 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, O: Observatio
             Ok((owner, _invocation)) => {
                 let outcome = (|| {
                     owner.storage.poison(Fault::Abandoned);
-                    // The P2 runner ended its poll loan before invoking this guard. P1
+                    // The driver runner ended its poll loan before invoking this guard. The body
                     // has no device reference, so cleanup has exclusive hardware access.
                     if owner
                         .storage

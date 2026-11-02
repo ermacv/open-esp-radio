@@ -1,7 +1,7 @@
 //! Production counters of one Wi-Fi receive epoch, for the W1 log.
 //!
-//! The interrupt line (P3), the radio executor (P2) and the application's
-//! frame receiver (P1, the prefix counts) each update their own counters
+//! The interrupt line (P3), the driver's task and the application's
+//! frame receiver (the body, the prefix counts) each update their own counters
 //! with single Relaxed atomic operations; a reader takes a [`WifiRxReport`]
 //! at any time. Counts wrap. The reload evidence is the ring's own
 //! (saturating, its maximum stops at the attempt limit), copied after every

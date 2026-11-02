@@ -131,14 +131,17 @@ An interrupt handler reaches its task only through a static signal
 entry and all raising contexts at construction:
 
 ```text
-IrqSignal::<RadioExecutor>::new::<
-    (FromHandler<WifiToken>, FromTask<AppExecutor, WakeToken>),
-    RadioToken,
+IrqSignal::<AppExecutor>::new::<
+    (FromHandler<WifiToken>, FromOwnTask<AppExecutor, WakeToken>),
+    WakeToken,
 >()
 ```
 
 `FromHandler<Entry>` must run above the receiving executor; `FromTask<X, Entry>`
-must be a lower executor's task on its hart. `FromPeerHart<X, Entry>` is a
+must be a lower executor's task on its hart. `FromOwnTask<X, Entry>` is a
+task of the receiving executor itself: it cannot preempt the executor's
+round, so, as for an `Exempt(ExecutorLevel)` handler, its raise publishes
+facts and pends the next round, which services them. `FromPeerHart<X, Entry>` is a
 task of executor `X` on another hart than the receiving executor (checked at
 compile time); no level relation holds across harts. A cross-hart wake is a
 raise of the peer executor's signal, never a waker call: the raiser

@@ -3,7 +3,7 @@ use oer_esp32s31_compose::Esp32s31;
 use oer_esp32s31_ieee80211_driver::irq::{
     DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, service_wifi_line,
 };
-use oer_espressif_executor::{Doorbell, DoorbellAcknowledger, InterruptExecutor};
+use oer_espressif_executor::{Doorbell, DoorbellAcknowledger};
 use oer_espressif_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
 use oer_ieee80211_core_roles_sta::machine::{StaCallbacks, StaConfig};
 use oer_ieee80211_runtime::station as runtime;
@@ -37,13 +37,16 @@ const _: () = {
     }
 };
 pub const TX: usize = crate::FRAME_CAPACITY;
-pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
+/// The executor that polls the MAC driver: the station's, on the boot hart.
+pub type DriverExecutor = oer_espressif_executor::Executor<Esp32s31, 0>;
 pub(crate) type Rng = oer_esp32s31_compose::platform::Entropy;
 /// Image-selected entries, callbacks, observers and event sink.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
     type Wifi: Entry<Part = WifiIrqPart<Lower>>;
-    type Radio: Entry;
+    /// The entry of the driver's executor ([`DriverExecutor`]): its wake
+    /// entry, which rings the radio doorbell.
+    type DriverEntry: Entry<Part: oer_espressif_interrupt_table::InterruptSource>;
     type Callbacks: crate::Callbacks + 'static;
     /// Receives the facade's own trace events ([`crate::observation`]).
     type Observer: Observer + Clone + 'static;
@@ -117,11 +120,18 @@ impl DoorbellAcknowledge for Lower {
         self.0.acknowledge();
     }
 }
-pub struct Bell<E: Entry, X: Entry>(pub Doorbell<Esp32s31, 3, E, X>);
-impl<E: Entry, X: Entry> RadioDoorbell for Bell<E, X> {
-    const HANDLER: oer_espressif_interrupt_table::Context = Doorbell::<Esp32s31, 3, E, X>::HANDLER;
+/// The radio doorbell, rung by the driver's executor through its entry `R`.
+pub struct Bell<E: Entry, R: Entry>(pub Doorbell<Esp32s31, 3, E, DriverExecutor, R>)
+where
+    R::Part: oer_espressif_interrupt_table::InterruptSource;
+impl<E: Entry, R: Entry> RadioDoorbell for Bell<E, R>
+where
+    R::Part: oer_espressif_interrupt_table::InterruptSource,
+{
+    const HANDLER: oer_espressif_interrupt_table::Context =
+        Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::HANDLER;
     const EXECUTOR: oer_espressif_interrupt_table::Context =
-        Doorbell::<Esp32s31, 3, E, X>::EXECUTOR;
+        Doorbell::<Esp32s31, 3, E, DriverExecutor, R>::EXECUTOR;
     fn ring(&self) {
         self.0.ring();
     }
@@ -138,7 +148,7 @@ pub trait InterruptTypes {
 }
 #[derive(bytemuck::Zeroable)]
 pub struct Interrupts {
-    pub(crate) line: HandlerCell<WifiIrqLine<RadioExecutor>>,
+    pub(crate) line: HandlerCell<WifiIrqLine<DriverExecutor>>,
 }
 impl InterruptTypes for Interrupts {
     type Part = WifiIrqPart<Lower>;
@@ -471,11 +481,11 @@ pub struct Resources<W: Binding> {
     pub address: [u8; 6],
     pub ap: [u8; 6],
     pub bound: Bound<W::Wifi>,
-    pub bell: Bell<W::Wifi, W::Radio>,
+    pub bell: Bell<W::Wifi, W::DriverEntry>,
     pub entropy: u32,
     pub interrupts: &'static Interrupts,
-    pub mac: &'static IrqSignal<RadioExecutor>,
-    pub power: &'static IrqSignal<RadioExecutor>,
+    pub mac: &'static IrqSignal<DriverExecutor>,
+    pub power: &'static IrqSignal<DriverExecutor>,
     pub dma: crate::DmaResources,
 }
 pub struct Runners<W: Binding> {

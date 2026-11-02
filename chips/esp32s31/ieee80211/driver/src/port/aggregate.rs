@@ -15,7 +15,7 @@
 //! window rooted at the first subframe's sequence number, no repeated
 //! sequence number, a retransmission's key, role, recipient and TID, and the
 //! aggregate's length at the widest MPDU start spacing under the access
-//! category's TXOP limit the builder samples. Planning on P2 applies the
+//! category's TXOP limit the builder samples. Planning in the driver's task applies the
 //! same rule at the recipient's own spacing, which needs no more room, so
 //! a submitted aggregate is never refused there.
 

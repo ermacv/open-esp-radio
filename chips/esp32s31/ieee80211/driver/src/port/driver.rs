@@ -12,7 +12,7 @@ mod core_views;
 #[cfg(oer_debug_control)]
 mod key_replacement;
 // A single phase projection lends the shared command set. The operation
-// itself has one body; invalid P1 commands remain typed capacity refusals.
+// itself has one body; invalid body commands remain typed capacity refusals.
 macro_rules! idle_command {
     ($owner:expr, |$view:ident| $command:expr) => {{
         let mut $view = $owner.view().commands().ok_or(Fault::Capacity)?;
@@ -784,7 +784,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // One turn serves up to `EVENTS_PER_POLL` events. A turn that ends
         // on `Pending` is registered for the next one; a turn that used its
         // budget, or served a TX wake whose completions freed queues, polls
-        // again. Received units wait in the ring while P1 holds
+        // again. Received units wait in the ring while the body holds
         // `RX_HELD` or has not taken `RX_IN_FLIGHT` queued ones.
         let mut again = true;
         let mut served_tx = false;
@@ -825,7 +825,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let network = &held.storage.shared.network;
         let starved = held.rx_out.get() >= RX_HELD && network.want_room();
         let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
-        // P1's take that leaves half the queue wakes a driver its queued
+        // The body's take that leaves half the queue wakes a driver its queued
         // units hold back; takes that reached it meanwhile leave room now.
         let mut waiting = false;
         if received.room(RX_IN_FLIGHT) == 0 && held.rx_out.get() < RX_HELD {
@@ -864,7 +864,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if held.dirty_edca.replace(false) {
             for role in [VifRole::Station, VifRole::AccessPoint] {
                 let Some(table) = held.edca.get(vif(role)) else {
-                    // P1 is publishing it: its commit wake serves it again.
+                    // The body is publishing it: its commit wake serves it again.
                     held.dirty_edca.set(true);
                     break;
                 };
@@ -884,7 +884,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             for (index, old) in self.applied_ba.iter_mut().enumerate() {
                 let wanted = match held.block_acks.get(index) {
                     Ok(wanted) => wanted,
-                    // P1 is publishing it: its commit wake serves it again.
+                    // The body is publishing it: its commit wake serves it again.
                     Err(None) => {
                         held.dirty_ba.set(true);
                         break;

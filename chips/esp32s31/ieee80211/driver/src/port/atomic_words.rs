@@ -1,9 +1,9 @@
-//! Bounded snapshots of atomic words on the same-core P1/P2 boundary.
+//! Bounded snapshots of atomic words on the same-core body/driver boundary.
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Writers of one record are serialized by its endpoint's execution context.
-/// P2 never waits for a preempted P1 writer: an incomplete snapshot is None.
+/// The driver never waits for a preempted body writer: an incomplete snapshot is None.
 /// All payload words are atomic, including across a rejected snapshot.
 #[derive(Debug)]
 pub(super) struct AtomicWords<const N: usize> {
@@ -49,9 +49,9 @@ impl<const N: usize> AtomicWords<N> {
     }
 }
 
-/// PTK creation stays on P1; GTK creation stays on P2. Revocation owns the
+/// PTK creation stays in the body; GTK creation stays in the driver's task. Revocation owns the
 /// same affine key/permission before publishing its command, so two writers
-/// cannot overlap on one record. Returned GTK permissions follow P2's completed
+/// cannot overlap on one record. Returned GTK permissions follow the driver's completed
 /// publication. Initialization and retirement run outside all endpoint loans.
 /// Abandonment does not mutate these records: quarantine prevents later use.
 #[derive(Debug)]
