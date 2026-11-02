@@ -1,5 +1,6 @@
 use oer_chips_esp32s31_board as board;
 use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses;
 use oer_chips_esp32s31_hal::peripherals::sleep::SleepRegisters;
 use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
 use oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
@@ -28,7 +29,7 @@ oer_chips_family_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
-        measure(sleep: SleepRegisters) = measure;
+        measure(sleep: SleepRegisters, causes: ResetCauses) = measure;
     }
 }
 
@@ -58,7 +59,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
-    let ((timer, software, watchdogs, sleep), _psram, mut adopted) =
+    let ((timer, software, watchdogs, sleep, causes), _psram, mut adopted) =
         match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
@@ -71,6 +72,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
                     hardware.software_interrupts,
                     hardware.watchdogs,
                     hardware.sleep,
+                    ResetCauses::read(hardware.reset_cause),
                 )
             },
         ) {
@@ -95,6 +97,8 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     // A sleep whose wake never comes ends in the watchdog's reset, not a
     // board that sleeps for good.
     watchdog.pause_in_sleep(false);
+    // Stage 0 keeps its RTC-domain reset: a system reset keeps the PMU,
+    // and a PMU that never woke keeps the HP system asleep through it.
     text(b"OER-PROBE light-sleep ready\r\n");
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(router) => router,
@@ -103,7 +107,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     match executor
         .run(&hart, &mut router, interrupts.wake, software.irq0, (), (), move |spawner| {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err()
-                || Tasks::measure(spawner, sleep).is_err()
+                || Tasks::measure(spawner, sleep, causes).is_err()
             {
                 fail(oer_portable_diagnostics::name!("task-start"; 32));
             }
@@ -114,7 +118,7 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
 
 /// The wait after boot before the first line that matters: the host's
 /// console attaches to the re-enumerated USB device.
-const ATTACH: Duration = Duration::from_secs(3);
+const ATTACH: Duration = Duration::from_secs(5);
 
 /// The LP-timer target check's length.
 const CHECK_MILLIS: u64 = 100;
@@ -124,10 +128,11 @@ const CHECK_MILLIS: u64 = 100;
 /// after at least its length and before twice it. No case sleeps unless
 /// the target fired awake: the RTC watchdog pauses in sleep, so a sleep
 /// whose wake never comes would not end.
-async fn measure(mut sleep: SleepRegisters) {
+async fn measure(mut sleep: SleepRegisters, causes: ResetCauses) {
     if EmbassyClock.wait_for(ATTACH).await.is_err() {
         fail(oer_portable_diagnostics::name!("attach-time"; 32));
     }
+    report_boot(&mut sleep, causes);
     let complete = counter_runs(&mut sleep).await && target_fires(&mut sleep);
     let mut passed = complete;
     if complete {
@@ -148,6 +153,49 @@ async fn measure(mut sleep: SleepRegisters) {
     });
 }
 
+/// Why this boot began and what the PMU and the LP timer hold of the last
+/// sleep request: after the watchdog's system reset they survive.
+fn report_boot(sleep_registers: &mut SleepRegisters, causes: ResetCauses) {
+    let record = sleep_registers.record();
+    // Short lines: the early writer drops what the USB FIFO cannot take
+    // before the host reads it.
+    let mut line = Line::new();
+    line.text("OER-PROBE ls boot");
+    for hart in oer_chips_esp32s31_hal::platform::Hart::ALL {
+        line.text(" reset")
+            .number(hart.get() as u64)
+            .text("=")
+            .number(u64::from(causes.of(hart).code()));
+    }
+    text(line.end());
+    text(
+        Line::new()
+            .text("OER-PROBE ls pmu woke=")
+            .number(u64::from(record.woke))
+            .text(" rejected=")
+            .number(u64::from(record.rejected))
+            .text(" fired=")
+            .number(u64::from(record.target_fired))
+            .end(),
+    );
+    text(
+        Line::new()
+            .text("OER-PROBE ls wake=")
+            .hex(record.wake_causes)
+            .text(" reject=")
+            .hex(record.reject_causes)
+            .end(),
+    );
+    text(
+        Line::new()
+            .text("OER-PROBE ls enables=")
+            .hex(record.wake_enables)
+            .text(" rtc=")
+            .number(record.rtc)
+            .end(),
+    );
+}
+
 /// Two counter readings a pause apart, with the system time between them.
 async fn counter_runs(sleep_registers: &mut SleepRegisters) -> bool {
     let first = sleep::now(sleep_registers);
@@ -158,17 +206,15 @@ async fn counter_runs(sleep_registers: &mut SleepRegisters) -> bool {
     let second = sleep::now(sleep_registers);
     let timer_us = EmbassyClock.now().as_micros().saturating_sub(before);
     let mut line = Line::new();
-    line.text("OER-PROBE light-sleep counter");
+    line.text("OER-PROBE ls counter");
     let runs = match (first, second) {
         (Ok(first), Ok(second)) => {
             let ticks = second.saturating_since(first);
-            line.text(" first=")
-                .number(first.get())
-                .text(" second=")
-                .number(second.get())
-                .text(" timer_us=")
+            line.text(" ticks=")
+                .number(ticks)
+                .text(" us=")
                 .number(timer_us)
-                .text(" rtc_hz=")
+                .text(" hz=")
                 .number(rate_hz(ticks, timer_us).unwrap_or(0));
             ticks > 0
         }

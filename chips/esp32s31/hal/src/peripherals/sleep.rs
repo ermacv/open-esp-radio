@@ -125,6 +125,46 @@ pub struct SleepRegisters<
     timer: RtcTimerWake<T>,
 }
 
+/// What the PMU and the LP timer hold of the last sleep request: read after
+/// a reset that keeps the RTC domain, it tells whether that sleep woke.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SleepRecord {
+    /// The PMU's wake-cause word.
+    pub wake_causes: u32,
+    /// The PMU's reject-cause word.
+    pub reject_causes: u32,
+    /// The PMU's raw wake status.
+    pub woke: bool,
+    /// The PMU's raw reject status.
+    pub rejected: bool,
+    /// The LP timer's first target raised its wake status.
+    pub target_fired: bool,
+    /// The PMU's wake-enable word.
+    pub wake_enables: u32,
+    /// The LP timer's count.
+    pub rtc: u64,
+}
+
+impl<P: Placement, Q: Placement, T: Placement> SleepRegisters<P, Q, T> {
+    /// Read what the last sleep request left, acknowledging nothing; the LP
+    /// timer's count is captured first.
+    pub fn record(&mut self) -> SleepRecord {
+        self.timer.trigger_update_main_timer_update();
+        let high = self.timer.read_main_buf0_high().main_timer_buf0_high();
+        let low = self.timer.read_main_buf0_low().main_timer_buf0_low();
+        let raw = self.control.read_int_raw();
+        SleepRecord {
+            wake_causes: self.control.read_slp_wakeup_status0().wakeup_cause(),
+            reject_causes: self.control.read_slp_wakeup_status1().reject_cause(),
+            woke: raw.soc_wakeup_int_raw(),
+            rejected: raw.soc_sleep_reject_int_raw(),
+            target_fired: self.timer.read_int_raw().soc_wakeup_int_raw(),
+            wake_enables: self.control.read_slp_wakeup_cntl2().wakeup_ena(),
+            rtc: (u64::from(high) << 32) | u64::from(low),
+        }
+    }
+}
+
 impl SleepRegisters {
     /// Own the root's sleep partition.
     pub fn new(peripherals: SleepPeripherals) -> Self {

@@ -90,6 +90,24 @@ fn a_sleep_keeps_every_domain_and_oscillator_on_and_stalls_the_cpu() {
 }
 
 #[test]
+fn a_record_reads_what_the_last_request_left_without_acknowledging() {
+    // Every control and timer word reads ones.
+    with_owner(u32::MAX, u32::MAX, |owner| {
+        let record = owner.record();
+        assert!(record.woke && record.rejected && record.target_fired);
+        assert_eq!(
+            record.wake_causes,
+            owner.control.read_slp_wakeup_status0().wakeup_cause()
+        );
+        assert_eq!(record.rtc, 0xffff_ffff_ffff);
+        assert!(
+            owner.control.read_int_raw().soc_wakeup_int_raw(),
+            "nothing acknowledged"
+        );
+    });
+}
+
+#[test]
 fn gated_clocks_close_every_gate() {
     with_owner(u32::MAX, 0, |owner| {
         sleep_until(owner, request(SleepClocks::Gated)).expect("an outcome");

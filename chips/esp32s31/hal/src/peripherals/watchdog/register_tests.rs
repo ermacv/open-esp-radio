@@ -226,12 +226,17 @@ fn the_rtc_watchdog_counts_through_sleep_keeping_its_other_fields() {
             .arm_rtc_reset(super::super::RTC_WATCHDOG_STAGE0_HOLD);
     armed.pause_in_sleep(true);
     armed.pause_in_sleep(false);
+    armed.stage0_action(oer_chips_family_watchdog::RtcStageAction::ResetSystem);
     drop(armed);
     let view = RwdtRegisters::host(&mut words).expect("host memory holds the block");
     let config = view.0.read_config0();
     assert!(!config.wdt_pause_in_slp());
     assert!(config.wdt_en(), "the watchdog stays armed");
-    assert_eq!(config.wdt_stg0().get(), 4);
+    assert_eq!(
+        config.wdt_stg0().get(),
+        3,
+        "stage 0 resets the digital system"
+    );
     assert_eq!(view.0.read_wprotect().wdt_wkey(), LOCK, "locked again");
 }
 

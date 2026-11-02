@@ -190,6 +190,7 @@ impl<P: Placement> SwdRegisters<P> {
 /// reset).
 const fn rtc_stage(action: RtcStageAction) -> Bits<3> {
     match action {
+        RtcStageAction::ResetSystem => Bits::constant::<3>(),
         RtcStageAction::ResetRtc => Bits::constant::<4>(),
     }
 }

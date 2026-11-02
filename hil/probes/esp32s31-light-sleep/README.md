@@ -7,7 +7,10 @@ the CPU stalls (`oer-chips-family-power::sleep`, the HAL's
 `peripherals::sleep`).
 
 The image is a staged boot with the boot hart's thread-mode executor, the
-system timer and the RTC watchdog's feed; hart 1 stays held. Three seconds
+system timer and the RTC watchdog's feed; hart 1 stays held. The RTC
+watchdog counts through sleep, so a sleep that never wakes ends in its
+RTC-domain reset. It first prints the reset causes and what the PMU and the
+LP timer hold of the last sleep request. Five seconds
 after boot, while the host's console attaches, it reads the LP timer twice
 200 ms apart, then arms the LP timer's first target 100 ms ahead and waits
 for its wake status without sleeping. The RTC watchdog pauses in sleep, so
@@ -18,7 +21,8 @@ sleep and reads the outcome.
 
 | Line | What it reports |
 | --- | --- |
-| `counter first=<count> second=<count> timer_us rtc_hz` | Two LP-timer readings with the system time between them |
+| `ls boot reset<h>=<code>`, `ls pmu`, `ls wake`, `ls enables` | Each hart's reset cause, then the PMU's raw wake and reject status, causes and wake enables and the LP timer's target status and count |
+| `ls counter ticks us hz` | LP-timer cycles over a pause of the system timer and the slow clock's rate |
 | `target ms=100 fired rtc_ticks timer_us` | The awake target check: LP-timer cycles and system-timer microseconds until the target's wake status rose |
 | `case=<n> clocks=<running\|gated> ms=<length> start` | The case, printed before it sleeps |
 | `case=<n> outcome=<woke\|rejected> causes=<word>` | The PMU's outcome and its wake- or reject-cause word |

@@ -347,6 +347,23 @@ fn the_armed_rtc_watchdog_counts_through_sleep_only_when_asked_under_its_key() {
 }
 
 #[test]
+fn the_armed_rtc_watchdog_changes_its_stage_0_action_under_its_key() {
+    let log = Log::default();
+    let mut watchdog = RtcWatchdog::new(Recorder(&log)).arm_rtc_reset(1);
+    log.take();
+    watchdog.stage0_action(RtcStageAction::ResetSystem);
+    assert_eq!(
+        log.take(),
+        [
+            Op::Key(WRITE_KEY),
+            Op::Action(RtcStageAction::ResetSystem),
+            Op::Key(LOCK)
+        ]
+    );
+    assert_eq!(RtcStageAction::ResetSystem.code(), 3);
+}
+
+#[test]
 fn the_armed_rtc_watchdog_is_fed_every_period_while_its_task_is_polled() {
     use core::{
         future::Future,

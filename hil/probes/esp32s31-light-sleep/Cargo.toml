@@ -18,6 +18,7 @@ oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-chips-family-executor = { path = "../../../chips/family/executor" }
 oer-chips-family-platform-port = { path = "../../../chips/family/platform-port", features = ["esp32s31"] }
 oer-chips-family-power = { path = "../../../chips/family/power" }
+oer-chips-family-watchdog = { path = "../../../chips/family/watchdog" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
