@@ -624,15 +624,24 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     state.set_status(status);
     assert_eq!(network.counts(), (2, 2), "a link change tells the network");
 
-    // A transmitted frame tells the station; its read tells the network.
+    // A transmitted frame tells the waiting station; its read tells the
+    // network waiting for room.
+    assert!(
+        core::pin::pin!(transmitted.ready())
+            .poll(&mut cx)
+            .is_pending()
+    );
+    assert_eq!(station.counts(), (1, 0));
     let frame = Frame {
         owner: Rc::new(Cell::new(0)),
         payload: [1; 4],
     };
     assert!(device.try_transmit(frame).is_ok());
-    assert_eq!(station.counts(), (0, 1));
+    assert_eq!(station.counts(), (1, 1));
+    assert!(device.poll_transmit_ready(&mut cx).is_pending());
+    assert_eq!(network.counts(), (4, 2));
     assert!(transmitted.try_receive_with(|_| ()).is_ok());
-    assert_eq!(network.counts(), (2, 3));
+    assert_eq!(network.counts(), (4, 3));
 }
 
 #[test]

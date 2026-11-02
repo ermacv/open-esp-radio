@@ -397,7 +397,7 @@ type Io<'c, W> = ServiceIo<
     Events<'static, Output<<W as Binding>::Events, <W as Binding>::Notifies>, Ch<W>>,
     crate::LentRx<<W as Binding>::Notifies>,
     crate::NetworkStopState<<W as Binding>::Notifies>,
-    2,
+    { crate::TX_DEPTH },
     { crate::RX_DEPTH },
     2,
     Ch<W>,

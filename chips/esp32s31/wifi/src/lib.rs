@@ -83,6 +83,10 @@ type Ch<N> = <N as Notifies>::Channels;
 /// Ack windows, so one window's burst fits while the network takes the
 /// previous one (a queue of one window dropped a 16-MPDU aggregate's tail).
 pub const RX_DEPTH: usize = 32;
+/// The network's MSDUs the station's transmit queue holds: the network
+/// fills a burst while the station is busy, and each end wakes the other
+/// once per burst.
+pub const TX_DEPTH: usize = 16;
 pub const FRAME_CAPACITY: usize = 1664;
 #[cfg(target_arch = "riscv32")]
 type Caps = oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
@@ -257,7 +261,7 @@ type EthernetCopy = oer_ieee80211_core_roles_sta::data::EthernetFrame;
 
 /// Affine neutral Ethernet end. The concrete station frame is private.
 pub struct Network<'a, N: Notifies = SameHart> {
-    inner: runtime::Device<'a, LentRx<N>, 2, RX_DEPTH, Ch<N>>,
+    inner: runtime::Device<'a, LentRx<N>, TX_DEPTH, RX_DEPTH, Ch<N>>,
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.
@@ -466,7 +470,7 @@ pub struct Channels<N: Notifies = SameHart> {
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
-    tx: oer_memory::WakingSlotQueue<TxMsdu, 2, Station<N>, Net<N>>,
+    tx: oer_memory::WakingSlotQueue<TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
     rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
     state: runtime::State<Ch<N>>,
@@ -573,7 +577,7 @@ struct ServiceConnection<'a, N: Notifies> {
     network_stop: &'a NetworkStopState<N>,
     start: StartGuard<'a>,
     commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
-    transmit: oer_memory::SlotReceiver<'a, TxMsdu, 2, Station<N>, Net<N>>,
+    transmit: oer_memory::SlotReceiver<'a, TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
     receive: oer_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     receive_copied: oer_memory::WakingSpscSender<
         'a,

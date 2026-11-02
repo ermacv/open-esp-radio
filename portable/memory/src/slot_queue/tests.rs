@@ -137,3 +137,54 @@ fn a_slot_queue_across_harts_tells_each_end_through_its_own_notify() {
     assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(4));
     assert_eq!(counts(&producer), (1, 1), "a freed slot tells the producer");
 }
+
+#[test]
+fn an_end_is_told_only_while_it_waits_once_per_burst() {
+    use core::pin::pin;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::task::{Context, Poll, Waker};
+
+    /// Counts its notifications.
+    #[derive(Default)]
+    struct Counted(AtomicUsize);
+    impl QueueNotify for Counted {
+        fn register(&self, _: &mut Context<'_>) {}
+        fn notify(&self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let told = |notify: &Counted| notify.0.load(Ordering::Relaxed);
+    let fill = |sender: &mut SlotSender<'_, u8, 4, &Counted, &Counted>, value| {
+        sender.try_send_with(|slot| {
+            *slot = value;
+            Ok::<_, ()>(())
+        })
+    };
+
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue = WakingSlotQueue::<u8, 4, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    let mut cx = Context::from_waker(Waker::noop());
+    // A consumer that never waited is told nothing.
+    assert_eq!(fill(&mut sender, 1), Ok(()));
+    assert_eq!(told(&consumer), 0);
+    // Ready at once: it does not wait, and the next fill tells nothing.
+    assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Ready(()));
+    assert_eq!(fill(&mut sender, 2), Ok(()));
+    assert_eq!(told(&consumer), 0);
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(1));
+    assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(2));
+    // Waiting on an empty queue, it is told once for a burst of fills.
+    assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Pending);
+    for value in 3..7 {
+        assert_eq!(fill(&mut sender, value), Ok(()));
+    }
+    assert_eq!(told(&consumer), 1, "one notify for the burst");
+    // The producer waits on the full queue: told once for a burst of reads.
+    assert_eq!(pin!(sender.ready()).poll(&mut cx), Poll::Pending);
+    for value in 3..7 {
+        assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(value));
+    }
+    assert_eq!(told(&producer), 1, "one notify for the reads");
+    assert_eq!(pin!(sender.ready()).poll(&mut cx), Poll::Ready(()));
+}
