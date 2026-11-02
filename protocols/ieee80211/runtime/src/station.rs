@@ -380,6 +380,32 @@ impl Taken {
     }
 }
 
+/// What a pass over the data machine's attempts did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+enum Attempted {
+    /// No attempt went.
+    Nothing,
+    /// Attempts went to the port and nothing else changed: their tickets
+    /// and permissions are the data machine's own, so the station, its
+    /// arbiter and its receive reordering owe nothing they did not owe.
+    Submitted,
+    /// An attempt came back refused: its follow-up reached the station or
+    /// the application, so the whole step runs again.
+    Followed,
+}
+
+impl Attempted {
+    /// What the pass did after one more attempt went, `followed` when it
+    /// came back with more than its submission.
+    fn after(self, followed: bool) -> Self {
+        self.max(if followed {
+            Self::Followed
+        } else {
+            Self::Submitted
+        })
+    }
+}
+
 /// Whether the station's next step is skipped at `now`. `settled` holds,
 /// after a direct input, the earliest deadline of the station, its arbiter
 /// and its receive reordering; `skipped` counts the steps skipped in a row.
@@ -1903,15 +1929,16 @@ impl<
             let stepped = if skip {
                 skipped = skipped.saturating_add(1);
                 // A taken MSDU changed the data machine alone: its attempts
-                // pass is the whole step. An attempt that went may change
-                // what the station owes, so the whole step follows at once.
+                // pass is the whole step. An attempt that came back refused
+                // may change what the station owes, so the whole step
+                // follows at once.
                 if core::mem::take(&mut data_taken) {
                     B::span(ServiceSpan::Step, false);
                     let attempted = self.attempt_data(turn, phase, io);
                     B::span(ServiceSpan::Step, true);
                     match attempted {
-                        Ok(false) => Next::Wait,
-                        Ok(true) => {
+                        Ok(Attempted::Nothing | Attempted::Submitted) => Next::Wait,
+                        Ok(Attempted::Followed) => {
                             settled = None;
                             continue;
                         }
@@ -2441,8 +2468,10 @@ impl<
                     }
                 }
             }
+            // Attempts that only went change nothing the step's other
+            // parts take; a refused one runs them again.
             match self.attempt_data(now, phase, io) {
-                Ok(attempted) => progress |= attempted,
+                Ok(attempted) => progress |= attempted == Attempted::Followed,
                 Err(fault) => return Next::Failed(fault),
             }
             if !progress {
@@ -2451,7 +2480,7 @@ impl<
         }
     }
 
-    /// Submit every data attempt owed at `now`: whether one went.
+    /// Submit every data attempt owed at `now`.
     // Keep source-specific temporaries out of the service poll frame.
     #[inline(never)]
     fn attempt_data<
@@ -2475,12 +2504,12 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) -> Result<bool, StepFailure<'id, B>>
+    ) -> Result<Attempted, StepFailure<'id, B>>
     where
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        let mut progress = false;
+        let mut attempted = Attempted::Nothing;
         // Data goes only while the link is up: otherwise its MPDUs wait
         // in the machine, none lost. At most the backend's queue depth
         // of data attempts of a category waits at the port, so a
@@ -2516,7 +2545,6 @@ impl<
                 else {
                     break 'data;
                 };
-                progress = true;
                 let transmit = match attempt {
                     data::DataAttempt::Single(transmit) => transmit,
                     data::DataAttempt::Aggregate(aggregate) => {
@@ -2622,9 +2650,11 @@ impl<
                     }
                 }
             };
-            self.follow(now, submitted?, io)?;
+            let follow = submitted?;
+            attempted = attempted.after(!matches!(follow, Follow::Nothing));
+            self.follow(now, follow, io)?;
         }
-        Ok(progress)
+        Ok(attempted)
     }
 
     /// What follows a station's action, once it no longer borrows the
