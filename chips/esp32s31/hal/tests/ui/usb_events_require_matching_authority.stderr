@@ -39,4 +39,4 @@ note: required by a bound in `enable_events`
    |        ------------- required by a bound in this associated function
    |         &mut self,
    |         authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
-   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`

@@ -14,4 +14,4 @@ note: function defined here
  4 | pub fn use_first<'id>(
    |        ^^^^^^^^^
  5 |     permission: ConfigurePermission<'id, Station, Child<Root<oer_protocols_radio_port::LocalId<'id>>, 0>>,
-   |     -------------------------------------------------------------------------------------------
+   |     -----------------------------------------------------------------------------------------------------

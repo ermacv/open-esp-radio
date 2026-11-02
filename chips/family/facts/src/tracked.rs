@@ -122,7 +122,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
         let chips = root.join("chips");
         let mut found = Vec::new();
-        toml_files(&chips.join("espressif/platform"), &mut found);
+        toml_files(&chips.join("family/platform"), &mut found);
         for entry in std::fs::read_dir(&chips).expect("chips/ is readable") {
             let entry = entry.expect("a readable entry").path();
             let platform = entry.join("platform");

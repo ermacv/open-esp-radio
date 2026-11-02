@@ -1,8 +1,8 @@
 error[E0308]: mismatched types
- --> tests/ui/runtime_watchdog_requires_arming.rs:7:133
+ --> tests/ui/runtime_watchdog_requires_arming.rs:7:145
   |
 7 | ...d: oer_chips_esp32s31_hal::peripherals::watchdog::ArmedRtcWatchdog<oer_chips_esp32s31_hal::peripherals::watchdog::RwdtRegisters> = owners.watchdogs.rtc; /...
-  |       -----------------------------------------------------------------------------------------------------------------   ^^^^^^^^^^^^^^^^^^^^ expected `ArmedRtcWatchdog<RwdtRegisters<...>>`, found `RwdtRegisters<Fixed<545263616>>`
+  |       -----------------------------------------------------------------------------------------------------------------------------   ^^^^^^^^^^^^^^^^^^^^ expected `ArmedRtcWatchdog<RwdtRegisters<...>>`, found `RwdtRegisters<Fixed<545263616>>`
   |       |
   |       expected due to this
   |

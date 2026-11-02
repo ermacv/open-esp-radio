@@ -1,8 +1,8 @@
 error[E0382]: use of moved value: `owner`
  --> tests/ui/owner_twice.rs:6:13
   |
-3 | pub async fn consume<'p, 'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(owner: Owner<'p, 'id, Id, B, Disabled>) {
-  |                                                                                     ----- move occurs because `owner` has type `Owner<'_, '_, Id, B, oer_protocols_radio_port::Disabled>`, which does not implement the `Copy` trait
+3 | pub async fn consume<'p, 'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(owner: Owner<'p, 'id, Id, B, Disabled...
+  |                                                                                               ----- move occurs because `owner` has type `Owner<'_, '_, Id, B, oer_protocols_radio_port::Disabled>`, which does not implement the `Copy` trait
 4 |     let enabling = owner.enable();
   |                          -------- `owner` moved due to this method call
 5 |     #[cfg(all())]

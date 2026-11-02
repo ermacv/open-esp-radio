@@ -12,4 +12,4 @@ note: function defined here
  --> tests/ui/block_ack_pool_size.rs:5:4
   |
 5 | fn take<'id, P: RxBlockAckPool>(_: P::Slot<'id, Root<oer_protocols_radio_port::LocalId<'id>>>) {}
-  |    ^^^^                         ---------------------------------------------------
+  |    ^^^^                         -------------------------------------------------------------

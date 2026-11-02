@@ -2,6 +2,6 @@ error[E0063]: missing field `second` in initializer of `Pair`
  --> tests/ui/init_complete.rs:8:12
   |
 8 |     return oer_portable_memory::init_in_place!(storage, Pair { first: 1 }); // ui-error: E0063
-  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `second`
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `second`
   |
   = note: this error originates in the macro `oer_portable_memory::init_in_place` (in Nightly builds, run with -Z macro-backtrace for more info)

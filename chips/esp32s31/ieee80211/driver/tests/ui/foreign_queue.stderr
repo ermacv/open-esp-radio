@@ -1,7 +1,7 @@
 error: lifetime may not live long enough
   --> tests/ui/foreign_queue.rs:17:19
    |
- 8 | ...ubmit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_mac::Rad...
+ 8 | ...ubmit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_ma...
    |          -----  -------- lifetime `'foreign` defined here
    |          |
    |          lifetime `'core` defined here
@@ -17,7 +17,7 @@ error: lifetime may not live long enough
 error: lifetime may not live long enough
   --> tests/ui/foreign_queue.rs:17:19
    |
- 8 | ...ubmit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_mac::Rad...
+ 8 | ...ubmit<'core, 'foreign, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_ma...
    |          -----  -------- lifetime `'foreign` defined here
    |          |
    |          lifetime `'core` defined here

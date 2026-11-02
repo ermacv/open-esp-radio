@@ -2,7 +2,7 @@ error[E0308]: mismatched types
  --> tests/ui/phy_reporter_signature.rs:7:1
   |
 7 | oer_chips_esp32s31_hal::phy_fault_reporter!(report); // ui-error: E0308
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   | |
   | expected `!`, found `()`
   | expected `!` because of return type

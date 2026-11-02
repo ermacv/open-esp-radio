@@ -159,7 +159,7 @@ fn compiler_resumed_checks_have_a_separate_row_and_keep_their_locations() {
             "compiler-async-fn-resumed\t1\texcluded",
             "CPU0 (hardware): 1 (protocols 1); compiler-async-fn-resumed 1",
             "T0: 1 (protocols 1); compiler-async-fn-resumed 1",
-            "compiler-async-fn-resumed\toer_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic_const::panic_const_async_fn_resumed\t[CPU0, T0]",
+            "compiler-async-fn-resumed\toer_chips_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic_const::panic_const_async_fn_resumed\t[CPU0, T0]",
             "protocols\toer_ieee80211_mac::receive at 0x0000103c calls core::panicking::panic_fmt\t[CPU0, T0]",
         ] {
             assert!(text.contains(expected), "missing {expected:?}: {text}");
@@ -217,7 +217,7 @@ fn ordinary_panics_are_not_classified_by_a_similar_callee_or_the_caller_name() {
             "{text}"
         );
         assert!(
-            text.contains("hal\toer_esp32s31_hal::panic_const_async_fn_resumed"),
+            text.contains("hal\toer_chips_esp32s31_hal::panic_const_async_fn_resumed"),
             "{text}"
         );
         assert!(text.contains("hardware\t2\t2"), "{text}");

@@ -16,4 +16,4 @@ note: required by a bound in `program`
   --> tests/ui/runtime_cpu_clock_has_no_programming_port.rs:5:15
    |
  5 | fn program<C: oer_chips_family_boot::clock::CpuClockRegisters>(_: C) {}
-   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `program`
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `program`

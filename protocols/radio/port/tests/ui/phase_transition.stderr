@@ -1,8 +1,8 @@
 error[E0505]: cannot move out of `owner` because it is borrowed
   --> tests/ui/phase_transition.rs:7:13
    |
- 3 | pub async fn phase<'p, 'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(mut owner: Owner<'p, 'id, Id, B, Enabled>) {
-   |                                                                                   --------- binding `owner` declared here
+ 3 | pub async fn phase<'p, 'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(mut owner: Owner<'p, 'id, Id, B, Enabled...
+   |                                                                                             --------- binding `owner` declared here
  4 |     let phase = owner.phase();
    |                 ----- borrow of `owner` occurs here
 ...

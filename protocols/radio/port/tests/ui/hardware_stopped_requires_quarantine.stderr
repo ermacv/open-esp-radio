@@ -7,7 +7,7 @@ warning: unused variable: `call`
   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 
 error[E0451]: field `_private` of struct `HardwareStopped` is private
- --> tests/ui/hardware_stopped_requires_quarantine.rs:6:60
+ --> tests/ui/hardware_stopped_requires_quarantine.rs:6:70
   |
 6 |         Abandon::Stopped(oer_protocols_radio_port::HardwareStopped { _private: () }) // ui-error: E0451
-  |                                                            ^^^^^^^^ private field
+  |                                                                      ^^^^^^^^ private field

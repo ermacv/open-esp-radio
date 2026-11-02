@@ -11,7 +11,7 @@ fn request_directions_are_rejected_during_codegen() {
     let scratch = tempfile::tempdir_in(scratch_root).expect("own compiler scratch");
     fs::write(scratch.path().join("Cargo.toml"), format!(
         "[package]\nname = \"wifi-request-directions\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-esp32s31-ieee80211-driver = {{ path = {:?} }}\noer-chips-family-interrupt-table = {{ path = {:?}, features = [\"host-signal\"] }}\n",
-        manifest, manifest.join("../../../espressif/interrupt-table")
+        manifest, manifest.join("../../../family/interrupt-table")
     )).expect("write isolated compiler manifest");
     for case in ["activate"] {
         let source =

@@ -1,8 +1,8 @@
 warning: unused variable: `request`
- --> tests/ui/fail_stop_request_closed.rs:4:73
+ --> tests/ui/fail_stop_request_closed.rs:4:83
   |
-4 | pub fn ended<'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(request: FailStopRequested<Id, B>) -> Ended<Id, B, ()> {
-  |                                                                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
+4 | ...tity, B: PortBackend<Id>>(request: FailStopRequested<Id, B>) -> Ended<Id, B, ()> {
+  |                              ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_request`
   |
   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
 

@@ -49,8 +49,10 @@ error[E0271]: type mismatch resolving `<I as Entry>::Part == Ieee802154Interrupt
 note: required by a bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
   --> src/ieee802154/mac.rs
    |
-   |     pub fn activate<I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
-   |                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
+   |     pub fn activate<
+   |            -------- required by a bound in this associated function
+   |         I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+   |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Ieee802154ArmedTaskOwner::<P, E, B>::activate`
 
 error[E0308]: mismatched types
   --> tests/ui/ieee802154_startup_phases.rs:49:52

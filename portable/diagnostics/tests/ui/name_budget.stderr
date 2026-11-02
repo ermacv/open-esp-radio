@@ -20,9 +20,9 @@ note: erroneous constant encountered
   | |_________^
 
 note: erroneous constant encountered
- --> tests/ui/name_budget.rs:8:55
+ --> tests/ui/name_budget.rs:8:64
   |
-8 | const REASON: oer_portable_diagnostics::Name<{ TEXT.len() }> = oer_portable_diagnostics::name!(TEXT); // ui-error@outside: E0080: evaluation panicked: ...
-  |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+8 | const REASON: oer_portable_diagnostics::Name<{ TEXT.len() }> = oer_portable_diagnostics::name!(TEXT); // ui-error@outside: E0080: eva...
+  |                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
   = note: this note originates in the macro `$crate::name` which comes from the expansion of the macro `oer_portable_diagnostics::name` (in Nightly builds, run with -Z macro-backtrace for more info)

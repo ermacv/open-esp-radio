@@ -4,7 +4,7 @@ error[E0382]: use of moved value: `root`
 5 | pub fn install(root: Root) -> Result<ChipClocks, oer_chips_family_boot::adoption::InitError> {
   |                ---- move occurs because `root` has type `Root`, which does not implement the `Copy` trait
 6 |     let clocks = oer_chips_family_boot::adoption::initialize(root.into_runtime())?.hardware.clocks;
-  |                                                                -------------- `root` moved due to this method call
+  |                                                                   -------------- `root` moved due to this method call
 7 |     #[cfg(all())]
 8 |     let _again = root.into_runtime(); // ui-error: E0382
   |                  ^^^^ value used here after move
