@@ -83,6 +83,16 @@ impl<T, const N: usize> ReturnBank<T, N> {
     }
 }
 
+impl<T, const N: usize> ReturnBank<T, N> {
+    /// Whether no place's value is out: each seeded place is available,
+    /// and a place never seeded holds nothing to return.
+    pub fn none_out(&self) -> bool {
+        self.cells
+            .iter()
+            .all(|cell| cell.state.load(Ordering::Acquire) != OUT)
+    }
+}
+
 impl<T, const N: usize> Default for ReturnBank<T, N> {
     fn default() -> Self {
         Self::new()
@@ -147,6 +157,19 @@ mod tests {
         let (value, token) = bank.take(0).expect("returned");
         assert_eq!(value, 9);
         token.return_value(value);
+    }
+
+    #[test]
+    fn a_bank_seeded_in_part_has_none_out_until_a_seeded_value_leaves() {
+        let mut bank = ReturnBank::<_, 2>::new();
+        assert!(bank.none_out(), "an unseeded place holds nothing to return");
+        assert!(bank.seed(0, 7).is_ok());
+        assert!(bank.none_out());
+        assert!(!bank.all_returned(), "place 1 was never seeded");
+        let (value, token) = bank.take(0).expect("seeded");
+        assert!(!bank.none_out());
+        token.return_value(value);
+        assert!(bank.none_out());
     }
 
     #[test]

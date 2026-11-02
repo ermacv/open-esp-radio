@@ -43,7 +43,7 @@ aliases and include optional and target-specific dependencies.
 | `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, `TransportFlow` | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
-| `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools; in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
+| `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, destination/flow TX queues, stack wake registration, RX copying into packet pools, a device's transmit memory parked as the stack's general packets (`ParkedTx`); in `datapath`, the software/physical TX ownership traits and `TxQueues` | radio scheduling, DMA descriptors, a concrete physical allocator |
 | `oer-portable-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
 | `oer-chips-esp32s31-ieee80211-driver::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
 | `oer-protocols-ieee80211-core-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
@@ -53,20 +53,23 @@ aliases and include optional and target-specific dependencies.
 
 ```text
 network stack (P1)
-    builds a general-memory PacketBuf
+    builds a PacketBuf in a station transmit buffer (its general allocator)
     classifies Ethernet destination and transport headers once
     publishes into destination/flow queues over one owner pool
-radio runner (P2)
-    selects a destination, then claims only its software owners
-    validates VIF, peer generation, TID and power-save eligibility
-    reserves the whole SRAM batch before consuming any selected owner
-    copies each selected frame once into DMA-visible storage
-    publishes; returns SRAM credits after terminal completion
+network end (P1)
+    takes the buffer out of the packet: the frame stays where it was written
+    copies a frame from elsewhere (a reply in a received buffer) into its spare
+    publishes the buffer to the station
+station (P2)
+    writes the 802.11 header in front of the payload, in place
+    publishes the same buffer; the buffer returns to P1 after its terminal
 ```
 
-- **General memory and SRAM are separate resources.** Selection happens
-  before SRAM admission. A failed submission returns the original
-  `PacketBuf`; a failed batch reservation removes nothing from the source.
+- **The stack's general packets are the station's transmit buffers.** The
+  network end parks every buffer the port does not hold in `TxSlots`
+  (`oer-portable-embassy-net::ethernet`), whose allocator is the stack's
+  general allocator; a dropped packet parks its buffer again. A refused
+  submission returns the original `PacketBuf` with its credit.
 - **Epochs.** Queue entries carry the interface link epoch; AP-retained owners
   also carry the association generation established at radio admission.
   Ethernet destination metadata alone grants no association or security
@@ -166,8 +169,8 @@ completions cannot bypass the settle interval.
   radio's DMA storage, and the packet returns to its pool when dropped.
 - Cross-domain wakes are hints over durable state: consumers check, arm and
   recheck before sleeping. An exhausted work budget self-wakes; real resource
-  exhaustion waits for its credit-return edge. RX availability, general pool
-  availability and SRAM completion are separate domains.
+  exhaustion waits for its credit-return edge. RX availability and general
+  pool availability (transmit buffers parked again) are separate domains.
 
 ## Access point egress
 

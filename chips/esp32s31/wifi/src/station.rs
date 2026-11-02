@@ -46,9 +46,10 @@ impl<W: Binding> Composition for ImageComposition<W> {
         machine::StaConfigurationContext<'p, Epoch<Id>>;
 }
 pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
-/// The pool places the station's management frames take; the data machine
-/// takes the next [`DATA_BUFFERS`].
-const MANAGEMENT: u8 = 4;
+/// The pool places the station's management frames take, holding the
+/// port's own buffers; the data machine takes the next [`DATA_BUFFERS`],
+/// which hold the network's memory for one MSDU each.
+const MANAGEMENT: u8 = crate::supply::PORT_BUFFERS;
 /// The buffers the data machine holds: every pool buffer the station's
 /// management frames do not take, within its queue (`PortData`'s capacity).
 const DATA_BUFFERS: usize = port::TX_BUFFERS - MANAGEMENT as usize;
@@ -102,6 +103,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     type TxContextStorage<T> = [Option<T>; port::TX_TICKETS];
     type Small = port::BufferClass<TX>;
     type Large = port::BufferClass<TX>;
+    type TxMemory = crate::TxMemory;
     fn lend_phase<'a, 'id, 'r>(
         phase: &'r mut <Backend<Id, W> as PortBackend<Id>>::Phase<'a, 'id>,
     ) -> &'r mut impl LowerMacPhase<'a, 'id, Caps = Caps, Types = Family<Id, W>>
@@ -408,7 +410,7 @@ type Io<'c, W> = ServiceIo<
     Events<'static, Output<<W as Binding>::Events, <W as Binding>::Notifies>, Ch<W>>,
     crate::LentRx<<W as Binding>::Notifies>,
     crate::NetworkStopState<<W as Binding>::Notifies>,
-    <W as Binding>::TxPacket,
+    crate::TxMemory,
     { crate::TX_DEPTH },
     { crate::RX_DEPTH },
     2,

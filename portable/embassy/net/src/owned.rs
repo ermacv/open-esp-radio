@@ -552,6 +552,16 @@ impl OwnedNetworkTxFrame<'_> {
     pub fn as_slice(&self) -> &[u8] {
         self.ethernet()
     }
+
+    pub(crate) fn packet(&self) -> &PacketBuf {
+        &self.packet
+    }
+
+    /// The packet, its software credit released: the device holds it from
+    /// here on.
+    pub(crate) fn into_packet(self) -> PacketBuf {
+        self.packet
+    }
 }
 
 /// Affine link-state capability lent exclusively by the radio-side owner.

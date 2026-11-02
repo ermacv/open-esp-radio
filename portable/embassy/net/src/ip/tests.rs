@@ -288,11 +288,12 @@ fn start_lent<X: ExecutionContext>(
     Rc<RefCell<PortState>>,
 ) {
     let (port, state) = port();
-    let resources = Box::leak(Box::new(Resources::<X, 2, 1, 8>::new()));
+    let resources = Box::leak(Box::new(Resources::<X, 2, 1>::new()));
     let (control, service) = resources
         .start(
             port,
             lent,
+            general::<8>(),
             NetworkInterfaceId::new(0),
             [2; 6],
             1,
@@ -657,11 +658,12 @@ fn invalid_static_configuration_returns_the_original_device() {
         ),
     ] {
         let (port, original) = port();
-        let resources = Box::leak(Box::new(Resources::<HostContext, 1, 1, 1>::new()));
+        let resources = Box::leak(Box::new(Resources::<HostContext, 1, 1>::new()));
         let refused = resources
             .start(
                 port,
                 None::<&'static crate::ethernet::LentSlots<Lent, LENT>>,
+                general::<1>(),
                 NetworkInterfaceId::new(0),
                 [2; 6],
                 1,
@@ -672,6 +674,34 @@ fn invalid_static_configuration_returns_the_original_device() {
         assert_eq!(refused.reason, expected);
         assert!(Rc::ptr_eq(&refused.device.0, &original));
     }
+}
+
+/// A general pool of `N` packets, as the stack's general allocator.
+fn general<const N: usize>() -> xarxa_driver::PacketBufAllocator {
+    let storage = Box::leak(Box::new(PacketPoolStorage::<N>::new()));
+    Box::leak(Box::new(PacketPool::new(storage))).allocator()
+}
+
+#[test]
+fn a_general_allocator_another_stack_waits_on_is_refused_before_a_stack_is_built() {
+    let (port, original) = port();
+    let general = general::<1>();
+    let _held = general.try_claim_waiter().unwrap();
+    let resources = Box::leak(Box::new(Resources::<HostContext, 1, 1>::new()));
+    let refused = resources
+        .start(
+            port,
+            None::<&'static crate::ethernet::LentSlots<Lent, LENT>>,
+            general,
+            NetworkInterfaceId::new(0),
+            [2; 6],
+            1,
+            Configuration::Dhcpv4,
+        )
+        .err()
+        .unwrap();
+    assert_eq!(refused.reason, Error::GeneralWaiterUnavailable);
+    assert!(Rc::ptr_eq(&refused.device.0, &original));
 }
 
 #[test]

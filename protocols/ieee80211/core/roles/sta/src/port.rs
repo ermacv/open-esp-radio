@@ -227,4 +227,11 @@ where
         }
         memory
     }
+    type Memory = <Ty as TxBufferPool<'id, L>>::NetworkMemory;
+    fn install(buffer: &mut Self::Buffer, memory: Self::Memory) -> Result<(), Self::Memory> {
+        <Ty as TxBufferPool<'id, L>>::install(buffer, memory)
+    }
+    fn uninstall(buffer: &mut Self::Buffer) -> Option<Self::Memory> {
+        <Ty as TxBufferPool<'id, L>>::uninstall(buffer)
+    }
 }

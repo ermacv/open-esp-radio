@@ -135,6 +135,15 @@ impl<'id> StaDataTokens for Data<'id> {
     fn renew(mpdu: Self::Sent) -> Buffer {
         mpdu
     }
+    type Memory = Vec<u8>;
+    /// The network's memory replaces whatever the test place held.
+    fn install(buffer: &mut Buffer, memory: Vec<u8>) -> Result<(), Vec<u8>> {
+        buffer.0 = memory;
+        Ok(())
+    }
+    fn uninstall(buffer: &mut Buffer) -> Option<Vec<u8>> {
+        (!buffer.0.is_empty()).then(|| core::mem::take(&mut buffer.0))
+    }
 }
 
 struct Station<'id>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
@@ -249,14 +258,31 @@ fn machine() -> StaData<'static, Data<'static>, Caps, 8> {
     )
 }
 
-fn msdu(priority: u8) -> Msdu<'static> {
+/// A network's memory of `len` octets holding an IPv4 frame to the peer
+/// with `payload`, where a network places it.
+fn frame_memory(len: usize, payload: &[u8]) -> Vec<u8> {
+    let mut memory = std::vec![0; len];
+    memory[MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&PEER);
+    memory[MSDU_ETHERNET_OFFSET + 6..][..6].copy_from_slice(&LOCAL);
+    memory[MSDU_ETHERNET_OFFSET + 12..][..2].copy_from_slice(&0x0800u16.to_be_bytes());
+    // A frame longer than the memory keeps only what fits: the machine
+    // refuses it by its length.
+    let room = len.saturating_sub(MSDU_PAYLOAD_OFFSET).min(payload.len());
+    memory[MSDU_PAYLOAD_OFFSET..][..room].copy_from_slice(&payload[..room]);
+    memory
+}
+
+fn msdu_of(priority: u8, len: usize, payload: &[u8]) -> Msdu<Vec<u8>> {
     Msdu {
-        destination: PEER,
-        ether_type: 0x0800,
+        memory: frame_memory(len, payload),
+        length: 14 + payload.len(),
         priority: WmmUserPriority::new(priority).unwrap(),
-        payload: &[0xab; 100],
         admitted: oer_portable_time::Instant::from_micros(1_000 + u64::from(priority)),
     }
+}
+
+fn msdu(priority: u8) -> Msdu<Vec<u8>> {
+    msdu_of(priority, 1600, &[0xab; 100])
 }
 
 fn epoch() -> CcmpRxReplayEpoch {
@@ -733,10 +759,7 @@ fn an_msdu_too_long_for_its_buffer_takes_no_sequence_number() {
         core::num::NonZeroU8::new(8).unwrap(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
-    let long = Msdu {
-        payload: &[0; 200],
-        ..msdu(0)
-    };
+    let long = msdu_of(0, 200, &[0; 200]);
     assert_eq!(
         data.input(
             DataInput {
@@ -789,17 +812,17 @@ fn a_buffer_whose_memory_is_not_the_stations_is_refused_and_takes_no_sequence_nu
 }
 
 #[test]
-fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
+fn an_open_mpdu_moves_its_payload_down_to_its_shorter_header() {
     let mut events = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(
         [1],
-        [Buffer::new(std::vec![0; 24 + 8 + 100])],
+        [Buffer::new(Vec::new())],
         core::num::NonZeroU8::new(8).unwrap(),
     );
     let mut counter = SequenceCounter::new(SequenceNumber::new(42).unwrap());
     data.input(
         DataInput {
-            msdu: msdu(0),
+            msdu: msdu_of(0, MSDU_PAYLOAD_OFFSET + 100, &[0xab; 100]),
             link: &mut open_link(&mut counter),
         },
         &mut events,
@@ -807,14 +830,18 @@ fn open_mpdu_fits_exactly_without_a_temporary_ccmp_gap() {
     .unwrap();
     let sent = transmit(&mut data);
     let bytes = memory(&sent.buffer);
-    assert_eq!(bytes.len(), 132);
+    assert_eq!(
+        bytes.len(),
+        MSDU_PAYLOAD_OFFSET + 100,
+        "the network's memory"
+    );
     assert_eq!(&bytes[..2], &[0x08, 0x01]);
     assert_eq!(&bytes[4..10], &BSSID);
     assert_eq!(&bytes[10..16], &LOCAL);
     assert_eq!(&bytes[16..22], &PEER);
     assert_eq!(&bytes[22..24], &(42_u16 << 4).to_le_bytes());
     assert_eq!(&bytes[24..32], &[0xaa, 0xaa, 3, 0, 0, 0, 8, 0]);
-    assert_eq!(&bytes[32..], &[0xab; 100]);
+    assert_eq!(&bytes[32..132], &[0xab; 100]);
     assert_eq!(counter.peek(), SequenceNumber::new(43).unwrap());
 }
 
@@ -1792,10 +1819,7 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
     for _ in 0..40 {
         data.input(
             DataInput {
-                msdu: Msdu {
-                    payload: &PAYLOAD,
-                    ..msdu(0)
-                },
+                msdu: msdu_of(0, 1_600, &PAYLOAD),
                 link: &mut link,
             },
             &mut events,
@@ -1985,4 +2009,59 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
     assert!(!data.attempts_wait());
     drop(full);
     assert_eq!(tokens_lost(&attempts), 0);
+}
+
+#[test]
+fn the_networks_memory_goes_back_once_its_mpdu_ended_or_its_msdu_was_refused() {
+    let mut events = Kept::default();
+    let mut data = machine();
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    data.input(
+        DataInput {
+            msdu: msdu(6),
+            link: &mut link,
+        },
+        &mut events,
+    )
+    .unwrap();
+    assert!(!data.has_freed(), "the MPDU holds its MSDU's memory");
+    let sent = transmit(&mut data);
+    // A protected QoS header fills the room in front of the payload: the
+    // payload stays where the network wrote it.
+    assert_eq!(
+        &memory(&sent.buffer)[MSDU_PAYLOAD_OFFSET..][..100],
+        &[0xab; 100]
+    );
+    data.returned(
+        DataReturn::TxDone {
+            context: sent.context,
+            ticket: sent.ticket,
+            buffer: sent.buffer,
+            completion: ended(End::Delivered, 1),
+        },
+        &mut events,
+    );
+    let memory = data.take_freed().expect("the ended MPDU's memory");
+    assert_eq!(&memory[MSDU_PAYLOAD_OFFSET..][..100], &[0xab; 100]);
+    assert!(data.take_freed().is_none());
+    assert_eq!(data.buffers.len(), 2, "the place, without memory, is free");
+    // A frame shorter than an Ethernet header takes no place and no number;
+    // its memory goes back too.
+    let short = Msdu {
+        length: 10,
+        ..msdu(6)
+    };
+    assert_eq!(
+        data.input(
+            DataInput {
+                msdu: short,
+                link: &mut link,
+            },
+            &mut events,
+        ),
+        Err(DataRefusal::ShortFrame)
+    );
+    assert!(data.take_freed().is_some());
+    assert_eq!(data.buffers.len(), 2);
 }

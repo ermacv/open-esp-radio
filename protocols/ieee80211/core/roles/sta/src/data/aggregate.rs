@@ -634,8 +634,7 @@ impl<
             };
             if let Some(buffer) = lost {
                 report(events, || StaEvent::DataLost(DataLoss::Overflow));
-                self.buffers
-                    .put(crate::events::fresh(buffer, D::renew, events), events);
+                self.retire(buffer, events);
             }
         }
         let Some((link, protection)) = shared else {
@@ -684,8 +683,7 @@ impl<
         };
         if let Err(mpdu) = kept {
             report(events, || StaEvent::TokenLost);
-            self.buffers
-                .put(crate::events::fresh(mpdu, D::renew, events), events);
+            self.retire(mpdu, events);
         }
     }
 
@@ -711,8 +709,7 @@ impl<
                 (None, Some(buffer)) => {
                     // The bank lost the member its place named.
                     report(events, || StaEvent::TokenLost);
-                    self.buffers
-                        .put(crate::events::fresh(buffer, D::renew, events), events);
+                    self.retire(buffer, events);
                 }
                 (_, None) => report(events, || StaEvent::TokenLost),
             }
@@ -804,13 +801,11 @@ impl<
             let Some(mut member) = member else {
                 // The bank lost the member its place named.
                 report(events, || StaEvent::TokenLost);
-                self.buffers
-                    .put(crate::events::fresh(buffer, D::renew, events), events);
+                self.retire(buffer, events);
                 continue;
             };
             if !current {
-                self.buffers
-                    .put(crate::events::fresh(buffer, D::renew, events), events);
+                self.retire(buffer, events);
                 continue;
             }
             let settled = match &completion {
@@ -886,8 +881,7 @@ impl<
                     } else {
                         settlement.dropped = settlement.dropped.saturating_add(1);
                     }
-                    self.buffers
-                        .put(crate::events::fresh(buffer, D::renew, events), events);
+                    self.retire(buffer, events);
                 }
                 None => {
                     settlement.retried = settlement.retried.saturating_add(1);

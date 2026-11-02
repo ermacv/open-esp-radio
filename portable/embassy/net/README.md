@@ -18,10 +18,13 @@ the DWARF method scopes the stack analyzer uses to prove Waker targets.
 
 ## Product IP service
 
-`ip::Resources<X, RX, TX, GENERAL>` holds final pool, endpoint, device and
+`ip::Resources<X, RX, TX>` holds final receive pool, endpoint, device and
 stack storage. An image places it once and lends it exclusively to `start`,
-passing a `NetDevice`, interface identity, MAC address, random seed and
-`Configuration::Dhcpv4` or `Configuration::Static`. It receives one local
+passing a `NetDevice`, the general allocator of every packet the stack makes
+(a device's `ethernet::TxSlots`, so that packets are written in its transmit
+memory), interface identity, MAC address, random seed and
+`Configuration::Dhcpv4` or `Configuration::Static`. A general allocator
+another stack waits on is refused. It receives one local
 `Control` and one `Service`; no second start, allocator waiter or stack is
 available through that borrow. A construction refusal returns the original
 neutral device and a typed reason. Storage remains lent.

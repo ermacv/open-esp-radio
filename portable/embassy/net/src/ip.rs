@@ -14,7 +14,7 @@ use owned_embassy_net::{
     iface::{Iface, dhcpv4::DhcpConfig},
     wire::{IpCidr, Ipv4Addr, Ipv4Cidr},
 };
-use xarxa_driver::{PacketPool, PacketPoolStorage};
+use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
 
 use crate::{OwnedEndpointResources, OwnedNetworkDevice, ethernet::EthernetBridge};
 
@@ -44,6 +44,8 @@ pub enum Error {
     InvalidPrefixLength(u8),
     EndpointAlreadySplit,
     RxWaiterUnavailable,
+    /// Another stack waits on the general allocator already.
+    GeneralWaiterUnavailable,
     InterfaceTableFull,
     UnsupportedMedium,
     HardwareAddressMismatch,
@@ -164,31 +166,27 @@ impl Control<'_> {
     }
 }
 
-/// Final storage for one stack and its two private packet pools. Consuming the
+/// Final storage for one stack and its private receive pool. Consuming the
 /// exclusive static borrow in `start` prevents a second start or pool waiter.
 ///
-/// Memory placement belongs to the image. There are GENERAL general packet
-/// slots, RX receive packet/queue slots and TX software admission credits.
+/// Memory placement belongs to the image. There are RX receive packet/queue
+/// slots and TX software admission credits; the general packets come from
+/// the allocator `start` takes, such as the device's
+/// [`TxSlots`](crate::ethernet::TxSlots).
 ///
 /// ```compile_fail,E0499
 /// use oer_portable_embassy_net::{NetworkInterfaceId, ip::{Configuration, Resources}};
 /// use oer_portable_memory::ExecutionContext;
 /// use oer_protocols_network_port::NetDevice;
 /// fn twice<X: ExecutionContext, D: oer_portable_embassy_net::ethernet::OwnedTxDevice<'static>>(
-///     resources: &'static mut Resources<X, 1, 1, 1>, first: D, second: D,
+///     resources: &'static mut Resources<X, 1, 1>, first: D, second: D,
+///     general: xarxa_driver::PacketBufAllocator,
 /// ) {
-///     let _ = resources.start(first, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
-///     let _ = resources.start(second, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
+///     let _ = resources.start::<D, 1>(first, None, general, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
+///     let _ = resources.start::<D, 1>(second, None, general, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
 /// }
 /// ```
-pub struct Resources<
-    X: ExecutionContext + 'static,
-    const RX: usize,
-    const TX: usize,
-    const GENERAL: usize,
-> {
-    general_storage: PacketPoolStorage<GENERAL>,
-    general_pool: Option<PacketPool<GENERAL>>,
+pub struct Resources<X: ExecutionContext + 'static, const RX: usize, const TX: usize> {
     rx_storage: PacketPoolStorage<RX>,
     rx_pool: Option<PacketPool<RX>>,
     endpoint: OwnedEndpointResources<X, RX, TX>,
@@ -197,26 +195,17 @@ pub struct Resources<
     state: State,
 }
 
-impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENERAL: usize> Default
-    for Resources<X, RX, TX, GENERAL>
+impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Default
+    for Resources<X, RX, TX>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENERAL: usize>
-    Resources<X, RX, TX, GENERAL>
-{
+impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize> Resources<X, RX, TX> {
     pub const fn new() -> Self {
-        const {
-            if GENERAL == 0 {
-                panic!("IP service requires general packet storage");
-            }
-        }
         Self {
-            general_storage: PacketPoolStorage::new(),
-            general_pool: None,
             rx_storage: PacketPoolStorage::new(),
             rx_pool: None,
             endpoint: OwnedEndpointResources::new(),
@@ -226,18 +215,25 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
         }
     }
 
-    /// Build once. Errors retain final storage; the device is returned on
-    /// construction refusal, without a second stack or fallback configuration.
+    /// Build once over `general`, the allocator of every packet the stack
+    /// makes, which no other stack waits on. Errors retain final storage;
+    /// the device is returned on construction refusal, without a second
+    /// stack or fallback configuration.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one start over the device and its pools"
+    )]
     pub fn start<D: crate::ethernet::OwnedTxDevice<'static>, const LENT: usize>(
         &'static mut self,
         device: D,
         lent: Option<&'static crate::ethernet::LentSlots<crate::ethernet::Lent<D>, LENT>>,
+        general: PacketBufAllocator,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
         configuration: Configuration,
     ) -> Result<(Control<'static>, Service<X, RX, TX, D, LENT>), StartRefused<D>> {
-        match self.initialize(interface, address, seed, configuration) {
+        match self.initialize(general, interface, address, seed, configuration) {
             Ok(Initialized {
                 state,
                 iface,
@@ -259,6 +255,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
 
     fn initialize(
         &'static mut self,
+        general: PacketBufAllocator,
         interface: NetworkInterfaceId,
         address: [u8; 6],
         seed: u64,
@@ -269,10 +266,11 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
         {
             return Err(Error::InvalidPrefixLength(config.prefix_length));
         }
-        let general = self
-            .general_pool
-            .insert(PacketPool::new(&mut self.general_storage))
-            .allocator();
+        // The stack claims the general allocator's waiter: refuse one
+        // another stack holds, before anything is built.
+        if general.waiter_claimed() {
+            return Err(Error::GeneralWaiterUnavailable);
+        }
         let receive = self
             .rx_pool
             .insert(PacketPool::new(&mut self.rx_storage))
@@ -281,8 +279,8 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
             .endpoint
             .split(interface, address, receive)
             .map_err(Error::from)?;
-        // Only this constructor can reach the fresh general pool: no other
-        // async stack can claim its waiter before Stack::new.
+        // Checked above, on this executor: no other stack claims the
+        // general waiter before Stack::new.
         let (stack, mut runner) = Stack::new(&mut self.stack, seed, general);
         runner.set_poll_budget(owned_embassy_net::PollBudget::new(4, 8));
         let iface = stack

@@ -283,3 +283,36 @@ fn a_rejected_transition_keeps_the_slot_and_returns_observations() {
     drop(owner);
     assert_eq!(pool.claimed_slots(), 0);
 }
+
+#[test]
+fn a_radio_lease_hands_its_slot_back_to_a_network_writer_without_freeing_it() {
+    let pool = pinned_pool();
+    let network = prepared_radio(&pool).into_network();
+    assert_eq!(pool.claimed_slots(), 1, "the writer still holds the slot");
+    assert!(pool.claim_network(0).is_err(), "no second writer takes it");
+    let (index, ()) = network.publish(crate::FrameLen::constant::<2>(), |frame| {
+        frame.copy_from_slice(&[7, 8])
+    });
+    let radio = pool.claim_radio(index).unwrap();
+    assert_eq!(
+        radio.ethernet(),
+        &[7, 8],
+        "the next frame replaces the bytes"
+    );
+    drop(radio);
+    assert_eq!(pool.claimed_slots(), 0);
+}
+
+#[test]
+fn a_network_writer_fills_its_bytes_across_calls_and_publishes_what_it_wrote() {
+    let pool = pinned_pool();
+    let mut network = pool.claim_network(0).unwrap();
+    assert_eq!(network.bytes_mut().len(), 32);
+    network.bytes_mut()[..2].copy_from_slice(&[7, 8]);
+    network.bytes_mut()[2..3].copy_from_slice(&[9]);
+    // Unpublished, the slot is no radio owner's.
+    assert!(pool.claim_radio(0).is_err());
+    let index = network.publish_written(crate::FrameLen::constant::<3>());
+    let radio = pool.claim_radio(index).unwrap();
+    assert_eq!(radio.ethernet(), &[7, 8, 9]);
+}

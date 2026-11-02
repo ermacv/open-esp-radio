@@ -21,7 +21,7 @@
 mod device;
 pub use device::{
     EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot, NetDevice,
-    ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
+    ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
 };
 
 mod flow;

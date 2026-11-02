@@ -1567,6 +1567,25 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PhaseTypes<'id> {
     /// forgotten, and the next protected attempt in it is numbered anew.
     /// The original external body is returned explicitly beside the memory.
     fn renew(buffer: Self::Sent) -> (Self::Buffer, Option<Self::TxBody>);
+
+    /// Memory a network fills with one frame in place, which a buffer of
+    /// the class holds only for that frame's MPDU. It names no installation:
+    /// it outlives one and crosses execution contexts.
+    type NetworkMemory: Send + 'static;
+
+    /// Lend `memory` to a buffer that holds none.
+    ///
+    /// # Errors
+    ///
+    /// The memory, unchanged, when the buffer already holds memory.
+    fn install(
+        buffer: &mut Self::Buffer,
+        memory: Self::NetworkMemory,
+    ) -> Result<(), Self::NetworkMemory>;
+
+    /// Take back the network's memory a buffer holds; `None`, and no change,
+    /// when it holds none or holds its own.
+    fn uninstall(buffer: &mut Self::Buffer) -> Option<Self::NetworkMemory>;
 }
 
 /// A returned MPDU retains whether it has ever been published, independently

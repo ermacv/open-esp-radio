@@ -376,6 +376,7 @@ fn unsolicited_tsf_and_access_point_terminals_retain_their_real_permissions() {
             ],
             std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
+        let backend = backend.with_network_memory();
         assert!(matches!(
             oer_protocols_radio_port::LocalExecution
                 .scope(
@@ -408,6 +409,7 @@ fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
                 ],
                 std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
             );
+            let backend = backend.with_network_memory();
             assert!(matches!(
                 oer_protocols_radio_port::LocalExecution
                     .scope(
@@ -446,6 +448,7 @@ fn full_custody_returns_the_next_terminal_to_poisoned_port_teardown() {
             ],
             std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
+        let backend = backend.with_network_memory();
         assert!(matches!(
             oer_protocols_radio_port::LocalExecution.scope(oer_protocols_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().expect("fresh local slot")), async |frontend| run_port(
                 frontend,

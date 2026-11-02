@@ -110,7 +110,7 @@ pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
     ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
-    StatusReader, UnreadOperation,
+    StatusReader, TxRefused, TxSupply, UnreadOperation,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
@@ -121,7 +121,9 @@ use oer_protocols_ieee80211_core_roles_sta::machine::TxRefusal;
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
-use oer_portable_memory::{SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    QueueNotify, SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender,
+};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
@@ -180,7 +182,7 @@ pub trait StationPort: Sized {
             EpochPath: oer_protocols_radio_port::PoolPath<Identity = Self::SlotId>,
             TicketPath: oer_protocols_radio_port::PoolPath<Identity = Self::SlotId>,
         > + TxBufferPool<'id, Self::Small>
-        + TxBufferPool<'id, Self::Large>
+        + TxBufferPool<'id, Self::Large, NetworkMemory = Self::TxMemory>
     where
         Self: 'id,
         Self::Backend: 'id,
@@ -197,6 +199,9 @@ pub trait StationPort: Sized {
     type Small: TxBufferClass;
     /// Buffer class for connected data traffic.
     type Large: TxBufferClass;
+    /// The network's memory a data MSDU comes in, the same in every
+    /// install: a buffer of [`Self::Large`] holds it for the MSDU's MPDU.
+    type TxMemory: Send + 'static;
 
     /// Lend only the public phase, retaining the body's loan and slot identity.
     fn lend_phase<'a, 'id, 'r>(
@@ -414,6 +419,23 @@ impl Attempted {
 /// Between direct inputs a step owes nothing before that deadline, so it
 /// runs only at the deadline and once per [`MAX_WAITING_EVENT_STEPS`]
 /// inputs.
+/// Hand `memory` back to the network through `returned`, whose room the
+/// caller checked. A broken queue keeps it quarantined rather than dropping
+/// it on this hart.
+fn give_back<M, const DEPTH: usize>(
+    returned: &mut SlotSender<'_, Option<M>, DEPTH, impl QueueNotify, impl QueueNotify>,
+    memory: M,
+) {
+    let mut memory = Some(memory);
+    let _sent = returned.try_send_with(|slot| {
+        *slot = memory.take();
+        Ok::<_, core::convert::Infallible>(())
+    });
+    if let Some(memory) = memory {
+        let _quarantined = core::mem::ManuallyDrop::new(memory);
+    }
+}
+
 fn skips_step(settled: Option<Option<Instant>>, skipped: u8, now: Instant) -> bool {
     matches!(settled, Some(deadline)
         if skipped < MAX_WAITING_EVENT_STEPS && deadline.is_none_or(|deadline| now < deadline))
@@ -669,11 +691,15 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
     }
 }
 
-/// One MSDU the network stack hands the station: its packet owner and the
-/// user priority its marking requests.
+/// One MSDU the network stack hands the station: the network's memory its
+/// frame is written in, and the user priority its marking requests.
 #[derive(Debug)]
-pub struct Outgoing<P> {
-    pub packet: P,
+pub struct Outgoing<M> {
+    /// The network's memory holding the frame, at the data machine's
+    /// [`MSDU_ETHERNET_OFFSET`](data::MSDU_ETHERNET_OFFSET) of a buffer's octets.
+    pub memory: M,
+    /// The length of the Ethernet frame, header and payload.
+    pub length: u16,
     pub priority: data::WmmUserPriority,
 }
 
@@ -754,11 +780,11 @@ pub struct ServiceIo<
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
     pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
-    /// The MSDUs the network stack sends: its packet owners, read where
-    /// the stack wrote them.
+    /// The MSDUs the network stack sends, each in the network's memory,
+    /// where the station writes its MPDU header in place.
     pub transmit: SlotReceiver<'c, Option<Outgoing<P>>, TX_DEPTH, N::Station, N::Network>,
-    /// The packets read, back to the network stack, which drops them on
-    /// its own executor.
+    /// The network's memory, back once its MSDU ended (or was refused), for
+    /// the network's next frame.
     pub returned: SlotSender<'c, Option<P>, TX_DEPTH, N::Network, N::Station>,
     /// The MSDUs the station received for the network stack.
     pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
@@ -1387,7 +1413,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1482,7 +1508,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1582,7 +1608,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1756,7 +1782,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1901,7 +1927,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2032,6 +2058,10 @@ impl<
                 .flatten()
                 .min();
                 let sending = self.data.accepts() && self.station.link().is_some();
+                // The memory ended MPDUs held goes back to the network while
+                // its queue has room; what still waits wakes the service
+                // when the network makes room.
+                let freed = self.return_freed(&mut io.returned);
                 // Frames wait in delivery order for the network's next return.
                 let parked = self.pending.receive.has_ready();
                 let (event, room, command_ready, tick, transmit) = {
@@ -2054,6 +2084,8 @@ impl<
                     };
                     let transmit_ready = io.transmit.ready();
                     let mut transmit_ready = core::pin::pin!(transmit_ready);
+                    let returned_room = io.returned.ready();
+                    let mut returned_room = core::pin::pin!(returned_room);
                     let mut command = core::pin::pin!(command);
                     let mut alarm = core::pin::pin!(alarm);
                     poll_fn(|cx| {
@@ -2082,12 +2114,14 @@ impl<
                         let tick = alarm_ready
                             && machine_deadline.is_some_and(|deadline| now() >= deadline);
                         let transmit = sending && transmit_ready.as_mut().poll(cx).is_ready();
+                        let returned = freed && returned_room.as_mut().poll(cx).is_ready();
                         if event.is_some()
                             || room
                             || command_ready.is_some()
                             || alarm_ready
                             || policy_ready
                             || transmit
+                            || returned
                         {
                             B::span(ServiceSpan::Sources, true);
                             Poll::Ready((event, room, command_ready, tick, transmit))
@@ -2249,7 +2283,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2263,68 +2297,49 @@ impl<
                 return Taken::Direct;
             };
             let ServiceIo {
-                transmit,
-                returned,
-                output,
-                ..
+                transmit, output, ..
             } = io;
             let data = &mut self.data;
             let events = &mut self.events;
             // The queue holds at most `TX_DEPTH`: one pass takes them all,
-            // each while the data machine has a buffer and its packet a
-            // place to go back.
+            // each while the data machine has a buffer.
             for _ in 0..TX_DEPTH {
-                if !data.accepts() || returned.free_capacity() == 0 {
+                if !data.accepts() {
                     break;
                 }
-                let Ok(Some(Outgoing { packet, priority })) =
-                    transmit.try_receive_with(Option::take)
+                let Ok(Some(Outgoing {
+                    memory,
+                    length,
+                    priority,
+                })) = transmit.try_receive_with(Option::take)
                 else {
                     break;
                 };
-                // The MSDU is read where the stack wrote it: the data path
-                // encodes it into its MPDU buffer, its one copy here.
-                let refusal = match packet.view() {
-                    Ok(view) => match data.input(
-                        DataInput {
-                            msdu: Msdu {
-                                destination: view.destination,
-                                ether_type: view.ether_type,
-                                priority,
-                                payload: view.payload,
-                                admitted: now,
-                            },
-                            link: &mut link,
+                // The frame stays where the network wrote it: the data
+                // machine writes the MPDU header in front of its payload.
+                // A refused MSDU's memory goes back with the freed memory.
+                match data.input(
+                    DataInput {
+                        msdu: Msdu {
+                            memory,
+                            length: usize::from(length),
+                            priority,
+                            admitted: now,
                         },
-                        events,
-                    ) {
-                        Ok(tid) => {
-                            if let Some(seen) = tids.get_mut(usize::from(tid.value())) {
-                                *seen = Some(tid);
-                            }
-                            None
-                        }
-                        // The available-pool observation is dynamic and the
-                        // public data input can refuse it.
-                        Err(reason) => Some(reason.into()),
+                        link: &mut link,
                     },
-                    // The network checked the frame before it queued it.
-                    Err(_) => Some(contract::MsduRefusal::InvalidFrame),
-                };
-                if let Some(reason) = refusal {
-                    output.emit(ServiceOutput::MsduRefused { reason });
-                }
-                // The packet goes back for the network to drop on its own
-                // executor; its place was checked above.
-                let mut packet = Some(packet);
-                let _sent = returned.try_send_with(|slot| {
-                    *slot = packet.take();
-                    Ok::<_, core::convert::Infallible>(())
-                });
-                if let Some(packet) = packet {
-                    // A broken return queue: the packet stays quarantined
-                    // rather than dropped on this hart.
-                    let _quarantined = core::mem::ManuallyDrop::new(packet);
+                    events,
+                ) {
+                    Ok(tid) => {
+                        if let Some(seen) = tids.get_mut(usize::from(tid.value())) {
+                            *seen = Some(tid);
+                        }
+                    }
+                    // The available-pool observation is dynamic and the
+                    // public data input can refuse it.
+                    Err(reason) => output.emit(ServiceOutput::MsduRefused {
+                        reason: reason.into(),
+                    }),
                 }
             }
         }
@@ -2337,6 +2352,28 @@ impl<
             }
         }
         taken
+    }
+
+    /// Give the network the memory ended MPDUs held, while its queue has
+    /// room; whether memory still waits for room.
+    #[inline(never)]
+    fn return_freed<const TX_DEPTH: usize>(
+        &mut self,
+        returned: &mut SlotSender<
+            '_,
+            Option<B::TxMemory>,
+            TX_DEPTH,
+            impl QueueNotify,
+            impl QueueNotify,
+        >,
+    ) -> bool {
+        while returned.free_capacity() != 0 {
+            let Some(memory) = self.data.take_freed() else {
+                return false;
+            };
+            give_back(returned, memory);
+        }
+        self.data.has_freed()
     }
 
     /// Carry out every action the machines owe at `now`.
@@ -2353,7 +2390,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2488,7 +2525,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2661,7 +2698,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2737,7 +2774,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2810,7 +2847,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2865,7 +2902,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2921,7 +2958,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2966,7 +3003,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3027,7 +3064,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3064,7 +3101,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3171,7 +3208,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3208,7 +3245,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
-            impl oer_protocols_network_port::EthernetFrame,
+            B::TxMemory,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -4210,7 +4247,7 @@ fn station_action<
         impl ServiceOutputSink<B::Caps>,
         B::LentRx,
         impl NetworkStop,
-        impl oer_protocols_network_port::EthernetFrame,
+        B::TxMemory,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,

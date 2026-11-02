@@ -538,26 +538,73 @@ impl<K, O: ServiceOutputSink<K>, N: Notifies> ServiceOutputSink<K> for Events<'_
     }
 }
 
+/// The network's memory the station's data MSDUs come in, as the network
+/// end holds it: the memory a frame `P` is handed over in, and the memory
+/// the station gives back once an MSDU ended.
+pub trait TxSupply<P> {
+    /// The memory the station holds for one MSDU
+    /// ([`StationPort::TxMemory`](super::StationPort::TxMemory)).
+    type Memory;
+    /// Whether the frame [`Self::write`] last refused for want of memory
+    /// may go now: memory came back since, or none was refused.
+    fn available(&self) -> bool;
+    /// Hand `frame` over in memory, its Ethernet header where the data
+    /// machine reads it
+    /// ([`MSDU_ETHERNET_OFFSET`](oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET)):
+    /// the memory it was written in, or free memory it is copied into.
+    ///
+    /// # Errors
+    ///
+    /// No free memory for a copy ([`TransmitError::QueueFull`]) or a frame
+    /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
+    /// frame; a pool that refuses its own written memory loses both.
+    fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
+    /// Memory the station gave back: free again.
+    fn give(&mut self, memory: Self::Memory);
+}
+
+/// A frame [`TxSupply::write`] did not hand over.
+pub enum TxRefused<P> {
+    /// The frame stays the caller's, and the memory free.
+    Kept(TransmitRefused<P>),
+    /// The pool refused the memory the frame was written in: frame and
+    /// memory left the network's reach, the memory quarantined.
+    Lost,
+}
+
 /// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
 /// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)),
-/// `P` the network stack's packet owner a transmission hands over.
-pub struct Device<'c, L, P, const TX: usize, const RX: usize, N: Notifies = SameHart> {
-    /// The stack's packets for the station, owners and all: the station
-    /// reads each where the stack wrote it.
-    transmit: SlotSender<'c, Option<super::Outgoing<P>>, TX, N::Station, N::Network>,
-    /// The packets the station read, back for this end to drop on the
-    /// network's executor.
-    returned: SlotReceiver<'c, Option<P>, TX, N::Network, N::Station>,
+/// `P` the network stack's packet a transmission hands over and `S` the
+/// memory its frame goes into for the station.
+pub struct Device<
+    'c,
+    L,
+    P,
+    S: TxSupply<P>,
+    const TX: usize,
+    const RX: usize,
+    N: Notifies = SameHart,
+> {
+    /// The frames for the station, each in the network's memory, where the
+    /// station writes its MPDU header in place.
+    transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
+    /// The memory the station gave back, free for the next frames.
+    returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+    supply: S,
     receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     link: &'c super::NetworkLink<N::NetworkWaker>,
     observed: LinkSnapshot,
+    packet: core::marker::PhantomData<fn(P)>,
 }
 /// The network end over the station's channels and `state`'s link.
-impl<'c, L, P, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, P, TX, RX, N> {
+impl<'c, L, P, S: TxSupply<P>, const TX: usize, const RX: usize, N: Notifies>
+    Device<'c, L, P, S, TX, RX, N>
+{
     pub fn new(
-        transmit: SlotSender<'c, Option<super::Outgoing<P>>, TX, N::Station, N::Network>,
-        returned: SlotReceiver<'c, Option<P>, TX, N::Network, N::Station>,
+        transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
+        returned: SlotReceiver<'c, Option<S::Memory>, TX, N::Network, N::Station>,
+        supply: S,
         receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
         copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
         state: &'c State<N>,
@@ -565,19 +612,20 @@ impl<'c, L, P, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, P, T
         Self {
             transmit,
             returned,
+            supply,
             receive,
             copied,
             link: state.network_link(),
             observed: LinkSnapshot::DOWN,
+            packet: core::marker::PhantomData,
         }
     }
-    /// Drop every packet the station read and returned, here on the
-    /// network's executor, and register for the next return: its packet
-    /// and credit go back to the stack, whose wakes stay on its hart.
+    /// Take back every memory the station returned, here on the network's
+    /// executor, and register for the next return.
     fn reclaim(&mut self, cx: &mut Context<'_>) {
         loop {
-            while let Ok(packet) = self.returned.try_receive_with(Option::take) {
-                drop(packet);
+            while let Ok(Some(memory)) = self.returned.try_receive_with(Option::take) {
+                self.supply.give(memory);
             }
             if core::pin::pin!(self.returned.ready()).poll(cx).is_pending() {
                 return;
@@ -588,10 +636,11 @@ impl<'c, L, P, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, P, T
 impl<
     L: oer_protocols_ieee80211_contracts_port::LentRxBuffer,
     P: oer_protocols_network_port::EthernetFrame,
+    S: TxSupply<P>,
     const TX: usize,
     const RX: usize,
     N: Notifies,
-> NetDevice for Device<'_, L, P, TX, RX, N>
+> NetDevice for Device<'_, L, P, S, TX, RX, N>
 {
     type RxFrame = Received<L>;
     type TxFrame = P;
@@ -599,8 +648,8 @@ impl<
         self.link.snapshot()
     }
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
-        // The bridge polls the link on every turn: returned packets are
-        // dropped here even while the stack has nothing to send.
+        // The bridge polls the link on every turn: returned memory comes
+        // back here even while the stack has nothing to send.
         self.reclaim(cx);
         self.link.register(cx);
         let link = self.link();
@@ -638,11 +687,18 @@ impl<
         if self.link().state == LinkState::Down {
             return Poll::Pending;
         }
+        // Free memory comes back with the station's returns.
+        self.reclaim(cx);
+        if !self.supply.available() {
+            return Poll::Pending;
+        }
         core::pin::pin!(self.transmit.ready()).poll(cx)
     }
     fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
         let checked = if self.link().state == LinkState::Down {
             Err(TransmitError::LinkDown)
+        } else if self.transmit.free_capacity() == 0 {
+            Err(TransmitError::QueueFull)
         } else {
             frame
                 .view()
@@ -655,33 +711,46 @@ impl<
                     }
                     // The frame requests a priority from its VLAN or IP
                     // marking; the station decides the final one.
-                    Ok(classify_wmm(view.ether_type, view.payload).user_priority)
+                    let priority = classify_wmm(view.ether_type, view.payload).user_priority;
+                    // Header and payload: at most 14 + MAX_ETHERNET_PAYLOAD_LEN.
+                    let length = view
+                        .payload
+                        .len()
+                        .checked_add(14)
+                        .and_then(|length| u16::try_from(length).ok())
+                        .ok_or(TransmitError::InvalidLength(
+                            oer_protocols_network_port::FrameLengthError::TooLong,
+                        ))?;
+                    Ok((length, priority))
                 })
         };
-        let priority = match checked {
-            Ok(priority) => priority,
+        let (length, priority) = match checked {
+            Ok(checked) => checked,
             Err(reason) => return Err(TransmitRefused { frame, reason }),
         };
-        // The owner itself goes into the slot: the station reads the frame
-        // where the stack wrote it, with no copy here.
-        let mut frame = Some(frame);
-        let sent = self.transmit.try_send_with(|slot| {
-            *slot = frame
-                .take()
-                .map(|packet| super::Outgoing { packet, priority });
+        // The frame's memory goes to the station; the packet itself ends
+        // here, on the network's executor.
+        let memory = match self.supply.write(frame) {
+            Ok(memory) => memory,
+            Err(TxRefused::Kept(refused)) => return Err(refused),
+            // Accepted, then lost with its memory, as a frame lost on air.
+            Err(TxRefused::Lost) => return Ok(()),
+        };
+        let mut outgoing = Some(super::Outgoing {
+            memory,
+            length,
+            priority,
+        });
+        let _sent = self.transmit.try_send_with(|slot| {
+            *slot = outgoing.take();
             Ok::<_, core::convert::Infallible>(())
         });
-        match (sent, frame) {
-            (Ok(()), _) => Ok(()),
-            (Err(_), Some(frame)) => Err(TransmitRefused {
-                frame,
-                reason: TransmitError::QueueFull,
-            }),
-            // A slot the indices named was not free (`SlotSendError::Lost`,
-            // a broken queue) after the fill: the owner stays quarantined
-            // in that slot, released only with the queue's next split.
-            (Err(_), None) => Ok(()),
+        if let Some(outgoing) = outgoing {
+            // The room was checked above: a broken queue keeps the memory
+            // quarantined rather than reused under the station.
+            let _quarantined = core::mem::ManuallyDrop::new(outgoing);
         }
+        Ok(())
     }
 }
 

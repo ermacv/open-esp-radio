@@ -308,6 +308,31 @@ pub struct PinnedDmaTxNetworkLease<
 impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
     PinnedDmaTxNetworkLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER>
 {
+    /// The slot's frame bytes, all `FRAME_CAPACITY` of them, for a writer
+    /// that fills them across calls before [`Self::publish_written`]. No
+    /// radio owner observes them before that publication.
+    pub fn bytes_mut(&mut self) -> &mut [u8] {
+        // SAFETY: this non-Clone Network lease is the unique SLOT_NETWORK
+        // owner, and `&mut self` makes this the only borrow of its bytes. No
+        // radio lease can exist before `publish_ready`, which consumes the
+        // lease. The frame bytes lie inside the slot's padding-free storage.
+        #[allow(unsafe_code, reason = "network lease uniquely initializes its TX slot")]
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                self.slot.storage_mut_ptr().wrapping_add(HEADROOM),
+                FRAME_CAPACITY,
+            )
+        }
+    }
+
+    /// Publish the first `length` bytes written through
+    /// [`Self::bytes_mut`], consuming the network lease.
+    pub fn publish_written(mut self, length: FrameLen<FRAME_CAPACITY>) -> u8 {
+        self.slot.publish_ready(length);
+        self.live = false;
+        self.index
+    }
+
     /// Write and publish one frame, consuming its network lease.
     ///
     /// The checked length bounds the writer's slice. On callback unwind the
@@ -317,19 +342,9 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         length: FrameLen<FRAME_CAPACITY>,
         write: impl FnOnce(&mut [u8]) -> R,
     ) -> (u8, R) {
-        // SAFETY: this non-Clone Network lease is the unique SLOT_NETWORK
-        // owner. No radio lease can exist before `publish_ready` below.
-        #[allow(unsafe_code, reason = "network lease uniquely initializes its TX slot")]
-        let storage = unsafe {
-            core::slice::from_raw_parts_mut(
-                self.slot.storage_mut_ptr().wrapping_add(HEADROOM),
-                length.get(),
-            )
-        };
-        let result = write(storage);
-        self.slot.publish_ready(length);
-        self.live = false;
-        (self.index, result)
+        // The checked length is at most FRAME_CAPACITY.
+        let result = write(self.bytes_mut().get_mut(..length.get()).unwrap_or_default());
+        (self.publish_written(length), result)
     }
 
     /// Writes one frame transactionally and publishes it only on success.
@@ -344,22 +359,11 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize>
         length: FrameLen<FRAME_CAPACITY>,
         write: impl FnOnce(&mut [u8]) -> Result<R, E>,
     ) -> Result<(u8, R), (Self, E)> {
-        // SAFETY: this non-Clone Network lease is the unique SLOT_NETWORK
-        // owner. No radio lease can exist before `publish_ready` below.
-        #[allow(unsafe_code, reason = "network lease uniquely initializes its TX slot")]
-        let storage = unsafe {
-            core::slice::from_raw_parts_mut(
-                self.slot.storage_mut_ptr().wrapping_add(HEADROOM),
-                length.get(),
-            )
-        };
-        let result = match write(storage) {
-            Ok(result) => result,
-            Err(error) => return Err((self, error)),
-        };
-        self.slot.publish_ready(length);
-        self.live = false;
-        Ok((self.index, result))
+        // The checked length is at most FRAME_CAPACITY.
+        match write(self.bytes_mut().get_mut(..length.get()).unwrap_or_default()) {
+            Ok(result) => Ok((self.publish_written(length), result)),
+            Err(error) => Err((self, error)),
+        }
     }
 
     pub fn release(mut self) -> u8 {
@@ -393,8 +397,13 @@ pub struct PinnedDmaTxRadioLease<
     _prepare: PhantomData<fn() -> P>,
 }
 
-impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P: DmaReadPrepare>
-    PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>
+impl<
+    'pool,
+    const FRAME_CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    P: DmaReadPrepare,
+> PinnedDmaTxRadioLease<'pool, FRAME_CAPACITY, HEADROOM, TRAILER, P>
 {
     pub const fn ethernet_offset(&self) -> usize {
         HEADROOM
@@ -447,6 +456,22 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P
         self.slot.release();
         self.live = false;
         self.index
+    }
+
+    /// Hand the slot straight back to a network writer, without freeing it:
+    /// the radio is done with its bytes, and the writer's next frame
+    /// replaces them.
+    pub fn into_network(
+        mut self,
+    ) -> PinnedDmaTxNetworkLease<'pool, FRAME_CAPACITY, HEADROOM, TRAILER> {
+        self.slot.length.store(0, Ordering::Relaxed);
+        self.slot.state.store(SLOT_NETWORK, Ordering::Release);
+        self.live = false;
+        PinnedDmaTxNetworkLease {
+            slot: self.slot,
+            index: self.index,
+            live: true,
+        }
     }
 }
 

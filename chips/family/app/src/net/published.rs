@@ -189,6 +189,7 @@ fn error_code(error: ServiceError) -> (u8, u32) {
         ServiceError::RouteTableFull => (10, 0),
         ServiceError::DhcpMediumMismatch => (11, 0),
         ServiceError::ContextAccessRefused => (12, 0),
+        ServiceError::GeneralWaiterUnavailable => (13, 0),
     }
 }
 
@@ -208,6 +209,7 @@ fn error_of(code: u8, detail: u32) -> Option<ServiceError> {
         10 => ServiceError::RouteTableFull,
         11 => ServiceError::DhcpMediumMismatch,
         12 => ServiceError::ContextAccessRefused,
+        13 => ServiceError::GeneralWaiterUnavailable,
         _ => return None,
     })
 }

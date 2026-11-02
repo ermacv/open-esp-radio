@@ -17,29 +17,38 @@ pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observ
 }
 type ReturnRight<const B: usize> = oer_portable_memory::ReturnToken<'static, TxBacking<B>>;
 
-/// One buffer place's pool buffer and its sole right of return, held
-/// together: memory never exists here without its right.
+/// Where a buffer place's memory goes when the place lets it go.
+enum Home<const B: usize> {
+    /// The pool buffer of the place: the sole right returns it to its bank.
+    Bank(ReturnRight<B>),
+    /// A network's memory, lent for one MSDU: it leaves the place again.
+    Network,
+}
+
+/// One buffer place's memory and where it returns, held together: memory
+/// never exists here without its home.
 enum Dma<const B: usize> {
-    /// The CPU owns the memory; its right travels with it, and dropping the
-    /// buffer returns the memory.
-    Free {
-        memory: TxBacking<B>,
-        returned: ReturnRight<B>,
-    },
-    /// The hardware owns the memory; the right waits for the completion
-    /// that hands it back. Dropped here, the place stays out of the bank.
-    Published { returned: ReturnRight<B> },
-    /// Neither: the place had no returned memory, or its pair moved on.
+    /// The CPU owns the memory; its home travels with it. Dropping the
+    /// buffer returns bank memory to the bank and lets network memory's
+    /// lease release its slot.
+    Free { memory: TxBacking<B>, home: Home<B> },
+    /// The hardware owns the memory; its home waits for the completion that
+    /// hands it back. Dropped here, the memory stays out of both.
+    Published { home: Home<B> },
+    /// Neither: the place holds no memory, or its pair moved on.
     Released,
 }
 
 /// A buffer place's [`Dma`]; dropping it returns CPU-owned memory.
 pub(super) struct ReturnableBuffer<const B: usize>(Dma<B>);
 impl<const B: usize> ReturnableBuffer<B> {
-    /// The pair the bank's place hands out, or nothing to return.
+    /// The pair the bank's place hands out, or a place without memory.
     pub(super) fn taken(pair: Option<(TxBacking<B>, ReturnRight<B>)>) -> Self {
         Self(match pair {
-            Some((memory, returned)) => Dma::Free { memory, returned },
+            Some((memory, returned)) => Dma::Free {
+                memory,
+                home: Home::Bank(returned),
+            },
             None => Dma::Released,
         })
     }
@@ -57,12 +66,12 @@ impl<const B: usize> ReturnableBuffer<B> {
             .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)?
             .get_mut(..len)
     }
-    /// Hand the memory to the hardware, keeping its right; `None`, and no
+    /// Hand the memory to the hardware, keeping its home; `None`, and no
     /// change, unless the CPU owns it.
     pub(super) fn publish(&mut self) -> Option<TxBacking<B>> {
         match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Free { memory, returned } => {
-                self.0 = Dma::Published { returned };
+            Dma::Free { memory, home } => {
+                self.0 = Dma::Published { home };
                 Some(memory)
             }
             other => {
@@ -71,12 +80,12 @@ impl<const B: usize> ReturnableBuffer<B> {
             }
         }
     }
-    /// The completion handed `memory` back: it rejoins its right. Refused,
+    /// The completion handed `memory` back: it rejoins its home. Refused,
     /// with the memory and no change, unless the hardware owned it.
     pub(super) fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
         match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Published { returned } => {
-                self.0 = Dma::Free { memory, returned };
+            Dma::Published { home } => {
+                self.0 = Dma::Free { memory, home };
                 Ok(())
             }
             other => {
@@ -85,10 +94,41 @@ impl<const B: usize> ReturnableBuffer<B> {
             }
         }
     }
+    /// Hold a network's `memory`; refused, unchanged, unless the place
+    /// holds none.
+    pub(super) fn install(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
+        if matches!(self.0, Dma::Released) {
+            self.0 = Dma::Free {
+                memory,
+                home: Home::Network,
+            };
+            Ok(())
+        } else {
+            Err(memory)
+        }
+    }
+    /// The network's memory the CPU holds here; `None`, and no change, for
+    /// bank memory, memory the hardware owns, or none.
+    pub(super) fn uninstall(&mut self) -> Option<TxBacking<B>> {
+        match core::mem::replace(&mut self.0, Dma::Released) {
+            Dma::Free {
+                memory,
+                home: Home::Network,
+            } => Some(memory),
+            other => {
+                self.0 = other;
+                None
+            }
+        }
+    }
 }
 impl<const B: usize> Drop for ReturnableBuffer<B> {
     fn drop(&mut self) {
-        if let Dma::Free { memory, returned } = core::mem::replace(&mut self.0, Dma::Released) {
+        if let Dma::Free {
+            memory,
+            home: Home::Bank(returned),
+        } = core::mem::replace(&mut self.0, Dma::Released)
+        {
             returned.return_value(memory);
         }
     }
@@ -402,6 +442,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (buffer.mpdu.buffer, buffer.mpdu.body)
     }
+    type NetworkMemory = TxBacking<B>;
+    fn install(buffer: &mut Self::Buffer, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
+        buffer.dma.install(memory)
+    }
+    fn uninstall(buffer: &mut Self::Buffer) -> Option<TxBacking<B>> {
+        buffer.dma.uninstall()
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PhaseTypes<'id>
@@ -509,6 +556,36 @@ mod tests {
         let mut buffer = ReturnableBuffer::taken(bank.take(0));
         assert!(buffer.memory_mut().is_none());
         assert!(buffer.publish().is_none());
+    }
+
+    #[test]
+    fn a_place_without_memory_holds_a_networks_memory_and_lets_it_go_again() {
+        let mut buffer = ReturnableBuffer::<512>::taken(None);
+        assert!(buffer.uninstall().is_none(), "nothing to let go");
+        assert!(buffer.install(bank_memory()).is_ok());
+        assert!(
+            buffer.install(bank_memory()).is_err(),
+            "one memory at a time"
+        );
+        // Published and completed, it stays the network's.
+        let memory = buffer.publish().expect("the CPU owned it");
+        assert!(buffer.uninstall().is_none(), "the hardware owns it");
+        assert!(buffer.complete(memory).is_ok());
+        assert!(buffer.uninstall().is_some());
+        assert!(
+            buffer.memory_mut().is_none(),
+            "the place holds no memory again"
+        );
+    }
+
+    #[test]
+    fn a_places_own_memory_never_leaves_for_a_network() {
+        let bank = bank();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        assert!(buffer.install(bank_memory()).is_err());
+        assert!(buffer.uninstall().is_none());
+        drop(buffer);
+        assert!(bank.take(0).is_some(), "the memory went back to its place");
     }
 
     /// Free memory of another model pool.
