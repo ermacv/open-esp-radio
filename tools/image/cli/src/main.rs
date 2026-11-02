@@ -33,7 +33,7 @@ enum Command {
         /// Select another binary of the image package.
         #[arg(long)]
         bin: Option<String>,
-        /// Package an unqualified firmware/probes image with reported checks.
+        /// Package an unqualified hil/probes image with reported checks.
         #[arg(long)]
         diagnostic: bool,
         /// Cargo features of the image package, comma-separated or repeated.
@@ -58,7 +58,7 @@ enum Command {
         #[arg(long)]
         source_root: Option<std::path::PathBuf>,
     },
-    /// Build a probe image of firmware/probes (a package named
+    /// Build a probe image of hil/probes (a package named
     /// `oer-firmware-probes-<chip>-…`) with `cfg(oer_probe)` into
     /// target/fw-probe/ and print its path.
     Probe {

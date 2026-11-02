@@ -1,6 +1,6 @@
 //! Build each chip's caller-owned vendor comparison artifacts.
 //!
-//! The probes are the packages of `firmware/probes/` (`<chip>-<name>`), built by
+//! The probes are the packages of `hil/probes/` (`<chip>-<name>`), built by
 //! `cargo fw`'s probe build (`oer_image_build::probe`): the chip's
 //! image compiler, with `cfg(oer_probe)`, in the probe target directory.
 
@@ -12,7 +12,7 @@ const JOBS: &str = "OPEN_RADIO_ANALYSIS_BUILD_JOBS";
 
 /// One probe image: its chip and the profile's `[[probe]]` entry.
 struct Probe {
-    /// The chip whose `firmware/probes/` (`<chip>-<name>`) holds the image.
+    /// The chip whose `hil/probes/` (`<chip>-<name>`) holds the image.
     chip: String,
     probe: oer_chip_profile::Probe,
 }

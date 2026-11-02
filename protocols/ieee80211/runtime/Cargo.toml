@@ -42,7 +42,7 @@ oer-ieee80211-wire = { path = "../wire" }
 critical-section = { version = "1.2.0", features = ["std"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-port = { path = "../../radio/port", features = ["test-support"] }
-oer-espressif-ieee80211-policy = { path = "../../../chips/espressif/ieee80211-policy" }
+oer-espressif-ieee80211-policy = { path = "../../../chips/family/ieee80211-policy" }
 oer-ieee80211-core-security-rsn = { path = "../core/security/rsn" }
 oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 

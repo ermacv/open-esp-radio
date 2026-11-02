@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn the_boot_smoke_image_declares_hart_1() {
         let manifest: toml::Value = toml::from_str(include_str!(
-            "../../../../firmware/apps/boot-smoke/Cargo.toml"
+            "../../../../hil/probes/boot-smoke/Cargo.toml"
         ))
         .unwrap();
         let package = &manifest["package"];

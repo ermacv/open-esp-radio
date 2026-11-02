@@ -121,11 +121,11 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | --- | --- |
 | Volatile register words and their claim | `portable/mmio` |
 | Semantic PACs and the HAL | `chips/esp32s31/pac`, `chips/esp32s31/hal` |
-| Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/board`, `chips/espressif/staged-bootstrap`, `chips/espressif/staged-runtime`, `chips/espressif/interrupt-table`, `chips/espressif/executor`, `portable/riscv` |
-| Cores of memory the hardware shares | `portable/memory`, `chips/espressif/staged-layout` |
+| Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/board`, `chips/family/staged-bootstrap`, `chips/family/staged-runtime`, `chips/family/interrupt-table`, `chips/family/executor`, `portable/riscv` |
+| Cores of memory the hardware shares | `portable/memory`, `chips/family/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
-| Bootstrap and probe images | `firmware/bootstrap/`, `firmware/probes/` |
+| Bootstrap and probe images | `firmware/bootstrap/`, `hil/probes/` |
 
 `oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
 vector ABI and staged-runtime symbols. CLIC line encodings live in
@@ -905,8 +905,8 @@ The adapter's two pointer dereferences extend no stack allocation's lifetime.
 The S31 composition sends only frontend endpoints to P1 and retains the slot
 manager and registration in its P2 task, establishing the cleanup Drop context.
 
-The platform crates (the boards and `chips/espressif/staged-*`), the bootstrap images
-(`firmware/bootstrap/*`) and the probe images (`firmware/probes/*`) own the
+The platform crates (the boards and `chips/family/staged-*`), the bootstrap images
+(`firmware/bootstrap/*`) and the probe images (`hil/probes/*`) own the
 target ABI and placement, so they hold unsafe code that no crate above them
 needs:
 
@@ -973,7 +973,7 @@ needs:
   record across system reset. Controlled interrupt-admission entry stubs delimit the
   threshold-write experiment; the installed trap ABI preserves their registers.
   Only the masked thread publishes the LP record before the reset fence.
-  In `firmware/probes/esp32s31-facts/src/image.rs`, `SAR_CONTEXT` publishes
+  In `hil/probes/esp32s31-facts/src/image.rs`, `SAR_CONTEXT` publishes
   the masked thread's exclusive `Sar` borrow to the isolated P2 handler.
   Its atomic swap to null admits exactly one handler dereference; the
   thread accesses no SAR owner until the handler returns and MIE is masked.
@@ -990,8 +990,8 @@ each unsafe attribute in them carries its `// SAFETY:` comment as well.
 
 Direct dependencies on the PAC are restricted independently of unsafe
 syntax. The allowed consumers are the chip's `hal` under `esp32s31/` and the
-explicitly admitted PAC-only facts image `firmware/probes/esp32s31-facts`.
-Other `firmware/probes/*-facts` packages require a separate layer-test admission.
+explicitly admitted PAC-only facts image `hil/probes/esp32s31-facts`.
+Other `hil/probes/*-facts` packages require a separate layer-test admission.
 The facts image's trap/vector ABI lives inside its own package: `global_asm!`
 uses offsets from its own Rust frame and a generated CPU-line table. All
 nonzero vectors enter the same register-preserving assembly entry and handler.

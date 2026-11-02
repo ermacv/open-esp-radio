@@ -87,7 +87,7 @@ at the chip's current pin, with its pinned header submodules initialized.
 `--check` repeats generation and requires byte-for-byte equal facts.
 
 The SDK configuration is an explicit input. The checked-in facts use the
-generated configuration of `firmware/vendor/esp32s31/ble-scan-reference`,
+generated configuration of `tools/vendor/references/esp32s31/ble-scan-reference`,
 configured for `IDF_TARGET=esp32s31` with the pinned ESP-IDF and the project's
 `sdkconfig.defaults`. CMake configuration produces `config/sdkconfig.h`
 without building firmware. Keep its build directory and `SDKCONFIG` under

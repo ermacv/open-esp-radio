@@ -15,36 +15,36 @@ bluetooth-engine = []
 test-support = ["oer-espressif-radio/test-support"]
 
 [dependencies]
-oer-espressif-bluetooth-engine = { path = "../../espressif/bluetooth-engine" }
-oer-espressif-phy = { path = "../../espressif/phy" }
-oer-espressif-radio = { path = "../../espressif/radio" }
+oer-espressif-bluetooth-engine = { path = "../../family/bluetooth-engine" }
+oer-espressif-phy = { path = "../../family/phy" }
+oer-espressif-radio = { path = "../../family/radio" }
 oer-esp32s31-knowledge = { path = "../knowledge" }
-oer-espressif-efuse = { path = "../../espressif/efuse" }
-oer-espressif-watchdog = { path = "../../espressif/watchdog" }
-oer-espressif-boot = { path = "../../espressif/boot" }
+oer-espressif-efuse = { path = "../../family/efuse" }
+oer-espressif-watchdog = { path = "../../family/watchdog" }
+oer-espressif-boot = { path = "../../family/boot" }
 oer-mmio = { path = "../../../portable/mmio" }
-oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../family/interrupt-table" }
 oer-riscv = { path = "../../../portable/riscv" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
-oer-espressif-analog = { path = "../../espressif/analog" }
+oer-espressif-analog = { path = "../../family/analog" }
 oer-diagnostics = { path = "../../../portable/diagnostics" }
 oer-memory = { path = "../../../portable/memory" }
 oer-time = { path = "../../../portable/time" }
 oer-esp32s31-pac = { path = "../pac" }
-oer-espressif-coex = { path = "../../espressif/coex" }
-oer-espressif-ieee802154-mac-values = { path = "../../espressif/ieee802154-mac-values" }
-oer-espressif-modem-clock = { path = "../../espressif/modem-clock" }
+oer-espressif-coex = { path = "../../family/coex" }
+oer-espressif-ieee802154-mac-values = { path = "../../family/ieee802154-mac-values" }
+oer-espressif-modem-clock = { path = "../../family/modem-clock" }
 oer-radio-coex = { path = "../../../protocols/radio/coex" }
-oer-espressif-usb-serial-jtag = { path = "../../espressif/usb-serial-jtag" }
+oer-espressif-usb-serial-jtag = { path = "../../family/usb-serial-jtag" }
 # The HAL implements the family platform contracts and selects its chip.
-oer-espressif-platform-port = { path = "../../espressif/platform-port", features = ["esp32s31"] }
+oer-espressif-platform-port = { path = "../../family/platform-port", features = ["esp32s31"] }
 
 [build-dependencies]
-oer-espressif-facts = { path = "../../espressif/facts" }
+oer-espressif-facts = { path = "../../family/facts" }
 
 [dev-dependencies]
-oer-espressif-radio = { path = "../../espressif/radio", features = ["test-support"] }
+oer-espressif-radio = { path = "../../family/radio", features = ["test-support"] }
 oer-time-virtual = { path = "../../../portable/time-virtual" }
 oer-radio-regulatory = { path = "../../../protocols/radio/regulatory", features = ["test-support"] }
 critical-section = { version = "1.2.0", features = ["std"] }

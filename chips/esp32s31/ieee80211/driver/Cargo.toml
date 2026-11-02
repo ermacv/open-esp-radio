@@ -17,7 +17,7 @@ pin-project = "1.1.13"
 subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.9.0", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
-oer-espressif-coex = { path = "../../../espressif/coex" }
+oer-espressif-coex = { path = "../../../family/coex" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-phy = { path = "../../phy" }
 oer-esp32s31-radio-client = { path = "../../radio/client" }
@@ -28,10 +28,10 @@ oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
 oer-ieee80211-contracts-security = { path = "../../../../protocols/ieee80211/contracts/security" }
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-time = { path = "../../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../../family/interrupt-table" }
 
 [target.'cfg(oer_debug_control)'.dependencies]
-oer-espressif-staged-runtime = { path = "../../../espressif/staged-runtime" }
+oer-espressif-staged-runtime = { path = "../../../family/staged-runtime" }
 oer-trace = { path = "../../../../portable/trace" }
 
 [features]
@@ -42,11 +42,11 @@ test-support = ["oer-esp32s31-hal/test-support", "oer-espressif-interrupt-table/
 oer-embassy-net = { path = "../../../../portable/embassy/net" }
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
-oer-espressif-ieee80211-policy = { path = "../../../espressif/ieee80211-policy" }
+oer-espressif-ieee80211-policy = { path = "../../../family/ieee80211-policy" }
 oer-ieee80211-core-upper-mac = { path = "../../../../protocols/ieee80211/core/upper-mac" }
 oer-ieee80211-testing-conformance = { path = "../../../../protocols/ieee80211/testing/conformance" }
 
-oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table", features = ["host-signal"] }
+oer-espressif-interrupt-table = { path = "../../../family/interrupt-table", features = ["host-signal"] }
 oer-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 

@@ -1,7 +1,7 @@
 //! Direct PAC authority is admitted by exact package path, never by suffix.
 use std::path::Path;
 
-const FACTS: &str = "firmware/probes/esp32s31-facts";
+const FACTS: &str = "hil/probes/esp32s31-facts";
 const PAC: &str = "oer-esp32s31-pac";
 const IMAGE: &str = "oer-firmware-probes-esp32s31-facts";
 
@@ -80,8 +80,8 @@ fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
         assert!(found.is_empty());
     }
     for owner in [
-        "firmware/probes/esp32s31-radio",
-        "firmware/probes/other-facts",
+        "hil/probes/esp32s31-radio",
+        "hil/probes/other-facts",
         "firmware/apps/x",
     ] {
         let mut found = Vec::new();
@@ -106,7 +106,7 @@ fn workspace_aliases_are_resolved_at_the_actual_consumer() {
         toml::from_str("[dependencies]\nrenamed = { workspace = true }").unwrap();
     let mut found = Vec::new();
     inspect(
-        "firmware/probes/other-facts",
+        "hil/probes/other-facts",
         &consumer,
         Some(&workspace),
         &mut found,

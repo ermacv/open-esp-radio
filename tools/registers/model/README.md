@@ -1024,7 +1024,7 @@ a module per instance with a module per register holding its `ADDRESS` and
 a `Field` per field and view, `REGISTERS` (each byte's described, opaque
 and reserved bits and known reset), `READ_SAFE` (the bytes a finite
 reviewed epoch admits to a read) and `CAPTURE` (those with an explicit
-comparison mask). The value types are `chips/espressif/analog::model`'s.
+comparison mask). The value types are `chips/family/analog::model`'s.
 `AnalogAddress { block, index }` is a transport identity, never a CPU
 address.
 

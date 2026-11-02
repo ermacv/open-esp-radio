@@ -5,9 +5,9 @@ use proc_macro2::{TokenStream, TokenTree};
 
 // Only these crates/files may own assembly outside the instruction API.
 const ABI_ASSEMBLY: &[(&str, &[&str])] = &[
-    ("chips/espressif/staged-bootstrap", &["src/entry.rs"]),
+    ("chips/family/staged-bootstrap", &["src/entry.rs"]),
     (
-        "chips/espressif/staged-runtime",
+        "chips/family/staged-runtime",
         &["src/entry.rs", "src/stacks.rs"],
     ),
 ];
@@ -29,7 +29,7 @@ fn allowed(package: &str, file: &str, instruction: &str) -> bool {
         .iter()
         .any(|(owner, files)| package == *owner && files.contains(&file))
         || package.starts_with("firmware/bootstrap/")
-        || package.starts_with("firmware/probes/")
+        || package.starts_with("hil/probes/")
 }
 
 fn assembly(tokens: TokenStream, found: &mut Vec<String>) {
@@ -118,7 +118,7 @@ fn architectural_instructions_stay_in_oer_riscv() {
 #[should_panic(expected = "assembly instruction ownership")]
 fn a_new_crate_with_asm_is_rejected_even_below_the_unsafe_boundary() {
     let root = tempfile::tempdir().expect("temporary source tree");
-    let package = root.path().join("firmware/probes/unreviewed");
+    let package = root.path().join("hil/probes/unreviewed");
     std::fs::create_dir_all(package.join("src")).expect("fixture directory");
     std::fs::write(
         package.join("Cargo.toml"),
@@ -138,7 +138,7 @@ fn a_new_crate_with_asm_is_rejected_even_below_the_unsafe_boundary() {
 fn inline_assembly_in_integration_tests_is_rejected() {
     for package in [
         "portable/unreviewed",
-        "firmware/probes/unreviewed",
+        "hil/probes/unreviewed",
         "tools/analysis/cli",
     ] {
         let root = tempfile::tempdir().expect("temporary source tree");
@@ -193,23 +193,23 @@ fn abi_exceptions_do_not_allow_inline_operations_or_other_files() {
     assert!(allowed("portable/riscv", "src/instructions.rs", "asm"));
     for instruction in ["asm", "global_asm", "naked_asm"] {
         assert!(!allowed(
-            "chips/espressif/staged-bootstrap",
+            "chips/family/staged-bootstrap",
             "src/runtime.rs",
             instruction
         ));
     }
     assert!(allowed(
-        "chips/espressif/staged-runtime",
+        "chips/family/staged-runtime",
         "src/stacks.rs",
         "global_asm"
     ));
     assert!(!allowed(
-        "chips/espressif/staged-runtime",
+        "chips/family/staged-runtime",
         "src/stacks.rs",
         "asm"
     ));
     assert!(!allowed(
-        "chips/espressif/staged-runtime",
+        "chips/family/staged-runtime",
         "src/other.rs",
         "naked_asm"
     ));

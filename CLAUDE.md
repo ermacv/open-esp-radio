@@ -26,8 +26,8 @@ system these rules serve.
   host tools. The PAC's single `take()` claims the chip; the HAL's
   `Root::take` splits it through `into_bootstrap` or `into_runtime`.
   Only these owned partitions grant register access. The repository holds
-  no Rust code for the ESP32-C5: its ESP-IDF peers (`firmware/peers`,
-  `firmware/vendor/esp32c5`), their pins and their flash map are all of it.
+  no Rust code for the ESP32-C5: its ESP-IDF peers (`tools/lab/peers`,
+  `tools/vendor/references/esp32c5`), their pins and their flash map are all of it.
 - **Compile time first.** Every check that can run at compile time runs there.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
@@ -179,7 +179,7 @@ system these rules serve.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, Espressif interrupt bindings in
-  `chips/espressif/interrupt-table`, typed symbol export attributes in
+  `chips/family/interrupt-table`, typed symbol export attributes in
   `portable/memory`, the PAC's one root claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.

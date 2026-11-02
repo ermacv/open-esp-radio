@@ -13,7 +13,7 @@ through the Espressif platform contracts.
 | [Wi-Fi driver](ieee80211/driver/README.md) | Lower-MAC port backend and its DMA/IRQ lifecycle |
 | [Bluetooth driver](bluetooth/driver/README.md) | Controller engine, scheduler and DTM physical runner |
 | [IEEE 802.15.4 driver](ieee802154/driver/README.md) | Family MAC engine bound to S31 HAL and permanent frame storage |
-| [Coexistence](../espressif/coex/README.md) | Family priority, timer and schedule policy; no combined schedule runtime |
+| [Coexistence](../family/coex/README.md) | Family priority, timer and schedule policy; no combined schedule runtime |
 | [Platform facts](platform/README.md) and [board](board/README.md) | Hart geometry, image layout and board mapping adoption |
 
 Exclusive root ownership and inactive route selection do not establish safe

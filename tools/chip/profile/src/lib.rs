@@ -7,7 +7,7 @@
 //! extend it. A [`Profile`] is the resolved facts of the chip's board and the
 //! image registry its chip layer holds (`[packages]`, `[[probe]]`).
 //! Everything else follows the id by convention
-//! (`firmware/probes/<id>-<name>`, `chips/<id>/registers`), and a capability exists
+//! (`hil/probes/<id>-<name>`, `chips/<id>/registers`), and a capability exists
 //! where its directory does.
 //! Host tools resolve a chip through [`Profile::load`] instead of matching
 //! chip names, so an unknown chip is refused with the supported ones.
@@ -45,7 +45,7 @@ pub struct Profile {
     /// The chip's packages as the repository policies classify them.
     pub packages: Packages,
     /// The Rust probe images of the chip's vendor comparison, in build
-    /// order (`firmware/probes/<id>-*`).
+    /// order (`hil/probes/<id>-*`).
     pub probe: Vec<Probe>,
 }
 
@@ -88,7 +88,7 @@ pub struct Packages {
 }
 
 /// One Rust probe image of the vendor comparison: the artifact role it
-/// serves and its package in `firmware/probes/<id>-*`. Every probe
+/// serves and its package in `hil/probes/<id>-*`. Every probe
 /// compiles in the host's one firmware compile cache.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -382,8 +382,8 @@ mod tests {
         Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
         let read: Vec<PathBuf> = inputs.into_digests().into_keys().collect();
         let mut expected: Vec<PathBuf> = [
-            "chips/espressif/platform/isa/rv32imafc.toml",
-            "chips/espressif/platform/family.toml",
+            "chips/family/platform/isa/rv32imafc.toml",
+            "chips/family/platform/family.toml",
             "chips/esp32s31/platform/chip.toml",
             "chips/esp32s31/platform/rom-rev0.toml",
             "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",

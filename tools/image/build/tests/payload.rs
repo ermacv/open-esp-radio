@@ -100,7 +100,7 @@ fn a_field_outside_the_header_is_a_contract_error_not_a_panic() {
 /// The fixture line `key` of the stage-two packing fixture the bootstrap's
 /// contract (`oer-espressif-staged-layout`) checks too.
 fn fixture(key: &str) -> String {
-    include_str!("../../../../chips/espressif/staged-layout/fixtures/stage-two.txt")
+    include_str!("../../../../chips/family/staged-layout/fixtures/stage-two.txt")
         .lines()
         .find_map(|line| Some(line.strip_prefix(key)?.strip_prefix(' ')?.to_owned()))
         .unwrap()

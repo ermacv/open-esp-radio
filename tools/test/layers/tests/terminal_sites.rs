@@ -31,7 +31,7 @@ const CLASSES: &[&str] = &[
 // terminal decision; the registry names the image/platform owner of each reason.
 const REASON_ENUMS: &[(&str, &str)] = &[
     (
-        "chips/espressif/staged-runtime/src/panic/fault.rs",
+        "chips/family/staged-runtime/src/panic/fault.rs",
         "FaultReason",
     ),
     (
@@ -136,8 +136,8 @@ impl Scanner<'_> {
 
     fn image_panic_scope(&self) -> bool {
         image_file(self.file)
-            || self.file.starts_with("chips/espressif/staged-runtime/")
-            || self.file.starts_with("chips/espressif/staged-bootstrap/")
+            || self.file.starts_with("chips/family/staged-runtime/")
+            || self.file.starts_with("chips/family/staged-bootstrap/")
     }
 
     // Macro bodies are token trees: inspect definitions as well as invocations,
@@ -365,10 +365,10 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         }
         match item {
             syn::Item::Const(item) => {
-                if (self.file == "chips/espressif/staged-runtime/src/panic.rs"
+                if (self.file == "chips/family/staged-runtime/src/panic.rs"
                     && item.ident == "INVALID_HART")
-                    || (self.file == "chips/espressif/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
-                    || (self.file == "chips/espressif/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
+                    || (self.file == "chips/family/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
+                    || (self.file == "chips/family/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
                 {
                     self.add(item.ident.span(), "retained-reason", &item.ident);
                 }
@@ -495,7 +495,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
     }
 
     fn visit_expr_call(&mut self, expr: &'ast syn::ExprCall) {
-        if self.file == "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs"
+        if self.file == "hil/probes/esp32s31-rx-chain/src/diagnostic.rs"
             && matches!(&*expr.func, syn::Expr::Path(path) if path.path.is_ident("record"))
             && let Some(syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Int(code),
@@ -815,10 +815,10 @@ fn admitted_owner(id: &str) -> Option<&str> {
     if [
         "chips/esp32s31/hal",
         "chips/esp32s31/compose",
-        "chips/espressif/staged-runtime",
-        "chips/espressif/staged-bootstrap",
-        "chips/espressif/executor",
-        "sdk/espressif",
+        "chips/family/staged-runtime",
+        "chips/family/staged-bootstrap",
+        "chips/family/executor",
+        "oer",
     ]
     .contains(&home)
         || image_file(home)
@@ -929,14 +929,14 @@ fn scanner_finds_macros_callbacks_and_reasons_but_skips_tests_and_const_blocks()
 fn metadata_requires_an_admitted_owner_and_fault_class() {
     for metadata in [
         "{ owner = 'protocols/wire', classes = ['rust-panic'] }",
-        "{ owner = 'firmware/apps/boot-smoke', classes = [] }",
-        "{ owner = 'firmware/apps/boot-smoke', classes = ['impossible-because-named-fault'] }",
-        "{ owner = 'firmware/apps/boot-smoke', classes = ['hardware-impossible'] }",
-        "{ owner = 'firmware/apps/radio-root', classes = ['rust-panic'] }",
+        "{ owner = 'hil/probes/boot-smoke', classes = [] }",
+        "{ owner = 'hil/probes/boot-smoke', classes = ['impossible-because-named-fault'] }",
+        "{ owner = 'hil/probes/boot-smoke', classes = ['hardware-impossible'] }",
+        "{ owner = 'hil/probes/radio-root', classes = ['rust-panic'] }",
     ] {
-        assert!(registry(&format!("version = 1\n[sites]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
+        assert!(registry(&format!("version = 1\n[sites]\n'hil/probes/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
     }
-    assert!(registry("version = 1\n[sites]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'firmware/apps/boot-smoke', classes = ['rust-panic'] }\n").is_ok());
+    assert!(registry("version = 1\n[sites]\n'hil/probes/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'hil/probes/boot-smoke', classes = ['rust-panic'] }\n").is_ok());
 }
 
 #[test]
@@ -1007,7 +1007,7 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
     "#;
     let parsed = syn::parse_file(source).expect("fixture parses");
     let mut scanner = Scanner {
-        file: "chips/espressif/staged-runtime/src/panic/fault.rs",
+        file: "chips/family/staged-runtime/src/panic/fault.rs",
         source,
         item: vec!["crate".into()],
         ordinals: BTreeMap::new(),
@@ -1037,7 +1037,7 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
 
 #[test]
 fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
-    let id = "firmware/apps/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
+    let id = "hil/probes/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
     let recorded = registry(&format!(
         "version = 1\n[sites]\n[nonterminal]\n'{id}' = 'parser clears its frame and returns'\n"
     ))
@@ -1046,14 +1046,14 @@ fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
         differences(&ScannedSites::new(), &recorded),
         [format!("stale: {id}")]
     );
-    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
+    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'hil/probes/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
 }
 
 #[test]
 fn duplicate_registry_keys_and_overlapping_nonterminal_reviews_are_rejected() {
-    let id = "firmware/apps/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
+    let id = "hil/probes/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
     let entry = format!(
-        "'{id}' = {{ owner = 'firmware/apps/boot-smoke', classes = ['requested-reset'] }}\n"
+        "'{id}' = {{ owner = 'hil/probes/boot-smoke', classes = ['requested-reset'] }}\n"
     );
     assert!(registry(&format!("version = 1\n[sites]\n{entry}{entry}")).is_err());
     assert!(

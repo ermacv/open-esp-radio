@@ -9,13 +9,13 @@ publish = false
 description = "ESP32-S31 cold-start composition binding owned HAL atoms and boot profiles to the family runner"
 
 [dependencies]
-oer-espressif-staged-bootstrap = { path = "../../espressif/staged-bootstrap" }
+oer-espressif-staged-bootstrap = { path = "../../family/staged-bootstrap" }
 oer-esp32s31-hal = { path = "../hal" }
-oer-espressif-boot = { path = "../../espressif/boot" }
+oer-espressif-boot = { path = "../../family/boot" }
 oer-time = { path = "../../../portable/time" }
 
 [build-dependencies]
-oer-espressif-facts = { path = "../../espressif/facts" }
+oer-espressif-facts = { path = "../../family/facts" }
 
 [lints]
 workspace = true

@@ -2,8 +2,8 @@
 //! builds.
 //!
 //! Every ESP-IDF project with a `firmware.toml` beside its `CMakeLists.txt`
-//! is an entry: peers in `firmware/peers/<project>/` and vendor references in
-//! `firmware/vendor/<chip>/<project>/`. Each is an application that
+//! is an entry: peers in `tools/lab/peers/<project>/` and vendor references in
+//! `tools/vendor/references/<chip>/<project>/`. Each is an application that
 //! its own ESP-IDF bootloader loads (`Boot::EspIdfBootloader`), the only
 //! images that do not boot staged. The manifest names the image (its name in
 //! the board journal), the target chip and the chip whose `artifacts.toml`
@@ -61,8 +61,8 @@ impl Entry {
 
 /// Every catalog entry below `root`, by image name.
 pub fn entries(root: &Path) -> Result<Vec<Entry>> {
-    let mut directories = subdirectories(&root.join("firmware/peers"))?;
-    for chip in subdirectories(&root.join("firmware/vendor"))? {
+    let mut directories = subdirectories(&root.join("tools/lab/peers"))?;
+    for chip in subdirectories(&root.join("tools/vendor/references"))? {
         directories.extend(subdirectories(&chip)?);
     }
     let mut entries = Vec::new();
@@ -188,7 +188,7 @@ pub fn peer_flash_file(chip: &str) -> String {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 struct PeerFlash {
     schema: u32,
-    /// The ISA layer (`chips/espressif/platform/isa/<isa>.toml`) whose
+    /// The ISA layer (`chips/family/platform/isa/<isa>.toml`) whose
     /// `rust-target` the bundle records.
     isa: String,
     espflash_chip: String,
@@ -240,7 +240,7 @@ impl Chip {
         if peer.schema != 1 {
             return Err(format!("{}: unsupported schema {}", file.display(), peer.schema).into());
         }
-        let isa_file = root.join(format!("chips/espressif/platform/isa/{}.toml", peer.isa));
+        let isa_file = root.join(format!("chips/family/platform/isa/{}.toml", peer.isa));
         let isa_text = std::fs::read_to_string(&isa_file)
             .map_err(|error| format!("{}: {error}", isa_file.display()))?;
         let isa: toml::Table = toml::from_str(&isa_text)
@@ -298,15 +298,15 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         project(
             root.path(),
-            "firmware/peers/chip-b-ieee802154",
+            "tools/lab/peers/chip-b-ieee802154",
             "image = \"ieee802154-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
         );
         project(
             root.path(),
-            "firmware/vendor/chip-a/calibration",
+            "tools/vendor/references/chip-a/calibration",
             "image = \"vendor-calibration\"\nchip = \"chip-a\"\npins = \"chip-a\"\n",
         );
-        std::fs::create_dir_all(root.path().join("firmware/peers/untracked")).unwrap();
+        std::fs::create_dir_all(root.path().join("tools/lab/peers/untracked")).unwrap();
         let entries = entries(root.path()).unwrap();
         assert_eq!(
             entries,
@@ -316,14 +316,14 @@ mod tests {
                     chip: "chip-b".into(),
                     pins: "chip-a".into(),
                     hold: None,
-                    directory: "firmware/peers/chip-b-ieee802154".into(),
+                    directory: "tools/lab/peers/chip-b-ieee802154".into(),
                 },
                 Entry {
                     image: "vendor-calibration".into(),
                     chip: "chip-a".into(),
                     pins: "chip-a".into(),
                     hold: None,
-                    directory: "firmware/vendor/chip-a/calibration".into(),
+                    directory: "tools/vendor/references/chip-a/calibration".into(),
                 },
             ]
         );
@@ -331,7 +331,7 @@ mod tests {
         assert!(entry(&entries, "missing").is_err());
         project(
             root.path(),
-            "firmware/peers/copy",
+            "tools/lab/peers/copy",
             "image = \"ieee802154-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
         );
         assert!(

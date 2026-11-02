@@ -169,7 +169,7 @@ mod tests {
             root.join("Cargo.toml"),
             r#"
 [workspace]
-members = ["firmware/apps/new", "firmware/probes/new", "tools/host", "chips/adapter"]
+members = ["firmware/apps/new", "hil/probes/new", "tools/host", "chips/adapter"]
 [workspace.dependencies]
 rt = { package = "oer-espressif-staged-runtime", version = "0.1" }
 "#,
@@ -186,7 +186,7 @@ adapter = "0.1"
 "#,
             ),
             (
-                "firmware/probes/new",
+                "hil/probes/new",
                 r#"
 [package]
 name = "new-probe"

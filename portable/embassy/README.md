@@ -1,7 +1,7 @@
 # Embassy bindings
 
 These crates bind Embassy facilities to driver contracts. Chip radio
-execution belongs to the [radio runtime domain](../../chips/espressif/executor/README.md), which
+execution belongs to the [radio runtime domain](../../chips/family/executor/README.md), which
 holds no Bluetooth runtime.
 
 | Location | Responsibility |
@@ -11,7 +11,7 @@ holds no Bluetooth runtime.
 
 An adapter can retain state required by its external contract.
 
-[`exec/executor`](../../chips/espressif/executor/) is the Embassy platform binding:
+[`exec/executor`](../../chips/family/executor/) is the Embassy platform binding:
 executor wake-up and timer-queue ABI (`src/{executor,time_driver}.rs`);
 applications supply interrupt and timer capabilities. It has no radio policy
 or PHY initialization. Image time is [`time`](time/)'s `EmbassyClock`, which

@@ -345,7 +345,7 @@ pub fn power_cycle(selector: &str) -> Result<()> {
 fn build_enforcement(package: &str, diagnostic: bool) -> Result<Enforced> {
     if diagnostic {
         if !package.starts_with(oer_image_build::probe::PROBE_PACKAGE_PREFIX) {
-            return Err("--diagnostic is restricted to firmware/probes packages".into());
+            return Err("--diagnostic is restricted to hil/probes packages".into());
         }
         Ok(Enforced::Reported)
     } else {

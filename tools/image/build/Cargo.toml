@@ -14,7 +14,7 @@ oer-image-bundle = { path = "../bundle" }
 oer-image-checks = { path = "../checks" }
 oer-image-esp-idf = { path = "../esp-idf" }
 oer-chip-profile = { path = "../../chip/profile" }
-oer-espressif-facts = { path = "../../../chips/espressif/facts" }
+oer-espressif-facts = { path = "../../../chips/family/facts" }
 oer-os-toolchain = { path = "../../os/toolchain" }
 oer-os-durable = { path = "../../os/durable" }
 oer-os-process = { path = "../../os/process" }

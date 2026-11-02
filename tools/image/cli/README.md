@@ -54,7 +54,7 @@ the runtime to the chip's `[placement]` contract (`placement.txt`).
 | --- | --- | --- |
 | `build` | Interrupt stacks (`Enforced::Only({Interrupts})`) | Frames, panic budgets, task stacks, bootstrap stack and placement |
 | `run` | None (`Enforced::Reported`) | All requested checks |
-| `build --diagnostic` (only `firmware/probes` packages) | None (`Enforced::Reported`, as already used by `run`) | All requested checks |
+| `build --diagnostic` (only `hil/probes` packages) | None (`Enforced::Reported`, as already used by `run`) | All requested checks |
 | `flash` | Uses the existing bundle without rerunning checks | Uses its recorded results |
 
 An interrupt stack without a proven bound (`partial + ?`), above its budget,
@@ -74,7 +74,7 @@ A reported check that does not pass prints as a warning containing
 already built bundle.
 
 `build --bin BINARY` selects a companion binary in the image package.
-`--diagnostic` is an explicit build option restricted to `firmware/probes`
+`--diagnostic` is an explicit build option restricted to `hil/probes`
 packages. It uses the same `Enforced::Reported` policy as `cargo fw run`: requested
 product checks still run and retain their results, but a failed reported check
 does not reject the diagnostic bundle. It changes no panic budget or stack/frame

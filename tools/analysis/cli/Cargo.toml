@@ -13,7 +13,7 @@ name = "blobray"
 path = "src/main.rs"
 
 [dependencies]
-oer-espressif-facts = { path = "../../../chips/espressif/facts" }
+oer-espressif-facts = { path = "../../../chips/family/facts" }
 oer-pins-artifacts = { path = "../../pins/artifacts" }
 oer-analysis-riscv-lift = { path = "../riscv-lift" }
 oer-analysis-blobray-riscv = { path = "../blobray-riscv" }

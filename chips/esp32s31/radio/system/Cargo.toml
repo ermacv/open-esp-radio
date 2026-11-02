@@ -11,7 +11,7 @@ description = "The ESP32-S31 radio system: one actor that owns the shared RF fro
 bluetooth = ["oer-esp32s31-radio-client/bluetooth"]
 
 [dependencies]
-oer-espressif-coex = { path = "../../../espressif/coex" }
+oer-espressif-coex = { path = "../../../family/coex" }
 embassy-futures = "0.1.2"
 pin-project-lite = "0.2.16"
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }

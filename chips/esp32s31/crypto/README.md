@@ -9,7 +9,7 @@ unwrap over it, in place in the request's buffer. The engine runs on
 the hart its composition places the AES owner on and never yields.
 `compose::crypto::aes_engine` builds it for its owner: the Wi-Fi station,
 which unwraps its EAPOL-Key data in its own step; the image that takes it
-from the library (`sdk/espressif`, `AesPeripheral::engine`), such as the HIL
+from the library (`oer`, `AesPeripheral::engine`), such as the HIL
 SDK RPC image, which serves its unwraps to the host; or
 boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart.
 

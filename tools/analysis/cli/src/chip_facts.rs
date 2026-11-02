@@ -93,7 +93,7 @@ mod tests {
         let chip = tracked::ids()[0];
         for path in [
             oer_espressif_facts::chip_file(chip),
-            "chips/espressif/platform/family.toml".to_owned(),
+            "chips/family/platform/family.toml".to_owned(),
         ] {
             let built = tracked::text(&path).unwrap();
             write(

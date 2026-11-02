@@ -70,7 +70,7 @@ only the final discard fence releases a bindable IRQ owner. Runtime teardown
 keeps the saved affine sample through all three masks before acknowledgement.
 
 `coex::CoexDomainPorts` binds the family coexistence policy
-([`oer-espressif-coex`](../../espressif/coex/README.md)) to one radio domain:
+([`oer-espressif-coex`](../../family/coex/README.md)) to one radio domain:
 it lends the timer bank, the event priorities and the clock to `CoexCore` as
 its `CoexTimerHardware` and `CoexClockHardware` ports. The domain lends only
 timers 0 through 4; timer 5 carries the PHY grant-protect request. The clock

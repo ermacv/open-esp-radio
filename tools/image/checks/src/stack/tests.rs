@@ -1173,8 +1173,8 @@ fn the_repository_policies_load() {
             include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
         ),
         (
-            "chips/espressif/staged-layout/stack-coverage.toml",
-            include_str!("../../../../../chips/espressif/staged-layout/stack-coverage.toml"),
+            "chips/family/staged-layout/stack-coverage.toml",
+            include_str!("../../../../../chips/family/staged-layout/stack-coverage.toml"),
         ),
     ]) {
         let path = root.join(path);

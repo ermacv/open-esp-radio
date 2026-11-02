@@ -262,8 +262,8 @@ including aliases, optional entries and target-specific entries:
   checked against a shrinking [deviation list](repository-layout.md#known-deviations).
   Transitive uses inside `embassy-net` and `bt-hci` do not admit direct uses.
 - `embassy-time` belongs to `portable/embassy/time` and the application
-  entry (`sdk/espressif`), which re-exports the executors' clock;
-  `embassy-time-driver` belongs to `chips/espressif/executor`.
+  entry (`oer`), which re-exports the executors' clock;
+  `embassy-time-driver` belongs to `chips/family/executor`.
 - `embassy-net`, `xarxa` and `xarxa-driver` belong to
   `portable/embassy/net` and `firmware/*`; `trouble-host` belongs to
   `portable/embassy/trouble` and `firmware/*`.
@@ -285,18 +285,18 @@ existing local entries.
 
 | Package | Directory |
 | --- | --- |
-| `oer-espressif-analog` | `chips/espressif/analog` |
-| `oer-espressif-boot` | `chips/espressif/boot` |
-| `oer-espressif-coex` | `chips/espressif/coex` |
-| `oer-espressif-efuse` | `chips/espressif/efuse` |
-| `oer-espressif-facts` | `chips/espressif/facts` |
-| `oer-espressif-ieee80211-policy` | `chips/espressif/ieee80211-policy` |
-| `oer-espressif-ieee802154-engine` | `chips/espressif/ieee802154-engine` |
-| `oer-espressif-ieee802154-mac-values` | `chips/espressif/ieee802154-mac-values` |
-| `oer-espressif-modem-clock` | `chips/espressif/modem-clock` |
-| `oer-espressif-radio` | `chips/espressif/radio` |
-| `oer-espressif-phy` | `chips/espressif/phy` |
-| `oer-espressif-bluetooth-engine` | `chips/espressif/bluetooth-engine` |
+| `oer-espressif-analog` | `chips/family/analog` |
+| `oer-espressif-boot` | `chips/family/boot` |
+| `oer-espressif-coex` | `chips/family/coex` |
+| `oer-espressif-efuse` | `chips/family/efuse` |
+| `oer-espressif-facts` | `chips/family/facts` |
+| `oer-espressif-ieee80211-policy` | `chips/family/ieee80211-policy` |
+| `oer-espressif-ieee802154-engine` | `chips/family/ieee802154-engine` |
+| `oer-espressif-ieee802154-mac-values` | `chips/family/ieee802154-mac-values` |
+| `oer-espressif-modem-clock` | `chips/family/modem-clock` |
+| `oer-espressif-radio` | `chips/family/radio` |
+| `oer-espressif-phy` | `chips/family/phy` |
+| `oer-espressif-bluetooth-engine` | `chips/family/bluetooth-engine` |
 | `oer-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
 
 The console `oer-espressif-usb-serial-jtag` depends transitively on mmio
@@ -337,7 +337,7 @@ factory identity, entropy and timer installation. The reusable console and
 SAR/PWDET bindings keep the existing driver/handler ownership. Trace clocks
 and unanswered request resets bind through that same platform.
 
-`oer-espressif` (`sdk/espressif`) is the family's application entry above
+`oer-espressif` (`oer`) is the family's application entry above
 the compositions and facades; the `esp32s31` feature selects the chip, and a
 second chip would add its implementation beside it without changing the API.
 An image built on it writes `entry!(boot)`: the synchronous `boot` runs once
@@ -359,7 +359,7 @@ same `boot` through the SDK, so that what the test checks is what an
 application runs. A test image differs only by the SDK features it adds
 (`console`), by explicit settings in place of the library's defaults and by
 the handlers of its services; it serves them through the HIL agent on the
-entry (`hil-scenarios/hil-agent/espressif`). An image on the SDK depends on
+entry (`hil/agent`). An image on the SDK depends on
 nothing the SDK places (compositions, facades, platform, interrupt table)
 besides it; `oer-test-layers` checks these direct dependencies, not that two
 `boot` functions take the same steps in the same order, which review keeps.
@@ -540,7 +540,7 @@ run its own executor.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
-- `chips/espressif/interrupt-table` (`oer-espressif-interrupt-table`) owns
+- `chips/family/interrupt-table` (`oer-espressif-interrupt-table`) owns
   the Espressif interrupt matrix contract, vector ABI and staged-runtime
   symbol names. Architectural CLIC line values live in `oer-riscv::clic`;
   chip facts select line geometry and MNLBITS. Signal task cells, atomic
@@ -879,7 +879,7 @@ defines the scan's scope and limits.
   from `oer-riscv`.
   Embassy futures, network and time utilities follow the external-crate
   homes above; remaining direct `embassy-sync` uses are listed deviations.
-  Tasks run on the static executor (`chips/espressif/executor`), in static
+  Tasks run on the static executor (`chips/family/executor`), in static
   slots, polled by direct calls, with one waker vtable, the binding's, whose
   data names the executor and task.
 - **Hart topology.** ESP32-S31's `[interrupts] harts` in
@@ -1274,7 +1274,7 @@ work intervals include preemption and overlap. `debug-control` separately names
 knobs that force paths under `oer_debug_control`; it is not an observer. Only
 `cargo fw` sets these cfgs for an image declaring the corresponding class. Comparison probe images (`cargo fw probe`) are built
 over the production crates' public API alone. The separately admitted
-`firmware/probes/esp32s31-facts` image takes the PAC once for short hardware
+`hil/probes/esp32s31-facts` image takes the PAC once for short hardware
 facts experiments, without HAL or production runtime dependencies. The HAL may
 expose typed access to registers that production does not use, on the owner
 that already holds them, so a comparison probe reaches them through the public
@@ -1323,7 +1323,7 @@ under test; it stores nothing and knows no scenario, service or equipment.
 | Link | `tools/hil/link` | One board's serial line: frames, their boot (`boot_id`), request/response correlation, missing-message counts and the device's diagnostic lines |
 | Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |
 | CLI | `tools/hil/cli` | `cargo hil list` and `run`: scenarios are packages marked `hil-scenario` in their metadata |
-| SDK agent | `hil-scenarios/hil-agent/espressif` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the one-deep hand-over of a request to the image's worker |
+| SDK agent | `hil/agent` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the one-deep hand-over of a request to the image's worker |
 | Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, `hil-agent/` the agent on the application entry, one host program per scenario with its cases and verdict |
 
 A boot is named by the `boot_id` every frame carries. Its first frame is its

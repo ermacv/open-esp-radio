@@ -1,0 +1,66 @@
+[package]
+name = "oer-espressif"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The Espressif family's application entry: peripherals, drivers and services with their tasks, interrupts and defaults, for one chip selected by feature"
+
+[features]
+## The ESP32-S31 implementation. Exactly one chip feature is selected.
+esp32s31 = []
+## The Wi-Fi station and its IP service.
+wifi = []
+## The USB Serial/JTAG console as the application's byte stream.
+console = []
+## The second boot on hart 1: its IP service and future run on hart 1's
+## executor. The image declares `harts = ["boot", 1]`.
+hart1 = []
+## What the library observes of its own work (`observe`): the executors'
+## CPU, named parts' polls, the station's, the bridge's and the PHY
+## tracking's counts, and on the boot hart its counters and a PC sampler on
+## TIMG1. The image declares `instrumentation = ["trace"]`.
+observe = []
+## UDP sockets on the IP stack (`wifi::embassy_net::udp`), each queueing
+## up to 16 received datagrams.
+udp = ["embassy-net/udp", "dep:xarxa"]
+
+[dependencies]
+oer-diagnostics = { path = "../portable/diagnostics" }
+oer-embassy-net = { path = "../portable/embassy/net" }
+oer-memory = { path = "../portable/memory" }
+oer-network-port = { path = "../protocols/network/port" }
+atomic-waker = "=1.1.2"
+static_cell.workspace = true
+
+# The chip implementation runs on the chip target only.
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-embassy-time = { path = "../portable/embassy/time" }
+oer-time = { path = "../portable/time" }
+oer-espressif-boot = { path = "../chips/family/boot" }
+oer-esp32s31-board = { path = "../chips/esp32s31/board" }
+oer-esp32s31-compose = { path = "../chips/esp32s31/compose", features = ["wifi-fault", "radio-fault"] }
+oer-esp32s31-hal = { path = "../chips/esp32s31/hal" }
+oer-espressif-executor = { path = "../chips/family/executor", features = ["port-slots"] }
+oer-espressif-interrupt-table = { path = "../chips/family/interrupt-table" }
+oer-espressif-staged-runtime = { path = "../chips/family/staged-runtime" }
+oer-ieee80211-core-security-cipher = { path = "../protocols/ieee80211/core/security/cipher" }
+oer-ieee80211-runtime = { path = "../protocols/ieee80211/runtime" }
+oer-esp32s31-wifi = { path = "../chips/esp32s31/wifi" }
+oer-riscv = { path = "../portable/riscv" }
+oer-trace = { path = "../portable/trace" }
+embassy-futures = "0.1.2"
+embassy-time = { workspace = true }
+# The stack the IP service pins (`oer-embassy-net`), with TCP sockets.
+embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "073d3fc49234db76005cb0ea1a86097d5f633c2d", default-features = false, features = ["tcp"] }
+# The stack's socket receive queue at its largest, with `udp`: some 2.7 ms
+# of 1400-byte datagrams at 65 Mbit/s (the revision the stack pins).
+xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "5b6f11a793c3b07e5ef5be39f3ad5e9b6e0fa711", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
+
+[dev-dependencies]
+oer-memory = { path = "../portable/memory", features = ["host-context"] }
+
+[lints]
+workspace = true

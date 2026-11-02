@@ -85,7 +85,7 @@ vendor:
   threshold; `ProtectEveryHeTxop` protects every individual HE PPDU while a
   threshold is advertised.
 
-[`oer-espressif-ieee80211-policy`](../../../../chips/espressif/ieee80211-policy/README.md)
+[`oer-espressif-ieee80211-policy`](../../../../chips/family/ieee80211-policy/README.md)
 supplies the Espressif values recovered from the vendor stack.
 
 Control-rate selection starts from the first eligible advertised basic rate.

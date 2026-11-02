@@ -1,5 +1,5 @@
 //! The probe images of the vendor comparison: the packages of
-//! `firmware/probes/`, built with `cfg(oer_probe)`.
+//! `hil/probes/`, built with `cfg(oer_probe)`.
 //!
 //! Only this build sets `cfg(oer_probe)`, only for a verification package,
 //! and in its own target directory (`target/fw-probe`), so the production
@@ -16,7 +16,7 @@ use crate::{Result, strict};
 
 /// The cfg the probe hooks are compiled under.
 pub const PROBE_CFG: &str = "oer_probe";
-/// Every package of `firmware/probes/` (`<chip>-<name>`) is named after its path.
+/// Every package of `hil/probes/` (`<chip>-<name>`) is named after its path.
 pub const PROBE_PACKAGE_PREFIX: &str = "oer-firmware-probes-";
 /// The target directory of probe builds, below the checkout's `target/`.
 pub const TARGET_SUBDIRECTORY: &str = "fw-probe";
@@ -31,7 +31,7 @@ const PROFILE: &str = crate::FIRMWARE_PROFILE;
 pub fn chip_of<'a>(package: &str, chips: &'a [String]) -> Result<&'a str> {
     let rest = package.strip_prefix(PROBE_PACKAGE_PREFIX).ok_or_else(|| {
         format!(
-            "{package} is not a firmware/probes package, which alone builds with cfg({PROBE_CFG})"
+            "{package} is not a hil/probes package, which alone builds with cfg({PROBE_CFG})"
         )
     })?;
     chips

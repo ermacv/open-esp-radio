@@ -8,19 +8,19 @@ repository.workspace = true
 description = "ESP32-S31 IEEE 802.15.4 engine adapter and placed MAC ownership"
 
 [dependencies]
-oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
+oer-espressif-interrupt-table = { path = "../../../family/interrupt-table" }
 oer-ieee802154-port = { path = "../../../../protocols/ieee802154/port" }
 oer-esp32s31-hal = { path = "../../hal" }
 oer-esp32s31-knowledge = { path = "../../knowledge" }
-oer-espressif-ieee802154-engine = { path = "../../../espressif/ieee802154-engine" }
-oer-espressif-ieee802154-mac-values = { path = "../../../espressif/ieee802154-mac-values" }
-oer-espressif-coex = { path = "../../../espressif/coex" }
+oer-espressif-ieee802154-engine = { path = "../../../family/ieee802154-engine" }
+oer-espressif-ieee802154-mac-values = { path = "../../../family/ieee802154-mac-values" }
+oer-espressif-coex = { path = "../../../family/coex" }
 oer-mmio = { path = "../../../../portable/mmio" }
 
 [dev-dependencies]
 oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 tempfile = "=3.27.0"
-oer-espressif-ieee802154-engine = { path = "../../../espressif/ieee802154-engine", features = ["test-support"] }
+oer-espressif-ieee802154-engine = { path = "../../../family/ieee802154-engine", features = ["test-support"] }
 oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
 

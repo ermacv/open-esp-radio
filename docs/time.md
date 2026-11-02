@@ -65,7 +65,7 @@ sample of another generation does not convert (`StaleSample`).
   reception. A consumer that needs the reception time converts the stamp.
 - Hardware counters and alarms belong to their driver and reach the layers
   above as read-only capabilities (`MacLocalTime`) or port operations.
-- Only adapters, the executor binding (`chips/espressif/executor`, the time
+- Only adapters, the executor binding (`chips/family/executor`, the time
   driver) and the firmware depend on `embassy-time`, dev dependencies
   included; every lower layer reads and waits through the `oer-time` ports,
   takes its timer from its owner or caller, and is tested with

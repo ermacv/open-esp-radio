@@ -102,10 +102,10 @@ mod tests {
     #[test]
     fn every_image_declares_a_budget_that_parses() -> Result<()> {
         for text in [
-            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
-            include_str!("../../../../firmware/apps/radio-root/Cargo.toml"),
-            include_str!("../../../../hil-scenarios/images/esp32s31-sdk-rpc/Cargo.toml"),
-            include_str!("../../../../hil-scenarios/images/esp32s31-sdk-station/Cargo.toml"),
+            include_str!("../../../../hil/probes/boot-smoke/Cargo.toml"),
+            include_str!("../../../../hil/probes/radio-root/Cargo.toml"),
+            include_str!("../../../../hil/images/esp32s31-aes/Cargo.toml"),
+            include_str!("../../../../hil/images/esp32s31-station/Cargo.toml"),
         ] {
             let manifest: toml::Value = toml::from_str(text).expect("the manifest parses");
             let name = manifest["package"]["name"]

@@ -254,31 +254,31 @@ pub(crate) fn repository() -> tempfile::TempDir {
             include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
         ),
         (
-            "firmware/peers/esp32c5-ieee802154/firmware.toml",
-            include_str!("../../../../firmware/peers/esp32c5-ieee802154/firmware.toml"),
+            "tools/lab/peers/esp32c5-ieee802154/firmware.toml",
+            include_str!("../../../lab/peers/esp32c5-ieee802154/firmware.toml"),
         ),
         (
-            "firmware/peers/esp32c5-openthread/firmware.toml",
-            include_str!("../../../../firmware/peers/esp32c5-openthread/firmware.toml"),
+            "tools/lab/peers/esp32c5-openthread/firmware.toml",
+            include_str!("../../../lab/peers/esp32c5-openthread/firmware.toml"),
         ),
         (
-            "firmware/vendor/esp32c5/ble-scan-request-counter/firmware.toml",
+            "tools/vendor/references/esp32c5/ble-scan-request-counter/firmware.toml",
             include_str!(
-                "../../../../firmware/vendor/esp32c5/ble-scan-request-counter/firmware.toml"
+                "../../../vendor/references/esp32c5/ble-scan-request-counter/firmware.toml"
             ),
         ),
         (
-            "firmware/vendor/esp32s31/ble-scan-reference/firmware.toml",
-            include_str!("../../../../firmware/vendor/esp32s31/ble-scan-reference/firmware.toml"),
+            "tools/vendor/references/esp32s31/ble-scan-reference/firmware.toml",
+            include_str!("../../../vendor/references/esp32s31/ble-scan-reference/firmware.toml"),
         ),
         (
-            "firmware/vendor/esp32s31/ieee802154-reference/firmware.toml",
-            include_str!("../../../../firmware/vendor/esp32s31/ieee802154-reference/firmware.toml"),
+            "tools/vendor/references/esp32s31/ieee802154-reference/firmware.toml",
+            include_str!("../../../vendor/references/esp32s31/ieee802154-reference/firmware.toml"),
         ),
         (
-            "firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml",
+            "tools/vendor/references/esp32s31/phy-tracking-reference/firmware.toml",
             include_str!(
-                "../../../../firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml"
+                "../../../vendor/references/esp32s31/phy-tracking-reference/firmware.toml"
             ),
         ),
     ]) {

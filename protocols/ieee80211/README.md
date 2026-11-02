@@ -113,7 +113,7 @@ numbers each fresh protected MPDU before the port takes it (the station's
 pairwise key in `core/roles/sta/src/port.rs` holds it); the backend encrypts with the
 supplied number. Its `sequence.rs` owns the transmit sequence spaces of every
 role. Espressif policy parameters live in
-[`oer-espressif-ieee80211-policy`](../../chips/espressif/ieee80211-policy/README.md).
+[`oer-espressif-ieee80211-policy`](../../chips/family/ieee80211-policy/README.md).
 
 `core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
 protocol state. Its `security.rs` sibling owns secrets and generations; each

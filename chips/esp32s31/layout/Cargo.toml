@@ -14,13 +14,13 @@ description = "Staged-boot address map of ESP32-S31-Function-CoreBoard-1"
 build = ["oer-espressif-staged-layout/build"]
 
 [dependencies]
-oer-espressif-staged-layout = { path = "../../espressif/staged-layout" }
+oer-espressif-staged-layout = { path = "../../family/staged-layout" }
 
 [build-dependencies]
-oer-espressif-facts = { path = "../../espressif/facts" }
+oer-espressif-facts = { path = "../../family/facts" }
 
 [dev-dependencies]
-oer-espressif-facts = { path = "../../espressif/facts" }
+oer-espressif-facts = { path = "../../family/facts" }
 
 [lints]
 workspace = true

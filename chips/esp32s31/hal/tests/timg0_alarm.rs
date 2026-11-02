@@ -14,7 +14,7 @@ impl ExecutorHandler<FromCpu2Irq> for OnExecutor {
 }
 
 // A test composition only: no production handler, cells, actor or vectors.
-// SOURCE: chips/espressif/platform/family.toml [interrupts], CLIC spec
+// SOURCE: chips/family/platform/family.toml [interrupts], CLIC spec
 // 3f8ee744 "Specifying Interrupt Priority"; ESP-IDF 4d59230d
 // components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 // SOURCE for arbitration: ESP32-C5 TRM v1.1,

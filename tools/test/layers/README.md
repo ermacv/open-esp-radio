@@ -85,8 +85,8 @@ are outside this rule; it does not inspect third-party dependency closures.
 | --- | --- |
 | `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
 | `embassy-sync` | Development only, with the exact normal-edge deviations above |
-| `embassy-time` | `portable/embassy/time`, `sdk/espressif` (the executors' clock) |
-| `embassy-time-driver` | `chips/espressif/executor` |
+| `embassy-time` | `portable/embassy/time`, `oer` (the executors' clock) |
+| `embassy-time-driver` | `chips/family/executor` |
 | `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |
 | `bt-hci` | `protocols/bluetooth/hci`, `portable/embassy/trouble`, `tools/*` |
@@ -118,7 +118,7 @@ name, in AST/token visitation order. Every key includes it, including unique
 sites, so appending a repeat preserves existing keys. Inserting or reordering
 identical sites requires reviewing their classifications.
 
-For example, `firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
+For example, `hil/probes/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
 names the first `panic!` in `run`. Unregistered-site diagnostics show the
 current `path:line:column` (1-based) for navigation. Stale keys identify sites
 which no longer exist and have no current coordinates.
@@ -132,7 +132,7 @@ InvalidHart proof is conditional on the stated rev0 model, correct CSR
 observation and intact code/data. It proves no radio event ordering.
 
 Reset owners are admitted explicitly: HAL, chip composition, staged runtime,
-staged bootstrap, executor, the application entry (`sdk/espressif`, on the
+staged bootstrap, executor, the application entry (`oer`, on the
 image's behalf) and the image containing the site. The family
 IEEE 802.15.4 engine's typed reasons belong to PHY HIL's terminal policy;
 their declaration grants the engine no reset dependency. An ordinary driver

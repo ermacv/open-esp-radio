@@ -5,9 +5,9 @@ contracts; details live with their owners.
 
 ## Regions
 
-The [shared layout](../chips/espressif/staged-layout/README.md) defines the
+The [shared layout](../chips/family/staged-layout/README.md) defines the
 regions; their addresses and sizes are the
-[chip facts](../chips/espressif/facts/README.md): the chip layer's internal
+[chip facts](../chips/family/facts/README.md): the chip layer's internal
 SRAM, flash window and retained memory with each region's attributes, the
 module's PSRAM, `runtime-psram` after the family's bootstrap probe page, what
 the boot chain keeps and what the ROM of the chip's revision uses of the
@@ -19,11 +19,11 @@ facts at build time; the host checks read the same facts.
 
 | Region | Current use and source |
 | --- | --- |
-| SRAM | The complete bootstrap code and ordinary constants; runtime strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
-| PSRAM | Ordinary runtime code, data and the per-hart task stacks: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
-| Flash XIP | Explicit bootstrap metadata, stage-two payload and tuning-reference data: [bootstrap sections](../chips/espressif/staged-layout/linker/bootstrap/sections.x). |
+| SRAM | The complete bootstrap code and ordinary constants; runtime strict and hot code, interrupt stacks, critical state and DMA storage: [runtime sections](../chips/family/staged-layout/linker/runtime/sections.x). |
+| PSRAM | Ordinary runtime code, data and the per-hart task stacks: [runtime sections](../chips/family/staged-layout/linker/runtime/sections.x). |
+| Flash XIP | Explicit bootstrap metadata, stage-two payload and tuning-reference data: [bootstrap sections](../chips/family/staged-layout/linker/bootstrap/sections.x). |
 | ROM | Chip routines available to the images: [S31 ROM facts](../chips/esp32s31/platform/rom-rev0.toml) generate its ROM script in the layout build directory. |
-| RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/espressif/staged-layout/linker/runtime/sections.x). |
+| RTC retained | Reset-retained records in `.rtc_fast.persistent`, below the reserved tail: [runtime sections](../chips/family/staged-layout/linker/runtime/sections.x). |
 
 ## Code placement
 
@@ -36,14 +36,14 @@ facts at build time; the host checks read the same facts.
   `hot-text.x` ([image linker](../tools/image/linker/README.md#hot-code)).
 - The staged platform uses `.trap`, `.rwtext` and
   `.flash.critical.text` conventions collected by the
-  [runtime linker script](../chips/espressif/staged-layout/linker/runtime/sections.x).
+  [runtime linker script](../chips/family/staged-layout/linker/runtime/sections.x).
 
 ## Data placement
 
 - `placed_static!` selects SRAM sections `.critical.data`, `.isr.rodata`
-  and `.dma.data`: [placement rustdoc](../chips/espressif/staged-runtime/src/placement.rs).
+  and `.dma.data`: [placement rustdoc](../chips/family/staged-runtime/src/placement.rs).
 - `retained_static!` places reset-retained RTC records with a claim in
-  zeroed SRAM: [placement rustdoc](../chips/espressif/staged-runtime/src/placement.rs)
+  zeroed SRAM: [placement rustdoc](../chips/family/staged-runtime/src/placement.rs)
   and [retained storage](../portable/memory/src/retained.rs).
 - `zeroed_static!` provides an all-zero initializer for statics in regions
   the boot clears: [zeroed storage rustdoc](../portable/memory/src/zeroed.rs)
@@ -95,7 +95,7 @@ contracts: [Hardware memory](hardware-memory.md).
   interrupt handlers and exception root have complete stack bounds, and its
   interrupt stack is sized by the image linker like the boot hart's. The runtime's critical section masks only its
   executing hart and takes no cross-hart lock
-  ([critical-section rustdoc](../chips/espressif/staged-runtime/src/critical.rs)).
+  ([critical-section rustdoc](../chips/family/staged-runtime/src/critical.rs)).
   The staged build/run check confines linked critical-section entry points to
   the hart roots declared through `[package.metadata.open-radio] critical-section-hart`;
   a secondary hart's roots must not reach it.
@@ -142,7 +142,7 @@ contracts: [Hardware memory](hardware-memory.md).
 ## Panic
 
 The panic handler records a bounded RTC record without formatting and
-resets the chip: [panic rustdoc](../chips/espressif/staged-runtime/src/panic.rs).
+resets the chip: [panic rustdoc](../chips/family/staged-runtime/src/panic.rs).
 
 ## Checks and reports
 

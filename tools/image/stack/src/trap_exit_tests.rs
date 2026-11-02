@@ -7,7 +7,7 @@ use super::*;
 use oer_espressif_facts::generate::{self, Vectors};
 
 /// The runtime's hand-written trap assembly: the common entry and exit.
-const VECTORS: &str = include_str!("../../../../chips/espressif/staged-runtime/src/vectors.s");
+const VECTORS: &str = include_str!("../../../../chips/family/staged-runtime/src/vectors.s");
 
 /// The vectors the runtime's build generates for chip `id`.
 fn chip(id: &str) -> Vectors {
@@ -45,19 +45,19 @@ fn runtime_built(vectors: &str, chip: &Vectors, trace: bool) -> Vec<u8> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let riscv = root.join("portable/riscv/src/lib.rs");
     let volatile = root.join("portable/memory/src/volatile.rs");
-    let tcontrol = root.join("chips/espressif/staged-runtime/src/stacks/tcontrol.rs");
+    let tcontrol = root.join("chips/family/staged-runtime/src/stacks/tcontrol.rs");
     // Compile the runtime's frame declaration and assembly invocation verbatim:
     // adding or changing an operand must affect this fixture as well. Only the
     // include paths change to select this test's generated files and mutations.
-    let trap = include_str!("../../../../chips/espressif/staged-runtime/src/trap.rs")
+    let trap = include_str!("../../../../chips/family/staged-runtime/src/trap.rs")
         .split_once("\n/// Vectors of a hart's CLIC")
         .unwrap()
         .0;
-    let layout = include_str!("../../../../chips/espressif/staged-runtime/src/layout.rs")
+    let layout = include_str!("../../../../chips/family/staged-runtime/src/layout.rs")
         .split_once("\n/// The linked image's sections and stacks")
         .unwrap()
         .0;
-    let (_, assembly) = include_str!("../../../../chips/espressif/staged-runtime/src/stacks.rs")
+    let (_, assembly) = include_str!("../../../../chips/family/staged-runtime/src/stacks.rs")
         .split_once("core::arch::global_asm!(")
         .unwrap();
     let assembly = format!("core::arch::global_asm!({assembly}")

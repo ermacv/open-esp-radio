@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn the_workspace_images_declare_their_classes() {
         let packages: Vec<_> = [include_str!(
-            "../../../../firmware/apps/boot-smoke/Cargo.toml"
+            "../../../../hil/probes/boot-smoke/Cargo.toml"
         )]
         .into_iter()
         .map(|text| {

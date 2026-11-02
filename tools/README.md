@@ -44,7 +44,7 @@ with `[[bin]] name`. The aliases in `.cargo/config.toml` run the programs.
 | Audit a source-only PHY archive | [PHY archive audit](vendor/cli/PHY_ARCHIVE.md) |
 | Fetch pinned vendor inputs | [Pins library](pins/artifacts/README.md), `cargo pins` |
 | Share the stand: queue, leases, boards | [Arbiter](lab/arbiter/README.md), [board I/O](lab/board/STAND.md), `cargo stand --help` |
-| Run a HIL scenario | [`cargo hil`](hil/cli/README.md), [scenarios](../hil-scenarios/README.md) |
+| Run a HIL scenario | [`cargo hil`](hil/cli/README.md), [scenarios](../hil/README.md) |
 | Install Linux fixture software | [Fixture contract](lab/fixture/README.md) |
 
 The typed vendor scenario library is `vendor/scenario/`; its CLI is

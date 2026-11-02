@@ -128,9 +128,9 @@ mod tests {
     #[test]
     fn applications_scenario_images_and_probes_keep_the_pipeline_checks_and_configuration() {
         let directory = repository(&[
-            "firmware/apps/boot-smoke",
-            "hil-scenarios/images/esp32s31-sdk-rpc",
-            "firmware/probes/esp32s31-radio",
+            "hil/probes/boot-smoke",
+            "hil/images/esp32s31-aes",
+            "hil/probes/esp32s31-radio",
         ]);
         for (image, package) in [
             ("boot-smoke", "oer-firmware-apps-boot-smoke"),

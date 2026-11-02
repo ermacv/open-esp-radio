@@ -77,8 +77,8 @@ mod tests {
     #[test]
     fn the_workspace_images_declare_their_task_stacks() {
         let packages: Vec<_> = [
-            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
-            include_str!("../../../../firmware/apps/radio-root/Cargo.toml"),
+            include_str!("../../../../hil/probes/boot-smoke/Cargo.toml"),
+            include_str!("../../../../hil/probes/radio-root/Cargo.toml"),
         ]
         .into_iter()
         .map(|text| {

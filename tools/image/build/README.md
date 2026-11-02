@@ -183,7 +183,7 @@ same way.
 ## Flash map
 
 Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
-([`oer-espressif-facts`](../../../chips/espressif/facts/README.md)' `FlashMap`,
+([`oer-espressif-facts`](../../../chips/family/facts/README.md)' `FlashMap`,
 with the flash size of the chip's module) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition-table CSV path (`chips/<chip>/platform/partitions/`). The S31
@@ -415,12 +415,12 @@ report or inspection error is explicit. The image JSON envelope and each
 crate's compiler facts have independent schema versions.
 
 The stage-two header, checksum and address map come from the
-[platform layout](../../../chips/espressif/staged-layout/README.md), which application
+[platform layout](../../../chips/family/staged-layout/README.md), which application
 build scripts also use to configure the linker.
 
 The staged runtime's placement audit (`staged::placement`) checks the
 PSRAM/SRAM placement contract of the
-[platform layout](../../../chips/espressif/staged-layout/README.md) and that each
+[platform layout](../../../chips/family/staged-layout/README.md) and that each
 PSRAM trap and interrupt entry first swaps to its SRAM stack; the caller's
 audit runs beside it.
 

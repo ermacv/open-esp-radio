@@ -29,21 +29,21 @@ chips/esp32s31/{board, boot, compose, crypto, hal, instrumentation, knowledge,
 chips/esp32s31/ieee80211/{driver, mac}/
 chips/esp32s31/ieee802154/driver/
 chips/esp32s31/radio/{client, system}/
-chips/espressif/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
+chips/family/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
     ieee802154-engine, ieee802154-mac-values, interrupt-table, modem-clock,
     platform-port, staged-bootstrap, staged-layout, staged-runtime, usb-serial-jtag,
     watchdog}/
 firmware/apps/{boot-smoke, radio-root, wifi-station}/
-firmware/bootstrap/esp32s31/
-firmware/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
+chips/esp32s31/bootstrap/
+hil/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, sync,
     time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
-sdk/espressif/
+oer/
 hil-scenarios/{aes, sdk-station, wifi-load, wifi-station}/
-hil-scenarios/hil-agent/espressif/
+hil/agent/
 hil-scenarios/images/{esp32s31-sdk-rpc, esp32s31-sdk-station}/
-hil-scenarios/services/{aes, fault, load, sdk-station, wifi-station}/
+hil/services/{aes, fault, load, sdk-station, wifi-station}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/
@@ -78,20 +78,20 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 
 ## Data and supporting files
 
-- `chips/espressif/platform/` holds family and ISA fact layers;
-  `chips/espressif/notes/` holds shared research notes.
+- `chips/family/platform/` holds family and ISA fact layers;
+  `chips/family/notes/` holds shared research notes.
 - `chips/esp32s31/platform/` holds chip, module and board facts, partitions,
   ROM functions and stack budgets. `registers/` holds block types, layouts,
   the chip root, evidence and ownership policy. `notes/` holds research
   notes, and `vendor/` holds artifact pins and generated facts. `layout/linker/` holds the chip's linker fragments.
-- `chips/espressif/executor/` contains the executor and its `bind!` macro,
+- `chips/family/executor/` contains the executor and its `bind!` macro,
   without a chip-specific feature or dependency. `chips/esp32s31/compose/`
   declares the `Esp32s31` executor binding over the HAL's platform port,
   alongside the chip's retained fault records and its platform, console and
   SAR/PWDET bindings.
 - `chips/esp32c5/` contains `vendor/artifacts.toml` and `platform/` flash
   metadata and partitions for ESP-IDF peers; it contains no Rust package.
-- `firmware/peers/` and `firmware/vendor/` contain ESP-IDF projects, whose
+- `tools/lab/peers/` and `tools/vendor/references/` contain ESP-IDF projects, whose
   `firmware.toml` entries form the image catalog.
 - `tools/lab/linux-net/` contains the network helper and pinned build inputs;
   `tools/lab/linux-bluetooth/` documents the Bluetooth helper.
@@ -104,13 +104,13 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 
 A library's package name is `oer-` and its path below its root:
 `protocols/ieee80211/wire` is `oer-ieee80211-wire`,
-`chips/esp32s31/hal` is `oer-esp32s31-hal`, `sdk/espressif` is
+`chips/esp32s31/hal` is `oer-esp32s31-hal`, `oer` is
 `oer-espressif`, `tools/hil/link` is
-`oer-hil-link`, `hil-scenarios/services/aes` is `oer-services-aes`, and
-`hil-scenarios/hil-agent/espressif` is `oer-hil-agent-espressif`. An
-executable keeps its root: `firmware/apps/boot-smoke` is
+`oer-hil-link`, `hil/services/aes` is `oer-services-aes`, and
+`hil/agent` is `oer-hil-agent-espressif`. An
+executable keeps its root: `hil/probes/boot-smoke` is
 `oer-firmware-apps-boot-smoke`, `tools/image/cli` is `oer-tool-image-cli`, and
-`hil-scenarios/aes` is `oer-hil-scenarios-aes`.
+`hil/scenarios/aes` is `oer-hil-scenarios-aes`.
 Rust imports replace hyphens with underscores. A program called by name,
 such as the image linker or a privileged helper, sets its binary name
 with `[[bin]] name`.
@@ -134,14 +134,14 @@ network contract on the codec.
 ## Known deviations
 
 - `protocols/ieee80211/runtime` has a dev-dependency on
-  `chips/espressif/ieee80211-policy`.
-- `chips/espressif/ieee80211-policy` has a dev-dependency on
+  `chips/family/ieee80211-policy`.
+- `chips/family/ieee80211-policy` has a dev-dependency on
   `chips/esp32s31/ieee80211/driver`.
 - Normal dependencies outside their role:
   `chips/esp32s31/pac` renders the analog-I2C model types of
-  `chips/espressif/analog`; `chips/esp32s31/hal` depends on
+  `chips/family/analog`; `chips/esp32s31/hal` depends on
   `protocols/radio/coex`; `chips/esp32s31/ieee80211/driver` depends on
-  `chips/espressif/staged-runtime` for its trace recorder;
+  `chips/family/staged-runtime` for its trace recorder;
   `chips/esp32s31/ieee802154/driver` depends on `portable/mmio` for
   `Placement`.
 - HAL production files that wait or poll are listed with exact counts:

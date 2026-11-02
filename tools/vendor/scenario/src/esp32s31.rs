@@ -28,7 +28,7 @@ pub static CHIP: crate::Chip = crate::Chip {
     name: "esp32s31",
     manifest_text: include_str!("../../../../chips/esp32s31/vendor/artifacts.toml"),
     hardware_scope: "chips/esp32s31",
-    shared_scopes: &["protocols/ieee80211", "chips/espressif/coex"],
+    shared_scopes: &["protocols/ieee80211", "chips/family/coex"],
     rom_input: layout::ROM_INPUT,
     rom_symbols: &layout::ROM_SYMBOLS,
     stack: (layout::STACK_ADDRESS, layout::STACK_BYTES),

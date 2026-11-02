@@ -1,0 +1,23 @@
+[package]
+name = "oer-firmware-bootstrap-esp32s31"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+build = "build.rs"
+
+[dependencies]
+oer-esp32s31-boot = { path = "../boot" }
+oer-esp32s31-layout.workspace = true
+oer-espressif-staged-bootstrap = { path = "../../family/staged-bootstrap" }
+oer-esp32s31-hal = { path = "../hal" }
+oer-espressif-boot = { path = "../../family/boot" }
+static_cell.workspace = true
+
+[build-dependencies]
+oer-espressif-facts = { path = "../../family/facts" }
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true

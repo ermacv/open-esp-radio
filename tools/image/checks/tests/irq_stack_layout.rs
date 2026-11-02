@@ -41,12 +41,12 @@ fn link_stacks(
     let path = directory.path();
     fs::write(
         path.join("memory.x"),
-        include_str!("../../../../chips/espressif/staged-layout/linker/runtime/memory.x"),
+        include_str!("../../../../chips/family/staged-layout/linker/runtime/memory.x"),
     )
     .unwrap();
     fs::write(
         path.join("sections.x"),
-        include_str!("../../../../chips/espressif/staged-layout/linker/runtime/sections.x"),
+        include_str!("../../../../chips/family/staged-layout/linker/runtime/sections.x"),
     )
     .unwrap();
     let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").unwrap();

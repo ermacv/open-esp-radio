@@ -1,0 +1,31 @@
+[package]
+name = "oer-firmware-probes-esp32s31-register"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+build = "build.rs"
+description = "Isolated ESP32-S31 PAC/HAL register conformance probes, and the linked probe image"
+
+[dependencies]
+oer-espressif-boot = { path = "../../../chips/family/boot" }
+oer-probe-macros = { path = "../../../tools/probe/macros" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-memory = { path = "../../../portable/memory" }
+[target.'cfg(not(target_arch = "riscv32"))'.dependencies]
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal", features = ["test-support"] }
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "oer-firmware-probes-esp32s31-register"
+path = "src/main.rs"
+
+[build-dependencies]
+oer-probe-codegen = { path = "../../../tools/probe/codegen" }
+
+[lints]
+workspace = true
+

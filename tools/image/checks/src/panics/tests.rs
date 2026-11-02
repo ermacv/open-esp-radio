@@ -405,12 +405,12 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ("oer-esp32s31-pac-raw", Path::new("chips/esp32s31/pac-raw")),
         (
             "oer-espressif-ieee80211-pac",
-            Path::new("chips/espressif/ieee80211-pac"),
+            Path::new("chips/family/ieee80211-pac"),
         ),
         ("oer-esp32s31-hal", Path::new("chips/esp32s31/hal")),
         (
             "oer-espressif-executor",
-            Path::new("chips/espressif/executor"),
+            Path::new("chips/family/executor"),
         ),
         ("oer-time", Path::new("portable/time")),
         (
@@ -419,13 +419,13 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
         ),
         (
             "oer-firmware-apps-boot-smoke",
-            Path::new("firmware/apps/boot-smoke"),
+            Path::new("hil/probes/boot-smoke"),
         ),
         (
             "oer-hil-scenarios-images-esp32s31-sdk-rpc",
-            Path::new("hil-scenarios/images/esp32s31-sdk-rpc"),
+            Path::new("hil/images/esp32s31-aes"),
         ),
-        ("oer-services-aes", Path::new("hil-scenarios/services/aes")),
+        ("oer-services-aes", Path::new("hil/services/aes")),
         ("oer-image-checks", Path::new("tools/image/checks")),
     ]);
     for (name, layer) in [

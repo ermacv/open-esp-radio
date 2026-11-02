@@ -1,7 +1,7 @@
 # Firmware
 
 The images for a chip: applications, the bootstrap, HIL agents, probes, peers
-and vendor references. The staged boot they share is in `chips/espressif/staged-*`, each chip's
+and vendor references. The staged boot they share is in `chips/family/staged-*`, each chip's
 memory layout in `chips/<chip>/layout/` and its platform data in
 `chips/<chip>/platform/`.
 The libraries they link are tested on the host.

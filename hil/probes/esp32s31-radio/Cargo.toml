@@ -1,0 +1,58 @@
+[package]
+name = "oer-firmware-probes-esp32s31-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+build = "build.rs"
+description = "Retained ESP32-S31 Rust entry points for compiled vendor verification, and the linked probe image"
+
+[dependencies]
+oer-espressif-phy = { path = "../../../chips/family/phy" }
+oer-espressif-boot = { path = "../../../chips/family/boot" }
+oer-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }
+oer-espressif-ieee80211-policy = { path = "../../../chips/family/ieee80211-policy" }
+oer-probe-macros = { path = "../../../tools/probe/macros" }
+oer-espressif-coex = { path = "../../../chips/family/coex" }
+oer-memory = { path = "../../../portable/memory" }
+oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
+oer-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
+oer-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-riscv = { path = "../../../portable/riscv" }
+oer-diagnostics = { path = "../../../portable/diagnostics" }
+oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-espressif-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-espressif-executor = { path = "../../../chips/family/executor" }
+oer-embassy-time = { path = "../../../portable/embassy/time" }
+oer-time = { path = "../../../portable/time" }
+oer-cooperate = { path = "../../../portable/cooperate" }
+static_cell.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "oer-firmware-probes-esp32s31-radio"
+path = "src/main.rs"
+
+[[bin]]
+name = "oer-firmware-probes-esp32s31-radio-hardware"
+path = "src/hardware.rs"
+
+[build-dependencies]
+oer-probe-codegen = { path = "../../../tools/probe/codegen" }
+oer-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+oer-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"

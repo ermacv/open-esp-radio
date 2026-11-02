@@ -925,8 +925,8 @@ mod tests {
         StackPolicy::load_with_inputs(&policy, &mut inputs).unwrap();
         let digests = inputs.into_digests();
         let layers = [
-            "chips/espressif/platform/isa/rv32imafc.toml",
-            "chips/espressif/platform/family.toml",
+            "chips/family/platform/isa/rv32imafc.toml",
+            "chips/family/platform/family.toml",
             "chips/esp32s31/platform/chip.toml",
             "chips/esp32s31/platform/rom-rev0.toml",
             "chips/esp32s31/platform/modules/esp32-s31-wroom.toml",
