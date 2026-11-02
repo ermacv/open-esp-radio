@@ -55,6 +55,9 @@ pub struct AggregateWindow {
 pub(crate) enum AttemptWait {
     /// No ticket is free: nothing goes before a terminal returns one.
     NoTicket,
+    /// The window cuts the next aggregate short while an attempt of its
+    /// category is out: nothing goes before a terminal moves the window.
+    WindowShared,
     /// The next aggregate of `tid` could still grow and waits while an
     /// attempt of its category is out.
     Growing {
@@ -82,7 +85,7 @@ impl AttemptWait {
         protection: DataProtection<()>,
     ) -> Option<Self> {
         match self {
-            Self::NoTicket => Some(self),
+            Self::NoTicket | Self::WindowShared => Some(self),
             Self::Growing {
                 tid: growing,
                 window,
@@ -607,6 +610,24 @@ impl<
                 length,
                 last,
             });
+            return None;
+        }
+        // An aggregate the window cuts short, while an attempt of its
+        // category is out, waits for that attempt's terminal: the window
+        // moves over its members, and the next aggregate takes the whole
+        // window instead of the rest of it. Two aggregates in flight would
+        // otherwise share one window and each PPDU carry half of it.
+        let clipped = count < limit
+            && self
+                .owed
+                .iter()
+                .filter(|owed| owed.context.tid == tid)
+                .nth(count)
+                .is_some_and(|next| window.ahead(next.context.sequence));
+        if clipped && outstanding {
+            self.admission.put(category, permit);
+            self.tickets.put(ticket, &mut ());
+            self.waits = Some(AttemptWait::WindowShared);
             return None;
         }
         let mut places = heapless::Vec::new();

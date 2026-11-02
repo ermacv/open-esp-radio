@@ -1917,6 +1917,59 @@ fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
 }
 
 #[test]
+fn an_aggregate_the_window_cuts_short_waits_for_the_attempt_out_and_then_takes_the_whole_window() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>, count: usize| {
+        for _ in 0..count {
+            data.input(
+                DataInput {
+                    msdu: msdu(0),
+                    link: &mut link,
+                },
+                &mut Kept::default(),
+            )
+            .unwrap();
+        }
+    };
+    // A window of four, aggregates of up to eight.
+    let narrow =
+        |start| window(start, 8, u32::MAX).map(|window| AggregateWindow { size: 4, ..window });
+    input(&mut data, 2);
+    let first = aggregate(data.poll_attempt(|_| narrow(0), &mut events));
+    assert_eq!(first.context.len(), 2);
+    // 2 to 5 arrive: the window holds only 2 and 3 while 0 and 1 are out.
+    // The cut aggregate waits, and so it does after one more MSDU.
+    input(&mut data, 4);
+    assert!(data.poll_attempt(|_| narrow(0), &mut events).is_none());
+    assert!(data.attempts_wait());
+    input(&mut data, 1);
+    assert!(data.attempts_wait(), "an MSDU leaves the wait standing");
+    // The BlockAck settles 0 and 1: the window moves to 2, and the next
+    // aggregate takes the whole of it.
+    data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            completion: block_ack(0, 0b11),
+        },
+        oer_portable_time::Instant::from_micros(1_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert!(!data.attempts_wait());
+    let whole = aggregate(data.poll_attempt(|_| narrow(2), &mut events));
+    assert_eq!(whole.context.len(), 4);
+    drop(whole);
+}
+
+#[test]
 fn an_mpdu_beyond_the_window_waits_for_the_window_to_move() {
     let mut events = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(

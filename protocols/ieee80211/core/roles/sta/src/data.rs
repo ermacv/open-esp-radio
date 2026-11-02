@@ -1034,8 +1034,9 @@ impl<
     }
 
     /// Whether the last attempt pass made no attempt and only MSDUs that
-    /// change none came since: no free ticket, or the next aggregate still
-    /// grows behind an attempt of its category. A service skips its next
+    /// change none came since: no free ticket, the next aggregate still
+    /// grows behind an attempt of its category, or the window cuts it short
+    /// while an attempt of its category is out. A service skips its next
     /// attempt pass then; every other change to the machine ends the wait.
     pub fn attempts_wait(&self) -> bool {
         self.waits.is_some()

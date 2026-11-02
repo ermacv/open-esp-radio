@@ -184,7 +184,10 @@ Module map:
   MSDU leaves its queue; one ticket and
   one admission permission serve the aggregate. A first owed MPDU beyond
   the window's end goes neither alone nor aggregated: it waits until the
-  terminals of the MPDUs before it move the window. Each member's description
+  terminals of the MPDUs before it move the window. An aggregate the window
+  cuts short waits too while an attempt of its category is out, so that
+  each aggregate takes the whole window rather than two in flight sharing
+  it. Each member's description
   waits in the machine's member bank (one place per buffer, `CAP`) while
   the aggregate is out; its context carries only the places, in subframe
   order, so it is no larger than a single MPDU's. Each member's memory
