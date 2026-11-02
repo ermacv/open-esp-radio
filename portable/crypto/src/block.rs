@@ -3,7 +3,7 @@
 //! one ([`Aes128Blocks`], software) and one that may refuse a key or a block
 //! ([`Aes128Engine`], hardware), which every infallible one also is.
 
-use crate::{Aes128Key, KeyUnwrap, KeyUnwrapDone, KeyUnwrapRequest, KeyUnwrapResponse, rfc3394};
+use crate::{Aes128Key, KeyUnwrapRequest, KeyUnwrapResponse, rfc3394};
 
 /// One 128-bit cipher block.
 pub type Block = [u8; 16];
@@ -105,40 +105,4 @@ pub fn unwrap_now<E: Aes128Engine, const N: usize>(
 ) -> KeyUnwrapResponse<N> {
     let (kek, wrapped) = request.into_parts();
     rfc3394::unwrap(wrapped, move || engine.load(&kek))
-}
-
-/// The [`KeyUnwrap`] engine of a synchronous primitive or engine: the
-/// operation is ready on its first poll.
-pub struct BlockKeyUnwrap<P> {
-    blocks: P,
-}
-
-impl<P: Aes128Engine> BlockKeyUnwrap<P> {
-    pub const fn new(blocks: P) -> Self {
-        Self { blocks }
-    }
-
-    pub fn into_blocks(self) -> P {
-        self.blocks
-    }
-
-    /// Unwrap `request` to completion ([`unwrap_now`]).
-    pub fn unwrap_now<const N: usize>(
-        &mut self,
-        request: KeyUnwrapRequest<N>,
-    ) -> KeyUnwrapResponse<N> {
-        unwrap_now(&mut self.blocks, request)
-    }
-}
-
-impl<P: Aes128Engine, const N: usize> KeyUnwrap<N> for BlockKeyUnwrap<P> {
-    type Operation = core::future::Ready<KeyUnwrapDone<Self, N>>;
-
-    fn unwrap_key(mut self, request: KeyUnwrapRequest<N>) -> Self::Operation {
-        let response = self.unwrap_now(request);
-        core::future::ready(KeyUnwrapDone {
-            engine: self,
-            response,
-        })
-    }
 }

@@ -18,7 +18,6 @@ radio-fault = []
 
 [dependencies]
 oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-crypto = { path = "../../../portable/crypto" }
 oer-esp32s31-crypto = { path = "../crypto" }
 oer-embassy-time = { path = "../../../portable/embassy/time" }
 oer-time = { path = "../../../portable/time" }

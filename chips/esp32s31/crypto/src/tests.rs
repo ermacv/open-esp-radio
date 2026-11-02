@@ -10,7 +10,6 @@ use super::*;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use oer_crypto::{
     KeyData, KeyUnwrapError, KeyUnwrapRequest,
-    block::BlockKeyUnwrap,
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
 };
 use std::{cell::RefCell, rc::Rc};
@@ -143,13 +142,9 @@ fn fake_register_engine_passes_the_shared_rfc3394_conformance() {
         busy_reads: 2,
         ..Port::default()
     }));
-    let engine = BlockKeyUnwrap::new(AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default()));
-    let engine = conformance::key_unwrap_rfc3394::<_, 32>(engine, || {
-        panic!("a synchronous engine's operation is ready on its first poll")
-    });
-    let engine = conformance::key_unwrap_rfc3394::<_, 512>(engine, || {
-        panic!("a synchronous engine's operation is ready on its first poll")
-    });
+    let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
+    conformance::key_unwrap_rfc3394::<_, 32>(&mut engine);
+    conformance::key_unwrap_rfc3394::<_, 512>(&mut engine);
     assert_eq!(port.borrow().starts, 72);
     assert_erased(&port);
     drop(engine);

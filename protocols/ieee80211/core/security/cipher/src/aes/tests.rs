@@ -2,20 +2,19 @@ use super::*;
 use oer_crypto::{KeyUnwrapError, KeyUnwrapRequest, conformance};
 
 fn unwrap(kek: &[u8; 16], wrapped: &[u8]) -> Result<RsnKeyData, KeyUnwrapError> {
-    SoftwareKeyUnwrap::new(SoftwareAes128)
-        .unwrap_now(KeyUnwrapRequest::new(
+    oer_crypto::block::unwrap_now(
+        &mut SoftwareAes128,
+        KeyUnwrapRequest::new(
             Aes128Key::copy_from(kek),
             RsnKeyData::try_copy(wrapped).unwrap(),
-        ))
-        .into_plaintext()
+        ),
+    )
+    .into_plaintext()
 }
 
 #[test]
 fn the_software_engine_passes_the_key_unwrap_conformance_cases() {
-    let engine = SoftwareKeyUnwrap::new(SoftwareAes128);
-    let _ = conformance::key_unwrap_rfc3394::<_, RSN_KEY_DATA_CAPACITY>(engine, || {
-        panic!("the software operation is ready on its first poll")
-    });
+    conformance::key_unwrap_rfc3394::<_, RSN_KEY_DATA_CAPACITY>(&mut SoftwareAes128);
 }
 
 #[test]

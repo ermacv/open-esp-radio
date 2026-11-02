@@ -21,7 +21,7 @@ path and reports ready; the boot hart reports the stack pointer it reported
 ready on. Hart 1's main then makes its own controller and router
 (`SecondaryHandoff::adopt`), routes its alarm (SYSTIMER target 1, line 17 of
 hart 1, level 3, above its executor), builds the AES engine
-(`compose::crypto::key_unwrap`) over its router's `Silent` proof for the AES
+(`compose::crypto::aes_engine`) over its router's `Silent` proof for the AES
 interrupt, starts its executor on `FROM_CPU1` (line 16 of hart 1, level 2)
 with three tasks and enables its interrupts.
 

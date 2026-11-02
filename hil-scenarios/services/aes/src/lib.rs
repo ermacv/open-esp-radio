@@ -32,7 +32,8 @@
 //! checks the answers against its own reference.
 
 use oer_crypto::{
-    Aes128Key, KeyData, KeyUnwrap, KeyUnwrapError, KeyUnwrapRequest, block::BlockError,
+    Aes128Key, KeyData, KeyUnwrapError, KeyUnwrapRequest,
+    block::{Aes128Engine, BlockError, unwrap_now},
 };
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -102,40 +103,27 @@ oer_hil_agent::service! {
     }
 }
 
-/// The handler of the service over a product engine `E` of key data
-/// capacity `N`, at least [`MAX_WRAPPED`], which moves into each operation
-/// and comes back with its response.
-pub struct Engine<E, const N: usize = MAX_WRAPPED> {
-    engine: Option<E>,
+/// The handler of the service over a product AES-128 engine `E`, which it
+/// lends to each unwrap for the length of the call.
+pub struct Engine<E> {
+    engine: E,
 }
 
-impl<E, const N: usize> Engine<E, N> {
+impl<E> Engine<E> {
     pub const fn new(engine: E) -> Self {
-        const {
-            if N < MAX_WRAPPED {
-                panic!("the engine's key data capacity is below the service's largest request");
-            }
-        }
-        Self {
-            engine: Some(engine),
-        }
+        Self { engine }
     }
 }
 
-impl<E: KeyUnwrap<N>, const N: usize> Handler for Engine<E, N> {
+impl<E: Aes128Engine> Handler for Engine<E> {
     async fn unwrap_key(&mut self, request: UnwrapKey) -> Unwrapped {
-        // A request never exceeds the engine's buffer: MAX_WRAPPED <= N.
-        let Ok(wrapped) = KeyData::<N>::try_copy(&request.wrapped) else {
+        // A request never exceeds the buffer: both hold MAX_WRAPPED bytes.
+        let Ok(wrapped) = KeyData::<MAX_WRAPPED>::try_copy(&request.wrapped) else {
             return Unwrapped::Refused(UnwrapError::InvalidLength);
         };
-        // An engine lost with an unfinished operation stays lost.
-        let Some(engine) = self.engine.take() else {
-            return Unwrapped::Refused(UnwrapError::EngineUnavailable);
-        };
         let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&request.kek), wrapped);
-        let done = engine.unwrap_key(request).await;
-        self.engine = Some(done.engine);
-        match done.response.plaintext() {
+        let response = unwrap_now(&mut self.engine, request);
+        match response.plaintext() {
             Ok(plaintext) => match heapless::Vec::from_slice(plaintext) {
                 Ok(plaintext) => Unwrapped::Plaintext(plaintext),
                 Err(_) => Unwrapped::Refused(UnwrapError::InvalidLength),

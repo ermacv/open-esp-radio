@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "The HIL AES service: RFC 3394 key unwrap requests and responses, and their handler over a product key-unwrap engine"
+description = "The HIL AES service: RFC 3394 key unwrap requests and responses, and their handler over a synchronous product AES-128 engine"
 
 [dependencies]
 oer-crypto = { path = "../../../portable/crypto" }

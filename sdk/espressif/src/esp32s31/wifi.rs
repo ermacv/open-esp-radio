@@ -528,8 +528,7 @@ impl Station {
     /// Start the station on `wifi`: the radio executor, the actor, the MAC
     /// driver and the station runner. Its tasks run once the executor does.
     /// It unwraps its EAPOL-Key data in its own step on `aes`, the
-    /// accelerator, which it owns from here: the image starts no AES
-    /// service beside it.
+    /// accelerator, which it owns from here as its synchronous AES engine.
     ///
     /// # Errors
     /// [`Error::InterruptRouted`] when the table routes the AES interrupt;
@@ -540,10 +539,7 @@ impl Station {
         config: Config,
         boot: &mut Boot,
     ) -> Result<(Self, NetStatus), Error> {
-        let silent = boot
-            .router()
-            .silent::<oer_esp32s31_hal::peripherals::aes::AesInterrupt>()
-            .map_err(|_| Error::InterruptRouted)?;
+        let aes = aes.engine(boot)?;
         let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
         let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
         let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
@@ -629,7 +625,7 @@ impl Station {
             config: config.chip,
             address,
             nonces,
-            aes: oer_esp32s31_compose::crypto::aes_engine(aes.0, silent),
+            aes,
         });
         boot.device = Some(Device {
             network: Some((network, stopper)),

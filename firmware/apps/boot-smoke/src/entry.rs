@@ -1,10 +1,10 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_crypto::{Aes128Key, KeyData, KeyUnwrap as _, KeyUnwrapRequest, KeyUnwrapResponse};
+use oer_crypto::{Aes128Key, KeyData, KeyUnwrapRequest, KeyUnwrapResponse};
 use oer_embassy_time::EmbassyClock;
 use oer_esp32s31_board as board;
 use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_compose::crypto::KeyUnwrapEngine;
+use oer_esp32s31_compose::crypto::AesEngine;
 use oer_esp32s31_hal::cores::Cores;
 use oer_esp32s31_hal::peripherals::aes::{AesInterrupt, AesParts};
 use oer_esp32s31_hal::peripherals::usb_serial_jtag;
@@ -60,7 +60,7 @@ oer_espressif_executor::tasks! {
     /// Hart 1's tasks.
     pub Hart1Tasks: InterruptExecutor<Esp32s31, 1> {
         respond(server: Server, hart: u16) = respond;
-        unwrap(server: AesServer, engine: KeyUnwrapEngine, hart: u16) = serve_aes;
+        unwrap(server: AesServer, engine: AesEngine, hart: u16) = serve_aes;
         beat(responder: LivenessResponder) = answer_beats;
     }
 }
@@ -375,7 +375,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
     let Ok(silent) = router.silent::<AesInterrupt>() else {
         fail(oer_diagnostics::name!("hart1-aes-silent"; 32));
     };
-    let engine = oer_esp32s31_compose::crypto::key_unwrap(aes, silent);
+    let engine = oer_esp32s31_compose::crypto::aes_engine(aes, silent);
     let spawner = executor
         .start::<Hart1Tasks, _, _, 1, _>(hart, router, token, irq, ())
         .unwrap_or_else(|failure| failure.reset());
@@ -412,7 +412,7 @@ async fn respond(mut server: Server, hart: u16) {
 /// Hart 1's AES task: take each unwrap request, wait [`HART1_TIMER`] on
 /// hart 1's timer, run the request on hart 1's AES engine (whose block waits
 /// are hart 1's timers too) and hand the response back in the next exchange.
-async fn serve_aes(mut server: AesServer, mut engine: KeyUnwrapEngine, hart: u16) {
+async fn serve_aes(mut server: AesServer, mut engine: AesEngine, hart: u16) {
     loop {
         let mut request = None;
         if server
@@ -429,9 +429,7 @@ async fn serve_aes(mut server: AesServer, mut engine: KeyUnwrapEngine, hart: u16
                 // collecting exchange expires. A wait past representable
                 // time runs no unwrap: the check finds no response.
                 if EmbassyClock.wait_for(HART1_TIMER).await.is_ok() {
-                    let done = engine.unwrap_key(request).await;
-                    engine = done.engine;
-                    Some(done.response)
+                    Some(oer_crypto::block::unwrap_now(&mut engine, request))
                 } else {
                     None
                 }

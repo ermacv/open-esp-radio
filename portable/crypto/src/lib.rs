@@ -24,18 +24,16 @@
 //! Owned cryptographic operation contracts and the mode algorithms behind them.
 //!
 //! One operation is one request: [`KeyUnwrapRequest`] owns its key-encryption
-//! key and its buffer and moves by value into a [`KeyUnwrap`] engine; the
-//! engine moves itself into the operation and returns with the
-//! [`KeyUnwrapResponse`], which carries the same buffer back. An engine runs
-//! one operation at a time because it is consumed by it, so there is no busy
-//! refusal. The key-encryption key is erased when the request is consumed.
+//! key and its buffer; [`block::unwrap_now`] runs it to completion over a
+//! synchronous AES-128 engine the caller lends ([`block::Aes128Engine`]) and
+//! returns the [`KeyUnwrapResponse`], which carries the same buffer back. The
+//! key-encryption key is erased when the request is consumed.
 //!
 //! The RFC 3394 algorithm has one copy, in [`rfc3394`]: the unwrap and the
 //! wrap run to completion in place in the caller's buffer, each block finished
 //! on return. The unwrap runs over a block engine that may refuse a key or a
 //! block with a typed error ([`block::BlockEngine`]); the wrap over the
-//! infallible [`block::BlockCipher`]. [`block::BlockKeyUnwrap`] is the
-//! [`KeyUnwrap`] engine of a synchronous one.
+//! infallible [`block::BlockCipher`].
 
 #[cfg(test)]
 extern crate std;
@@ -45,7 +43,6 @@ pub mod block;
 pub mod conformance;
 pub mod rfc3394;
 
-use core::future::Future;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// An AES-128 key, erased when dropped.
@@ -157,8 +154,7 @@ impl<const N: usize> KeyUnwrapRequest<N> {
 
 /// The completion of one unwrap: the request's buffer, holding the plaintext
 /// key data on success and cleared on refusal. Only [`rfc3394`] builds a
-/// success, so every plaintext passed the same integrity check; an engine
-/// that ran nothing returns [`Self::engine_failed`].
+/// success, so every plaintext passed the same integrity check.
 pub struct KeyUnwrapResponse<const N: usize> {
     data: KeyData<N>,
     outcome: Result<(), KeyUnwrapError>,
@@ -176,40 +172,6 @@ impl<const N: usize> KeyUnwrapResponse<N> {
         let Self { data, outcome } = self;
         outcome.map(|()| data)
     }
-
-    /// The refusal of an engine that could not run the unwrap at all: no
-    /// key data was processed, and the buffer is empty.
-    pub fn engine_failed(error: block::BlockError) -> Self {
-        Self::refused(KeyUnwrapError::Engine(error))
-    }
-
-    fn refused(error: KeyUnwrapError) -> Self {
-        Self {
-            data: KeyData::cleared(),
-            outcome: Err(error),
-        }
-    }
-}
-
-/// The engine and the response of one finished operation.
-pub struct KeyUnwrapDone<E, const N: usize> {
-    /// The engine, ready for its next request.
-    pub engine: E,
-    pub response: KeyUnwrapResponse<N>,
-}
-
-/// An RFC 3394 unwrap engine of buffers of capacity `N`.
-///
-/// The engine moves into its operation and comes back with the response, so
-/// a caller holds at most one operation per engine. Dropping an unfinished
-/// operation drops the engine with it: an engine whose hardware may still
-/// reach the request's storage keeps that storage until it confirmed the stop,
-/// and never returns it earlier.
-pub trait KeyUnwrap<const N: usize>: Sized {
-    type Operation: Future<Output = KeyUnwrapDone<Self, N>>;
-
-    /// Start unwrapping `request`.
-    fn unwrap_key(self, request: KeyUnwrapRequest<N>) -> Self::Operation;
 }
 
 #[cfg(test)]

@@ -6,17 +6,14 @@
     clippy::unwrap_used,
     clippy::indexing_slicing
 )]
-//! The shared conformance cases of every [`KeyUnwrap`] engine:
-//! [`key_unwrap_rfc3394`]. An engine's tests call it with the engine and a
-//! driver that lets a pending operation progress (advancing virtual time or
-//! servicing a model). An engine that breaks a case panics with what it
+//! The shared conformance cases of every AES-128 engine's RFC 3394 unwrap
+//! ([`crate::block::unwrap_now`]): [`key_unwrap_rfc3394`]. An engine's tests
+//! call it with the engine; an engine that breaks a case panics with what it
 //! observed, so the test fails.
 
-use crate::{Aes128Key, KeyData, KeyUnwrap, KeyUnwrapError, KeyUnwrapRequest, KeyUnwrapResponse};
-use core::{
-    future::Future,
-    pin::pin,
-    task::{Context, Poll, Waker},
+use crate::{
+    Aes128Key, KeyData, KeyUnwrapError, KeyUnwrapRequest,
+    block::{Aes128Engine, unwrap_now},
 };
 
 /// The key-encryption key of RFC 3394 §4.1.
@@ -33,31 +30,6 @@ pub const RFC3394_4_1_CIPHERTEXT: [u8; 24] = [
     0x9d, 0x3e, 0x86, 0x23, 0x71, 0xd2, 0xcf, 0xe5,
 ];
 
-/// Polls before a pending operation counts as never completing.
-const MAX_POLLS: usize = 10_000;
-
-/// Run `request` on `engine` to completion, calling `drive` after each
-/// pending poll, and return the engine with the response.
-///
-/// # Panics
-///
-/// The operation stays pending for [`MAX_POLLS`] polls.
-pub fn complete<E: KeyUnwrap<N>, const N: usize>(
-    engine: E,
-    request: KeyUnwrapRequest<N>,
-    drive: &mut impl FnMut(),
-) -> (E, KeyUnwrapResponse<N>) {
-    let mut context = Context::from_waker(Waker::noop());
-    let mut operation = pin!(engine.unwrap_key(request));
-    for _ in 0..MAX_POLLS {
-        if let Poll::Ready(done) = operation.as_mut().poll(&mut context) {
-            return (done.engine, done.response);
-        }
-        drive();
-    }
-    panic!("the key-unwrap operation never completed");
-}
-
 fn request<const N: usize>(wrapped: &[u8]) -> KeyUnwrapRequest<N> {
     KeyUnwrapRequest::new(
         Aes128Key::copy_from(&RFC3394_4_1_KEK),
@@ -70,23 +42,18 @@ fn request<const N: usize>(wrapped: &[u8]) -> KeyUnwrapRequest<N> {
 /// - refuses a changed ciphertext as `IntegrityCheckFailed` with no plaintext;
 /// - refuses data of fewer than three semiblocks, or not semiblocks, as
 ///   `InvalidLength`;
-/// - comes back after every operation and takes the next request.
-///
-/// Returns the engine after the last case.
+/// - takes the next request after a refusal.
 ///
 /// # Panics
 ///
 /// The engine breaks a case.
-pub fn key_unwrap_rfc3394<E: KeyUnwrap<N>, const N: usize>(
-    engine: E,
-    mut drive: impl FnMut(),
-) -> E {
+pub fn key_unwrap_rfc3394<E: Aes128Engine, const N: usize>(engine: &mut E) {
     const {
         if N < 32 {
             panic!("the conformance cases need 32-byte buffers");
         }
     }
-    let (engine, response) = complete(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT), &mut drive);
+    let response = unwrap_now(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT));
     assert_eq!(
         response.plaintext(),
         Ok(&RFC3394_4_1_KEY_DATA[..]),
@@ -95,18 +62,14 @@ pub fn key_unwrap_rfc3394<E: KeyUnwrap<N>, const N: usize>(
 
     let mut changed = RFC3394_4_1_CIPHERTEXT;
     changed[23] ^= 1;
-    let (engine, response) = complete(engine, request::<N>(&changed), &mut drive);
+    let response = unwrap_now(engine, request::<N>(&changed));
     assert_eq!(
         response.plaintext(),
         Err(KeyUnwrapError::IntegrityCheckFailed),
         "a changed ciphertext fails the integrity check"
     );
 
-    let (engine, response) = complete(
-        engine,
-        request::<N>(&RFC3394_4_1_CIPHERTEXT[..16]),
-        &mut drive,
-    );
+    let response = unwrap_now(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT[..16]));
     assert_eq!(
         response.plaintext(),
         Err(KeyUnwrapError::InvalidLength),
@@ -115,14 +78,14 @@ pub fn key_unwrap_rfc3394<E: KeyUnwrap<N>, const N: usize>(
 
     let mut odd = [0; 25];
     odd[..24].copy_from_slice(&RFC3394_4_1_CIPHERTEXT);
-    let (engine, response) = complete(engine, request::<N>(&odd), &mut drive);
+    let response = unwrap_now(engine, request::<N>(&odd));
     assert_eq!(
         response.plaintext(),
         Err(KeyUnwrapError::InvalidLength),
         "data that is not semiblocks is refused"
     );
 
-    let (engine, response) = complete(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT), &mut drive);
+    let response = unwrap_now(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT));
     assert_eq!(
         response
             .into_plaintext()
@@ -130,5 +93,4 @@ pub fn key_unwrap_rfc3394<E: KeyUnwrap<N>, const N: usize>(
         Ok(true),
         "the engine serves its next request after a refusal"
     );
-    engine
 }

@@ -3,12 +3,14 @@ fn software_key_unwrap(
     kek: &[u8; 16],
     wrapped: &[u8],
 ) -> Result<RsnKeyData, oer_crypto::KeyUnwrapError> {
-    SoftwareKeyUnwrap::new(SoftwareAes128)
-        .unwrap_now(oer_crypto::KeyUnwrapRequest::new(
+    oer_crypto::block::unwrap_now(
+        &mut SoftwareAes128,
+        oer_crypto::KeyUnwrapRequest::new(
             oer_crypto::Aes128Key::copy_from(kek),
             RsnKeyData::try_copy(wrapped).unwrap(),
-        ))
-        .into_plaintext()
+        ),
+    )
+    .into_plaintext()
 }
 
 const TEST_HT_CAPABILITIES: oer_ieee80211_wire::ht::HtLocalCapabilities =
@@ -19,7 +21,7 @@ mod transmit;
 
 use super::*;
 use crate::security_policy::AP_WPA2_PERSONAL_RSN_ELEMENT;
-use oer_ieee80211_core_security_cipher::aes::{RsnKeyData, SoftwareAes128, SoftwareKeyUnwrap};
+use oer_ieee80211_core_security_cipher::aes::{RsnKeyData, SoftwareAes128};
 use oer_ieee80211_core_security_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
