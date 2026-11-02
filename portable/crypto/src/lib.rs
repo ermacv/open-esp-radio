@@ -39,9 +39,14 @@
 extern crate std;
 
 pub mod block;
+pub mod ccm;
+pub mod cmac;
+mod compare;
 #[cfg(any(test, feature = "test-support"))]
 pub mod conformance;
 pub mod rfc3394;
+#[cfg(test)]
+mod test_engine;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
