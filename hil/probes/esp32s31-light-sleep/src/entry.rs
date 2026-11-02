@@ -109,24 +109,115 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     {}
 }
 
-/// Every case in order, then the verdict: every case woke after at least
-/// its length and before twice it.
+/// The wait after boot before the first line that matters: the host's
+/// console attaches to the re-enumerated USB device.
+const ATTACH: Duration = Duration::from_secs(3);
+
+/// The LP-timer target check's length.
+const CHECK_MILLIS: u64 = 100;
+
+/// The counter twice, then the target check without sleep, then every case
+/// in order, and the verdict: the target fired awake and every case woke
+/// after at least its length and before twice it. No case sleeps unless
+/// the target fired awake: the RTC watchdog pauses in sleep, so a sleep
+/// whose wake never comes would not end.
 async fn measure(mut sleep: SleepRegisters) {
-    let mut complete = true;
-    for (index, case) in CASES.iter().enumerate() {
-        if EmbassyClock.wait_for(PAUSE).await.is_err() {
-            fail(oer_portable_diagnostics::name!("pause-time"; 32));
+    if EmbassyClock.wait_for(ATTACH).await.is_err() {
+        fail(oer_portable_diagnostics::name!("attach-time"; 32));
+    }
+    let complete = counter_runs(&mut sleep).await && target_fires(&mut sleep);
+    let mut passed = complete;
+    if complete {
+        for (index, case) in CASES.iter().enumerate() {
+            if EmbassyClock.wait_for(PAUSE).await.is_err() {
+                fail(oer_portable_diagnostics::name!("pause-time"; 32));
+            }
+            passed &= run_case(&mut sleep, index, case);
         }
-        complete &= run_case(&mut sleep, index, case);
     }
     if EmbassyClock.wait_for(PAUSE).await.is_err() {
         fail(oer_portable_diagnostics::name!("pause-time"; 32));
     }
-    text(if complete {
+    text(if passed {
         b"OER-RESULT: pass light-sleep\r\n"
     } else {
         b"OER-RESULT: fail light-sleep\r\n"
     });
+}
+
+/// Two counter readings a pause apart, with the system time between them.
+async fn counter_runs(sleep_registers: &mut SleepRegisters) -> bool {
+    let first = sleep::now(sleep_registers);
+    let before = EmbassyClock.now().as_micros();
+    if EmbassyClock.wait_for(PAUSE).await.is_err() {
+        fail(oer_portable_diagnostics::name!("pause-time"; 32));
+    }
+    let second = sleep::now(sleep_registers);
+    let timer_us = EmbassyClock.now().as_micros().saturating_sub(before);
+    let mut line = Line::new();
+    line.text("OER-PROBE light-sleep counter");
+    let runs = match (first, second) {
+        (Ok(first), Ok(second)) => {
+            let ticks = second.saturating_since(first);
+            line.text(" first=")
+                .number(first.get())
+                .text(" second=")
+                .number(second.get())
+                .text(" timer_us=")
+                .number(timer_us)
+                .text(" rtc_hz=")
+                .number(rate_hz(ticks, timer_us).unwrap_or(0));
+            ticks > 0
+        }
+        _ => {
+            line.text(" error=counter");
+            false
+        }
+    };
+    text(line.end());
+    runs
+}
+
+/// The first target armed [`CHECK_MILLIS`] ahead and waited for awake.
+fn target_fires(sleep_registers: &mut SleepRegisters) -> bool {
+    let Some(ticks) = nominal_ticks(CHECK_MILLIS) else {
+        return false;
+    };
+    let result = oer_portable_riscv::interrupt_free(|| {
+        let start = sleep::now(sleep_registers)?;
+        let at = start.checked_add(ticks).ok_or(SleepError::Bound)?;
+        let give_up_after = at.checked_add(ticks).ok_or(SleepError::Bound)?;
+        let before = EmbassyClock.now().as_micros();
+        let fired = sleep::check_timer(sleep_registers, at, give_up_after)?;
+        let timer_us = EmbassyClock.now().as_micros().saturating_sub(before);
+        Ok::<(u64, u64), SleepError>((fired.saturating_since(start), timer_us))
+    });
+    let mut line = Line::new();
+    line.text("OER-PROBE light-sleep target ms=").number(CHECK_MILLIS);
+    let fires = match result {
+        Ok((rtc, timer_us)) => {
+            line.text(" fired rtc_ticks=")
+                .number(rtc)
+                .text(" timer_us=")
+                .number(timer_us);
+            rtc >= ticks && rtc < ticks.saturating_mul(2)
+        }
+        Err(error) => {
+            line.text(" error=").text(error_name(error));
+            false
+        }
+    };
+    text(line.end());
+    fires
+}
+
+fn error_name(error: SleepError) -> &'static str {
+    match error {
+        SleepError::Bound => "bound",
+        SleepError::TooSoon { .. } => "too-soon",
+        SleepError::Counter(_) => "counter",
+        SleepError::NoOutcome { .. } => "no-outcome",
+    }
 }
 
 /// One sleep with interrupts masked; its line, and whether it woke within
@@ -188,13 +279,7 @@ fn run_case(sleep_registers: &mut SleepRegisters, index: usize, case: &Case) -> 
             woke && rtc >= ticks && rtc < ticks.saturating_mul(2)
         }
         Err(error) => {
-            let reason = match error {
-                SleepError::Bound => "bound",
-                SleepError::TooSoon { .. } => "too-soon",
-                SleepError::Counter(_) => "counter",
-                SleepError::NoOutcome { .. } => "no-outcome",
-            };
-            line.text(" error=").text(reason);
+            line.text(" error=").text(error_name(error));
             false
         }
     };

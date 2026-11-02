@@ -167,6 +167,9 @@ pub trait Registers {
     fn captured_rtc(&self, access: Access<'_>) -> u64;
     /// Acknowledge the first target's wake status.
     fn acknowledge_rtc_wake(&mut self, access: Access<'_>);
+    /// Whether the first target's wake status is raised, without
+    /// acknowledgement.
+    fn rtc_wake_pending(&mut self, access: Access<'_>) -> bool;
     /// Write the first target and enable it.
     fn arm_rtc_target(&mut self, access: Access<'_>, at: RtcTicks);
     /// Make the LP timer the only wake source, or disable every source.
@@ -190,6 +193,57 @@ pub fn now<R: Registers>(registers: &mut R) -> Result<RtcTicks, SleepError> {
     registers.capture_rtc(Access::new());
     let ticks = registers.captured_rtc(Access::new());
     RtcTicks::new(ticks).ok_or(SleepError::Counter(ticks))
+}
+
+/// Arm the LP timer's first target at `at` without sleeping and wait for
+/// its wake status: the count it was seen at.
+///
+/// It shows that the counter runs and the target raises the status the
+/// PMU wakes on, before any sleep depends on it. No outcome by
+/// `give_up_after` is [`SleepError::NoOutcome`]; the status is acknowledged
+/// again either way.
+pub fn check_timer<R: Registers>(
+    registers: &mut R,
+    at: RtcTicks,
+    give_up_after: RtcTicks,
+) -> Result<RtcTicks, SleepError> {
+    if give_up_after <= at {
+        return Err(SleepError::Bound);
+    }
+    let start = now(registers)?;
+    if at <= start {
+        return Err(SleepError::TooSoon {
+            now: start,
+            wake_at: at,
+        });
+    }
+    registers.acknowledge_rtc_wake(Access::new());
+    registers.arm_rtc_target(Access::new(), at);
+    let fired = wait_timer(registers, give_up_after);
+    registers.acknowledge_rtc_wake(Access::new());
+    fired
+}
+
+/// Poll the first target's wake status; read the LP timer every
+/// [`POLLS_PER_TIMER_READ`] polls and give up once it passes
+/// `give_up_after`.
+fn wait_timer<R: Registers>(
+    registers: &mut R,
+    give_up_after: RtcTicks,
+) -> Result<RtcTicks, SleepError> {
+    let mut polls: u32 = 0;
+    loop {
+        if registers.rtc_wake_pending(Access::new()) {
+            return now(registers);
+        }
+        polls = polls.wrapping_add(1);
+        if polls.is_multiple_of(POLLS_PER_TIMER_READ) {
+            let current = now(registers)?;
+            if current > give_up_after {
+                return Err(SleepError::NoOutcome { now: current });
+            }
+        }
+    }
 }
 
 /// Sleep until the LP timer reaches `request.wake_at`, or until a reject.

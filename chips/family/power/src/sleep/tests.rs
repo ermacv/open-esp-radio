@@ -12,7 +12,7 @@ use std::vec::Vec;
 
 use super::{
     Outcome, POLLS_PER_TIMER_READ, RawOutcome, Registers, RtcTicks, SleepClocks, SleepError,
-    SleepRequest, Slept, sleep_until,
+    SleepRequest, Slept, check_timer, sleep_until,
 };
 use crate::Access;
 
@@ -28,6 +28,7 @@ enum Op {
     AckOutcome,
     Request,
     Outcome,
+    Pending,
 }
 
 /// What the model PMU answers to a request.
@@ -48,6 +49,10 @@ struct Model {
     answer: Answer,
     requested: bool,
     polls: u32,
+    /// The armed target.
+    armed: Option<u64>,
+    /// The target never raises its status.
+    dead_timer: bool,
 }
 
 const WAKE_CAUSES: u32 = 1 << 13;
@@ -61,6 +66,8 @@ impl Model {
             answer,
             requested: false,
             polls: 0,
+            armed: None,
+            dead_timer: false,
         }
     }
 }
@@ -83,8 +90,13 @@ impl Registers for Model {
     fn acknowledge_rtc_wake(&mut self, _: Access<'_>) {
         self.ops.push(Op::AckRtc);
     }
+    fn rtc_wake_pending(&mut self, _: Access<'_>) -> bool {
+        self.ops.push(Op::Pending);
+        !self.dead_timer && self.armed.is_some_and(|at| self.counter >= at)
+    }
     fn arm_rtc_target(&mut self, _: Access<'_>, at: RtcTicks) {
         self.ops.push(Op::Arm(at.get()));
+        self.armed = Some(at.get());
     }
     fn select_wake(&mut self, _: Access<'_>, rtc_timer: bool) {
         self.ops.push(Op::Wake(rtc_timer));
@@ -245,4 +257,47 @@ fn ticks_hold_only_the_counter_width() {
     let earlier = RtcTicks::new(10).unwrap();
     assert_eq!(later.saturating_since(earlier), 20);
     assert_eq!(earlier.saturating_since(later), 0);
+}
+
+fn ticks(count: u64) -> RtcTicks {
+    RtcTicks::new(count).unwrap()
+}
+
+#[test]
+fn a_timer_check_arms_the_target_and_reports_the_count_it_fired_at() {
+    // Each timer read advances the counter by one: the target at 5 fires
+    // after a few reads.
+    let mut model = Model::new(0, Answer::Never);
+    let fired = check_timer(&mut model, ticks(5), ticks(100)).unwrap();
+    assert!(fired >= ticks(5));
+    assert_eq!(model.ops[1..3], [Op::AckRtc, Op::Arm(5)]);
+    assert_eq!(model.ops.last(), Some(&Op::AckRtc));
+    assert!(!model.ops.contains(&Op::Request), "a check never sleeps");
+}
+
+#[test]
+fn a_timer_that_never_fires_is_no_outcome() {
+    let mut model = Model::new(0, Answer::Never);
+    model.dead_timer = true;
+    assert_eq!(
+        check_timer(&mut model, ticks(3), ticks(4)),
+        Err(SleepError::NoOutcome { now: ticks(5) })
+    );
+    assert_eq!(model.ops.last(), Some(&Op::AckRtc));
+}
+
+#[test]
+fn a_timer_check_refuses_a_past_target_and_a_bound_before_it() {
+    let mut model = Model::new(10, Answer::Never);
+    assert_eq!(
+        check_timer(&mut model, ticks(5), ticks(100)),
+        Err(SleepError::TooSoon {
+            now: ticks(11),
+            wake_at: ticks(5)
+        })
+    );
+    assert_eq!(
+        check_timer(&mut model, ticks(50), ticks(50)),
+        Err(SleepError::Bound)
+    );
 }

@@ -315,6 +315,10 @@ impl<P: Placement, Q: Placement, T: Placement> Registers for SleepRegisters<P, Q
         self.timer.trigger_int_clr_soc_wakeup_int_clr();
     }
 
+    fn rtc_wake_pending(&mut self, _: Access<'_>) -> bool {
+        self.timer.read_int_raw().soc_wakeup_int_raw()
+    }
+
     fn arm_rtc_target(&mut self, _: Access<'_>, at: RtcTicks) {
         let ticks = at.get();
         let high = (ticks >> 32) as u16;
