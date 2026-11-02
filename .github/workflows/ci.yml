@@ -100,13 +100,13 @@ jobs:
         run: rustup show active-toolchain || rustup toolchain install
       - name: Portable and chip libraries for the chip target
         # Every library of protocols/, portable/ and chips/ builds for the chip;
-        # the platform packages (the boards and the staged runtime and
-        # bootstrap) are checked with the images.
+        # the platform packages (the board, the chip's bootstrap and the
+        # staged runtime and bootstrap) are checked with the images.
         # chips/family/interrupt-table is included by the chips/ selection.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
-              | select(.manifest_path | test("/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
+              | select(.manifest_path | test("/chips/(esp32s31/(board|bootstrap)|family/staged-(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
         # Firmware chip APIs are checked separately from host packages.
