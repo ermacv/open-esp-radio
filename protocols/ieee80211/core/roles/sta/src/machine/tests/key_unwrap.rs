@@ -1,5 +1,5 @@
-//! The asynchronous key-data unwrap: one ticket, an explicit wait, stale
-//! responses returning only their ticket.
+//! The key-data unwrap runs in the step, over the composition's block
+//! primitive: no ticket, no action, no wait.
 
 use super::*;
 
@@ -23,12 +23,13 @@ fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk, counter: u64) -> Vec<u8>
 }
 
 /// Group Message 1 of key `key_id` with replay counter `replay`, protected
-/// under packet number `pn`.
+/// under packet number `pn`; `corrupt` flips a bit of the wrapped key data.
 fn group_message1_at(
     ptk: &oer_ieee80211_core_security_rsn::Ptk,
     replay: u64,
     key_id: u8,
     pn: u64,
+    corrupt: bool,
 ) -> Vec<u8> {
     use oer_ieee80211_core_security_rsn::frames::RsnTxFrame;
     use oer_ieee80211_wire::security::rsn::Akm;
@@ -40,163 +41,61 @@ fn group_message1_at(
     let wrapped =
         oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
             .unwrap();
-    let message =
-        RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
-            .unwrap()
-            .authenticate(ptk);
+    let mut wrapped = wrapped.as_bytes().to_vec();
+    if corrupt {
+        wrapped[0] ^= 1;
+    }
+    let message = RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], &wrapped)
+        .unwrap()
+        .authenticate(ptk);
     protected_received(eapol_frame(message.as_bytes()), pn)
 }
 
-fn handshake_step<'w>(world: &'w World<'_>) -> Option<&'w HandshakeStep> {
-    match &world.station.state {
-        State::Handshake(handshake) => Some(&handshake.step),
-        _ => None,
-    }
-}
-
 #[test]
-fn the_handshake_waits_for_its_unwrap_and_ignores_a_repeated_message3() {
+fn message3_key_data_is_unwrapped_in_the_step_that_takes_it() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
-        world.hold_unwraps = true;
-        let message3 = message3(&ptk, 2);
-        world.receive(at(33), &message3);
-        assert_eq!(world.unwraps, 1);
-        assert!(matches!(
-            handshake_step(&world),
-            Some(HandshakeStep::AwaitUnwrap { .. })
-        ));
-        assert!(world.station.key_unwrap.in_flight());
-        let deadline = world.station.poll_deadline();
-        assert!(deadline.is_some());
-
-        // The access point repeats Message 3 while the unwrap is out: the
-        // station asks for nothing more and its deadline stays.
-        world.receive(at(34), &message3);
-        assert_eq!(world.unwraps, 1);
-        assert_eq!(world.station.poll_deadline(), deadline);
-        assert!(world.take().is_empty());
-
-        world.release_unwrap(at(35));
-        world.run(at(35));
-        assert!(world.station.is_connected());
-        assert!(!world.station.key_unwrap.in_flight());
-        assert_eq!(world.unwraps, 1);
-    });
-}
-
-#[test]
-fn a_response_after_the_handshake_left_returns_only_its_ticket_and_a_new_handshake_waits_for_it() {
-    installed(|mint| {
-        let (mut world, ptk) = wpa2_associated::<2>(mint);
-        world.hold_unwraps = true;
+        let before = world.unwraps();
+        // The receive and the actions it owes connect: nothing waits for an
+        // engine or a later input.
         world.receive(at(33), &message3(&ptk, 2));
-        assert_eq!(world.unwraps, 1);
-        world.command(at(34), 2, StaCommand::Disconnect).unwrap();
-        world.run(at(34));
-        assert!(handshake_step(&world).is_none());
-
-        // A new connection reaches its Message 3 while the old unwrap is out:
-        // its request waits for the ticket.
-        world.command(at(40), 3, StaCommand::Connect).unwrap();
-        world.run(at(40));
-        let now = world.advance();
-        world.receive(now, &wpa2_beacon());
-        let now = world.advance();
-        world.answer_authentication(now, 0);
-        world.receive(now, &association_response(0));
-        let message1 = oer_ieee80211_core_security_rsn::frames::RsnTxFrame::<512>::message1(
-            oer_ieee80211_wire::security::rsn::Akm::Psk,
-            LOCAL,
-            1,
-            ANONCE,
-        )
-        .unwrap();
-        world.receive(now, &eapol_frame(message1.as_bytes()));
-        world.receive(now, &message3(&ptk, 2));
-        assert!(matches!(
-            handshake_step(&world),
-            Some(HandshakeStep::Unwrap(..))
-        ));
-        assert_eq!(world.unwraps, 1);
-
-        // The old response finds no handshake waiting for it: only the
-        // ticket comes back, and the new request goes out with it.
-        world.release_unwrap(now);
-        assert!(matches!(
-            handshake_step(&world),
-            Some(HandshakeStep::Unwrap(..))
-        ));
-        world.run(now);
-        assert_eq!(world.unwraps, 2);
-        assert!(matches!(
-            handshake_step(&world),
-            Some(HandshakeStep::AwaitUnwrap { .. })
-        ));
-        world.release_unwrap(now);
-        world.run(now);
+        assert_eq!(world.unwraps(), before + 1);
         assert!(world.station.is_connected());
-        assert!(!world.station.key_unwrap.in_flight());
     });
 }
 
 #[test]
-fn a_group_rekey_waits_for_its_unwrap_and_takes_the_next_frame_after_its_response() {
+fn a_group_rekey_unwraps_each_frame_in_its_step_and_answers_each() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
-        world.unwraps = 0;
-        world.hold_unwraps = true;
-        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3));
-        assert_eq!(world.unwraps, 1);
-
-        // The same frame again is stale while its unwrap is out; a newer one
-        // waits in the deferred place.
-        assert_eq!(
-            world.station.receive(
-                at(51),
-                &group_message1_at(&ptk, 3, 2, 4),
-                verified_meta(),
-                |_| {},
-                &mut world.losses,
-            ),
-            Err(StaRxError::Security(RsnConnectedProcessError::Supplicant(
-                RsnConnectedSupplicantError::StaleReplayCounter
-            )))
-        );
-        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 5));
-        assert_eq!(world.unwraps, 1);
-        let before = world.frames.len();
-
-        world.release_unwrap(at(52));
-        world.run(at(52));
-        assert_eq!(world.unwraps, 2);
-        world.release_unwrap(at(53));
-        world.run(at(53));
-        assert_eq!(world.frames.len(), before + 2, "GM2 for each counter");
+        let before = world.unwraps();
+        let frames = world.frames.len();
+        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, false));
+        world.run(at(50));
+        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, false));
+        world.run(at(51));
+        assert_eq!(world.unwraps(), before + 2);
+        assert_eq!(world.frames.len(), frames + 2, "GM2 for each counter");
         assert!(world.station.is_connected());
-        assert!(!world.station.key_unwrap.in_flight());
         assert_eq!(world.station.tickets.len(), 2);
         assert_eq!(world.station.buffers.len(), 2);
     });
 }
 
 #[test]
-fn a_response_after_the_link_left_installs_nothing() {
+fn key_data_that_fails_its_integrity_check_is_a_counted_drop_and_the_link_stays() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
-        world.unwraps = 0;
-        world.hold_unwraps = true;
-        world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
-        assert_eq!(world.unwraps, 1);
-        world.command(at(51), 2, StaCommand::Disconnect).unwrap();
+        let before = world.losses.rsn;
+        let frames = world.frames.len();
+        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, true));
+        world.run(at(50));
+        assert_eq!(world.losses.rsn, before + 1);
+        assert_eq!(world.frames.len(), frames, "no GM2 for refused key data");
+        assert!(world.station.is_connected());
+        // The next valid group message still installs and answers.
+        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, false));
         world.run(at(51));
-        assert!(!world.station.is_connected());
-        world.take();
-
-        world.release_unwrap(at(52));
-        world.run(at(52));
-        assert!(!world.station.key_unwrap.in_flight());
-        assert!(world.take().is_empty());
-        assert!(world.station.keys.clear());
+        assert_eq!(world.frames.len(), frames + 1);
     });
 }

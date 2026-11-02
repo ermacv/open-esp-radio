@@ -204,11 +204,16 @@ const SNONCE: [u8; 32] = [3; 32];
 
 struct Callbacks {
     nonce_calls: usize,
+    blocks: CountingBlocks,
 }
 impl StaCallbacks for Callbacks {
+    type KeyUnwrapBlocks = CountingBlocks;
     fn nonce(&mut self) -> [u8; 32] {
         self.nonce_calls += 1;
         SNONCE
+    }
+    fn key_unwrap_blocks(&mut self) -> &mut CountingBlocks {
+        &mut self.blocks
     }
     fn he_packet_padding(
         &self,
@@ -229,12 +234,23 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     wmm: [0; 9],
 };
 
-/// The software engine's unwrap, as an image composes it.
-fn unwrap(request: StaKeyUnwrapRequest) -> crate::machine::StaKeyUnwrapResponse {
-    oer_ieee80211_core_security_cipher::aes::SoftwareKeyUnwrap::new(
-        oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
-    )
-    .unwrap_now(request)
+/// The software block an image composes, counting its key loads: one per
+/// key-data unwrap.
+struct CountingBlocks {
+    loads: usize,
+}
+impl oer_crypto::block::Aes128Blocks for CountingBlocks {
+    type Keyed<'a>
+        = oer_ieee80211_core_security_cipher::aes::SoftwareAes128Keyed
+    where
+        Self: 'a;
+    fn load_key(&mut self, key: &oer_crypto::Aes128Key) -> Self::Keyed<'_> {
+        self.loads += 1;
+        oer_crypto::block::Aes128Blocks::load_key(
+            &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+            key,
+        )
+    }
 }
 
 fn channel(number: u8) -> SupportedChannel<Caps> {
@@ -397,11 +413,6 @@ struct World<'id, const G: usize = 2> {
     associated: Option<(usize, Peer<RxMeta>)>,
     /// The signal of the frames the world delivers.
     rssi: i8,
-    /// Key-data unwraps wait for the test's release.
-    hold_unwraps: bool,
-    pending_unwraps: Vec<(KeyUnwrapId, StaKeyUnwrapRequest)>,
-    /// The key-data unwraps the station asked for.
-    unwraps: usize,
 }
 
 /// A station with the test's pools and no profile yet.
@@ -512,7 +523,10 @@ impl<'id> World<'id> {
             listen_interval: StationListenInterval::new(10).unwrap(),
             phy: PhyMode::Legacy,
             tx_block_ack: None,
-            callbacks: Callbacks { nonce_calls: 0 },
+            callbacks: Callbacks {
+                nonce_calls: 0,
+                blocks: CountingBlocks { loads: 0 },
+            },
         };
         let resources = StationResources {
             configure: permissions.configure,
@@ -548,9 +562,6 @@ impl<'id> World<'id> {
             unsend_next: false,
             associated: None,
             rssi: i8::MIN,
-            hold_unwraps: false,
-            pending_unwraps: Vec::new(),
-            unwraps: 0,
         }
     }
 }
@@ -832,21 +843,6 @@ impl<'id, const G: usize> World<'id, G> {
                     StaAction::Associated(peer) => {
                         self.associated = Some((self.frames.len(), peer))
                     }
-                    StaAction::UnwrapKeyData { id, request } => {
-                        self.unwraps += 1;
-                        if self.hold_unwraps {
-                            self.pending_unwraps.push((id, request));
-                        } else {
-                            self.station.input(
-                                now,
-                                StaInput::KeyDataUnwrapped {
-                                    id,
-                                    result: unwrap(request),
-                                },
-                                &mut self.losses,
-                            );
-                        }
-                    }
                 }
             }
             while let Some(action) = self.arbiter.poll_action(now) {
@@ -891,17 +887,9 @@ impl<'id, const G: usize> World<'id, G> {
         }
     }
 
-    /// Complete the oldest held key-data unwrap in the software engine.
-    fn release_unwrap(&mut self, now: Instant) {
-        let (id, request) = self.pending_unwraps.remove(0);
-        self.station.input(
-            now,
-            StaInput::KeyDataUnwrapped {
-                id,
-                result: unwrap(request),
-            },
-            &mut self.losses,
-        );
+    /// The key-data unwraps the station ran, in its steps.
+    fn unwraps(&self) -> usize {
+        self.station.config.callbacks.blocks.loads
     }
 
     fn installed(&mut self, now: Instant, input: StaInput<'id, Tokens<'id, G>, Caps>) {
@@ -3610,23 +3598,11 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     &mut world.losses,
                 );
             }
-            // The unwrap is out: the deadline keeps running.
+            // Message 3's key data was unwrapped in its receive.
             if point >= 4 {
-                let Some(StaAction::UnwrapKeyData { id, request }) =
-                    world.station.poll_action(at(33), &mut world.losses)
-                else {
-                    panic!("key-data unwrap")
-                };
-                assert!(
-                    world
-                        .station
-                        .poll_action(at(33), &mut world.losses)
-                        .is_none()
-                );
-                world.pending_unwraps.push((id, request));
+                assert_eq!(world.unwraps(), 1);
             }
             if point >= 5 {
-                world.release_unwrap(at(33));
                 let Some(StaAction::InstallPairwiseKey {
                     association,
                     pending,
@@ -3688,12 +3664,6 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
             for installed in core::mem::take(&mut world.pending_installs) {
                 world.station.input(at(6032), installed, &mut world.losses);
             }
-            // A late response finds no waiting handshake: only its ticket
-            // comes back.
-            while !world.pending_unwraps.is_empty() {
-                world.release_unwrap(at(6032));
-            }
-            assert!(!world.station.key_unwrap.in_flight());
             for tx in transmissions {
                 world.transmitted(tx, false);
             }

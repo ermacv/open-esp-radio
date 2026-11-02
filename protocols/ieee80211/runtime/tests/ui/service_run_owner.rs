@@ -24,11 +24,8 @@ pub fn run_once<
         1,
     >,
     timer: &impl Timer,
-    unwrap: &mut oer_ieee80211_runtime::station::KeyUnwrapSlot<
-        impl oer_crypto::KeyUnwrap<{ oer_ieee80211_core_roles_sta::machine::KEY_DATA_CAPACITY }, Operation: Unpin>,
-    >,
 ) {
-    let run = service.run(owner, io, timer, unwrap);
+    let run = service.run(owner, io, timer);
     #[cfg(ui_reject)]
     drop(service); // ui-error: E0382
     drop(run);

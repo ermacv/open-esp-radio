@@ -13,9 +13,8 @@ oer_espressif::entry!(boot, hart1 = network);
 static LINK: Channel<Request, Reply, 1> = Channel::new();
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
-    let aes = Aes::start(p.aes, &mut boot)?;
     let config = wifi::Config::new(*b"DE", 6, 10)?;
-    let (station, status) = Station::start(p.wifi, &aes, config, &mut boot)?;
+    let (station, status) = Station::start(p.wifi, config, &mut boot)?;
     let link = LINK.application(&mut boot)?;
     Ok(boot.run(app(station, status, link)))
 }
@@ -117,7 +116,8 @@ once the boot ended: it runs the second boot there and then its IP service
 and future on its own thread-mode executor, and hart 0 waits for the second
 boot's end before it enables its interrupts. The image declares
 `harts = ["boot", 1]`. Service tasks on the application executor: the RTC
-watchdog feed, the AES service, the station runner and the IP service. The
+watchdog feed, the AES service when the image starts it, the station
+runner and the IP service. The
 radio executor runs the radio actor and the MAC driver.
 
 | Default | Value |
@@ -134,10 +134,10 @@ radio executor runs the radio actor and the MAC driver.
 clients from `Aes::client` (in the boot or in a task). A request moves into
 the client's seat and its response comes back by value; the service runs
 one request at a time, the next pending client after the last served. A
-client is also a `KeyUnwrap` engine; the Wi-Fi station takes one.
+client is also a `KeyUnwrap` engine. The Wi-Fi station takes none: it
+unwraps its EAPOL-Key data in its own step.
 
-`wifi::Station::start` takes the radio, the entropy source and an AES
-client. Its configuration names one channel (`wifi::Config::new`) or every
+`wifi::Station::start` takes the radio and the entropy source. Its configuration names one channel (`wifi::Config::new`) or every
 2.4 GHz channel the country permits, scanned at each connect
 (`wifi::Config::all_channels`). `connect(profile)`
 ends with the result of that connection attempt: `Connected`, or a

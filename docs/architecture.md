@@ -212,9 +212,11 @@ the lossless concrete callback. A duplicate in-flight kind has its own typed
 admission refusal. Runner selects inputs over the generic port and executes
 the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
-NetDevice, Runners)`; compose supplies the value-owned key-unwrap engine in
-resources. Images declare its composed static type, select the interrupt entries,
-callbacks and observers, and spawn the returned runners.
+NetDevice, Runners)`. The station unwraps EAPOL-Key data synchronously in
+its step over the block primitive its callbacks supply
+(`StaCallbacks::KeyUnwrapBlocks`); the facade's is the software AES-128
+block. Images select the interrupt entries, callbacks and observers, and
+spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
 is the default, which the HIL station image keeps: it joins once per boot.

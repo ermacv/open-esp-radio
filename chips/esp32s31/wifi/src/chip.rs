@@ -39,7 +39,7 @@ const _: () = {
 pub const TX: usize = crate::FRAME_CAPACITY;
 pub type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 pub(crate) type Rng = oer_esp32s31_compose::platform::Entropy;
-/// Image-selected entries, callbacks, observers, event sink and key-unwrap engine.
+/// Image-selected entries, callbacks, observers and event sink.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
     type Wifi: Entry<Part = WifiIrqPart<Lower>>;
@@ -51,10 +51,6 @@ pub trait Binding: Sized + 'static {
     /// The sink the station service lends its cores: the protocol's events.
     /// `()` keeps none.
     type Sink: oer_ieee80211_runtime::station::StationEvents + 'static;
-    type Engine: oer_crypto::KeyUnwrap<
-            { oer_ieee80211_core_roles_sta::machine::KEY_DATA_CAPACITY },
-            Operation: Unpin,
-        > + 'static;
     type Events: Events + 'static;
     /// Where the station's network end runs: [`crate::SameHart`], or
     /// [`crate::AcrossHarts`] with the executor signals the two harts raise
@@ -238,10 +234,19 @@ impl Config {
         })
     }
 }
-pub(crate) struct CoreCallbacks<C>(C);
+/// The image's callbacks and the block primitive the station unwraps
+/// EAPOL-Key data with in its step: the software AES-128 block.
+pub(crate) struct CoreCallbacks<C> {
+    callbacks: C,
+    blocks: oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+}
 impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
+    type KeyUnwrapBlocks = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
-        self.0.nonce()
+        self.callbacks.nonce()
+    }
+    fn key_unwrap_blocks(&mut self) -> &mut Self::KeyUnwrapBlocks {
+        &mut self.blocks
     }
     fn he_packet_padding(
         &self,
@@ -335,7 +340,10 @@ impl<W: Binding> Profile<W> {
                     oer_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(TX_BLOCK_ACK)
                         .map_err(|_| InitializationError::TxBlockAck)?,
                 ),
-                callbacks: CoreCallbacks(callbacks),
+                callbacks: CoreCallbacks {
+                    callbacks,
+                    blocks: oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                },
             },
             observer,
             sink,
@@ -456,7 +464,6 @@ impl<W: Binding<Notifies = crate::SameHart>> Default for Storage<W> {
     }
 }
 pub struct Resources<W: Binding> {
-    pub engine: W::Engine,
     pub events: W::Events,
     pub storage: &'static mut Storage<W>,
     pub hardware: crate::WifiHardware,
@@ -491,7 +498,6 @@ pub struct StationRunner<W: Binding> {
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
-    pub(crate) engine: W::Engine,
     pub(crate) frontend: oer_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
     pub(crate) connection: ServiceConnection<'static, W::Notifies>,
@@ -530,7 +536,6 @@ pub fn station<W: Binding>(
     Runners<W>,
 ) {
     let Resources {
-        engine,
         events,
         storage,
         hardware,
@@ -607,7 +612,6 @@ pub fn station<W: Binding>(
             },
             station: StationRunner {
                 service: ServiceRunner {
-                    engine,
                     frontend,
                     config,
                     connection,
