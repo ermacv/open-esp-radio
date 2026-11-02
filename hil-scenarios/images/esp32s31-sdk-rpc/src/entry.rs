@@ -16,13 +16,15 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let console = Console::open(p.console, &mut boot)?;
     let evidence = boot.evidence();
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
-    Ok(boot.run(oer_hil_agent_espressif::serve(
+    Ok(boot.run(move || {
+        oer_hil_agent_espressif::serve(
         console,
         evidence,
         services::IMAGE,
         outbox,
         move || worker(engine, inbox),
-    )))
+    )
+    }))
 }
 
 /// Answer each AES request in order, each to completion on the library's

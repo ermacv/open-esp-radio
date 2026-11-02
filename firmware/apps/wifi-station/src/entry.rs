@@ -23,7 +23,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;
     let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;
-    Ok(boot.run(app(station, status, exchanges)))
+    Ok(boot.run(move || app(station, status, exchanges)))
 }
 
 /// The second boot: the IP service over the station's device, and the
@@ -32,7 +32,7 @@ fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Er
     let device = p.device.ok_or(Error::NoDevice)?;
     let (net, mut boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
     let requests = EXCHANGES.second(&mut boot)?;
-    Ok(boot.run(exchanges(net, requests)))
+    Ok(boot.run(move || exchanges(net, requests)))
 }
 
 /// Exchange one line with each gateway the application names.
