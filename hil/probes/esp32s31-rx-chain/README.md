@@ -86,7 +86,7 @@ ELF requires the normal bootstrap/PSRAM handoff. Under a board/air lease:
 
 ```console
 cargo stand --owner wifi lease --board s31-b --air exclusive -- \
-  cargo fw run ../probes/esp32s31-rx-chain --board s31-b --timeout 8s
+  cargo fw run esp32s31-rx-chain --board s31-b --timeout 8s
 ```
 
 The common runtime exception path retains the entry-time frame before the

@@ -56,5 +56,5 @@ hardware result agrees with software (`fail` otherwise). When the interrupt
 does not come in Typical mode, it prints `interrupt none-in-typical-mode` and
 skips the `interrupt` operations.
 
-Run it with `cargo fw run ../probes/esp32s31-aes-timing --board <board>`
+Run it with `cargo fw run esp32s31-aes-timing --board <board>`
 under a lease.

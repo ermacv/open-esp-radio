@@ -367,7 +367,7 @@ pub struct GroupPeripherals {
 /// The group's context: `entry!(boot, group = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
 /// ends with beside the IP service it started. Both run where the second
-/// boot runs: on hart 0, the application's executor, or with the `hart1`
+/// boot runs: on hart 0, the application's executor, or with the `group`
 /// feature on hart 1's own executor, which hart 1 runs alone.
 ///
 /// `N` is the IP service the group started, whose pool sizes are the
@@ -641,7 +641,7 @@ impl Error {
 pub type AppResult = Result<core::convert::Infallible, Error>;
 
 /// Run the image: adopt the runtime, report the previous boot's faults,
-/// call `boot` with the peripherals, then `hart1` with what the boot handed
+/// call `boot` with the peripherals, then the group's setup with what the boot handed
 /// it, and start the executor with the library's service tasks, the second
 /// boot's IP service and future, and the application's future. Any error
 /// records and resets.
@@ -778,7 +778,7 @@ pub fn start<S: Started, H: GroupStarted>(
         #[cfg(feature = "wifi")]
         device: setup.device.take(),
     };
-    // On hart 0 the group runs here; with `hart1` on hart 1, below.
+    // On hart 0 the group runs here; with `group` on hart 1, below.
     #[cfg(not(feature = "group"))]
     let (net, second) = hart1(handed, GroupBoot { net: NoNet })
         .unwrap_or_else(|error| fail(error.name()))
@@ -954,7 +954,7 @@ struct Owned {
 }
 
 /// Where hart 1 takes its parts: the mailbox `entry!` declares with the
-/// `hart1` feature, nothing without it. Not an API.
+/// `group` feature, nothing without it. Not an API.
 #[doc(hidden)]
 #[cfg(feature = "group")]
 pub type GroupMailbox = &'static oer_chips_family_staged_runtime::Mailbox<

@@ -125,7 +125,7 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | Cores of memory the hardware shares | `portable/memory`, `chips/family/staged-layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
-| Bootstrap and probe images | `firmware/bootstrap/`, `hil/probes/` |
+| Bootstrap and probe images | `chips/esp32s31/bootstrap/`, `hil/probes/` |
 
 `oer-chips-family-interrupt-table` owns the Espressif interrupt matrix contract,
 vector ABI and staged-runtime symbols. CLIC line encodings live in
@@ -906,7 +906,7 @@ The S31 composition sends only frontend endpoints to P1 and retains the slot
 manager and registration in its P2 task, establishing the cleanup Drop context.
 
 The platform crates (the boards and `chips/family/staged-*`), the bootstrap images
-(`firmware/bootstrap/*`) and the probe images (`hil/probes/*`) own the
+(`chips/esp32s31/bootstrap`) and the probe images (`hil/probes/*`) own the
 target ABI and placement, so they hold unsafe code that no crate above them
 needs:
 

@@ -10,7 +10,7 @@ The session retains every owner. There is no second PAC claim.
 
 ```console
 cargo fw probe oer-hil-probes-esp32s31-radio
-cargo fw build ../probes/esp32s31-radio --bin oer-hil-probes-esp32s31-radio-hardware --diagnostic
+cargo fw build esp32s31-radio --bin oer-hil-probes-esp32s31-radio-hardware --diagnostic
 ```
 
 Build before leasing. Flash the built bundle with `cargo fw flash

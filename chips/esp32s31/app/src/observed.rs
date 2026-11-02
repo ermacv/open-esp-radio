@@ -3,8 +3,8 @@
 //! report to, and the readers.
 //!
 //! Executors: the application executor (hart 0, thread mode), the radio
-//! executor (hart 0, P2) and, with `hart1`, hart 1's executor (thread mode),
-//! each at its index. Hart 1's executor reports nothing without `hart1`.
+//! executor (hart 0, P2) and, with `group`, hart 1's executor (thread mode),
+//! each at its index. Hart 1's executor reports nothing without `group`.
 //!
 //! The readers run in thread mode, on either hart: a reader that yields
 //! never stays above a writer it preempted.

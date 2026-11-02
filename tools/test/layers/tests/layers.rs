@@ -927,7 +927,7 @@ enum Role {
 }
 
 /// The role of every chip and HIL package. A package under `chips/`,
-/// `protocols/hil/` or `hil-scenarios/`, or a `hil` leaf, is listed here.
+/// `protocols/hil/` or `hil/` (but `hil/probes/`), or a `hil` leaf, is listed here.
 const ROLES: &[(&str, Role)] = &[
     ("chips/family/facts", Role::Facts),
     ("chips/family/efuse", Role::Facts),

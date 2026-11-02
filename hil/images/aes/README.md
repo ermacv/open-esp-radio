@@ -23,5 +23,5 @@ A boot error and an application error record their named cause and reset
 the chip (the library's failure table); a console transport fault ends
 the application with `sdk-console`. The image builds in no credentials.
 
-`cargo fw build esp32s31-sdk-rpc` builds it; the scenario's harness builds
+`cargo fw build hil-aes` builds it; the scenario's harness builds
 and flashes it.

@@ -1,4 +1,4 @@
-//! The group on hart 1 (`hart1` feature).
+//! The group on hart 1 (`group` feature).
 //!
 //! Hart 0 ends its boot, grants hart 1's executor system timer comparator 2
 //! and launches hart 1 through the image's mailbox

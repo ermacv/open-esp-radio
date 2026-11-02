@@ -1,8 +1,8 @@
 # open-esp-radio
 
-Source-only `no_std` radio stack in Rust for the Espressif ESP32-S31:
-Wi-Fi, Bluetooth LE and IEEE 802.15.4, without the vendor's radio binaries.
-The ESP32-C5 appears only as the stand's ESP-IDF peers; it has no Rust code.
+Source-only `no_std` radio stack in Rust for Espressif chips, today the
+ESP32-S31: Wi-Fi, Bluetooth LE and IEEE 802.15.4, without the vendor's radio
+binaries. The stand's ESP-IDF peers run on the ESP32-C5.
 
 **Status.** The tree contains portable protocol cores and runtimes, host
 reference models and tests, the S31 register model, PAC, HAL, PHY and drivers
@@ -17,11 +17,13 @@ Not affiliated with or endorsed by Espressif Systems.
 
 | Path | Contents |
 | --- | --- |
-| `protocols/` | sans-IO protocols: Wi-Fi, Bluetooth LE, IEEE 802.15.4, the radio port, network, HIL ([layout](docs/repository-layout.md)) |
-| `portable/` | generic `no_std` support: time, memory, trace, crypto, Embassy bindings |
-| `chips/` | everything Espressif: PACs, HALs, PHY, drivers, staged boot, boards, and each chip's register model, notes and vendor pins |
-| `firmware/` | the images for a chip: apps, bootstraps, HIL agents, probes, ESP-IDF peers |
 | `tools/` | the developer's machine, by domain: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
+| `portable/` | generic `no_std` support: time, memory, trace, crypto, Embassy bindings |
+| `protocols/` | sans-IO protocols: Wi-Fi, Bluetooth LE, IEEE 802.15.4, the radio port, network, HIL ([layout](docs/repository-layout.md)) |
+| `chips/` | the hardware layers: `family/` what every chip shares (staged boot, executor, facts), `<chip>/` its register model, PAC, HAL, PHY, drivers, bootstrap and application entry |
+| `oer/` | the application entry (`oer`): what an image uses, the chip selected by the build |
+| `examples/` | examples on the entry |
+| `hil/` | checks on hardware: images on the entry, probes below it, their services, agent and host programs |
 | `docs/` | architecture, source policy, hardware errata and topic pages |
 
 ## Build

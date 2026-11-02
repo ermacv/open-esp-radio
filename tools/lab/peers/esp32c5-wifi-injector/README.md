@@ -23,8 +23,8 @@ cargo fw idf build wifi-injector-peer
 cargo fw idf build wifi-injector-vendor-reference
 ```
 
-`cargo fw flash` writes only the S31 images of `firmware/apps` and
-`hil-scenarios/images`, so a leased command writes a catalog build with
+`cargo fw flash` writes only the S31 images of `examples/`, `hil/images/`
+and `hil/probes/`, so a leased command writes a catalog build with
 ESP-IDF's `esptool` from the cache's tools (`write-flash @flash_args` in the
 build directory, `--chip`, the board's `/dev/serial/by-id` port), and the
 lease journals it:

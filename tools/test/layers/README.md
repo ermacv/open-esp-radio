@@ -13,7 +13,7 @@ dependencies count only where a rule says so.
 ## Roles
 
 `tests/layers.rs` lists the role of every package under `chips/`,
-`protocols/hil/` and `hil-scenarios/` and of any `hil` leaf (`ROLES`); a
+`protocols/hil/` and `hil/` (but `hil/probes/`) and of any `hil` leaf (`ROLES`); a
 listed role whose package does not exist yet waits in `AWAITED_ROLES`. Other
 packages follow their root: protocol leaves (`wire`, `cipher`, `port`,
 `model`, `runtime`, otherwise a core; `instrumentation` is an
@@ -39,7 +39,7 @@ other `portable/` support, firmware images and tools.
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
 | `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
-| `HilImage` | `hil-scenarios/images/*` | the application entry (each depends on it), the HIL agent on the entry, HIL bindings, agent and protocol, portable, Embassy adapters |
+| `HilImage` | `hil/images/*` | the application entry (each depends on it), the HIL agent on the entry, HIL bindings, agent and protocol, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for
 facts, PAC, HAL, drivers, adapters, service and client, platform, platform

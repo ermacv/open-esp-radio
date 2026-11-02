@@ -6,9 +6,10 @@ the end go deeper.
 
 ## Goals and scope
 
-- **Chips.** ESP32-S31 is the product; ESP32-C5 is a peer on the vendor SDK:
-  the repository holds its ESP-IDF peer applications, its pins and its flash
-  map, and no Rust code for it.
+- **Chips.** ESP32-S31 is the product chip; the ESP32-C5 runs the stand's
+  ESP-IDF peers. Examples and HIL images name no chip: they use the
+  application entry by capability (cores, radios, peripherals), and the image
+  pipeline selects the chip from the board.
 - **Radios.** Wi-Fi in every mode, Bluetooth LE (every controller capability
   the hardware offers, multiple connections and the central role first),
   IEEE 802.15.4, with hardware coexistence between them. Bluetooth Classic
@@ -36,7 +37,7 @@ application          credentials, network stack (embassy-net), sockets
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
 image                boot (chosen peripherals and services), application tasks
-  application entry  the family SDK (`oer`): peripherals taken once,
+  application entry  `oer` over `chips/<chip>/app`: peripherals taken once,
                      drivers and services with defaults, their interrupts,
                      executors and service tasks, record and reset on the
                      image's behalf
@@ -265,8 +266,9 @@ including aliases, optional entries and target-specific entries:
   entry (`oer`), which re-exports the executors' clock;
   `embassy-time-driver` belongs to `chips/family/executor`.
 - `embassy-net`, `xarxa` and `xarxa-driver` belong to
-  `portable/embassy/net` and `firmware/*`; `trouble-host` belongs to
-  `portable/embassy/trouble` and `firmware/*`.
+  `portable/embassy/net`, the S31 application entry (`chips/esp32s31/app`)
+  and the images; `trouble-host` belongs to `portable/embassy/trouble` and
+  the images.
 - `bt-hci` belongs to `oer-protocols-bluetooth-hci`, `portable/embassy/trouble` and
   `tools/`. The HCI codec exports selected packet, command and event values,
   without re-exporting the crate. Protocol sources never use
@@ -337,36 +339,44 @@ factory identity, entropy and timer installation. The reusable console and
 SAR/PWDET bindings keep the existing driver/handler ownership. Trace clocks
 and unanswered request resets bind through that same platform.
 
-`oer` (`oer`) is the family's application entry above
-the compositions and facades; the `esp32s31` feature selects the chip, and a
-second chip would add its implementation beside it without changing the API.
-An image built on it writes `entry!(boot)`: the synchronous `boot` runs once
+The application entry is three crates. `oer` is what an image uses: the
+chip's implementation selected by a feature (`esp32s31`) that the image
+pipeline sets from the board, its re-exports and `entry!`. A chip's
+`chips/<chip>/app` implements it above the chip's compositions and facades
+(boot sequence, interrupt table, executors, service tasks, peripherals and
+the Wi-Fi, AES and console API); `chips/family/app` holds what every chip's
+entry shares (boot identity, the typed channel between task groups, the IP
+service's status and the observation counters). A second chip adds its
+`chips/<chip>/app` with the same API.
+
+An image built on it writes `entry!(main)`: the synchronous `main` runs once
 before any executor, takes the peripherals it needs and builds drivers and
 services with defaults through the boot context, overriding a default only
 by an explicit setting or a static storage of its own (reconnect, drain,
 IP pools), and returns what builds the application's future (`impl
-Started`): a closure the SDK calls where the future stays, so a root
-future is never moved. The SDK owns the default interrupt table, the
-executors and its service tasks (`SdkTasks`, on the same executor as the
-image's IP service at the image's pool sizes and its application, which
-run as that executor's roots in the frame of the SDK's run), and applies
-record and reset on the image's
-behalf to every boot error, application error and unrecoverable service
-exit; handled errors stay values. The SDK runs the application on hart 0.
+Started`): a closure the entry calls where the future stays, so a root
+future is never moved. `entry!(main, group = setup)` with the `group`
+feature adds a task group: `setup` runs once after `main`, before any
+executor, starts its IP service and returns what builds the group's future;
+the two exchange data through a `Channel`. A chip with a second core runs
+the group there on its own executor (the S31 on hart 1); a chip with one
+runs it beside the application, cooperatively. The entry owns the default
+interrupt table, the executors and its service tasks (`SdkTasks`, on the
+same executor as the image's roots, in the frame of the entry's run), and
+applies record and reset on the image's behalf to every boot error,
+application error and unrecoverable service exit; handled errors stay
+values. The application runs on the boot hart.
 
-An example and a HIL test image of one function build it the same way: the
-same `boot` through the SDK, so that what the test checks is what an
-application runs. A test image differs only by the SDK features it adds
-(`console`), by explicit settings in place of the library's defaults and by
-the handlers of its services; it serves them through the HIL agent on the
-entry (`hil/agent`). An image on the SDK depends on
-nothing the SDK places (compositions, facades, platform, interrupt table)
-besides it; `oer-tools-test-layers` checks these direct dependencies, not that two
-`boot` functions take the same steps in the same order, which review keeps.
-Every HIL image is an image on the SDK; `oer-tools-test-layers` checks that each
-depends on it. Probes and images whose function
-or layout the SDK does not offer select their entries, priorities and task
-spawning through the compositions directly.
+An example and a HIL image are built on the product API alike: a HIL image
+takes the same entry and drivers and runs its scenarios' logic on them,
+controlled at runtime by its host program, adding only the entry's features
+it needs (`console`, `observe`), explicit settings and the handlers of its
+services, which it serves through the HIL agent on the entry (`hil/agent`).
+An image on the entry depends on nothing the entry places (compositions,
+facades, platform, interrupt table) besides it; `oer-tools-test-layers`
+checks these direct dependencies. Every HIL image is an image on the entry;
+`oer-tools-test-layers` checks that each depends on it. Probes select their
+entries, priorities and task spawning through the compositions directly.
 These crates are outside the sans-IO layer. `oer-chips-family-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
 system-deadline lease. `oer-portable-time::deadline` contains only the deadline policy,
@@ -396,7 +406,7 @@ run its own executor.
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application; the Wi-Fi driver beside the station on the station's executor | the Wi-Fi driver and the station never preempt each other; the driver's work waits for the station's turn, and the station takes received units from the ring in its own turn |
-| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The SDK's group (`oer`, `hart1`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the station's IP service and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The entry's task group (`oer`, `group`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the station's IP service and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-portable-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
@@ -1291,7 +1301,7 @@ the existing HAL owner.
   image checks (placement and stacks), reports frames and panics, and
   `cargo fw sizes` compares builds.
 - **Stand.** HIL scenarios (`cargo hil list`, `cargo hil run NAME`) start
-  by hand when they answer a real question. Stand roles belong to firmware,
+  by hand when they answer a real question. Stand roles belong to images,
   not boards; the stand file holds no credentials. One LAB service per host
   (`tools/lab/service`) owns the stand's leases and every access to its
   hardware: `cargo hil`, `cargo fw` and `cargo stand` build against its
@@ -1324,7 +1334,7 @@ under test; it stores nothing and knows no scenario, service or equipment.
 | Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |
 | CLI | `tools/hil/cli` | `cargo hil list` and `run`: scenarios are packages marked `hil-scenario` in their metadata |
 | SDK agent | `hil/agent` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the one-deep hand-over of a request to the image's worker |
-| Scenarios | `hil-scenarios/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, `hil-agent/` the agent on the application entry, one host program per scenario with its cases and verdict |
+| Scenarios | `hil/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, `hil-agent/` the agent on the application entry, one host program per scenario with its cases and verdict |
 
 A boot is named by the `boot_id` every frame carries. Its first frame is its
 Hello, which also names the image (`image_crc32`, the stage-two payload

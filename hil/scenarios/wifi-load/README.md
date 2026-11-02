@@ -1,7 +1,7 @@
 # Wi-Fi station load scenario
 
 `cargo hil run wifi-load` measures UDP load between this host and the
-product Wi-Fi station of the `esp32s31-sdk-station` image, through the lab
+product Wi-Fi station of the `hil-wifi-station` image, through the lab
 router: host → Ethernet → OpenWrt AP → Wi-Fi → station, one hop over the
 air. The host sends and receives the load; the image counts its end through
 the [load service](../../services/load) and reports its CPU. Only parameters
@@ -163,7 +163,7 @@ in the tables as `memcpy ← caller`, the function (and innermost inlined
 function) of the call `ra` returns from. Ticks are due every period on the
 timer's own schedule; one due while the hart's interrupts were masked
 samples where they open. The functions are named from the DWARF of the
-runtime ELF the harness built (`target/fw/esp32s31-sdk-station/runtime.elf`,
+runtime ELF the harness built (`target/fw/hil-wifi-station/runtime.elf`,
 `oer_tools_analysis_elf::dwarf::Symbolizer`); without it the profile records why
 and keeps the raw samples. The profile's `copies` weights the memory copy
 call sites the image build found in that ELF (`runtime-copies.json` beside

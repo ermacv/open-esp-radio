@@ -1,9 +1,12 @@
 # `cargo fw`
 
-Builds the staged images of `firmware/apps`, writes them into a stand board's
-flash and runs them to a verdict. `boot-smoke` and `radio-root` are the
-application images. HIL and probes are selected with paths relative to
-`firmware/apps`, such as `../hil/esp32s31` or `../probes/esp32s31-radio`.
+Builds the staged images, writes them into a stand board's flash and runs
+them to a verdict. An image is named by its directory: an example
+(`examples/wifi-station` is `wifi-station`), a probe (`hil/probes/esp32s31-radio`
+is `esp32s31-radio`) or a HIL image as `hil-<directory>` (`hil/images/aes` is
+`hil-aes`). A path is refused, so a bundle stays below `target/fw/`. An image
+on the application entry names no chip: the build selects the board's chip
+(`oer/<chip>`) and links the image for it.
 
 ```console
 cargo fw sizes <base-output-directory> <head-output-directory>

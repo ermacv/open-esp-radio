@@ -82,7 +82,7 @@ fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
     for owner in [
         "hil/probes/esp32s31-radio",
         "hil/probes/other-facts",
-        "firmware/apps/x",
+        "examples/x",
     ] {
         let mut found = Vec::new();
         inspect(owner, &spec, None, &mut found);

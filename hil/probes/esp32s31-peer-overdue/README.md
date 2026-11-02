@@ -32,7 +32,7 @@ only feeds the watchdog: nothing re-arms the probe but the stand, so it never
 enters a reset loop. A flash or a power cycle (`ChipPowerOn`, `Other`) after
 an injection discards the stale state.
 
-Run it with `cargo fw run ../probes/esp32s31-peer-overdue --board <board>`
+Run it with `cargo fw run esp32s31-peer-overdue --board <board>`
 under a lease and, once the console prints `OER-PROBE peer-overdue ready`,
 write `ARMED` to `PROBE`'s first word (`llvm-nm` on the built
 `runtime.elf` names `PROBE::STORAGE`) through the debug module's system bus

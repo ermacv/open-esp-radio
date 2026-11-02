@@ -8,13 +8,13 @@ cover their APIs.
 
 | Root | Contents |
 | --- | --- |
-| `protocols/` | Radio and network formats, ports, cores, runtimes, host models and the HIL protocol and agent |
-| `portable/` | Generic support, architectural RISC-V operations and Embassy adapters |
-| `sdk/` | Application entries: one crate per chip family, the chip selected by feature |
-| `chips/` | Espressif family support, the S31 implementation and chip data |
-| `firmware/` | Applications, bootstrap, probes and ESP-IDF projects |
-| `hil-scenarios/` | HIL scenarios: the RPC images they share (`images/`), test-only service vocabularies (`services/`), the HIL agent on the application entry (`hil-agent/`) and one host program per scenario |
 | `tools/` | Host libraries and programs, grouped by domain; see [tools](../tools/README.md) |
+| `portable/` | Generic `no_std` support for host and chip, architectural RISC-V operations and Embassy adapters |
+| `protocols/` | Radio and network formats, ports, cores, runtimes, host models and the HIL protocol and agent |
+| `chips/` | The hardware layers: `family/` what every chip of the family shares, `<chip>/` one chip's register model, PAC, HAL, PHY, drivers, compositions, bootstrap and application entry (`app`) |
+| `oer/` | The application entry an image uses (`oer`), its chip selected by the build |
+| `examples/` | Examples on the application entry |
+| `hil/` | Checks on hardware: images on the entry (`images/`), probes below it (`probes/`), test-only service vocabularies (`services/`), the HIL agent on the entry (`agent/`) and one host program per scenario (`scenarios/`) |
 | `docs/` | Cross-cutting documents; see the [index](README.md) |
 
 ## Workspace packages
@@ -23,27 +23,26 @@ Each path below contains a `Cargo.toml`. Braces list sibling package
 folders. This inventory corresponds to `cargo metadata --no-deps`.
 
 ```text
-chips/esp32s31/bluetooth/driver/
-chips/esp32s31/{board, boot, compose, crypto, hal, instrumentation, knowledge,
-    layout, pac, phy}/
-chips/esp32s31/ieee80211/{driver, mac}/
-chips/esp32s31/ieee802154/driver/
-chips/esp32s31/radio/{client, system}/
-chips/family/{analog, boot, coex, efuse, executor, facts, ieee80211-policy,
-    ieee802154-engine, ieee802154-mac-values, interrupt-table, modem-clock,
-    platform-port, staged-bootstrap, staged-layout, staged-runtime, usb-serial-jtag,
-    watchdog}/
-firmware/apps/{boot-smoke, radio-root, wifi-station}/
-chips/esp32s31/bootstrap/
-hil/probes/{esp32s31-facts, esp32s31-radio, esp32s31-register, esp32s31-rx-chain}/
-portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort, sync,
-    time, time-virtual, trace, wire}/
+tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
+    blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli,
+    elf, riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program}/
+tools/chip/profile/
+tools/hil/{cli, harness, link}/
+tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker,
+    stack}/
+tools/lab/{arbiter, board, cli, client, fixture, fixture-helpers,
+    fixture-install, model, router, service}/
+tools/os/{command-tree, durable, process, serial, toolchain}/
+tools/pins/{artifacts, cli}/
+tools/probe/{codegen, macros}/
+tools/registers/{cli, contracts, generate, model}/
+tools/regulatory/generate/
+tools/test/{layers, ui-cases}/
+tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
+    provenance, scenario, scenario-cli}/
+portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort,
+    sync, time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
-oer/
-hil-scenarios/{aes, sdk-station, wifi-load, wifi-station}/
-hil/agent/
-hil-scenarios/images/{esp32s31-sdk-rpc, esp32s31-sdk-station}/
-hil/services/{aes, fault, load, sdk-station, wifi-station}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/
@@ -58,22 +57,25 @@ protocols/ieee80211/testing/{conformance, model}/
 protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/{port, wire}/
 protocols/radio/{coex, port, regulatory}/
-tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
-    blobray-domain, blobray-linker, blobray-riscv, blobray-verification, cli, elf,
-    riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program}/
-tools/chip/profile/
-tools/hil/{cli, harness, link}/
-tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker, stack}/
-tools/lab/{arbiter, board, cli, client, fixture, fixture-helpers, fixture-install, model,
-    router, service}/
-tools/os/{command-tree, durable, process, serial, toolchain}/
-tools/pins/{artifacts, cli}/
-tools/probe/{codegen, macros}/
-tools/registers/{cli, contracts, generate, model}/
-tools/regulatory/generate/
-tools/test/{layers, ui-cases}/
-tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
-    provenance, scenario, scenario-cli}/
+chips/esp32s31/{app, board, boot, bootstrap, compose, crypto, hal,
+    instrumentation, knowledge, layout, pac, phy, wifi}/
+chips/esp32s31/bluetooth/driver/
+chips/esp32s31/ieee80211/driver/
+chips/esp32s31/ieee802154/driver/
+chips/esp32s31/radio/{client, system}/
+chips/family/{analog, app, bluetooth-engine, boot, coex, efuse, executor, facts,
+    ieee80211-policy, ieee802154-engine, ieee802154-mac-values, interrupt-table,
+    modem-clock, phy, platform-port, radio, staged-bootstrap, staged-layout,
+    staged-runtime, usb-serial-jtag, watchdog}/
+oer/
+examples/wifi-station/
+hil/agent/
+hil/images/{aes, wifi-station}/
+hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
+    esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
+    esp32s31-register, esp32s31-rx-chain}/
+hil/scenarios/{aes, sdk-station, wifi-load, wifi-station}/
+hil/services/{aes, fault, load, sdk-station, wifi-station}/
 ```
 
 ## Data and supporting files
@@ -102,22 +104,19 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 
 ## Names
 
-A library's package name is `oer-` and its path below its root:
-`protocols/ieee80211/wire` is `oer-protocols-ieee80211-wire`,
-`chips/esp32s31/hal` is `oer-chips-esp32s31-hal`, `oer` is
-`oer`, `tools/hil/link` is
-`oer-tools-hil-link`, `hil/services/aes` is `oer-hil-services-aes`, and
-`hil/agent` is `oer-hil-agent`. An
-executable keeps its root: `hil/probes/esp32s31-boot-smoke` is
-`oer-hil-probes-esp32s31-boot-smoke`, `tools/image/cli` is `oer-tools-image-cli`, and
-`hil/scenarios/aes` is `oer-hil-scenarios-aes`.
-Rust imports replace hyphens with underscores. A program called by name,
-such as the image linker or a privileged helper, sets its binary name
-with `[[bin]] name`.
+Every package is `oer-` and its whole path: `protocols/ieee80211/wire` is
+`oer-protocols-ieee80211-wire`, `chips/esp32s31/hal` is
+`oer-chips-esp32s31-hal`, `tools/image/cli` is `oer-tools-image-cli` and
+`hil/probes/esp32s31-mcycle` is `oer-hil-probes-esp32s31-mcycle`. The
+application entry (`oer/`) is `oer`. Rust imports replace hyphens with
+underscores. A program called by name, such as the image linker or a
+privileged helper, sets its binary name with `[[bin]] name`. `cargo fw`
+names an image by its directory: an example or a probe by it alone, a HIL
+image as `hil-<directory>` (`hil-wifi-station`).
 
 ## Layer roles
 
-Each package under `chips/`, `protocols/hil/` and `hil-scenarios/` has one
+Each package under `chips/`, `protocols/hil/` and `hil/` (but `hil/probes/`) has one
 role in `oer-tools-test-layers` that names its level
 ([architecture](architecture.md#layers)); a directory name such as `driver`
 grants nothing. `chips/esp32s31/wifi` assembles the S31 station backend and portable runtime as the Wi-Fi facade.

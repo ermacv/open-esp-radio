@@ -4,7 +4,8 @@
 -> ImageBundle`. `cargo fw` ([tools/image/cli](../cli/README.md)) and the HIL harness
 (`tools/hil/harness`, for a scenario's image) build every image here; nothing
 else compiles, checks or encodes one. `images` resolves an image by its
-directory in `firmware/apps` or `hil-scenarios/images` and gives its spec and
+directory in `examples/`, `hil/images/` (named `hil-<directory>`) or
+`hil/probes/` and gives its spec and
 bundle to both. Every image builds with the `firmware` profile against
 the workspace's one `Cargo.lock` (`--locked`).
 

@@ -1,7 +1,7 @@
 # SDK station scenario
 
 `cargo hil run sdk-station` checks the Wi-Fi station and IP service of the
-application entry `oer` on the `esp32s31-sdk-station` image
+application entry `oer` on the `hil-wifi-station` image
 through the [SDK station service](../../services/sdk-station/src/lib.rs).
 Every claim of the device is checked against the lab router, which the run
 leases with the board and the air (`Scenario::using_router`), or against

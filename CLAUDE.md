@@ -1,8 +1,7 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for the Espressif ESP32-S31: Wi-Fi, Bluetooth LE
-and IEEE 802.15.4, without vendor radio binaries. The ESP32-C5 appears in the
-repository only as the stand's ESP-IDF peers; it has no Rust code.
+Rust 2024 `no_std` radio stack for Espressif chips, today the ESP32-S31:
+Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries.
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
 system these rules serve.
 
@@ -25,9 +24,7 @@ system these rules serve.
   or bridges. Host `espflash` and its transitive image-format dependency are
   host tools. The PAC's single `take()` claims the chip; the HAL's
   `Root::take` splits it through `into_bootstrap` or `into_runtime`.
-  Only these owned partitions grant register access. The repository holds
-  no Rust code for the ESP32-C5: its ESP-IDF peers (`tools/lab/peers`,
-  `tools/vendor/references/esp32c5`), their pins and their flash map are all of it.
+  Only these owned partitions grant register access.
 - **Compile time first.** Every check that can run at compile time runs there.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
@@ -219,23 +216,31 @@ system these rules serve.
   a vendor image, use Blobray (`cargo blobray`,
   [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md)) first.
 - **Where code goes** ([docs/repository-layout.md](docs/repository-layout.md)):
-  `protocols/` sans-IO protocols, `portable/` generic support, `chips/`
-  everything Espressif, `firmware/` chip images, `hil-scenarios/` the HIL
-  scenarios (their shared images, test-only services and host programs),
-  `tools/<domain>/` the developer's machine. Executables only in
-  `firmware/`, `hil-scenarios/` and `tools/`. A library is `oer-` plus its
-  path below the root; an executable keeps its root
-  (`oer-hil-probes-esp32s31-boot-smoke`). A crate never sits inside another; a new crate
-  needs a reason (dependency direction, license, target, independent
-  consumer). Only the image pipeline builds images: `cargo fw`, and the HIL
-  harness for a scenario's image. Every package builds.
+  `tools/<domain>/` the developer's machine, `portable/` generic `no_std`
+  support, `protocols/` sans-IO protocols, `chips/` the hardware layers
+  (`chips/family` what every chip of the family shares, `chips/<chip>` one
+  chip, `chips/<chip>/app` its application entry), `oer/` the application
+  entry an image uses, `examples/` examples on it, `hil/` checks on hardware
+  (`agent`, `services`, `images` on the entry, `probes` below it,
+  `scenarios` their host programs). Executables only in `examples/`, `hil/`,
+  `tools/` and a chip's `bootstrap`. Every package is `oer-` plus its whole
+  path (`oer-chips-esp32s31-hal`, `oer-hil-probes-esp32s31-mcycle`); the
+  entry is `oer`. A crate never sits inside another; a new crate needs a
+  reason (dependency direction, license, target, independent consumer).
+  Only the image pipeline builds images: `cargo fw`, and the HIL harness for
+  a scenario's image; an image is named by its directory (a HIL image as
+  `hil-<directory>`). An example or HIL image names no chip: it depends on
+  `oer` with the capabilities it needs (`wifi`, `console`, `group`, …), and
+  the pipeline selects the board's chip and links the image for it. Every
+  package builds.
 - **HIL.** The HIL core (`protocols/hil`, `tools/hil/link`) only carries
   data and commands between the host and the device under test; it stores
   nothing and knows no scenario, service or stand equipment. A scenario's
   host program holds its cases and verdict; the image it runs serves
   services whose every endpoint has a handler (`oer_protocols_hil_agent::service!`);
-  several scenarios share one image. Stand equipment and its drivers belong
-  to `tools/lab`.
+  several scenarios share one image. A HIL image is built on the product API
+  (`oer`) and takes its runs' control at runtime from the host. Stand
+  equipment, its drivers and its ESP-IDF peer firmware belong to `tools/lab`.
 
 ## Work
 

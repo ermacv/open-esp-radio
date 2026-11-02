@@ -4,7 +4,7 @@ The image of the [SDK station](../../scenarios/sdk-station/README.md),
 [Wi-Fi station](../../scenarios/wifi-station/README.md) and
 [Wi-Fi load](../../scenarios/wifi-load/README.md) scenarios: an
 application of the entry `oer` (`oer`, features
-`esp32s31`, `wifi`, `console`, `hart1`, `observe` and `udp`). Its boot takes the Wi-Fi
+`wifi`, `console`, `group`, `observe` and `udp`; the build selects the chip). Its boot takes the Wi-Fi
 station (on the AES accelerator) and its IP service with the library's defaults and the USB
 Serial/JTAG console; the library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
@@ -134,5 +134,5 @@ record their named cause and reset the chip (the library's failure table);
 a console transport fault ends the application with `sdk-console`. The
 image builds in no credentials.
 
-`cargo fw build esp32s31-sdk-station` builds it; the scenario's harness
+`cargo fw build hil-wifi-station` builds it; the scenario's harness
 builds and flashes it.

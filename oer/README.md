@@ -1,8 +1,8 @@
 # oer
 
-The Espressif family's application entry. An image selects its chip by
-feature (`esp32s31`, exactly one) and the capabilities it uses (`wifi`,
-`console`, `hart1`, `observe`, `udp`),
+The Espressif family's application entry. An image names the capabilities
+it uses (`wifi`, `console`, `group`, `observe`, `udp`) and no chip: the
+image pipeline selects the board's chip (`esp32s31`, exactly one). It
 takes the peripherals it needs once and builds drivers and services with
 defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
@@ -108,15 +108,15 @@ with the source it takes, otherwise the library does once the timer runs.
 | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
 | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC and doorbell (line 21) |
 | profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22) |
-| hart 1 application (`hart1`) | 1 | hart 1's executor wake (line 40), its alarm (comparator 2, line 41) |
+| hart 1 application (`group`) | 1 | hart 1's executor wake (line 40), its alarm (comparator 2, line 41) |
 
 The radio entries exist with the `wifi` feature, the console's with
-`console`, the sampler's with `observe` and hart 1's with `hart1`; an entry
-no driver binds routes no source. With `hart1` the library launches hart 1
-once the boot ended: it runs the group there and then its IP service
-and future on its own thread-mode executor, and hart 0 waits for the second
-boot's end before it enables its interrupts. The image declares
-`harts = ["boot", 1]`. Service tasks on the application executor: the RTC
+`console`, the sampler's with `observe` and hart 1's with `group`; an entry
+no driver binds routes no source. With `group` the library launches hart 1
+once the boot ended: it runs the group's setup there and then its IP service
+and future on its own thread-mode executor, and hart 0 waits for the setup's
+end before it enables its interrupts. The pipeline gives such an image hart
+1's stacks. Service tasks on the application executor: the RTC
 watchdog feed, the station runner, the MAC driver beside it and the IP
 service. The radio executor
 runs the radio actor.

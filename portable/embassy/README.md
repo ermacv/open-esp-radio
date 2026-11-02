@@ -19,7 +19,7 @@ chip PHY and the runtimes take as an `oer_portable_time::Timer`; chip PHY remain
 executor-independent.
 
 Final memory profiles, static claims, IRQ binding and whole-radio lifecycles
-belong to the integrating firmware (`firmware/apps`). Station network ownership
+belong to the integrating image (`examples/`, `hil/images/`). Station network ownership
 across associations is `net/`'s `station_network`; finite task-group shutdown is
 [`oer-portable-cooperate`](../cooperate/)'s `connected_tasks`; monitor handoffs are runtime
 code in [`ieee80211/runtime`](../../protocols/ieee80211/runtime/). None of them is an

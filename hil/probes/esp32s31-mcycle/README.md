@@ -30,5 +30,5 @@ every case completed; it states nothing about the values.
 
 Hart 1's wait for interrupt is not measured: it has no interrupt source.
 
-Run it with `cargo fw run ../probes/esp32s31-mcycle --board <board>` under a
+Run it with `cargo fw run esp32s31-mcycle --board <board>` under a
 lease.
