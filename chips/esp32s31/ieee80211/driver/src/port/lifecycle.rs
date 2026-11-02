@@ -180,7 +180,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         backing.resources = None;
         backing.addresses = None;
         if !matches!(self.state, BackendState::Initial(Some(_)))
-            || !self.storage.shared.returned.all_returned()
+            || !self.storage.shared.returned.none_out()
             || !self.storage.shared.subframes_vacant()
             || self.storage.shared.network.held() != 0
             || !backing.driver.get_mut().retired()
@@ -459,7 +459,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             || !held.completions_vacant()
             || held.rx_out.get() != 0
             || storage.shared.network.held() != 0
-            || !storage.shared.returned.all_returned()
+            || !storage.shared.returned.none_out()
         {
             retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;

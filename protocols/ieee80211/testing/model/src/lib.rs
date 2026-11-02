@@ -441,13 +441,20 @@ pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
 enum ModelMemory {
     Small(Box<[u8; ModelSmall::CAPACITY]>),
     Large(Box<[u8; ModelLarge::CAPACITY]>),
+    /// A network's memory, lent for one MSDU ([`TxBufferPool::install`]).
+    Network(ModelNetworkMemory),
+    /// No memory: a large place waits for a network's.
+    Vacant,
 }
+/// The memory a network fills with one frame for the model's large class.
+pub type ModelNetworkMemory = Box<[u8; ModelLarge::CAPACITY]>;
 impl core::ops::Deref for ModelMemory {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         match self {
             Self::Small(bytes) => bytes.as_slice(),
-            Self::Large(bytes) => bytes.as_slice(),
+            Self::Large(bytes) | Self::Network(bytes) => bytes.as_slice(),
+            Self::Vacant => &[],
         }
     }
 }
@@ -455,7 +462,8 @@ impl core::ops::DerefMut for ModelMemory {
     fn deref_mut(&mut self) -> &mut [u8] {
         match self {
             Self::Small(bytes) => bytes.as_mut_slice(),
-            Self::Large(bytes) => bytes.as_mut_slice(),
+            Self::Large(bytes) | Self::Network(bytes) => bytes.as_mut_slice(),
+            Self::Vacant => &mut [],
         }
     }
 }
@@ -466,18 +474,12 @@ impl AsRef<[u8]> for ModelMemory {
 }
 impl ModelMemory {
     fn sequence(&self) -> SequenceNumber {
-        let bytes: &[u8] = match self {
-            Self::Small(bytes) => bytes.as_ref(),
-            Self::Large(bytes) => bytes.as_ref(),
-        };
+        let bytes: &[u8] = self;
         // Both memory classes hold at least a MAC header.
         sequence_control(bytes).map_or(SequenceNumber::ZERO, SequenceNumber::from_sequence_control)
     }
     fn retry(&mut self) {
-        let bytes: &mut [u8] = match self {
-            Self::Small(bytes) => bytes.as_mut(),
-            Self::Large(bytes) => bytes.as_mut(),
-        };
+        let bytes: &mut [u8] = self;
         // Both memory classes hold at least a MAC header.
         let _marked: bool = set_retry_bit(bytes);
     }
@@ -507,7 +509,11 @@ impl<B: ModelComposition, C: ModelClass> TxBufferMemory for ModelBuffer<'_, B, C
         Ok(())
     }
     fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
-        Ok(&mut self.memory)
+        if matches!(self.memory, ModelMemory::Vacant) {
+            Err(BufferMemoryUnavailable)
+        } else {
+            Ok(&mut self.memory)
+        }
     }
 }
 
@@ -1249,6 +1255,28 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
     fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (mpdu.buffer, mpdu.body)
+    }
+
+    type NetworkMemory = ModelNetworkMemory;
+    fn install(
+        buffer: &mut Self::Buffer,
+        memory: ModelNetworkMemory,
+    ) -> Result<(), ModelNetworkMemory> {
+        if matches!(buffer.memory, ModelMemory::Vacant) {
+            buffer.memory = ModelMemory::Network(memory);
+            Ok(())
+        } else {
+            Err(memory)
+        }
+    }
+    fn uninstall(buffer: &mut Self::Buffer) -> Option<ModelNetworkMemory> {
+        match core::mem::replace(&mut buffer.memory, ModelMemory::Vacant) {
+            ModelMemory::Network(memory) => Some(memory),
+            other => {
+                buffer.memory = other;
+                None
+            }
+        }
     }
 }
 

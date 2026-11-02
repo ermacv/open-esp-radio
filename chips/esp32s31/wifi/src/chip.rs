@@ -435,7 +435,10 @@ impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<
     }
 }
 pub struct Storage<W: Binding> {
-    pub(crate) channels: Channels<W::Notifies, W::TxPacket>,
+    pub(crate) channels: Channels<W::Notifies, crate::TxMemory>,
+    /// The transmit pool, pinned once: the port holds its first buffers,
+    /// the network the rest ([`crate::NetworkSupply`]).
+    pub(crate) pool: static_cell::StaticCell<oer_chips_esp32s31_ieee80211_driver::port::TxPool<TX>>,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
     pub(crate) bell: oer_portable_memory::Doorbell,
@@ -462,6 +465,7 @@ where
                 },
             ),
             service: service::ServiceStorage::new(),
+            pool: static_cell::StaticCell::new(),
             bell: oer_portable_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
             retire: static_cell::StaticCell::new(),
@@ -476,6 +480,7 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
                 oer_chips_esp32s31_ieee80211_driver::port::SameHart::new(),
             ),
             service: service::ServiceStorage::new(),
+            pool: static_cell::StaticCell::new(),
             bell: oer_portable_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
             retire: static_cell::StaticCell::new(),
@@ -527,7 +532,7 @@ pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) frontend:
         oer_portable_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: ServiceConnection<'static, W::Notifies, W::TxPacket>,
+    pub(crate) connection: ServiceConnection<'static, W::Notifies, crate::TxMemory>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
     pub(crate) output: runtime::Events<
         'static,
@@ -558,7 +563,7 @@ pub fn station<W: Binding>(
     config: Config,
 ) -> (
     Control<'static, W::Notifies>,
-    Network<'static, W::Notifies, W::TxPacket>,
+    Network<'static, W::Notifies, W::TxPacket, crate::NetworkSupply>,
     crate::NetworkStopper<'static, W::Notifies>,
     Runners<W>,
 ) {
@@ -580,9 +585,26 @@ pub fn station<W: Binding>(
     } = resources;
     let crate::WifiHardware { cell, wifi } = hardware;
     let crate::DmaResources { rx, tx } = dma;
+    let crate::dma::TxDma {
+        pool,
+        descriptors,
+        chains,
+    } = tx;
+    // The pool is pinned here, before the network's end exists: the
+    // network holds every buffer the port does not.
+    let pool = storage
+        .pool
+        .try_init(
+            oer_chips_esp32s31_ieee80211_driver::port::TxPool::pin(pool)
+                .unwrap_or_else(|_| W::fail(InitializationError::Tx)),
+        )
+        .unwrap_or_else(|| W::fail(InitializationError::Storage));
+    let pool: &'static _ = pool;
+    let supply =
+        crate::NetworkSupply::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx));
     let (mut control, network, stopper, connection) = storage
         .channels
-        .split()
+        .split(supply)
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     let crate::Connection {
         service: connection,
@@ -632,7 +654,9 @@ pub fn station<W: Binding>(
                     receive,
                     power,
                     rx,
-                    tx,
+                    pool,
+                    descriptors,
+                    chains,
                     storage: &mut storage.driver,
                 },
                 ready,

@@ -2571,6 +2571,17 @@ impl<'id> crate::data::StaDataTokens for Tokens<'id> {
     fn renew(mpdu: Self::Sent) -> Buffer {
         mpdu
     }
+    type Memory = [u8; 512];
+    fn install(buffer: &mut Buffer, memory: Self::Memory) -> Result<(), Self::Memory> {
+        *buffer = Buffer(memory, memory.len());
+        Ok(())
+    }
+    fn uninstall(buffer: &mut Buffer) -> Option<Self::Memory> {
+        (buffer.1 != 0).then(|| {
+            buffer.1 = 0;
+            buffer.0
+        })
+    }
 }
 
 /// The TID and sequence number of a QoS Data frame.
@@ -2602,11 +2613,14 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             priority: u8,
         ) -> (u8, u16) {
             let mut link = world.station.link().expect("the link is up");
+            let mut memory = [0xab; 512];
+            memory[crate::data::MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&BSSID);
+            memory[crate::data::MSDU_ETHERNET_OFFSET + 12..][..2]
+                .copy_from_slice(&0x0800u16.to_be_bytes());
             let msdu = Msdu {
-                destination: BSSID,
-                ether_type: 0x0800,
+                memory,
+                length: 14 + 20,
                 priority: WmmUserPriority::new(priority).unwrap(),
-                payload: &[0xab; 20],
                 admitted: Instant::from_micros(0),
             };
             data.input(

@@ -3,12 +3,16 @@
 //! attempt an action ([`StaData::poll_action`]). Data keeps no timer; every
 //! wait ends on a returned credit or an input from the station or network.
 //!
-//! An MSDU becomes one MPDU in a buffer of the machine's own: QoS Data by
+//! An MSDU comes in the network's memory, its Ethernet frame where the
+//! machine reads it ([`MSDU_ETHERNET_OFFSET`]), and becomes one MPDU in place:
+//! a buffer place of the machine's own holds the memory while the MPDU
+//! lives, and the header is written in front of the payload: QoS Data by
 //! its user priority on a QoS BSS, Data in the station's sequence space
 //! otherwise, with the Protected bit and the CCMP header's room on a
-//! protected link (the port's backend writes the header). It holds its own
-//! tickets and buffers, apart from the station's, so data never takes the
-//! station's EAPOL, Null or Deauthentication tokens.
+//! protected link (the port's backend writes the CCMP header). Once the
+//! MPDU ends, the memory goes back to the network ([`StaData::take_freed`]).
+//! It holds its own tickets and buffer places, apart from the station's, so
+//! data never takes the station's EAPOL, Null or Deauthentication tokens.
 //!
 //! A received data MPDU of the station's BSS gives its MSDUs only once the
 //! replay check of the association's keys passed it
@@ -56,19 +60,42 @@ pub trait StaDataTokens {
     type AirDenied: Copy;
     /// Retire an MPDU and release its body before reusing the allocation.
     fn renew(mpdu: Self::Sent) -> Self::Buffer;
+    /// A network's memory holding one MSDU, which a buffer holds only for
+    /// that MSDU's MPDU.
+    type Memory;
+    /// Lend `memory` to a buffer that holds none; refused, unchanged,
+    /// otherwise.
+    fn install(buffer: &mut Self::Buffer, memory: Self::Memory) -> Result<(), Self::Memory>;
+    /// Take back the network's memory a buffer holds, if it holds any.
+    fn uninstall(buffer: &mut Self::Buffer) -> Option<Self::Memory>;
 }
 
-/// One MSDU from the network stack.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Msdu<'a> {
-    /// Its destination.
-    pub destination: [u8; 6],
-    /// Its EtherType.
-    pub ether_type: u16,
+/// The length of an Ethernet header: destination, source and EtherType.
+const ETHERNET_HEADER_LEN: usize = 14;
+
+/// Where an MSDU's payload starts in a buffer's octets
+/// ([`TxBufferMemory::bytes_mut`]): where the longest data MPDU header
+/// ends, QoS Data with the CCMP header and LLC/SNAP. The machine writes the
+/// header in front of the payload in place.
+pub const MSDU_PAYLOAD_OFFSET: usize =
+    oer_protocols_ieee80211_wire::data::IEEE80211_QOS_DATA_HEADER_LEN
+        + oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN
+        + oer_protocols_ieee80211_wire::data::LLC_SNAP_HEADER_LEN;
+
+/// Where a network places an MSDU's Ethernet frame in a buffer's octets:
+/// its header right before [`MSDU_PAYLOAD_OFFSET`].
+pub const MSDU_ETHERNET_OFFSET: usize = MSDU_PAYLOAD_OFFSET - ETHERNET_HEADER_LEN;
+
+/// One MSDU from the network stack: its Ethernet frame, already in the
+/// network's memory at [`MSDU_ETHERNET_OFFSET`] of a buffer's octets.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Msdu<M> {
+    /// The network's memory holding it.
+    pub memory: M,
+    /// The length of its Ethernet frame, header and payload.
+    pub length: usize,
     /// Its user priority.
     pub priority: WmmUserPriority,
-    /// Its payload.
-    pub payload: &'a [u8],
     /// When the radio's software admitted it, on the monotonic clock: its
     /// age starts here and stays with each of its attempts.
     pub admitted: oer_portable_time::Instant,
@@ -78,20 +105,20 @@ pub struct Msdu<'a> {
 ///
 /// ```compile_fail,E0223
 /// use oer_protocols_ieee80211_core_roles_sta::{data::DataInput, machine::StaTokens};
-/// fn variant<T: StaTokens>(input: DataInput<'_, '_, '_, '_, T>) -> bool {
+/// fn variant<T: StaTokens, M>(input: DataInput<'_, '_, '_, T, M>) -> bool {
 ///     matches!(input, DataInput::Msdu { .. })
 /// }
 /// ```
 ///
 /// ```
 /// use oer_protocols_ieee80211_core_roles_sta::{data::DataInput, machine::StaTokens};
-/// fn payload_length<T: StaTokens>(input: DataInput<'_, '_, '_, '_, T>) -> usize {
-///     input.msdu.payload.len()
+/// fn frame_length<T: StaTokens, M>(input: DataInput<'_, '_, '_, T, M>) -> usize {
+///     input.msdu.length
 /// }
 /// ```
-pub struct DataInput<'a, 'l, 'v, 'id, T: StaTokens> {
+pub struct DataInput<'l, 'v, 'id, T: StaTokens, M> {
     /// The MSDU from the network stack.
-    pub msdu: Msdu<'a>,
+    pub msdu: Msdu<M>,
     /// The station link on which it goes.
     pub link: &'l mut LinkView<'v, 'id, T>,
 }
@@ -246,6 +273,8 @@ pub enum DataRefusal {
     NoAdmittedAccessCategory,
     /// The buffer's memory is not the station's; its tokens came back.
     BufferUnavailable,
+    /// The frame is shorter than an Ethernet header.
+    ShortFrame,
 }
 
 /// The original data operation. It travels by value with the attempt;
@@ -501,6 +530,8 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     link: Option<LinkEpoch<'id, D::EpochPath>>,
     /// Why the last attempt pass made none, while only MSDUs came since.
     waits: Option<aggregate::AttemptWait>,
+    /// The network's memory ended MPDUs held, until the network takes it.
+    freed: Fifo<D::Memory, CAP>,
 }
 
 /// Terminal data bank. Queued work has returned its frame credits; it has no
@@ -513,6 +544,7 @@ pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     members: aggregate::MemberBank<K, D::Class, ReturnedMpdu<D::Buffer, D::Sent>, CAP>,
     admission: Admissions,
     next_order: u32,
+    freed: Fifo<D::Memory, CAP>,
 }
 
 impl<
@@ -526,6 +558,16 @@ impl<
         self.admission.available(category).count_ones()
     }
 
+    /// One network memory an ended MPDU held, for the network to fill again.
+    pub fn take_freed(&mut self) -> Option<D::Memory> {
+        self.freed.pop()
+    }
+
+    /// Whether network memory waits for [`Self::take_freed`].
+    pub fn has_freed(&self) -> bool {
+        self.freed.iter().next().is_some()
+    }
+
     /// Move the same credits, ordering frontier and admission permissions into
     /// another run on this installation. No pool or permission is minted.
     pub fn restart(self) -> StaData<'id, D, K, CAP> {
@@ -536,6 +578,7 @@ impl<
             members,
             admission,
             next_order,
+            freed,
         } = self;
         StaData {
             tickets,
@@ -546,6 +589,7 @@ impl<
             next_order,
             link: None,
             waits: None,
+            freed,
         }
     }
 }
@@ -566,7 +610,7 @@ impl<
         events: &mut impl EventSink<StaEvent>,
     ) -> oer_portable_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
         machine.leave(events);
-        let (tickets, buffers, owed, members, admission, next_order, link, waits) = oer_portable_memory::unpack_placed!(
+        let (tickets, buffers, owed, members, admission, next_order, link, waits, freed) = oer_portable_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
@@ -576,7 +620,8 @@ impl<
                 admission,
                 next_order,
                 link,
-                waits
+                waits,
+                freed
             }
         );
         drop((link, waits));
@@ -588,6 +633,7 @@ impl<
                 members => |place| members.move_to(place).into_mut(),
                 admission: admission.read(),
                 next_order: next_order.read(),
+                freed => |place| freed.move_to(place).into_mut(),
             })
         })
     }
@@ -605,6 +651,7 @@ impl<
             next_order,
             link: _,
             waits: _,
+            freed,
         } = self;
         RetiredData {
             tickets,
@@ -613,6 +660,7 @@ impl<
             members,
             admission,
             next_order,
+            freed,
         }
     }
 
@@ -638,6 +686,7 @@ impl<
             next_order: 0,
             link: None,
             waits: None,
+            freed: Fifo::new(),
         }
     }
 
@@ -663,6 +712,7 @@ impl<
             next_order: 0,
             link: None,
             waits: None,
+            freed => |place| Fifo::init_in_place(place),
         })
     }
 
@@ -673,8 +723,7 @@ impl<
         self.waits = None;
         while let Some(owed) = self.owed.pop() {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
-            self.buffers
-                .put(crate::events::fresh(owed.buffer, D::renew, events), events);
+            self.retire(owed.buffer, events);
         }
         self.link = None;
     }
@@ -682,8 +731,7 @@ impl<
     /// An MPDU a full queue did not take: its buffer comes back, counted.
     fn overflowed(&mut self, owed: OwedMpdu<'id, D, K>, events: &mut impl EventSink<StaEvent>) {
         report(events, || StaEvent::DataLost(DataLoss::Overflow));
-        self.buffers
-            .put(crate::events::fresh(owed.buffer, D::renew, events), events);
+        self.retire(owed.buffer, events);
     }
 
     /// Whether the machine takes one more MSDU now: a buffer is free.
@@ -712,8 +760,7 @@ impl<
                 let (context, permit) = context.admission(());
                 self.admission.put(context.access_category, permit);
                 self.tickets.put(ticket, events);
-                self.buffers
-                    .put(crate::events::fresh(buffer, D::renew, events), events);
+                self.retire(buffer, events);
                 None
             }
             DataReturn::TxDone {
@@ -729,8 +776,7 @@ impl<
                         report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
                     }
                     self.tickets.put(ticket, events);
-                    self.buffers
-                        .put(crate::events::fresh(buffer, D::renew, events), events);
+                    self.retire(buffer, events);
                     return None;
                 }
                 match completion {
@@ -771,25 +817,33 @@ impl<
                     marks.expired = 1;
                 }
                 self.tickets.put(ticket, events);
-                self.buffers
-                    .put(crate::events::fresh(buffer, D::renew, events), events);
+                self.retire(buffer, events);
                 Some(marks)
             }
         }
     }
 
-    /// Take one input. An MSDU goes on its link and becomes an MPDU owed;
-    /// the TID whose queue holds it.
+    /// Take one input. An MSDU goes on its link and becomes an MPDU owed, in
+    /// the network's memory it came in: the header is written in front of
+    /// its payload; the TID whose queue holds it.
     ///
     /// # Errors
     ///
-    /// Why an MSDU did not become an MPDU: it waits, or is too long.
+    /// Why an MSDU did not become an MPDU: it waits, or is too long. The
+    /// network's memory it came in waits with the freed memory
+    /// ([`Self::take_freed`]).
     pub fn input<T: StaTokens<EpochPath = D::EpochPath>>(
         &mut self,
-        input: DataInput<'_, '_, '_, 'id, T>,
+        input: DataInput<'_, '_, 'id, T, D::Memory>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<WmmUserPriority, DataRefusal> {
         let DataInput { msdu, link } = input;
+        let Msdu {
+            memory,
+            length,
+            priority,
+            admitted,
+        } = msdu;
         if self.link != Some(link.epoch) {
             self.leave(events);
             self.link = Some(link.epoch);
@@ -798,84 +852,144 @@ impl<
         // The final priority, before any owner or number is taken: the
         // requested one, or the one admission control leaves it. It names
         // the frame's TID, its sequence space and its access category.
-        let msdu = if qos {
-            let priority = link
-                .admission
-                .admitted_user_priority(msdu.priority)
-                .ok_or(DataRefusal::NoAdmittedAccessCategory)?;
-            Msdu { priority, ..msdu }
+        let priority = if qos {
+            match link.admission.admitted_user_priority(priority) {
+                Some(priority) => priority,
+                None => {
+                    self.free(memory, events);
+                    return Err(DataRefusal::NoAdmittedAccessCategory);
+                }
+            }
         } else {
-            msdu
+            priority
         };
-        let mut buffer = self.buffers.take().ok_or(DataRefusal::NoTokens)?;
-        let tid = msdu.priority;
-        let admitted = msdu.admitted;
+        let Some(mut buffer) = self.buffers.take() else {
+            self.free(memory, events);
+            return Err(DataRefusal::NoTokens);
+        };
+        if let Err(memory) = D::install(&mut buffer, memory) {
+            report(events, || StaEvent::BufferMemoryUnavailable);
+            self.buffers.put(buffer, events);
+            self.free(memory, events);
+            return Err(DataRefusal::BufferUnavailable);
+        }
         // A non-QoS link has one queue, best effort.
         let (slot, access_category) = if qos {
-            (tid, msdu.priority.access_category())
+            (priority, priority.access_category())
         } else {
             (WmmUserPriority::UP0, WmmAccessCategory::BestEffort)
         };
         let protection = DataProtection::from(&link.protection).without_key();
         // A frame that does not fit its buffer, or a buffer whose memory
         // is not the station's, takes no sequence number.
-        let bytes = match buffer.bytes_mut() {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                report(events, || StaEvent::BufferMemoryUnavailable);
-                self.buffers.put(buffer, events);
-                return Err(DataRefusal::BufferUnavailable);
-            }
+        let Ok(bytes) = buffer.bytes_mut() else {
+            report(events, || StaEvent::BufferMemoryUnavailable);
+            return Err(self.refuse(buffer, DataRefusal::BufferUnavailable, events));
         };
-        if mpdu_len(qos, protection, msdu.payload.len()).is_none_or(|length| length > bytes.len()) {
-            self.buffers.put(buffer, events);
-            return Err(DataRefusal::TooLong);
+        let Some(payload) = length.checked_sub(ETHERNET_HEADER_LEN) else {
+            return Err(self.refuse(buffer, DataRefusal::ShortFrame, events));
+        };
+        let fits = MSDU_PAYLOAD_OFFSET
+            .checked_add(payload)
+            .is_some_and(|end| end <= bytes.len())
+            && mpdu_len(qos, protection, payload).is_some_and(|length| length <= bytes.len());
+        if !fits {
+            return Err(self.refuse(buffer, DataRefusal::TooLong, events));
         }
         let sequence_number = match &mut link.mode {
-            LinkMode::Qos(counters) => tid.select_mut(counters).take(),
+            LinkMode::Qos(counters) => slot.select_mut(counters).take(),
             LinkMode::NonQos(counter) => counter.take(),
         };
-        let frame =
-            encode_frame::<_, K, D::Class>(link, qos, msdu, sequence_number, protection, bytes);
-        match frame {
-            Some(frame) => {
-                let order = self.next_order;
-                self.next_order = self.next_order.wrapping_add(1);
-                let context = DataTxContext {
-                    admission: (),
-                    link: link.epoch,
-                    tid: slot,
-                    frame,
-                    access_category,
-                    protection,
-                    order,
-                    admitted,
-                    sequence: sequence_number,
-                    attempts: 0,
-                };
-                self.waits = self.waits.take().and_then(|waits| {
-                    waits.after_input(
-                        context.tid,
-                        context.sequence,
-                        context.frame.frame().len().get(),
-                        context.protection,
-                    )
-                });
-                let owed = OwedMpdu {
-                    context,
-                    buffer: ReturnedMpdu::Fresh(buffer),
-                };
-                if let Err(owed) = self.owed.push(owed) {
-                    self.waits = None;
-                    self.overflowed(owed, events);
-                }
-                Ok(slot)
-            }
-            None => {
-                self.buffers.put(buffer, events);
-                Err(DataRefusal::TooLong)
-            }
+        let frame = encode_in_place::<_, K, D::Class>(
+            link,
+            qos,
+            InPlace { priority, payload },
+            sequence_number,
+            protection,
+            bytes,
+        );
+        let Some(frame) = frame else {
+            return Err(self.refuse(buffer, DataRefusal::TooLong, events));
+        };
+        let order = self.next_order;
+        self.next_order = self.next_order.wrapping_add(1);
+        let context = DataTxContext {
+            admission: (),
+            link: link.epoch,
+            tid: slot,
+            frame,
+            access_category,
+            protection,
+            order,
+            admitted,
+            sequence: sequence_number,
+            attempts: 0,
+        };
+        self.waits = self.waits.take().and_then(|waits| {
+            waits.after_input(
+                context.tid,
+                context.sequence,
+                context.frame.frame().len().get(),
+                context.protection,
+            )
+        });
+        let owed = OwedMpdu {
+            context,
+            buffer: ReturnedMpdu::Fresh(buffer),
+        };
+        if let Err(owed) = self.owed.push(owed) {
+            self.waits = None;
+            self.overflowed(owed, events);
         }
+        Ok(slot)
+    }
+
+    /// A buffer holding an MSDU it did not take goes back to the pool; the
+    /// network's memory waits with the freed memory.
+    fn refuse(
+        &mut self,
+        mut buffer: D::Buffer,
+        reason: DataRefusal,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> DataRefusal {
+        if let Some(memory) = D::uninstall(&mut buffer) {
+            self.free(memory, events);
+        }
+        self.buffers.put(buffer, events);
+        reason
+    }
+
+    /// Network memory the machine is done with waits for the network.
+    fn free(&mut self, memory: D::Memory, events: &mut impl EventSink<StaEvent>) {
+        // The network lends at most as much memory as the freed memory
+        // holds.
+        if self.freed.push(memory).is_err() {
+            report(events, || StaEvent::BufferMemoryUnavailable);
+        }
+    }
+
+    /// An MPDU ended: its buffer, renewed, goes back to the pool, and the
+    /// network's memory it held waits for the network ([`Self::take_freed`]).
+    fn retire(
+        &mut self,
+        returned: ReturnedMpdu<D::Buffer, D::Sent>,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
+        let mut buffer = crate::events::fresh(returned, D::renew, events);
+        if let Some(memory) = D::uninstall(&mut buffer) {
+            self.free(memory, events);
+        }
+        self.buffers.put(buffer, events);
+    }
+
+    /// One network memory an ended MPDU held, for the network to fill again.
+    pub fn take_freed(&mut self) -> Option<D::Memory> {
+        self.freed.pop()
+    }
+
+    /// Whether network memory waits for [`Self::take_freed`].
+    pub fn has_freed(&self) -> bool {
+        self.freed.iter().next().is_some()
     }
 
     /// Free data permissions in this category, bounded by the backend's
@@ -992,50 +1106,90 @@ const fn mpdu_len(qos: bool, protection: DataProtection<()>, payload: usize) -> 
     payload.checked_add(prefix)
 }
 
-/// The MPDU of `msdu` on `link`, written into `output`.
-fn encode_frame<
+/// What the in-place encoding knows of the MSDU: the frame's user priority
+/// and its payload's length at [`MSDU_PAYLOAD_OFFSET`].
+struct InPlace {
+    priority: WmmUserPriority,
+    payload: usize,
+}
+
+/// The MPDU of the MSDU whose Ethernet frame sits at
+/// [`MSDU_ETHERNET_OFFSET`] of `output`, on `link`: its header is written in
+/// front of the payload. A header shorter than the longest moves the payload
+/// down to it, so the MPDU starts at the buffer's first octet.
+fn encode_in_place<
     T: StaTokens,
     K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
     C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
 >(
     link: &LinkView<'_, '_, T>,
     qos: bool,
-    msdu: Msdu<'_>,
+    msdu: InPlace,
     sequence_number: SequenceNumber,
     protection: DataProtection<()>,
     output: &mut [u8],
 ) -> Option<oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
-    if protection == DataProtection::Open {
-        // The open encoding writes the payload once; it never needs a
-        // temporary CCMP gap or a second move of the payload.
-        let len = oer_protocols_ieee80211_wire::station::StaOpenDataFrame {
+    let ethernet = output.get(MSDU_ETHERNET_OFFSET..MSDU_PAYLOAD_OFFSET)?;
+    let (destination, rest) = ethernet.split_first_chunk::<6>()?;
+    let destination = *destination;
+    let ether_type = u16::from_be_bytes(*rest.last_chunk::<2>()?);
+    let prefix = mpdu_len(qos, protection, 0)?;
+    let end = MSDU_PAYLOAD_OFFSET.checked_add(msdu.payload)?;
+    if prefix < MSDU_PAYLOAD_OFFSET {
+        move_down(output, prefix, end)?;
+    }
+    let header = output.get_mut(..prefix)?;
+    let written = if protection == DataProtection::Open {
+        oer_protocols_ieee80211_wire::station::StaOpenDataFrame {
             source: link.address,
             bssid: link.bssid,
-            destination: msdu.destination,
+            destination,
             sequence_number,
             priority: msdu.priority,
             peer_qos: qos,
-            ether_type: msdu.ether_type,
-            payload: msdu.payload,
+            ether_type,
+            payload: &[],
         }
-        .encode(output)
-        .ok()?;
-        return sized(output.split_at_checked(len)?.0);
+        .encode(header)
+        .ok()?
+    } else {
+        StaProtectedDataFrame {
+            source: link.address,
+            bssid: link.bssid,
+            destination,
+            sequence_number,
+            user_priority: msdu.priority.value(),
+            peer_qos: qos,
+            ccmp_header: [0; 8],
+            ether_type,
+            payload: &[],
+        }
+        .encode(header)
+        .ok()?
+    };
+    if written != prefix {
+        return None;
     }
-    let len = StaProtectedDataFrame {
-        source: link.address,
-        bssid: link.bssid,
-        destination: msdu.destination,
-        sequence_number,
-        user_priority: msdu.priority.value(),
-        peer_qos: qos,
-        ccmp_header: [0; 8],
-        ether_type: msdu.ether_type,
-        payload: msdu.payload,
+    sized(output.get(..prefix.checked_add(msdu.payload)?)?)
+}
+
+/// Move the payload at `MSDU_PAYLOAD_OFFSET..end` down to start at `to`,
+/// one shift-long run at a time: each run's source lies right behind its
+/// destination, so the two never overlap.
+fn move_down(output: &mut [u8], to: usize, end: usize) -> Option<()> {
+    let shift = MSDU_PAYLOAD_OFFSET.checked_sub(to)?;
+    output.get(..end)?;
+    let mut at = to;
+    while let Some(from) = at.checked_add(shift).filter(|&from| from < end) {
+        let (front, back) = output.split_at_mut_checked(from)?;
+        let run = shift.min(end.checked_sub(from)?);
+        let destination = front.get_mut(at..)?.get_mut(..run)?;
+        for (octet, source) in destination.iter_mut().zip(back.get(..run)?) {
+            *octet = *source;
+        }
+        at = from;
     }
-    .encode(output)
-    .ok()?;
-    sized(output.split_at_checked(len)?.0)
+    Some(())
 }
 
 fn sized<

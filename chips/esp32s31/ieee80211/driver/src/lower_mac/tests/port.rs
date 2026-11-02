@@ -615,6 +615,7 @@ fn installed_with_entropy(
         storage,
         transmitter,
         pool: crate::mac::tx::test_support::model_pool().expect("model pool"),
+        bank: crate::port::TX_BUFFERS as u8,
         descriptors: descriptors(),
         config: crate::lower_mac::LowerMacConfig {
             station_address: STATION,

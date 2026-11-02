@@ -493,6 +493,9 @@ impl From<oer_protocols_ieee80211_core_roles_sta::data::DataRefusal> for MsduRef
             oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::BufferUnavailable => {
                 Self::BufferUnavailable
             }
+            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::ShortFrame => {
+                Self::InvalidFrame
+            }
         }
     }
 }

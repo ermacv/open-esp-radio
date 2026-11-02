@@ -516,7 +516,7 @@ pub enum StopError {
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
     network: Option<(
-        wifi::Network<'static, Notifies, TxPacket>,
+        wifi::Network<'static, Notifies, TxPacket, wifi::NetworkSupply>,
         wifi::NetworkStopper<'static, Notifies>,
     )>,
     address: [u8; 6],
@@ -760,8 +760,13 @@ type Context = ThreadContext<0>;
 type Context = ThreadContext<1>;
 type IpResources<const RX: usize, const TX: usize, const GENERAL: usize> =
     Resources<Context, RX, TX, GENERAL>;
-type IpService<const RX: usize, const TX: usize> =
-    Service<Context, RX, TX, wifi::Network<'static, Notifies, TxPacket>, { wifi::LENT_RX }>;
+type IpService<const RX: usize, const TX: usize> = Service<
+    Context,
+    RX,
+    TX,
+    wifi::Network<'static, Notifies, TxPacket, wifi::NetworkSupply>,
+    { wifi::LENT_RX },
+>;
 
 /// The IP service's packet pools: `RX` receive slots, `TX` transmit
 /// credits and `GENERAL` general slots, each one 1514-byte frame. A static

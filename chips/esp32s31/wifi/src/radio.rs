@@ -79,7 +79,6 @@ pub(crate) struct DriverStorage<W: Binding> {
     device: StaticCell<Device<W>>,
     /// The transmitter's descriptor and one per EDCA queue.
     slots: [StaticCell<TxSlot<TX>>; 5],
-    pool: StaticCell<TxPool<TX>>,
     /// Each aggregate chain's metadata and the leases it retains.
     chains: [StaticCell<HtAmpduTxStorage<TX_AMPDU_SUBFRAMES>>; AMPDU_CHAINS],
     retention:
@@ -93,7 +92,6 @@ impl<W: Binding> DriverStorage<W> {
             storage: StaticCell::new(),
             device: StaticCell::new(),
             slots: [const { StaticCell::new() }; 5],
-            pool: StaticCell::new(),
             chains: [const { StaticCell::new() }; AMPDU_CHAINS],
             retention: [const { StaticCell::new() }; AMPDU_CHAINS],
         }
@@ -117,7 +115,11 @@ pub(crate) struct Boot<W: Binding> {
     pub rx: oer_chips_esp32s31_hal::memory::dma_static::Placed<
         oer_chips_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic<N, B, S, Q, DriverExecutor>,
     >,
-    pub tx: crate::dma::TxDma,
+    /// The transmit pool, pinned: the port holds its first buffers.
+    pub pool: &'static TxPool<TX>,
+    pub descriptors:
+        [oer_chips_esp32s31_hal::memory::dma_static::Placed<crate::dma::TxDescriptor>; 5],
+    pub chains: [oer_chips_esp32s31_hal::memory::dma_static::Placed<crate::dma::TxChain>; 2],
     pub storage: &'static mut DriverStorage<W>,
 }
 pub struct Platform {
@@ -331,11 +333,9 @@ async fn install<W: Binding>(
             }))
         })
         .ok_or(InitializationError::Storage)?;
-    let crate::dma::TxDma {
-        pool,
-        descriptors: [t0, t1, t2, t3, t4],
-        chains: [c0, c1],
-    } = boot.tx;
+    let pool = boot.pool;
+    let [t0, t1, t2, t3, t4] = boot.descriptors;
+    let [c0, c1] = boot.chains;
     let [s0, s1, s2, s3, s4] = &mut storage.slots;
     let [m0, m1] = &mut storage.chains;
     let [r0, r1] = &mut storage.retention;
@@ -362,10 +362,6 @@ async fn install<W: Binding>(
             RetainedDmaAmpduTx::new(resources, retention)
         }};
     }
-    let pool = storage
-        .pool
-        .try_init(TxPool::pin(pool).map_err(|_| InitializationError::Tx)?)
-        .ok_or(InitializationError::Storage)?;
     let transmitter = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot!(t0, s0),
         policy: WifiTxRuntimePolicy::vendor_defaults(),
@@ -396,6 +392,7 @@ async fn install<W: Binding>(
             .ok_or(InitializationError::Storage)?,
         transmitter,
         pool,
+        bank: crate::supply::PORT_BUFFERS,
         descriptors: TxDescriptors {
             single: [slot!(t1, s1), slot!(t2, s2), slot!(t3, s3), slot!(t4, s4)],
             chains: [chain!(c0, m0, r0), chain!(c1, m1, r1)],

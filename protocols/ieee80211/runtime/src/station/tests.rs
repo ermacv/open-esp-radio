@@ -114,6 +114,7 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     type TxContextStorage<T> = [Option<T>; oer_protocols_ieee80211_testing_model::MODEL_TICKETS];
     type Small = ModelSmall;
     type Large = ModelLarge;
+    type TxMemory = oer_protocols_ieee80211_testing_model::ModelNetworkMemory;
 
     fn span(span: ServiceSpan, end: bool) {
         if span == ServiceSpan::Transmit && !end {
@@ -229,6 +230,29 @@ impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks
         _: &[u8],
     ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
         oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
+    }
+}
+
+/// The network's memory the station's data MSDUs come in.
+type NetworkMemory = oer_protocols_ieee80211_testing_model::ModelNetworkMemory;
+
+/// A network frame of user `priority`, written into fresh network memory
+/// where the data machine reads it.
+fn network_frame(
+    parts: oer_protocols_ieee80211_wire::data::MsduParts<'_>,
+    priority: WmmUserPriority,
+) -> Outgoing<NetworkMemory> {
+    use oer_protocols_ieee80211_contracts_port::TxBufferClass as _;
+    use oer_protocols_ieee80211_core_roles_sta::data::{MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET};
+    let mut memory: NetworkMemory = Box::new([0; ModelLarge::CAPACITY]);
+    memory[MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&parts.destination);
+    memory[MSDU_ETHERNET_OFFSET + 6..][..6].copy_from_slice(&parts.source);
+    memory[MSDU_ETHERNET_OFFSET + 12..][..2].copy_from_slice(&parts.ether_type.to_be_bytes());
+    memory[MSDU_PAYLOAD_OFFSET..][..parts.payload.len()].copy_from_slice(parts.payload);
+    Outgoing {
+        memory,
+        length: u16::try_from(14 + parts.payload.len()).unwrap(),
+        priority,
     }
 }
 
@@ -603,10 +627,13 @@ struct World<'b> {
     /// The scenario's network side: it stops at once, or is lost.
     network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
-    /// The network stack's end of the transmit queue: its packet owners.
-    stack: RefCell<oer_portable_memory::SlotSender<'b, Option<Outgoing<EthernetFrame>>, 2>>,
-    /// The packets the station read and returned, for the stack to drop.
-    returned: RefCell<oer_portable_memory::SlotReceiver<'b, Option<EthernetFrame>, 2>>,
+    /// The network stack's end of the transmit queue: its frames, each in
+    /// the network's memory.
+    stack: RefCell<oer_portable_memory::SlotSender<'b, Option<Outgoing<NetworkMemory>>, 2>>,
+    /// The memory the station gave back once its MSDU ended.
+    returned: RefCell<oer_portable_memory::SlotReceiver<'b, Option<NetworkMemory>, 2>>,
+    /// How much memory the station gave back.
+    memory_back: Cell<usize>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
     delivered_copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
@@ -973,6 +1000,13 @@ impl Application<'_, '_, '_> {
         assert!(self.try_send_msdu(destination), "the queue has room");
     }
 
+    /// Take back every memory the station returned, counted.
+    fn take_back_memory(&self) {
+        while let Ok(Some(_memory)) = self.returned.borrow_mut().try_receive_with(Option::take) {
+            self.memory_back.set(self.memory_back.get() + 1);
+        }
+    }
+
     /// The network stack sends one Ethernet frame to `destination` if its
     /// queue has room.
     fn try_send_msdu(&self, destination: [u8; 6]) -> bool {
@@ -982,24 +1016,18 @@ impl Application<'_, '_, '_> {
     /// The network stack sends one Ethernet frame of user `priority` to
     /// `destination` if its queue has room.
     fn try_send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
-        // The stack drops what the station returned first, as its network
-        // end does on every poll.
-        while self
-            .returned
-            .borrow_mut()
-            .try_receive_with(Option::take)
-            .is_ok()
-        {}
-        let packet = Outgoing {
-            priority: WmmUserPriority::new(priority).unwrap(),
-            packet: EthernetFrame::from_parts(oer_protocols_ieee80211_wire::data::MsduParts {
+        // The network end takes back what the station returned first, as
+        // it does on every poll.
+        self.take_back_memory();
+        let packet = network_frame(
+            oer_protocols_ieee80211_wire::data::MsduParts {
                 destination,
                 source: LOCAL,
                 ether_type: 0x0800,
                 payload: &[0xab; 100],
-            })
-            .unwrap(),
-        };
+            },
+            WmmUserPriority::new(priority).unwrap(),
+        );
         self.stack
             .borrow_mut()
             .try_send_with(|slot| {
@@ -1040,8 +1068,8 @@ impl Application<'_, '_, '_> {
 struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
-    transmit: oer_portable_memory::SlotReceiver<'b, Option<Outgoing<EthernetFrame>>, 2>,
-    returned: oer_portable_memory::SlotSender<'b, Option<EthernetFrame>, 2>,
+    transmit: oer_portable_memory::SlotReceiver<'b, Option<Outgoing<NetworkMemory>>, 2>,
+    returned: oer_portable_memory::SlotSender<'b, Option<NetworkMemory>, 2>,
     receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
     receive_copied: WakingSpscSender<'b, EthernetFrame, RX_COPIED_DEPTH>,
     config: TestConfig,
@@ -1594,9 +1622,10 @@ where
             ],
             clock.clone(),
         );
+        let backend = backend.with_network_memory();
         let mut transmit =
-            oer_portable_memory::WakingSlotQueue::<Option<Outgoing<EthernetFrame>>, 2>::new();
-        let mut back = oer_portable_memory::WakingSlotQueue::<Option<EthernetFrame>, 2>::new();
+            oer_portable_memory::WakingSlotQueue::<Option<Outgoing<NetworkMemory>>, 2>::new();
+        let mut back = oer_portable_memory::WakingSlotQueue::<Option<NetworkMemory>, 2>::new();
         let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
         let (stack, transmit) = transmit.split(|| None);
         let (returned, back) = back.split(|| None);
@@ -1623,6 +1652,7 @@ where
             delivered: RefCell::new(delivered),
             delivered_copies: RefCell::new(delivered_copies),
             lent: Cell::new(0),
+            memory_back: Cell::new(0),
         };
         let uninstalled = oer_protocols_radio_port::LocalExecution
             .scope(
@@ -2130,6 +2160,9 @@ fn a_data_preparation_refusal_releases_admission_and_the_next_msdu_can_go() {
                 )));
                 assert_eq!(world.air.sent().len(), sent_before);
                 assert_eq!(world.completions.borrow().len(), statistics_before);
+                // The refused MSDU's memory is the network's again.
+                world.take_back_memory();
+                assert_eq!(world.memory_back.get(), 1);
                 world.send_msdu(ACCESS_POINT_ADDRESS);
                 let frame = world.sent(&mut seen, DATA).await;
                 assert!(frame.packet_number.is_some());
@@ -2588,18 +2621,15 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
                         .stack
                         .borrow_mut()
                         .try_send_with(|slot| {
-                            *slot = Some(Outgoing {
-                                packet: EthernetFrame::from_parts(
-                                    oer_protocols_ieee80211_wire::data::MsduParts {
-                                        destination: view.destination,
-                                        source: view.source,
-                                        ether_type: view.ether_type,
-                                        payload: view.payload,
-                                    },
-                                )
-                                .unwrap(),
-                                priority: requested.user_priority,
-                            });
+                            *slot = Some(network_frame(
+                                oer_protocols_ieee80211_wire::data::MsduParts {
+                                    destination: view.destination,
+                                    source: view.source,
+                                    ether_type: view.ether_type,
+                                    payload: view.payload,
+                                },
+                                requested.user_priority,
+                            ));
                             Ok::<_, ()>(())
                         })
                         .is_ok()

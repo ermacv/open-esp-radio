@@ -393,8 +393,13 @@ pub struct PinnedDmaTxRadioLease<
     _prepare: PhantomData<fn() -> P>,
 }
 
-impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P: DmaReadPrepare>
-    PinnedDmaTxRadioLease<'_, FRAME_CAPACITY, HEADROOM, TRAILER, P>
+impl<
+    'pool,
+    const FRAME_CAPACITY: usize,
+    const HEADROOM: usize,
+    const TRAILER: usize,
+    P: DmaReadPrepare,
+> PinnedDmaTxRadioLease<'pool, FRAME_CAPACITY, HEADROOM, TRAILER, P>
 {
     pub const fn ethernet_offset(&self) -> usize {
         HEADROOM
@@ -447,6 +452,22 @@ impl<const FRAME_CAPACITY: usize, const HEADROOM: usize, const TRAILER: usize, P
         self.slot.release();
         self.live = false;
         self.index
+    }
+
+    /// Hand the slot straight back to a network writer, without freeing it:
+    /// the radio is done with its bytes, and the writer's next frame
+    /// replaces them.
+    pub fn into_network(
+        mut self,
+    ) -> PinnedDmaTxNetworkLease<'pool, FRAME_CAPACITY, HEADROOM, TRAILER> {
+        self.slot.length.store(0, Ordering::Relaxed);
+        self.slot.state.store(SLOT_NETWORK, Ordering::Release);
+        self.live = false;
+        PinnedDmaTxNetworkLease {
+            slot: self.slot,
+            index: self.index,
+            live: true,
+        }
     }
 }
 

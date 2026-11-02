@@ -518,8 +518,13 @@ impl<const B: usize, Body> Default for PortSharedStorage<B, SameHart, Body> {
 pub struct PortParts<D: Device<B>, const B: usize, O: Observations> {
     pub storage: &'static mut PortStorage<D, B>,
     pub transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
-    /// The transmit pool, whose every buffer the port holds from here on.
+    /// The transmit pool. The port holds its first `bank` buffers from here
+    /// on, one at each of the first `bank` buffer places; every other place
+    /// holds no memory until a network lends it a buffer of this pool for
+    /// one MSDU ([`TxBufferPool::install`]).
     pub pool: &'static TxPool<B>,
+    /// The pool buffers the port holds itself, at most [`TX_BUFFERS`].
+    pub bank: u8,
     /// The idle descriptors its buffers are published through.
     pub descriptors: TxDescriptors<B>,
     pub config: LowerMacConfig,
@@ -584,6 +589,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
                 + 24
                 + crate::ordinary_tx::TX_CCMP_MIC_SIZE
                 + crate::ordinary_tx::TX_FCS_SIZE
+            || usize::from(parts.bank) > TX_BUFFERS
             || !parts.descriptors.idle()
             || parts.storage.shared.poisoned.get().is_some()
         {
@@ -594,20 +600,22 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
             storage,
             transmitter,
             pool,
+            bank,
             descriptors,
             config,
             access_point_address,
             coex,
             observations,
         } = parts;
-        // The port takes every pool buffer at its place, and each place's
-        // subframe record starts empty. A buffer the pool does not give, or
-        // a place already held, poisons this installation: the allocation
-        // stays out of the bank and enable refuses with the fault.
+        // The port takes each of its pool buffers at its place, and each
+        // place's subframe record starts empty. A buffer the pool does not
+        // give, or a place already held, poisons this installation: the
+        // allocation stays out of the bank and enable refuses with the fault.
         for index in 0..TX_BUFFERS {
             let seeded = u8::try_from(index).ok().is_some_and(|place| {
-                claim(pool, place)
-                    .is_some_and(|memory| storage.shared.returned.seed(index, memory).is_ok())
+                (place >= bank
+                    || claim(pool, place)
+                        .is_some_and(|memory| storage.shared.returned.seed(index, memory).is_ok()))
                     && storage.shared.subframes.seed(index, None).is_ok()
             });
             if !seeded {
@@ -668,7 +676,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPor
     #[inline(never)]
     pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B, O>, Self> {
         if self.storage.shared.poisoned.get().is_some()
-            || !self.storage.shared.returned.all_returned()
+            || !self.storage.shared.returned.none_out()
             || !self.storage.shared.subframes_vacant()
             || tsf_epoch == self.config.tsf_epoch
         {
