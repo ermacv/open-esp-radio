@@ -8,18 +8,25 @@ use oer_image_checks::linker::hot::{HotCode, profiled_functions};
 use serde_json::Value;
 
 /// Write the list of the functions of `elf` that hold the most samples of
-/// `measurement`'s profile in `results` (a scenario's results file), within
-/// `budget_bytes`, to `output`. Prints the listed functions.
+/// the `measurements`' profiles in `results` (a scenario's results file),
+/// ranked together, within `budget_bytes`, to `output`. Prints the listed
+/// functions.
 pub fn write(
     results: &Path,
-    measurement: &str,
+    measurements: &[String],
     elf: &Path,
     budget_bytes: u64,
     output: &Path,
 ) -> Result<()> {
     let document: Value = serde_json::from_slice(&std::fs::read(results)?)
         .map_err(|error| format!("{}: {error}", results.display()))?;
-    let pcs = profile_pcs(&document, measurement)?;
+    let mut pcs = Vec::new();
+    let mut sampled = Vec::new();
+    for measurement in measurements {
+        let profile = profile_pcs(&document, measurement)?;
+        sampled.push(format!("{measurement}, {} samples", profile.len()));
+        pcs.extend(profile);
+    }
     let bytes = std::fs::read(elf)?;
     let functions = profiled_functions(&oer_analysis_elf::Elf::parse(&bytes)?)?;
     let list = HotCode::from_samples(&functions, pcs.iter().copied(), budget_bytes);
@@ -30,12 +37,12 @@ pub fn write(
         )
     };
     let origin = format!(
-        "Written by `cargo fw hot-code` from {} ({measurement}, {} samples) and its {}:\n\
+        "Written by `cargo fw hot-code` from {} ({}) and its {}:\n\
          the cached or already moved functions with the most samples per byte within the budget,\n\
          densest first.\n\
          The image linker moves them into SRAM; regenerate after the hot path changes.",
         name(results),
-        pcs.len(),
+        sampled.join("; "),
         name(elf),
     );
     std::fs::write(output, list.render(&origin)?)?;
