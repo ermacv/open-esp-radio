@@ -90,8 +90,13 @@ impl Region {
 /// One chip's staged-boot address map and stack sizes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Layout {
-    /// Application-owned internal SRAM (ESP-IDF's `SRAM_START..SRAM_SEG_END`).
+    /// The internal SRAM stage two owns: all of it, the ROM's reserves
+    /// included, as stage two calls no ROM function.
     pub sram: Region,
+    /// The internal SRAM the bootstrap links in (ESP-IDF's
+    /// `SRAM_START..SRAM_SEG_END`), below what the ROM and the boot chain keep
+    /// until stage two starts; the bootstrap's stack ends at its top.
+    pub bootstrap_sram: Region,
     /// Start of the second-stage loader's `iram_loader_seg`. The loader runs
     /// from here while it loads the bootstrap image, so every segment of that
     /// image it loads must end below this address; memory it does not load
@@ -112,9 +117,6 @@ pub struct Layout {
     /// Bytes of the ESP image's headers preceding the bootstrap's
     /// flash-mapped text in its first MMU page.
     pub image_segment_header_bytes: u32,
-    /// SRAM at the top the runtime's SRAM sections leave free while the boot hart
-    /// still runs on the bootstrap's stack.
-    pub handoff_sram_margin_bytes: u32,
     /// Memory that no reset entry initializes, which keeps the panic record
     /// across a reset (`.rtc_fast.persistent`).
     pub retained: Region,
@@ -162,10 +164,10 @@ impl Layout {
                 .is_multiple_of(self.mmu_page_bytes)
         );
         assert!(self.image_segment_header_bytes < self.mmu_page_bytes);
-        assert!(self.handoff_sram_margin_bytes < self.sram.length);
-        assert!(self.sram.contains_range(
+        assert!(self.sram.contains(self.bootstrap_sram));
+        assert!(self.bootstrap_sram.contains_range(
             self.second_stage_loader_start as u64,
-            self.sram.end() as u64
+            self.bootstrap_sram.end() as u64
         ));
         assert!(self.sram.end() <= self.psram.origin);
         assert!(self.harts > 0 && self.boot_hart < self.harts);

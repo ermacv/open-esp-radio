@@ -1,5 +1,5 @@
 //! The ROM exports are exactly the foreign functions declared by our S31
-//! code: the HAL's two ROM printf slot installers. Generated PACs and vendor
+//! code: none, as stage two owns the whole internal SRAM. Generated PACs and vendor
 //! research facts are not ABI consumers, and a declaration of a symbol our
 //! own `global_asm!` defines (a probe's thunk) names no ROM function.
 
@@ -126,24 +126,18 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
 }
 
 #[test]
-fn s31_exports_only_the_rom_printf_slot_installers() {
+fn s31_exports_no_rom_function() {
     let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31").expect("S31 facts");
     let rom = facts.rom.expect("S31 ROM");
-    let names: BTreeSet<_> = rom
-        .functions
-        .iter()
-        .map(|function| function.name.as_str())
-        .collect();
-    assert_eq!(
-        names,
-        BTreeSet::from(["ets_install_putc1", "ets_install_putc2"])
-    );
+    assert!(rom.functions.is_empty(), "{:?}", rom.functions);
     let script = oer_chips_family_facts::generate::rom_script(&rom).expect("S31 ROM script");
     for name in [
         "ets_delay_us",
         "ets_update_cpu_frequency",
         "software_reset",
         "ets_set_appcpu_boot_addr",
+        "ets_install_putc1",
+        "ets_install_putc2",
     ] {
         assert!(!rom.functions.iter().any(|function| function.name == name));
         assert!(

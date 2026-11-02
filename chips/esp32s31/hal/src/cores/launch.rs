@@ -164,8 +164,7 @@ fn secondary(entry: SecondaryEntry) -> Result<SecondaryHart, StartError> {
         .ok_or(StartError::NotSecondary { hart: entry.hart() })
 }
 
-/// The ordered start over `cell`'s words; `clear_printf_slots` empties the
-/// ROM's two output slots before the release.
+/// The ordered start over `cell`'s words.
 pub(super) fn start_with<
     P: Placement,
     Q: Placement,
@@ -181,7 +180,6 @@ pub(super) fn start_with<
     permit: LaunchPermit<M, L, C, K>,
     causes: ResetCauses,
     entry: SecondaryEntry,
-    clear_printf_slots: impl FnOnce(),
 ) -> Result<Released<M, K>, StartError> {
     let hart = secondary(entry)?;
     let LaunchPermit {
@@ -229,9 +227,7 @@ pub(super) fn start_with<
         }
     }
     oer_portable_riscv::fence();
-    // (5) The ROM's secondary path prints through neither of its slots.
-    clear_printf_slots();
-    // (6) Release, the boot word last.
+    // (5) Release, the boot word last.
     operate(cell, |words| {
         driver::release(words, hart, entry.address(), STALL_POLLS)
     })

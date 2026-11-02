@@ -49,6 +49,9 @@
     .global _runtime_exception_frames
     .set _runtime_exception_frames, {exception_frames}
 
+    // Stage two's entry calls this first, before it copies the SRAM text:
+    // it lies in ordinary text in PSRAM, not in the copied trap text.
+    .pushsection .text._runtime_stack_bootstrap, "ax", @progbits
     .balign 4
     .global _runtime_stack_bootstrap
     .type _runtime_stack_bootstrap, @function
@@ -69,6 +72,7 @@ _runtime_stack_bootstrap:
     csrw mscratch, t0
     ret
     .size _runtime_stack_bootstrap, . - _runtime_stack_bootstrap
+    .popsection
 
     // Swap before the first memory access. The second CSR exchange keeps
     // the interrupted t0 in mscratch and gives t0 the other stack pointer:

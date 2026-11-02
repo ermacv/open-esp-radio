@@ -273,7 +273,8 @@ pub struct MappedRegion {
 ///
 /// The chip names its internal SRAM, its flash window, where PSRAM lies, its
 /// retained memory and the attributes of each region; the module names the
-/// PSRAM's size; `sram` is the internal SRAM below what the boot chain keeps
+/// PSRAM's size; `sram` is the whole internal SRAM, which the image owns;
+/// `bootstrap_sram` is its part below what the boot chain keeps
 /// (`[boot-chain] application-sram-end`); `runtime_psram` is the PSRAM after
 /// the family's bootstrap probe page.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -282,10 +283,13 @@ pub struct Memory {
     /// The chip's whole internal (HP) SRAM, the ROM's and the boot chain's
     /// reserves included.
     pub internal_sram: Region,
-    /// The internal SRAM the application owns: from the internal SRAM's
-    /// origin up to the boot chain's reserve, clear of every range the ROM
-    /// keeps while an image runs.
+    /// The internal SRAM the image owns: all of it. The image calls no ROM
+    /// function, so nothing the ROM keeps in SRAM outlives the bootstrap.
     pub sram: Region,
+    /// The internal SRAM the bootstrap links in: from the internal SRAM's
+    /// origin up to the boot chain's reserve, clear of every range the ROM
+    /// keeps until stage two starts.
+    pub bootstrap_sram: Region,
     pub flash_xip: Region,
     /// The module's PSRAM in the cached external RAM aperture, on a chip
     /// that maps one apart from flash.
@@ -399,9 +403,9 @@ impl Memory {
             }
         }
         if let Some(chain) = boot_chain {
-            if !self.sram.contains_range(
+            if !self.bootstrap_sram.contains_range(
                 u64::from(chain.second_stage_loader_start),
-                u64::from(self.sram.end()),
+                u64::from(self.bootstrap_sram.end()),
             ) {
                 return Err("the second-stage loader must start in SRAM".into());
             }
@@ -434,18 +438,18 @@ impl Memory {
                 )
                 .into());
             }
-            if range.kept == Kept::Running
-                && range.start < self.sram.end()
-                && self.sram.origin() < range.end
+            if range.kept == Kept::Bootstrap
+                && range.start < self.bootstrap_sram.end()
+                && self.bootstrap_sram.origin() < range.end
             {
                 return Err(format!(
-                    "the ROM keeps `{}` {:#010x}..{:#010x} while an image runs, inside the \
-                     application's SRAM {:#010x}..{:#010x}",
+                    "the ROM keeps `{}` {:#010x}..{:#010x} until stage two starts, inside the \
+                     bootstrap's SRAM {:#010x}..{:#010x}",
                     range.name,
                     range.start,
                     range.end,
-                    self.sram.origin(),
-                    self.sram.end()
+                    self.bootstrap_sram.origin(),
+                    self.bootstrap_sram.end()
                 )
                 .into());
             }
@@ -628,9 +632,6 @@ pub struct StagedBoot {
     /// The ESP image's file and segment headers before the bootstrap's
     /// flash-mapped text in its first MMU page.
     pub image_segment_header_bytes: u32,
-    /// SRAM at the top the runtime's own SRAM sections leave free while the
-    /// bootstrap's stack still runs there, until stage two switches stacks.
-    pub handoff_sram_margin_bytes: u32,
     /// The cold flash the bootstrap keeps for its flash timing tuning; zero
     /// on a chip whose bootstrap does not tune flash.
     pub flash_tuning_reference_bytes: u32,
@@ -734,9 +735,10 @@ pub enum Kept {
     /// Until the boot chain hands the CPU to the image: the ROM's boot
     /// stacks, which the second-stage loader runs on.
     Boot,
-    /// While an image runs: the ROM's `.data` and `.bss`, which the ROM
-    /// functions an image calls use.
-    Running,
+    /// Until stage two starts: the ROM's `.data` and `.bss`, which the
+    /// boot chain's ROM calls use. Stage two calls no ROM function and owns
+    /// the whole internal SRAM.
+    Bootstrap,
 }
 
 /// A named ROM address range, `start..end`.

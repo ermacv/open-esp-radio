@@ -106,6 +106,7 @@ fn link(
     out.defsym("MMU_PAGE_BYTES", layout.mmu_page_bytes);
     for (name, region) in [
         ("SRAM", layout.sram),
+        ("BOOTSTRAP_SRAM", layout.bootstrap_sram),
         ("PSRAM", layout.psram),
         ("RUNTIME_PSRAM", runtime_psram),
         ("RETAINED", layout.retained),
@@ -192,10 +193,6 @@ pub fn runtime(
         ("STAGE_TWO_HEADER_BYTES", stage_two::HEADER_BYTES as u32),
         ("HART_COUNT", layout.harts),
         ("RETAINED_RESERVED_TAIL", layout.retained_reserved_tail),
-        (
-            "HANDOFF_SRAM_MARGIN_BYTES",
-            layout.handoff_sram_margin_bytes,
-        ),
     ] {
         out.defsym(name, value);
     }

@@ -15,6 +15,9 @@ _runtime_start:
     li t1, {boot_hart}
     bne t0, t1, 99f
     la gp, __global_pointer$
+    // Leave the bootstrap's SRAM stack first: the copies and clears below
+    // own the whole internal SRAM, the bootstrap's stack included.
+    call _runtime_stack_bootstrap
     la a0, __runtime_data_load_start
     la a1, __runtime_data_start
     la a2, __runtime_data_end
@@ -94,7 +97,6 @@ _runtime_start:
     addi a1, a1, 4
     j 15b
 16:
-    call _runtime_stack_bootstrap
     fence.i
     la t0, _start_trap
     ori t0, t0, 3

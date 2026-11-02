@@ -11,8 +11,10 @@ regions; their addresses and sizes are the
 SRAM, flash window and retained memory with each region's attributes, the
 module's PSRAM, `runtime-psram` after the family's bootstrap probe page, what
 the boot chain keeps and what the ROM of the chip's revision uses of the
-internal SRAM. The application's SRAM is the internal SRAM below the boot
-chain's reserve, clear of the ROM's data. The
+internal SRAM. Stage two owns the whole internal SRAM, the ROM's boot stacks
+and data included: it calls no ROM function, and its entry leaves the
+bootstrap's stack before it touches SRAM. The bootstrap's SRAM is the internal
+SRAM below the boot chain's reserve, clear of the ROM's data. The
 [S31 layout crate](../chips/esp32s31/layout/src/lib.rs) generates its
 `LAYOUT`, and through it the linker scripts' `--defsym` values, from those
 facts at build time; the host checks read the same facts.

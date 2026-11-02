@@ -107,7 +107,6 @@ fn link_stacks(
         ("STAGE_TWO_HEADER_BYTES", 48),
         ("HART_COUNT", harts),
         ("MMU_PAGE_BYTES", 0x10000),
-        ("HANDOFF_SRAM_MARGIN_BYTES", 0x2000),
     ] {
         command.arg(format!("--defsym={name}={value}"));
     }

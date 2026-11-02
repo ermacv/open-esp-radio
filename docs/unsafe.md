@@ -358,11 +358,9 @@ The HAL's core-control partition owns `LP_SYS.SYS_CTRL` and
 `BOOT_ADDR_HP_CORE%s` for the sourced secondary harts alongside indexed
 stall, clock and reset words. Bootstrap
 containment, secondary launch and fatal reset use those owned typed
-accessors. The HAL's one ROM FFI is `rom.rs`: the secondary launch calls the
-rev0 ROM's `ets_install_putc1` and `ets_install_putc2` with a null pointer,
-each of which stores its argument to its own ROM `.bss` slot and returns
-(SOURCE: the ROM facts' `[rom] functions` and the pinned ROM's function
-records); the facts' export test holds the declarations to those facts.
+accessors. The HAL calls no ROM function: stage two owns the whole internal
+SRAM, the ROM's data included; the facts' export test holds the declarations
+to the empty `[rom] functions`.
 
 A secondary hart's entry is the staged runtime's generated assembly
 (`entry.rs`, `SECONDARY_ENTRY`): before any stack exists it masks interrupts,

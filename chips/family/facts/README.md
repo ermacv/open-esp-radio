@@ -11,7 +11,7 @@ tools load.
 | Layer | File | Holds |
 | --- | --- | --- |
 | ISA | `chips/family/platform/isa/<isa>.toml` | the ISA of the harts and its bare-metal Rust target |
-| family | `chips/family/platform/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page, handoff margin), the reachability report's observed functions |
+| family | `chips/family/platform/family.toml` | the boot flow, the CLIC's lines and levels, the interrupt-table layout and symbols, the placement contract, the staged boot's host contract (MMU page, image headers, probe page), the reachability report's observed functions |
 | chip | `chips/<id>/platform/chip.toml` | the chip's properties, flash map, address map (internal SRAM, flash window, retained memory) with each region's attributes, what the boot chain keeps and requires (`[boot-chain]`), harts, core start, reset cause; still the image registry (`[hil]`, `[packages]`, `[[probe]]`) |
 | ROM | `chips/<id>/platform/rom-<revision>.toml` | the mask ROM of one chip revision: its pinned ELF, symbol script, sourced entry points (`[[rom.functions]]`), function summaries, forbidden code and what it uses of the internal SRAM (`[rom] sram`) |
 | module | `chips/<id>/platform/modules/<module>.toml` | the module that carries the chip: its flash and PSRAM |
@@ -39,9 +39,11 @@ the chip layer to the ISA and the family.
 ## Derived facts
 
 - `[flash] application-encoding.size-mib` is the module's flash size.
-- `[memory] sram`, the application's SRAM, is the chip's `internal-sram`
-  below the boot chain's reserve, `[boot-chain] application-sram-end` (the
-  whole internal SRAM on a chip without a boot chain).
+- `[memory] sram`, the image's SRAM, is the chip's whole `internal-sram`:
+  the image calls no ROM function. `bootstrap-sram`, the bootstrap's, is the
+  internal SRAM below the boot chain's reserve, `[boot-chain]
+  application-sram-end` (the whole internal SRAM on a chip without a boot
+  chain).
 - `[memory] psram` is the module's PSRAM at the chip's `psram-origin`;
   `runtime-psram` is the PSRAM after the family's
   `[staged] bootstrap-psram-bytes`.
@@ -53,7 +55,7 @@ the chip layer to the ISA and the family.
 - `rust-target` is checked against `isa`; `[core-start]` is named by exactly
   the chips with more than one core; SRAM lies below PSRAM, flash and PSRAM
   in the shared `cache-window` of a chip that has one, and the boot chain's
-  loader and retained tail in SRAM and the retained memory.
+  loader and retained tail in the bootstrap's SRAM and the retained memory.
 - `[memory.attributes]` names exactly the regions the chip maps (`sram`,
   `flash-xip`, and `psram` and `retained` where mapped), each `executable`,
   `cached`, `dma` (in the radio's DMA window), `retained` (no reset entry
@@ -61,8 +63,8 @@ the chip layer to the ISA and the family.
   checks classify memory by these, never by a region's name.
 - The ROM's `[rom] sram` ranges lie in the internal SRAM in address order,
   each `kept` during `download` mode only, until the `boot` chain hands over,
-  or while an image is `running`; a `running` range (the ROM's `.data` and
-  `.bss`) inside the application's SRAM is refused. `[rom] revision` is one
+  or until stage two starts (`bootstrap`); a `bootstrap` range (the ROM's
+  `.data` and `.bss`) inside the bootstrap's SRAM is refused. `[rom] revision` is one
   of the chip's `revisions`.
 
 `Region::new` admits only ranges whose exclusive end fits `u32`; deserialization
