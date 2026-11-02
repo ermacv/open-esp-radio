@@ -141,6 +141,7 @@ fn a_burst_reaches_the_body_through_its_own_pulls_within_a_virtual_time_bound() 
                 // A stale ready timer must fail this finite step budget, not
                 // hang.
                 observed.borrow_mut().context = 2;
+                observed.borrow_mut().driver_steps = 0;
                 driver_polls += 1;
                 let before = observed.borrow().rx_delivered;
                 let polled = p2
@@ -187,9 +188,13 @@ fn a_burst_reaches_the_body_through_its_own_pulls_within_a_virtual_time_bound() 
     }));
     assert_eq!(observed.borrow().rx_delivered, FRAMES);
     assert_eq!(driver_took, 0, "the driver's turn takes no unit");
+    // The model arms a continuation every four units: the driver takes each
+    // one's deadline at a turn the body's pull asks for, and wakes the body
+    // at the deadline. No other turn is the burst's.
+    let continuations = FRAMES / 4;
     assert!(
-        driver_polls < FRAMES / 4,
-        "{driver_polls} driver turns for {FRAMES} units"
+        driver_polls <= 2 * continuations + 8,
+        "{driver_polls} driver turns for {continuations} continuations"
     );
     assert_eq!(super::count(&released), FRAMES);
 }
@@ -299,6 +304,7 @@ fn the_body_holds_at_most_its_bound_and_the_rest_waits_in_the_ring() {
         for _ in 0..2000 {
             if !p2_done && p2_ready.0.swap(false, Ordering::Relaxed) {
                 observed.borrow_mut().context = 2;
+                observed.borrow_mut().driver_steps = 0;
                 let before = observed.borrow().rx_delivered;
                 if let Poll::Ready(retired) = p2
                     .as_mut()
@@ -603,5 +609,104 @@ fn polls_without_ring_work_leave_the_device_alone() {
     };
     assert_eq!(idle, 0, "an idle poll reached the device");
     assert!(total >= 1, "the announced unit was pulled");
+    assert_eq!(super::count(&released), 1);
+}
+
+/// The body lends its one unit, polls once more with an empty ring, then the
+/// network returns the unit: the body's next poll, with no driver turn
+/// between, rearms the ring. A walker that ran out of armed descriptors
+/// raises no receive interrupt, so the return is the only edge left.
+struct ReturnRearms {
+    observed: Rc<RefCell<Observed>>,
+    released: super::Released,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReturnRearms {
+    type Output = (usize, usize);
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, (usize, usize)>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = owner.enable().await.ok().expect("model enable");
+        let counts;
+        {
+            let mut phase = owner.phase();
+            phase.station().configure(
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            assert!(matches!(
+                phase.next_event().await,
+                Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
+            ));
+            self.observed.borrow_mut().received.push_back(TestReceive {
+                bytes: super::super::data_frame(STATION),
+                view: 0..26,
+                released: self.released.clone(),
+            });
+            let lent = match phase.next_event().await {
+                Ok(Ok(LowerMacEvent::Received { frame, .. })) => match phase.lend(frame) {
+                    Ok(lent) => lent,
+                    Err(_) => panic!("the network takes the unit"),
+                },
+                _ => panic!("the received unit"),
+            };
+            // An idle poll: the ring has no work, the pull stays closed.
+            core::future::poll_fn(|cx| {
+                assert!(core::pin::pin!(phase.next_event()).poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+            let before = self.observed.borrow().returned;
+            drop(lent);
+            core::future::poll_fn(|cx| {
+                let _ = core::pin::pin!(phase.next_event()).poll(cx);
+                Poll::Ready(())
+            })
+            .await;
+            counts = (before, self.observed.borrow().returned);
+        }
+        let owner = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+            .ok()
+            .expect("model disable");
+        radio::Ended::uninstall(owner, (), counts)
+    }
+}
+
+#[test]
+fn a_network_return_rearms_the_ring_in_the_bodys_own_poll() {
+    let (parts, observed, _clock) = installed(Vec::new());
+    let released = super::Released::default();
+    let report = block_on(super::run_body(
+        parts,
+        ReturnRearms {
+            observed: observed.clone(),
+            released: released.clone(),
+        },
+    ));
+    let super::Report::Uninstalled {
+        output: (before, after),
+    } = report
+    else {
+        panic!("clean uninstall");
+    };
+    assert_eq!(
+        after,
+        before + 1,
+        "the body's poll rearmed the returned unit"
+    );
     assert_eq!(super::count(&released), 1);
 }

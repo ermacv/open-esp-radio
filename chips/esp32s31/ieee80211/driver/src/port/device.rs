@@ -282,12 +282,16 @@ where
         &self.timer
     }
     fn next_deadline(&self) -> Option<Instant> {
+        // A due continuation is the body's pull's to take: the driver's turn
+        // only wakes the body for it, and a passed deadline would keep the
+        // driver from yielding to the body.
+        let continuation = self.continuation.filter(|at| self.timer.now() < *at);
         [
             self.session
                 .as_ref()
                 .ok()
                 .and_then(ReceiveSession::port_deadline),
-            self.continuation,
+            continuation,
         ]
         .into_iter()
         .flatten()

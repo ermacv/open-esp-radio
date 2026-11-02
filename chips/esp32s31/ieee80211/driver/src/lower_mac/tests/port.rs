@@ -108,6 +108,8 @@ struct Observed {
     rx_delivered: usize,
     /// The body's pulls that reached the device.
     pulls: usize,
+    /// The driver's event polls since the harness last polled its task.
+    driver_steps: usize,
 }
 struct Payload(Rc<Cell<usize>>);
 /// An opaque context: its value, and the destructor count of a fixture
@@ -293,7 +295,11 @@ impl Device<512> for TestDevice {
         &self.timer
     }
     fn next_deadline(&self) -> Option<Instant> {
-        self.observed.borrow().rx_continuation
+        // As the device's: a due continuation is the body's to take.
+        self.observed
+            .borrow()
+            .rx_continuation
+            .filter(|at| self.timer.now() < *at)
     }
     fn take_power_profile(&mut self) -> Option<Self::Power> {
         None
@@ -344,6 +350,13 @@ impl Device<512> for TestDevice {
         self.capture();
         let mut observed = self.observed.borrow_mut();
         observed.device_polls += 1;
+        if observed.continuous_rx {
+            observed.driver_steps += 1;
+            assert!(
+                observed.driver_steps <= 64,
+                "the driver must return to its executor"
+            );
+        }
         drop(observed);
         let publications = self.hardware.publications();
         self.observed.borrow_mut().backoffs = self
@@ -406,6 +419,9 @@ impl Device<512> for TestDevice {
         self.capture();
         let observed = self.observed.borrow();
         !observed.received.is_empty()
+            && observed
+                .rx_continuation
+                .is_none_or(|at| self.timer.now() >= at)
     }
     fn poll_received_facts(&mut self, _: &mut Context<'_>) -> Result<bool, Fault> {
         self.assert_task_context();
@@ -436,11 +452,11 @@ impl Device<512> for TestDevice {
         if receive_room == 0 {
             return Ok(None);
         }
-        if observed
-            .rx_continuation
-            .is_some_and(|at| self.timer.now() >= at)
-        {
-            observed.rx_continuation = None;
+        // The ring waits for its continuation, as the device's does.
+        match observed.rx_continuation {
+            Some(at) if self.timer.now() < at => return Ok(None),
+            Some(_) => observed.rx_continuation = None,
+            None => {}
         }
         let Some(frame) = observed.received.pop_front() else {
             return Ok(None);

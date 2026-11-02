@@ -229,6 +229,9 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// holds them; otherwise `Fault::HardwareUnavailable`.
     fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault>;
     fn timer(&self) -> &Self::Timer;
+    /// The device's next deadline for the driver's turn. A due receive
+    /// continuation is not one: the body's pull takes it, and the driver's
+    /// turn only wakes the body ([`Self::receive_due`]).
     fn next_deadline(&self) -> Option<Instant>;
     fn take_power_profile(&mut self) -> Option<Self::Power>;
     fn radio_now(&mut self) -> Result<Ieee80211Instant, ClockError>;
