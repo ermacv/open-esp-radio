@@ -3,7 +3,7 @@
 use crate::OwnedNetworkTxFrame;
 use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, LentParts,
-    NetDevice, ReceivedFrame, TransmitRefused,
+    NetDevice, ReceivedFrame, TransmitError, TransmitRefused, TxStorage,
 };
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 
@@ -138,6 +138,131 @@ pub fn publish_view<const RX: usize>(
     view: EthernetFrameView<'_>,
 ) -> Result<(), crate::RxEnqueueError> {
     publisher.try_send_parts(view.destination, view.source, view.ether_type, view.payload)
+}
+
+/// A device's transmit memory as a parked packet's storage.
+pub struct TxInPlace<S>(S);
+
+impl<S: TxStorage> xarxa_driver::ExternalPacketStorage for TxInPlace<S> {
+    fn storage_mut(&mut self) -> &mut [u8] {
+        self.0.bytes_mut()
+    }
+}
+
+/// The packet slots of a device's transmit memory, placed in a `static` by
+/// the image; their allocator is the stack's general allocator, so that a
+/// packet the stack writes is already in the device's memory.
+pub type TxSlots<S, const N: usize> = xarxa_driver::ParkedPacketSlots<TxInPlace<S>, N>;
+
+/// A frame in a device's transmit memory: `len` octets from `start` in
+/// [`TxStorage::bytes_mut`].
+pub struct TxWritten<S> {
+    pub storage: S,
+    pub start: usize,
+    pub len: usize,
+}
+
+/// A frame [`ParkedTx::write`] did not place.
+pub enum TxWriteRefused<'r> {
+    /// The frame stays the caller's.
+    Kept(TransmitRefused<OwnedNetworkTxFrame<'r>>),
+    /// The frame was lost on the way: slots that refused a packet they own.
+    Lost,
+}
+
+/// The network end of a device's transmit memory, on the network's
+/// executor: the memory the device lends parks in `slots` for the stack to
+/// allocate over, but one spare that a frame from elsewhere (a reply built in
+/// a received packet's storage) is copied into.
+pub struct ParkedTx<S: TxStorage, const N: usize> {
+    slots: &'static TxSlots<S, N>,
+    spare: Option<S>,
+    /// A frame from elsewhere waited for the spare.
+    starved: bool,
+}
+
+impl<S: TxStorage, const N: usize> ParkedTx<S, N> {
+    /// Over the image's `slots`; the device's memory comes in through
+    /// [`Self::give`].
+    pub const fn new(slots: &'static TxSlots<S, N>) -> Self {
+        Self {
+            slots,
+            spare: None,
+            starved: false,
+        }
+    }
+
+    /// Whether a frame refused for want of the spare may go now.
+    pub fn available(&self) -> bool {
+        !self.starved || self.spare.is_some()
+    }
+
+    /// Memory free for the network: the spare first, then parked for the
+    /// stack's next packets. Memory the slots refuse (more than they hold,
+    /// or bytes the packets cannot use) goes back to the device by its drop.
+    pub fn give(&mut self, storage: S) {
+        if self.spare.is_none() {
+            self.spare = Some(storage);
+            self.starved = false;
+            return;
+        }
+        if let Err(refused) = self.slots.park(TxInPlace(storage)) {
+            drop(refused.owner.0);
+        }
+    }
+
+    /// The memory `frame` is in: its own when the stack wrote it in these
+    /// slots, no copy, or else the spare, the frame copied to its start.
+    ///
+    /// # Errors
+    ///
+    /// A frame from elsewhere waits while the spare is out
+    /// ([`TransmitError::QueueFull`]); one longer than the spare is refused
+    /// ([`TransmitError::InvalidLength`]). Both keep the frame.
+    pub fn write<'r>(
+        &mut self,
+        frame: OwnedNetworkTxFrame<'r>,
+    ) -> Result<TxWritten<S>, TxWriteRefused<'r>> {
+        if self.slots.owns(frame.packet()) {
+            return match self.slots.take(frame.into_packet()) {
+                Ok(taken) => Ok(TxWritten {
+                    storage: taken.owner.0,
+                    start: taken.headroom,
+                    len: taken.len,
+                }),
+                // The slots own the packet, so they take it: one they
+                // return ends here.
+                Err(packet) => {
+                    drop(packet);
+                    Err(TxWriteRefused::Lost)
+                }
+            };
+        }
+        let Some(mut spare) = self.spare.take() else {
+            self.starved = true;
+            return Err(TxWriteRefused::Kept(TransmitRefused {
+                frame,
+                reason: TransmitError::QueueFull,
+            }));
+        };
+        let ethernet = frame.ethernet();
+        let len = ethernet.len();
+        let Some(bytes) = spare.bytes_mut().get_mut(..len) else {
+            self.spare = Some(spare);
+            return Err(TxWriteRefused::Kept(TransmitRefused {
+                frame,
+                reason: TransmitError::InvalidLength(FrameLengthError::TooLong),
+            }));
+        };
+        for (byte, value) in bytes.iter_mut().zip(ethernet) {
+            *byte = *value;
+        }
+        Ok(TxWritten {
+            storage: spare,
+            start: 0,
+            len,
+        })
+    }
 }
 
 impl crate::OwnedLinkController<'_> {

@@ -45,6 +45,16 @@ pub trait FrameStorage: Send + 'static {
     fn advance(&mut self, by: usize) -> Result<(), StorageAdvanceRefused>;
 }
 
+/// Memory a device lends its network for frames to send. The network
+/// writes a frame into the bytes, where the device's own packets would let
+/// it, and hands the memory back to the device with the frame, which the
+/// device sends from it without a copy.
+pub trait TxStorage: Send + 'static {
+    /// The bytes a frame may take, from the place the device reads a frame
+    /// written at their start.
+    fn bytes_mut(&mut self) -> &mut [u8];
+}
+
 /// A refused [`FrameStorage::advance`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StorageAdvanceRefused {

@@ -110,7 +110,7 @@ pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
     ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
-    StatusReader, TxSupply, UnreadOperation,
+    StatusReader, TxRefused, TxSupply, UnreadOperation,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 

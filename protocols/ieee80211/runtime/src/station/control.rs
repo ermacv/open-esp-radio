@@ -539,35 +539,52 @@ impl<K, O: ServiceOutputSink<K>, N: Notifies> ServiceOutputSink<K> for Events<'_
 }
 
 /// The network's memory the station's data MSDUs come in, as the network
-/// end holds it: free memory for its next frames, and the memory the
-/// station gives back once an MSDU ended.
-pub trait TxSupply {
+/// end holds it: the memory a frame `P` is handed over in, and the memory
+/// the station gives back once an MSDU ended.
+pub trait TxSupply<P> {
     /// The memory the station holds for one MSDU
     /// ([`StationPort::TxMemory`](super::StationPort::TxMemory)).
     type Memory;
-    /// Whether free memory takes a frame now.
+    /// Whether the frame [`Self::write`] last refused for want of memory
+    /// may go now: memory came back since, or none was refused.
     fn available(&self) -> bool;
-    /// Write `frame` into free memory where the data machine reads it
-    /// ([`MSDU_ETHERNET_OFFSET`](oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET)),
-    /// and hand the memory over for the station.
+    /// Hand `frame` over in memory, its Ethernet header where the data
+    /// machine reads it
+    /// ([`MSDU_ETHERNET_OFFSET`](oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET)):
+    /// the memory it was written in, or free memory it is copied into.
     ///
     /// # Errors
     ///
-    /// No free memory ([`TransmitError::QueueFull`]), or a frame the memory
-    /// does not hold ([`TransmitError::InvalidLength`]); the memory stays free.
-    fn write(
-        &mut self,
-        frame: oer_protocols_network_port::EthernetFrameView<'_>,
-    ) -> Result<Self::Memory, TransmitError>;
+    /// No free memory for a copy ([`TransmitError::QueueFull`]) or a frame
+    /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
+    /// frame; a pool that refuses its own written memory loses both.
+    fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
     /// Memory the station gave back: free again.
     fn give(&mut self, memory: Self::Memory);
+}
+
+/// A frame [`TxSupply::write`] did not hand over.
+pub enum TxRefused<P> {
+    /// The frame stays the caller's, and the memory free.
+    Kept(TransmitRefused<P>),
+    /// The pool refused the memory the frame was written in: frame and
+    /// memory left the network's reach, the memory quarantined.
+    Lost,
 }
 
 /// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
 /// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)),
 /// `P` the network stack's packet a transmission hands over and `S` the
 /// memory its frame goes into for the station.
-pub struct Device<'c, L, P, S: TxSupply, const TX: usize, const RX: usize, N: Notifies = SameHart> {
+pub struct Device<
+    'c,
+    L,
+    P,
+    S: TxSupply<P>,
+    const TX: usize,
+    const RX: usize,
+    N: Notifies = SameHart,
+> {
     /// The frames for the station, each in the network's memory, where the
     /// station writes its MPDU header in place.
     transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
@@ -581,7 +598,7 @@ pub struct Device<'c, L, P, S: TxSupply, const TX: usize, const RX: usize, N: No
     packet: core::marker::PhantomData<fn(P)>,
 }
 /// The network end over the station's channels and `state`'s link.
-impl<'c, L, P, S: TxSupply, const TX: usize, const RX: usize, N: Notifies>
+impl<'c, L, P, S: TxSupply<P>, const TX: usize, const RX: usize, N: Notifies>
     Device<'c, L, P, S, TX, RX, N>
 {
     pub fn new(
@@ -619,7 +636,7 @@ impl<'c, L, P, S: TxSupply, const TX: usize, const RX: usize, N: Notifies>
 impl<
     L: oer_protocols_ieee80211_contracts_port::LentRxBuffer,
     P: oer_protocols_network_port::EthernetFrame,
-    S: TxSupply,
+    S: TxSupply<P>,
     const TX: usize,
     const RX: usize,
     N: Notifies,
@@ -704,22 +721,26 @@ impl<
                         .ok_or(TransmitError::InvalidLength(
                             oer_protocols_network_port::FrameLengthError::TooLong,
                         ))?;
-                    let memory = self.supply.write(view)?;
-                    Ok(super::Outgoing {
-                        memory,
-                        length,
-                        priority,
-                    })
+                    Ok((length, priority))
                 })
         };
-        let outgoing = match checked {
-            Ok(outgoing) => outgoing,
+        let (length, priority) = match checked {
+            Ok(checked) => checked,
             Err(reason) => return Err(TransmitRefused { frame, reason }),
         };
-        // The frame is in the network's memory: the packet itself is done
+        // The frame's memory goes to the station; the packet itself ends
         // here, on the network's executor.
-        drop(frame);
-        let mut outgoing = Some(outgoing);
+        let memory = match self.supply.write(frame) {
+            Ok(memory) => memory,
+            Err(TxRefused::Kept(refused)) => return Err(refused),
+            // Accepted, then lost with its memory, as a frame lost on air.
+            Err(TxRefused::Lost) => return Ok(()),
+        };
+        let mut outgoing = Some(super::Outgoing {
+            memory,
+            length,
+            priority,
+        });
         let _sent = self.transmit.try_send_with(|slot| {
             *slot = outgoing.take();
             Ok::<_, core::convert::Infallible>(())

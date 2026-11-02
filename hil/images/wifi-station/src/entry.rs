@@ -46,11 +46,11 @@ type Requests = Either<
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 
-/// The IP service's pools: receive slots, transmit credits and general
-/// slots, larger than the library's defaults for the stand's TCP load.
+/// The IP service's pools: receive slots and transmit credits, larger than
+/// the library's defaults for the stand's TCP load.
 const RX: usize = 32;
 const TX: usize = 16;
-static POOLS: wifi::Pools<RX, TX, 32> = wifi::Pools::new();
+static POOLS: wifi::Pools<RX, TX> = wifi::Pools::new();
 
 /// The worker hands each line exchange to the group's future and
 /// hears how it ended.

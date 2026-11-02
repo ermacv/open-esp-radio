@@ -34,11 +34,14 @@ use oer_chips_family_executor::{
 use oer_chips_family_interrupt_table::signal::{FromHandler, FromOwnTask, IrqSignal};
 use oer_portable_embassy_net::{
     NetworkInterfaceId,
-    ethernet::LentSlots,
+    ethernet::{LentSlots, ParkedTx, TxSlots, TxWriteRefused},
     ip::{self, Configuration, Resources, Service},
 };
 use oer_portable_embassy_time::EmbassyClock;
-use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
+use oer_protocols_ieee80211_runtime::station::{
+    TxRefused, TxSupply,
+    contract::{CommandOutcome, Notice},
+};
 use static_cell::StaticCell;
 
 pub use embassy_net;
@@ -164,12 +167,64 @@ fn failure(error: wifi::InitializationError) -> ! {
 /// The IP stack's packet owner a transmission hands the station.
 type TxPacket = oer_portable_embassy_net::OwnedNetworkTxFrame<'static>;
 
+/// The packet slots over the station's transmit buffers, but the spare the
+/// network keeps for copies: the IP stack's general allocator.
+static TX_SLOTS: TxSlots<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }> = TxSlots::new();
+
+/// The network end's transmit memory: the station's transmit buffers parked
+/// in [`TX_SLOTS`], where the IP stack writes its packets, and the spare
+/// that a packet from elsewhere is copied into. A packet goes to the
+/// station in the buffer it was written in.
+pub struct WifiTx {
+    publisher: wifi::TxPublisher,
+    parked: ParkedTx<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }>,
+}
+
+impl wifi::NetworkTxSupply for WifiTx {
+    type Packet = TxPacket;
+    fn new(tx: wifi::NetworkTx) -> Self {
+        let (publisher, slots) = tx.into_parts();
+        let mut parked = ParkedTx::new(&TX_SLOTS);
+        for slot in slots {
+            parked.give(slot);
+        }
+        Self { publisher, parked }
+    }
+}
+
+impl TxSupply<TxPacket> for WifiTx {
+    type Memory = wifi::TxMemory;
+    fn available(&self) -> bool {
+        self.parked.available()
+    }
+    fn write(&mut self, frame: TxPacket) -> Result<wifi::TxMemory, TxRefused<TxPacket>> {
+        let written = match self.parked.write(frame) {
+            Ok(written) => written,
+            Err(TxWriteRefused::Kept(refused)) => return Err(TxRefused::Kept(refused)),
+            Err(TxWriteRefused::Lost) => return Err(TxRefused::Lost),
+        };
+        self.publisher
+            .publish(written.storage, written.start, written.len)
+            .map_err(|refused| {
+                // A packet stays inside its buffer: a frame past it ends
+                // here, and the buffer is free again.
+                if let wifi::TxPublishRefused::Range(slot) = refused {
+                    self.parked.give(slot);
+                }
+                TxRefused::Lost
+            })
+    }
+    fn give(&mut self, memory: wifi::TxMemory) {
+        self.parked.give(self.publisher.slot(memory));
+    }
+}
+
 #[cfg(not(feature = "group"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_packet:TxPacket,fail:failure}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure}}
 // The station's network end runs on hart 1, with the group's IP
 // service.
 #[cfg(feature = "group")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_packet:TxPacket,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
@@ -516,7 +571,7 @@ pub enum StopError {
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
     network: Option<(
-        wifi::Network<'static, Notifies, TxPacket, wifi::NetworkSupply>,
+        wifi::Network<'static, Notifies, TxPacket, WifiTx>,
         wifi::NetworkStopper<'static, Notifies>,
     )>,
     address: [u8; 6],
@@ -747,37 +802,31 @@ fn control(error: wifi::ControlError) -> ConnectError {
     }
 }
 
-/// The default packet pools of the IP service: receive slots, transmit
-/// credits and general slots, each holding one 1514-byte Ethernet frame.
+/// The default packet pools of the IP service: receive slots, each holding
+/// one 1514-byte Ethernet frame, and transmit credits. The stack's general
+/// packets are the station's transmit buffers ([`TX_SLOTS`]).
 pub const RX: usize = 8;
 pub const TX: usize = 8;
-pub const GENERAL: usize = 8;
 
 #[cfg(not(feature = "group"))]
 type Context = ThreadContext<0>;
 /// The IP service's executor: hart 1's with the group there.
 #[cfg(feature = "group")]
 type Context = ThreadContext<1>;
-type IpResources<const RX: usize, const TX: usize, const GENERAL: usize> =
-    Resources<Context, RX, TX, GENERAL>;
-type IpService<const RX: usize, const TX: usize> = Service<
-    Context,
-    RX,
-    TX,
-    wifi::Network<'static, Notifies, TxPacket, wifi::NetworkSupply>,
-    { wifi::LENT_RX },
->;
+type IpResources<const RX: usize, const TX: usize> = Resources<Context, RX, TX>;
+type IpService<const RX: usize, const TX: usize> =
+    Service<Context, RX, TX, wifi::Network<'static, Notifies, TxPacket, WifiTx>, { wifi::LENT_RX }>;
 
-/// The IP service's packet pools: `RX` receive slots, `TX` transmit
-/// credits and `GENERAL` general slots, each one 1514-byte frame. A static
-/// of this type is the storage [`Net::start_with`] takes once; [`Net::start`]
-/// takes the library's own of [`RX`], [`TX`] and [`GENERAL`].
-pub struct Pools<const RX: usize, const TX: usize, const GENERAL: usize> {
-    resources: StaticCell<IpResources<RX, TX, GENERAL>>,
+/// The IP service's packet pools: `RX` receive slots, each one 1514-byte
+/// frame, and `TX` transmit credits. A static of this type is the storage
+/// [`Net::start_with`] takes once; [`Net::start`] takes the library's own
+/// of [`RX`] and [`TX`].
+pub struct Pools<const RX: usize, const TX: usize> {
+    resources: StaticCell<IpResources<RX, TX>>,
     control: StaticCell<ip::Control<'static>>,
 }
 
-impl<const RX: usize, const TX: usize, const GENERAL: usize> Pools<RX, TX, GENERAL> {
+impl<const RX: usize, const TX: usize> Pools<RX, TX> {
     pub const fn new() -> Self {
         Self {
             resources: StaticCell::new(),
@@ -786,13 +835,13 @@ impl<const RX: usize, const TX: usize, const GENERAL: usize> Pools<RX, TX, GENER
     }
 }
 
-impl<const RX: usize, const TX: usize, const GENERAL: usize> Default for Pools<RX, TX, GENERAL> {
+impl<const RX: usize, const TX: usize> Default for Pools<RX, TX> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-static POOLS: Pools<RX, TX, GENERAL> = Pools::new();
+static POOLS: Pools<RX, TX> = Pools::new();
 
 /// What the IP service runs: the service, the station's stop request, and
 /// the service's control to stop it with, at the image's pool sizes.
@@ -899,9 +948,9 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
     ///
     /// # Errors
     /// As [`Net::start`]; the pools were taken already.
-    pub fn start_with<const GENERAL: usize>(
+    pub fn start_with(
         mut device: Device,
-        pools: &'static Pools<RX, TX, GENERAL>,
+        pools: &'static Pools<RX, TX>,
         configuration: Configuration,
         boot: GroupBoot,
     ) -> Result<(Self, GroupBoot<IpStart<RX, TX>>), Error> {
@@ -909,12 +958,13 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
         let resources = pools
             .resources
             .try_uninit()
-            .map(|place| place.write(const { IpResources::<RX, TX, GENERAL>::new() }))
+            .map(|place| place.write(const { IpResources::<RX, TX>::new() }))
             .ok_or(Error::AlreadyStarted)?;
         let (control, service) = resources
             .start(
                 network,
                 Some(&LENT),
+                TX_SLOTS.allocator(),
                 NetworkInterfaceId::new(0),
                 device.address,
                 device.seed,

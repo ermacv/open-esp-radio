@@ -50,10 +50,10 @@ oer-portable-trace = { path = "../../../portable/trace" }
 embassy-futures = "0.1.2"
 embassy-time = { workspace = true }
 # The stack the IP service pins (`oer-portable-embassy-net`), with TCP sockets.
-embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "073d3fc49234db76005cb0ea1a86097d5f633c2d", default-features = false, features = ["tcp"] }
+embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "a4937b529053c36d3c2e2f5cef3014e3126c867f", default-features = false, features = ["tcp"] }
 # The stack's socket receive queue at its largest, with `udp`: some 2.7 ms
 # of 1400-byte datagrams at 65 Mbit/s (the revision the stack pins).
-xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "5b6f11a793c3b07e5ef5be39f3ad5e9b6e0fa711", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
+xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "f6a6bbef505f442a934e248874a3204692a838a1", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
 
 [lints]
 workspace = true

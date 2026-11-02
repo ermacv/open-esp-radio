@@ -264,7 +264,7 @@ type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// Affine neutral Ethernet end over the network stack's packets `P`,
 /// whose frames go into the network's transmit memory `S`. The concrete
 /// station frame is private.
-pub struct Network<'a, N: Notifies, P, S: runtime::TxSupply> {
+pub struct Network<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
     inner: runtime::Device<'a, LentRx<N>, P, S, TX_DEPTH, RX_DEPTH, Ch<N>>,
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
@@ -303,7 +303,7 @@ impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
         }
     }
 }
-impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply> NetDevice
+impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply<P>> NetDevice
     for Network<'_, N, P, S>
 {
     type RxFrame = Received<N>;
@@ -457,7 +457,7 @@ impl<N: Notifies> NetworkStopper<'_, N> {
     /// The composition has no network side: it gives up the station's
     /// network end, the station delivers no frame (each received MSDU's
     /// buffer goes back at once), and its stop needs no answer.
-    pub fn no_network<P, S: runtime::TxSupply>(self, network: Network<'_, N, P, S>) {
+    pub fn no_network<P, S: runtime::TxSupply<P>>(self, network: Network<'_, N, P, S>) {
         drop(network);
         self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
@@ -541,7 +541,7 @@ impl<N: Notifies, M> Channels<N, M> {
     /// The four ends, the network's over the free memory `supply` and the
     /// stack's packets `P`.
     #[allow(clippy::type_complexity, reason = "the four ends of one split")]
-    pub fn split<P, S: runtime::TxSupply<Memory = M>>(
+    pub fn split<P, S: runtime::TxSupply<P, Memory = M>>(
         &mut self,
         supply: S,
     ) -> Result<
@@ -627,10 +627,12 @@ mod chip;
 #[cfg(target_arch = "riscv32")]
 mod dma;
 pub mod policy;
-#[cfg(target_arch = "riscv32")]
+#[cfg(any(test, target_arch = "riscv32"))]
 mod supply;
 #[cfg(target_arch = "riscv32")]
-pub use supply::{NetworkSupply, TxMemory};
+pub use supply::{
+    NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused, TxPublisher, TxSlot,
+};
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;
@@ -673,25 +675,25 @@ pub use chip::{
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_packet:$tx_packet:ty,fail:$fail:path $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_packet:$tx_packet,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail}
    notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
  // task's signal, `station` the station task's, `driver` the driver's, each
  // a notify of the type it names.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_packet:$tx_packet:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_packet:$tx_packet,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail}
    notifies: $crate::AcrossHarts<$nt,$st,$dt>, storage: $crate::Storage::across_harts($network,$station,$driver));
  };
- (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_packet:$tx_packet:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_chips_family_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
-    type Notifies=$notifies;type TxPacket=$tx_packet;
+    type Notifies=$notifies;type TxSupply=$tx_supply;
     fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
    }
@@ -745,16 +747,18 @@ mod tests {
     }
     /// No free memory: the tests' network sends nothing.
     struct NoMemory;
-    impl runtime::TxSupply for NoMemory {
+    impl<P> runtime::TxSupply<P> for NoMemory {
         type Memory = ();
         fn available(&self) -> bool {
             false
         }
-        fn write(
-            &mut self,
-            _: oer_protocols_network_port::EthernetFrameView<'_>,
-        ) -> Result<(), oer_protocols_network_port::TransmitError> {
-            Err(oer_protocols_network_port::TransmitError::QueueFull)
+        fn write(&mut self, frame: P) -> Result<(), runtime::TxRefused<P>> {
+            Err(runtime::TxRefused::Kept(
+                oer_protocols_network_port::TransmitRefused {
+                    frame,
+                    reason: oer_protocols_network_port::TransmitError::QueueFull,
+                },
+            ))
         }
         fn give(&mut self, (): ()) {}
     }

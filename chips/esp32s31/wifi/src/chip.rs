@@ -59,8 +59,9 @@ pub trait Binding: Sized + 'static {
     /// [`crate::AcrossHarts`] with the executor signals the two harts raise
     /// for each other's tasks and the driver.
     type Notifies: crate::Notifies;
-    /// The network stack's packet owner its transmissions hand the station.
-    type TxPacket: oer_protocols_network_port::EthernetFrame + 'static;
+    /// The network end's transmit memory over the pool buffers the port
+    /// does not hold, and the network stack's packets it takes.
+    type TxSupply: crate::NetworkTxSupply;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
@@ -437,7 +438,7 @@ impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<
 pub struct Storage<W: Binding> {
     pub(crate) channels: Channels<W::Notifies, crate::TxMemory>,
     /// The transmit pool, pinned once: the port holds its first buffers,
-    /// the network the rest ([`crate::NetworkSupply`]).
+    /// the network the rest ([`crate::NetworkTx`]).
     pub(crate) pool: static_cell::StaticCell<oer_chips_esp32s31_ieee80211_driver::port::TxPool<TX>>,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
@@ -558,12 +559,23 @@ pub enum UnavailableCause {
     Abandoned,
     Initialization(InitializationError),
 }
+/// The station's network end over `W`'s transmit memory and its packets.
+pub type StationNetwork<W> = Network<
+    'static,
+    <W as Binding>::Notifies,
+    <<W as Binding>::TxSupply as crate::NetworkTxSupply>::Packet,
+    <W as Binding>::TxSupply,
+>;
+#[allow(
+    clippy::type_complexity,
+    reason = "the four ends of the station's start"
+)]
 pub fn station<W: Binding>(
     resources: Resources<W>,
     config: Config,
 ) -> (
     Control<'static, W::Notifies>,
-    Network<'static, W::Notifies, W::TxPacket, crate::NetworkSupply>,
+    StationNetwork<W>,
     crate::NetworkStopper<'static, W::Notifies>,
     Runners<W>,
 ) {
@@ -600,8 +612,9 @@ pub fn station<W: Binding>(
         )
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
     let pool: &'static _ = pool;
-    let supply =
-        crate::NetworkSupply::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx));
+    let supply = <W::TxSupply as crate::NetworkTxSupply>::new(
+        crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx)),
+    );
     let (mut control, network, stopper, connection) = storage
         .channels
         .split(supply)

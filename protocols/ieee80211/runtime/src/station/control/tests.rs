@@ -25,18 +25,26 @@ impl Supply {
         self.0.borrow().len()
     }
 }
-impl TxSupply for Supply {
+/// Copies any frame into free memory, as the network end does for a
+/// packet that is not in its memory already.
+impl<P: oer_protocols_network_port::EthernetFrame> TxSupply<P> for Supply {
     type Memory = Vec<u8>;
     fn available(&self) -> bool {
         self.free() != 0
     }
-    fn write(&mut self, frame: EthernetFrameView<'_>) -> Result<Vec<u8>, TransmitError> {
-        let mut memory = self.0.borrow_mut().pop().ok_or(TransmitError::QueueFull)?;
+    fn write(&mut self, frame: P) -> Result<Vec<u8>, TxRefused<P>> {
+        let Some(mut memory) = self.0.borrow_mut().pop() else {
+            return Err(TxRefused::Kept(TransmitRefused {
+                frame,
+                reason: TransmitError::QueueFull,
+            }));
+        };
+        let view = frame.view().unwrap();
         let at = oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
-        memory[at..][..6].copy_from_slice(&frame.destination);
-        memory[at + 6..][..6].copy_from_slice(&frame.source);
-        memory[at + 12..][..2].copy_from_slice(&frame.ether_type.to_be_bytes());
-        memory[at + 14..][..frame.payload.len()].copy_from_slice(frame.payload);
+        memory[at..][..6].copy_from_slice(&view.destination);
+        memory[at + 6..][..6].copy_from_slice(&view.source);
+        memory[at + 12..][..2].copy_from_slice(&view.ether_type.to_be_bytes());
+        memory[at + 14..][..view.payload.len()].copy_from_slice(view.payload);
         Ok(memory)
     }
     fn give(&mut self, memory: Vec<u8>) {
@@ -795,4 +803,53 @@ fn a_stopped_control_refuses_a_connect_and_keeps_no_profile() {
         Some(ControlError::Stopped)
     );
     assert!(runner.take_profile().is_none());
+}
+
+/// Memory that loses every frame: a pool that refuses its own buffer.
+struct Losing;
+impl<P> TxSupply<P> for Losing {
+    type Memory = Vec<u8>;
+    fn available(&self) -> bool {
+        true
+    }
+    fn write(&mut self, frame: P) -> Result<Vec<u8>, TxRefused<P>> {
+        drop(frame);
+        Err(TxRefused::Lost)
+    }
+    fn give(&mut self, _: Vec<u8>) {}
+}
+
+#[test]
+fn a_frame_lost_with_its_memory_is_accepted_and_reaches_no_station() {
+    let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
+    let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<Vec<u8>>, 1>::new();
+    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
+    let state = State::new();
+    let (sender, _) = commands.split();
+    let (_control, _runner) = Control::new(sender, &state).unwrap();
+    let (sender, mut receiver) = tx.split(|| None);
+    let (_, back) = back.split(|| None);
+    let (_, receive) = rx.split();
+    let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+    let (_, copied) = copies.split();
+    let mut device: Device<'_, _, Frame, _, 1, 1> =
+        Device::new(sender, back, Losing, receive, copied, &state);
+    let mut status = state.status.get();
+    status.link = LinkSnapshot {
+        state: LinkState::Up,
+        epoch: 1,
+    };
+    state.set_status(status);
+    let dropped = Rc::new(Cell::new(0));
+    let frame = Frame {
+        owner: dropped.clone(),
+        payload: [7; 4],
+    };
+    assert!(device.try_transmit(frame).is_ok());
+    assert_eq!(dropped.get(), 1);
+    assert!(!matches!(
+        receiver.try_receive_with(Option::take),
+        Ok(Some(_))
+    ));
 }

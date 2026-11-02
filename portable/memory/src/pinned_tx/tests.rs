@@ -302,3 +302,17 @@ fn a_radio_lease_hands_its_slot_back_to_a_network_writer_without_freeing_it() {
     drop(radio);
     assert_eq!(pool.claimed_slots(), 0);
 }
+
+#[test]
+fn a_network_writer_fills_its_bytes_across_calls_and_publishes_what_it_wrote() {
+    let pool = pinned_pool();
+    let mut network = pool.claim_network(0).unwrap();
+    assert_eq!(network.bytes_mut().len(), 32);
+    network.bytes_mut()[..2].copy_from_slice(&[7, 8]);
+    network.bytes_mut()[2..3].copy_from_slice(&[9]);
+    // Unpublished, the slot is no radio owner's.
+    assert!(pool.claim_radio(0).is_err());
+    let index = network.publish_written(crate::FrameLen::constant::<3>());
+    let radio = pool.claim_radio(index).unwrap();
+    assert_eq!(radio.ethernet(), &[7, 8, 9]);
+}
