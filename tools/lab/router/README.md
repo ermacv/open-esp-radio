@@ -143,7 +143,15 @@ and the host refuses any line outside the allowlist. In order:
    config=$(uci show wireless) && printf '%s\n' "$config" | grep -E '^wireless\.[^.=]+=(wifi-device|wifi-iface)$|^wireless\.[^.=]+\.(device|mode|disabled|hidden|ssid|band|hwmode|channel|htmode|beacon_int|country|encryption|ieee80211ax|ieee80211r|ieee80211w|wpa_group_rekey)='
    ```
 
-3. The radio's channels in its regulatory domain: the profile's channel
+3. The regulatory domain of the radio's UCI `country`, set and awaited up
+   to ten seconds: a freshly booted router keeps the world domain (`00`,
+   channels 12 and 13 `no IR`) until a radio starts with its country.
+
+   ```sh
+   iw reg set <country> && attempt=0 && until iw reg get | grep -q '^country <country>:'; do attempt=$((attempt + 1)) && test "$attempt" -lt 10 && sleep 1 || exit 1; done
+   ```
+
+   Then the radio's channels in its regulatory domain: the profile's channel
    must be offered at 2.4 GHz and be neither `disabled` nor `no IR`.
 
    ```sh
