@@ -290,7 +290,13 @@ metadata: an MPDU's buffer is attached to its queue's ordinary descriptor
 for the publication, and an aggregate's buffers are retained by one of two
 descriptor chains (`AMPDU_CHAINS`), one in the air while the next is
 published; an aggregate whose head finds no free chain waits in its access
-category's FIFO. Each queue executes an MPDU's supplied retry plan; an
+category's FIFO. At publication the aggregates queued right behind it, of
+the same recipient, TID, key, rate and settings, ride in its PPDU while
+their BlockAck bits stay inside the hardware's 32-bit window and their
+subframes fit the length rule together; they stay at the head of the
+queue, which publishes nothing else meanwhile, and each ends with the
+PPDU's outcome after it, `Air::followers` counting the parts still to end.
+Each queue executes an MPDU's supplied retry plan; an
 aggregate is one attempt, and the planner above the port resends what its
 BlockAck report misses. While an aggregate is built, queued or published,
 its subframes' records wait in the installation's subframe table at their

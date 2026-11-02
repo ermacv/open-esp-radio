@@ -239,6 +239,7 @@ mod learn_tests {
         let air = Air {
             transmissions: NonZeroU16::MIN,
             rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+            followers: 0,
         };
         let tally = BlockAckTally::new(NonZeroU16::MIN, 0).unwrap();
         let unanswered: AggregateOutcome<(), ()> = TxOutcome::Ended(AggregateEnd::AckTimeout(air));
@@ -258,6 +259,7 @@ mod learn_tests {
             air: Air {
                 transmissions: NonZeroU16::MIN,
                 rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+                followers: 0,
             },
             response: SingleResponse::Ack(()),
         });

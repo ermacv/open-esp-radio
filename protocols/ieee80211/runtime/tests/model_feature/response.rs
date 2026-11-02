@@ -238,6 +238,7 @@ impl Case {
         let air = Air {
             transmissions: core::num::NonZeroU16::MIN,
             rate,
+            followers: 0,
         };
         let expected = match self.expected {
             Expected::Delivered(report) => Seen::Delivered {

@@ -533,6 +533,8 @@ pub struct StationTxAmpdu {
     pub block_ack_request: bool,
     /// The rate the aggregate's last transmission went at.
     pub rate: RateClass,
+    /// The aggregates of its PPDU whose settlements follow.
+    pub followers: u8,
 }
 
 impl Default for StationTxAmpdu {
@@ -545,9 +547,13 @@ impl Default for StationTxAmpdu {
             refused: false,
             block_ack_request: false,
             rate: RateClass::Unknown,
+            followers: 0,
         }
     }
 }
+
+/// The rate's 18 bits of a settlement's second word.
+const RATE_WORD: u32 = (1 << 18) - 1;
 
 impl Event for StationTxAmpdu {
     const KIND: Kind = Kind::new(Domain::Ieee80211, 33);
@@ -556,15 +562,18 @@ impl Event for StationTxAmpdu {
     fn encode(&self) -> [u32; 2] {
         [
             u32::from_le_bytes([self.members, self.acknowledged, self.retried, self.dropped]),
-            // The rate's word takes 18 bits above the two flags.
+            // The rate's word takes 18 bits above the two flags; the
+            // followers take the top octet.
             u32::from(self.refused)
                 | (u32::from(self.block_ack_request) << 1)
-                | (self.rate.encode() << 2),
+                | (self.rate.encode() << 2)
+                | (u32::from(self.followers) << 24),
         ]
     }
 
     fn decode([counts, word]: [u32; 2]) -> Option<Self> {
         let [members, acknowledged, retried, dropped] = counts.to_le_bytes();
+        let [.., followers] = word.to_le_bytes();
         Some(Self {
             members,
             acknowledged,
@@ -572,7 +581,8 @@ impl Event for StationTxAmpdu {
             dropped,
             refused: word & 1 != 0,
             block_ack_request: word & 0b10 != 0,
-            rate: RateClass::decode(word >> 2)?,
+            rate: RateClass::decode((word >> 2) & RATE_WORD)?,
+            followers,
         })
     }
 }
@@ -770,6 +780,7 @@ impl<O: oer_portable_trace::Observer>
                 refused: settled.refused,
                 block_ack_request: false,
                 rate: RateClass::of(settled.rate),
+                followers: settled.followers,
             }),
             StaEvent::BlockAckRequestSent => self.report_tx(StationTxAmpdu {
                 block_ack_request: true,
@@ -798,6 +809,7 @@ mod tests {
                 width40: true,
                 short_gi: true,
             },
+            followers: 3,
         };
         assert_eq!(StationTxAmpdu::decode(settled.encode()), Some(settled));
         let bar = StationTxAmpdu {
@@ -945,6 +957,7 @@ mod tests {
         let air = Air {
             transmissions: core::num::NonZeroU16::new(3).unwrap(),
             rate: ht40,
+            followers: 0,
         };
         let timeout: SingleOutcome<(), ()> = TxOutcome::Ended(SingleEnd::AckTimeout(air));
         assert_eq!(

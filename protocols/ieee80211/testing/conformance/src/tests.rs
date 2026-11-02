@@ -76,6 +76,7 @@ fn acknowledged(transmissions: u16) -> ReturnEvidence {
             rate: oer_protocols_ieee80211_contracts_port::PhyRate::Legacy(
                 oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M,
             ),
+            followers: 0,
         }),
     );
     ReturnEvidence::terminal(true, &terminal).expect("terminal evidence")

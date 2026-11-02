@@ -4100,6 +4100,7 @@ fn ended(status: End) -> Outcome {
     let air = oer_protocols_ieee80211_contracts_port::Air {
         transmissions: NonZeroU16::MIN,
         rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+        followers: 0,
     };
     TxOutcome::Ended(match status {
         End::Delivered => SingleEnd::Delivered {

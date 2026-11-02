@@ -1825,6 +1825,7 @@ impl Work for LongRetryPlan<'_> {
                         air: Air {
                             transmissions: count,
                             rate: PhyRate::Legacy(LegacyRate::Ofdm54M),
+                            followers: 0,
                         },
                         ..
                     }) if count.get() == 1020
@@ -1916,6 +1917,7 @@ impl Work for LastRateBeforeCollision<'_> {
                     TxOutcome::Ended(SingleEnd::ContentionLimit(Some(Air {
                         transmissions: NonZeroU16::MIN,
                         rate: first_rate,
+                        followers: 0,
                     })))
                 );
                 assert!(completion.rate_sample().is_none());

@@ -159,6 +159,13 @@ pub struct Air {
     pub transmissions: NonZeroU16,
     /// The rate the last transmission went at.
     pub rate: crate::PhyRate,
+    /// The terminals that follow this one from the same PPDU. A backend
+    /// may send queued aggregates of one recipient and TID as one PPDU;
+    /// each ends with that PPDU's outcome, in queue order, and every one
+    /// but the last counts here the parts after it. 0 for an MPDU and for
+    /// a PPDU's last part. A rate observation takes the PPDU once: its
+    /// parts' subframes add up to it.
+    pub followers: u8,
 }
 
 /// The SNR a backend's ACK evidence always carries: a property of the
@@ -226,7 +233,7 @@ pub enum SingleResponse<A> {
 /// use core::num::NonZeroU16;
 /// use oer_protocols_ieee80211_contracts_port::{Air, PhyRate, SingleEnd, SingleResponse};
 /// fn delivered(rate: PhyRate) -> SingleEnd<i8, ()> {
-///     let air = Air { transmissions: NonZeroU16::MIN, rate };
+///     let air = Air { transmissions: NonZeroU16::MIN, rate, followers: 0 };
 ///     SingleEnd::Delivered { air, response: SingleResponse::Ack(20) }
 /// }
 /// ```

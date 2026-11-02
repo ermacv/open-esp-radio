@@ -584,7 +584,7 @@ fn sequence_and_retry(frame: &AirFrame) -> (u16, bool) {
 }
 
 #[test]
-fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
+fn an_agreement_aggregates_msdus_queued_together_and_retries_a_missing_member() {
     run_with(tx_block_ack_config(ht_config()), |world| {
         Box::pin(async move {
             let mut seen = 0;
@@ -599,23 +599,25 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
                 .air
                 .receive(&addba_response(dialog_token, 0, 32), meta());
             assert!(world.delivered().await.is_empty());
-            // Sequence number 1 goes at once; 2, 3 and 4 wait while it is
-            // out, to go together.
+            // Sequence number 1 goes at once; 2 and 3, queued together
+            // while it is out, go as one aggregate.
             world.air.hold(WmmAccessCategory::BestEffort, true);
-            for _ in 0..4 {
+            assert!(world.try_send_msdu(BSSID));
+            assert!(world.delivered().await.is_empty());
+            for _ in 0..2 {
                 assert!(world.try_send_msdu(BSSID));
-                assert!(world.delivered().await.is_empty());
             }
+            assert!(world.delivered().await.is_empty());
             world
                 .air
                 .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
                     0b1,
                 ));
-            // The aggregate of 2, 3 and 4 misses 3.
+            // The aggregate of 2 and 3 misses 3.
             world
                 .air
                 .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
-                    0b101,
+                    0b01,
                 ));
             world.air.hold(WmmAccessCategory::BestEffort, false);
             let retried = loop {
@@ -625,8 +627,8 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
                 }
             };
             // Bit 1 of the second answer is the second subframe of the
-            // second publication: 2, 3 and 4 went as one aggregate, and only
-            // 3 again.
+            // second publication: 2 and 3 went as one aggregate, and only 3
+            // again.
             assert_eq!(sequence_and_retry(&retried), (3, true));
             assert!(
                 world
@@ -634,7 +636,7 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
                     .sent()
                     .iter()
                     .filter(|frame| kind(frame) == 0x88)
-                    .all(|frame| ![(2, true), (4, true)].contains(&sequence_and_retry(frame)))
+                    .all(|frame| sequence_and_retry(frame) != (2, true))
             );
             world.command(ControlCommand::Stop).await;
         })

@@ -3512,10 +3512,12 @@ fn single_outcome(
     let before = last.map(|(transmissions, rate)| Air {
         transmissions,
         rate,
+        followers: 0,
     });
     let transmitted = Air {
         transmissions: last.map_or(NonZeroU16::MIN, |(count, _)| count.saturating_add(1)),
         rate,
+        followers: 0,
     };
     let ack = ModelAck {
         snr_db: MODEL_ACK_SNR_DB,
@@ -3569,6 +3571,7 @@ fn aggregate_outcome(
     let air = Air {
         transmissions: NonZeroU16::MIN,
         rate,
+        followers: 0,
     };
     match (answer, cause) {
         (AggregateAnswer::HardwareTimeout, _) => {

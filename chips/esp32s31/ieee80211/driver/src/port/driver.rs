@@ -44,6 +44,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
         Some(Air {
             transmissions: core::num::NonZeroU16::new(self.transmissions)?,
             rate: self.air_rate?,
+            followers: 0,
         })
     }
 }
@@ -334,7 +335,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             deadline = deadline.min(at.saturating_add(COMMAND_BOUND));
         }
         if !core_views::configuring::<Id, D, B>(self.core.view()) {
-            for pending in self.queues.iter().flat_map(|q| q.iter()) {
+            // Riders end with the PPDU they ride in, under its deadline.
+            let queued = self
+                .queues
+                .iter()
+                .zip(&self.running)
+                .flat_map(|(queue, running)| {
+                    queue
+                        .iter()
+                        .skip(running.as_ref().map_or(0, Running::riders))
+                });
+            for pending in queued {
                 if let Some(at) = pending.admission() {
                     let lifetime = held.edca.lifetime(vif(pending.role()), pending.category());
                     deadline = deadline.min(at.saturating_add(lifetime));
@@ -1084,7 +1095,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             match self.queues[index].pop_front() {
                 Some(Queued::Single(pending)) => self.publish(held, device, index, pending)?,
                 Some(Queued::Aggregate(pending)) => {
-                    self.publish_aggregate(held, device, index, pending)?
+                    self.publish_aggregate(held, device, index, pending, now)?
                 }
                 None => {}
             }

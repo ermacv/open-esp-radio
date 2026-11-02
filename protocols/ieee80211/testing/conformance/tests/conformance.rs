@@ -116,6 +116,7 @@ fn trace(case: Case) -> Trace<(), (), ()> {
     let air = Air {
         rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
         transmissions: NonZeroU16::MIN,
+        followers: 0,
     };
     let outcome = match case {
         Case::Ack => Outcome::Single(TxOutcome::Ended(SingleEnd::Delivered {

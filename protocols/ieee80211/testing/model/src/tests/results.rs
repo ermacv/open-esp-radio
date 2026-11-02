@@ -148,6 +148,7 @@ impl Work for Results {
             let air = Air {
                 transmissions: NonZeroU16::MIN,
                 rate,
+                followers: 0,
             };
             let expected = match (form, result) {
                 (Form::Single, AirAnswer::HardwareTimeout) => Returned::Single(
@@ -455,6 +456,7 @@ fn lost_air_gives_no_rate_sample_and_counts_no_transmission() {
             air: Some(Air {
                 transmissions: NonZeroU16::MIN,
                 rate,
+                followers: 0,
             }),
         })
     );

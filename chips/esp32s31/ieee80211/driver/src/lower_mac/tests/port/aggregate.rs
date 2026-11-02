@@ -47,6 +47,12 @@ enum Scenario {
     Expired,
     /// The unacknowledged subframes go again in a second aggregate.
     Retransmitted,
+    /// A second aggregate, queued behind the first, follows its sequence
+    /// numbers: it rides in the first one's PPDU.
+    Riding,
+    /// A second aggregate starts beyond the hardware's BlockAck window from
+    /// the first one: it goes in a PPDU of its own.
+    Apart,
 }
 
 /// What a scenario observed of its last aggregate's terminal.
@@ -63,6 +69,10 @@ struct Seen {
     /// carries the Retry bit.
     retry_marked: bool,
     ticket: Option<(u8, u8)>,
+    /// Each delivered terminal's parts after it in its PPDU.
+    followers: Vec<u8>,
+    /// Each terminal's returned buffer places, in order.
+    parts: Vec<Vec<u8>>,
 }
 
 struct AggregateBody {
@@ -164,6 +174,40 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for AggregateBody {
                         .expect("virtual time");
                 }
                 _ => {}
+            }
+            if matches!(self.scenario, Scenario::Riding | Scenario::Apart) {
+                // Submitted before the driver runs: it waits behind the first.
+                let start = if self.scenario == Scenario::Riding {
+                    103
+                } else {
+                    140
+                };
+                let ticket = tickets.next().expect("a second ticket");
+                let mut station = phase.station();
+                let mut builder = Some(station.aggregate(
+                    IndividualAddress::new(BSSID).expect("receiver"),
+                    Tid::new(0).expect("TID"),
+                    rate,
+                    TxProtection::Open,
+                ));
+                let mut nonempty = None;
+                for sequence in start..start + 2 {
+                    let buffer = buffers.next().expect("a pool buffer");
+                    let source = SubframeSource::Fresh {
+                        numbering: TxNumbering::Open,
+                        buffer,
+                        frame: subframe(sequence, 64),
+                        body: None,
+                    };
+                    nonempty = Some(match (builder.take(), nonempty.take()) {
+                        (Some(empty), None) => push(empty, source),
+                        (None, Some(nonempty)) => push(nonempty, source),
+                        _ => unreachable!("one builder"),
+                    });
+                }
+                submit(&mut station, nonempty.expect("two subframes"), ticket);
+                drop(station);
+                let _first = terminal(&mut phase, &mut resources.terminal_access, &self.seen).await;
             }
             let returned = terminal(&mut phase, &mut resources.terminal_access, &self.seen).await;
             if self.scenario == Scenario::Retransmitted {
@@ -273,6 +317,7 @@ async fn terminal<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
                     TxOutcome::Ended(AggregateEnd::Delivered { air, report, .. }) => {
                         assert_eq!(air.transmissions, core::num::NonZeroU16::MIN);
                         seen.report = Some(report);
+                        seen.followers.push(air.followers);
                         seen.ends.push("delivered");
                     }
                     TxOutcome::Ended(AggregateEnd::AckTimeout(_)) => seen.ends.push("ack-timeout"),
@@ -295,6 +340,8 @@ async fn terminal<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
                         AnyBuffer::Sent(sent) => (sent.index(), true),
                     })
                     .collect();
+                let places = seen.returned.iter().map(|(place, _)| *place).collect();
+                seen.parts.push(places);
                 return buffers;
             }
             Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_)))) => {
@@ -309,11 +356,13 @@ async fn terminal<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
 fn exercise(scenario: Scenario) -> (Seen, Rc<RefCell<Observed>>) {
     let statuses = match scenario {
         Scenario::NoResponse | Scenario::Retransmitted => std::vec![(5, 0), (0, 0)],
+        Scenario::Apart => std::vec![(0, 0), (0, 0)],
         _ => std::vec![(0, 0)],
     };
     let (parts, observed, timer) = installed(statuses);
     observed.borrow_mut().block_ack = Some(match scenario {
         Scenario::NoResponse | Scenario::Retransmitted => (0, 0, false),
+        Scenario::Riding => (100, 0b1_1111, true),
         _ => (100, 0b011, true),
     });
     let seen = Rc::new(RefCell::new(Seen::default()));
@@ -380,6 +429,35 @@ fn a_sent_subframe_goes_again_with_its_sequence_number_and_the_retry_bit() {
     assert_eq!(seen.ends, ["ack-timeout", "delivered"]);
     assert!(seen.retry_marked);
     assert_eq!(observed.borrow().publications, 2);
+}
+
+#[test]
+fn an_aggregate_queued_behind_its_predecessor_rides_in_its_ppdu() {
+    let (seen, observed) = exercise(Scenario::Riding);
+    assert_eq!(observed.borrow().publications, 1, "one PPDU for both");
+    assert_eq!(seen.ends, ["delivered", "delivered"]);
+    // The first part announces the second; both carry the PPDU's report.
+    assert_eq!(seen.followers, [1, 0]);
+    assert_eq!(
+        seen.report,
+        Some(BlockAckReport::new(
+            oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(100),
+            0b1_1111
+        ))
+    );
+    // Each part gets its own subframes back, in order.
+    assert_eq!(seen.parts.len(), 2);
+    assert_eq!(seen.parts[0], seen.admitted);
+    assert_eq!(seen.parts[1].len(), 2);
+}
+
+#[test]
+fn an_aggregate_beyond_its_predecessors_window_goes_in_its_own_ppdu() {
+    let (seen, observed) = exercise(Scenario::Apart);
+    assert_eq!(observed.borrow().publications, 2);
+    assert_eq!(seen.ends, ["delivered", "delivered"]);
+    assert_eq!(seen.followers, [0, 0]);
+    assert_eq!(seen.parts[0], seen.admitted);
 }
 
 /// What a builder refused, by reason, with the refused buffer's place

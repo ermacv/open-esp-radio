@@ -24,6 +24,7 @@ fn settlements_and_block_ack_requests_count_apart() {
         acknowledged: 4,
         retried: 1,
         dropped: 1,
+        followers: 0,
     });
     counter.settled(Settled {
         rate: Rate::Unknown,
@@ -32,6 +33,7 @@ fn settlements_and_block_ack_requests_count_apart() {
         acknowledged: 0,
         retried: 0,
         dropped: 0,
+        followers: 0,
     });
     counter.block_ack_request();
     assert_eq!(
@@ -52,6 +54,28 @@ fn settlements_and_block_ack_requests_count_apart() {
     let sent = counter.link().tx.mpdus;
     assert_eq!(sent.ht40_long_gi[7], 5);
     assert_eq!(sent.unknown, 0);
+}
+
+#[test]
+fn the_aggregates_of_one_ppdu_count_once_in_the_bin_of_all_their_subframes() {
+    let counter = LinkCounter::new();
+    let part = |members, followers| Settled {
+        rate: Rate::Unknown,
+        members,
+        refused: false,
+        acknowledged: members,
+        retried: 0,
+        dropped: 0,
+        followers,
+    };
+    counter.settled(part(12, 2));
+    counter.settled(part(10, 1));
+    counter.settled(part(6, 0));
+    counter.settled(part(2, 0));
+    let ampdu = counter.ampdu();
+    assert_eq!(ampdu.aggregates, 2);
+    assert_eq!(ampdu.subframes, 30);
+    assert_eq!(ampdu.by_size, [0, 1, 0, 0, 0, 1]);
 }
 
 #[test]

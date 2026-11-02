@@ -506,6 +506,15 @@ pub trait AmpduPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id> {
 
     /// Submit a nonempty aggregate. All preparation refusals happen at push;
     /// only poisoning can refuse this operation, with the usual fail-stop.
+    ///
+    /// While another attempt of its access category is out, a submitted
+    /// aggregate waits in the category's queue. The backend may publish it
+    /// in one PPDU with the queued aggregates that follow it, of the same
+    /// recipient, TID, key, rate and settings, when their subframes fit one
+    /// aggregate together; each still ends with its own terminal
+    /// ([`Air::followers`](crate::Air::followers)). A caller therefore
+    /// submits what it has instead of holding MSDUs back for a larger
+    /// aggregate.
     fn submit_ampdu<'k>(
         &mut self,
         attempt: InterfaceAggregateSubmission<'k, 'p, 'id, Self>,

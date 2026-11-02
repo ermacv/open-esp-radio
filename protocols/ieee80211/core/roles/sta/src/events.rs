@@ -45,6 +45,9 @@ pub struct AggregateSettled {
     /// The rate its last transmission went at; `None` when none reached
     /// the air.
     pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
+    /// The aggregates of its PPDU whose settlements follow
+    /// ([`Air::followers`](oer_protocols_ieee80211_contracts_port::Air::followers)).
+    pub followers: u8,
 }
 
 /// The returned buffer, renewed for a new MSDU. A buffer whose memory is

@@ -1242,6 +1242,85 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     group: Option<PendingGroup<'id, B>>,
     /// The station's PTK installation, until its terminal returns the key.
     pairwise: Option<PendingPairwise<'id, B>>,
+    /// The parts of a PPDU whose terminals came while more of it follow.
+    ppdu: Option<PpduTally>,
+}
+
+/// The parts of one PPDU ended so far: their subframes, those the
+/// BlockAck acknowledged, whether every part was on the current link, and
+/// how many parts still follow.
+#[derive(Clone, Copy, Debug)]
+struct PpduTally {
+    attempted: u16,
+    acknowledged: u16,
+    current: bool,
+    followers: u8,
+}
+
+impl PpduTally {
+    /// The tally after one more part with `followers` after it: added to
+    /// the previous parts when it is the part they announced, its own
+    /// otherwise.
+    fn add(
+        previous: Option<Self>,
+        attempted: u16,
+        acknowledged: u16,
+        current: bool,
+        followers: u8,
+    ) -> Self {
+        let part = Self {
+            attempted,
+            acknowledged,
+            current,
+            followers,
+        };
+        match previous {
+            // The part the previous one announced: the PPDU continues.
+            Some(previous) if previous.followers.checked_sub(1) == Some(followers) => Self {
+                attempted: previous.attempted.saturating_add(attempted),
+                acknowledged: previous.acknowledged.saturating_add(acknowledged),
+                current: previous.current && current,
+                followers,
+            },
+            // A part that does not continue the tally starts its own.
+            _ => part,
+        }
+    }
+}
+
+#[cfg(test)]
+mod ppdu_tests {
+    use super::PpduTally;
+
+    #[test]
+    fn a_ppdus_parts_add_up_and_a_stray_part_starts_its_own_tally() {
+        let first = PpduTally::add(None, 3, 2, true, 2);
+        let second = PpduTally::add(Some(first), 2, 2, false, 1);
+        let last = PpduTally::add(Some(second), 4, 1, true, 0);
+        assert_eq!((last.attempted, last.acknowledged), (9, 5));
+        assert!(!last.current, "one part was not on the current link");
+        assert_eq!(last.followers, 0);
+        // A part the tally did not announce starts again.
+        let stray = PpduTally::add(Some(first), 5, 5, true, 0);
+        assert_eq!((stray.attempted, stray.acknowledged), (5, 5));
+    }
+}
+
+/// The parts of a PPDU after the one `outcome` ended.
+fn ppdu_followers<B, D>(
+    outcome: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<B, D>,
+) -> u8 {
+    use oer_protocols_ieee80211_contracts_port::{AggregateEnd, TxOutcome};
+    match outcome {
+        TxOutcome::Ended(
+            AggregateEnd::Delivered { air, .. }
+            | AggregateEnd::AckTimeout(air)
+            | AggregateEnd::CtsTimeout(Some(air))
+            | AggregateEnd::ContentionLimit(Some(air))
+            | AggregateEnd::AirDenied { air: Some(air), .. },
+        ) => air.followers,
+        _ => 0,
+    }
 }
 
 struct PendingPairwise<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
@@ -1335,6 +1414,7 @@ impl<
                     retune: None,
                     group: None,
                     pairwise: None,
+                    ppdu: None,
                 },
             },
         }
@@ -1387,7 +1467,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), network: None, retune: None, group: None, pairwise: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), network: None, retune: None, group: None, pairwise: None, ppdu: None },
                 }),
             })
         })
@@ -1961,8 +2041,8 @@ impl<
             let stepped = if skip {
                 skipped = skipped.saturating_add(1);
                 // A taken MSDU changed the data machine alone: its attempts
-                // pass is the whole step, unless the MSDUs left the last
-                // pass's wait standing (they join the growing aggregate).
+                // pass is the whole step, unless the last pass found no
+                // ticket, which an MSDU does not free.
                 // An attempt that came back refused may change what the
                 // station owes, so the whole step follows at once.
                 if core::mem::take(&mut data_taken) && !self.data.attempts_wait() {
@@ -3623,9 +3703,8 @@ impl<
             }
         };
         let current = self.data.aggregate_is_current(&context);
-        let attempted = u16::try_from(context.len())
-            .ok()
-            .and_then(core::num::NonZeroU16::new);
+        let attempted = u16::try_from(context.len()).unwrap_or(u16::MAX);
+        let followers = ppdu_followers(&outcome);
         let marks = self.data.aggregate_returned(
             oer_protocols_ieee80211_core_roles_sta::data::DataAggregateReturn::TxDone {
                 context,
@@ -3639,14 +3718,28 @@ impl<
         let acknowledged = marks.map_or(0, |marks| {
             u16::try_from(marks.delivered.count_ones()).unwrap_or(u16::MAX)
         });
-        if let Some(tally) = attempted.and_then(|attempted| {
-            oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
-                attempted,
-                acknowledged,
-            )
-            .ok()
-        }) {
-            self.rates.learn_aggregate(now, current, tally, &outcome);
+        // A PPDU teaches the rates once, at its last part, with the
+        // subframes of all its parts.
+        let ppdu = PpduTally::add(
+            self.pending.ppdu.take(),
+            attempted,
+            acknowledged,
+            current,
+            followers,
+        );
+        if ppdu.followers != 0 {
+            self.pending.ppdu = Some(ppdu);
+        } else if let Some(tally) =
+            core::num::NonZeroU16::new(ppdu.attempted).and_then(|attempted| {
+                oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
+                    attempted,
+                    ppdu.acknowledged,
+                )
+                .ok()
+            })
+        {
+            self.rates
+                .learn_aggregate(now, ppdu.current, tally, &outcome);
         }
         if let Some(marks) = marks {
             self.station.tx_block_ack_settled(marks);

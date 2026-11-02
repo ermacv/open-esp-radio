@@ -1071,6 +1071,7 @@ fn ended(status: End, transmissions: u16) -> SingleOutcome<(), ()> {
         oer_protocols_ieee80211_contracts_port::Air {
             transmissions,
             rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+            followers: 0,
         }
     });
     TxOutcome::Ended(match status {
@@ -1627,6 +1628,7 @@ fn block_ack(
             air: oer_protocols_ieee80211_contracts_port::Air {
                 transmissions: NonZeroU16::MIN,
                 rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+                followers: 0,
             },
             report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
                 SequenceNumber::new(start).unwrap(),
@@ -1861,7 +1863,7 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
 }
 
 #[test]
-fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
+fn an_aggregate_goes_at_once_while_its_category_has_an_attempt_out() {
     let mut inputs = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2],
@@ -1887,17 +1889,12 @@ fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
     // Nothing is out: the one owed MPDU goes at once.
     let first = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
     assert_eq!(first.context.len(), 1);
-    // Another arrives while it is out: it waits to grow.
-    input(&mut data, 1);
-    assert!(
-        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events)
-            .is_none()
-    );
-    // A full aggregate goes even with one out.
-    input(&mut data, 3);
-    let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
-    assert_eq!(full.context.len(), 4);
-    drop((first, full));
+    // Two arrive while it is out: they go at once too, as one aggregate
+    // the port may send with it in one PPDU.
+    input(&mut data, 2);
+    let second = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
+    assert_eq!(second.context.len(), 2);
+    drop((first, second));
 }
 
 #[test]
@@ -1947,7 +1944,7 @@ fn an_mpdu_beyond_the_window_waits_for_the_window_to_move() {
 }
 
 #[test]
-fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
+fn only_a_missing_ticket_makes_msdus_leave_the_attempt_wait() {
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2],
         core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
@@ -1970,24 +1967,11 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
     input(&mut data, 0);
     let first = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
     assert!(!data.attempts_wait(), "an attempt went");
-    // 1 waits to grow behind the attempt out: the pass made none.
     input(&mut data, 0);
-    assert!(
-        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts)
-            .is_none()
-    );
-    assert!(data.attempts_wait());
-    // 2 and 3 join it, and an MSDU of another category queues behind it.
-    input(&mut data, 0);
-    input(&mut data, 6);
-    input(&mut data, 0);
-    assert!(data.attempts_wait(), "the aggregate still grows");
-    // 4 fills it: the next pass sends it, full, at once.
-    input(&mut data, 0);
-    assert!(!data.attempts_wait());
-    let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
-    assert_eq!(full.context.len(), 4);
+    let second = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
+    assert!(!data.attempts_wait(), "a second attempt went");
     // Both tickets are out: no MSDU makes an attempt before a terminal.
+    input(&mut data, 0);
     assert!(
         data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts)
             .is_none()
@@ -2007,7 +1991,7 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
         &mut attempts,
     );
     assert!(!data.attempts_wait());
-    drop(full);
+    drop(second);
     assert_eq!(tokens_lost(&attempts), 0);
 }
 

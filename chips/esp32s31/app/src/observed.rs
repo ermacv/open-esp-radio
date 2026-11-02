@@ -313,6 +313,7 @@ impl oer_portable_trace::Observer for Observer {
                     acknowledged: settled.acknowledged,
                     retried: settled.retried,
                     dropped: settled.dropped,
+                    followers: settled.followers,
                 });
             }
         }

@@ -174,6 +174,7 @@ fn air(transmissions: u16) -> Air {
     Air {
         transmissions: NonZeroU16::new(transmissions).unwrap(),
         rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+        followers: 0,
     }
 }
 

@@ -86,7 +86,8 @@ pub struct Link {
 /// The transmit agreements' settlements: aggregates, those refused, their
 /// subframes, the aggregates by size (1, 2, 3 to 4, 5 to 8, 9 to
 /// 16, 17 and more subframes), the subframes acknowledged, retried and
-/// dropped, and the BlockAckReqs sent.
+/// dropped, and the BlockAckReqs sent. The aggregates one PPDU carried
+/// count once, in the bin of all their subframes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct TxAmpdu {
     pub aggregates: u32,
@@ -110,6 +111,8 @@ pub struct Settled {
     pub acknowledged: u8,
     pub retried: u8,
     pub dropped: u8,
+    /// The aggregates of its PPDU whose settlements follow.
+    pub followers: u8,
 }
 
 /// The aggregates' size bins.
@@ -191,6 +194,8 @@ pub struct LinkCounter {
     /// Aggregates, refused, subframes, the size bins, acknowledged,
     /// retried, dropped and BlockAckReqs.
     ampdu: [AtomicU32; AMPDU_COUNTS],
+    /// The subframes of a PPDU's settled parts while more follow.
+    ppdu: AtomicU32,
 }
 
 const AMPDU_COUNTS: usize = 7 + SIZE_BINS;
@@ -206,6 +211,7 @@ impl LinkCounter {
             tx_ends: [const { AtomicU32::new(0) }; 4],
             tx_transmissions: AtomicU32::new(0),
             ampdu: [const { AtomicU32::new(0) }; AMPDU_COUNTS],
+            ppdu: AtomicU32::new(0),
         }
     }
 
@@ -243,14 +249,24 @@ impl LinkCounter {
                 u32::from(settled.members),
             );
         }
-        bump_at(&self.ampdu, 0, 1);
         bump_at(&self.ampdu, 1, u32::from(settled.refused));
         bump_at(&self.ampdu, 2, u32::from(settled.members));
-        bump_at(
-            &self.ampdu,
-            AMPDU_BINS.saturating_add(size_bin(settled.members)),
-            1,
-        );
+        // A PPDU's parts count as one aggregate of all their subframes, at
+        // its last part.
+        if settled.followers != 0 {
+            bump(&self.ppdu, u32::from(settled.members));
+        } else {
+            let members = self
+                .ppdu
+                .swap(0, Ordering::Relaxed)
+                .saturating_add(u32::from(settled.members));
+            bump_at(&self.ampdu, 0, 1);
+            bump_at(
+                &self.ampdu,
+                AMPDU_BINS.saturating_add(size_bin(u8::try_from(members).unwrap_or(u8::MAX))),
+                1,
+            );
+        }
         bump_at(
             &self.ampdu,
             AMPDU_ACKNOWLEDGED,

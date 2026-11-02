@@ -269,6 +269,19 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         })
     }
 
+    /// Subframe `index`'s PSDU octets in an aggregate: its MPDU with the
+    /// MIC the hardware adds to a protected one and the FCS.
+    pub(super) fn psdu(&self, index: usize) -> Option<usize> {
+        let place = self.place(index)?;
+        let mic = match self.key {
+            Some(_) => crate::ordinary_tx::TX_CCMP_MIC_SIZE,
+            None => 0,
+        };
+        self.shared
+            .with_subframe(place, |record| record.layout.mpdu_len())?
+            .checked_add(mic + crate::ordinary_tx::TX_FCS_SIZE)
+    }
+
     /// Hand subframe `index`'s buffer to the hardware: its record keeps the
     /// return right. The buffer, the MPDU's length, its admission, whether
     /// it went out before, its header length and its PN.
@@ -392,8 +405,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> IntoI
 #[derive(Clone, Copy, Debug)]
 pub struct AggregateExecution {
     pub(super) rate: PhyRate,
+    pub(super) receiver: IndividualAddress,
     pub(super) tid: Tid,
     pub(super) txop_limit_units_32_us: u16,
+    /// The sequence number of its first subframe, the root of its BlockAck
+    /// bits.
+    pub(super) first: SequenceNumber,
+    /// Its subframes' BlockAck bits from `first`.
+    pub(super) bits: u64,
 }
 
 /// One aggregate being built: its fixed recipient, TID, rate and key, and
@@ -712,8 +731,11 @@ where
             ticket: loan.reclaim_slot(ticket),
             execution: AggregateExecution {
                 rate: self.rate.rate().get(),
+                receiver: self.receiver,
                 tid: self.tid,
                 txop_limit_units_32_us: self.txop_limit_units_32_us,
+                first: S::into_head(self.first),
+                bits: self.bits,
             },
             payload: self.subframes.into_owned(&loan),
         }
