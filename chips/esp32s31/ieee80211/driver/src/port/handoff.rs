@@ -428,9 +428,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         for _ in 0..EVENTS_PER_POLL {
             let room = RX_HELD.saturating_sub(self.rx_out.get());
             let Some(unit) = device.pull_received(room, cx)? else {
+                let due = device.receive_due();
+                self.receive_due.set(due);
                 // A continuation timer's ring work waits for the driver,
-                // whose deadline covers it.
-                self.receive_due.set(device.receive_due());
+                // whose deadline covers it: the driver, asleep on its
+                // earlier deadline, takes the new one at its next turn.
+                if !due && device.next_deadline().is_some() {
+                    self.storage.driver.wake();
+                }
                 return Ok(None);
             };
             if let Some(event) = driver.admit(&mut **device, self.rx_out, self.storage, unit)? {

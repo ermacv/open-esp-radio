@@ -141,6 +141,7 @@ fn a_burst_reaches_the_body_through_its_own_pulls_within_a_virtual_time_bound() 
                 // A stale ready timer must fail this finite step budget, not
                 // hang.
                 observed.borrow_mut().context = 2;
+                observed.borrow_mut().driver_steps = 0;
                 driver_polls += 1;
                 let before = observed.borrow().rx_delivered;
                 let polled = p2
@@ -187,9 +188,13 @@ fn a_burst_reaches_the_body_through_its_own_pulls_within_a_virtual_time_bound() 
     }));
     assert_eq!(observed.borrow().rx_delivered, FRAMES);
     assert_eq!(driver_took, 0, "the driver's turn takes no unit");
+    // The model arms a continuation every four units: the driver takes each
+    // one's deadline at a turn the body's pull asks for, and wakes the body
+    // at the deadline. No other turn is the burst's.
+    let continuations = FRAMES / 4;
     assert!(
-        driver_polls < FRAMES / 4,
-        "{driver_polls} driver turns for {FRAMES} units"
+        driver_polls <= 2 * continuations + 8,
+        "{driver_polls} driver turns for {continuations} continuations"
     );
     assert_eq!(super::count(&released), FRAMES);
 }
@@ -299,6 +304,7 @@ fn the_body_holds_at_most_its_bound_and_the_rest_waits_in_the_ring() {
         for _ in 0..2000 {
             if !p2_done && p2_ready.0.swap(false, Ordering::Relaxed) {
                 observed.borrow_mut().context = 2;
+                observed.borrow_mut().driver_steps = 0;
                 let before = observed.borrow().rx_delivered;
                 if let Poll::Ready(retired) = p2
                     .as_mut()
