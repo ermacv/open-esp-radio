@@ -49,8 +49,9 @@ start = "reset"
 # bootstrap's probe page (`runtime-psram`).
 [memory]
 # The internal HP SRAM, the ROM's and the boot chain's reserves at its top
-# included; the application's SRAM (`sram`) is the part below what the boot
-# chain keeps (`[boot-chain] application-sram-end`).
+# included. Stage two owns all of it (`sram`): it calls no ROM function. The
+# bootstrap's SRAM is the part below what the boot chain keeps
+# (`[boot-chain] application-sram-end`).
 #
 # SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/soc.h:152-155`
 # (`SOC_IRAM_LOW`/`SOC_DRAM_LOW 0x2F000000`, `SOC_IRAM_HIGH`/`SOC_DRAM_HIGH
@@ -95,8 +96,8 @@ psram = { executable = true, cached = true, dma = false, retained = false, writa
 # DROM/IROM share a window: both records may contain read-only data.
 mapped-segments = 2
 # The end of ESP-IDF's application memory map, `SRAM_START..SRAM_SEG_END`:
-# the application's SRAM ends here. The internal SRAM above it holds the
-# ROM's boot stacks and data (rom-rev0.toml).
+# the bootstrap's SRAM ends here. The internal SRAM above it holds the
+# ROM's boot stacks and data (rom-rev0.toml) until stage two starts.
 #
 # SOURCE: ESP-IDF 4d80c1b2 `components/esp_system/ld/esp32s31/ld.hp_mem_defs:9`
 # (`SRAM_SEG_END 0x2F07AFC0`) and `memory.ld.in:19-23`

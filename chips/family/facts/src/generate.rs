@@ -123,13 +123,13 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
          /// The staged-boot layout of `{id}` on {board}.\n\
          pub const LAYOUT: oer_chips_family_staged_layout::Layout = oer_chips_family_staged_layout::Layout {{\n\
          \x20   sram: {sram},\n\
+         \x20   bootstrap_sram: {bootstrap_sram},\n\
          \x20   second_stage_loader_start: {loader:#010x},\n\
          \x20   flash_xip: {flash_xip},\n\
          \x20   psram: {psram},\n\
          \x20   bootstrap_psram_bytes: {probe:#x},\n\
          \x20   mmu_page_bytes: {page:#x},\n\
          \x20   image_segment_header_bytes: {header:#x},\n\
-         \x20   handoff_sram_margin_bytes: {margin:#x},\n\
          \x20   retained: {retained},\n\
          \x20   retained_reserved_tail: {tail},\n\
          \x20   task_stack_bytes: &{task:?},\n\
@@ -147,13 +147,13 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
             .as_ref()
             .map_or_else(|| "its module".to_string(), |board| board.name.clone()),
         sram = region(memory.sram),
+        bootstrap_sram = region(memory.bootstrap_sram),
         loader = chain.second_stage_loader_start,
         flash_xip = region(memory.flash_xip),
         psram = region(psram),
         probe = staged.bootstrap_psram_bytes,
         page = staged.mmu_page_bytes,
         header = staged.image_segment_header_bytes,
-        margin = staged.handoff_sram_margin_bytes,
         retained = region(retained),
         tail = chain.retained_reserved_tail,
         task = task_stack_bytes,
@@ -747,7 +747,8 @@ mod tests {
         tasks[facts.interrupts.as_ref().unwrap().boot_hart as usize] = 0x30000;
         let layout = layout(&facts, &tasks).expect("a staged layout");
         for field in [
-            "sram: const { oer_chips_family_staged_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
+            "sram: const { oer_chips_family_staged_layout::Region::new(0x2f000000, 0x00080000).expect(\"region end fits u32\") },",
+            "bootstrap_sram: const { oer_chips_family_staged_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
             "second_stage_loader_start: 0x2f06cfb0,",
             "psram: const { oer_chips_family_staged_layout::Region::new(0x50000000, 0x01000000).expect(\"region end fits u32\") },",
             "retained: const { oer_chips_family_staged_layout::Region::new(0x2e000000, 0x00008000).expect(\"region end fits u32\") },",

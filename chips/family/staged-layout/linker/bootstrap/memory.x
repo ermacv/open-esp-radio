@@ -9,9 +9,10 @@ MEMORY
        reservation.
 
        The SRAM end is ESP-IDF's SRAM_SEG_END; the ROM boot stack side lies
-       above it. The second-stage loader runs from SECOND_STAGE_LOADER_START
-       (at or below the SRAM end) while it loads this image (see sections.x). */
-    SRAM   (RWX) : ORIGIN = SRAM_ORIGIN, LENGTH = SRAM_LENGTH
+       above it, which the ROM keeps until stage two starts. The second-stage
+       loader runs from SECOND_STAGE_LOADER_START (at or below the SRAM end)
+       while it loads this image (see sections.x). */
+    SRAM   (RWX) : ORIGIN = BOOTSTRAP_SRAM_ORIGIN, LENGTH = BOOTSTRAP_SRAM_LENGTH
 
     RETAINED (RW) : ORIGIN = RETAINED_ORIGIN, LENGTH = RETAINED_LENGTH
 

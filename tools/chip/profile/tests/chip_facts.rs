@@ -41,6 +41,11 @@ fn memory_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
     let memory = profile.memory.as_ref().expect("a staged chip has [memory]");
     check("sram", Some(memory.sram), region(layout.sram));
     check(
+        "bootstrap-sram",
+        Some(memory.bootstrap_sram),
+        region(layout.bootstrap_sram),
+    );
+    check(
         "flash-xip",
         Some(memory.flash_xip),
         region(layout.flash_xip),
@@ -138,6 +143,14 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
             moved(&|p| {
                 let r = &mut p.memory.as_mut().unwrap().sram;
                 *r = Region::new(r.origin(), r.length() + 16).unwrap();
+            })
+            .len()
+                == 1
+        );
+        assert!(
+            moved(&|p| {
+                let r = &mut p.memory.as_mut().unwrap().bootstrap_sram;
+                *r = Region::new(r.origin(), r.length() - 16).unwrap();
             })
             .len()
                 == 1

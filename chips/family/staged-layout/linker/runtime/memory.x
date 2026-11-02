@@ -3,10 +3,11 @@
    (`oer-chips-family-staged-layout` `build`). */
 MEMORY
 {
-  /* All application-owned internal SRAM is one arena. Section placement is
+  /* The whole internal SRAM, the ROM's former reserves included, is one
+     arena: stage two calls no ROM function, and it leaves the bootstrap's
+     stack before it copies or clears anything here. Section placement is
      determined only by explicitly SRAM-qualified ISR, hot, critical and DMA
-     inputs. Linker assertions retain only a bounded transient bootstrap
-     handoff margin. */
+     inputs. */
   INTERNAL_LOW (RWX) : ORIGIN = SRAM_ORIGIN, LENGTH = SRAM_LENGTH
   /* Memory no reset entry initializes: the chip's RTC fast or LP RAM. */
   RTC_FAST (RWX) : ORIGIN = RETAINED_ORIGIN, LENGTH = RETAINED_LENGTH

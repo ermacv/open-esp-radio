@@ -189,8 +189,7 @@ impl Cores {
     /// the hart is held; its instruction bus and the shared data bus reach
     /// the cache; the ROM takes its boot-word path, not the light-sleep wake
     /// stub (`causes` and `LP_STORE8`); every connected route of its bank is
-    /// disconnected; the ROM's printf slots are cleared; then the hart is
-    /// released, its boot word written last. The caller retires the boot word
+    /// disconnected; then the hart is released, its boot word written last. The caller retires the boot word
     /// ([`Self::retire_boot_word`]) once the hart reports its entry.
     ///
     /// # Errors
@@ -205,10 +204,7 @@ impl Cores {
         causes: crate::peripherals::reset_cause::ResetCauses,
         entry: SecondaryEntry,
     ) -> Result<Released, StartError> {
-        launch::start_with(&CORE_CONTROL, permit, causes, entry, || {
-            #[cfg(target_arch = "riscv32")]
-            crate::rom::clear_printf_slots();
-        })
+        launch::start_with(&CORE_CONTROL, permit, causes, entry)
     }
 
     /// Clear a released hart's boot word and read it back as zero, so the ROM

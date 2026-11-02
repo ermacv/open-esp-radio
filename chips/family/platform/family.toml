@@ -156,10 +156,6 @@ mmu-page-bytes = 0x1_0000
 # `components/esp_system/ld/esp32s31/memory.ld.in:37-45`
 # (irom origin 0x40000020; 0x20 accounts for image and segment headers).
 image-segment-header-bytes = 0x20
-# SRAM at the top the runtime's SRAM sections leave free while the boot hart still
-# runs on the bootstrap's stack, until `_runtime_stack_bootstrap` switches to
-# the PSRAM task stack; the bootstrap's largest frame is below 0.5 KiB.
-handoff-sram-margin-bytes = 0x2000
 
 # The stage-two header: little-endian words; "STG2" magic, the handoff ABI
 # version, the header's own size and the payload CRC-32 (computed with its

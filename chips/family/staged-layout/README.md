@@ -52,9 +52,11 @@ uses the CU ranges and line tables retained in the ELF. The shared
 allocated sections and their relocations are unaffected.
 
 The linker scripts contain no addresses, sizes or header constants of their
-own; they read `SRAM_ORIGIN`, `RUNTIME_PSRAM_ORIGIN`, `HART_COUNT`,
-`MMU_PAGE_BYTES`, `HANDOFF_SRAM_MARGIN_BYTES`, `STAGE_TWO_MAGIC` and the other
-symbols emitted by `build`. The runtime script includes
+own; they read `SRAM_ORIGIN` (stage two's, the whole internal SRAM),
+`BOOTSTRAP_SRAM_ORIGIN`, `RUNTIME_PSRAM_ORIGIN`, `HART_COUNT`,
+`MMU_PAGE_BYTES`, `STAGE_TWO_MAGIC` and the other symbols emitted by `build`.
+Stage two's entry leaves the bootstrap's SRAM stack for its PSRAM task stack
+before it copies or clears anything in SRAM. The runtime script includes
 `oer-staged-runtime-vectors.x`, every line's default handler, which the
 staged runtime's build generates from the chip facts into its build
 directory, a library search path of every image that links it. Stage two has

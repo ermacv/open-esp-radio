@@ -4,13 +4,13 @@ use std::vec::Vec;
 
 const LAYOUT: Layout = Layout {
     sram: Region::new(0x1000, 0x1000).expect("fixture region"),
+    bootstrap_sram: Region::new(0x1000, 0xc00).expect("fixture region"),
     second_stage_loader_start: 0x1800,
     flash_xip: Region::new(0x4000_0000, 0x1000).expect("fixture region"),
     psram: Region::new(0x5000_0000, 1024).expect("fixture region"),
     bootstrap_psram_bytes: 512,
     mmu_page_bytes: 512,
     image_segment_header_bytes: 16,
-    handoff_sram_margin_bytes: 16,
     retained: Region::new(0x2000, 16).expect("fixture region"),
     retained_reserved_tail: 0,
     task_stack_bytes: &[16],

@@ -491,19 +491,12 @@ mod launch {
     }
 
     #[test]
-    fn a_held_hart_is_released_into_its_entry_after_its_routes_and_the_rom_slots() {
+    fn a_held_hart_is_released_into_its_entry_after_its_routes() {
         let mut memory = held();
         let cell = memory.cell();
         let mut permit = Permit::new(&[3, 40]);
-        let cleared = Cell::new(false);
-        let mut released = start_with(&cell, permit.permit(), causes(0x17), entry(), || {
-            // The ROM slots are cleared before the release writes anything.
-            assert_eq!(boot_word(&cell), 0);
-            assert_eq!(hart_state(&cell), CoreState::Held);
-            cleared.set(true);
-        })
-        .expect("a held hart starts");
-        assert!(cleared.get());
+        let mut released =
+            start_with(&cell, permit.permit(), causes(0x17), entry()).expect("a held hart starts");
         assert_eq!(released.hart(), HART);
         assert_eq!(released.disconnected(), (2, Some(3)));
         assert_eq!(boot_word(&cell), ENTRY, "the boot word names the entry");
@@ -523,8 +516,8 @@ mod launch {
         let mut memory = held();
         let cell = memory.cell();
         let mut permit = Permit::new(&[]);
-        let mut released = start_with(&cell, permit.permit(), causes(0x17), entry(), || ())
-            .expect("a held hart starts");
+        let mut released =
+            start_with(&cell, permit.permit(), causes(0x17), entry()).expect("a held hart starts");
         let grant = released.take_interrupts().expect("the grant is there once");
         assert!(
             released.take_interrupts().is_none(),
@@ -547,8 +540,8 @@ mod launch {
         let mut memory = held();
         let cell = memory.cell();
         let mut permit = Permit::new(&[]);
-        let mut released = start_with(&cell, permit.permit(), causes(0x17), entry(), || ())
-            .expect("a held hart starts");
+        let mut released =
+            start_with(&cell, permit.permit(), causes(0x17), entry()).expect("a held hart starts");
         let controller = released
             .take_interrupts()
             .expect("the grant")
@@ -572,10 +565,8 @@ mod launch {
         expected: StartError,
     ) {
         let cell = memory.cell();
-        let slots = Cell::new(false);
-        let result = start_with(&cell, permit.permit(), causes, entry(), || slots.set(true));
+        let result = start_with(&cell, permit.permit(), causes, entry());
         assert_eq!(result.err(), Some(expected));
-        assert!(!slots.get(), "a refusal leaves the ROM slots alone");
         assert_eq!(boot_word(&cell), 0, "a refusal writes no boot word");
     }
 
@@ -636,7 +627,7 @@ mod launch {
             let cell = memory.cell();
             let mut permit = Permit::new(&[]);
             permit.lp_sys.fill(store8);
-            assert!(start_with(&cell, permit.permit(), causes(cause), entry(), || ()).is_ok());
+            assert!(start_with(&cell, permit.permit(), causes(cause), entry()).is_ok());
         }
     }
 
@@ -645,7 +636,7 @@ mod launch {
         let empty = ClaimCell::<HostRegisters<'_>>::new();
         let mut permit = Permit::new(&[9]);
         assert_eq!(
-            start_with(&empty, permit.permit(), causes(0x17), entry(), || ()).err(),
+            start_with(&empty, permit.permit(), causes(0x17), entry()).err(),
             Some(StartError::Cores(CoresError::NotInstalled))
         );
         assert_eq!(permit.routed(), 1);

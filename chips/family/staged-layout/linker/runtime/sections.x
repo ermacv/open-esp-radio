@@ -308,12 +308,6 @@ ASSERT(__runtime_dma_bss_end <= ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW),
    is the proof the HAL's placement constructor relies on. A chip whose model
    names no DMA window holds no DMA storage. */
 INCLUDE dma-window.x
-/* The bootstrap's largest post-LTO frame is below 0.5 KiB. Keep the
-   family's bounded transient handoff margin until `_runtime_stack_bootstrap`
-   switches the boot hart to PSRAM; it is not a task stack and cannot silently grow. */
-ASSERT(__runtime_dma_bss_end <=
-       ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW) - HANDOFF_SRAM_MARGIN_BYTES,
-       "runtime SRAM owners overlap the bootstrap handoff margin");
 ASSERT((__runtime_isr_load_start & 3) == 0 &&
        ((__runtime_isr_end - __runtime_isr_start) & 3) == 0,
        "runtime interrupt copy must be word aligned");
