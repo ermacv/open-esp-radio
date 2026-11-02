@@ -3,7 +3,7 @@ use crate::{
     KeyUnwrapRequest, KeyUnwrapResponse,
     block::{Aes128Blocks, Block, BlockCipher, BlockKeyUnwrap},
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
-    rfc3394::{KeyWrapError, Rfc3394Step, Rfc3394Unwrap, wrap},
+    rfc3394::{KeyWrapError, wrap},
 };
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use core::{
@@ -37,52 +37,40 @@ impl Aes128Blocks for Rust {
     }
 }
 
-/// An engine that performs one block per poll: the machine is resumable.
-struct Stepping;
+/// An engine whose operation is pending on its first poll and unwraps on the
+/// next, as a service client's would.
+struct Deferred;
 
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a test operation holds its machine in place"
-)]
-enum SteppingOperation {
-    Running(Rfc3394Step<64>, RustKeyed),
-    Done(KeyUnwrapResponse<64>),
-    Taken,
+struct DeferredOperation {
+    yielded: bool,
+    request: Option<KeyUnwrapRequest<64>>,
 }
 
-impl Future for SteppingOperation {
-    type Output = KeyUnwrapDone<Stepping, 64>;
+impl Future for DeferredOperation {
+    type Output = KeyUnwrapDone<Deferred, 64>;
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        match core::mem::replace(this, Self::Taken) {
-            Self::Running(step, mut cipher) => match step {
-                Rfc3394Step::Block { mut input, pending } => {
-                    cipher.decrypt_block(input.as_mut_bytes());
-                    *this = Self::Running(pending.complete(Ok(input)), cipher);
-                    context.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                Rfc3394Step::Complete(response) => Poll::Ready(KeyUnwrapDone {
-                    engine: Stepping,
-                    response,
-                }),
-            },
-            Self::Done(response) => Poll::Ready(KeyUnwrapDone {
-                engine: Stepping,
-                response,
+        if !this.yielded {
+            this.yielded = true;
+            context.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        match this.request.take() {
+            Some(request) => Poll::Ready(KeyUnwrapDone {
+                engine: Deferred,
+                response: crate::block::unwrap_now(&mut Rust, request),
             }),
-            Self::Taken => Poll::Pending,
+            None => Poll::Pending,
         }
     }
 }
 
-impl KeyUnwrap<64> for Stepping {
-    type Operation = SteppingOperation;
-    fn unwrap_key(self, request: KeyUnwrapRequest<64>) -> SteppingOperation {
-        let (kek, wrapped) = request.into_parts();
-        match Rfc3394Unwrap::start(wrapped) {
-            Ok(machine) => SteppingOperation::Running(machine.next_block(), Rust.load_key(&kek)),
-            Err(response) => SteppingOperation::Done(response),
+impl KeyUnwrap<64> for Deferred {
+    type Operation = DeferredOperation;
+    fn unwrap_key(self, request: KeyUnwrapRequest<64>) -> DeferredOperation {
+        DeferredOperation {
+            yielded: false,
+            request: Some(request),
         }
     }
 }
@@ -99,33 +87,11 @@ fn the_synchronous_engine_passes_the_rfc3394_conformance_cases() {
 }
 
 #[test]
-fn an_engine_yielding_between_blocks_passes_the_same_cases() {
+fn a_pending_engine_passes_the_same_cases_through_its_driver() {
     let mut drives = 0;
-    let _ = conformance::key_unwrap_rfc3394(Stepping, || drives += 1);
-    // §4.1 is two semiblocks: six passes of two blocks, one block per poll,
-    // for the two valid runs and the changed ciphertext. Length refusals
-    // complete at once.
-    assert_eq!(drives, 3 * 12);
-}
-
-#[test]
-fn the_machine_unwraps_one_block_per_step() {
-    let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap();
-    let mut step = Rfc3394Unwrap::start(wrapped).ok().unwrap().next_block();
-    let mut cipher = Rust.load_key(&Aes128Key::copy_from(&RFC3394_4_1_KEK));
-    let mut steps = 0;
-    let response = loop {
-        step = match step {
-            Rfc3394Step::Block { mut input, pending } => {
-                steps += 1;
-                cipher.decrypt_block(input.as_mut_bytes());
-                pending.complete(Ok(input))
-            }
-            Rfc3394Step::Complete(response) => break response,
-        };
-    };
-    assert_eq!(steps, 12);
-    assert_eq!(response.plaintext(), Ok(&RFC3394_4_1_KEY_DATA[..]));
+    let _ = conformance::key_unwrap_rfc3394(Deferred, || drives += 1);
+    // Each of the five conformance requests is pending once.
+    assert_eq!(drives, 5);
 }
 
 #[test]
@@ -293,27 +259,45 @@ fn keys_and_key_data_erase_themselves_when_dropped() {
     erased::<KeyData<32>>();
 }
 
+/// An engine that records the first block it is given and refuses it.
+struct RecordingRefusal {
+    first: Option<Block>,
+}
+impl crate::block::BlockEngine for &mut RecordingRefusal {
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+        self.decrypt(block)
+    }
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+        self.first = Some(*block);
+        Err(crate::block::BlockError::Timeout { observation: 1 })
+    }
+}
+
 #[test]
 fn an_engine_error_terminates_the_mode_without_exposing_key_data() {
-    use crate::block::{BlockError, CipherBlock};
+    use crate::block::BlockError;
     let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap();
-    let machine = Rfc3394Unwrap::start(wrapped).ok().unwrap();
-    let Rfc3394Step::Block { input, pending } = machine.next_block() else {
-        panic!("first block")
-    };
+    let mut engine = RecordingRefusal { first: None };
+    let response = crate::rfc3394::unwrap(wrapped, || Ok(&mut engine));
     let mut expected = [0; 16];
     expected[..8].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[..8]);
     expected[7] ^= 12; // n*j+i = 2*5+2, big endian.
     expected[8..].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[16..]);
-    assert_eq!(input.as_bytes(), &expected);
-    drop(input);
+    assert_eq!(engine.first, Some(expected));
     let error = BlockError::Timeout { observation: 1 };
-    let Rfc3394Step::Complete(response) = pending.complete(Err(error)) else {
-        panic!("error is terminal")
-    };
     assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
     assert_eq!(response.data.len, 0);
     assert!(response.data.bytes.iter().all(|byte| *byte == 0));
-    fn erased<T: ZeroizeOnDrop>() {}
-    erased::<CipherBlock>();
+}
+
+#[test]
+fn a_length_refusal_loads_no_key() {
+    let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT[..16]).unwrap();
+    let mut loads = 0;
+    let response = crate::rfc3394::unwrap(wrapped, || {
+        loads += 1;
+        Ok(Rust.load_key(&Aes128Key::copy_from(&RFC3394_4_1_KEK)))
+    });
+    assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
+    assert_eq!(loads, 0);
 }

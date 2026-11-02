@@ -1,14 +1,14 @@
 //! RFC 3394 AES key wrap: the one copy of the algorithm, over a synchronous
-//! [`BlockCipher`].
+//! block engine.
 //!
-//! [`Rfc3394Unwrap`] is resumable: each [`Rfc3394Unwrap::next_block`] issues one
-//! block of the index-based unwrap (RFC 3394 §2.2.2, second form), so an
-//! engine may yield while a block is in flight and between blocks. [`wrap`] is the index-based wrap (§2.2.1)
-//! to completion. Received data reaches the unwrap; nothing here panics on it.
+//! [`unwrap`] is the index-based unwrap (RFC 3394 §2.2.2, second form) and
+//! [`wrap`] the index-based wrap (§2.2.1), each to completion, in place in
+//! the caller's buffer. Received data reaches the unwrap; nothing here panics
+//! on it.
 
 use crate::{
     KeyData, KeyUnwrapError, KeyUnwrapResponse,
-    block::{BlockCipher, BlockError, CipherBlock},
+    block::{BlockCipher, BlockEngine, BlockError},
 };
 use zeroize::Zeroize;
 
@@ -21,167 +21,139 @@ const LAST_ROUND: u8 = 5;
 /// One semiblock.
 const SEMIBLOCK: usize = 8;
 
-/// An unwrap in progress: the buffer holds the ciphertext's registers
-/// `R[1..=n]` after the first semiblock.
-pub struct Rfc3394Unwrap<const N: usize> {
-    data: KeyData<N>,
-    /// The integrity register `A`.
-    accumulator: [u8; 8],
-    /// `n`, the number of key-data semiblocks.
-    semiblocks: u64,
-    /// The pass `j`, from 5 down to 0.
-    round: u8,
-    /// The register `i` of the next step, from `n` down to 1.
-    index: u64,
-}
-
-/// The machine after one step.
-pub enum Rfc3394Step<const N: usize> {
-    /// One owned input block and the unique continuation accepting its result.
-    Block {
-        input: CipherBlock,
-        pending: Rfc3394Pending<N>,
-    },
-    /// The response, with the plaintext or the refusal.
-    Complete(KeyUnwrapResponse<N>),
-}
-
-/// The mode state while a block engine owns its input. It accepts one result;
-/// dropping it erases the intermediate key data and integrity register.
-pub struct Rfc3394Pending<const N: usize>(Rfc3394Unwrap<N>);
-
-impl<const N: usize> Rfc3394Unwrap<N> {
-    /// Admit wrapped data: `n + 1` semiblocks with `n >= 2`. A refusal
-    /// returns the response at once, without a block operation.
-    pub fn start(wrapped: KeyData<N>) -> Result<Self, KeyUnwrapResponse<N>> {
-        let len = wrapped.as_bytes().len();
-        let Some(accumulator) = wrapped.as_bytes().first_chunk::<SEMIBLOCK>().copied() else {
-            return Err(KeyUnwrapResponse::refused(KeyUnwrapError::InvalidLength));
-        };
-        if !len.is_multiple_of(SEMIBLOCK) || len < 3 * SEMIBLOCK {
-            return Err(KeyUnwrapResponse::refused(KeyUnwrapError::InvalidLength));
-        }
-        let semiblocks = (len / SEMIBLOCK).saturating_sub(1) as u64;
-        Ok(Self {
-            data: wrapped,
-            accumulator,
-            semiblocks,
-            round: LAST_ROUND,
-            index: semiblocks,
-        })
-    }
-
-    /// Issue `AES-1(K, (A ^ t) | R[i])`, with `t = n * j + i`.
-    /// No mode state advances until the returned continuation accepts a result.
-    pub fn next_block(mut self) -> Rfc3394Step<N> {
-        let Some(register) = register(&mut self.data, self.index) else {
-            return Rfc3394Step::Complete(self.refuse(KeyUnwrapError::InvalidLength));
-        };
-        let Some(counter) = u64::from(self.round)
-            .checked_mul(self.semiblocks)
-            .and_then(|base| base.checked_add(self.index))
-        else {
-            return Rfc3394Step::Complete(self.refuse(KeyUnwrapError::InvalidLength));
-        };
-        let mut high = [0; SEMIBLOCK];
-        for ((out, value), count) in high
-            .iter_mut()
-            .zip(self.accumulator)
-            .zip(counter.to_be_bytes())
-        {
-            *out = value ^ count;
-        }
-        let input = CipherBlock::new(join(&high, register));
-        high.zeroize();
-        Rfc3394Step::Block {
-            input,
-            pending: Rfc3394Pending(self),
-        }
-    }
-
-    /// Terminate an admitted operation before submitting a block.
-    pub fn fail(self, error: BlockError) -> KeyUnwrapResponse<N> {
-        self.refuse(KeyUnwrapError::Engine(error))
-    }
-
-    /// Check the integrity register and move the plaintext `R[1..=n]` to the
-    /// start of the buffer.
-    fn finish(mut self) -> KeyUnwrapResponse<N> {
-        let mut difference = 0;
-        for (actual, expected) in self.accumulator.iter().zip(IV) {
-            difference |= actual ^ expected;
-        }
-        if difference != 0 {
-            return self.refuse(KeyUnwrapError::IntegrityCheckFailed);
-        }
-        let len = self.data.len;
-        let plain = len.saturating_sub(SEMIBLOCK);
-        let mut target = 0;
-        while target < plain {
-            let source = target.saturating_add(SEMIBLOCK);
-            match (
-                self.data.bytes.get(source).copied(),
-                self.data.bytes.get_mut(target),
-            ) {
-                (Some(byte), Some(out)) => *out = byte,
-                _ => return self.refuse(KeyUnwrapError::InvalidLength),
-            }
-            target = target.saturating_add(1);
-        }
-        for byte in self.data.bytes.iter_mut().take(len).skip(plain) {
-            *byte = 0;
-        }
-        self.data.len = plain;
-        self.accumulator.zeroize();
-        KeyUnwrapResponse {
-            data: core::mem::replace(&mut self.data, KeyData::cleared()),
+/// Unwrap `wrapped` (`n + 1` semiblocks with `n >= 2`) in place, decrypting
+/// each block over the engine `load` returns. A length refusal returns before
+/// `load` runs; a refused key or block ends the operation with
+/// [`KeyUnwrapError::Engine`]. The engine is dropped after the last block, and
+/// the integrity register and the block are erased on every exit; a refusal
+/// clears the buffer.
+pub fn unwrap<K: BlockEngine, const N: usize>(
+    wrapped: KeyData<N>,
+    load: impl FnOnce() -> Result<K, BlockError>,
+) -> KeyUnwrapResponse<N> {
+    let mut data = wrapped;
+    let Some(semiblocks) = admitted_semiblocks(data.as_bytes().len()) else {
+        return refuse(data, KeyUnwrapError::InvalidLength);
+    };
+    let mut cipher = match load() {
+        Ok(cipher) => cipher,
+        Err(error) => return refuse(data, KeyUnwrapError::Engine(error)),
+    };
+    let mut accumulator = [0; SEMIBLOCK];
+    let mut block = [0; 16];
+    let blocks = unwrap_blocks(
+        &mut cipher,
+        &mut data,
+        semiblocks,
+        &mut accumulator,
+        &mut block,
+    );
+    drop(cipher);
+    block.zeroize();
+    let outcome = blocks
+        .and_then(|()| verify(&accumulator))
+        .and_then(|()| shift_plaintext(&mut data));
+    accumulator.zeroize();
+    match outcome {
+        Ok(()) => KeyUnwrapResponse {
+            data,
             outcome: Ok(()),
-        }
-    }
-
-    fn refuse(mut self, error: KeyUnwrapError) -> KeyUnwrapResponse<N> {
-        self.data.zeroize();
-        self.accumulator.zeroize();
-        KeyUnwrapResponse {
-            data: core::mem::replace(&mut self.data, KeyData::cleared()),
-            outcome: Err(error),
-        }
+        },
+        Err(error) => refuse(data, error),
     }
 }
 
-impl<const N: usize> Rfc3394Pending<N> {
-    /// Terminate while the block is in flight, erasing all mode state.
-    pub fn fail(self, error: BlockError) -> KeyUnwrapResponse<N> {
-        self.0.fail(error)
+/// `n` for `len` bytes of wrapped data, if RFC 3394 admits them.
+fn admitted_semiblocks(len: usize) -> Option<u64> {
+    if !len.is_multiple_of(SEMIBLOCK) || len < 3 * SEMIBLOCK {
+        return None;
     }
+    u64::try_from(len / SEMIBLOCK).ok()?.checked_sub(1)
+}
 
-    /// Accept exactly one completed block or a typed engine error.
-    pub fn complete(self, result: Result<CipherBlock, BlockError>) -> Rfc3394Step<N> {
-        let mut machine = self.0;
-        let block = match result {
-            Ok(block) => block,
-            Err(error) => return Rfc3394Step::Complete(machine.fail(error)),
-        };
-        let Some(register) = register(&mut machine.data, machine.index) else {
-            return Rfc3394Step::Complete(machine.refuse(KeyUnwrapError::InvalidLength));
-        };
-        (machine.accumulator, *register) = split(block.as_bytes());
-        drop(block);
-        match (machine.index.checked_sub(1), machine.round.checked_sub(1)) {
-            (Some(index @ 1..), _) => machine.index = index,
-            (_, Some(round)) => {
-                machine.round = round;
-                machine.index = machine.semiblocks;
+/// The six passes: for `j` from 5 down to 0 and `i` from `n` down to 1,
+/// `B = AES-1(K, (A ^ t) | R[i])` with `t = n * j + i`, then `A = MSB(64, B)`
+/// and `R[i] = LSB(64, B)`.
+fn unwrap_blocks<K: BlockEngine, const N: usize>(
+    cipher: &mut K,
+    data: &mut KeyData<N>,
+    semiblocks: u64,
+    accumulator: &mut [u8; SEMIBLOCK],
+    block: &mut [u8; 16],
+) -> Result<(), KeyUnwrapError> {
+    *accumulator = *data
+        .as_bytes()
+        .first_chunk::<SEMIBLOCK>()
+        .ok_or(KeyUnwrapError::InvalidLength)?;
+    for round in (0..=u64::from(LAST_ROUND)).rev() {
+        for index in (1..=semiblocks).rev() {
+            let counter = round
+                .checked_mul(semiblocks)
+                .and_then(|base| base.checked_add(index))
+                .ok_or(KeyUnwrapError::InvalidLength)?;
+            let register = register(data, index).ok_or(KeyUnwrapError::InvalidLength)?;
+            for ((out, value), count) in block
+                .iter_mut()
+                .zip(accumulator.iter())
+                .zip(counter.to_be_bytes())
+            {
+                *out = value ^ count;
             }
-            (_, None) => return Rfc3394Step::Complete(machine.finish()),
+            for (out, byte) in block.iter_mut().skip(SEMIBLOCK).zip(register.iter()) {
+                *out = *byte;
+            }
+            cipher.decrypt(block).map_err(KeyUnwrapError::Engine)?;
+            for (out, byte) in accumulator
+                .iter_mut()
+                .chain(register.iter_mut())
+                .zip(block.iter())
+            {
+                *out = *byte;
+            }
         }
-        machine.next_block()
     }
+    Ok(())
 }
 
-impl<const N: usize> Drop for Rfc3394Unwrap<N> {
-    fn drop(&mut self) {
-        self.accumulator.zeroize();
+/// Compare the integrity register with the initial value in constant time.
+fn verify(accumulator: &[u8; SEMIBLOCK]) -> Result<(), KeyUnwrapError> {
+    let mut difference = 0;
+    for (actual, expected) in accumulator.iter().zip(IV) {
+        difference |= actual ^ expected;
+    }
+    if difference != 0 {
+        return Err(KeyUnwrapError::IntegrityCheckFailed);
+    }
+    Ok(())
+}
+
+/// Move the plaintext `R[1..=n]` to the start of the buffer and clear the
+/// semiblock it leaves.
+fn shift_plaintext<const N: usize>(data: &mut KeyData<N>) -> Result<(), KeyUnwrapError> {
+    let len = data.len;
+    let plain = len.saturating_sub(SEMIBLOCK);
+    let mut target = 0;
+    while target < plain {
+        let source = target.saturating_add(SEMIBLOCK);
+        match (data.bytes.get(source).copied(), data.bytes.get_mut(target)) {
+            (Some(byte), Some(out)) => *out = byte,
+            _ => return Err(KeyUnwrapError::InvalidLength),
+        }
+        target = target.saturating_add(1);
+    }
+    for byte in data.bytes.iter_mut().take(len).skip(plain) {
+        *byte = 0;
+    }
+    data.len = plain;
+    Ok(())
+}
+
+/// The refusal: the buffer cleared, with `error`.
+fn refuse<const N: usize>(mut data: KeyData<N>, error: KeyUnwrapError) -> KeyUnwrapResponse<N> {
+    data.zeroize();
+    KeyUnwrapResponse {
+        data,
+        outcome: Err(error),
     }
 }
 
