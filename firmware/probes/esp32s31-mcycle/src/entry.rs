@@ -208,37 +208,32 @@ async fn measure() {
     });
 }
 
-/// One read-cost case: its name and its timed loop.
-type ReadCase = (&'static str, fn() -> u64);
-
 /// The cycles of `READS` reads of the cycle counter, of the image's clock and
-/// of an empty loop, each through `black_box`.
+/// of an empty loop, each through `black_box`; called directly, so the stack
+/// bound has no indirect call.
 fn read_costs() {
-    let cases: [ReadCase; 3] = [
-        ("mcycle64", || {
-            let start = oer_riscv::cycle64();
-            for _ in 0..READS {
-                core::hint::black_box(oer_riscv::cycle64());
-            }
-            oer_riscv::cycle64().wrapping_sub(start)
-        }),
-        ("now", || {
-            let start = oer_riscv::cycle64();
-            for _ in 0..READS {
-                core::hint::black_box(EmbassyClock.now());
-            }
-            oer_riscv::cycle64().wrapping_sub(start)
-        }),
-        ("empty", || {
-            let start = oer_riscv::cycle64();
-            for index in 0..READS {
-                core::hint::black_box(index);
-            }
-            oer_riscv::cycle64().wrapping_sub(start)
-        }),
-    ];
-    for (name, case) in cases {
-        let cycles = case();
+    let mcycle = {
+        let start = oer_riscv::cycle64();
+        for _ in 0..READS {
+            core::hint::black_box(oer_riscv::cycle64());
+        }
+        oer_riscv::cycle64().wrapping_sub(start)
+    };
+    let now = {
+        let start = oer_riscv::cycle64();
+        for _ in 0..READS {
+            core::hint::black_box(EmbassyClock.now());
+        }
+        oer_riscv::cycle64().wrapping_sub(start)
+    };
+    let empty = {
+        let start = oer_riscv::cycle64();
+        for index in 0..READS {
+            core::hint::black_box(index);
+        }
+        oer_riscv::cycle64().wrapping_sub(start)
+    };
+    for (name, cycles) in [("mcycle64", mcycle), ("now", now), ("empty", empty)] {
         text(
             Line::new()
                 .text("OER-PROBE mcycle read ")
@@ -316,14 +311,15 @@ async fn direct_wfi() -> Option<Span> {
     let (t0, c0) = edge_sample()?;
     let i0 = oer_riscv::instret64();
     let mut waits = 0_u32;
-    core::future::poll_fn(|cx| loop {
-        match Pin::new(&mut wait).poll(cx) {
-            Poll::Ready(()) => return Poll::Ready(()),
-            Poll::Pending if waits >= WFI_WAKES => return Poll::Ready(()),
-            Poll::Pending => {
-                oer_riscv::wait_for_interrupt();
-                waits = waits.saturating_add(1);
-            }
+    // One wait per poll, then back to the executor: its other tasks (the
+    // watchdog's feed) run between the waits.
+    core::future::poll_fn(|cx| match Pin::new(&mut wait).poll(cx) {
+        Poll::Ready(()) => Poll::Ready(()),
+        Poll::Pending if waits >= WFI_WAKES => Poll::Ready(()),
+        Poll::Pending => {
+            oer_riscv::wait_for_interrupt();
+            waits = waits.saturating_add(1);
+            Poll::Pending
         }
     })
     .await;
