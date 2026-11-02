@@ -282,6 +282,11 @@ impl<K, C, M, const N: usize> MemberBank<K, C, M, N> {
         })
     }
 
+    /// The places a member holds.
+    pub(crate) fn occupied(&self) -> usize {
+        N.saturating_sub(self.vacancies())
+    }
+
     /// The places no member holds.
     fn vacancies(&self) -> usize {
         self.members

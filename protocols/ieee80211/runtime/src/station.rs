@@ -93,7 +93,7 @@
 mod commands;
 pub mod contract;
 mod events;
-pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents};
+pub use events::{RxDrop, RxMsdusRefused, ServiceEvent, StationEvents, TxMemoryHeld};
 mod control;
 mod network;
 mod network_link;
@@ -2062,6 +2062,17 @@ impl<
                 // its queue has room; what still waits wakes the service
                 // when the network makes room.
                 let freed = self.return_freed(&mut io.returned);
+                report(&mut self.events, || {
+                    let held = self.data.held_memory();
+                    let count = |count: usize| u8::try_from(count).unwrap_or(u8::MAX);
+                    ServiceEvent::TxMemory(TxMemoryHeld {
+                        incoming: count(io.transmit.len()),
+                        owed: count(held.owed),
+                        members: count(held.members),
+                        freed: count(held.freed),
+                        returning: count(TX_DEPTH.saturating_sub(io.returned.free_capacity())),
+                    })
+                });
                 // Frames wait in delivery order for the network's next return.
                 let parked = self.pending.receive.has_ready();
                 let (event, room, command_ready, tick, transmit) = {

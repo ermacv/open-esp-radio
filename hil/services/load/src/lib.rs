@@ -43,8 +43,9 @@ use serde::{Deserialize, Serialize};
 pub mod header;
 pub mod tally;
 
-/// The most executors a [`Load`] reports.
-pub const MAX_EXECUTORS: usize = 8;
+/// The most executors a [`Load`] reports: the library runs three, one
+/// spare keeps a [`Report`] with both its loads within one response.
+pub const MAX_EXECUTORS: usize = 4;
 /// The most harts a [`Load`] reports.
 pub const MAX_HARTS: usize = 2;
 /// The most named parts one [`Parts`] answer holds, and the longest name.
@@ -159,6 +160,9 @@ pub struct Report {
     pub cpu_end: Load,
     pub received: Received,
     pub sent: Sent,
+    /// What the network bridge's turns did with the stack's transmissions
+    /// within the window: why a send was refused.
+    pub bridge_tx: BridgeTx,
 }
 
 /// The load datagrams of the run the image received on its port, counted
@@ -227,6 +231,8 @@ pub struct HartLoad {
     pub hart: u8,
     /// Time spent idle (in WFI, between an executor's idle boundaries).
     pub idle_us: u64,
+    /// Its wakes from the wait for an interrupt since boot, wrapping.
+    pub wakes: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -237,6 +243,8 @@ pub struct ExecutorLoad {
     pub level: u8,
     /// Time between its work boundaries, preemption included.
     pub work_us: u64,
+    /// Its rounds (work spans begun) since boot, wrapping.
+    pub rounds: u32,
 }
 
 /// The polls of the image's named parts within run `run`'s window, from the
@@ -303,6 +311,40 @@ pub enum CountersCollected {
     /// The run's window or drain has not ended yet.
     Running,
     Refused(LoadError),
+}
+
+/// What the network bridge's turns did with the stack's transmissions
+/// within the window; each turn moves at most one packet to the station.
+/// The sums are taken at each turn's start.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct BridgeTx {
+    /// Turns, idle ones included.
+    pub turns: u32,
+    /// Turns that handed a packet to the station.
+    pub moved: u32,
+    /// Turns whose packet waits for the station's room.
+    pub held: u32,
+    /// Turns whose packet the station refused for its length.
+    pub dropped: u32,
+    /// Turns that began with the stack's transmit queue full.
+    pub queue_full: u32,
+    /// Turns that began with no network transmit buffer free for the
+    /// stack.
+    pub starved: u32,
+    /// The stack's queued packets, summed over the turns.
+    pub queued_sum: u32,
+    /// The network transmit buffers the station held, summed over the
+    /// turns.
+    pub station_sum: u32,
+    /// Of those, summed likewise by where the station's latest pass saw
+    /// them: in the queue to the station, owed by its data machine, members
+    /// of aggregates out at the port, freed and not yet given back, and in
+    /// the queue back to the network.
+    pub incoming_sum: u32,
+    pub owed_sum: u32,
+    pub members_sum: u32,
+    pub freed_sum: u32,
+    pub returning_sum: u32,
 }
 
 /// Counts within one run's measuring window.

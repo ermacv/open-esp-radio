@@ -47,6 +47,10 @@ pub struct ExecutorSample {
     /// Its work and idle microseconds since boot, the open span included.
     pub work_us: Option<u64>,
     pub idle_us: Option<u64>,
+    /// Its rounds (work spans begun) and its wakes from the hart's wait for
+    /// an interrupt since boot, wrapping.
+    pub rounds: u32,
+    pub wakes: u32,
 }
 
 /// The cumulative work and idle microseconds of one executor.
@@ -60,6 +64,9 @@ pub struct CpuCounter {
     open: AtomicU32,
     /// Executor, hart, level and the kinds of span seen.
     context: AtomicU32,
+    /// Work spans begun and idle spans ended.
+    rounds: AtomicU32,
+    wakes: AtomicU32,
 }
 
 impl CpuCounter {
@@ -71,6 +78,8 @@ impl CpuCounter {
             start: AtomicU32::new(0),
             open: AtomicU32::new(OPEN_NONE),
             context: AtomicU32::new(0),
+            rounds: AtomicU32::new(0),
+            wakes: AtomicU32::new(0),
         }
     }
 
@@ -90,6 +99,9 @@ impl CpuCounter {
         };
         let seen = match boundary.phase {
             Phase::WorkStart | Phase::IdleStart => {
+                if boundary.phase == Phase::WorkStart {
+                    increment(&self.rounds);
+                }
                 self.start.store(boundary.at_us, Ordering::Relaxed);
                 let (kind, open) = match boundary.phase {
                     Phase::WorkStart => (SEEN_WORK, OPEN_WORK),
@@ -99,6 +111,9 @@ impl CpuCounter {
                 seen | kind
             }
             Phase::WorkEnd | Phase::IdleEnd => {
+                if boundary.phase == Phase::IdleEnd {
+                    increment(&self.wakes);
+                }
                 match (boundary.phase, open) {
                     (Phase::WorkEnd, OPEN_WORK) => add(&self.work, span()),
                     (Phase::IdleEnd, OPEN_IDLE) => add(&self.idle, span()),
@@ -131,6 +146,8 @@ impl CpuCounter {
         let start = self.start.load(Ordering::Relaxed);
         let open = self.open.load(Ordering::Relaxed);
         let [executor, hart, level, seen] = self.context.load(Ordering::Relaxed).to_le_bytes();
+        let rounds = self.rounds.load(Ordering::Relaxed);
+        let wakes = self.wakes.load(Ordering::Relaxed);
         fence(Ordering::Acquire);
         if self.sequence.load(Ordering::Relaxed) != sequence {
             return Err(Concurrent);
@@ -149,6 +166,8 @@ impl CpuCounter {
             level,
             work_us: (seen & SEEN_WORK != 0).then(|| with_open(work, OPEN_WORK)),
             idle_us: (seen & SEEN_IDLE != 0).then(|| with_open(idle, OPEN_IDLE)),
+            rounds,
+            wakes,
         })
     }
 }
@@ -167,6 +186,14 @@ fn add(total: &[AtomicU32; 2], span: u32) {
     .to_le_bytes();
     low.store(u32::from_le_bytes([l0, l1, l2, l3]), Ordering::Relaxed);
     high.store(u32::from_le_bytes([h0, h1, h2, h3]), Ordering::Relaxed);
+}
+
+/// Add one to `count`, wrapping; only its one writer calls it.
+fn increment(count: &AtomicU32) {
+    count.store(
+        count.load(Ordering::Relaxed).wrapping_add(1),
+        Ordering::Relaxed,
+    );
 }
 
 fn total(total: &[AtomicU32; 2]) -> u64 {

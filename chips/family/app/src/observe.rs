@@ -40,20 +40,109 @@ pub struct Bridge {
     pub refused_queue: u32,
     pub refused_other: u32,
     pub copied: u32,
+    pub tx: BridgeTx,
+}
+
+/// What the network bridge's turns did with the stack's transmissions.
+///
+/// Each turn moves at most one packet from the stack's queue to the
+/// station. The sums are taken at each turn's start: divided by `turns`,
+/// they give the mean packets the stack's queue held and the mean network
+/// buffers the station held.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BridgeTx {
+    /// The bridge's turns, idle ones included.
+    pub turns: u32,
+    /// Turns that handed a packet to the station.
+    pub moved: u32,
+    /// Turns whose packet waits for the station's room.
+    pub held: u32,
+    /// Turns whose packet the station refused for its length.
+    pub dropped: u32,
+    /// Turns that began with the stack's queue full: a send meanwhile is
+    /// refused for the device's room.
+    pub queue_full: u32,
+    /// Turns that began with no buffer free for the stack: every network
+    /// buffer but the spare with the station, queued or waiting. A send
+    /// meanwhile is refused for a packet buffer.
+    pub starved: u32,
+    pub queued_sum: u32,
+    pub station_sum: u32,
+    /// Of the station's buffers, summed likewise by where they waited at
+    /// the station's latest pass: in the queue to the station, owed by its
+    /// data machine, members of aggregates out at the port, freed and not
+    /// yet given back, and in the queue back to the network.
+    pub incoming_sum: u32,
+    pub owed_sum: u32,
+    pub members_sum: u32,
+    pub freed_sum: u32,
+    pub returning_sum: u32,
+}
+
+/// Where the network's transmit buffers the station holds waited at its
+/// latest pass ([`BridgeTx`]'s parts).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StationHeld {
+    pub incoming: u8,
+    pub owed: u8,
+    pub members: u8,
+    pub freed: u8,
+    pub returning: u8,
 }
 
 /// The network bridge's counts; the IP service is their one writer, and a
 /// reader takes each word on its own.
 pub struct BridgeCounter {
-    /// Received, refused for the pool, the queue and otherwise, copied.
-    counts: [core::sync::atomic::AtomicU32; 5],
+    /// Received, refused for the pool, the queue and otherwise, copied,
+    /// then [`BridgeTx`]'s in its order.
+    counts: [core::sync::atomic::AtomicU32; 18],
 }
 
 impl BridgeCounter {
     pub const fn new() -> Self {
         Self {
-            counts: [const { core::sync::atomic::AtomicU32::new(0) }; 5],
+            counts: [const { core::sync::atomic::AtomicU32::new(0) }; 18],
         }
+    }
+
+    /// One bridge turn, while the station held `station` of the network's
+    /// `buffers` transmit buffers, `held` where its latest pass saw them.
+    pub fn turned(
+        &self,
+        turn: oer_portable_embassy_net::ethernet::TxTurn,
+        station: u32,
+        buffers: u32,
+        held: StationHeld,
+    ) {
+        use oer_portable_embassy_net::ethernet::TxOutcome;
+        let queued = u32::try_from(turn.queued).unwrap_or(u32::MAX);
+        let outcome = match turn.outcome {
+            TxOutcome::Idle => None,
+            TxOutcome::Moved => Some(6),
+            TxOutcome::Held => Some(7),
+            TxOutcome::Dropped => Some(8),
+        };
+        self.bump(5);
+        if let Some(index) = outcome {
+            self.bump(index);
+        }
+        if turn.queued >= turn.capacity {
+            self.bump(9);
+        }
+        let taken = station
+            .saturating_add(queued)
+            .saturating_add(u32::from(turn.waited));
+        // One buffer is the spare that frames from elsewhere are copied to.
+        if taken >= buffers.saturating_sub(1) {
+            self.bump(10);
+        }
+        self.add(11, queued);
+        self.add(12, station);
+        self.add(13, held.incoming.into());
+        self.add(14, held.owed.into());
+        self.add(15, held.members.into());
+        self.add(16, held.freed.into());
+        self.add(17, held.returning.into());
     }
 
     /// The bridge took a frame from the station.
@@ -77,15 +166,38 @@ impl BridgeCounter {
     }
 
     fn bump(&self, index: usize) {
+        self.add(index, 1);
+    }
+
+    fn add(&self, index: usize, by: u32) {
         if let Some(count) = self.counts.get(index) {
-            bump(count, 1);
+            bump(count, by);
         }
     }
 
     /// The counts now.
     pub fn read(&self) -> Bridge {
         use core::sync::atomic::Ordering;
-        let [received, refused_pool, refused_queue, refused_other, copied] = self
+        let [
+            received,
+            refused_pool,
+            refused_queue,
+            refused_other,
+            copied,
+            turns,
+            moved,
+            held,
+            dropped,
+            queue_full,
+            starved,
+            queued_sum,
+            station_sum,
+            incoming_sum,
+            owed_sum,
+            members_sum,
+            freed_sum,
+            returning_sum,
+        ] = self
             .counts
             .each_ref()
             .map(|count| count.load(Ordering::Relaxed));
@@ -95,6 +207,21 @@ impl BridgeCounter {
             refused_queue,
             refused_other,
             copied,
+            tx: BridgeTx {
+                turns,
+                moved,
+                held,
+                dropped,
+                queue_full,
+                starved,
+                queued_sum,
+                station_sum,
+                incoming_sum,
+                owed_sum,
+                members_sum,
+                freed_sum,
+                returning_sum,
+            },
         }
     }
 }

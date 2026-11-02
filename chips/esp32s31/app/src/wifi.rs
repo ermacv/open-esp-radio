@@ -203,7 +203,8 @@ impl TxSupply<TxPacket> for WifiTx {
             Err(TxWriteRefused::Kept(refused)) => return Err(TxRefused::Kept(refused)),
             Err(TxWriteRefused::Lost) => return Err(TxRefused::Lost),
         };
-        self.publisher
+        let published = self
+            .publisher
             .publish(written.storage, written.start, written.len)
             .map_err(|refused| {
                 // A packet stays inside its buffer: a frame past it ends
@@ -212,9 +213,14 @@ impl TxSupply<TxPacket> for WifiTx {
                     self.parked.give(slot);
                 }
                 TxRefused::Lost
-            })
+            });
+        if published.is_ok() {
+            station_took_tx();
+        }
+        published
     }
     fn give(&mut self, memory: wifi::TxMemory) {
+        station_gave_tx();
         self.parked.give(self.publisher.slot(memory));
     }
 }
@@ -1017,7 +1023,9 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
 }
 
 #[cfg(feature = "observe")]
-use super::observed::{bridge_copied, bridge_received, bridge_refused};
+use super::observed::{
+    bridge_copied, bridge_received, bridge_refused, bridge_turned, station_gave_tx, station_took_tx,
+};
 /// The network bridge's frames: counted with `observe`.
 #[cfg(not(feature = "observe"))]
 fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {}
@@ -1025,6 +1033,14 @@ fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {}
 fn bridge_refused(_: oer_portable_embassy_net::RxEnqueueError) {}
 #[cfg(not(feature = "observe"))]
 fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {}
+#[cfg(not(feature = "observe"))]
+fn bridge_turned(_: oer_portable_embassy_net::ethernet::TxTurn) {}
+/// The network transmit buffers the station holds: counted with
+/// `observe`.
+#[cfg(not(feature = "observe"))]
+fn station_took_tx() {}
+#[cfg(not(feature = "observe"))]
+fn station_gave_tx() {}
 
 /// The IP service's task: every status change wakes the waits. Once the
 /// station asks its network to stop, the service stops and returns every
@@ -1041,6 +1057,7 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
             bridge_received,
             bridge_refused,
             bridge_copied,
+            bridge_turned,
         ));
         match select(run.as_mut(), stopper.requested()).await {
             Either::First(result) => result,

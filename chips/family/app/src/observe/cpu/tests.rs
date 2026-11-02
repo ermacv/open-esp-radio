@@ -30,6 +30,20 @@ fn a_counter_accumulates_closed_and_open_spans_of_each_kind() {
 }
 
 #[test]
+fn a_counter_counts_its_rounds_and_its_wakes_from_the_wait() {
+    let counter = CpuCounter::new();
+    counter.observe(at(10, Phase::WorkStart));
+    counter.observe(at(20, Phase::WorkEnd));
+    counter.observe(at(30, Phase::IdleStart));
+    counter.observe(at(40, Phase::IdleEnd));
+    counter.observe(at(41, Phase::WorkStart));
+    counter.observe(at(42, Phase::WorkEnd));
+    counter.observe(at(43, Phase::WorkStart));
+    let sample = counter.sample(50).unwrap();
+    assert_eq!((sample.rounds, sample.wakes), (3, 1));
+}
+
+#[test]
 fn spans_cross_the_activity_clock_wrap_and_totals_exceed_32_bits() {
     let counter = CpuCounter::new();
     counter.observe(at(u32::MAX - 4, Phase::WorkStart));

@@ -595,6 +595,51 @@ impl core::fmt::Display for StationTxAmpdu {
     }
 }
 
+/// The network's transmit memory the station service holds, by where it
+/// waits ([`TxMemoryHeld`](oer_protocols_ieee80211_runtime::station::TxMemoryHeld)),
+/// after one pass of the service.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StationTxMemory {
+    pub incoming: u8,
+    pub owed: u8,
+    pub members: u8,
+    pub freed: u8,
+    pub returning: u8,
+}
+
+impl Event for StationTxMemory {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 34);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [
+            u32::from_le_bytes([self.incoming, self.owed, self.members, self.freed]),
+            u32::from(self.returning),
+        ]
+    }
+
+    fn decode([counts, returning]: [u32; 2]) -> Option<Self> {
+        let [incoming, owed, members, freed] = counts.to_le_bytes();
+        Some(Self {
+            incoming,
+            owed,
+            members,
+            freed,
+            returning: u8::try_from(returning).ok()?,
+        })
+    }
+}
+
+impl core::fmt::Display for StationTxMemory {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "station.tx-memory incoming={} owed={} members={} freed={} returning={}",
+            self.incoming, self.owed, self.members, self.freed, self.returning
+        )
+    }
+}
+
 /// The station's event sink of a trace build: it reports each receive
 /// decision of the service, the station and its receive agreements as
 /// [`StationRx`], and each data aggregate's settlement and BlockAckReq as
@@ -621,6 +666,14 @@ impl<O: oer_portable_trace::Observer> TracedStationEvents<O> {
     fn report_tx(&self, settled: StationTxAmpdu) {
         oer_portable_trace::observe!(self.0, settled);
     }
+
+    #[cfg_attr(
+        not(oer_trace),
+        allow(unused_variables, reason = "only a trace build reports")
+    )]
+    fn report_memory(&self, held: StationTxMemory) {
+        oer_portable_trace::observe!(self.0, held);
+    }
 }
 
 /// The receive decisions of one service event, each to `emit`.
@@ -641,7 +694,7 @@ fn service_rx(
             emit(StationRxKind::CopiedAggregated, copied.aggregated.into());
             emit(StationRxKind::CopiedKept, copied.kept.into());
         }
-        ServiceEvent::GroupKeyInstalled { .. } => {}
+        ServiceEvent::GroupKeyInstalled { .. } | ServiceEvent::TxMemory(_) => {}
     }
 }
 
@@ -736,6 +789,17 @@ impl<O: oer_portable_trace::Observer>
     const ENABLED: bool = cfg!(oer_trace);
 
     fn event(&mut self, event: oer_protocols_ieee80211_runtime::station::ServiceEvent) {
+        use oer_protocols_ieee80211_runtime::station::ServiceEvent;
+        if let ServiceEvent::TxMemory(held) = event {
+            self.report_memory(StationTxMemory {
+                incoming: held.incoming,
+                owed: held.owed,
+                members: held.members,
+                freed: held.freed,
+                returning: held.returning,
+            });
+            return;
+        }
         service_rx(event, &mut |kind, count| self.report(kind, count));
     }
 }
@@ -1001,6 +1065,14 @@ mod tests {
         assert_eq!(ServiceSpan::decode([9, 0]), None);
         assert_eq!(StationBeacon::decode([7, 1]), None);
         assert_eq!(TxRateSelected::decode([1, 0]), None);
+        round_trip(StationTxMemory {
+            incoming: 1,
+            owed: 2,
+            members: 32,
+            freed: 4,
+            returning: 16,
+        });
+        assert_eq!(StationTxMemory::decode([0, 256]), None);
         for kind in StationRxKind::ALL {
             round_trip(StationRx { kind, count: 9 });
         }

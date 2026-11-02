@@ -29,6 +29,23 @@ pub enum ServiceEvent {
     /// The service installed a group key: the station's first or a
     /// replacement. `key_id` is 0..=3.
     GroupKeyInstalled { key_id: u8, replaced: bool },
+    /// Where the network's transmit memory the service holds waits, after
+    /// one pass gave back what the network's queue had room for.
+    TxMemory(TxMemoryHeld),
+}
+
+/// The network's transmit memory a station service holds, by where it
+/// waits: frames in the network's queue to the service, MPDUs the data
+/// machine owes, members of aggregates out at the port, memory freed but
+/// not yet given back, and memory in the queue back to the network. Each
+/// count saturates at `u8::MAX`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TxMemoryHeld {
+    pub incoming: u8,
+    pub owed: u8,
+    pub members: u8,
+    pub freed: u8,
+    pub returning: u8,
 }
 
 /// Why the service dropped a received frame.

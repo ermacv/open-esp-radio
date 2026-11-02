@@ -479,6 +479,16 @@ struct OwedMpdu<'id, D: StaDataTokens, K> {
     buffer: ReturnedMpdu<D::Buffer, D::Sent>,
 }
 
+/// Where the network memory a data machine holds waits, by MPDU: owed and
+/// not yet at the port, a member of an aggregate out at the port, or freed
+/// and not yet taken back by the network.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HeldMemory {
+    pub owed: usize,
+    pub members: usize,
+    pub freed: usize,
+}
+
 /// The connected station's data machine. `CAP` sizes its buffer pool and
 /// its one queue of owed MPDUs, every TID's in their order: each owed MPDU
 /// holds a buffer, so every buffer fits the queue (checked at build).
@@ -990,6 +1000,15 @@ impl<
     /// Whether network memory waits for [`Self::take_freed`].
     pub fn has_freed(&self) -> bool {
         self.freed.iter().next().is_some()
+    }
+
+    /// Where the network memory the machine holds waits now.
+    pub fn held_memory(&self) -> HeldMemory {
+        HeldMemory {
+            owed: self.owed.len(),
+            members: self.members.occupied(),
+            freed: self.freed.len(),
+        }
     }
 
     /// Free data permissions in this category, bounded by the backend's

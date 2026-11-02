@@ -132,6 +132,7 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
             cx,
             |_| {},
             |_| {},
+            |_| {},
             |_| {}
         )));
         let mut cx = Context::from_waker(core::task::Waker::noop());

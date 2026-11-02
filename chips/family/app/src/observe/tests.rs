@@ -18,6 +18,52 @@ fn the_bridge_counts_each_outcome_apart() {
             refused_queue: 1,
             refused_other: 1,
             copied: 1,
+            tx: BridgeTx::default(),
+        }
+    );
+}
+
+#[test]
+fn a_bridge_turn_counts_its_outcome_a_full_queue_and_a_pool_without_free_buffers() {
+    use oer_portable_embassy_net::ethernet::{TxOutcome, TxTurn};
+    let bridge = BridgeCounter::new();
+    let turn = |queued, waited, outcome| TxTurn {
+        queued,
+        capacity: 16,
+        waited,
+        outcome,
+    };
+    let held = StationHeld {
+        incoming: 1,
+        owed: 2,
+        members: 3,
+        freed: 4,
+        returning: 5,
+    };
+    // 63 buffers: the station holds 40, the queue 3; 19 are free.
+    bridge.turned(turn(3, false, TxOutcome::Moved), 40, 63, held);
+    // The queue is full.
+    bridge.turned(turn(16, false, TxOutcome::Moved), 30, 63, held);
+    // All but the spare are taken: 45 + 16 + 1 waiting.
+    bridge.turned(turn(16, true, TxOutcome::Held), 45, 63, held);
+    bridge.turned(turn(0, false, TxOutcome::Idle), 10, 63, held);
+    bridge.turned(turn(1, false, TxOutcome::Dropped), 10, 63, held);
+    assert_eq!(
+        bridge.read().tx,
+        BridgeTx {
+            turns: 5,
+            moved: 2,
+            held: 1,
+            dropped: 1,
+            queue_full: 2,
+            starved: 1,
+            queued_sum: 36,
+            station_sum: 135,
+            incoming_sum: 5,
+            owed_sum: 10,
+            members_sum: 15,
+            freed_sum: 20,
+            returning_sum: 25,
         }
     );
 }

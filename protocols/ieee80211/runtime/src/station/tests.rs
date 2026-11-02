@@ -335,6 +335,18 @@ impl Observations {
             .collect()
     }
 
+    fn tx_memory(&self) -> Vec<TxMemoryHeld> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                Observation::Service(ServiceEvent::TxMemory(held)) => Some(*held),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn rx_msdus_copied(&self) -> Vec<RxMsdusCopied> {
         self.events
             .lock()
@@ -2160,7 +2172,15 @@ fn a_data_preparation_refusal_releases_admission_and_the_next_msdu_can_go() {
                 )));
                 assert_eq!(world.air.sent().len(), sent_before);
                 assert_eq!(world.completions.borrow().len(), statistics_before);
-                // The refused MSDU's memory is the network's again.
+                // The refused MSDU's memory is the network's again: the
+                // service reports it in the queue back to the network.
+                assert!(
+                    world
+                        .observed
+                        .tx_memory()
+                        .iter()
+                        .any(|held| held.returning == 1 && held.owed == 0 && held.members == 0)
+                );
                 world.take_back_memory();
                 assert_eq!(world.memory_back.get(), 1);
                 world.send_msdu(ACCESS_POINT_ADDRESS);

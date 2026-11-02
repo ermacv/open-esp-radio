@@ -36,7 +36,7 @@ use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
-use crate::observe::{Bridge, BridgeCounter, Concurrent};
+use crate::observe::{Bridge, BridgeCounter, Concurrent, StationHeld};
 
 pub use crate::observe::link::{Link, TxAmpdu};
 pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
@@ -316,6 +316,14 @@ impl oer_portable_trace::Observer for Observer {
                 });
             }
         }
+        if let Some(held) = Self::decoded::<E, station::StationTxMemory>(event) {
+            let [counts, returning] = &STATION_PARTS;
+            counts.store(
+                u32::from_le_bytes([held.incoming, held.owed, held.members, held.freed]),
+                Ordering::Relaxed,
+            );
+            returning.store(u32::from(held.returning), Ordering::Relaxed);
+        }
         if let Some(data) = Self::decoded::<E, station::RxData>(event) {
             LINK.received(
                 rate(data.rate),
@@ -439,6 +447,56 @@ pub(crate) fn bridge_refused(reason: oer_portable_embassy_net::RxEnqueueError) {
 #[cfg(feature = "wifi")]
 pub(crate) fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {
     BRIDGE.copied();
+}
+
+/// The network transmit buffers the station holds now; the IP service, which
+/// hands them over and takes them back, is its one writer.
+#[cfg(feature = "wifi")]
+static STATION_TX: AtomicU32 = AtomicU32::new(0);
+
+/// The station took a network transmit buffer.
+#[cfg(feature = "wifi")]
+pub(crate) fn station_took_tx() {
+    STATION_TX.store(
+        STATION_TX.load(Ordering::Relaxed).wrapping_add(1),
+        Ordering::Relaxed,
+    );
+}
+
+/// The station gave a network transmit buffer back.
+#[cfg(feature = "wifi")]
+pub(crate) fn station_gave_tx() {
+    STATION_TX.store(
+        STATION_TX.load(Ordering::Relaxed).saturating_sub(1),
+        Ordering::Relaxed,
+    );
+}
+
+/// Where the station's latest pass saw the network transmit buffers it
+/// holds: incoming, owed, members and freed in one word's bytes, returning
+/// in another. The station service is their one writer; a reader on the
+/// other hart may take the two words of different passes.
+static STATION_PARTS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+
+/// One bridge turn of the stack's transmissions.
+#[cfg(feature = "wifi")]
+pub(crate) fn bridge_turned(turn: oer_portable_embassy_net::ethernet::TxTurn) {
+    const BUFFERS: u32 = oer_chips_esp32s31_wifi::NETWORK_BUFFERS as u32;
+    let [counts, returning] = &STATION_PARTS;
+    let [incoming, owed, members, freed] = counts.load(Ordering::Relaxed).to_le_bytes();
+    let [returning, ..] = returning.load(Ordering::Relaxed).to_le_bytes();
+    BRIDGE.turned(
+        turn,
+        STATION_TX.load(Ordering::Relaxed),
+        BUFFERS,
+        StationHeld {
+            incoming,
+            owed,
+            members,
+            freed,
+            returning,
+        },
+    );
 }
 
 /// The samples one session of one hart's sampler keeps.

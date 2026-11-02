@@ -31,8 +31,9 @@ use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, PartsCollected,
-    Report, Request, SamplesCollected, Sent, Start, Started, Tracking, TrackingCollected, Transmit,
+    BridgeTx, Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError,
+    PartsCollected, Report, Request, SamplesCollected, Sent, Start, Started, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -268,6 +269,7 @@ struct Ends {
     cpu_end: Load,
     parts: Windows,
     counters: Counters,
+    bridge_tx: BridgeTx,
     link: Link,
     tracking: Tracking,
     sampled: Sampled,
@@ -341,6 +343,7 @@ async fn run(
         cpu_end: ends.cpu_end,
         received: receiving.received(tally),
         sent,
+        bridge_tx: ends.bridge_tx,
     };
     Ended {
         report,
@@ -456,6 +459,7 @@ async fn measure(
         cpu_end,
         parts: report::parts(&parts_start, &parts_end),
         counters: report::counters(&counters_start, &counters_end),
+        bridge_tx: report::bridge_tx(&counters_start, &counters_end),
         link: report::link_window(&counters_start, &counters_end),
         tracking: report::tracking(&tracking_start, &tracking_end),
         sampled: [sampled, sampled1],

@@ -25,7 +25,7 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
+    BridgeTx, CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
     CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
     LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Tracking,
     TrackingCollected, Transmit,
@@ -382,9 +382,17 @@ fn utilisation(before: &Load, after: &Load) -> serde_json::Value {
                 .find(|earlier| earlier.hart == hart.hart)
                 .map_or(0, |earlier| earlier.idle_us);
             let idle = hart.idle_us.saturating_sub(idle_before) as f64;
+            let wakes_before = before
+                .harts
+                .iter()
+                .find(|earlier| earlier.hart == hart.hart)
+                .map_or(0, |earlier| earlier.wakes);
             serde_json::json!({
                 "hart": hart.hart,
                 "busy_percent": round(100.0 * (1.0 - idle / window)),
+                "wakes_per_s": round(
+                    f64::from(hart.wakes.wrapping_sub(wakes_before)) * 1e6 / window,
+                ),
             })
         })
         .collect::<Vec<_>>();
@@ -397,6 +405,11 @@ fn utilisation(before: &Load, after: &Load) -> serde_json::Value {
                 .iter()
                 .find(|earlier| earlier.executor == executor.executor)
                 .map_or(0, |earlier| earlier.work_us);
+            let rounds_before = before
+                .executors
+                .iter()
+                .find(|earlier| earlier.executor == executor.executor)
+                .map_or(0, |earlier| earlier.rounds);
             serde_json::json!({
                 "executor": executor.executor,
                 "hart": executor.hart,
@@ -404,10 +417,42 @@ fn utilisation(before: &Load, after: &Load) -> serde_json::Value {
                 "work_percent": round(
                     100.0 * executor.work_us.saturating_sub(work_before) as f64 / window,
                 ),
+                "rounds_per_s": round(
+                    f64::from(executor.rounds.wrapping_sub(rounds_before)) * 1e6 / window,
+                ),
             })
         })
         .collect::<Vec<_>>();
     serde_json::json!({ "window_ms": round(window / 1000.0), "harts": harts, "executors": executors })
+}
+
+/// What the network bridge's turns did with the stack's transmissions:
+/// each outcome's turns, the shares of turns that began with the stack's
+/// queue full or with no buffer free for the stack, and the means of the
+/// stack's queued packets and of the buffers the station held.
+fn bridge_tx(bridge: &BridgeTx) -> serde_json::Value {
+    let mean =
+        |sum: u32| (bridge.turns != 0).then(|| round(f64::from(sum) / f64::from(bridge.turns)));
+    let share = |count: u32| {
+        (bridge.turns != 0).then(|| round(100.0 * f64::from(count) / f64::from(bridge.turns)))
+    };
+    serde_json::json!({
+        "turns": bridge.turns,
+        "moved": bridge.moved,
+        "held": bridge.held,
+        "dropped": bridge.dropped,
+        "queue_full_percent": share(bridge.queue_full),
+        "starved_percent": share(bridge.starved),
+        "queued_mean": mean(bridge.queued_sum),
+        "station_mean": mean(bridge.station_sum),
+        "station_parts_mean": {
+            "incoming": mean(bridge.incoming_sum),
+            "owed": mean(bridge.owed_sum),
+            "members": mean(bridge.members_sum),
+            "freed": mean(bridge.freed_sum),
+            "returning": mean(bridge.returning_sum),
+        },
+    })
 }
 
 /// The run's measuring window as the image kept it.
@@ -1093,6 +1138,7 @@ fn measurement(
                 "device_send_refused": device.refused,
                 "device_send_missed": device.missed,
                 "device_send_failed": device.failed,
+                "bridge": bridge_tx(&report.bridge_tx),
                 "host_received_mbps": mbps(host.bytes, window),
                 "host_received_datagrams": host.datagrams,
                 "lost": device.datagrams.saturating_sub(host.datagrams),
@@ -1168,26 +1214,59 @@ mod tests {
 
     #[test]
     fn a_hart_s_busy_share_is_its_window_less_its_idle_time() {
-        let at = |now_us, idle_us, work_us| Load {
+        let at = |now_us, idle_us, work_us, count| Load {
             now_us,
-            harts: [oer_hil_services_load::HartLoad { hart: 0, idle_us }]
-                .into_iter()
-                .collect(),
+            harts: [oer_hil_services_load::HartLoad {
+                hart: 0,
+                idle_us,
+                wakes: count,
+            }]
+            .into_iter()
+            .collect(),
             executors: [oer_hil_services_load::ExecutorLoad {
                 executor: 1,
                 hart: 0,
                 level: 2,
                 work_us,
+                rounds: count,
             }]
             .into_iter()
             .collect(),
         };
         let value = utilisation(
-            &at(1_000_000, 400_000, 0),
-            &at(2_000_000, 1_000_000, 300_000),
+            &at(1_000_000, 400_000, 0, u32::MAX),
+            &at(2_000_000, 1_000_000, 300_000, 2_999),
         );
         assert_eq!(value["harts"][0]["busy_percent"], 40.0);
         assert_eq!(value["executors"][0]["work_percent"], 30.0);
+        assert_eq!(
+            value["harts"][0]["wakes_per_s"], 3000.0,
+            "a wake count that wrapped still differs"
+        );
+        assert_eq!(value["executors"][0]["rounds_per_s"], 3000.0);
+    }
+
+    #[test]
+    fn the_bridge_s_turns_give_shares_and_means_and_none_without_a_turn() {
+        let value = bridge_tx(&BridgeTx {
+            turns: 200,
+            moved: 150,
+            held: 10,
+            dropped: 0,
+            queue_full: 50,
+            starved: 20,
+            queued_sum: 1_000,
+            station_sum: 9_000,
+            freed_sum: 3_000,
+            ..BridgeTx::default()
+        });
+        assert_eq!(value["queue_full_percent"], 25.0);
+        assert_eq!(value["starved_percent"], 10.0);
+        assert_eq!(value["queued_mean"], 5.0);
+        assert_eq!(value["station_mean"], 45.0);
+        assert_eq!(value["station_parts_mean"]["freed"], 15.0);
+        let none = bridge_tx(&BridgeTx::default());
+        assert!(none["queued_mean"].is_null());
     }
 
     #[test]

@@ -366,6 +366,7 @@ impl<
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(crate::ethernet::LentCopy),
+        mut transmitted: impl FnMut(crate::ethernet::TxTurn),
     ) -> Result<(), Error> {
         let mut running = core::pin::pin!(self.runner.run());
         drive(
@@ -380,6 +381,7 @@ impl<
             &mut received,
             &mut refused,
             &mut copied,
+            &mut transmitted,
         )
         .await
     }
@@ -444,6 +446,7 @@ async fn drive<
     mut received: impl FnMut(EthernetFrameView<'_>),
     mut refused: impl FnMut(crate::RxEnqueueError),
     mut copied: impl FnMut(crate::ethernet::LentCopy),
+    mut transmitted: impl FnMut(crate::ethernet::TxTurn),
 ) -> Result<(), Error> {
     core::future::poll_fn(|cx| {
         state.runner.register(cx.waker());
@@ -455,7 +458,13 @@ async fn drive<
         if state.stop.get() {
             return finish(state, bridge, iface, Ok(()), &mut events);
         }
-        if let Poll::Ready(Err(_)) = bridge.poll(cx, &mut received, &mut refused, &mut copied) {
+        if let Poll::Ready(Err(_)) = bridge.poll(
+            cx,
+            &mut received,
+            &mut refused,
+            &mut copied,
+            &mut transmitted,
+        ) {
             return finish(
                 state,
                 bridge,

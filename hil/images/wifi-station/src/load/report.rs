@@ -10,7 +10,7 @@ use oer::observe::link;
 use oer::observe::parts::{PARTS, PartReading};
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
-    CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
+    BridgeTx, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
     InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, PartWindow, Parts, Rates, RxCounts,
     RxLink, Sample, Samples, StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
 };
@@ -27,13 +27,17 @@ pub(crate) fn load(now_us: u64, samples: &[ExecutorSample]) -> Load {
     for sample in samples {
         if let Some(idle_us) = sample.idle_us {
             match load.harts.iter_mut().find(|hart| hart.hart == sample.hart) {
-                Some(hart) => hart.idle_us = hart.idle_us.saturating_add(idle_us),
+                Some(hart) => {
+                    hart.idle_us = hart.idle_us.saturating_add(idle_us);
+                    hart.wakes = hart.wakes.wrapping_add(sample.wakes);
+                }
                 // The library's harts fit the report's: a full one only
                 // loses the hart.
                 None => {
                     let _room = load.harts.push(HartLoad {
                         hart: sample.hart,
                         idle_us,
+                        wakes: sample.wakes,
                     });
                 }
             }
@@ -45,6 +49,7 @@ pub(crate) fn load(now_us: u64, samples: &[ExecutorSample]) -> Load {
                 hart: sample.hart,
                 level: sample.level,
                 work_us,
+                rounds: sample.rounds,
             });
         }
     }
@@ -200,6 +205,27 @@ fn data_window(start: &DataBus, end: &DataBus) -> DataBus {
         next_level_reads: end.next_level_reads.wrapping_sub(start.next_level_reads),
         next_level_writes: end.next_level_writes.wrapping_sub(start.next_level_writes),
         overflowed: start.overflowed || end.overflowed,
+    }
+}
+
+/// What the network bridge's turns did with the stack's transmissions
+/// between the window's ends `start` and `end`.
+pub(crate) fn bridge_tx(start: &Snapshot, end: &Snapshot) -> BridgeTx {
+    let (start, end) = (start.bridge.tx, end.bridge.tx);
+    BridgeTx {
+        turns: end.turns.wrapping_sub(start.turns),
+        moved: end.moved.wrapping_sub(start.moved),
+        held: end.held.wrapping_sub(start.held),
+        dropped: end.dropped.wrapping_sub(start.dropped),
+        queue_full: end.queue_full.wrapping_sub(start.queue_full),
+        starved: end.starved.wrapping_sub(start.starved),
+        queued_sum: end.queued_sum.wrapping_sub(start.queued_sum),
+        station_sum: end.station_sum.wrapping_sub(start.station_sum),
+        incoming_sum: end.incoming_sum.wrapping_sub(start.incoming_sum),
+        owed_sum: end.owed_sum.wrapping_sub(start.owed_sum),
+        members_sum: end.members_sum.wrapping_sub(start.members_sum),
+        freed_sum: end.freed_sum.wrapping_sub(start.freed_sum),
+        returning_sum: end.returning_sum.wrapping_sub(start.returning_sum),
     }
 }
 
