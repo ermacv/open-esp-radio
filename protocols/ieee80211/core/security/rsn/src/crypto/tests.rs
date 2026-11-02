@@ -6,6 +6,7 @@
 )]
 use super::*;
 use crate::{EapolKeyFrame, EapolKeyMessage, frames};
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_wire::eapol::EAPOL_KEY_PACKET_LEN;
 
 #[test]
@@ -93,7 +94,8 @@ fn derives_known_ptk_and_builds_message_2() {
         &security_ies,
     )
     .unwrap()
-    .authenticate(&ptk);
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let parsed = EapolKeyFrame::parse(message.as_bytes()).unwrap();
     assert_eq!(parsed.message(), EapolKeyMessage::PairwiseMessage2);
     assert_eq!(parsed.replay_counter(), 7);
@@ -104,15 +106,21 @@ fn derives_known_ptk_and_builds_message_2() {
     let message4 =
         frames::RsnTxFrame::<512>::message4(crate::Akm::Psk, context.authenticator_address, 8)
             .unwrap()
-            .authenticate(&ptk);
+            .authenticate(&ptk, &mut SoftwareAes128)
+            .unwrap();
     let parsed4 = EapolKeyFrame::parse(message4.as_bytes()).unwrap();
     assert_eq!(parsed4.protocol_version(), 1);
     assert_eq!(parsed4.message(), EapolKeyMessage::PairwiseMessage4);
     assert_eq!(parsed4.replay_counter(), 8);
-    assert!(parsed4.verify_mic(&ptk));
+    assert!(parsed4.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
 
     let mut changed = [0; EAPOL_KEY_PACKET_LEN];
     changed.copy_from_slice(message4.as_bytes());
     changed[17] ^= 1;
-    assert!(!EapolKeyFrame::parse(&changed).unwrap().verify_mic(&ptk));
+    assert!(
+        !EapolKeyFrame::parse(&changed)
+            .unwrap()
+            .verify_mic(&ptk, &mut SoftwareAes128)
+            .unwrap()
+    );
 }

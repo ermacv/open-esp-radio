@@ -10,6 +10,7 @@
 )]
 
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
+use oer_crypto::block::{Aes128Engine, BlockError};
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_wire::{
     address::AddressFlags,
@@ -40,6 +41,8 @@ pub enum ManagementCcmpError {
     MissingExtendedIv,
     /// The MIC does not verify.
     InvalidMic,
+    /// The AES engine refused the key or a block.
+    Engine(BlockError),
 }
 
 /// One validated management MPDU; the caller owns its replay decision.
@@ -91,12 +94,16 @@ impl<'a> ManagementCcmpFrame<'a> {
         self.packet_number
     }
 
-    pub fn open(self, temporal_key: &Ccmp128Key) -> Result<&'a [u8], ManagementCcmpError> {
+    pub fn open<E: Aes128Engine>(
+        self,
+        engine: &mut E,
+        temporal_key: &Ccmp128Key,
+    ) -> Result<&'a [u8], ManagementCcmpError> {
         let frame = self.frame;
         // SPP only affects QoS data; management uses the same transform in
         // either association mode. The receiver owns its separate PN frontier.
         let body = CcmpAssociation::new(Spp::NotNegotiated)
-            .open(temporal_key, frame)
+            .open(engine, temporal_key, frame)
             .map_err(ManagementCcmpError::from)?;
         Ok(body)
     }
@@ -111,6 +118,7 @@ impl From<CcmpMpduError> for ManagementCcmpError {
             CcmpMpduError::Truncated => Self::Truncated,
             CcmpMpduError::TooLong => Self::TooLong,
             CcmpMpduError::InvalidMic => Self::InvalidMic,
+            CcmpMpduError::Engine(error) => Self::Engine(error),
         }
     }
 }

@@ -18,7 +18,8 @@ fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk, counter: u64) -> Vec<u8>
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, counter, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(ptk);
+            .authenticate(ptk, &mut SoftwareAes128)
+            .unwrap();
     eapol_frame(message3.as_bytes())
 }
 
@@ -47,7 +48,8 @@ fn group_message1_at(
     }
     let message = RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], &wrapped)
         .unwrap()
-        .authenticate(ptk);
+        .authenticate(ptk, &mut SoftwareAes128)
+        .unwrap();
     protected_received(eapol_frame(message.as_bytes()), pn)
 }
 

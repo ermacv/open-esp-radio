@@ -439,11 +439,14 @@ their delivery outcomes. An exact completed M3 still
 coalesces a cached M4 without reinstalling PTK. Every M4 mirrors the received
 M3's MAC protection; an open M3 produces an open M4 even with an installed PTK.
 
-Key data is unwrapped in the step (RFC 3394, `oer-crypto`'s
-`block::unwrap_now`) over the synchronous AES-128 engine the composition
-supplies through its callbacks (`StaCallbacks::KeyUnwrapEngine`, lent by
-`key_unwrap_engine`): Message 3's when the handshake takes it, a connected
-rekey's in the action turn that follows. The machine stays sans-IO: it names
+Every AES operation of the station runs in the step over the synchronous
+AES-128 engine the composition supplies through its callbacks
+(`StaCallbacks::AesEngine`, lent by `aes_engine`): the key-data unwrap
+(RFC 3394, `oer-crypto`'s `block::unwrap_now`), Message 3's when the
+handshake takes it and a connected rekey's in the action turn that follows;
+the AES-CMAC EAPOL-Key MIC of PSK-SHA256 and SAE; and the CCMP and BIP of
+received protected management frames. A refusal drops such a frame like one
+that does not verify and leaves its replay state unchanged. The machine stays sans-IO: it names
 no hardware type, and a composition may supply a software block or a chip's
 accelerator behind the same trait. An engine's refusal fails the unwrap like
 key data that fails its integrity check. No unwrap is in flight across

@@ -50,9 +50,11 @@ impl ManagementProtection {
         }
     }
 
-    /// Metadata claiming integrity never bypasses CCMP/BIP verification.
-    pub(super) fn receive(
+    /// Metadata claiming integrity never bypasses CCMP/BIP verification,
+    /// which runs on `engine`; a refusal drops the frame like a MIC failure.
+    pub(super) fn receive<E: oer_crypto::block::Aes128Engine>(
         &mut self,
+        engine: &mut E,
         frame: &[u8],
         local: OwnAddress,
         bssid: Bssid,
@@ -84,7 +86,7 @@ impl ManagementProtection {
             if control.protected() {
                 return None;
             }
-            self.group.as_mut()?.verify(frame).ok()?;
+            self.group.as_mut()?.verify(engine, frame).ok()?;
             frame
                 .get(MANAGEMENT_HEADER_LEN..frame.len().checked_sub(MANAGEMENT_MIC_ELEMENT_LEN)?)?
         } else {
@@ -92,7 +94,7 @@ impl ManagementProtection {
             for (destination, source) in copied.iter_mut().zip(frame) {
                 *destination = *source;
             }
-            self.individual.open(copied).ok()?
+            self.individual.open(engine, copied).ok()?
         };
         match (disconnect, action) {
             (true, _) => {

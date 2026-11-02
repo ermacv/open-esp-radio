@@ -213,9 +213,10 @@ the lossless concrete callback. A duplicate in-flight kind has its own typed
 admission refusal. Runner selects inputs over the generic port and executes
 the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
-NetDevice, Runners)`. The station unwraps EAPOL-Key data synchronously in
-its step over the engine its callbacks supply
-(`StaCallbacks::KeyUnwrapEngine`); the facade's is the AES accelerator,
+NetDevice, Runners)`. The station runs its EAPOL-Key data unwrap, its
+AES-CMAC EAPOL-Key MIC and its protected-management CCMP and BIP
+synchronously in its step over the engine its callbacks supply
+(`StaCallbacks::AesEngine`); the facade's is the AES accelerator,
 which the image hands to the station's `Profile`. Images select the interrupt entries, callbacks and observers, and
 spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product

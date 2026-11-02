@@ -371,6 +371,8 @@ pub enum ApWpa2Error {
     MissingPairwiseKey,
     UnexpectedAction,
     Retry(RsnRetryError),
+    /// The AES engine refused an EAPOL-Key MIC's key or block.
+    Engine(oer_crypto::block::BlockError),
 }
 
 impl From<RsnRetryError> for ApWpa2Error {
@@ -413,6 +415,7 @@ impl From<RsnAuthenticatorError> for ApWpa2Error {
             RsnAuthenticatorError::KeyWrap(error) => Self::KeyWrap(error),
             RsnAuthenticatorError::MissingPairwiseKey => Self::MissingPairwiseKey,
             RsnAuthenticatorError::UnexpectedAction => Self::UnexpectedAction,
+            RsnAuthenticatorError::Engine(error) => Self::Engine(error),
         }
     }
 }

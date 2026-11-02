@@ -1579,6 +1579,8 @@ name = "oer-crypto"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "ccm",
+ "cmac",
  "zeroize",
 ]
 
@@ -2599,8 +2601,6 @@ name = "oer-ieee80211-core-security-cipher"
 version = "0.1.0"
 dependencies = [
  "aes",
- "ccm",
- "cmac",
  "oer-crypto",
  "oer-ieee80211-contracts-security",
  "oer-ieee80211-wire",
@@ -2612,10 +2612,8 @@ dependencies = [
 name = "oer-ieee80211-core-security-rsn"
 version = "0.1.0"
 dependencies = [
- "aes",
  "chacha20",
  "cipher 0.5.2",
- "cmac",
  "heapless",
  "hmac",
  "oer-crypto",

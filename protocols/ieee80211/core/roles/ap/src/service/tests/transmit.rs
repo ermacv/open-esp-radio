@@ -71,7 +71,8 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     };
     let message4 = RsnTxFrame::<512>::message4(oer_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
         .unwrap()
-        .authenticate(service.pending_ptk(PEER).unwrap());
+        .authenticate(service.pending_ptk(PEER).unwrap(), &mut SoftwareAes128)
+        .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();

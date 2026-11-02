@@ -149,7 +149,11 @@ fn finish_handshake(
     )
     .unwrap();
     assert!(
-        message2.key_frame().unwrap().verify_mic(&ptk),
+        message2
+            .key_frame()
+            .unwrap()
+            .verify_mic(&ptk, &mut SoftwareAes128)
+            .unwrap(),
         "wire M2 must use the authenticated PMK"
     );
     let mut plain = advertisement[55..].to_vec();
@@ -170,7 +174,8 @@ fn finish_handshake(
             .unwrap();
     let message3 = RsnTxFrame::<512>::message3(akm, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
     world.receive(at(now + 2), &eapol_frame(message3.as_bytes()));
     assert!(
         world.station.is_connected(),

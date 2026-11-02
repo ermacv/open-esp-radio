@@ -96,7 +96,8 @@ fn signed_message2(
         &security_ies,
     )
     .unwrap()
-    .authenticate(&ptk);
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes()).unwrap()
 }
 
@@ -776,7 +777,8 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         &rsn,
     )
     .unwrap()
-    .authenticate(&ptk);
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let message2 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes())
             .unwrap();
@@ -788,7 +790,13 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         message3.key_frame().unwrap().message(),
         EapolKeyMessage::PairwiseMessage3
     );
-    assert!(message3.key_frame().unwrap().verify_mic(&ptk));
+    assert!(
+        message3
+            .key_frame()
+            .unwrap()
+            .verify_mic(&ptk, &mut SoftwareAes128)
+            .unwrap()
+    );
     let plaintext = software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
     assert!(
@@ -828,7 +836,8 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
 
     let message4 = RsnTxFrame::<512>::message4(oer_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
@@ -984,7 +993,8 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     );
     let valid_m4 = RsnTxFrame::<512>::message4(oer_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
     let valid_m4 =
         OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, valid_m4.as_bytes()).unwrap();
     let forged_m4 = corrupt_mic(valid_m4.clone());
@@ -1761,7 +1771,8 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         &rsn,
     )
     .unwrap()
-    .authenticate(&ptk);
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let message2 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes())
             .unwrap();
@@ -1769,7 +1780,13 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         panic!("message 2 must produce message 3");
     };
     let (message3, message3_context) = message3.into_parts();
-    assert!(message3.key_frame().unwrap().verify_mic(&ptk));
+    assert!(
+        message3
+            .key_frame()
+            .unwrap()
+            .verify_mic(&ptk, &mut SoftwareAes128)
+            .unwrap()
+    );
     let plaintext = software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
     let keys = parse_gtk_key_data(
@@ -1921,7 +1938,8 @@ fn begin_management_handshake(
         &rsn,
     )
     .unwrap()
-    .authenticate(&ptk);
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let message2 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message2.as_bytes())
             .unwrap();
@@ -1947,7 +1965,8 @@ fn authorize_management_peer(
     let now = oer_time::Instant::from_micros(1);
     let message4 = RsnTxFrame::<512>::message4(oer_ieee80211_wire::security::rsn::Akm::Sae, AP, 10)
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message4.as_bytes())
             .unwrap();
@@ -2085,10 +2104,20 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     );
     let mut second = first;
     let protected = service.protect_group_management(&mut first, len).unwrap();
-    assert_eq!(receiver.verify(&first[..protected]), Ok(()));
-    assert!(receiver.verify(&first[..protected]).is_err());
+    assert_eq!(
+        receiver.verify(&mut SoftwareAes128, &first[..protected]),
+        Ok(())
+    );
+    assert!(
+        receiver
+            .verify(&mut SoftwareAes128, &first[..protected])
+            .is_err()
+    );
     let protected = service.protect_group_management(&mut second, len).unwrap();
-    assert_eq!(receiver.verify(&second[..protected]), Ok(()));
+    assert_eq!(
+        receiver.verify(&mut SoftwareAes128, &second[..protected]),
+        Ok(())
+    );
     assert_eq!(&first[len + 4..len + 10], &[1, 0, 0, 0, 0, 0]);
     assert_eq!(&second[len + 4..len + 10], &[2, 0, 0, 0, 0, 0]);
     let (ptk, message3) = begin_management_handshake(&mut service, PEER);
@@ -2106,7 +2135,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     assert_eq!(delivered.packet_number(), [2, 0, 0, 0, 0, 0]);
     let mut new_peer = BipReceiver::new(&delivered);
     assert_eq!(
-        new_peer.verify(&second[..protected]),
+        new_peer.verify(&mut SoftwareAes128, &second[..protected]),
         Err(oer_ieee80211_core_security_rsn::bip::BipReceiveError::Replay)
     );
     service
@@ -2116,7 +2145,10 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     // must retain its original authenticated bytes, including the IPN.
     let mut third = second;
     let protected = service.protect_group_management(&mut third, len).unwrap();
-    assert_eq!(new_peer.verify(&third[..protected]), Ok(()));
+    assert_eq!(
+        new_peer.verify(&mut SoftwareAes128, &third[..protected]),
+        Ok(())
+    );
     assert_eq!(service.igtk().unwrap().packet_number(), [3, 0, 0, 0, 0, 0]);
     let ApWpa2RetryProgress::Transmit(repeated) = service
         .take_due_wpa2_retry::<512>(service.next_wpa2_retry_deadline().unwrap())

@@ -18,7 +18,10 @@ use crate::{
     frames::{RsnFrameError, RsnPlainKeyData, RsnTxFrame, build_ap_action_frame},
     state::{RsnApAction, RsnApPhase, RsnApState, RsnStateError, RsnTicket, RsnTransmit},
 };
-use oer_crypto::rfc3394::KeyWrapError;
+use oer_crypto::{
+    block::{Aes128Engine, BlockError},
+    rfc3394::KeyWrapError,
+};
 use oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap;
 
 /// Why the authenticator refused a step.
@@ -35,6 +38,14 @@ pub enum RsnAuthenticatorError {
     MissingPairwiseKey,
     /// The state machine asked for an action this step does not take.
     UnexpectedAction,
+    /// The AES engine refused a MIC's key or block.
+    Engine(BlockError),
+}
+
+impl From<BlockError> for RsnAuthenticatorError {
+    fn from(error: BlockError) -> Self {
+        Self::Engine(error)
+    }
 }
 
 impl From<RsnStateError> for RsnAuthenticatorError {
@@ -137,11 +148,13 @@ impl RsnAuthenticator {
     ///
     /// A Message 2 derives the PTK and verifies its MIC; only then may its
     /// Key Data, the station's security IEs, decide the outcome, and a
-    /// mismatch ends the handshake.
-    pub fn on_frame<const N: usize>(
+    /// mismatch ends the handshake. The MIC of an AES-CMAC suite runs on
+    /// `engine`; a refusal fails the MIC's transition and is the error.
+    pub fn on_frame<const N: usize, E: Aes128Engine>(
         &mut self,
         pmk: &Pmk,
         frame: OwnedEapolFrame<N>,
+        engine: &mut E,
     ) -> Result<RsnAuthenticatorStep, RsnAuthenticatorError> {
         let action = self
             .state
@@ -153,16 +166,20 @@ impl RsnAuthenticator {
                 ticket,
                 context,
                 message2,
-            } => self.on_message2(pmk, ticket, context, message2),
+            } => self.on_message2(pmk, ticket, context, message2, engine),
             RsnApAction::VerifyMessage4Mic { ticket, message4 } => {
-                let valid = {
+                let verified = {
                     let ptk = self
                         .pending_ptk
                         .as_ref()
                         .ok_or(RsnAuthenticatorError::MissingPairwiseKey)?;
-                    message4.key_frame()?.verify_mic(ptk)
+                    message4.key_frame()?.verify_mic(ptk, engine)
                 };
-                match self.state.complete_message4_mic(ticket, message4, valid)? {
+                let action =
+                    self.state
+                        .complete_message4_mic(ticket, message4, verified == Ok(true))?;
+                verified?;
+                match action {
                     RsnApAction::AuthorizePeer => Ok(RsnAuthenticatorStep::Authorized),
                     RsnApAction::None => Ok(RsnAuthenticatorStep::None),
                     RsnApAction::DeauthenticatePeer => Ok(RsnAuthenticatorStep::Deauthenticate),
@@ -175,12 +192,13 @@ impl RsnAuthenticator {
         }
     }
 
-    fn on_message2<const N: usize>(
+    fn on_message2<const N: usize, E: Aes128Engine>(
         &mut self,
         pmk: &Pmk,
         ticket: RsnTicket,
         context: crate::state::PtkContext,
         message2: OwnedEapolFrame<N>,
+        engine: &mut E,
     ) -> Result<RsnAuthenticatorStep, RsnAuthenticatorError> {
         let ptk = pmk.derive_ptk(
             self.state.akm(),
@@ -197,7 +215,8 @@ impl RsnAuthenticator {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
         let key_frame = message2.key_frame()?;
-        let valid = key_frame.verify_mic(&ptk);
+        let verified = key_frame.verify_mic(&ptk, engine);
+        let valid = verified == Ok(true);
         // The association commitment is an authenticated semantic binding.
         // Do not let attacker-controlled Key Data decide peer teardown until
         // this exact M2 has passed its PTK-derived MIC.
@@ -206,7 +225,9 @@ impl RsnAuthenticator {
                 .association_security_binding
                 .as_ref()
                 .is_some_and(|binding| binding.matches(pmk, key_frame.key_data()));
-        let ticket = match self.state.complete_message2_mic(ticket, message2, valid)? {
+        let action = self.state.complete_message2_mic(ticket, message2, valid)?;
+        verified?;
+        let ticket = match action {
             RsnApAction::PrepareMessage3 { ticket } => ticket,
             RsnApAction::None => return Ok(RsnAuthenticatorStep::None),
             RsnApAction::DeauthenticatePeer => return Ok(RsnAuthenticatorStep::Deauthenticate),
@@ -227,11 +248,13 @@ impl RsnAuthenticator {
     }
 
     /// Wrap `key_data` under the prepared PTK and build the first Message 3.
-    /// The PTK becomes pending only once the frame exists.
-    pub fn complete_message3<const N: usize, const K: usize>(
+    /// The PTK becomes pending only once the frame exists. The MIC of an
+    /// AES-CMAC suite runs on `engine`; the wrap stays in software.
+    pub fn complete_message3<const N: usize, const K: usize, E: Aes128Engine>(
         &mut self,
         preparation: RsnMessage3Preparation,
         key_data: &RsnPlainKeyData<K>,
+        engine: &mut E,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let RsnMessage3Preparation { ticket, ptk } = preparation;
         let wrapped = software_aes128_key_wrap(ptk.kek(), key_data.as_bytes())?;
@@ -242,17 +265,18 @@ impl RsnAuthenticator {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
         let frame = build_ap_action_frame(&self.state, transmit, [0; 8], wrapped.as_bytes())?
-            .authenticate(&ptk);
+            .authenticate(&ptk, engine)?;
         self.pending_ptk = Some(ptk);
         Ok((frame, transmit))
     }
 
     /// The pending Message 3 of `transmit` with `key_data`, for a
     /// retransmission.
-    pub fn message3<const N: usize, const K: usize>(
+    pub fn message3<const N: usize, const K: usize, E: Aes128Engine>(
         &self,
         transmit: RsnTransmit,
         key_data: &RsnPlainKeyData<K>,
+        engine: &mut E,
     ) -> Result<RsnTxFrame<N>, RsnAuthenticatorError> {
         let ptk = self
             .pending_ptk
@@ -261,7 +285,7 @@ impl RsnAuthenticator {
         let wrapped = software_aes128_key_wrap(ptk.kek(), key_data.as_bytes())?;
         Ok(
             build_ap_action_frame(&self.state, transmit, [0; 8], wrapped.as_bytes())?
-                .authenticate(ptk),
+                .authenticate(ptk, engine)?,
         )
     }
 

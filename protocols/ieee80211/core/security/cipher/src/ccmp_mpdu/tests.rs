@@ -1,4 +1,5 @@
 use super::*;
+use crate::aes::SoftwareAes128;
 use std::vec::Vec;
 
 // Independent Python cryptography AESCCM fixtures, explicit 802.11 AAD/nonce.
@@ -49,10 +50,14 @@ fn amsdu_wire_peer_matches_in_both_directions_with_and_without_spp() {
         let wire = bytes(fixture);
         let mut opened = wire.clone();
         let association = mode(spp);
-        let body = association.open(&key(), &mut opened).unwrap();
+        let body = association
+            .open(&mut SoftwareAes128, &key(), &mut opened)
+            .unwrap();
         assert_eq!(&body[..6], &[2, 0, 0, 0, 0, 3]);
         assert_eq!(&body[14..], b"\xaa\xaa\x03\x00\x00\x00\x08\x00test");
-        association.seal(&key(), &mut opened).unwrap();
+        association
+            .seal(&mut SoftwareAes128, &key(), &mut opened)
+            .unwrap();
         assert_eq!(opened, wire);
     }
 }
@@ -62,7 +67,7 @@ fn spp_authenticates_amsdu_present_but_ordinary_ccmp_does_not() {
     for &(spp, _, fixture) in WIRE {
         let mut changed = bytes(fixture);
         changed[24] ^= 0x80;
-        let result = mode(spp).open(&key(), &mut changed);
+        let result = mode(spp).open(&mut SoftwareAes128, &key(), &mut changed);
         if spp {
             assert_eq!(result, Err(CcmpMpduError::InvalidMic));
         } else {
@@ -78,11 +83,15 @@ fn mutable_retry_power_and_sequence_fields_do_not_change_mic() {
         changed[1] ^= 0x38;
         changed[22] ^= 0xf0;
         changed[23] ^= 0xff;
-        assert!(mode(spp).open(&key(), &mut changed).is_ok());
+        assert!(
+            mode(spp)
+                .open(&mut SoftwareAes128, &key(), &mut changed)
+                .is_ok()
+        );
         let mut tampered = bytes(fixture);
         tampered[4] ^= 2;
         assert_eq!(
-            mode(spp).open(&key(), &mut tampered),
+            mode(spp).open(&mut SoftwareAes128, &key(), &mut tampered),
             Err(CcmpMpduError::InvalidMic)
         );
         assert!(
@@ -100,12 +109,12 @@ fn oversized_data_is_refused_before_encryption_or_decryption() {
     let before = oversized.clone();
     let association = mode(false);
     assert_eq!(
-        association.seal(&key(), &mut oversized),
+        association.seal(&mut SoftwareAes128, &key(), &mut oversized),
         Err(CcmpMpduError::TooLong)
     );
     assert_eq!(oversized, before);
     assert_eq!(
-        association.open(&key(), &mut oversized),
+        association.open(&mut SoftwareAes128, &key(), &mut oversized),
         Err(CcmpMpduError::TooLong)
     );
     assert_eq!(oversized, before);
@@ -121,16 +130,86 @@ fn four_address_wire_vectors_cover_the_28_and_30_byte_aad_shapes() {
         let wire = bytes(wire);
         let mut opened = wire.clone();
         assert_eq!(
-            mode(true).open(&key(), &mut opened).unwrap(),
+            mode(true)
+                .open(&mut SoftwareAes128, &key(), &mut opened)
+                .unwrap(),
             b"four-address"
         );
-        mode(true).seal(&key(), &mut opened).unwrap();
+        mode(true)
+            .seal(&mut SoftwareAes128, &key(), &mut opened)
+            .unwrap();
         assert_eq!(opened, wire);
         let mut changed = wire.clone();
         changed[29] ^= 1; // Last address-4 byte lies in the second AAD block.
         assert_eq!(
-            mode(true).open(&key(), &mut changed),
+            mode(true).open(&mut SoftwareAes128, &key(), &mut changed),
             Err(CcmpMpduError::InvalidMic)
+        );
+    }
+}
+
+/// The software block, refusing every block from `refuse_from` on, as a
+/// timed-out accelerator does.
+struct Refusing {
+    refuse_from: usize,
+}
+
+struct RefusingKeyed {
+    blocks: crate::aes::SoftwareAes128Keyed,
+    left: usize,
+}
+
+impl Aes128Engine for Refusing {
+    type Keyed<'a> = RefusingKeyed;
+
+    fn load(&mut self, key: &oer_crypto::Aes128Key) -> Result<RefusingKeyed, BlockError> {
+        Ok(RefusingKeyed {
+            blocks: oer_crypto::block::Aes128Blocks::load_key(&mut SoftwareAes128, key),
+            left: self.refuse_from,
+        })
+    }
+}
+
+impl oer_crypto::block::BlockEngine for RefusingKeyed {
+    fn encrypt(&mut self, block: &mut oer_crypto::block::Block) -> Result<(), BlockError> {
+        self.left = self.left.checked_sub(1).ok_or(BlockError::Unavailable)?;
+        oer_crypto::block::BlockCipher::encrypt_block(&mut self.blocks, block);
+        Ok(())
+    }
+
+    fn decrypt(&mut self, block: &mut oer_crypto::block::Block) -> Result<(), BlockError> {
+        self.left = self.left.checked_sub(1).ok_or(BlockError::Unavailable)?;
+        oer_crypto::block::BlockCipher::decrypt_block(&mut self.blocks, block);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_refused_block_is_an_engine_error_that_erases_the_body() {
+    let (spp, _, fixture) = WIRE[0];
+    let wire = bytes(fixture);
+    // A QoS data header and the CCMP header precede the body; the MIC ends it.
+    let body = 26 + 8..wire.len() - 8;
+    for refuse_from in [0, 1, 3, 5] {
+        let mut frame = wire.clone();
+        assert_eq!(
+            mode(spp).open(&mut Refusing { refuse_from }, &key(), &mut frame),
+            Err(CcmpMpduError::Engine(BlockError::Unavailable)),
+            "open {refuse_from}"
+        );
+        assert!(
+            frame[body.clone()].iter().all(|byte| *byte == 0),
+            "open {refuse_from}"
+        );
+        let mut frame = wire.clone();
+        assert_eq!(
+            mode(spp).seal(&mut Refusing { refuse_from }, &key(), &mut frame),
+            Err(CcmpMpduError::Engine(BlockError::Unavailable)),
+            "seal {refuse_from}"
+        );
+        assert!(
+            frame[body.clone()].iter().all(|byte| *byte == 0),
+            "seal {refuse_from}"
         );
     }
 }

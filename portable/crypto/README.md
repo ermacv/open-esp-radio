@@ -28,6 +28,15 @@ primitive (software, its `BlockCipher` blocks) is an engine that never
 refuses; a hardware engine implements `Aes128Engine` itself. `wrap` uses the
 infallible primitive.
 
+`ccm` (RFC 3610, thirteen-byte nonce, MIC length checked at compile time) and
+`cmac` (RFC 4493, fed in pieces) run over the same keyed `BlockEngine`, so a
+software block and a hardware accelerator share one copy of each mode. A
+refused block is the typed error of the operation: CCM erases the body it
+was decrypting or encrypting, and the first refusal poisons a CMAC. Both
+compare tags in constant time and erase their chaining values on every exit.
+The host tests check them against RustCrypto's `ccm` and `cmac`, RFC 4493's
+examples and a refusal at every block.
+
 With `test-support`, `conformance::key_unwrap_rfc3394` runs an engine through
 the RFC 3394 §4.1 vector, a changed ciphertext, two invalid lengths and a
 request after a refusal, each through `block::unwrap_now`.

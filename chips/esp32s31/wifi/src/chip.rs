@@ -252,11 +252,11 @@ pub(crate) struct CoreCallbacks<C> {
     aes: oer_esp32s31_compose::crypto::AesEngine,
 }
 impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
-    type KeyUnwrapEngine = oer_esp32s31_compose::crypto::AesEngine;
+    type AesEngine = oer_esp32s31_compose::crypto::AesEngine;
     fn nonce(&mut self) -> [u8; 32] {
         self.callbacks.nonce()
     }
-    fn key_unwrap_engine(&mut self) -> &mut Self::KeyUnwrapEngine {
+    fn aes_engine(&mut self) -> &mut Self::AesEngine {
         &mut self.aes
     }
     fn he_packet_padding(

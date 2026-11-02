@@ -1,4 +1,5 @@
-//! Software CCMP for data and management, including negotiated SPP A-MSDU.
+//! CCMP for data and management over a caller's AES-128 engine, including
+//! negotiated SPP A-MSDU.
 //!
 //! The association owns the SPP decision; individual keys do not select it.
 //! The transform consumes the same checked MAC geometry as hardware-backed RX.
@@ -20,6 +21,10 @@
 )]
 
 use crate::ccm::{self, MIC_LEN, NONCE_LEN};
+use oer_crypto::{
+    block::{Aes128Engine, BlockError},
+    ccm::CcmError,
+};
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_wire::ccmp::protected::{CcmpAad, ProtectedMpdu, ProtectedMpduError};
 use oer_ieee80211_wire::security::Spp;
@@ -34,6 +39,19 @@ pub enum CcmpMpduError {
     Truncated,
     TooLong,
     InvalidMic,
+    /// The AES engine refused the key or a block; the frame's body is erased.
+    Engine(BlockError),
+}
+
+impl From<CcmError> for CcmpMpduError {
+    fn from(error: CcmError) -> Self {
+        match error {
+            // The CCMP AAD is at most 30 bytes, so only the body can be too long.
+            CcmError::AadTooLong | CcmError::BodyTooLong => Self::TooLong,
+            CcmError::InvalidMic => Self::InvalidMic,
+            CcmError::Engine(error) => Self::Engine(error),
+        }
+    }
 }
 
 /// Immutable authentication policy of one association, shared by PTK and GTK.
@@ -54,7 +72,13 @@ impl CcmpAssociation {
 
     /// Encrypt an MPDU in place. The caller has already allocated its PN and
     /// encoded the CCMP header, and reserved eight trailing bytes for the MIC.
-    pub fn seal(&self, key: &Ccmp128Key, frame: &mut [u8]) -> Result<(), CcmpMpduError> {
+    /// A refusal of `engine` erases the body.
+    pub fn seal<E: Aes128Engine>(
+        &self,
+        engine: &mut E,
+        key: &Ccmp128Key,
+        frame: &mut [u8],
+    ) -> Result<(), CcmpMpduError> {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame
             .split_at_mut_checked(blocks.body_start)
@@ -62,8 +86,15 @@ impl CcmpAssociation {
         let (body, mic) = body_and_mic
             .split_at_mut_checked(blocks.body_len)
             .ok_or(CcmpMpduError::Truncated)?;
-        let tag = ccm::seal(key.as_bytes(), &blocks.nonce, &blocks.aad, body)
-            .map_err(|_| CcmpMpduError::TooLong)?;
+        let tag = match ccm::seal(engine, key.as_bytes(), &blocks.nonce, &blocks.aad, body) {
+            Ok(tag) => tag,
+            Err(error) => {
+                if let CcmError::Engine(_) = error {
+                    body.zeroize();
+                }
+                return Err(error.into());
+            }
+        };
         for (out, byte) in mic.iter_mut().zip(tag) {
             *out = byte;
         }
@@ -72,8 +103,10 @@ impl CcmpAssociation {
 
     /// Verify and decrypt. Failed authentication erases the tentative plaintext;
     /// a caller must discard the frame and leave its replay frontier unchanged.
-    pub fn open<'a>(
+    /// A refusal of `engine` erases the body as well.
+    pub fn open<'a, E: Aes128Engine>(
         &self,
+        engine: &mut E,
         key: &Ccmp128Key,
         frame: &'a mut [u8],
     ) -> Result<&'a [u8], CcmpMpduError> {
@@ -87,9 +120,16 @@ impl CcmpAssociation {
         let mic = mic
             .first_chunk::<MIC_LEN>()
             .ok_or(CcmpMpduError::Truncated)?;
-        if ccm::open(key.as_bytes(), &blocks.nonce, &blocks.aad, body, mic).is_err() {
+        if let Err(error) = ccm::open(
+            engine,
+            key.as_bytes(),
+            &blocks.nonce,
+            &blocks.aad,
+            body,
+            mic,
+        ) {
             body.zeroize();
-            return Err(CcmpMpduError::InvalidMic);
+            return Err(error.into());
         }
         Ok(body)
     }

@@ -10,6 +10,7 @@ use crate::{
     EapolKeyMessage, RsnInterface,
     frames::{OwnedRsnIe, RsnGtk, parse_gtk_key_data},
 };
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_wire::{ccmp::GroupKeyId, security::rsn::Akm};
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
@@ -59,7 +60,8 @@ fn message2(rsn: &[u8], ptk: &Ptk) -> OwnedEapolFrame<512> {
     let rsn = OwnedRsnIe::<64>::try_copy(rsn).unwrap();
     let frame = RsnTxFrame::<512>::message2(Akm::Psk, AP, REPLAY, SNONCE, &rsn)
         .unwrap()
-        .authenticate(ptk);
+        .authenticate(ptk, &mut SoftwareAes128)
+        .unwrap();
     OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
 }
 
@@ -73,7 +75,7 @@ fn a_verified_handshake_wraps_message3_and_authorizes_on_message4() {
     let mut authenticator = authenticator(&STATION_RSN);
     let ptk = ptk();
     let RsnAuthenticatorStep::PrepareMessage3(preparation) = authenticator
-        .on_frame(&pmk(), message2(&STATION_RSN, &ptk))
+        .on_frame(&pmk(), message2(&STATION_RSN, &ptk), &mut SoftwareAes128)
         .unwrap()
     else {
         panic!("a verified Message 2 prepares Message 3");
@@ -81,28 +83,31 @@ fn a_verified_handshake_wraps_message3_and_authorizes_on_message4() {
     // The PTK is pending only once Message 3 exists.
     assert!(authenticator.pending_ptk().is_none());
     let (message3, transmit) = authenticator
-        .complete_message3::<512, _>(preparation, &key_data())
+        .complete_message3::<512, _, _>(preparation, &key_data(), &mut SoftwareAes128)
         .unwrap();
     assert!(authenticator.pending_ptk().is_some());
     let key_frame = message3.key_frame().unwrap();
     assert_eq!(key_frame.message(), EapolKeyMessage::PairwiseMessage3);
-    assert!(key_frame.verify_mic(&ptk));
+    assert!(key_frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
     let plain = crate::test_unwrap_bytes(ptk.kek(), key_frame.key_data()).unwrap();
     assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], false).is_ok());
     // A retransmission carries the same key data under the same PTK.
     let again = authenticator
-        .message3::<512, _>(transmit, &key_data())
+        .message3::<512, _, _>(transmit, &key_data(), &mut SoftwareAes128)
         .unwrap();
     assert_eq!(again.as_bytes(), message3.as_bytes());
 
     let message4 = RsnTxFrame::<512>::message4(Akm::Psk, AP, REPLAY + 1)
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
     assert!(matches!(
-        authenticator.on_frame(&pmk(), message4).unwrap(),
+        authenticator
+            .on_frame(&pmk(), message4, &mut SoftwareAes128)
+            .unwrap(),
         RsnAuthenticatorStep::Authorized
     ));
     assert_eq!(authenticator.phase(), RsnApPhase::Authorized);
@@ -115,7 +120,7 @@ fn a_verified_message2_with_other_security_ies_ends_the_handshake() {
     let mut authenticator = authenticator(&STATION_RSN);
     assert!(matches!(
         authenticator
-            .on_frame(&pmk(), message2(&AP_RSN, &ptk()))
+            .on_frame(&pmk(), message2(&AP_RSN, &ptk()), &mut SoftwareAes128)
             .unwrap(),
         RsnAuthenticatorStep::Deauthenticate
     ));
@@ -134,7 +139,7 @@ fn a_message2_under_another_pmk_never_prepares_message3() {
             supplicant_nonce: SNONCE,
         },
     );
-    let step = authenticator.on_frame(&pmk(), message2(&STATION_RSN, &other));
+    let step = authenticator.on_frame(&pmk(), message2(&STATION_RSN, &other), &mut SoftwareAes128);
     assert!(!matches!(
         step,
         Ok(RsnAuthenticatorStep::PrepareMessage3(_))
@@ -147,22 +152,24 @@ fn message4_before_message3_is_refused_and_unsolicited_frames_are_rejected() {
     let mut authenticator = authenticator(&STATION_RSN);
     let message4 = RsnTxFrame::<512>::message4(Akm::Psk, AP, REPLAY)
         .unwrap()
-        .authenticate(&ptk());
+        .authenticate(&ptk(), &mut SoftwareAes128)
+        .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
     assert!(matches!(
-        authenticator.on_frame(&pmk(), message4),
+        authenticator.on_frame(&pmk(), message4, &mut SoftwareAes128),
         Err(RsnAuthenticatorError::Rejected(_)) | Ok(RsnAuthenticatorStep::None)
     ));
     assert!(matches!(
-        authenticator.message3::<512, _>(
+        authenticator.message3::<512, _, _>(
             RsnTransmit {
                 message: crate::state::RsnTxMessage::PairwiseMessage3,
                 replay_counter: REPLAY + 1,
                 retransmission: true,
             },
-            &key_data()
+            &key_data(),
+            &mut SoftwareAes128,
         ),
         Err(RsnAuthenticatorError::MissingPairwiseKey)
     ));

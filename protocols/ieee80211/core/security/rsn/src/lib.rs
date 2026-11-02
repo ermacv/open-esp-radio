@@ -31,6 +31,8 @@ extern crate std;
 
 #[cfg(test)]
 mod fuzz;
+#[cfg(test)]
+mod test_engine;
 
 /// Unwrap `request` in the software engine.
 #[cfg(test)]
@@ -96,21 +98,4 @@ pub(crate) use oer_ieee80211_wire::security::rsn::Akm;
 pub enum RsnInterface {
     Station,
     AccessPoint,
-}
-
-#[cfg(test)]
-mod key_schedule_tests {
-    #![allow(
-        clippy::disallowed_macros,
-        clippy::disallowed_methods,
-        clippy::arithmetic_side_effects,
-        clippy::unreachable
-    )]
-    #[test]
-    fn aes_key_schedules_zeroize_on_drop() {
-        fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}
-        assert_zeroize_on_drop::<aes::Aes128>();
-        assert_zeroize_on_drop::<aes::Aes192>();
-        assert_zeroize_on_drop::<aes::Aes256>();
-    }
 }

@@ -83,6 +83,8 @@ pub enum ApGroupManagementError {
     /// The IGTK's 48-bit IPN space is exhausted; replace the key.
     PacketNumbersExhausted,
     InvalidKey(RsnFrameError),
+    /// The AES engine refused the IGTK or a block.
+    Engine(oer_crypto::block::BlockError),
 }
 
 impl<S: SppScope> AccessPointService<'_, S> {
@@ -198,14 +200,23 @@ impl<S: SppScope> AccessPointService<'_, S> {
             .group_management
             .as_mut()
             .ok_or(ApGroupManagementError::NoManagementKey)?;
-        let protected = sender.protect(frame, length).map_err(|error| match error {
-            oer_ieee80211_core_security_rsn::bip::BipTransmitError::Exhausted => {
-                ApGroupManagementError::PacketNumbersExhausted
-            }
-            oer_ieee80211_core_security_rsn::bip::BipTransmitError::InvalidFrame => {
-                ApGroupManagementError::InvalidFrame
-            }
-        })?;
+        let protected = sender
+            .protect(
+                &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                frame,
+                length,
+            )
+            .map_err(|error| match error {
+                oer_ieee80211_core_security_rsn::bip::BipTransmitError::Exhausted => {
+                    ApGroupManagementError::PacketNumbersExhausted
+                }
+                oer_ieee80211_core_security_rsn::bip::BipTransmitError::InvalidFrame => {
+                    ApGroupManagementError::InvalidFrame
+                }
+                oer_ieee80211_core_security_rsn::bip::BipTransmitError::Engine(error) => {
+                    ApGroupManagementError::Engine(error)
+                }
+            })?;
         // New associations receive the current frontier in Message 3,
         // so old group frames cannot replay under the unchanged IGTK.
         let packet_number = sender.packet_number();
