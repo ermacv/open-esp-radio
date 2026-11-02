@@ -14,17 +14,17 @@ data (`InvalidLength`, `IntegrityCheckFailed`). An engine whose hardware may
 still reach a request's storage keeps that storage until it confirmed the stop,
 even when its operation is dropped.
 
-The RFC 3394 algorithm has one copy, in `rfc3394`. `Rfc3394Unwrap::next_block`
-issues a secret `CipherBlock` input and an affine `Rfc3394Pending` continuation.
-The engine returns an output or `BlockError` through `complete`; only then does
-the mode advance. A pending continuation and each block erase their secret
-state on drop. There is no async code inside the machine. Engine failures
-become `KeyUnwrapError::Engine` and clear the response buffer.
+The RFC 3394 algorithm has one copy, in `rfc3394`. `rfc3394::unwrap` runs the
+index-based unwrap to completion in place in the request's buffer, over a
+synchronous block engine; nothing moves the buffer between blocks. A length
+refusal loads no key. The integrity register and the block are erased on
+every exit; any refusal clears the response buffer, and engine failures
+become `KeyUnwrapError::Engine`.
 
-`block::unwrap_now` decrypts every issued block immediately through a
-synchronous `Aes128Engine`, which loads a key for the run and erases it when
-its keyed view drops; a refused key or block (`BlockError`) ends the
-operation as `KeyUnwrapError::Engine`. Every infallible `Aes128Blocks`
+`block::unwrap_now` runs it through a synchronous `Aes128Engine`, which loads
+a key for the run and erases it when its keyed view drops; the request's key
+is erased right after the load, before the first block. A refused key or
+block (`BlockError`) ends the operation as `KeyUnwrapError::Engine`. Every infallible `Aes128Blocks`
 primitive (software, its `BlockCipher` blocks) is an engine that never
 refuses; a hardware engine implements `Aes128Engine` itself.
 `BlockKeyUnwrap` owns an engine and runs `unwrap_now`, so its `KeyUnwrap`

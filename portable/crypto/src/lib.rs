@@ -30,11 +30,12 @@
 //! one operation at a time because it is consumed by it, so there is no busy
 //! refusal. The key-encryption key is erased when the request is consumed.
 //!
-//! The RFC 3394 algorithm has one copy, in [`rfc3394`]: a resumable unwrap
-//! machine issuing owned blocks and accepting their results or typed errors.
-//! Hardware engines may yield while a block is in flight. The wrap and
-//! [`block::BlockKeyUnwrap`] use the synchronous [`block::BlockCipher`]
-//! software primitive and return each block's result immediately.
+//! The RFC 3394 algorithm has one copy, in [`rfc3394`]: the unwrap and the
+//! wrap run to completion in place in the caller's buffer, each block finished
+//! on return. The unwrap runs over a block engine that may refuse a key or a
+//! block with a typed error ([`block::BlockEngine`]); the wrap over the
+//! infallible [`block::BlockCipher`]. [`block::BlockKeyUnwrap`] is the
+//! [`KeyUnwrap`] engine of a synchronous one.
 
 #[cfg(test)]
 extern crate std;
@@ -148,7 +149,7 @@ impl<const N: usize> KeyUnwrapRequest<N> {
     }
 
     /// Split the request for an engine: the key goes to its block primitive,
-    /// the buffer to the [`rfc3394::Rfc3394Unwrap`] machine.
+    /// the buffer to [`rfc3394::unwrap`].
     pub fn into_parts(self) -> (Aes128Key, KeyData<N>) {
         (self.kek, self.wrapped)
     }

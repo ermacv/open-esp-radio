@@ -44,7 +44,7 @@ start, AES start), `wait` and `finish` (`DMA_EXIT` and the copy out).
 
 `unwrap`, `ccm-seal` and `cmac` run the same code over every block
 (`src/ops.rs`, checked on the host against RustCrypto's `ccm` and `cmac`);
-`unwrap` uses `oer-crypto`'s RFC 3394 machine (`BlockKeyUnwrap`). The
+`unwrap` uses `oer-crypto`'s RFC 3394 unwrap (`BlockKeyUnwrap`). The
 `driver` mode runs only `unwrap`, the one operation the station hands the
 accelerator. Every hardware result is compared with the software one.
 
