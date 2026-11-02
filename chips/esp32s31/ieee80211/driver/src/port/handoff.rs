@@ -222,6 +222,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         settings.dirty_ba.set(false);
         settings.color.set(None);
         settings.loss.set(false);
+        settings.receive_due.set(false);
         #[cfg(oer_debug_control)]
         {
             settings.publication_hold.set(0);
@@ -386,8 +387,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
                 .map(|held| self.rx_out.set(held))
                 .ok_or(Fault::Capacity)
         });
-        if let Err(fault) = returned {
-            self.storage.poison(fault);
+        match returned {
+            // The returned unit waits for the next pull to rearm the ring.
+            Ok(()) => self.receive_due.set(true),
+            Err(fault) => self.storage.poison(fault),
         }
     }
     /// The body's receive pull: the next received unit the ring holds and
@@ -398,7 +401,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         &self,
         cx: &mut Context<'_>,
     ) -> Result<Option<owned::OwnedEvent<'static, Id, D, B>>, Fault> {
-        if !self.enabled.get() {
+        if !self.enabled.get() || !self.receive_due.get() {
             return Ok(None);
         }
         let mut device = self.port.device()?;
@@ -412,6 +415,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         for _ in 0..EVENTS_PER_POLL {
             let room = RX_HELD.saturating_sub(self.rx_out.get());
             let Some(unit) = device.pull_received(room, cx)? else {
+                // A continuation timer's ring work waits for the driver,
+                // whose deadline covers it.
+                self.receive_due.set(device.receive_due());
                 return Ok(None);
             };
             if let Some(event) = driver.admit(&mut **device, self.rx_out, self.storage, unit)? {

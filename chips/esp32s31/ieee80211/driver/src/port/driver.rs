@@ -810,6 +810,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         }
         if device.receive_due() {
+            held.receive_due.set(true);
             held.storage.shared.wake_body();
         }
         // Returns wake the driver only when it asks, with many units in
@@ -1011,6 +1012,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                                 handoff::retain_terminal(held.failed_terminal, terminal.into());
                                 return Err(cause);
                             }
+                            // The resumed ring is the body's again; the
+                            // terminal's wake brings its next pull.
+                            held.receive_due.set(true);
                             held.terminal(terminal);
                         }
                     }

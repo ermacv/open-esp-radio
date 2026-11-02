@@ -242,6 +242,10 @@ pub(super) struct Settings {
     pub(super) dirty_ba: Flag,
     pub(super) color: ColorSetting,
     pub(super) loss: Flag,
+    /// The ring has work for the body's pull: the driver set it with its
+    /// wake, the body's return rearms the ring, or the last pull left
+    /// work. A pull without it touches neither the device nor the driver.
+    pub(super) receive_due: Flag,
     #[cfg(oer_debug_control)]
     pub(super) publication_hold: Byte,
     #[cfg(oer_debug_control)]
@@ -263,6 +267,7 @@ impl Settings {
             dirty_ba: Flag::new(false),
             color: ColorSetting::new(),
             loss: Flag::new(false),
+            receive_due: Flag::new(false),
             #[cfg(oer_debug_control)]
             publication_hold: Byte::new(),
             #[cfg(oer_debug_control)]

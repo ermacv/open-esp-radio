@@ -106,6 +106,8 @@ struct Observed {
     rx_poll_steps: usize,
     rx_saturated_polls: usize,
     rx_delivered: usize,
+    /// The body's pulls that reached the device.
+    pulls: usize,
 }
 struct Payload(Rc<Cell<usize>>);
 /// An opaque context: its value, and the destructor count of a fixture
@@ -413,6 +415,7 @@ impl Device<512> for TestDevice {
         self.assert_task_context();
         self.capture();
         let mut observed = self.observed.borrow_mut();
+        observed.pulls += 1;
         suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
         if observed.continuous_rx {
             observed.rx_poll_steps += 1;

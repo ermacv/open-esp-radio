@@ -517,3 +517,91 @@ fn the_network_leaves_the_pool_a_full_reorder_window_and_the_critical_reserve() 
     }
     assert_eq!(crate::port::lent_rx(RX_HELD), 0);
 }
+
+/// The body polls its next event many times with an empty ring, as the
+/// station's sources do, then takes one unit the driver's turn announced.
+struct IdlePolls {
+    observed: Rc<RefCell<Observed>>,
+    released: super::Released,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for IdlePolls {
+    type Output = (usize, usize);
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, (usize, usize)>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = owner.enable().await.ok().expect("model enable");
+        let counts;
+        {
+            let mut phase = owner.phase();
+            phase.station().configure(
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            assert!(matches!(
+                phase.next_event().await,
+                Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
+            ));
+            let before = self.observed.borrow().pulls;
+            core::future::poll_fn(|cx| {
+                for _ in 0..64 {
+                    assert!(core::pin::pin!(phase.next_event()).poll(cx).is_pending());
+                }
+                Poll::Ready(())
+            })
+            .await;
+            let idle = self.observed.borrow().pulls - before;
+            self.observed.borrow_mut().received.push_back(TestReceive {
+                bytes: super::super::data_frame(STATION),
+                view: 0..26,
+                released: self.released.clone(),
+            });
+            // The driver's turn sees the staged unit and wakes the body.
+            match phase.next_event().await {
+                Ok(Ok(LowerMacEvent::Received { frame, .. })) => phase.recycle(frame),
+                _ => panic!("the announced unit"),
+            }
+            counts = (idle, self.observed.borrow().pulls - before);
+        }
+        let owner = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+            .ok()
+            .expect("model disable");
+        radio::Ended::uninstall(owner, (), counts)
+    }
+}
+
+#[test]
+fn polls_without_ring_work_leave_the_device_alone() {
+    let (parts, observed, _clock) = installed(Vec::new());
+    let released = super::Released::default();
+    let report = block_on(super::run_body(
+        parts,
+        IdlePolls {
+            observed: observed.clone(),
+            released: released.clone(),
+        },
+    ));
+    let super::Report::Uninstalled {
+        output: (idle, total),
+    } = report
+    else {
+        panic!("clean uninstall");
+    };
+    assert_eq!(idle, 0, "an idle poll reached the device");
+    assert!(total >= 1, "the announced unit was pulled");
+    assert_eq!(super::count(&released), 1);
+}

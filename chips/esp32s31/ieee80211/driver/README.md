@@ -206,7 +206,9 @@ most 32 refused units per pull. A unit it returns goes straight back to the
 ring, and its lends come off its count at its next pull. The driver task
 takes the interrupt facts, serves the transmit and TBTT ones and wakes the
 station when they leave ring work; the RX interrupt stays masked until the
-pull drained the ring. A cut's units and every terminal reach the station
+pull drained the ring. A pull runs only while the ring has work for it
+(the driver's wake, a returned unit or work the last pull left); otherwise
+it touches neither the device nor the driver's state. A cut's units and every terminal reach the station
 through the event queue, ahead of what the ring holds. The driver task and
 the pull borrow the device and the driver's state only within one
 synchronous step of their own task on the station's executor.
