@@ -244,6 +244,10 @@ impl<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 }
 
 /// An aggregate's portable outcome after its one publication at `rate`.
+// Kept out of line: called once per part of a PPDU, its `match` would
+// otherwise dispatch through a table whose base the caller spills, which the
+// image's stack analysis cannot follow.
+#[inline(never)]
 fn outcome(
     end: PublicationEnd,
     rate: PhyRate,
