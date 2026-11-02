@@ -368,6 +368,16 @@ impl Config {
         })
     }
 
+    /// Join at HT 40 MHz where the access point's HT elements name a
+    /// secondary channel the regulatory domain permits beside the scanned
+    /// one; otherwise, and without this, the join stays at 20 MHz.
+    pub fn with_ht40(self) -> Self {
+        Self {
+            chip: self.chip.with_ht40(),
+            ..self
+        }
+    }
+
     /// Stay idle after a lost association until the next connect.
     pub fn without_reconnect(self) -> Self {
         Self {
