@@ -821,7 +821,7 @@ fn admitted_owner(id: &str) -> Option<&str> {
         "chips/family/staged-runtime",
         "chips/family/staged-bootstrap",
         "chips/family/executor",
-        "oer",
+        "chips/esp32s31/app",
     ]
     .contains(&home)
         || image_file(home)

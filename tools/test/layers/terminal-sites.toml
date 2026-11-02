@@ -414,18 +414,18 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 
 # hil/images/station/src/entry.rs
 "hil/images/station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/station", classes = ["rust-panic", "cpu-exception"] }
-# oer/src/esp32s31.rs
-"oer/src/esp32s31.rs:crate::esp32s31::start:terminal-entry:start:1" = { owner = "oer", classes = ["configuration-boot"] }
-"oer/src/esp32s31.rs:crate::esp32s31::fail:terminal-entry:fail:1" = { owner = "oer", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
-"oer/src/esp32s31.rs:crate::esp32s31::fail:terminal-reference:boot_failure:1" = { owner = "oer", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
-"oer/src/esp32s31.rs:crate::esp32s31:terminal-binding:phy_fault_reporter:1" = { owner = "oer", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"oer/src/esp32s31.rs:crate::esp32s31:terminal-reference:reset:1" = { owner = "oer", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-# oer/src/esp32s31/hart1.rs
-"oer/src/esp32s31/hart1.rs:crate::esp32s31::hart1::hart1_main:terminal-entry:hart1_main:1" = { owner = "oer", classes = ["configuration-boot"] }
-# oer/src/esp32s31/wifi.rs
-"oer/src/esp32s31/wifi.rs:crate::esp32s31::wifi::on_wifi:terminal-reference:reset:1" = { owner = "oer", classes = ["unexpected-hardware"] }
-"oer/src/esp32s31/wifi.rs:crate::esp32s31::wifi::failure:terminal-entry:failure:1" = { owner = "oer", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
-"oer/src/esp32s31/wifi.rs:crate::esp32s31::wifi::failure:terminal-reference:reset_request:1" = { owner = "oer", classes = ["cancellation"] }
-"oer/src/esp32s31/wifi.rs:crate::esp32s31::wifi::impl Station::start:terminal-reference:reset_binding:1" = { owner = "oer", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+# chips/esp32s31/app/src/lib.rs
+"chips/esp32s31/app/src/lib.rs:crate::start:terminal-entry:start:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot"] }
+"chips/esp32s31/app/src/lib.rs:crate::fail:terminal-entry:fail:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/lib.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/lib.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/lib.rs:crate:terminal-reference:reset:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
+# chips/esp32s31/app/src/hart1.rs
+"chips/esp32s31/app/src/hart1.rs:crate::hart1::hart1_main:terminal-entry:hart1_main:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot"] }
+# chips/esp32s31/app/src/wifi.rs
+"chips/esp32s31/app/src/wifi.rs:crate::wifi::on_wifi:terminal-reference:reset:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware"] }
+"chips/esp32s31/app/src/wifi.rs:crate::wifi::failure:terminal-entry:failure:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/wifi.rs:crate::wifi::failure:terminal-reference:reset_request:1" = { owner = "chips/esp32s31/app", classes = ["cancellation"] }
+"chips/esp32s31/app/src/wifi.rs:crate::wifi::impl Station::start:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
 [nonterminal]

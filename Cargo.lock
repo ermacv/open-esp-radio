@@ -1328,6 +1328,15 @@ dependencies = [
 name = "oer"
 version = "0.1.0"
 dependencies = [
+ "oer-chips-esp32s31-app",
+ "oer-chips-family-app",
+ "oer-portable-diagnostics",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-app"
+version = "0.1.0"
+dependencies = [
  "atomic-waker",
  "embassy-futures",
  "embassy-net",
@@ -1336,6 +1345,7 @@ dependencies = [
  "oer-chips-esp32s31-compose",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-wifi",
+ "oer-chips-family-app",
  "oer-chips-family-boot",
  "oer-chips-family-executor",
  "oer-chips-family-interrupt-table",
@@ -1663,6 +1673,17 @@ dependencies = [
 [[package]]
 name = "oer-chips-family-analog"
 version = "0.1.0"
+
+[[package]]
+name = "oer-chips-family-app"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "oer-portable-embassy-net",
+ "oer-portable-memory",
+ "oer-protocols-network-port",
+ "static_cell",
+]
 
 [[package]]
 name = "oer-chips-family-bluetooth-engine"

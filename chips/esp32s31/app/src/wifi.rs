@@ -468,7 +468,7 @@ pub enum ConnectError {
     Profile(ProfileError),
 }
 
-/// A connect's cause as a diagnostic path, which [`println!`](crate::println)
+/// A connect's cause as a diagnostic path, which `oer::println!`
 /// prints whole: `Failed(Sae(Protocol(Malformed)))`.
 impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
     fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {

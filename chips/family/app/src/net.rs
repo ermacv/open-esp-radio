@@ -32,13 +32,8 @@ use oer_protocols_network_port::LinkState;
 
 pub use oer_portable_embassy_net::ip::Error as ServiceError;
 
-#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
-pub(crate) mod published;
-#[cfg_attr(
-    not(all(target_arch = "riscv32", feature = "wifi")),
-    allow(unused_imports)
-)]
-pub(crate) use published::Published;
+pub mod published;
+pub use published::Published;
 
 /// Why a wait ended without its condition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -240,8 +235,7 @@ pub async fn wait_link_down<X: ExecutionContext, const K: usize>(
 /// The application's waits on a [`Published`] status: each registers with
 /// `notify`, which the writer tells after every publication, then reads.
 /// A read concurrent with a write waits for that write's notify.
-#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
-pub(crate) async fn published_status(published: &Published, notify: &impl QueueNotify) -> Status {
+pub async fn published_status(published: &Published, notify: &impl QueueNotify) -> Status {
     core::future::poll_fn(|cx| {
         notify.register(cx);
         published.read().map_or(Poll::Pending, Poll::Ready)
@@ -253,8 +247,7 @@ pub(crate) async fn published_status(published: &Published, notify: &impl QueueN
 ///
 /// # Errors
 /// The service stopped or failed.
-#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
-pub(crate) async fn published_ipv4(
+pub async fn published_ipv4(
     published: &Published,
     notify: &impl QueueNotify,
 ) -> Result<Ipv4Configuration, NetError> {
@@ -266,8 +259,7 @@ pub(crate) async fn published_ipv4(
 ///
 /// # Errors
 /// As [`published_ipv4`].
-#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
-pub(crate) async fn published_link_down(
+pub async fn published_link_down(
     published: &Published,
     notify: &impl QueueNotify,
 ) -> Result<(), NetError> {
@@ -281,7 +273,6 @@ pub(crate) async fn published_link_down(
     .await
 }
 
-#[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
 fn poll_published<T>(
     published: &Published,
     notify: &impl QueueNotify,

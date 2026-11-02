@@ -28,7 +28,7 @@ pub struct Console;
 impl Console {
     /// Open the console over the block the early writer used until now:
     /// its interrupt is bound in the application's context. From here on
-    /// [`println!`](crate::println) writes nothing and returns `false`; a
+    /// `oer::println!` writes nothing and returns `false`; a
     /// fatal note still reaches the host.
     ///
     /// # Errors

@@ -1,5 +1,19 @@
+#![cfg(target_arch = "riscv32")]
+#![no_std]
+#![feature(type_alias_impl_trait)]
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
 //! The ESP32-S31 implementation: the default interrupt layout, executors,
-//! service tasks and boot sequence behind [`main!`](crate::main).
+//! service tasks and boot sequence behind the application entry's `entry!`
+//! (`oer`), which re-exports this crate for an image built for the ESP32-S31.
 //!
 //! Layout, fixed for every image (lines and levels from the chip's
 //! measured arbitration):
@@ -31,6 +45,11 @@ use oer_chips_family_executor::{Executor, Spawner};
 use oer_chips_family_staged_runtime::{Adopted, Handoff};
 use oer_portable_embassy_time::EmbassyClock;
 
+// The family's shared parts keep their paths in this crate.
+#[cfg(feature = "observe")]
+use oer_chips_family_app::observe;
+use oer_chips_family_app::{boot, channel, net};
+
 pub use oer_chips_esp32s31_compose::Esp32s31;
 
 /// Time on the executors' clock: timers, timeouts, instants.
@@ -41,7 +60,7 @@ pub use embassy_time as time;
 #[cfg(feature = "observe")]
 macro_rules! observed {
     ($part:ident, $future:expr) => {
-        $crate::esp32s31::observed::Polled::library(
+        $crate::observed::Polled::library(
             $crate::observe::parts::LibraryPart::$part,
             core::pin::pin!($future),
         )
@@ -60,7 +79,7 @@ macro_rules! observed {
 #[cfg(feature = "observe")]
 macro_rules! observed_root {
     ($root:ident, $part:ident) => {
-        let mut $root = core::pin::pin!($crate::esp32s31::observed::Polled::library(
+        let mut $root = core::pin::pin!($crate::observed::Polled::library(
             $crate::observe::parts::LibraryPart::$part,
             $root.as_mut(),
         ));
@@ -73,7 +92,7 @@ macro_rules! observed_root {
 }
 
 #[cfg(feature = "observe")]
-pub(crate) mod observed;
+pub mod observed;
 #[cfg(feature = "observe")]
 use observed::executor_observer;
 /// The observer of executor `SLOT`: none without `observe`.
@@ -420,9 +439,11 @@ where
 pub use crate::channel::ChannelError;
 
 /// A channel between the application's future and the second boot's
-/// ([`crate::channel`]), its ends waking through [`AppNotify`] and
+/// (`oer_chips_family_app::channel`), its ends waking through [`AppNotify`] and
 /// [`SecondNotify`].
-pub type Channel<A, B, const N: usize> = crate::channel::Channel<A, B, N, AppNotify, SecondNotify>;
+pub struct Channel<A: 'static, B: 'static, const N: usize>(
+    crate::channel::Channel<A, B, N, AppNotify, SecondNotify>,
+);
 /// The application's end of a [`Channel`]: it sends `A` and receives `B`.
 pub type ApplicationEnd<A, B, const N: usize> =
     crate::channel::End<A, B, N, AppNotify, SecondNotify>;
@@ -450,11 +471,26 @@ pub(crate) static APPLICATION: AppNotify = atomic_waker::AtomicWaker::new();
 #[cfg(all(feature = "wifi", feature = "hart1"))]
 pub(crate) static APPLICATION: AppNotify = &hart1::APPLICATION;
 
-#[cfg(feature = "hart1")]
-impl<A, B, const N: usize> crate::channel::Channel<A, B, N, AppNotify, SecondNotify> {
-    /// A channel between hart 0's application and hart 1's second boot.
+impl<A, B, const N: usize> Channel<A, B, N> {
+    /// A channel between the application's future and the second boot's.
+    #[cfg(not(feature = "hart1"))]
     pub const fn new() -> Self {
-        Self::across_harts(&hart1::APPLICATION, &hart1::SECOND)
+        Self(crate::channel::Channel::new())
+    }
+
+    /// A channel between hart 0's application and hart 1's second boot.
+    #[cfg(feature = "hart1")]
+    pub const fn new() -> Self {
+        Self(crate::channel::Channel::across_harts(
+            &hart1::APPLICATION,
+            &hart1::SECOND,
+        ))
+    }
+}
+
+impl<A, B, const N: usize> Default for Channel<A, B, N> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -465,7 +501,7 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
     /// [`Error::Channel`]: the end was taken already.
     pub fn application(&'static self, boot: &mut Boot) -> Result<ApplicationEnd<A, B, N>, Error> {
         let _ = boot;
-        self.take_application().map_err(Error::Channel)
+        self.0.take_application().map_err(Error::Channel)
     }
 
     /// The second boot's end, taken once in the second boot after the
@@ -476,7 +512,7 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
     /// application end.
     pub fn second<M>(&'static self, boot: &mut Hart1Boot<M>) -> Result<SecondEnd<A, B, N>, Error> {
         let _ = boot;
-        self.take_second().map_err(Error::Channel)
+        self.0.take_second().map_err(Error::Channel)
     }
 }
 
@@ -644,9 +680,8 @@ pub fn start<S: Started, H: Hart1Started>(
                 oer_chips_esp32s31_compose::radio_fault::report_previous();
                 oer_chips_esp32s31_compose::exception::report_previous();
                 if let Some(record) = previous {
-                    let mut console = oer_chips_family_staged_runtime::diagnostics::Console::shared(
-                        crate::print::whole,
-                    );
+                    let mut console =
+                        oer_chips_family_staged_runtime::diagnostics::Console::shared(whole);
                     let _ = oer_chips_family_staged_runtime::diagnostics::previous_panic(
                         &mut console,
                         &record,
@@ -965,4 +1000,20 @@ pub mod __private {
     pub use oer_chips_esp32s31_hal::platform::Port;
     pub use oer_chips_family_staged_runtime::{Handoff, entry};
     pub use oer_chips_family_staged_runtime::{SecondaryHandoff, secondary_entry};
+}
+
+/// Write `bytes` whole to the console, or fail.
+pub(crate) fn whole(bytes: &[u8]) -> Result<(), ()> {
+    if oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole() {
+        Ok(())
+    } else {
+        Err(())
+    }
+}
+
+/// Write one application line (`oer::println!`) whole under one hold of the
+/// console; whether all of it reached the console.
+#[doc(hidden)]
+pub fn console_line(line: oer_portable_diagnostics::Line) -> bool {
+    oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&line.note()).is_whole()
 }

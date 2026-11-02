@@ -23,7 +23,7 @@ pub use oer_portable_diagnostics as __diagnostics;
 #[doc(hidden)]
 #[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
 pub fn line(line: oer_portable_diagnostics::Line) -> bool {
-    oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&line.note()).is_whole()
+    oer_chips_esp32s31_app::console_line(line)
 }
 
 /// Off the chip there is no console.
@@ -31,16 +31,6 @@ pub fn line(line: oer_portable_diagnostics::Line) -> bool {
 #[cfg(not(all(feature = "esp32s31", target_arch = "riscv32")))]
 pub fn line(_: oer_portable_diagnostics::Line) -> bool {
     false
-}
-
-/// Write `bytes` whole, or fail.
-#[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
-pub(crate) fn whole(bytes: &[u8]) -> Result<(), ()> {
-    if oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole() {
-        Ok(())
-    } else {
-        Err(())
-    }
 }
 
 /// Write one line to the console: `println!("OER-WIFI ipv4 {}/{}",

@@ -1,5 +1,4 @@
 #![cfg_attr(not(test), no_std)]
-#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 #![forbid(unsafe_code)]
 #![deny(
     clippy::unwrap_used,
@@ -25,51 +24,24 @@
 //! - `observe` (`observe` feature): what the library observes of its own
 //!   work, for an image that measures it.
 
-#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-mod boot;
-#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-pub mod channel;
-pub mod net;
-#[cfg(any(test, feature = "observe"))]
-pub mod observe;
+pub use oer_chips_family_app::{channel, net};
 pub mod print;
+
+/// What the library observes of its own work, for an image that measures
+/// it: the family's counters and the chip's readers.
+#[cfg(feature = "observe")]
+pub mod observe {
+    #[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
+    pub use oer_chips_esp32s31_app::observed::*;
+    pub use oer_chips_family_app::observe::*;
+}
 
 #[cfg(all(target_arch = "riscv32", not(feature = "esp32s31")))]
 compile_error!("select the application's chip: the `esp32s31` feature");
 
 #[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
-mod esp32s31;
-#[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
-pub use esp32s31::*;
+pub use oer_chips_esp32s31_app::*;
 
-/// The image's entry: `boot` runs once before any executor, with the
-/// peripherals and the boot context; it builds drivers and services and ends
-/// with [`Boot::run`] and the application's future, which the library runs
-/// beside its service tasks. Every error records and resets.
-///
-/// `hart1 = boot1` names the second boot: `boot1` runs once the boot ended,
-/// with what the boot handed it ([`Hart1Peripherals`]: the station's
-/// network device), starts the IP service ([`wifi::Net::start`]) and ends
-/// with [`Hart1Boot::run`] and the future that uses its sockets. That
-/// future and the IP service run on hart 0, the application's executor, or
-/// with the `hart1` feature on hart 1, which the library launches for them
-/// once the boot ended; hart 0 waits for the second boot's end before any
-/// executor runs.
-///
-/// ```ignore
-/// oer::entry!(boot, hart1 = network);
-///
-/// fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
-///     let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
-///     Ok(boot.run(move || app(station, status)))
-/// }
-///
-/// fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
-///     let device = p.device.ok_or(Error::NoDevice)?;
-///     let (net, boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
-///     Ok(boot.run(move || sockets(net)))
-/// }
-/// ```
 #[macro_export]
 macro_rules! entry {
     ($boot:path) => {

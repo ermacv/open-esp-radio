@@ -969,6 +969,8 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/compose", Role::Composition),
     ("chips/esp32s31/wifi", Role::Facade),
     ("oer", Role::Sdk),
+    ("chips/family/app", Role::Sdk),
+    ("chips/esp32s31/app", Role::Sdk),
     ("protocols/hil/protocol", Role::HilProtocol),
     ("protocols/hil/agent", Role::HilAgent),
     ("hil/agent", Role::HilSdkAgent),
@@ -1129,7 +1131,9 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         }
         Role::Composition => assembled,
         Role::Facade => assembled || to == Role::Composition,
-        Role::Sdk => assembled || matches!(to, Role::Composition | Role::Facade),
+        // The entry (`oer`) selects a chip's application crate, which builds
+        // on the family's.
+        Role::Sdk => assembled || matches!(to, Role::Composition | Role::Facade | Role::Sdk),
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
         // It serves the HIL console over the SDK's console and evidence; the
@@ -2253,14 +2257,14 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         "embassy-time" => {
             path == "portable/embassy/time"
                 // The application entry re-exports the executors' clock.
-                || path == "oer"
+                || path == "chips/esp32s31/app"
         }
         "embassy-time-driver" => path == "chips/family/executor",
         // The application entry names the stack its IP service pins, for
         // its applications' sockets, and the stack's socket receive queue.
         "embassy-net" | "xarxa" | "xarxa-driver" => {
             path == "portable/embassy/net"
-                || (path == "oer" && dependency != "xarxa-driver")
+                || (path == "chips/esp32s31/app" && dependency != "xarxa-driver")
                 || image_path(path)
         }
         "trouble-host" => path == "portable/embassy/trouble" || image_path(path),

@@ -84,7 +84,7 @@ where
     SecondHalves<A, B, N, C, S>: Send,
 {
     /// The application's end: split both queues and keep the second end.
-    pub(crate) fn take_application(&'static self) -> Result<End<A, B, N, C, S>, ChannelError> {
+    pub fn take_application(&'static self) -> Result<End<A, B, N, C, S>, ChannelError> {
         let (to_second, from_second) = self.queues.try_take().ok_or(ChannelError::Taken)?;
         let (send, receive_there) = to_second.split();
         let (send_there, receive) = from_second.split();
@@ -99,7 +99,7 @@ where
     }
 
     /// The second boot's end.
-    pub(crate) fn take_second(&'static self) -> Result<End<B, A, N, S, C>, ChannelError> {
+    pub fn take_second(&'static self) -> Result<End<B, A, N, S, C>, ChannelError> {
         let (receive, send) = self.second.take().map_err(|refusal| match refusal {
             oer_portable_memory::Claim::Empty => ChannelError::NotSplit,
             oer_portable_memory::Claim::Lent | oer_portable_memory::Claim::Kept => {

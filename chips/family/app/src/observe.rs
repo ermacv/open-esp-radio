@@ -24,9 +24,6 @@ pub mod link;
 pub mod parts;
 pub mod tracking;
 
-#[cfg(all(target_arch = "riscv32", feature = "esp32s31"))]
-pub use crate::esp32s31::observed::*;
-
 /// A reading ran while the counter's writer wrote: it holds no state the
 /// writer published.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

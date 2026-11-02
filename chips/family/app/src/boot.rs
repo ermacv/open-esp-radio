@@ -5,20 +5,26 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 /// The boot's identity in two words: written once before any task runs,
 /// read by every task after.
-pub(crate) struct BootId {
+pub struct BootId {
     low: AtomicU32,
     high: AtomicU32,
 }
 
+impl Default for BootId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BootId {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             low: AtomicU32::new(0),
             high: AtomicU32::new(0),
         }
     }
 
-    pub(crate) fn publish(&self, id: u64) {
+    pub fn publish(&self, id: u64) {
         let [l0, l1, l2, l3, h0, h1, h2, h3] = id.to_le_bytes();
         self.low
             .store(u32::from_le_bytes([l0, l1, l2, l3]), Ordering::Release);
@@ -26,22 +32,21 @@ impl BootId {
             .store(u32::from_le_bytes([h0, h1, h2, h3]), Ordering::Release);
     }
 
-    pub(crate) fn get(&self) -> u64 {
+    pub fn get(&self) -> u64 {
         (u64::from(self.high.load(Ordering::Acquire)) << 32)
             | u64::from(self.low.load(Ordering::Acquire))
     }
 }
 
 /// A nonzero identity from eight random bytes.
-pub(crate) fn identity(random: [u8; 8]) -> u64 {
+pub fn identity(random: [u8; 8]) -> u64 {
     u64::from_le_bytes(random).max(1)
 }
 
-#[cfg(any(test, feature = "wifi"))]
 /// The first of the 2.4 GHz channels 1 to 13 that `attempt` accepts. An
 /// error `refused` names as the channel's own is passed over; any other
 /// ends the search with it. `None` when every channel was refused.
-pub(crate) fn lowest_channel<T, E>(
+pub fn lowest_channel<T, E>(
     mut attempt: impl FnMut(u8) -> Result<T, E>,
     refused: impl Fn(&E) -> bool,
 ) -> Result<T, Option<E>> {
@@ -55,10 +60,9 @@ pub(crate) fn lowest_channel<T, E>(
     Err(None)
 }
 
-#[cfg(any(test, feature = "wifi"))]
 /// A station's stop deadline of `micros`: none for zero, which no network
 /// could meet.
-pub(crate) fn drain_micros(micros: u64) -> Option<core::num::NonZeroU64> {
+pub fn drain_micros(micros: u64) -> Option<core::num::NonZeroU64> {
     core::num::NonZeroU64::new(micros)
 }
 

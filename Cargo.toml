@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "oer",
+    "chips/family/app",
+    "chips/esp32s31/app",
     "chips/esp32s31/crypto",
     "chips/esp32s31/bluetooth/driver",
     "chips/esp32s31/knowledge",
