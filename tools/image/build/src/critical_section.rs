@@ -116,7 +116,7 @@ mod tests {
                     dependencies,
                     crate::images::DIRECTORIES
                         .iter()
-                        .any(|images| Path::new(member).starts_with(images))
+                        .any(|(images, _)| Path::new(member).starts_with(images))
                         || Path::new(member).ends_with("bootstrap"),
                 ),
             );

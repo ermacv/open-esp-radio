@@ -976,7 +976,7 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/agent", Role::HilSdkAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
     ("hil/images/aes", Role::HilImage),
-    ("hil/images/station", Role::HilImage),
+    ("hil/images/wifi-station", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
     ("hil/services/load", Role::HilBinding),
@@ -3496,7 +3496,7 @@ fn an_image_on_the_application_entry_takes_nothing_the_entry_places() {
 fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
     let members = [
         member(
-            "hil/images/station",
+            "hil/images/wifi-station",
             "image",
             true,
             &["oer", "oer-chips-esp32s31-compose"],
@@ -3518,7 +3518,7 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
     assert_eq!(
         outside_the_entry(&members),
         BTreeSet::from([(
-            "hil/images/station".to_owned(),
+            "hil/images/wifi-station".to_owned(),
             "chips/esp32s31/compose".to_owned(),
         )])
     );
@@ -3551,7 +3551,7 @@ fn every_hil_image_is_an_application_of_the_entry() {
 #[test]
 fn a_hil_image_without_the_entry_is_named_and_another_image_is_not() {
     let members = [
-        member("hil/images/station", "station", true, &["oer"]),
+        member("hil/images/wifi-station", "station", true, &["oer"]),
         member(
             "hil/images/aes",
             "hand-built",

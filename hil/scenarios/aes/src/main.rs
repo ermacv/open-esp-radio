@@ -12,7 +12,7 @@ use oer_tools_hil_harness::{Case, Cx, Failure, Scenario, check};
 
 mod reference;
 
-const SCENARIO: Scenario = Scenario::new("aes", "aes", &[oer_hil_services_aes::Request::KEYS]);
+const SCENARIO: Scenario = Scenario::new("aes", "hil-aes", &[oer_hil_services_aes::Request::KEYS]);
 
 const CASES: [Case; 4] = [
     Case {

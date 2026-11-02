@@ -171,7 +171,7 @@ jobs:
         # Every image the HIL scenarios share, with the linked image's checks.
         run: |
           for image in hil/images/*/; do
-            cargo fw build "$(basename "$image")"
+            cargo fw build "hil-$(basename "$image")"
           done
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.

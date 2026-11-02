@@ -37,7 +37,7 @@ use oer_tools_hil_harness::{
 };
 
 /// The image the scenario runs.
-const IMAGE: &str = "station";
+const IMAGE: &str = "hil-wifi-station";
 
 const SCENARIO: Scenario = Scenario::new(
     "wifi-load",

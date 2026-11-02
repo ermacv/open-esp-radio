@@ -237,7 +237,6 @@ fn runtime_command(
         command.env(LAYOUT_SEED_ENV, seed.to_string());
     }
     zeroed_inputs(&mut command, profile);
-    runtime_link(&mut command, spec)?;
     crate::compiler::configure(
         &mut command,
         &crate::compiler::of_policy(
@@ -248,6 +247,7 @@ fn runtime_command(
             &profile.facts.rust_target,
         ),
     )?;
+    runtime_link(&mut command, spec)?;
     Ok(command)
 }
 
@@ -259,14 +259,21 @@ fn runtime_link(command: &mut std::process::Command, spec: &ImageSpec) -> Result
     if !spec.application.features.contains(&entry_feature) {
         return Ok(());
     }
-    let variable = |name: &str| {
-        if name == LAYOUT_SEED_ENV {
-            return spec.layout_seed.map(|seed| seed.to_string());
-        }
-        spec.runtime_environment
-            .iter()
-            .find(|(key, _)| key == name)
-            .and_then(|(_, value)| value.clone())
+    // The environment a build script of the image would read: the
+    // command's own, which the stack policy and the layout seed set, before
+    // the inherited one.
+    let environment: Vec<(String, Option<String>)> = command
+        .get_envs()
+        .map(|(key, value)| {
+            (
+                key.to_string_lossy().into_owned(),
+                value.map(|value| value.to_string_lossy().into_owned()),
+            )
+        })
+        .collect();
+    let variable = |name: &str| match environment.iter().find(|(key, _)| key == name) {
+        Some((_, value)) => value.clone(),
+        None => std::env::var(name).ok(),
     };
     let arguments = match spec.chip.as_str() {
         "esp32s31" => oer_chips_esp32s31_layout::build::runtime_link_arguments(&variable)

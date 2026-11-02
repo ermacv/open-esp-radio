@@ -1,5 +1,5 @@
 //! The HIL SDK station scenario: the `oer` station of the
-//! `station` image meets the lab router's isolated WPA2
+//! `hil-wifi-station` image meets the lab router's isolated WPA2
 //! network. A wrong passphrase is a handled result without a reset; the
 //! station joins, takes its DHCP address, exchanges a line over TCP with
 //! this host, rejoins by itself after the router deauthenticates it, and a
@@ -32,7 +32,7 @@ use oer_tools_hil_harness::{
 
 const SCENARIO: Scenario = Scenario::new(
     "sdk-station",
-    "station",
+    "hil-wifi-station",
     &[
         oer_hil_services_sdk_station::Request::KEYS,
         oer_hil_services_fault::Request::KEYS,

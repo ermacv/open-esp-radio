@@ -105,7 +105,7 @@ mod tests {
             include_str!("../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"),
             include_str!("../../../../hil/probes/esp32s31-radio-root/Cargo.toml"),
             include_str!("../../../../hil/images/aes/Cargo.toml"),
-            include_str!("../../../../hil/images/station/Cargo.toml"),
+            include_str!("../../../../hil/images/wifi-station/Cargo.toml"),
         ] {
             let manifest: toml::Value = toml::from_str(text).expect("the manifest parses");
             let name = manifest["package"]["name"]

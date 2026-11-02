@@ -19,7 +19,7 @@ use oer_tools_hil_harness::{
 
 const SCENARIO: Scenario = Scenario::new(
     "wifi-station",
-    "station",
+    "hil-wifi-station",
     &[oer_hil_services_wifi_station::Request::KEYS],
 )
 .using_router();

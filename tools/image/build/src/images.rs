@@ -14,9 +14,11 @@ use oer_tools_image_checks::{Enforced, interrupts::Required};
 /// The chip every image is built for.
 pub const CHIP: &str = "esp32s31";
 
-/// Where image packages live: the examples, the HIL scenarios' images and
-/// the probes. An image's name is its directory; no name may be in two.
-pub const DIRECTORIES: [&str; 3] = ["examples", "hil/images", "hil/probes"];
+/// Where image packages live, each with the prefix its images' names carry:
+/// the examples and the probes by their directory, the HIL scenarios'
+/// images as `hil-<directory>`. No two images share a name.
+pub const DIRECTORIES: [(&str, &str); 3] =
+    [("examples", ""), ("hil/images", "hil-"), ("hil/probes", "")];
 
 /// The application entry: an image that depends on it gets the chip's
 /// feature from the build, never from its own manifest.
@@ -31,26 +33,32 @@ pub fn output(root: &Path, image: &str) -> PathBuf {
 /// image is named by its directory alone, so its bundle directory stays
 /// below `target/fw/`.
 fn directory(root: &Path, image: &str) -> Result<PathBuf> {
+    let roots = || {
+        DIRECTORIES
+            .iter()
+            .map(|(directory, prefix)| format!("{directory}/{prefix}*"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     if image.is_empty() || image.starts_with('.') || image.contains(['/', '\\']) {
         return Err(format!(
-            "`{image}` is not an image name: name an image by its directory in {}",
-            DIRECTORIES.join(", ")
+            "`{image}` is not an image name: name an image by its directory ({})",
+            roots()
         )
         .into());
     }
     let found = DIRECTORIES
         .iter()
-        .map(|directory| root.join(directory).join(image))
+        .filter_map(|(directory, prefix)| {
+            let name = image.strip_prefix(prefix)?;
+            (!name.is_empty()).then(|| root.join(directory).join(name))
+        })
         .filter(|directory| directory.join("Cargo.toml").is_file())
         .collect::<Vec<_>>();
     match found.as_slice() {
         [directory] => Ok(directory.clone()),
-        [] => Err(format!("no image `{image}` in {}", DIRECTORIES.join(" or ")).into()),
-        _ => Err(format!(
-            "image `{image}` is in more than one of {}",
-            DIRECTORIES.join(", ")
-        )
-        .into()),
+        [] => Err(format!("no image `{image}` in {}", roots()).into()),
+        _ => Err(format!("image `{image}` is in more than one of {}", roots()).into()),
     }
 }
 
@@ -62,6 +70,14 @@ pub fn package(root: &Path, image: &str) -> Result<String> {
 #[derive(Deserialize)]
 struct Manifest {
     package: Package,
+    #[serde(default)]
+    dependencies: std::collections::BTreeMap<String, toml::Value>,
+    #[serde(default)]
+    target: std::collections::BTreeMap<String, Target>,
+}
+
+#[derive(Deserialize)]
+struct Target {
     #[serde(default)]
     dependencies: std::collections::BTreeMap<String, toml::Value>,
 }
@@ -81,7 +97,12 @@ fn manifest(root: &Path, image: &str) -> Result<Manifest> {
 /// The features the build gives `image`: the chip's feature of the
 /// application entry when the image depends on it.
 fn chip_features(manifest: &Manifest, chip: &str) -> Vec<String> {
-    if manifest.dependencies.contains_key(ENTRY) {
+    if manifest.dependencies.contains_key(ENTRY)
+        || manifest
+            .target
+            .values()
+            .any(|target| target.dependencies.contains_key(ENTRY))
+    {
         vec![format!("{ENTRY}/{chip}")]
     } else {
         Vec::new()
@@ -160,7 +181,7 @@ mod tests {
         ]);
         for (image, package) in [
             ("esp32s31-boot-smoke", "oer-hil-probes-esp32s31-boot-smoke"),
-            ("aes", "oer-hil-images-aes"),
+            ("hil-aes", "oer-hil-images-aes"),
             ("esp32s31-radio", "oer-hil-probes-esp32s31-radio"),
         ] {
             for enforced in [
@@ -186,7 +207,7 @@ mod tests {
 
     #[test]
     fn a_name_in_both_directories_or_in_none_is_refused() {
-        let directory = repository(&["examples/twin", "hil/images/twin"]);
+        let directory = repository(&["examples/twin", "hil/probes/twin"]);
         let twin = package(directory.path(), "twin").unwrap_err().to_string();
         assert!(twin.contains("more than one"), "{twin}");
         let none = package(directory.path(), "absent").unwrap_err().to_string();
@@ -195,10 +216,10 @@ mod tests {
 
     #[test]
     fn an_image_is_named_by_its_directory_and_never_by_a_path() {
-        let directory = repository(&["hil/images/station"]);
+        let directory = repository(&["hil/images/wifi-station"]);
         for path in [
             "../../hil/images/station",
-            "hil/images/station",
+            "hil/images/wifi-station",
             ".station",
             "",
         ] {
@@ -206,9 +227,11 @@ mod tests {
             assert!(refused.contains("not an image name"), "{path}: {refused}");
         }
         assert_eq!(
-            package(directory.path(), "station").unwrap(),
-            "oer-hil-images-station"
+            package(directory.path(), "hil-wifi-station").unwrap(),
+            "oer-hil-images-wifi-station"
         );
+        // A HIL image is named with its root's prefix, never bare.
+        assert!(package(directory.path(), "wifi-station").is_err());
     }
 
     #[test]
@@ -223,6 +246,15 @@ mod tests {
         .unwrap();
         let entry = spec(directory.path(), "entry", Enforced::Reported).unwrap();
         assert_eq!(entry.application.features, [format!("oer/{CHIP}")]);
+        let targeted = directory.path().join("examples/targeted/Cargo.toml");
+        std::fs::create_dir_all(targeted.parent().unwrap()).unwrap();
+        std::fs::write(
+            targeted,
+            "[package]\nname = \"oer-examples-targeted\"\n[target.'cfg(target_arch = \"riscv32\")'.dependencies]\noer = { path = \"../../oer\" }\n",
+        )
+        .unwrap();
+        let targeted = spec(directory.path(), "targeted", Enforced::Reported).unwrap();
+        assert_eq!(targeted.application.features, [format!("oer/{CHIP}")]);
         let plain = spec(directory.path(), "plain", Enforced::Reported).unwrap();
         assert!(plain.application.features.is_empty());
     }

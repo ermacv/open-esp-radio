@@ -1932,7 +1932,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-images-station"
+name = "oer-hil-images-wifi-station"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",

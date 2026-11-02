@@ -412,8 +412,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 # hil/images/aes/src/entry.rs
 "hil/images/aes/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/aes", classes = ["rust-panic", "cpu-exception"] }
 
-# hil/images/station/src/entry.rs
-"hil/images/station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/station", classes = ["rust-panic", "cpu-exception"] }
+# hil/images/wifi-station/src/entry.rs
+"hil/images/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/wifi-station", classes = ["rust-panic", "cpu-exception"] }
 # chips/esp32s31/app/src/lib.rs
 "chips/esp32s31/app/src/lib.rs:crate::start:terminal-entry:start:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot"] }
 "chips/esp32s31/app/src/lib.rs:crate::fail:terminal-entry:fail:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
