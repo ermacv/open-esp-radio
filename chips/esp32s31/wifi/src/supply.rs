@@ -38,6 +38,9 @@ const _: () = {
     if PORT_BUFFERS as usize > TX_BUFFERS {
         panic!("the port holds at most the pool");
     }
+    if crate::TX_DEPTH != 2 * oer_chips_esp32s31_ieee80211_driver::port::TX_AMPDU_SUBFRAMES {
+        panic!("the station's transmit queue holds two whole aggregates");
+    }
 };
 
 type NetworkLease = PinnedDmaTxNetworkLease<'static, TX, 0, 0>;

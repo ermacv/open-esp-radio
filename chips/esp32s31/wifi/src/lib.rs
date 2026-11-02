@@ -82,10 +82,11 @@ type Ch<N> = <N as Notifies>::Channels;
 /// Ack windows, so one window's burst fits while the network takes the
 /// previous one (a queue of one window dropped a 16-MPDU aggregate's tail).
 pub const RX_DEPTH: usize = 32;
-/// The network's MSDUs the station's transmit queue holds: the network
-/// fills a burst while the station is busy, and each end wakes the other
-/// once per burst.
-pub const TX_DEPTH: usize = 16;
+/// The network's MSDUs the station's transmit queue holds: two whole
+/// transmit A-MPDUs, so that the aggregate the station builds while one is
+/// on air finds its 32 MSDUs queued; each end wakes the other once per
+/// burst.
+pub const TX_DEPTH: usize = 64;
 pub const FRAME_CAPACITY: usize = 1664;
 #[cfg(target_arch = "riscv32")]
 type Caps = oer_chips_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
