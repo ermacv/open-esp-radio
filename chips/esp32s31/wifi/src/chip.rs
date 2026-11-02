@@ -59,6 +59,8 @@ pub trait Binding: Sized + 'static {
     /// [`crate::AcrossHarts`] with the executor signals the two harts raise
     /// for each other's tasks and the driver.
     type Notifies: crate::Notifies;
+    /// The network stack's packet owner its transmissions hand the station.
+    type TxPacket: oer_protocols_network_port::EthernetFrame + 'static;
     fn take_slot() -> Option<&'static mut radio::Slot<Self>>;
     /// Image-owned terminal policy, called with a handled construction error.
     fn fail(error: InitializationError) -> !;
@@ -397,8 +399,8 @@ pub enum Event {
         request: runtime::Request,
         status: runtime::Status,
     },
+    /// The packet itself went back to the network stack.
     MsduRefused {
-        packet: runtime::contract::TransmitPacket,
         reason: runtime::contract::MsduRefusal,
     },
     AccessPoint(runtime::contract::AccessPointCommand<Caps>),
@@ -426,16 +428,14 @@ impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<
                 request,
                 status: self.status.status(),
             },
-            runtime::ServiceOutput::MsduRefused { packet, reason } => {
-                Event::MsduRefused { packet, reason }
-            }
+            runtime::ServiceOutput::MsduRefused { reason } => Event::MsduRefused { reason },
             runtime::ServiceOutput::AccessPoint(command) => Event::AccessPoint(command),
         };
         self.events.event(event)
     }
 }
 pub struct Storage<W: Binding> {
-    pub(crate) channels: Channels<W::Notifies>,
+    pub(crate) channels: Channels<W::Notifies, W::TxPacket>,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
     pub(crate) bell: oer_portable_memory::Doorbell,
@@ -527,7 +527,7 @@ pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) frontend:
         oer_portable_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
-    pub(crate) connection: ServiceConnection<'static, W::Notifies>,
+    pub(crate) connection: ServiceConnection<'static, W::Notifies, W::TxPacket>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
     pub(crate) output: runtime::Events<
         'static,
@@ -558,7 +558,7 @@ pub fn station<W: Binding>(
     config: Config,
 ) -> (
     Control<'static, W::Notifies>,
-    Network<'static, W::Notifies>,
+    Network<'static, W::Notifies, W::TxPacket>,
     crate::NetworkStopper<'static, W::Notifies>,
     Runners<W>,
 ) {

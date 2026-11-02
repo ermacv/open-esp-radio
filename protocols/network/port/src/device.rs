@@ -185,11 +185,15 @@ pub struct TransmitRefused<F> {
 
 /// One affine Ethernet port. Poll methods register before observing readiness.
 /// Cancelling a readiness wait consumes no frame or capacity. Only successful
-/// TX transfers the caller's owner; RX transfers its concrete owner by value.
+/// TX transfers the caller's owner, the stack's packet itself ([`Self::TxFrame`]):
+/// the device reads it where the stack wrote it and returns it for the
+/// stack to drop on its own executor; RX transfers its concrete owner by value.
 /// Readiness is an observation; a later TX refusal still returns the owner.
 /// The endpoints and their task wakers stay on their executor's hart.
 pub trait NetDevice {
     type RxFrame: ReceivedFrame;
+    /// The stack's packet owner a transmission hands over.
+    type TxFrame: EthernetFrame;
     fn link(&self) -> LinkSnapshot;
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot>;
     fn receive_queue_len(&self) -> usize;
@@ -208,7 +212,7 @@ pub trait NetDevice {
         read: impl FnOnce(EthernetFrameView<'_>) -> R,
     ) -> Result<R, FrameLengthError>;
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-    fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>>;
+    fn try_transmit(&mut self, frame: Self::TxFrame) -> Result<(), TransmitRefused<Self::TxFrame>>;
 }
 
 #[cfg(test)]

@@ -97,9 +97,14 @@ impl State {
         Self::wake(&self.tx_waker);
     }
 }
-struct Port(Rc<RefCell<State>>, LinkSnapshot);
-impl NetDevice for Port {
+struct Port<F>(
+    Rc<RefCell<State>>,
+    LinkSnapshot,
+    core::marker::PhantomData<F>,
+);
+impl<F: EthernetFrame> NetDevice for Port<F> {
     type RxFrame = Frame;
+    type TxFrame = F;
     fn link(&self) -> LinkSnapshot {
         self.0.borrow().link
     }
@@ -144,7 +149,7 @@ impl NetDevice for Port {
             Poll::Pending
         }
     }
-    fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
+    fn try_transmit(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
         let mut state = self.0.borrow_mut();
         if !state.ready || state.refuse_once {
             state.refuse_once = false;
@@ -184,14 +189,13 @@ fn hil_bridge_parks_retains_credit_and_services_rx_until_tx_credit_event() {
     }));
     let mut bridge = EthernetBridge::new(
         radio,
-        Port(state.clone(), LinkSnapshot::DOWN),
+        Port(state.clone(), LinkSnapshot::DOWN, core::marker::PhantomData),
         None::<&'static oer_portable_embassy_net::ethernet::LentSlots<_, 1>>,
     );
     let mut task = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
         cx,
         |_| {},
         |_| panic!("RX refused"),
-        |_| {},
         |_| {}
     )));
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));

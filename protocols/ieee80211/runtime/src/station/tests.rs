@@ -603,8 +603,10 @@ struct World<'b> {
     /// The scenario's network side: it stops at once, or is lost.
     network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
-    /// The network stack's end of the transmit queue.
-    stack: RefCell<oer_portable_memory::SlotSender<'b, TxMsdu, 2>>,
+    /// The network stack's end of the transmit queue: its packet owners.
+    stack: RefCell<oer_portable_memory::SlotSender<'b, Option<Outgoing<EthernetFrame>>, 2>>,
+    /// The packets the station read and returned, for the stack to drop.
+    returned: RefCell<oer_portable_memory::SlotReceiver<'b, Option<EthernetFrame>, 2>>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
     delivered_copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
@@ -732,7 +734,6 @@ struct ObservedCommandTerminal {
 }
 enum ObservedOutput {
     MsduRefused {
-        _packet: Box<super::contract::TransmitPacket>,
         _reason: super::contract::MsduRefusal,
     },
     TxRefused {
@@ -817,10 +818,9 @@ impl Application<'_, '_, '_> {
     fn record_output(&self, output: ServiceOutput<ModelCaps24>) {
         let observed = match output {
             ServiceOutput::CommandStarted(_) => return,
-            ServiceOutput::MsduRefused { packet, reason } => ObservedOutput::MsduRefused {
-                _packet: Box::new(packet),
-                _reason: reason,
-            },
+            ServiceOutput::MsduRefused { reason } => {
+                ObservedOutput::MsduRefused { _reason: reason }
+            }
             ServiceOutput::TxRefused { operation, reason } => {
                 ObservedOutput::TxRefused { operation, reason }
             }
@@ -982,9 +982,17 @@ impl Application<'_, '_, '_> {
     /// The network stack sends one Ethernet frame of user `priority` to
     /// `destination` if its queue has room.
     fn try_send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
-        let packet = TxMsdu {
+        // The stack drops what the station returned first, as its network
+        // end does on every poll.
+        while self
+            .returned
+            .borrow_mut()
+            .try_receive_with(Option::take)
+            .is_ok()
+        {}
+        let packet = Outgoing {
             priority: WmmUserPriority::new(priority).unwrap(),
-            frame: EthernetFrame::from_parts(oer_protocols_ieee80211_wire::data::MsduParts {
+            packet: EthernetFrame::from_parts(oer_protocols_ieee80211_wire::data::MsduParts {
                 destination,
                 source: LOCAL,
                 ether_type: 0x0800,
@@ -995,7 +1003,7 @@ impl Application<'_, '_, '_> {
         self.stack
             .borrow_mut()
             .try_send_with(|slot| {
-                *slot = packet;
+                *slot = Some(packet);
                 Ok::<_, ()>(())
             })
             .is_ok()
@@ -1032,7 +1040,8 @@ impl Application<'_, '_, '_> {
 struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
-    transmit: oer_portable_memory::SlotReceiver<'b, TxMsdu, 2>,
+    transmit: oer_portable_memory::SlotReceiver<'b, Option<Outgoing<EthernetFrame>>, 2>,
+    returned: oer_portable_memory::SlotSender<'b, Option<EthernetFrame>, 2>,
     receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
     receive_copied: WakingSpscSender<'b, EthernetFrame, RX_COPIED_DEPTH>,
     config: TestConfig,
@@ -1197,6 +1206,7 @@ where
                 commands,
                 control,
                 transmit: self.transmit,
+                returned: self.returned,
                 receive: self.receive,
                 receive_copied: self.receive_copied,
                 output: &mut output,
@@ -1584,9 +1594,12 @@ where
             ],
             clock.clone(),
         );
-        let mut transmit = oer_portable_memory::WakingSlotQueue::<TxMsdu, 2>::new();
+        let mut transmit =
+            oer_portable_memory::WakingSlotQueue::<Option<Outgoing<EthernetFrame>>, 2>::new();
+        let mut back = oer_portable_memory::WakingSlotQueue::<Option<EthernetFrame>, 2>::new();
         let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
-        let (stack, transmit) = transmit.split(TxMsdu::empty);
+        let (stack, transmit) = transmit.split(|| None);
+        let (returned, back) = back.split(|| None);
         let (receive, delivered) = receive.split();
         let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let (receive_copied, delivered_copies) = copies.split();
@@ -1606,6 +1619,7 @@ where
             network: TestNetwork::default(),
             restart_stopped_service: Cell::new(None),
             stack: RefCell::new(stack),
+            returned: RefCell::new(back),
             delivered: RefCell::new(delivered),
             delivered_copies: RefCell::new(delivered_copies),
             lent: Cell::new(0),
@@ -1625,6 +1639,7 @@ where
                             world: &world,
                             sink: PhantomData,
                             transmit,
+                            returned,
                             receive,
                             receive_copied,
                             config,
@@ -2572,9 +2587,21 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
                     world
                         .stack
                         .borrow_mut()
-                        .try_send_with(
-                            |slot| slot.refill_from_network(view, requested.user_priority)
-                        )
+                        .try_send_with(|slot| {
+                            *slot = Some(Outgoing {
+                                packet: EthernetFrame::from_parts(
+                                    oer_protocols_ieee80211_wire::data::MsduParts {
+                                        destination: view.destination,
+                                        source: view.source,
+                                        ether_type: view.ether_type,
+                                        payload: view.payload,
+                                    },
+                                )
+                                .unwrap(),
+                                priority: requested.user_priority,
+                            });
+                            Ok::<_, ()>(())
+                        })
                         .is_ok()
                 );
                 let data = world.sent(&mut seen, QOS_DATA).await;

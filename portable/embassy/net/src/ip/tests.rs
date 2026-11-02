@@ -5,7 +5,9 @@ use core::{cell::RefCell, pin::Pin, task::Waker};
 use oer_portable_memory::HostContext;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_network_port::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
+use oer_protocols_network_port::{
+    EthernetFrame, FrameLengthError, NetDevice, TransmitError, TransmitRefused,
+};
 use std::{
     boxed::Box,
     collections::VecDeque,
@@ -187,9 +189,12 @@ impl PortState {
         Self::wake(&self.link_waker);
     }
 }
-struct Port(Rc<RefCell<PortState>>);
-impl NetDevice for Port {
+struct Port<F>(Rc<RefCell<PortState>>, core::marker::PhantomData<F>);
+/// The port the IP service drives: it takes the stack's packet owners.
+type IpPort = Port<crate::OwnedNetworkTxFrame<'static>>;
+impl<F: EthernetFrame> NetDevice for Port<F> {
     type RxFrame = Frame;
+    type TxFrame = F;
     fn link(&self) -> LinkSnapshot {
         self.0.borrow().link
     }
@@ -229,7 +234,7 @@ impl NetDevice for Port {
             Poll::Pending
         }
     }
-    fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
+    fn try_transmit(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
         let mut state = self.0.borrow_mut();
         if !state.ready || state.refuse_once {
             state.refuse_once = false;
@@ -245,7 +250,7 @@ impl NetDevice for Port {
         Ok(())
     }
 }
-fn port() -> (Port, Rc<RefCell<PortState>>) {
+fn port() -> (IpPort, Rc<RefCell<PortState>>) {
     let state = Rc::new(RefCell::new(PortState {
         link: LinkSnapshot {
             state: LinkState::Up,
@@ -259,7 +264,7 @@ fn port() -> (Port, Rc<RefCell<PortState>>) {
         ready: true,
         refuse_once: false,
     }));
-    (Port(state.clone()), state)
+    (Port(state.clone(), core::marker::PhantomData), state)
 }
 /// The lent packet slots of the services these tests start.
 const LENT: usize = 4;
@@ -268,7 +273,7 @@ fn start<X: ExecutionContext>(
     configuration: Configuration,
 ) -> (
     Control<'static>,
-    Service<X, 2, 1, Port, LENT>,
+    Service<X, 2, 1, IpPort, LENT>,
     Rc<RefCell<PortState>>,
 ) {
     start_lent(configuration, None)
@@ -279,7 +284,7 @@ fn start_lent<X: ExecutionContext>(
     lent: Option<&'static crate::ethernet::LentSlots<Lent, LENT>>,
 ) -> (
     Control<'static>,
-    Service<X, 2, 1, Port, LENT>,
+    Service<X, 2, 1, IpPort, LENT>,
     Rc<RefCell<PortState>>,
 ) {
     let (port, state) = port();
@@ -387,7 +392,6 @@ fn lease_events_expiry_and_coalesced_reconnect_keep_the_stack_and_socket() {
             |_| {},
             |_| {},
             |_| {},
-            |_| {},
         ));
         settle(&mut task, &scheduled, &mut cx);
         assert_eq!(control.status().link.epoch, 1);
@@ -492,7 +496,6 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
         |_| received.set(received.get().saturating_add(1)),
         |_| {},
         |_| {},
-        |_| {},
     ));
     settle(&mut task, &scheduled, &mut cx);
     port.borrow_mut().refuse_once = true;
@@ -540,7 +543,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         assert!(
             service
                 .bridge
-                .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
+                .poll(&mut cx, |_| {}, |_| {}, |_| {})
                 .is_pending()
         );
         assert!(iface.has_ip_addr(Ipv4Addr::from(CONFIG.address)));
@@ -553,7 +556,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
             assert!(
                 service
                     .bridge
-                    .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
+                    .poll(&mut cx, |_| {}, |_| {}, |_| {})
                     .is_pending()
             );
         }
@@ -561,7 +564,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         control.stop();
         control.stop();
         {
-            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
             assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
         }
         assert!(pool.try_alloc().is_some());
@@ -570,7 +573,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         assert!(service.stack().routes().is_empty());
         assert_eq!(control.status().lifecycle, Lifecycle::Stopped);
         // A terminal service can be polled again without touching the stack ABI.
-        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
         assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     }
 }
@@ -578,7 +581,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
 #[test]
 fn context_refusal_is_a_typed_terminal_and_does_not_poll_the_stack() {
     let (control, mut service, _) = start::<oer_portable_memory::Never>(Configuration::Dhcpv4);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     assert_eq!(
         task.as_mut()
             .poll(&mut core::task::Context::from_waker(Waker::noop())),
@@ -603,7 +606,6 @@ fn static_status_tracks_link_events_and_stop_clears_the_real_interface() {
         &mut service.bridge,
         &iface,
         Configuration::Static(CONFIG),
-        |_| {},
         |_| {},
         |_| {},
         |_| {},
@@ -683,7 +685,7 @@ fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     settle(&mut task, &scheduled, &mut cx);
     // The device takes no frame and the stack's one TX credit is out: its
     // replies wait inside it, each in its request's packet.
@@ -753,7 +755,7 @@ fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     settle(&mut task, &scheduled, &mut cx);
     let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for payload in [[1, 2, 3], [4, 5, 6]] {

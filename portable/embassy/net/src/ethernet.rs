@@ -20,41 +20,26 @@ impl EthernetFrame for OwnedNetworkTxFrame<'_> {
     }
 }
 
-/// A projection borrows the packet until admission and its observation finish.
-/// The current neutral TX contract copies into the device's bounded owner.
-struct FrameProjection<'a>(EthernetFrameView<'a>);
-impl EthernetFrame for FrameProjection<'_> {
-    fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        Ok(self.0)
-    }
-}
+/// A device whose transmissions take the stack's packet owner itself: the
+/// device reads the frame where the stack wrote it, without a copy.
+pub trait OwnedTxDevice<'r>: NetDevice<TxFrame = OwnedNetworkTxFrame<'r>> {}
+impl<'r, D: NetDevice<TxFrame = OwnedNetworkTxFrame<'r>>> OwnedTxDevice<'r> for D {}
 
-impl OwnedNetworkTxFrame<'_> {
-    /// Transfer this stack owner into a neutral device. Refusal preserves its
-    /// packet and software credit together; neither is returned early. The
-    /// accepted callback runs only after admission, while that packet and
-    /// credit remain retained, matching the copying bridge's observation point.
+impl<'r> OwnedNetworkTxFrame<'r> {
+    /// Transfer this stack owner into a neutral device: on acceptance the
+    /// device holds the packet and its software credit; a refusal returns
+    /// both together, neither released early.
     pub fn transmit_to(
         self,
-        device: &mut impl NetDevice,
-        accepted: impl FnOnce(EthernetFrameView<'_>),
+        device: &mut impl OwnedTxDevice<'r>,
     ) -> Result<(), TransmitRefused<Self>> {
-        let result = match self.view() {
-            Ok(view) => match device.try_transmit(FrameProjection(view)) {
-                Ok(()) => {
-                    accepted(view);
-                    Ok(())
-                }
-                Err(refused) => Err(refused.reason),
-            },
-            Err(reason) => Err(oer_protocols_network_port::TransmitError::InvalidLength(
-                reason,
-            )),
-        };
-        result.map_err(|reason| TransmitRefused {
-            frame: self,
-            reason,
-        })
+        if let Err(reason) = self.view() {
+            return Err(TransmitRefused {
+                frame: self,
+                reason: oer_protocols_network_port::TransmitError::InvalidLength(reason),
+            });
+        }
+        device.try_transmit(self)
     }
 }
 
@@ -197,7 +182,7 @@ pub struct EthernetBridge<
     X: oer_portable_memory::ExecutionContext,
     const RX: usize,
     const TX: usize,
-    D: NetDevice,
+    D: OwnedTxDevice<'r>,
     const LENT: usize,
 > {
     radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
@@ -215,7 +200,7 @@ impl<
     X: oer_portable_memory::ExecutionContext,
     const RX: usize,
     const TX: usize,
-    D: NetDevice,
+    D: OwnedTxDevice<'r>,
     const LENT: usize,
 > EthernetBridge<'r, X, RX, TX, D, LENT>
 {
@@ -271,7 +256,6 @@ impl<
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(LentCopy),
-        transmitted: impl FnMut(EthernetFrameView<'_>),
     ) -> core::task::Poll<Result<core::convert::Infallible, crate::AccessRefused>> {
         use core::task::Poll;
         // A lent frame's packet dropped later wakes this task to return it:
@@ -323,7 +307,7 @@ impl<
                 refused(reason);
             }
         }
-        match self.poll_transmit_one(cx, transmitted) {
+        match self.poll_transmit_one(cx) {
             Err(error) => Poll::Ready(Err(error)),
             Ok(progress) => {
                 if progress {
@@ -339,7 +323,6 @@ impl<
     fn poll_transmit_one(
         &mut self,
         cx: &mut core::task::Context<'_>,
-        mut observe: impl FnMut(EthernetFrameView<'_>),
     ) -> Result<bool, crate::AccessRefused> {
         use core::{future::Future, task::Poll};
         let (epoch, packet) = match self.pending.take() {
@@ -363,7 +346,7 @@ impl<
             self.pending = Some((epoch, packet));
             return Ok(false);
         }
-        match packet.transmit_to(&mut self.device, &mut observe) {
+        match packet.transmit_to(&mut self.device) {
             Ok(()) => Ok(true),
             Err(refused) => match refused.reason {
                 oer_protocols_network_port::TransmitError::InvalidLength(_) => Ok(true),

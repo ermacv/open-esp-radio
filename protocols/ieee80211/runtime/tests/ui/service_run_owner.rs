@@ -19,6 +19,7 @@ pub fn run_once<
         impl oer_protocols_ieee80211_runtime::station::ServiceOutputSink<B::Caps>,
         B::LentRx,
         impl oer_protocols_ieee80211_runtime::station::NetworkStop,
+        impl oer_protocols_network_port::EthernetFrame,
         1,
         1,
         1,

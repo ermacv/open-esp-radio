@@ -7,7 +7,7 @@ use oer_protocols_network_port::{LinkSnapshot, LinkState, TransmitError};
 use std::{boxed::Box, vec::Vec};
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
-struct Port(LinkSnapshot, bool);
+struct Port<F>(LinkSnapshot, bool, core::marker::PhantomData<F>);
 struct Frame;
 impl oer_protocols_network_port::ReceivedFrame for Frame {
     type Storage = core::convert::Infallible;
@@ -21,8 +21,9 @@ impl EthernetFrame for Frame {
         Err(FrameLengthError::TooShort)
     }
 }
-impl NetDevice for Port {
+impl<F: EthernetFrame> NetDevice for Port<F> {
     type RxFrame = Frame;
+    type TxFrame = F;
     fn link(&self) -> LinkSnapshot {
         self.0
     }
@@ -48,7 +49,7 @@ impl NetDevice for Port {
     fn poll_transmit_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
         Poll::Ready(())
     }
-    fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
+    fn try_transmit(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
         if self.1 {
             Ok(())
         } else {
@@ -74,6 +75,7 @@ fn neutral_refusal_retains_the_packet_and_software_credit_and_epoch_change_recla
             epoch: 1,
         },
         false,
+        core::marker::PhantomData,
     );
     let mut previous = LinkSnapshot::DOWN;
     radio.link_controller().follow_device(&port, &mut previous);
@@ -83,7 +85,7 @@ fn neutral_refusal_retains_the_packet_and_software_credit_and_epoch_change_recla
     let address = packet.as_ptr();
     assert!(stack.transmit(packet).is_ok());
     let frame = radio.try_receive_tx().unwrap().unwrap();
-    let returned = frame.transmit_to(&mut port, |_| {}).err().unwrap();
+    let returned = frame.transmit_to(&mut port).err().unwrap();
     assert_eq!(returned.reason, TransmitError::QueueFull);
     assert_eq!(returned.frame.ethernet().as_ptr(), address);
     assert!(!stack.can_transmit());
@@ -117,6 +119,7 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
             epoch: 1,
         },
         false,
+        core::marker::PhantomData,
     );
     radio.link_controller().set_link_up(true);
     let mut packet = pool.try_alloc().unwrap();
@@ -124,17 +127,12 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
     packet.fill(7);
     assert!(stack.transmit(packet).is_ok());
     let mut bridge = EthernetBridge::new(radio, port, None::<&'static LentSlots<_, 1>>);
-    let mut observed = 0;
     {
         let mut future = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
             cx,
             |_| {},
             |_| {},
-            |_| {},
-            |view| {
-                assert_eq!(view.payload, &[7; 4]);
-                observed += 1;
-            }
+            |_| {}
         )));
         let mut cx = Context::from_waker(core::task::Waker::noop());
         for _ in 0..3 {
@@ -143,14 +141,13 @@ fn bridge_keeps_a_refused_packet_until_cancellation_without_spinning_or_releasin
             assert!(!stack.can_transmit());
         }
     }
-    assert_eq!(observed, 0);
     drop(bridge);
     assert!(pool.has_available());
     assert!(stack.can_transmit());
 }
 
 #[test]
-fn successful_tx_is_observed_once_after_admission_and_before_packet_and_credit_return() {
+fn successful_tx_hands_the_owner_to_the_device_whose_drop_returns_packet_and_credit() {
     let storage = Box::leak(Box::new(PacketPoolStorage::<1>::new()));
     let pool = Box::leak(Box::new(PacketPool::new(storage))).allocator();
     let mut resources = OwnedEndpointResources::<HostContext, 1, 1>::new();
@@ -163,6 +160,7 @@ fn successful_tx_is_observed_once_after_admission_and_before_packet_and_credit_r
             epoch: 1,
         },
         true,
+        core::marker::PhantomData,
     );
     radio.link_controller().set_link_up(true);
     let mut packet = pool.try_alloc().unwrap();
@@ -170,18 +168,12 @@ fn successful_tx_is_observed_once_after_admission_and_before_packet_and_credit_r
     packet.fill(7);
     assert!(stack.transmit(packet).is_ok());
     let frame = radio.try_receive_tx().unwrap().unwrap();
-    let mut observed = 0;
-    assert!(
-        frame
-            .transmit_to(&mut port, |view| {
-                assert_eq!(view.payload, &[7; 4]);
-                assert!(!pool.has_available());
-                assert!(!stack.can_transmit());
-                observed += 1;
-            })
-            .is_ok()
-    );
-    assert_eq!(observed, 1);
+    assert_eq!(frame.view().unwrap().payload, &[7; 4]);
+    assert!(!pool.has_available());
+    assert!(!stack.can_transmit());
+    // The port accepts the owner and drops it: the packet and its credit
+    // return then, not before.
+    assert!(frame.transmit_to(&mut port).is_ok());
     assert!(pool.has_available());
     assert!(stack.can_transmit());
 }
