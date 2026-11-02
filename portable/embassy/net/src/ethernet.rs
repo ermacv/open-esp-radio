@@ -317,6 +317,31 @@ pub struct EthernetBridge<
     pending: Option<(u64, OwnedNetworkTxFrame<'r>)>,
 }
 
+/// What one bridge turn did with the stack's transmissions, for an image
+/// that observes them: the packets the stack's queue held for the device
+/// when the turn began, out of its `capacity`, whether a packet waited from
+/// an earlier turn, and what became of the turn's packet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TxTurn {
+    pub queued: usize,
+    pub capacity: usize,
+    pub waited: bool,
+    pub outcome: TxOutcome,
+}
+
+/// What became of a bridge turn's packet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxOutcome {
+    /// None: the stack published no packet.
+    Idle,
+    /// The device took the packet.
+    Moved,
+    /// The packet waits for the device's room, for a later turn.
+    Held,
+    /// The device refused the packet for its length: it ended here.
+    Dropped,
+}
+
 /// The storage of a device's lent frames.
 pub type Lent<D> = <<D as NetDevice>::RxFrame as ReceivedFrame>::Storage;
 
@@ -381,6 +406,7 @@ impl<
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(LentCopy),
+        mut transmitted: impl FnMut(TxTurn),
     ) -> core::task::Poll<Result<core::convert::Infallible, crate::AccessRefused>> {
         use core::task::Poll;
         // A lent frame's packet dropped later wakes this task to return it:
@@ -432,7 +458,7 @@ impl<
                 refused(reason);
             }
         }
-        match self.poll_transmit_one(cx) {
+        match self.poll_transmit_one(cx, &mut transmitted) {
             Err(error) => Poll::Ready(Err(error)),
             Ok(progress) => {
                 if progress {
@@ -448,39 +474,54 @@ impl<
     fn poll_transmit_one(
         &mut self,
         cx: &mut core::task::Context<'_>,
+        transmitted: &mut impl FnMut(TxTurn),
     ) -> Result<bool, crate::AccessRefused> {
         use core::{future::Future, task::Poll};
+        let waited = self.pending.is_some();
+        let queued = self.radio.tx_queue_len()?;
+        let mut ended = |outcome, progress| {
+            transmitted(TxTurn {
+                queued,
+                capacity: TX,
+                waited,
+                outcome,
+            });
+            Ok(progress)
+        };
         let (epoch, packet) = match self.pending.take() {
             Some(pending) => pending,
             None => {
                 {
                     let mut publication = core::pin::pin!(self.radio.wait_tx_publication());
                     match publication.as_mut().poll(cx) {
-                        Poll::Pending => return Ok(false),
+                        Poll::Pending => return ended(TxOutcome::Idle, false),
                         Poll::Ready(result) => result?,
                     }
                 }
                 let Some(packet) = self.radio.try_receive_tx()? else {
                     // The coalesced publication outlived its last packet.
-                    return Ok(true);
+                    return ended(TxOutcome::Idle, true);
                 };
                 (self.link.epoch, packet)
             }
         };
         if self.device.poll_transmit_ready(cx).is_pending() {
             self.pending = Some((epoch, packet));
-            return Ok(false);
+            return ended(TxOutcome::Held, false);
         }
         match packet.transmit_to(&mut self.device) {
-            Ok(()) => Ok(true),
+            Ok(()) => ended(TxOutcome::Moved, true),
             Err(refused) => match refused.reason {
-                oer_protocols_network_port::TransmitError::InvalidLength(_) => Ok(true),
+                oer_protocols_network_port::TransmitError::InvalidLength(_) => {
+                    ended(TxOutcome::Dropped, true)
+                }
                 oer_protocols_network_port::TransmitError::QueueFull
                 | oer_protocols_network_port::TransmitError::LinkDown => {
                     self.pending = Some((epoch, refused.frame));
                     // Readiness is only an observation. Rearm after a refusal;
                     // if credit is already back, schedule another bounded turn.
-                    Ok(self.device.poll_transmit_ready(cx).is_ready())
+                    let again = self.device.poll_transmit_ready(cx).is_ready();
+                    ended(TxOutcome::Held, again)
                 }
             },
         }

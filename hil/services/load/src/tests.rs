@@ -35,6 +35,7 @@ fn the_largest_reports_fit_one_response() {
             .map(|hart| HartLoad {
                 hart,
                 idle_us: u64::MAX,
+                wakes: u32::MAX,
             })
             .collect(),
         executors: (0..MAX_EXECUTORS as u8)
@@ -43,6 +44,7 @@ fn the_largest_reports_fit_one_response() {
                 hart: 1,
                 level: 3,
                 work_us: u64::MAX,
+                rounds: u32::MAX,
             })
             .collect(),
     };
@@ -65,6 +67,16 @@ fn the_largest_reports_fit_one_response() {
             first_us: Some(u64::MAX),
             last_us: Some(u64::MAX),
             ..Sent::default()
+        },
+        bridge_tx: BridgeTx {
+            turns: u32::MAX,
+            moved: u32::MAX,
+            held: u32::MAX,
+            dropped: u32::MAX,
+            queue_full: u32::MAX,
+            starved: u32::MAX,
+            queued_sum: u32::MAX,
+            station_sum: u32::MAX,
         },
     });
     assert!(postcard::to_slice(&report, &mut buffer).unwrap().len() <= 512);

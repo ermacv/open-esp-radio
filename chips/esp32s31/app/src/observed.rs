@@ -441,6 +441,36 @@ pub(crate) fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {
     BRIDGE.copied();
 }
 
+/// The network transmit buffers the station holds now; the IP service, which
+/// hands them over and takes them back, is its one writer.
+#[cfg(feature = "wifi")]
+static STATION_TX: AtomicU32 = AtomicU32::new(0);
+
+/// The station took a network transmit buffer.
+#[cfg(feature = "wifi")]
+pub(crate) fn station_took_tx() {
+    STATION_TX.store(
+        STATION_TX.load(Ordering::Relaxed).wrapping_add(1),
+        Ordering::Relaxed,
+    );
+}
+
+/// The station gave a network transmit buffer back.
+#[cfg(feature = "wifi")]
+pub(crate) fn station_gave_tx() {
+    STATION_TX.store(
+        STATION_TX.load(Ordering::Relaxed).saturating_sub(1),
+        Ordering::Relaxed,
+    );
+}
+
+/// One bridge turn of the stack's transmissions.
+#[cfg(feature = "wifi")]
+pub(crate) fn bridge_turned(turn: oer_portable_embassy_net::ethernet::TxTurn) {
+    const BUFFERS: u32 = oer_chips_esp32s31_wifi::NETWORK_BUFFERS as u32;
+    BRIDGE.turned(turn, STATION_TX.load(Ordering::Relaxed), BUFFERS);
+}
+
 /// The samples one session of one hart's sampler keeps.
 #[cfg(not(feature = "group"))]
 pub const SAMPLES: usize = 2048;

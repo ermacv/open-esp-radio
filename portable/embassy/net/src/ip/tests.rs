@@ -1,6 +1,7 @@
 extern crate std;
 
 use super::*;
+use crate::ethernet::{TxOutcome, TxTurn};
 use core::{cell::RefCell, pin::Pin, task::Waker};
 use oer_portable_memory::HostContext;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
@@ -393,6 +394,7 @@ fn lease_events_expiry_and_coalesced_reconnect_keep_the_stack_and_socket() {
             |_| {},
             |_| {},
             |_| {},
+            |_| {},
         ));
         settle(&mut task, &scheduled, &mut cx);
         assert_eq!(control.status().link.epoch, 1);
@@ -484,6 +486,7 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
     let packet = packet(pool);
     let original_payload = packet.get(14..).unwrap().as_ptr() as usize;
     let received = Cell::new(0u32);
+    let turns = RefCell::new(Vec::new());
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
@@ -497,7 +500,17 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
         |_| received.set(received.get().saturating_add(1)),
         |_| {},
         |_| {},
+        |turn| turns.borrow_mut().push(turn),
     ));
+    // The turns that had a packet, without the idle ones.
+    let busy = || {
+        turns
+            .borrow()
+            .iter()
+            .filter(|turn| turn.outcome != TxOutcome::Idle)
+            .copied()
+            .collect::<Vec<_>>()
+    };
     settle(&mut task, &scheduled, &mut cx);
     port.borrow_mut().refuse_once = true;
     iface.with_driver(|driver| driver.transmit(packet)).unwrap();
@@ -507,6 +520,13 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
         !iface.with_driver(|driver| driver.can_transmit()),
         "retained packet keeps the single TX credit"
     );
+    let held = TxTurn {
+        queued: 1,
+        capacity: 1,
+        waited: false,
+        outcome: TxOutcome::Held,
+    };
+    assert_eq!(busy(), [held], "the refused packet waits for the device");
     port.borrow_mut().rx.push_back(Frame::Plain);
     PortState::wake(&port.borrow().rx_waker);
     settle(&mut task, &scheduled, &mut cx);
@@ -522,6 +542,17 @@ fn tx_refusal_keeps_the_exact_owner_until_credit_and_rx_still_progresses() {
     PortState::wake(&port.borrow().tx_waker);
     settle(&mut task, &scheduled, &mut cx);
     assert_eq!(port.borrow().accepted, [original_payload]);
+    let moved = TxTurn {
+        queued: 0,
+        waited: true,
+        outcome: TxOutcome::Moved,
+        ..held
+    };
+    assert_eq!(
+        busy().last(),
+        Some(&moved),
+        "the waiting packet goes once the device has room"
+    );
     assert!(pool.try_alloc().is_some());
     assert!(iface.with_driver(|driver| driver.can_transmit()));
     // A frame the device still queues at the stop may be lent: the stop
@@ -544,7 +575,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         assert!(
             service
                 .bridge
-                .poll(&mut cx, |_| {}, |_| {}, |_| {})
+                .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
                 .is_pending()
         );
         assert!(iface.has_ip_addr(Ipv4Addr::from(CONFIG.address)));
@@ -557,7 +588,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
             assert!(
                 service
                     .bridge
-                    .poll(&mut cx, |_| {}, |_| {}, |_| {})
+                    .poll(&mut cx, |_| {}, |_| {}, |_| {}, |_| {})
                     .is_pending()
             );
         }
@@ -565,7 +596,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         control.stop();
         control.stop();
         {
-            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+            let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
             assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
         }
         assert!(pool.try_alloc().is_some());
@@ -574,7 +605,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
         assert!(service.stack().routes().is_empty());
         assert_eq!(control.status().lifecycle, Lifecycle::Stopped);
         // A terminal service can be polled again without touching the stack ABI.
-        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+        let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
         assert_eq!(task.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
     }
 }
@@ -582,7 +613,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
 #[test]
 fn context_refusal_is_a_typed_terminal_and_does_not_poll_the_stack() {
     let (control, mut service, _) = start::<oer_portable_memory::Never>(Configuration::Dhcpv4);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
     assert_eq!(
         task.as_mut()
             .poll(&mut core::task::Context::from_waker(Waker::noop())),
@@ -607,6 +638,7 @@ fn static_status_tracks_link_events_and_stop_clears_the_real_interface() {
         &mut service.bridge,
         &iface,
         Configuration::Static(CONFIG),
+        |_| {},
         |_| {},
         |_| {},
         |_| {},
@@ -715,7 +747,7 @@ fn a_stop_returns_every_lent_buffer_including_the_replies_the_stack_retains() {
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
     settle(&mut task, &scheduled, &mut cx);
     // The device takes no frame and the stack's one TX credit is out: its
     // replies wait inside it, each in its request's packet.
@@ -785,7 +817,7 @@ fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
     let waker = Waker::from(scheduled.clone());
     let mut cx = core::task::Context::from_waker(&waker);
-    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
+    let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
     settle(&mut task, &scheduled, &mut cx);
     let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for payload in [[1, 2, 3], [4, 5, 6]] {

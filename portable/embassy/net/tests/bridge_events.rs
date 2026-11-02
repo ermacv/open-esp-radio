@@ -196,6 +196,7 @@ fn hil_bridge_parks_retains_credit_and_services_rx_until_tx_credit_event() {
         cx,
         |_| {},
         |_| panic!("RX refused"),
+        |_| {},
         |_| {}
     )));
     let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));

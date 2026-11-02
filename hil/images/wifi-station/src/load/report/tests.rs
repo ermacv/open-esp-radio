@@ -9,6 +9,8 @@ fn executor(executor: u8, hart: u8, work_us: Option<u64>, idle_us: Option<u64>) 
         level: executor,
         work_us,
         idle_us,
+        rounds: u32::from(executor) * 10,
+        wakes: u32::from(executor) + 1,
     }
 }
 
@@ -36,6 +38,18 @@ fn the_cpu_report_sums_each_harts_idle_and_lists_each_working_executor() {
             .collect::<Vec<_>>(),
         [(0, 0, 100), (1, 0, 50), (2, 1, 20)],
         "an executor that saw no work reports none"
+    );
+    assert_eq!(
+        load.executors
+            .iter()
+            .map(|executor| executor.rounds)
+            .collect::<Vec<_>>(),
+        [0, 10, 20]
+    );
+    assert_eq!(
+        load.harts.iter().map(|hart| hart.wakes).collect::<Vec<_>>(),
+        [1, 3 + 4],
+        "a hart's wakes add up over the executors that idled on it"
     );
 }
 
@@ -203,6 +217,10 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
     };
     end.bridge.received = 2;
     end.bridge.refused_queue = 1;
+    start.bridge.tx.turns = u32::MAX;
+    end.bridge.tx.turns = 4;
+    end.bridge.tx.starved = 2;
+    end.bridge.tx.station_sum = 90;
     end.cache.ibus0.hits = 9;
     end.cache_geometry.l2_bypassed = true;
     let window = counters(&start, &end);
@@ -214,6 +232,11 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
     assert_eq!(
         window.stack_received, 0,
         "a stack count that went back saturates"
+    );
+    let tx = bridge_tx(&start, &end);
+    assert_eq!(
+        (tx.turns, tx.starved, tx.station_sum, tx.moved),
+        (5, 2, 90, 0)
     );
     assert_eq!(window.cache.ibus0.hits, 4);
     assert!(window.cache.dbus1.overflowed);
