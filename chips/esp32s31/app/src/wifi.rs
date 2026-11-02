@@ -596,19 +596,23 @@ impl Station {
         if !rng.is_healthy() {
             return Err(Error::Entropy);
         }
-        boot.boot_id = Some(super::draw_boot_id(&mut rng));
-        let nonces = NONCES
-            .try_init(wifi::NonceSource::from_entropy(|seed| rng.fill(seed)))
-            .ok_or(Error::Storage)?;
+        // Every draw happens here, at boot: the generator stays with no
+        // runtime owner, so a failed health test is a typed boot error.
+        boot.boot_id = Some(super::draw_boot_id(&mut rng).map_err(|_| Error::Entropy)?);
+        let nonces =
+            wifi::NonceSource::from_entropy(|seed| rng.fill(seed)).map_err(|_| Error::Entropy)?;
+        let nonces = NONCES.try_init(nonces).ok_or(Error::Storage)?;
         let mut words = [0; 12];
-        rng.fill(&mut words);
+        rng.fill(&mut words).map_err(|_| Error::Entropy)?;
         let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
+        let mut delay = [0; 4];
+        rng.fill(&mut delay).map_err(|_| Error::Entropy)?;
         let (control, network, stopper, runners) = wifi::station(
             wifi::Resources {
                 events: ProductEvents,
                 storage: binding::storage(),
                 hardware,
-                rng,
+                delay_random: u32::from_le_bytes(delay),
                 address,
                 ap,
                 bound,

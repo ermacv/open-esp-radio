@@ -10,9 +10,7 @@
 //! frontier; startup therefore cannot accidentally lock the radio into the
 //! first role an application happens to use.
 
-use oer_chips_esp32s31_hal::ieee80211::init::{
-    MacColdStartConfig, MacDelayEntropy, MacSlowClockCalibrationSource,
-};
+use oer_chips_esp32s31_hal::ieee80211::init::{MacColdStartConfig, MacSlowClockCalibrationSource};
 use oer_chips_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold},
     root::WifiPartition,
@@ -35,7 +33,7 @@ use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 ///
 /// The coexistence priorities and the PHY power table stay with the radio
 /// system, which answers the MAC cold start's queries for them.
-pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
+pub trait WifiMacPlatform: MacSlowClockCalibrationSource {
     fn install_phy_tx_power_profile(&mut self, profile: PhyTxTargetPowerProfile);
 }
 
@@ -70,14 +68,17 @@ pub struct WifiMacStartConfig {
     handshake_deadline: Duration,
     station_address: IndividualAddress,
     access_point_address: IndividualAddress,
+    delay_random: u32,
 }
 
 impl WifiMacStartConfig {
-    /// Retain two nonzero interface addresses before starting the hardware.
+    /// Retain two nonzero interface addresses and the random word of the
+    /// MAC's delay slot, drawn before starting the hardware.
     pub const fn new(
         handshake_deadline: Duration,
         station_address: IndividualAddress,
         access_point_address: IndividualAddress,
+        delay_random: u32,
     ) -> Result<Self, oer_protocols_ieee80211_wire::address::IndividualAddressError> {
         if matches!(station_address.get(), [0, 0, 0, 0, 0, 0])
             || matches!(access_point_address.get(), [0, 0, 0, 0, 0, 0])
@@ -88,6 +89,7 @@ impl WifiMacStartConfig {
             handshake_deadline,
             station_address,
             access_point_address,
+            delay_random,
         })
     }
 
@@ -101,6 +103,11 @@ impl WifiMacStartConfig {
 
     pub const fn access_point_address(self) -> IndividualAddress {
         self.access_point_address
+    }
+
+    /// The random word the MAC's delay slot is chosen from.
+    pub const fn delay_random(self) -> u32 {
+        self.delay_random
     }
 }
 
@@ -213,7 +220,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
             access_point_address: config.mac.access_point_address.get(),
         },
         slow_clock: platform.mac_slow_clock_calibration(),
-        delay_random: platform.mac_delay_random(),
+        delay_random: config.mac.delay_random,
     };
     let (cell, tracked) = match cell.track(member, request).await {
         Ok(answer) => answer,

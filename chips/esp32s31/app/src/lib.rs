@@ -292,10 +292,12 @@ pub fn boot_id() -> u64 {
 }
 
 /// A nonzero boot identity from `rng`.
-pub(crate) fn draw_boot_id(rng: &mut oer_chips_esp32s31_compose::platform::Entropy) -> u64 {
+pub(crate) fn draw_boot_id(
+    rng: &mut oer_chips_esp32s31_compose::platform::Entropy,
+) -> Result<u64, oer_chips_esp32s31_hal::peripherals::entropy::EntropyError> {
     let mut bytes = [0; 8];
-    rng.fill(&mut bytes);
-    crate::boot::identity(bytes)
+    rng.fill(&mut bytes)?;
+    Ok(crate::boot::identity(bytes))
 }
 
 /// Service tasks a boot step prepared, started with the executor.
@@ -814,7 +816,10 @@ pub fn start<S: Started, H: GroupStarted>(
             if !rng.is_healthy() {
                 fail(Error::Entropy.name());
             }
-            draw_boot_id(&mut rng)
+            match draw_boot_id(&mut rng) {
+                Ok(id) => id,
+                Err(_) => fail(Error::Entropy.name()),
+            }
         }
         (None, None) => fail(Error::Entropy.name()),
     };

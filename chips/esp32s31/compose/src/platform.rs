@@ -66,7 +66,7 @@ impl DeviceIdentity {
     }
 }
 
-/// The unique entropy owner moves from image seed generation to the radio.
+/// The unique entropy owner, which draws the image's seeds at boot.
 pub struct Entropy(hw::entropy::Entropy<EmbassyClock>);
 impl Entropy {
     pub fn new(registers: hw::entropy::EntropyRegisters, clock: EmbassyClock) -> Self {
@@ -75,11 +75,11 @@ impl Entropy {
     pub fn is_healthy(&self) -> bool {
         self.0.status().is_healthy()
     }
-    pub fn random(&mut self) -> u32 {
+    pub fn random(&mut self) -> Result<u32, hw::entropy::EntropyError> {
         self.0.random()
     }
-    pub fn fill(&mut self, bytes: &mut [u8]) {
-        self.0.fill(bytes);
+    pub fn fill(&mut self, bytes: &mut [u8]) -> Result<(), hw::entropy::EntropyError> {
+        self.0.fill(bytes)
     }
 }
 

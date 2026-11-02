@@ -39,7 +39,6 @@ const _: () = {
 pub const TX: usize = crate::FRAME_CAPACITY;
 /// The executor that polls the MAC driver: the station's, on the boot hart.
 pub type DriverExecutor = oer_chips_family_executor::Executor<Esp32s31, 0>;
-pub(crate) type Rng = oer_chips_esp32s31_compose::platform::Entropy;
 /// Image-selected entries, callbacks, observers and event sink.
 pub trait Binding: Sized + 'static {
     type Id: SlotIdentity + 'static;
@@ -491,7 +490,9 @@ pub struct Resources<W: Binding> {
     pub events: W::Events,
     pub storage: &'static mut Storage<W>,
     pub hardware: crate::WifiHardware,
-    pub rng: Rng,
+    /// The random word of the MAC's delay slot, drawn from the hardware
+    /// generator before the station starts.
+    pub delay_random: u32,
     pub address: [u8; 6],
     pub ap: [u8; 6],
     pub bound: Bound<W::Wifi>,
@@ -566,7 +567,7 @@ pub fn station<W: Binding>(
         events,
         storage,
         hardware,
-        rng,
+        delay_random,
         address,
         ap,
         bound,
@@ -620,7 +621,7 @@ pub fn station<W: Binding>(
                 boot: radio::Boot {
                     cell,
                     wifi,
-                    rng,
+                    delay_random,
                     station: address,
                     ap,
                     bound,
