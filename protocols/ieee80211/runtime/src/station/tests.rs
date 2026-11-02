@@ -3735,3 +3735,17 @@ fn a_turn_is_direct_only_when_it_took_an_input_and_each_it_took_was_direct() {
     assert_eq!(super::Taken::of(Some(Direct), Some(Input)), Input);
     assert_eq!(super::Taken::of(None, Some(Input)), Input);
 }
+
+#[test]
+fn an_attempts_pass_reruns_the_step_only_after_a_refused_attempt() {
+    use super::Attempted::{Followed, Nothing, Submitted};
+    assert_eq!(Nothing.after(false), Submitted);
+    assert_eq!(Nothing.after(true), Followed);
+    assert_eq!(Submitted.after(false), Submitted);
+    assert_eq!(Submitted.after(true), Followed);
+    assert_eq!(
+        Followed.after(false),
+        Followed,
+        "a refusal is never forgotten"
+    );
+}
