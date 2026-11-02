@@ -344,8 +344,9 @@ An image built on it writes `entry!(boot)`: the synchronous `boot` runs once
 before any executor, takes the peripherals it needs and builds drivers and
 services with defaults through the boot context, overriding a default only
 by an explicit setting or a static storage of its own (reconnect, drain,
-AES seats, IP pools), and returns the application's future (`impl
-Started`). The SDK owns the default interrupt table, the
+IP pools), and returns what builds the application's future (`impl
+Started`): a closure the SDK calls where the future stays, so a root
+future is never moved. The SDK owns the default interrupt table, the
 executors and its service tasks (`SdkTasks`, on the same executor as the
 image's IP service at the image's pool sizes and its application, which
 run as that executor's roots in the frame of the SDK's run), and applies

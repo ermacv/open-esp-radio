@@ -16,14 +16,14 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(*b"DE", 6, 10)?;
     let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let link = LINK.application(&mut boot)?;
-    Ok(boot.run(app(station, status, link)))
+    Ok(boot.run(move || app(station, status, link)))
 }
 
 fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let (net, mut boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
     let link = LINK.second(&mut boot)?;
-    Ok(boot.run(sockets(net, link)))
+    Ok(boot.run(move || sockets(net, link)))
 }
 
 async fn app(mut station: Station, status: NetStatus, link: ApplicationEnd<Request, Reply, 1>) -> AppResult {
@@ -49,14 +49,17 @@ calls `boot` once
 on hart 0, before any executor and with interrupts disabled. `boot` moves
 peripherals into drivers and services through the boot context (`Boot`):
 their interrupt bindings, executors and service tasks are made there and
-nowhere else. `Boot::run` ends the boot with the application's future.
+nowhere else. `Boot::run` ends the boot with what builds the application's
+future: a closure the library calls where the future stays, so the future
+is never moved.
 
 `entry!(boot, hart1 = boot1)` names the second boot. The library calls
 `boot1` once `boot` returned, still before any executor, with what the boot
 handed it (`Hart1Peripherals`: the station's network device, which
 `Station::start` keeps for it) and its own context (`Hart1Boot`). `boot1`
 starts the IP service (`wifi::Net::start`), whose stack and sockets stay in
-its future, and ends with `Hart1Boot::run`. The stack has TCP sockets; with
+its future, and ends with `Hart1Boot::run` and the closure that builds that
+future. The stack has TCP sockets; with
 `udp` also UDP sockets, each queueing up to 16 received datagrams. A
 stopped IP service closes every UDP socket, which returns its queued
 datagrams' lent receive buffers to the station. Data of the image's own reaches
@@ -69,8 +72,8 @@ when a station started, the application executor otherwise), enables
 interrupts and runs the application executor in thread mode with its
 service tasks (`SdkTasks`) and the image's three futures as the executor's
 roots: the second boot's IP service, at the image's pool sizes, the second
-boot's future and the application. They stay in the frame of the library's
-run, which never returns, and are tasks of the executor after `SdkTasks`; no
+boot's future and the application. The library builds them in the frame of
+its run, which never returns, and they stay there: and are tasks of the executor after `SdkTasks`; no
 static slot names their types, so an image declares no task set and needs
 no unstable feature. `boot` returns `impl Started` and `boot1` `impl
 Hart1Started`, which name the future types: `Boot::run` and

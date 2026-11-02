@@ -79,13 +79,15 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         phase: Phase::Idle,
         requests: inbox,
     };
-    Ok(boot.run(oer_hil_agent_espressif::serve(
+    Ok(boot.run(move || {
+        oer_hil_agent_espressif::serve(
         console,
         evidence,
         services::IMAGE,
         outbox,
         move || application(worker, relay, hart0, relay_part),
-    )))
+    )
+    }))
 }
 
 /// The worker beside the load server's relay, which never ends.
@@ -112,7 +114,7 @@ fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Er
     let relay = load::relay::RELAY.second(&mut boot)?;
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
     let part = observe::Part::claim("load")?;
-    Ok(boot.run(sockets(net, exchanges, load, relay, tally, part)))
+    Ok(boot.run(move || sockets(net, exchanges, load, relay, tally, part)))
 }
 
 /// The line exchanges beside the load server, which never ends.

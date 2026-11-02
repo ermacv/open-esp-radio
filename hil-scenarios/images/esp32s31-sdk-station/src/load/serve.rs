@@ -115,7 +115,11 @@ pub(crate) async fn serve(
                 {
                     Ok(socket) => {
                         requests.send(Answer::Started(Started::Running)).await;
-                        let ended = run(&mut requests, socket, start, tally, net, &mut hart0).await;
+                        // Built where it stays: an awaited call would build
+                        // the run's future on this poll's stack, then move it.
+                        let mut running =
+                            pin!(run(&mut requests, socket, start, tally, net, &mut hart0));
+                        let ended = running.as_mut().await;
                         kept = Some((start.run, ended));
                         continue;
                     }
@@ -271,13 +275,13 @@ async fn run(
     let mut receiving = Receiving::default();
     let mut sent = Sent::default();
     let ends = {
-        let mut activity = pin!(select(
-            receive(&socket, start.run, tally, &mut receiving, &window),
-            measure(&socket, &start, &window, &mut sent, net, hart0),
-        ));
+        // Each future built where it stays, as in `serve`.
+        let mut receiver = pin!(receive(&socket, start.run, tally, &mut receiving, &window));
+        let mut measuring = pin!(measure(&socket, &start, &window, &mut sent, net, hart0));
+        let mut activity = select(receiver.as_mut(), measuring.as_mut());
         loop {
             let running = Phase::Running { run: start.run };
-            match select(requests.receive(), activity.as_mut()).await {
+            match select(requests.receive(), &mut activity).await {
                 Either::First((_identity, request)) => {
                     let answer = match action(running, request) {
                         Action::Answer(decided) => decided_answer(decided),

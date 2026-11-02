@@ -61,13 +61,13 @@ pub use esp32s31::*;
 ///
 /// fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 ///     let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
-///     Ok(boot.run(app(station, status)))
+///     Ok(boot.run(move || app(station, status)))
 /// }
 ///
 /// fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
 ///     let device = p.device.ok_or(Error::NoDevice)?;
 ///     let (net, boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
-///     Ok(boot.run(sockets(net)))
+///     Ok(boot.run(move || sockets(net)))
 /// }
 /// ```
 #[macro_export]

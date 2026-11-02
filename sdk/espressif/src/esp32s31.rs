@@ -290,9 +290,14 @@ pub(crate) struct Pending {
 }
 
 impl Boot {
-    /// End the boot: run `app` on hart 0 beside the library's service
-    /// tasks once the executor starts.
-    pub fn run<F: core::future::Future<Output = AppResult>>(self, app: F) -> Run<F> {
+    /// End the boot: run the future `app` builds on hart 0 beside the
+    /// library's service tasks once the executor starts. The library calls
+    /// `app` where the future stays, so the future is never moved.
+    pub fn run<C, F>(self, app: C) -> Run<C>
+    where
+        C: FnOnce() -> F,
+        F: core::future::Future<Output = AppResult>,
+    {
         Run { boot: self, app }
     }
 }
@@ -302,8 +307,10 @@ impl Boot {
 pub trait Started: started::Sealed {
     /// The application's future.
     type App: core::future::Future<Output = AppResult>;
+    /// What builds it, where it stays.
+    type Build: FnOnce() -> Self::App;
     #[doc(hidden)]
-    fn into_parts(self) -> (Boot, Self::App);
+    fn into_parts(self) -> (Boot, Self::Build);
 }
 
 mod started {
@@ -311,16 +318,21 @@ mod started {
 }
 
 /// The finished boot [`Boot::run`] returns.
-pub struct Run<F> {
+pub struct Run<C> {
     boot: Boot,
-    app: F,
+    app: C,
 }
 
-impl<F> started::Sealed for Run<F> {}
+impl<C> started::Sealed for Run<C> {}
 
-impl<F: core::future::Future<Output = AppResult>> Started for Run<F> {
+impl<C, F> Started for Run<C>
+where
+    C: FnOnce() -> F,
+    F: core::future::Future<Output = AppResult>,
+{
     type App = F;
-    fn into_parts(self) -> (Boot, F) {
+    type Build = C;
+    fn into_parts(self) -> (Boot, C) {
         (self.boot, self.app)
     }
 }
@@ -356,8 +368,14 @@ impl Hart1Boot {
 }
 
 impl<N: NetTask> Hart1Boot<N> {
-    /// End the second boot: run `future` beside its IP service.
-    pub fn run<F: core::future::Future<Output = AppResult>>(self, future: F) -> Hart1Run<F, N> {
+    /// End the second boot: run the future `future` builds beside its IP
+    /// service. The library calls `future` where the future stays, so the
+    /// future is never moved.
+    pub fn run<C, F>(self, future: C) -> Hart1Run<C, N>
+    where
+        C: FnOnce() -> F,
+        F: core::future::Future<Output = AppResult>,
+    {
         Hart1Run {
             net: self.net,
             future,
@@ -369,24 +387,32 @@ impl<N: NetTask> Hart1Boot<N> {
 pub trait Hart1Started: started::Sealed {
     /// The second boot's future.
     type Future: core::future::Future<Output = AppResult>;
+    /// What builds it, where it stays.
+    type Build: FnOnce() -> Self::Future;
     /// The IP service it started, or [`NoNet`].
     type Net: NetTask;
     #[doc(hidden)]
-    fn into_parts(self) -> (Self::Net, Self::Future);
+    fn into_parts(self) -> (Self::Net, Self::Build);
 }
 
 /// The finished second boot [`Hart1Boot::run`] returns.
-pub struct Hart1Run<F, N> {
+pub struct Hart1Run<C, N> {
     net: N,
-    future: F,
+    future: C,
 }
 
-impl<F, N> started::Sealed for Hart1Run<F, N> {}
+impl<C, N> started::Sealed for Hart1Run<C, N> {}
 
-impl<F: core::future::Future<Output = AppResult>, N: NetTask> Hart1Started for Hart1Run<F, N> {
+impl<C, F, N> Hart1Started for Hart1Run<C, N>
+where
+    C: FnOnce() -> F,
+    F: core::future::Future<Output = AppResult>,
+    N: NetTask,
+{
     type Future = F;
+    type Build = C;
     type Net = N;
-    fn into_parts(self) -> (N, F) {
+    fn into_parts(self) -> (N, C) {
         (self.net, self.future)
     }
 }
@@ -459,7 +485,7 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
 /// its frames) and runs nothing.
 #[doc(hidden)]
 pub fn no_hart1(_handed: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
-    Ok(boot.run(core::future::pending()))
+    Ok(boot.run(core::future::pending::<AppResult>))
 }
 
 /// An IP service the executor runs beside the application, with the
@@ -798,12 +824,12 @@ pub fn start<S: Started, H: Hart1Started>(
     #[cfg(not(feature = "hart1"))]
     observed_root!(net, Ip);
     #[cfg(not(feature = "hart1"))]
-    let mut second = core::pin::pin!(second);
+    let mut second = core::pin::pin!(second());
     #[cfg(not(feature = "hart1"))]
     let mut second = core::pin::pin!(run_app(second.as_mut()));
     #[cfg(not(feature = "hart1"))]
     observed_root!(second, Second);
-    let mut app = core::pin::pin!(app);
+    let mut app = core::pin::pin!(app());
     let mut app = core::pin::pin!(run_app(app.as_mut()));
     observed_root!(app, Application);
     #[cfg(not(feature = "hart1"))]
