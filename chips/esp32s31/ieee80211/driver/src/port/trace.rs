@@ -1,4 +1,4 @@
-//! P2 publication evidence for the image declaring trace and debug-control.
+//! Driver publication evidence for the image declaring trace and debug-control.
 use oer_trace::{Channel, Domain, Event, Kind};
 mod edca;
 pub(crate) use edca::contention;

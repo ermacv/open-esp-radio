@@ -6,7 +6,7 @@
 //! an exhausted walker raises no further RX interrupt. So the return itself
 //! must wake the runner. Dropping a lease marks its buffer released (the
 //! stage pool's own release edge); [`RxReturnNotifier::notify`] then posts
-//! the RX-capacity fact, which starts one drain on P2: the runner rearms the
+//! the RX-capacity fact, which starts one drain in the driver's task: the runner rearms the
 //! released prefix, stages what waited, and unmasks RX through the doorbell.
 //!
 //! The notifier touches no ring state and no register: it only publishes a

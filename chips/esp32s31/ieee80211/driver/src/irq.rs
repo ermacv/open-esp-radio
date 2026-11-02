@@ -11,17 +11,17 @@
 //! cause left for later enters the handler again at once.
 //!
 //! The banks' epoch ([`InterruptEpoch`]) is the handler's alone. The radio
-//! executor (P2) never touches an interrupt register and never the CPU
+//! executor (the driver's) never touches an interrupt register and never the CPU
 //! route; it asks the line through [`WifiIrqRequests`] and rings the
 //! doorbell:
 //!
-//! 1. P2 sets a request bit (`fetch_or`, Release), then rings
+//! 1. The driver sets a request bit (`fetch_or`, Release), then rings
 //!    ([`WifiIrqRequests::ring`], or [`WifiIrqRequests::activate`] with the
 //!    binding's [`Bound`] proof).
 //! 2. The handler lowers the doorbell first, then takes every request at
 //!    once (`swap(0)`, AcqRel). A ring after the lowering raises the line
 //!    again, so no request is lost; requests made before the take coalesce.
-//!    The handler preempts P2, so once [`WifiIrqRequests::is_pending`] reads
+//!    The handler preempts the driver, so once [`WifiIrqRequests::is_pending`] reads
 //!    `false` the requests it took are applied.
 //! 3. Of the requests taken together the safest wins:
 //!    [`WifiIrqRequest::Close`] (mask and clear both banks), then
@@ -66,7 +66,7 @@ use crate::mac::irq::Fault;
 /// at the radio interrupt level, one of [`WifiIrqPart`]'s sources.
 ///
 /// The image implements it over its `FROM_CPU` 3 doorbell; host tests run
-/// the handler synchronously, as the interrupt would preempt P2.
+/// the handler synchronously, as the interrupt would preempt the driver.
 pub trait RadioDoorbell {
     const HANDLER: oer_espressif_interrupt_table::Context;
     const EXECUTOR: oer_espressif_interrupt_table::Context;

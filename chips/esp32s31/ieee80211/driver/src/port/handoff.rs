@@ -1,4 +1,4 @@
-//! Separate affine P1/P2 endpoints over permanent queue backing.
+//! Separate affine body/driver endpoints over permanent queue backing.
 use super::*;
 use oer_memory::{
     AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, LocalSpscReceiver, LocalSpscSender,
@@ -19,15 +19,15 @@ type FailedCommand<'id, Id, D, const B: usize, O: Observations> =
 type FailedTerminal<'id, Id, D, const B: usize, O: Observations> =
     oer_memory::OnceValue<owned::Retained<'id, Id, D, B, O>>;
 
-/// The transmissions' terminals, each at its ticket's place from P2's
-/// completion until P1 takes it, so only the place travels through the
+/// The transmissions' terminals, each at its ticket's place from the driver's
+/// completion until the body takes it, so only the place travels through the
 /// event queue. A ticket names one operation at a time: a place holds at
 /// most one terminal.
 pub(super) type Completions<'id, Id, D, const B: usize, O> =
     oer_memory::ReturnBank<Option<owned::OwnedTxCompleted<'id, Id, D, B, O>>, TX_TICKETS>;
 
-/// The place of one parked transmission terminal. Only P2 makes one, when
-/// it parks the terminal; P1 consumes it once.
+/// The place of one parked transmission terminal. Only the driver makes one, when
+/// it parks the terminal; the body consumes it once.
 pub(super) struct ParkedCompletion {
     place: u8,
 }
@@ -63,7 +63,7 @@ fn completions_vacant<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observa
     })
 }
 
-// Keep the ownership-preserving failure path shared by P1 and P2 callers.
+// Keep the ownership-preserving failure path shared by body and driver callers.
 // It never extracts the retained owner through a shared reference.
 #[inline(never)]
 pub(super) fn retain_terminal<
@@ -113,7 +113,7 @@ pub(super) struct Attached<'id, Id: SlotIdentity, D: Device<B>, const B: usize> 
     /// The device's timer, cloned once at preparation.
     pub(super) timer: D::Timer,
     pub(super) gate: GateIssuer<'id, Part<Id, 1>>,
-    /// P1's view of the channel it last published; P1 alone writes it.
+    /// The body's view of the channel it last published; the body alone writes it.
     pub(super) tuned: Cell<Channel>,
 }
 
@@ -180,7 +180,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         channel: Channel,
         timer: D::Timer,
     ) {
-        // Pure clock readings carry no affine owner. A cancelled P1 read may
+        // Pure clock readings carry no affine owner. A cancelled body read may
         // leave one reply after its endpoint epoch ended; discard it only
         // under this exclusive, joined preparation borrow.
         let _ = self.clock_replies.split().1.try_receive();

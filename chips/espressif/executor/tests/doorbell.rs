@@ -24,7 +24,12 @@ fn doorbell_constructor_checks_direction_and_urgent_source_identity() {
         (
             "doorbell_requester",
             "error[E0080]",
-            "the doorbell requester must be an executor entry",
+            "an interrupt-mode executor's entry must poll its tasks",
+        ),
+        (
+            "doorbell_thread_requester",
+            "error[E0080]",
+            "a thread executor needs its wake entry",
         ),
         (
             "doorbell_urgent_source",
@@ -39,7 +44,7 @@ fn doorbell_constructor_checks_direction_and_urgent_source_identity() {
             &format!("include!(\"{}/tests/ui/support/", manifest.display()),
         );
         fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"doorbell-direction\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?} }}\noer-espressif-platform-port = {{ path = {:?} }}\noer-riscv = {{ path = {:?} }}\n",
+        "[package]\nname = \"doorbell-direction\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?}, features = [\"host-signal\"] }}\noer-espressif-platform-port = {{ path = {:?} }}\noer-riscv = {{ path = {:?} }}\n",
         manifest.join("../../../chips/espressif/interrupt-table"),
         manifest.join("../../../chips/espressif/platform-port"),
         manifest.join("../../../portable/riscv")

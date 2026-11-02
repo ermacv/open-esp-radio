@@ -34,8 +34,11 @@ block primitive the facade's station callbacks supply
 The permanent RX ring and nine TX allocations have one declaration in the
 facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
 modules hold only their line and signals. `Resources` consumes the opaque
-`WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` runs
-on the existing P2 executor; `Runners::station` runs on P1 beside networking.
+`WifiHardware` and DMA owners without exposing their backend field types. `Runners::driver` and
+`Runners::station` run on one thread-mode executor (`DriverExecutor`, the
+station's), so neither preempts the other. The driver's signals name that
+executor; the station's lent-buffer returns raise them as its own tasks
+(`FromOwnTask`), and the driver rings the radio doorbell from its wake entry.
 The image supplies the station runner's start-time `Profile`: the station's address, scan channels and callbacks.
 The network comes with each connect: `Control::connect(credentials)` takes
 the `PreparedCredentials` of one network, which only an idle station takes

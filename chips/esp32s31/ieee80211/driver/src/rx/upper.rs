@@ -1,7 +1,7 @@
-//! Staged leases reach the application (P1) through an SPSC queue.
+//! Staged leases reach the application (the body) through an SPSC queue.
 //!
-//! [`QueueSink`] is the receive runner's publisher on the radio executor
-//! (P2): it marks each staged lease's first handoff (the monotonic time and
+//! [`QueueSink`] is the receive runner's publisher in the driver's task:
+//! it marks each staged lease's first handoff (the monotonic time and
 //! the frame's raw MAC stamp), counts it, sends it into the queue and wakes
 //! the application. [`FrameReceiver`] is the application's end: it takes
 //! the leases in order and holds each through the [`RxReturnNotifier`], so

@@ -2,6 +2,6 @@ use oer_espressif_interrupt_table::signal::{FromHandler, IrqSignal, host::Deferr
 include!("support/table.rs");
 
 #[cfg(ui_reject)]
-const SIGNAL: IrqSignal<Deferred> = IrqSignal::new::<FromHandler<IrqToken>, WakeToken>(); // ui-error@outside: E0080: evaluation panicked: the signal entry must name its executor's software interrupt
+const SIGNAL: IrqSignal<Deferred> = IrqSignal::new::<FromHandler<IrqToken>, WakeToken>(); // ui-error@outside: E0080: evaluation panicked: an executor's entry must name its software interrupt
 #[cfg(not(ui_reject))]
 const SIGNAL: IrqSignal<Deferred> = IrqSignal::new::<FromHandler<IrqToken>, ExecutorToken>();

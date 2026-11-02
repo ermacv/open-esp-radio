@@ -446,7 +446,7 @@ pub trait RxBeaconPriorityHardware {
 /// The coexistence priorities of the shared radio the core shares its RF
 /// with, as it last published them.
 /// The core retains a concrete `C: RadioCoexPriorities` chosen by its image;
-/// this policy is statically dispatched, including on the P2 publication path.
+/// this policy is statically dispatched, including on the driver's publication path.
 pub trait RadioCoexPriorities {
     /// The priority of the beacon-window event (`coex_pti_get(0)`), which
     /// beacon reception asks for the air with.

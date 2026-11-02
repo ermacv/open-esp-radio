@@ -1,4 +1,4 @@
-use oer_espressif_interrupt_table::Bound;
+use oer_espressif_interrupt_table::{Bound, signal::host::Deferred};
 oer_espressif_interrupt_table::__fake_parts!();
 include!("support/doorbell.rs");
 
@@ -21,5 +21,7 @@ table!(2);
 
 pub fn make(bound: &Bound<IrqToken>) {
     let (line, _ack) = doorbell::DoorbellLine::<chip::Fake, 3>::split(chip::platform::FromCpu3);
-    let _bell = doorbell::Doorbell::<chip::Fake, 3, _, ExecutorToken>::new::<TimerIrq>(line, bound); // ui-error@outside: E0080: evaluation panicked: a request handler must be above its executor on the same hart
+    let _bell = doorbell::Doorbell::<chip::Fake, 3, _, Deferred, ExecutorToken>::new::<TimerIrq>(
+        line, bound,
+    ); // ui-error@outside: E0080: evaluation panicked: a request handler must be above its executor on the same hart
 }

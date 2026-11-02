@@ -1,7 +1,7 @@
 # oer-esp32s31-ieee80211-driver
 
 The ESP32-S31 Wi-Fi driver: device composition, the lower-MAC port backend,
-DMA rings, keys and the P3/P2 interrupt path. System context: [architecture](../../../../docs/architecture.md).
+DMA rings, keys and the path from the P3 interrupt to the driver task. System context: [architecture](../../../../docs/architecture.md).
 
 The driver's MAC building blocks cover initialization and receive policy,
 EDCA and channel state, DMA ownership, aggregate formatting, local/TSF time
@@ -30,7 +30,7 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
   radio client's channel retune through owned HAL transactions. P3 latches
-  power events; P2 tracks station TBTT deadlines from the installed schedule.
+  power events; the driver task tracks station TBTT deadlines from the installed schedule.
   Caller-supplied coexistence intent selects the publication PTI. The `coex`
   module's time-slice status values have no runtime publisher.
 - **MAC preparation and start.** Cold preparation programs configuration
@@ -95,7 +95,7 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   cases (they need the Block Ack originator above the port), and
   InstallBeside and SelectRetained (one station GTK slot).
 - **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
-  the P2 driver's observation receiver (`port::Observations`, an
+  the driver task's observation receiver (`port::Observations`, an
   `oer_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
   stored once in the driver from preparation to retirement, returns with the
   stopped port and is lent to each contention draw, where the driver selects
@@ -171,8 +171,9 @@ The host model tests masked STATUS, redelivery and clearing with a positive
 sample retained before masking. Its TBTT model remains a policy assumption;
 the timer stand observations do not qualify received-beacon causes.
 
-P2 asks for a bank change by setting a request bit (`fetch_or`, Release)
-and ringing the doorbell; the handler preempts P2, so a request that no
+The driver task asks for a bank change by setting a request bit
+(`fetch_or`, Release) and ringing the doorbell; the handler preempts the
+task, so a request that no
 longer reads pending has been applied. The handler lowers the doorbell
 first, then takes every request at once (`swap(0)`, AcqRel), so a ring
 after the lowering raises it again and requests before the take coalesce;
@@ -189,7 +190,7 @@ publishes it (`WifiIrqRequests::mac_interrupt_enable`).
 
 A start activates the epoch; a pause or retune closes it after the mask,
 the drain and the walker stop; a freeze masks it and its resume activates
-it again. P2 requests `UnmaskRx` only after the RX frontier drained with no
+it again. The driver task requests `UnmaskRx` only after the RX frontier drained with no
 released buffer left to rearm. Installing a line clears a stale request. A
 lease the upper layer returns posts the RX-capacity fact
 (`RxReturnNotifier`), so the runner rearms the returned descriptors even
@@ -198,18 +199,17 @@ state.
 
 ## Receive path
 
-When the port's RX handoffs are full, P2 disarms only the RX continuation
+When the port's RX handoffs are full, the driver task disarms only the RX continuation
 timer and keeps the pending RX work and buffer owners. It waits for a
 returned lease's RX-capacity fact, a TX event or another applicable deadline;
-an overdue RX retry must not keep P2 running while P1 needs to return buffers.
+an overdue RX retry must not keep the driver task running while the station needs to return buffers.
 TX deadlines and the port contract are unchanged.
 
-P1 holds at most `RX_HELD` (32) received units besides those it lent the
-network: its queued receive events and the MPDUs its receive Block Ack
-agreements keep, a 32-MPDU reorder window. P2 queues at most eight units P1
-has not taken yet; at that bound it asks to be woken, and P1's next take of
-a received event wakes it. A burst therefore keeps P1 from running for at
-most eight units, however many P1 retains. The units outside the ring come
+The station holds at most `RX_HELD` (16) received units besides those it
+lent the network: its queued receive events and the MPDUs its receive Block
+Ack agreements keep, a 16-MPDU reorder window. The driver task queues at
+most eight units the station has not taken yet; at that bound it asks to be
+woken, and the station's next take of a received event wakes it. The units outside the ring come
 from one stage pool; the network may hold all of it but `RX_HELD` and the
 admission's critical reserve (`port::lent_rx`). The admission discards bulk
 input, which the hardware already acknowledged, once only the reserve is
@@ -218,32 +218,34 @@ left, so this split keeps a full reorder window's hole-closing MPDU staged.
 One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The radio handler masks RX delivery, acknowledges and raises
-   the RX fact in the image's static `IrqSignal` of the P2 executor
-   (`oer_espressif_interrupt_table::signal`), which pends P2 and touches no waker;
-   the buffer is the DMA engine's.
-2. **P2.** The executor's handler hands the fact to the receive runner
-   (`rx/receive.rs`) and wakes it in P2's own context; the runner runs
+   the RX fact in the image's static `IrqSignal` of the driver's executor
+   (`oer_espressif_interrupt_table::signal`), the station's, which pends it
+   and touches no waker; the buffer is the DMA engine's.
+2. **Driver task.** The executor's next round hands the fact to the receive
+   runner (`rx/receive.rs`) and wakes it in its own context; the runner runs
    the product service (`rx/transaction`), which takes the completed unit
    and stages it: the original buffer becomes a `NetworkRxFrame` lease of
    the staging pool, with no copy. Chained, oversized, empty and too-long
-   units are dropped and counted there and never leave P2.
-3. **P2.** `QueueSink` (`rx/upper.rs`), the runner's publisher, marks the
+   units are dropped and counted there and never leave the driver task.
+3. **Driver task.** `QueueSink` (`rx/upper.rs`), the runner's publisher, marks the
    lease's first handoff (the monotonic time and the prefix's raw MAC
    stamp), counts it and sends it into an affine SPSC queue as deep as the
    pool; a send after a pool credit therefore never refuses. The queue owns
    the lease. The runner unmasks RX through the doorbell once drained.
-4. **P1.** `FrameReceiver::next` takes the lease and holds it as a
+4. **Station.** `FrameReceiver::next` takes the lease and holds it as a
    `HeldRxFrame`; `normalize` decodes the prefix under `W1_INGRESS` (no
    strict RXEND or dump-length refusal; what they would refuse is counted)
    and counts refusals by reason. The application owns the lease.
-5. **P1.** The MPDU and `portable::rx_meta` on the configured channel go to
+5. **Station.** The MPDU and `portable::rx_meta` on the configured channel go to
    `sta::receive::classify` and `observe_scan`.
-6. **P1.** Dropping the held frame releases the lease and posts the
-   RX-capacity fact; P2 rearms the buffer.
+6. **Station.** Dropping the held frame releases the lease and posts the
+   RX-capacity fact (a raise of its own executor's signal, `FromOwnTask`);
+   the driver task rearms the buffer.
 
-P2 and P1 share only the queue's cursors and an `AtomicWaker`. Teardown waits,
+The driver task and the station share one executor, so neither preempts the
+other; they share only the queue's cursors and an `AtomicWaker`. Teardown waits,
 bounded, until no lease is staged before it stops the walker, and queued
-frames are staged: P1 keeps receiving and dropping frames after it requests
+frames are staged: the station keeps receiving and dropping frames after it requests
 the stop, until the exit is published; otherwise the epoch ends quarantined
 with `DrainTimeout`.
 
@@ -251,8 +253,8 @@ with `DrainTimeout`.
 
 The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
 The adapter [`src/port.rs`](src/port.rs) implements its lifecycle, phase,
-station and access-point interfaces over that core. One P2 task polls the
-port; the P3 handlers own only their interrupt epoch and static typed signals.
+station and access-point interfaces over that core. One task polls the
+port, beside the station on the station's executor; the P3 handlers own only their interrupt epoch and static typed signals.
 The task-side `RadioDevice` retains the cooperative registers, PHY actor
 transaction and RX ring. No ISR accesses its task-only `RefCell` state.
 
@@ -270,8 +272,8 @@ BlockAck report misses. While an aggregate is built, queued or published,
 its subframes' records wait in the installation's subframe table at their
 buffers' places; only the places travel through the port's queues. The
 builder refuses, at push, every subframe the window, the subframe count or
-the length (at the widest MPDU start spacing, under the TXOP limit P1 last
-published) cannot hold, so P2 planning never refuses a submitted aggregate.
+the length (at the widest MPDU start spacing, under the TXOP limit the station last
+published) cannot hold, so the driver's planning never refuses a submitted aggregate.
 Timeout aborts of MPDUs and aggregates force CCA one at a time. Gate,
 configuration, key and disable barriers wait for published aggregates as
 for MPDUs and return the original operation owners through terminals.

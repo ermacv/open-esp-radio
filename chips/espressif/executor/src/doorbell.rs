@@ -1,7 +1,8 @@
 //! The radio doorbell: a software interrupt at the radio interrupts' level.
 //!
-//! The radio executor (P2) cannot write the registers the radio interrupts
-//! (P3) own without sharing them with a handler that preempts it. It records
+//! An executor below the radio interrupts (P3), such as the one that polls a
+//! radio driver, cannot write the registers they own without sharing them
+//! with a handler that preempts it. It records
 //! a request in memory both sides see and rings the doorbell; the doorbell's
 //! line is one source of the radio interrupt's part, so the handler that
 //! holds the radio registers runs at P3 and applies the request.
@@ -23,7 +24,8 @@ use crate::SoftwareInterrupt;
 use core::marker::PhantomData;
 
 use oer_espressif_interrupt_table::{
-    Bound, Class, Context, Entry, InterruptSource, InterruptSources, request_direction,
+    Bound, Context, Entry, InterruptSource, InterruptSources, request_direction,
+    signal::{SignalExecutor, executor_context},
 };
 
 use crate::chip::{Binding, Line, Line0, Line1, Line2, Line3, PortOf, software_interrupt_source};
@@ -31,11 +33,15 @@ use crate::software_line::SoftwareLine;
 use crate::urgent_sources::UrgentSource;
 
 /// The radio doorbell of chip binding `B` on software interrupt `SWI`
-/// (`FROM_CPU_INTR<SWI>`): the ringing half.
-pub struct Doorbell<B: Binding, const SWI: u8, E: Entry, X: Entry> {
+/// (`FROM_CPU_INTR<SWI>`): the ringing half. `E` is the handler's entry;
+/// executor `X`, through its entry `R`, rings it.
+pub struct Doorbell<B: Binding, const SWI: u8, E: Entry, X: SignalExecutor, R: Entry> {
     line: Line<PortOf<B>>,
-    entries: PhantomData<fn() -> (E, X)>,
+    entries: PhantomData<Entries<E, X, R>>,
 }
+
+/// The handler's entry and the requester a doorbell's type retains.
+type Entries<E, X, R> = fn() -> (E, X, R);
 
 /// Software interrupt `SWI`'s line before the binding of the part it is a
 /// source of: it rings nothing until [`Doorbell::new`] takes the binding's
@@ -84,10 +90,13 @@ impl_doorbell!(1, Line1, own_line_1);
 impl_doorbell!(2, Line2, own_line_2);
 impl_doorbell!(3, Line3, own_line_3);
 
-impl<B: Binding, const SWI: u8, E: Entry, X: Entry> Doorbell<B, SWI, E, X> {
+impl<B: Binding, const SWI: u8, E: Entry, X: SignalExecutor, R: Entry> Doorbell<B, SWI, E, X, R>
+where
+    R::Part: InterruptSource,
+{
     /// The handler and requester selected by this doorbell's constructor.
     pub const HANDLER: Context = E::CONTEXT;
-    pub const EXECUTOR: Context = X::CONTEXT;
+    pub const EXECUTOR: Context = executor_context::<X, R>();
 
     /// The ringing half of `line`, once `bound` proves that the image's
     /// interrupt table binds entry `E`, whose part holds `Member`'s source, the
@@ -96,8 +105,10 @@ impl<B: Binding, const SWI: u8, E: Entry, X: Entry> Doorbell<B, SWI, E, X> {
     /// [`InterruptSources`]).
     ///
     /// A member that is not the line, or that the bound part does not hold,
-    /// fails to compile (the constant's check, `E0080`). `X` is the
-    /// requesting executor's entry; `E` must be above it on the same hart.
+    /// fails to compile (the constant's check, `E0080`). `R` is the
+    /// requesting executor `X`'s entry, as a signal's raiser names it
+    /// ([`executor_context`]); `E` must be above that executor's tasks on the
+    /// same hart.
     /// The accompanying urgent source retains that same `Member` type for
     /// executor admission; it cannot name another software line.
     pub fn new<Member>(line: DoorbellLine<B, SWI>, bound: &Bound<E>) -> (Self, UrgentSource<Member>)
@@ -105,10 +116,7 @@ impl<B: Binding, const SWI: u8, E: Entry, X: Entry> Doorbell<B, SWI, E, X> {
         Member: InterruptSource,
     {
         const {
-            if !matches!(X::CLASS, Class::Executor) {
-                panic!("the doorbell requester must be an executor entry");
-            }
-            if !request_direction(E::CONTEXT, X::CONTEXT) {
+            if !request_direction(E::CONTEXT, executor_context::<X, R>()) {
                 panic!("a request handler must be above its executor on the same hart");
             }
             if Member::SOURCE

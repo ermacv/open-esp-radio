@@ -1,4 +1,4 @@
-//! The cooperative S31 register/RX owner used by the port driver on P2.
+//! The cooperative S31 register/RX owner used by the port driver.
 use super::*;
 use crate::mac::{
     irq::{EVENT_TX_COMPLETE, EVENT_TX_TIMEOUT, IrqWork},

@@ -1,4 +1,4 @@
-use oer_espressif_interrupt_table::{Bound, InterruptSource};
+use oer_espressif_interrupt_table::{Bound, InterruptSource, signal::host::Deferred};
 oer_espressif_interrupt_table::__fake_parts!();
 include!("support/doorbell.rs");
 
@@ -22,7 +22,9 @@ oer_espressif_interrupt_table::interrupt_table! {
 
 pub fn make(bound: &Bound<IrqToken>) {
     let (line, _ack) = doorbell::DoorbellLine::<chip::Fake, 3>::split(chip::platform::FromCpu3);
-    let pair = doorbell::Doorbell::<chip::Fake, 3, _, ExecutorToken>::new::<FromCpu3Irq>(line, bound);
+    let pair = doorbell::Doorbell::<chip::Fake, 3, _, Deferred, ExecutorToken>::new::<FromCpu3Irq>(
+        line, bound,
+    );
     #[cfg(not(ui_reject))]
     let (_bell, _urgent): (_, urgent_sources::UrgentSource<FromCpu3Irq>) = pair;
     #[cfg(ui_reject)]

@@ -1,4 +1,4 @@
-//! Select typed lower-MAC views at each synchronous P2 frontier.
+//! Select typed lower-MAC views at each synchronous driver frontier.
 use super::*;
 
 #[inline]

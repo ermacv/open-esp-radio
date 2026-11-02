@@ -1,7 +1,8 @@
 //! The S31 lower-MAC port. Only the driver loan executes hardware operations.
 //!
-//! The image polls `run_port` on P1 and retains its driver registration on
-//! P2. P3 owns the interrupt epoch and posts
+//! The image polls the port's body in the station's task and its driver
+//! registration in the driver's task, beside it on the station's executor.
+//! P3 owns the interrupt epoch and posts
 //! static typed signals through [`crate::irq`]; it never accesses this state.
 //! All DMA allocations and the device remain in static storage through an
 //! abnormal exit. Neither a dropped future nor a forgotten port frees them.
@@ -116,7 +117,7 @@ impl<const B: usize> TxDescriptors<B> {
     }
 }
 
-/// The receive units P1 holds at once besides those it lent the network:
+/// The receive units the body holds at once besides those it lent the network:
 /// its receive events and the MPDUs its receive Block Ack agreements keep,
 /// one 16-MPDU reorder window, the archive's choice: a 32-MPDU window
 /// left too few descriptors armed under sustained HT40 traffic. The network leaves them in the receive pool
@@ -125,7 +126,7 @@ pub const RX_HELD: usize = 16;
 
 /// The receive units of a pool of `units` (the units that may be outside
 /// the ring at once) the network may hold. It leaves the radio
-/// [`RX_HELD`] units and the admission's critical reserve: when P1 holds a
+/// [`RX_HELD`] units and the admission's critical reserve: when the body holds a
 /// full reorder window and the network all it may, the pool still stages
 /// the MPDU that closes the window's hole, which the hardware already
 /// acknowledged, as ordinary bulk input.
@@ -133,19 +134,18 @@ pub const fn lent_rx(units: usize) -> usize {
     units.saturating_sub(RX_HELD + crate::rx::transaction::DEFAULT_CRITICAL_RESERVE)
 }
 
-/// The received units P2 queues for P1 that P1 has not taken yet. P2
-/// queues no more until P1 takes one, so a burst never keeps P1 from
-/// running for more than this many units, whatever P1 retains.
+/// The received units the driver queues for the body that the body has not
+/// taken yet. The driver queues no more until the body takes one.
 const RX_IN_FLIGHT: usize = TX_TICKETS;
 
-/// The queued units at or below which P1's take wakes a P2 that waits for
-/// room: half the queue, so a P2 held back by P1 runs once per half queue
-/// of received units, not once per unit.
+/// The queued units at or below which the body's take wakes a driver that
+/// waits for room: half the queue, so a driver held back by the body runs
+/// once per half queue of received units, not once per unit.
 const RX_WAKE_AT: usize = RX_IN_FLIGHT / 2;
 
 const _: () = {
     if RX_WAKE_AT >= RX_IN_FLIGHT {
-        panic!("a waiting P2 wakes before P1 took every queued unit");
+        panic!("a waiting driver wakes before the body took every queued unit");
     }
 };
 
@@ -153,8 +153,9 @@ const _: () = {
 /// worth of received units, so a burst costs one turn, not one per unit.
 const EVENTS_PER_POLL: usize = 32;
 
-// A blocked RX handoff needs P1 to return a lease. Its retry timer must not
-// keep P2 polling an already reached deadline while that consumer cannot run.
+// A blocked RX handoff needs the body to return a lease. Its retry timer must
+// not keep the driver polling an already reached deadline while that consumer
+// cannot run.
 pub(super) fn suspend_rx_continuation(receive_room: usize, continuation: &mut Option<Instant>) {
     if receive_room == 0 {
         *continuation = None;
@@ -172,11 +173,12 @@ pub const TERMINAL_CAPACITY: usize = TX_TICKETS + 16 + 2 + 1 + INTERFACE_TERMINA
 const COMMANDS: usize = TX_TICKETS + 16 + 2 + 2 + INTERFACE_COMMANDS;
 pub const PUBLICATION_BOUND: Duration = Duration::from_millis(250);
 pub const COMMAND_BOUND: Duration = Duration::from_millis(400);
-/// Response/retirement containment budget. It covers one P2 cleanup step and
-/// ready P2 work within the existing command bound; a later answer fails closed.
+/// Response/retirement containment budget. It covers one driver cleanup step
+/// and ready driver work within the existing command bound; a later answer
+/// fails closed.
 pub const SHUTDOWN_BOUND: Duration = COMMAND_BOUND;
 /// Fresh-clock response budget, independent of the command FIFO. It covers
-/// one P2 reading and its ready peer tasks; expiry is transient Unavailable.
+/// one driver reading and its ready peer tasks; expiry is transient Unavailable.
 const CLOCK_BOUND: Duration = COMMAND_BOUND;
 type Part<Id, const I: u8> = Child<Root<Id>, I>;
 type CorePath<Id: SlotIdentity> = Part<Id, 0>;
@@ -208,11 +210,12 @@ pub trait ReceiveUnit: 'static {
     fn storage_mut(&mut self) -> &mut [u8];
 }
 
-/// One bounded P2 hardware step. Implementations retain all progress in
+/// One bounded hardware step of the driver's task. Implementations retain all progress in
 /// themselves across `Pending`; no ISR may call any of these operations.
 /// The device owns the cooperative registers, RX ring and PHY membership.
 pub trait Device<const B: usize>: Sized + 'static {
-    /// Image-selected concrete coexistence policy, statically dispatched on P2.
+    /// Image-selected concrete coexistence policy, statically dispatched in
+    /// the driver's task.
     type Coex: RadioCoexPriorities + 'static;
     type Power: WifiTxPowerProfile;
     type Entropy: WifiTxEntropy;
@@ -295,7 +298,7 @@ pub enum Fault {
     /// The core asked for a retune right after recording the channel it was
     /// tuned to.
     TuneNotRecorded,
-    /// A P1 setting could not be published or read back.
+    /// A body setting could not be published or read back.
     Setting(settings::SettingFault),
     /// The device's registers were lent to an actor transaction or retired.
     HardwareUnavailable,
@@ -321,8 +324,8 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
     const CAPS: LowerMacCapabilities = esp32s31_lower_mac_capabilities(B);
 }
 
-/// P2-only backing borrowing the retained device and cross-context storage.
-/// Only the P2 registration can reach its device `RefCell`.
+/// The driver's backing, borrowing the retained device and cross-context
+/// storage. Only the driver's registration can reach its device `RefCell`.
 pub struct PortStorage<D: Device<B>, const B: usize> {
     device: RefCell<&'static mut D>,
     shared: &'static mut PortSharedStorage<B, D::Lent, D::Body>,
@@ -342,8 +345,9 @@ pub struct PortSharedStorage<
     Body = core::convert::Infallible,
 > {
     poisoned: oer_memory::OnceValue<Fault>,
-    // P2 can preempt a P1 notification. The P1 body consumer cannot
-    // preempt its P2 producer, so its AtomicWaker needs no second slot.
+    // The driver's waker keeps a slot for a notifier the driver preempts;
+    // beside the station on its executor none does. The body's consumer
+    // never preempts its producer, so its AtomicWaker needs no second slot.
     driver: PriorityWaker,
     body: AtomicWaker,
     key_live: [KeyActivity; 20],
@@ -353,7 +357,7 @@ pub struct PortSharedStorage<
     subframes: aggregate::SubframeTable<B, Body>,
     /// The receive units lent to the network.
     network: lent::NetworkCredit<P>,
-    /// The received units queued for P1 and not yet taken.
+    /// The received units queued for the body and not yet taken.
     received: settings::ReceivedInFlight,
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
@@ -426,14 +430,14 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     }
 }
 impl<const B: usize, Body> PortSharedStorage<B, SameHart, Body> {
-    /// Vacant cross-context backing, placed separately from the P2-only device.
+    /// Vacant cross-context backing, placed separately from the driver's device.
     pub const fn new() -> Self {
         Self::with_network(lent::SameHart::new())
     }
 }
 impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
     // Keep the waker's typed scope at the indirect call, independently of
-    // the large terminal dispatchers that notify the P1 body.
+    // the large terminal dispatchers that notify the body.
     #[inline(never)]
     fn wake_body(&self) {
         self.body.wake();
@@ -472,7 +476,7 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
             .get()
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
     }
-    /// P1 took one received unit P2 queued: wake a driver that waits for
+    /// The body took one received unit the driver queued: wake a driver that waits for
     /// room once the queue is down to [`RX_WAKE_AT`]. A unit never queued
     /// poisons the installation.
     fn took_received(&self) {
@@ -520,7 +524,7 @@ pub struct PortParts<D: Device<B>, const B: usize, O: Observations> {
     pub config: LowerMacConfig,
     pub access_point_address: IndividualAddress,
     pub coex: &'static D::Coex,
-    /// The P2 driver's receiver of its own publication observations; `()`
+    /// The driver's receiver of its own publication observations; `()`
     /// keeps nothing and builds nothing.
     pub observations: O,
 }

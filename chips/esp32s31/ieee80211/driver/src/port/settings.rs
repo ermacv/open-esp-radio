@@ -1,4 +1,4 @@
-//! Coalesced P1 settings, read only by a bounded P2 poll.
+//! Coalesced body settings, read only by a bounded driver poll.
 
 use super::*;
 use atomic_words::AtomicWords;
@@ -26,10 +26,10 @@ impl Flag {
     }
 }
 
-/// The received units P2 queued for P1 that P1 has not taken, and whether
-/// P2 waits for P1 to take them down to a mark. P2 asks before it reads the
-/// count again, and P1 takes before it reads the ask, so the take that
-/// reaches the mark after P2 saw the queue above it always finds the ask,
+/// The received units the driver queued for the body that the body has not taken, and whether
+/// The driver waits for the body to take them down to a mark. The driver asks before it reads the
+/// count again, and the body takes before it reads the ask, so the take that
+/// reaches the mark after the driver saw the queue above it always finds the ask,
 /// on one hart or across two.
 pub(super) struct ReceivedInFlight {
     queued: AtomicUsize,
@@ -42,27 +42,27 @@ impl ReceivedInFlight {
             wanted: AtomicBool::new(false),
         }
     }
-    /// P2 queued one unit.
+    /// The driver queued one unit.
     pub(super) fn queue(&self) {
         self.queued.fetch_add(1, Ordering::SeqCst);
     }
-    /// The units P2 may still queue under `bound`.
+    /// The units the driver may still queue under `bound`.
     pub(super) fn room(&self, bound: usize) -> usize {
         bound.saturating_sub(self.queued.load(Ordering::SeqCst))
     }
-    /// P2 waits for P1 to take units until at most `wake_at` stay queued:
+    /// The driver waits for the body to take units until at most `wake_at` stay queued:
     /// the take that leaves that many wakes it. Whether they already are:
-    /// P2 then polls again itself.
+    /// The driver then polls again itself.
     pub(super) fn want(&self, wake_at: usize) -> bool {
         self.wanted.store(true, Ordering::SeqCst);
         self.queued.load(Ordering::SeqCst) <= wake_at
     }
-    /// P1 took one unit: whether it left at most `wake_at` queued while P2
+    /// The body took one unit: whether it left at most `wake_at` queued while the driver
     /// waits; a take above the mark leaves the ask for a later one. A take
     /// of a unit never queued is refused and leaves the count as it was.
     pub(super) fn take(&self, wake_at: usize) -> Result<bool, SettingFault> {
         let Some(left) = self.queued.fetch_sub(1, Ordering::SeqCst).checked_sub(1) else {
-            // The count wrapped below zero for one step; P2 read no room.
+            // The count wrapped below zero for one step; the driver read no room.
             self.queued.fetch_add(1, Ordering::SeqCst);
             return Err(SettingFault::ReceivedUnqueued);
         };
@@ -104,12 +104,12 @@ pub enum SettingFault {
     EdcaLifetime,
     /// A published Block Ack record holds no sequence number.
     BlockAckSequence,
-    /// P1 took a received unit P2 never queued.
+    /// The body took a received unit the driver never queued.
     ReceivedUnqueued,
 }
 
 /// One 2.4 GHz channel, 20 or 40 MHz wide: its number and its width in
-/// one word, so P2 never reads one without the other; zero until the first
+/// one word, so the driver never reads one without the other; zero until the first
 /// publication.
 pub(super) struct ChannelSetting(AtomicU16);
 impl ChannelSetting {
@@ -176,8 +176,8 @@ impl EdcaSetting {
         self.0[vif].set(words);
         Ok(())
     }
-    /// One VIF's last complete publication; `None` while P1 is publishing
-    /// it, which P2 retries after P1's commit wake.
+    /// One VIF's last complete publication; `None` while the body is publishing
+    /// it, which the driver retries after the body's commit wake.
     pub(super) fn get(&self, vif: usize) -> Option<EdcaParameterSet> {
         let words = self.0[vif].get()?;
         let acs = core::array::from_fn(|index| {
@@ -229,8 +229,8 @@ impl BlockAckSetting {
         self.0.set([0; 24]);
     }
     /// One agreement's last complete publication: `Ok(None)` without an
-    /// agreement, `Err(None)` while P1 is publishing it, which P2 retries
-    /// after P1's commit wake, and `Err(Some(fault))` for a record no
+    /// agreement, `Err(None)` while the body is publishing it, which the driver retries
+    /// after the body's commit wake, and `Err(Some(fault))` for a record no
     /// publication writes.
     pub(super) fn get(
         &self,
@@ -280,10 +280,10 @@ impl ColorSetting {
     }
 }
 
-/// Only P1 changes configuration after split. Its busy flag brackets complete
-/// coalesced updates, including the dirty flag. P2 checks it before touching
-/// settings; on this core P1 cannot preempt that bounded P2 poll. An interrupted
-/// P1 publication is skipped without retry and wakes P2 after committing.
+/// Only the body changes configuration after split. Its busy flag brackets complete
+/// coalesced updates, including the dirty flag. The driver checks it before touching
+/// settings; on this core the body cannot preempt that bounded driver poll. An interrupted
+/// body publication is skipped without retry and wakes the driver after committing.
 pub(super) struct Settings {
     pub(super) publishing: Flag,
     pub(super) clock_requested: Flag,
@@ -438,7 +438,7 @@ mod tests {
             wakes,
             [false, false, false, true, false, false, false, false]
         );
-        // An ask at or below the mark tells P2 to poll again itself.
+        // An ask at or below the mark tells the driver to poll again itself.
         received.queue();
         assert!(received.want(4));
     }

@@ -164,6 +164,9 @@ oer_espressif_executor::tasks! {
         #[cfg(feature = "wifi")]
         /// The Wi-Fi station's runner.
         station(launch: wifi::StationStart) = wifi::serve_station;
+        #[cfg(feature = "wifi")]
+        /// The Wi-Fi MAC driver, beside the station's runner.
+        driver(driver: wifi::Driver) = wifi::drive;
     }
 }
 
@@ -283,6 +286,9 @@ pub(crate) struct Pending {
     pub(crate) aes: Option<aes::AesStart>,
     #[cfg(feature = "wifi")]
     pub(crate) station: Option<wifi::StationStart>,
+    /// The Wi-Fi MAC driver, started beside the station.
+    #[cfg(feature = "wifi")]
+    pub(crate) driver: Option<wifi::Driver>,
 }
 
 impl Boot {
@@ -861,6 +867,9 @@ impl Starts {
                 .is_none_or(|engine| SdkTasks::aes_service(library, engine).is_ok());
         #[cfg(feature = "wifi")]
         let started = started
+            && pending
+                .driver
+                .is_none_or(|driver| SdkTasks::driver(library, driver).is_ok())
             && pending
                 .station
                 .is_none_or(|start| SdkTasks::station(library, start).is_ok());

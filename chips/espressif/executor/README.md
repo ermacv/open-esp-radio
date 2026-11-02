@@ -80,12 +80,15 @@ interrupt (`FROM_CPU` line 3) that is one source of the radio handler's part:
 `ring` fences and raises the line. `DoorbellLine::split` consumes the software
 interrupt, so no executor can use the line, and hands out the
 `DoorbellAcknowledger` for that part and the unbound `DoorbellLine`; only
-`Doorbell::<B, SWI, HandlerEntry, ExecutorEntry>::new::<Member>(line, &bound)` makes the
+`Doorbell::<B, SWI, HandlerEntry, Executor, ExecutorEntry>::new::<Member>(line, &bound)` makes the
 ringing half, once the router bound a part whose sources hold the line's
 (`Member::SOURCE` in `HandlerEntry::Part::SOURCES`, checked when the image compiles).
-The same constructor checks that the handler preempts the requesting executor
-and that the requester has class `Executor`. Both entries remain in the
-doorbell type; wrappers derive their metadata from it.
+The same constructor checks that the handler preempts the requesting
+executor's tasks and that `ExecutorEntry` names `Executor` as a signal's
+raiser does: an interrupt-mode executor's entry of class `Executor`, or a
+thread executor's wake entry, whose tasks run at level zero. The handler's
+entry and the requester remain in the doorbell type; wrappers derive their
+metadata from it.
 A part of the line alone is the acknowledger itself, which names the line's
 source. The handler first lowers the interrupt through the acknowledger,
 then takes the requests, so a ring after the take is not lost. The request

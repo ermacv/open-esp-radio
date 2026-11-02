@@ -1,6 +1,6 @@
 //! P2 owns the S31 device, its DMA and the port registration.
 use crate::chip::{
-    self as irq, Binding, Config, Driver, InitializationError, Interrupts, RadioExecutor, Rng,
+    self as irq, Binding, Config, Driver, DriverExecutor, InitializationError, Interrupts, Rng,
 };
 use crate::chip::{B, N, Q, S, TX};
 use crate::station::ImageComposition;
@@ -58,12 +58,12 @@ type Inner<W> = RadioDevice<
     EmbassyClock,
     Platform,
     oer_espressif_interrupt_table::Bound<<W as Binding>::Wifi>,
-    irq::Bell<<W as Binding>::Wifi, <W as Binding>::Radio>,
+    irq::Bell<<W as Binding>::Wifi, <W as Binding>::DriverEntry>,
     N,
     B,
     S,
     Q,
-    RadioExecutor,
+    DriverExecutor,
 >;
 pub struct Device<W: Binding>(Inner<W>);
 pub type Backend<Id, W> = Esp32s31Backend<Id, Device<W>, TX, ()>;
@@ -106,14 +106,14 @@ pub(crate) struct Boot<W: Binding> {
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub bound: oer_espressif_interrupt_table::Bound<W::Wifi>,
-    pub bell: irq::Bell<W::Wifi, W::Radio>,
+    pub bell: irq::Bell<W::Wifi, W::DriverEntry>,
     pub config: Config,
     pub entropy: u32,
     pub interrupts: &'static Interrupts,
-    pub mac: &'static oer_espressif_interrupt_table::signal::IrqSignal<RadioExecutor>,
-    pub power: &'static oer_espressif_interrupt_table::signal::IrqSignal<RadioExecutor>,
+    pub mac: &'static oer_espressif_interrupt_table::signal::IrqSignal<DriverExecutor>,
+    pub power: &'static oer_espressif_interrupt_table::signal::IrqSignal<DriverExecutor>,
     pub rx: oer_esp32s31_hal::memory::dma_static::Placed<
-        oer_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic<N, B, S, Q, RadioExecutor>,
+        oer_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic<N, B, S, Q, DriverExecutor>,
     >,
     pub tx: crate::dma::TxDma,
     pub storage: &'static mut DriverStorage<W>,
@@ -296,7 +296,7 @@ async fn install<W: Binding>(
     let power = stopped.start_report().track.tx_power;
     let arena = boot.rx;
     let (rx, _, _) =
-        oer_esp32s31_ieee80211_driver::rx::arena::WifiRxArena::<N, B, S, Q, RadioExecutor>::bind(
+        oer_esp32s31_ieee80211_driver::rx::arena::WifiRxArena::<N, B, S, Q, DriverExecutor>::bind(
             arena,
             WifiIrqSignals {
                 mac: boot.mac,

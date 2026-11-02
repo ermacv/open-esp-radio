@@ -677,7 +677,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortBacken
             view.held.want_enabled.set(false);
             view.held.storage.driver.wake();
         }
-        // The drain's progress stays in the held queues and the P2 driver:
+        // The drain's progress stays in the held queues and the driver:
         // at the deadline only this wait ends, and every owner it did not
         // return stays there for the fail-stop's quarantine.
         async move {
