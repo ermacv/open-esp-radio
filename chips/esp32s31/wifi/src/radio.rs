@@ -1,6 +1,6 @@
 //! P2 owns the S31 device, its DMA and the port registration.
 use crate::chip::{
-    self as irq, Binding, Config, Driver, DriverExecutor, InitializationError, Interrupts, Rng,
+    self as irq, Binding, Config, Driver, DriverExecutor, InitializationError, Interrupts,
 };
 use crate::chip::{B, N, Q, S, TX};
 use crate::station::ImageComposition;
@@ -14,8 +14,7 @@ use oer_chips_esp32s31_hal::{
     ieee80211::{
         dma::{space::ChipDma, tx_storage::TxDmaStorage},
         init::{
-            MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
-            MacSlowClockCalibrationSource,
+            MAC_COLD_HANDSHAKE_DEADLINE, MacSlowClockCalibration, MacSlowClockCalibrationSource,
         },
     },
     root::WifiPartition,
@@ -102,7 +101,7 @@ impl<W: Binding> DriverStorage<W> {
 pub(crate) struct Boot<W: Binding> {
     pub cell: MembershipCell<Wifi>,
     pub wifi: WifiPartition,
-    pub rng: Rng,
+    pub delay_random: u32,
     pub station: [u8; 6],
     pub ap: [u8; 6],
     pub bound: oer_chips_family_interrupt_table::Bound<W::Wifi>,
@@ -121,13 +120,7 @@ pub(crate) struct Boot<W: Binding> {
     pub storage: &'static mut DriverStorage<W>,
 }
 pub struct Platform {
-    rng: Rng,
     power: Option<PhyTxTargetPowerProfile>,
-}
-impl MacDelayEntropy for Platform {
-    fn mac_delay_random(&mut self) -> u32 {
-        self.rng.random()
-    }
 }
 impl MacSlowClockCalibrationSource for Platform {
     fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
@@ -279,20 +272,14 @@ async fn install<W: Binding>(
             IndividualAddress::for_interface(boot.station)
                 .map_err(|_| InitializationError::Address)?,
             IndividualAddress::for_interface(boot.ap).map_err(|_| InitializationError::Address)?,
+            boot.delay_random,
         )
         .map_err(|_| InitializationError::Radio)?,
     );
-    let (cell, stopped) = start_esp32s31_radio(
-        boot.cell,
-        boot.wifi,
-        Platform {
-            rng: boot.rng,
-            power: None,
-        },
-        start,
-    )
-    .await
-    .unwrap_or_else(|error| W::fail(InitializationError::Request(error.into())));
+    let (cell, stopped) =
+        start_esp32s31_radio(boot.cell, boot.wifi, Platform { power: None }, start)
+            .await
+            .unwrap_or_else(|error| W::fail(InitializationError::Request(error.into())));
     let stopped = stopped.map_err(|_| InitializationError::Radio)?;
     let power = stopped.start_report().track.tx_power;
     let arena = boot.rx;

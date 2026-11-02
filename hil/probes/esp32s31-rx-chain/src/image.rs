@@ -6,8 +6,7 @@ use oer_chips_esp32s31_hal::{
     ieee80211::{
         dma::{descriptor::RxDescriptor, rx_storage::RxDmaStorage},
         init::{
-            MAC_COLD_HANDSHAKE_DEADLINE, MacDelayEntropy, MacSlowClockCalibration,
-            MacSlowClockCalibrationSource,
+            MAC_COLD_HANDSHAKE_DEADLINE, MacSlowClockCalibration, MacSlowClockCalibrationSource,
         },
     },
     peripherals::usb_serial_jtag::ConsoleInterrupt,
@@ -45,7 +44,6 @@ const FULL_PATTERN_NODES: [usize; 3] = [12, 20, 28];
 const WORDS: usize = BUFFER / 4;
 const _: () = assert!(BUFFER >= 4 && BUFFER.is_multiple_of(4) && COUNT <= u32::BITS as usize);
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
-type Rng = oer_chips_esp32s31_hal::peripherals::entropy::Entropy<EmbassyClock>;
 type Backend = Esp32s31Radio<
     ChipClocks,
     oer_chips_family_executor::Cooperative<Esp32s31, EmbassyClock>,
@@ -83,7 +81,7 @@ oer_chips_family_interrupt_table::interrupt_table! {
 }
 oer_chips_family_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_chips_esp32s31_hal::root::WifiPartition, rng: Rng, station: [u8;6], ap: [u8;6]) = direct_start;
+        direct(backend: &'static mut Backend, lp: LpClock<RcSlow>, wifi: oer_chips_esp32s31_hal::root::WifiPartition, delay_random: u32, station: [u8;6], ap: [u8;6]) = direct_start;
     }
 }
 oer_chips_family_executor::tasks! {
@@ -227,8 +225,23 @@ fn main(
     let radio = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
-    let rng = Rng::new(runtime_entropy, EmbassyClock);
-    if RadioTasks::direct(&radio, backend, lp, partitions.wifi, rng, station, ap).is_err() {
+    let mut rng =
+        oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, EmbassyClock);
+    let delay_random = match rng.random() {
+        Ok(word) => word,
+        Err(_) => fail(oer_portable_diagnostics::name!("entropy"; 32)),
+    };
+    if RadioTasks::direct(
+        &radio,
+        backend,
+        lp,
+        partitions.wifi,
+        delay_random,
+        station,
+        ap,
+    )
+    .is_err()
+    {
         fail(oer_portable_diagnostics::name!("direct-task"; 32));
     }
     let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
@@ -339,7 +352,7 @@ fn direct_future(
     backend: &'static mut Backend,
     lp: LpClock<RcSlow>,
     wifi: oer_chips_esp32s31_hal::root::WifiPartition,
-    rng: Rng,
+    delay_random: u32,
     station: [u8; 6],
     ap: [u8; 6],
 ) -> DirectRun {
@@ -373,7 +386,7 @@ fn direct_future(
             )
             .await
             .map_err(|_| oer_portable_diagnostics::name!("direct-enter"; 32))?;
-        let mut platform = Platform { rng };
+        let mut platform = Platform;
         let tracked = placed_track(
             backend,
             WifiTrack {
@@ -386,7 +399,7 @@ fn direct_future(
                     access_point_address: ap,
                 },
                 slow_clock: platform.mac_slow_clock_calibration(),
-                delay_random: platform.mac_delay_random(),
+                delay_random,
             },
         )?
         .await
@@ -403,24 +416,24 @@ fn placed_direct(
     backend: &'static mut Backend,
     lp: LpClock<RcSlow>,
     wifi: oer_chips_esp32s31_hal::root::WifiPartition,
-    rng: Rng,
+    delay_random: u32,
     station: [u8; 6],
     ap: [u8; 6],
 ) -> oer_portable_memory::PlacedFuture<'static, DirectRun> {
     let Some(place) = DIRECT_RUN.try_take() else {
         fail(oer_portable_diagnostics::name!("direct-future-claimed"; 32));
     };
-    place.future(|| direct_future(backend, lp, wifi, rng, station, ap))
+    place.future(|| direct_future(backend, lp, wifi, delay_random, station, ap))
 }
 async fn direct_start(
     backend: &'static mut Backend,
     lp: LpClock<RcSlow>,
     wifi: oer_chips_esp32s31_hal::root::WifiPartition,
-    rng: Rng,
+    delay_random: u32,
     station: [u8; 6],
     ap: [u8; 6],
 ) {
-    let result = match placed_direct(backend, lp, wifi, rng, station, ap).await {
+    let result = match placed_direct(backend, lp, wifi, delay_random, station, ap).await {
         Ok(output) => DIRECT_OUTPUT
             .try_init(output)
             .ok_or(oer_portable_diagnostics::name!("direct-output"; 32)),
@@ -438,14 +451,7 @@ async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
         )
         .await {}
 }
-struct Platform {
-    rng: Rng,
-}
-impl MacDelayEntropy for Platform {
-    fn mac_delay_random(&mut self) -> u32 {
-        self.rng.random()
-    }
-}
+struct Platform;
 impl MacSlowClockCalibrationSource for Platform {
     fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
         MacSlowClockCalibration::Unavailable

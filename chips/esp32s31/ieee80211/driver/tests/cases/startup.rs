@@ -10,6 +10,22 @@ fn mac_delay_slot_reproduces_vendor_modulo_eleven() {
 }
 
 #[test]
+fn the_mac_start_config_carries_the_delay_word_drawn_before_the_start() {
+    use oer_chips_esp32s31_ieee80211_driver::startup::WifiMacStartConfig;
+    use oer_protocols_ieee80211_wire::address::IndividualAddress;
+    let station = IndividualAddress::for_interface([0x02, 0, 0, 0, 0, 1]).unwrap();
+    let ap = IndividualAddress::for_interface([0x02, 0, 0, 0, 0, 2]).unwrap();
+    let config = WifiMacStartConfig::new(
+        oer_portable_time::Duration::from_millis(1),
+        station,
+        ap,
+        0x1234_5678,
+    )
+    .unwrap();
+    assert_eq!(config.delay_random(), 0x1234_5678);
+}
+
+#[test]
 fn unavailable_calibration_preserves_provenance_even_when_the_field_is_zero() {
     let unavailable = MacSlowClockCalibration::Unavailable;
     let measured_zero = MacSlowClockCalibration::from_osi_value(0);

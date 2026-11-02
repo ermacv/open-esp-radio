@@ -74,11 +74,23 @@ const READ_GAP_SETTLE: SettleLimit = match SettleLimit::new(READ_GAP) {
     None => panic!("the read gap is a valid settle limit"),
 };
 
+/// Why the generator gave no word.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EntropyError {
+    /// A startup or continuous health test failed: the generator's raw
+    /// health-error flag is set.
+    HealthTest,
+    /// The clock did not show [`READ_GAP`] since the previous read by the
+    /// settle's last attempt.
+    ReadGap,
+}
+
 /// Owns the true random number generator's output for the image's lifetime.
 ///
 /// This owner only reads the generator, spacing reads by [`READ_GAP`] with
-/// a named settle; [`Entropy::status`] tells whether it runs. The time of
-/// the last read lives here, not in a global.
+/// a named settle, and checks the health-error flag after every read;
+/// [`Entropy::status`] tells whether it runs. The time of the last read
+/// lives here, not in a global.
 pub struct Entropy<C: Clock, P: Placement = TrngPlacement, Q: Placement = RngClockPlacement> {
     registers: EntropyRegisters<P, Q>,
     clock: C,
@@ -97,16 +109,17 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
 
     /// One random word, at least [`READ_GAP`] after the previous read.
     ///
-    /// A named settle of at most [`READ_GAP`] waits out the gap; a
-    /// monotonic clock always passes it, since the settle's last attempt
-    /// runs after its limit, which is at least the gap since the last read.
-    pub fn random(&mut self) -> u32 {
+    /// A named settle of at most [`READ_GAP`] waits out the gap. The word
+    /// is returned only when the health-error flag, read after it, is
+    /// clear. Stage two has no writer of the flag, so once set every later
+    /// read fails too.
+    pub fn random(&mut self) -> Result<u32, EntropyError> {
         if let Some(last) = self.last {
             let clock = &self.clock;
             settle(Settle::new(READ_GAP_SETTLE, clock), || {
                 (clock.now().saturating_duration_since(last) >= READ_GAP).then_some(())
             })
-            .expect("a monotonic clock passes the read gap by the settle's last attempt");
+            .map_err(|_| EntropyError::ReadGap)?;
         }
         let word = self
             .registers
@@ -114,24 +127,39 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
             .read_crc_sync_data()
             .sw_crc_random_data_sync();
         self.last = Some(self.clock.now());
-        word
+        if self.registers.trng.read_int_raw().error_int_raw() {
+            return Err(EntropyError::HealthTest);
+        }
+        Ok(word)
     }
 
     /// Fill `bytes` with random bytes, four from each word, little-endian.
-    pub fn fill(&mut self, bytes: &mut [u8]) {
+    ///
+    /// On an error `bytes` is all zero: no word of a failing generator is
+    /// left behind.
+    pub fn fill(&mut self, bytes: &mut [u8]) -> Result<(), EntropyError> {
+        let filled = self.fill_words(bytes);
+        if filled.is_err() {
+            bytes.fill(0);
+        }
+        filled
+    }
+
+    fn fill_words(&mut self, bytes: &mut [u8]) -> Result<(), EntropyError> {
         for chunk in bytes.chunks_mut(4) {
-            let word = self.random().to_le_bytes();
+            let word = self.random()?.to_le_bytes();
             for (byte, random) in chunk.iter_mut().zip(word) {
                 *byte = random;
             }
         }
+        Ok(())
     }
 
     /// `N` random bytes.
-    pub fn random_bytes<const N: usize>(&mut self) -> [u8; N] {
+    pub fn random_bytes<const N: usize>(&mut self) -> Result<[u8; N], EntropyError> {
         let mut bytes = [0; N];
-        self.fill(&mut bytes);
-        bytes
+        self.fill(&mut bytes)?;
+        Ok(bytes)
     }
 
     /// The generator's clock, sampling and health-test state.

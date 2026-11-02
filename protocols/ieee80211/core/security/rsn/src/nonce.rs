@@ -11,12 +11,13 @@ pub struct SNonceSource(ChaCha20);
 
 impl SNonceSource {
     /// `fill` must supply 256 bits of fresh cryptographic entropy. It is
-    /// called exactly once, before the hardware owner moves to P2.
-    pub fn from_entropy(fill: impl FnOnce(&mut [u8; 32])) -> Self {
+    /// called exactly once, before the hardware owner moves to P2. Its
+    /// error returns unchanged, and no stream exists without a seed.
+    pub fn from_entropy<E>(fill: impl FnOnce(&mut [u8; 32]) -> Result<(), E>) -> Result<Self, E> {
         let mut seed = Zeroizing::new([0; 32]);
-        fill(&mut seed);
+        fill(&mut seed)?;
         // The nonce is fixed within this stream; every boot has a fresh key.
-        Self(ChaCha20::new((&*seed).into(), (&[0; 12]).into()))
+        Ok(Self(ChaCha20::new((&*seed).into(), (&[0; 12]).into())))
     }
 
     /// Fails closed if the stream's finite counter is exhausted. The caller
@@ -44,7 +45,9 @@ mod tests {
         let mut source = SNonceSource::from_entropy(|seed| {
             seeds += 1;
             seed.fill(0x42);
-        });
+            Ok::<(), ()>(())
+        })
+        .unwrap();
         let first = source.next_nonce().unwrap();
         let second = source.next_nonce().unwrap();
         assert_eq!(seeds, 1);
@@ -52,5 +55,16 @@ mod tests {
         assert_ne!(first, [0; 32]);
         fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>() {}
         wipes_on_drop::<ChaCha20>();
+    }
+
+    #[test]
+    fn a_failed_seed_builds_no_stream() {
+        assert!(matches!(
+            SNonceSource::from_entropy(|seed| {
+                seed.fill(0x42);
+                Err("entropy")
+            }),
+            Err("entropy")
+        ));
     }
 }

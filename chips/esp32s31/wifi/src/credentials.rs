@@ -143,8 +143,8 @@ pub struct NonceSource(oer_protocols_ieee80211_core_security_rsn::nonce::SNonceS
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NonceExhausted;
 impl NonceSource {
-    pub fn from_entropy(fill: impl FnOnce(&mut [u8; 32])) -> Self {
-        Self(oer_protocols_ieee80211_core_security_rsn::nonce::SNonceSource::from_entropy(fill))
+    pub fn from_entropy<E>(fill: impl FnOnce(&mut [u8; 32]) -> Result<(), E>) -> Result<Self, E> {
+        oer_protocols_ieee80211_core_security_rsn::nonce::SNonceSource::from_entropy(fill).map(Self)
     }
     pub fn next_nonce(&mut self) -> Result<[u8; 32], NonceExhausted> {
         self.0.next_nonce().map_err(|_| NonceExhausted)
@@ -261,7 +261,9 @@ mod tests {
         let mut source = NonceSource::from_entropy(|seed| {
             calls += 1;
             seed.fill(0x42);
-        });
+            Ok::<(), ()>(())
+        })
+        .unwrap();
         assert_ne!(source.next_nonce().unwrap(), source.next_nonce().unwrap());
         assert_eq!(calls, 1);
     }
