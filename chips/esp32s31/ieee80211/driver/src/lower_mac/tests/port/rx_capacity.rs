@@ -605,3 +605,102 @@ fn polls_without_ring_work_leave_the_device_alone() {
     assert!(total >= 1, "the announced unit was pulled");
     assert_eq!(super::count(&released), 1);
 }
+
+/// The body lends its one unit, polls once more with an empty ring, then the
+/// network returns the unit: the body's next poll, with no driver turn
+/// between, rearms the ring. A walker that ran out of armed descriptors
+/// raises no receive interrupt, so the return is the only edge left.
+struct ReturnRearms {
+    observed: Rc<RefCell<Observed>>,
+    released: super::Released,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReturnRearms {
+    type Output = (usize, usize);
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, (usize, usize)>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let mut owner = owner.enable().await.ok().expect("model enable");
+        let counts;
+        {
+            let mut phase = owner.phase();
+            phase.station().configure(
+                resources
+                    .station_commands
+                    .configure
+                    .with_context(Tag(7, None)),
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            assert!(matches!(
+                phase.next_event().await,
+                Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_))))
+            ));
+            self.observed.borrow_mut().received.push_back(TestReceive {
+                bytes: super::super::data_frame(STATION),
+                view: 0..26,
+                released: self.released.clone(),
+            });
+            let lent = match phase.next_event().await {
+                Ok(Ok(LowerMacEvent::Received { frame, .. })) => match phase.lend(frame) {
+                    Ok(lent) => lent,
+                    Err(_) => panic!("the network takes the unit"),
+                },
+                _ => panic!("the received unit"),
+            };
+            // An idle poll: the ring has no work, the pull stays closed.
+            core::future::poll_fn(|cx| {
+                assert!(core::pin::pin!(phase.next_event()).poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+            let before = self.observed.borrow().returned;
+            drop(lent);
+            core::future::poll_fn(|cx| {
+                let _ = core::pin::pin!(phase.next_event()).poll(cx);
+                Poll::Ready(())
+            })
+            .await;
+            counts = (before, self.observed.borrow().returned);
+        }
+        let owner = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+            .ok()
+            .expect("model disable");
+        radio::Ended::uninstall(owner, (), counts)
+    }
+}
+
+#[test]
+fn a_network_return_rearms_the_ring_in_the_bodys_own_poll() {
+    let (parts, observed, _clock) = installed(Vec::new());
+    let released = super::Released::default();
+    let report = block_on(super::run_body(
+        parts,
+        ReturnRearms {
+            observed: observed.clone(),
+            released: released.clone(),
+        },
+    ));
+    let super::Report::Uninstalled {
+        output: (before, after),
+    } = report
+    else {
+        panic!("clean uninstall");
+    };
+    assert_eq!(
+        after,
+        before + 1,
+        "the body's poll rearmed the returned unit"
+    );
+    assert_eq!(super::count(&released), 1);
+}

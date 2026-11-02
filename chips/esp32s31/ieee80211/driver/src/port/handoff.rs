@@ -404,6 +404,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         if !self.enabled.get() {
             return Ok(None);
         }
+        // A unit the network returned waits for this pull to rearm the
+        // ring: an exhausted walker raises no receive interrupt, so the
+        // return itself wakes the body.
+        if self.storage.network.poll_returns(cx) {
+            self.receive_due.set(true);
+        }
         let mut device = self.port.device()?;
         // The receive facts wake the body itself; taking them registers it.
         if device.poll_received_facts(cx)? {

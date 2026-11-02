@@ -139,6 +139,15 @@ impl<P: LentNotifies> NetworkCredit<P> {
         self.returned.swap(false, Ordering::AcqRel)
     }
 
+    /// Whether the network returned a unit the ring has not rearmed yet;
+    /// the next return tells the polling task ([`LentNotifies::returned`]
+    /// runs on every return). The body's receive pull asks: a return may
+    /// be the only edge left when the walker ran out of armed descriptors.
+    pub(super) fn poll_returns(&self, cx: &mut Context<'_>) -> bool {
+        self.notifies.register_returned(cx);
+        self.returned.load(Ordering::Acquire)
+    }
+
     /// Ready once the network holds no unit.
     pub(super) fn poll_returned(&self, cx: &mut Context<'_>) -> Poll<()> {
         self.notifies.register_returned(cx);

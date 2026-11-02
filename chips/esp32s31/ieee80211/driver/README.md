@@ -209,13 +209,18 @@ signal, which only the station's pull polls, so they wake the station
 directly; the driver task takes the other MAC facts and serves the transmit
 and TBTT ones. The RX interrupt stays masked until the pull drained the
 ring. A pull services the ring only while it has work (a receive fact, the
-driver's wake, a returned unit or work the last pull left); otherwise it
+driver's wake, a unit the station or the network returned, or work the last
+pull left); otherwise it
 takes no more than the receive facts and leaves the driver's state alone.
 While a cut or a stop holds the ring, the driver task's batches take both
 signals' facts. A cut's units and every terminal reach the station
 through the event queue, ahead of what the ring holds. The driver task and
 the pull borrow the device and the driver's state only within one
 synchronous step of their own task on the station's executor.
+
+Every unit the network returns wakes the station, whose next pull rearms
+the ring: a walker that ran out of armed descriptors raises no receive
+interrupt, so the return is the only edge left.
 
 When the station holds `RX_HELD` units, its pull disarms only the RX
 continuation timer and keeps the pending RX work and buffer owners; it
