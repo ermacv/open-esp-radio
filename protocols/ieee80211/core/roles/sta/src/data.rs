@@ -495,6 +495,8 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     next_order: u32,
     /// The current link: [`Self::leave`] ends it.
     link: Option<LinkEpoch<'id, D::EpochPath>>,
+    /// Why the last attempt pass made none, while only MSDUs came since.
+    waits: Option<aggregate::AttemptWait>,
 }
 
 /// Terminal data bank. Queued work has returned its frame credits; it has no
@@ -539,6 +541,7 @@ impl<
             admission,
             next_order,
             link: None,
+            waits: None,
         }
     }
 }
@@ -559,7 +562,7 @@ impl<
         events: &mut impl EventSink<StaEvent>,
     ) -> oer_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
         machine.leave(events);
-        let (tickets, buffers, owed, members, admission, next_order, link) = oer_memory::unpack_placed!(
+        let (tickets, buffers, owed, members, admission, next_order, link, waits) = oer_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
@@ -568,10 +571,11 @@ impl<
                 members,
                 admission,
                 next_order,
-                link
+                link,
+                waits
             }
         );
-        drop(link);
+        drop((link, waits));
         oer_memory::Placed::init(destination, |place| {
             oer_memory::init_in_place!(place, RetiredData {
                 tickets: tickets.read(),
@@ -596,6 +600,7 @@ impl<
             admission,
             next_order,
             link: _,
+            waits: _,
         } = self;
         RetiredData {
             tickets,
@@ -628,6 +633,7 @@ impl<
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
+            waits: None,
         }
     }
 
@@ -652,6 +658,7 @@ impl<
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
+            waits: None,
         })
     }
 
@@ -659,6 +666,7 @@ impl<
     /// for it drains into its tokens, counted; its submitted ones return
     /// their tokens with their terminals and never go again.
     pub fn leave(&mut self, events: &mut impl EventSink<StaEvent>) {
+        self.waits = None;
         while let Some(owed) = self.owed.pop() {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
             self.buffers
@@ -688,6 +696,7 @@ impl<
         input: DataReturn<'id, D, K>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<BlockAckMarks> {
+        self.waits = None;
         match input {
             DataReturn::Refused {
                 context,
@@ -840,11 +849,20 @@ impl<
                     sequence: sequence_number,
                     attempts: 0,
                 };
+                self.waits = self.waits.take().and_then(|waits| {
+                    waits.after_input(
+                        context.tid,
+                        context.sequence,
+                        context.frame.frame().len().get(),
+                        context.protection,
+                    )
+                });
                 let owed = OwedMpdu {
                     context,
                     buffer: ReturnedMpdu::Fresh(buffer),
                 };
                 if let Err(owed) = self.owed.push(owed) {
+                    self.waits = None;
                     self.overflowed(owed, events);
                 }
                 Ok(slot)
@@ -878,6 +896,14 @@ impl<
         self.next_tid()
     }
 
+    /// Whether the last attempt pass made no attempt and only MSDUs that
+    /// change none came since: no free ticket, or the next aggregate still
+    /// grows behind an attempt of its category. A service skips its next
+    /// attempt pass then; every other change to the machine ends the wait.
+    pub fn attempts_wait(&self) -> bool {
+        self.waits.is_some()
+    }
+
     /// The TID of the earliest owed MSDU of an admitted category, whatever
     /// its TID, while a ticket is free.
     fn next_tid(&self) -> Option<WmmUserPriority> {
@@ -897,6 +923,7 @@ impl<
     /// action the ticket until their return; queued work consumes neither.
     /// The service takes every action before waiting.
     pub fn poll_action(&mut self) -> Option<DataTransmit<'id, D, K>> {
+        self.waits = None;
         let tid = self.next_tid()?;
         // A queue can be empty or an AC can have no free permit: both are
         // normal polling states. Reserve and pop under the same exclusive
