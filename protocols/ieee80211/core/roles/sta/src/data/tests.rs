@@ -1688,7 +1688,7 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
     );
     assert_eq!(marks.map(|marks| marks.expired), Some(0b1));
     assert_eq!(losses(&events, DataLoss::RetryLimit), 1);
-    // A sequence number outside the window goes alone.
+    // A sequence number before the window's head goes alone.
     assert!(matches!(
         data.poll_attempt(|_| window(100, 8, u32::MAX), &mut events),
         Some(DataAttempt::Single(_))
@@ -1858,4 +1858,50 @@ fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
     let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
     assert_eq!(full.context.len(), 4);
     drop((first, full));
+}
+
+#[test]
+fn an_mpdu_beyond_the_window_waits_for_the_window_to_move() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for _ in 0..4 {
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut link,
+            },
+            &mut events,
+        )
+        .unwrap();
+    }
+    // A window of two: 0 and 1 fill it.
+    let narrow =
+        |start| window(start, 2, u32::MAX).map(|window| AggregateWindow { size: 2, ..window });
+    let first = aggregate(data.poll_attempt(|_| narrow(0), &mut events));
+    assert_eq!(first.context.len(), 2);
+    // 2 lies beyond the window while 0 and 1 are out: it neither goes
+    // alone nor takes the free ticket.
+    assert!(data.poll_attempt(|_| narrow(0), &mut events).is_none());
+    // The BlockAck settles 0 and 1 and the window moves over them.
+    let marks = data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            completion: block_ack(0, 0b11),
+        },
+        oer_time::Instant::from_micros(2_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert_eq!(marks.map(|marks| marks.delivered), Some(0b11));
+    let second = aggregate(data.poll_attempt(|_| narrow(2), &mut events));
+    assert_eq!(second.context.len(), 2);
+    drop(second);
+    assert_eq!(tokens_lost(&events), 0);
 }
