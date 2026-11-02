@@ -29,8 +29,9 @@ waker crosses harts.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 the facade's affine `DmaResources` claim, signals and declared storage. The
 station unwraps EAPOL-Key data (RFC 3394) synchronously in its step over the
-block primitive the facade's station callbacks supply
-(`StaCallbacks::KeyUnwrapBlocks`): the software AES-128 block.
+engine the facade's station callbacks supply (`StaCallbacks::KeyUnwrapEngine`):
+the AES accelerator (`compose::crypto::AesEngine`), each block waited for on
+its `STATE` flag, which the image hands to the station's `Profile`.
 The permanent RX ring and nine TX allocations have one declaration in the
 facade. Their HAL placement proof stays in the existing HAL macro; image IRQ
 modules hold only their line and signals. `Resources` consumes the opaque
@@ -39,7 +40,7 @@ modules hold only their line and signals. `Resources` consumes the opaque
 station's), so neither preempts the other. The driver's signals name that
 executor; the station's lent-buffer returns raise them as its own tasks
 (`FromOwnTask`), and the driver rings the radio doorbell from its wake entry.
-The image supplies the station runner's start-time `Profile`: the station's address, scan channels and callbacks.
+The image supplies the station runner's start-time `Profile`: the station's address, scan channels and callbacks and AES engine.
 The network comes with each connect: `Control::connect(credentials)` takes
 the `PreparedCredentials` of one network, which only an idle station takes
 and keeps for its reconnections; a refused, stopped or cancelled connect

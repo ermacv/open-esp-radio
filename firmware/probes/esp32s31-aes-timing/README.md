@@ -17,7 +17,7 @@ each timed with `mcycle` around the operation:
 | `software-crate` | CCMP's and BIP's RustCrypto calls as the product makes them (`ccm`, `cmac`, key schedule included) |
 | `flag` | The accelerator, polling `STATE` until it reads idle |
 | `interrupt` | The accelerator with `INT_ENA` set, spinning until the handler counts an entry |
-| `wifi` | The Wi-Fi station's engine (`oer-esp32s31-crypto`): a timer-woken sample every 1 µs through the system timer |
+| `driver` | The AES driver's engine (`oer-esp32s31-crypto`), which the Wi-Fi station unwraps with in its step: each block waited for on `STATE` within its named settle |
 | `dma-flag` | DMA-AES over AXI-DMA channel 0, polling `STATE` for `DONE` and the output descriptor's `OWNER` (`INT_ENA` cleared) |
 | `dma-interrupt` | DMA-AES with `INT_ENA` set, spinning until the handler counts the completion, then the same check |
 
@@ -45,7 +45,7 @@ start, AES start), `wait` and `finish` (`DMA_EXIT` and the copy out).
 `unwrap`, `ccm-seal` and `cmac` run the same code over every block
 (`src/ops.rs`, checked on the host against RustCrypto's `ccm` and `cmac`);
 `unwrap` uses `oer-crypto`'s RFC 3394 machine (`BlockKeyUnwrap`). The
-`wifi` mode runs only `unwrap`, the one operation the station hands the
+`driver` mode runs only `unwrap`, the one operation the station hands the
 accelerator. Every hardware result is compared with the software one.
 
 The console prints one line per case,

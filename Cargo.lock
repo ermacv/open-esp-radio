@@ -1667,6 +1667,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embedded-io-async",
+ "oer-crypto",
  "oer-diagnostics",
  "oer-embassy-time",
  "oer-esp32s31-crypto",
@@ -1693,7 +1694,6 @@ dependencies = [
  "oer-crypto",
  "oer-esp32s31-hal",
  "oer-time",
- "oer-time-virtual",
  "zeroize",
 ]
 
@@ -1895,7 +1895,6 @@ dependencies = [
  "oer-ieee80211-contracts-port",
  "oer-ieee80211-core-arbiter",
  "oer-ieee80211-core-roles-sta",
- "oer-ieee80211-core-security-cipher",
  "oer-ieee80211-core-security-rsn",
  "oer-ieee80211-core-upper-mac",
  "oer-ieee80211-runtime",

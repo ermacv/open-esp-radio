@@ -46,7 +46,10 @@ pub use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
 pub use oer_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
 pub use oer_network_port::{LinkSnapshot, LinkState};
 
-use super::{Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken, WifiToken};
+use super::{
+    AesPeripheral, Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken,
+    WifiToken,
+};
 use crate::net::{NetError, Published, Watchers};
 
 type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
@@ -98,6 +101,8 @@ pub(crate) struct StationStart {
     config: wifi::Config,
     address: [u8; 6],
     nonces: &'static mut wifi::NonceSource,
+    /// The accelerator the station unwraps its EAPOL-Key data with.
+    aes: oer_esp32s31_compose::crypto::AesEngine,
 }
 
 /// The image keeps no trace observations.
@@ -212,11 +217,13 @@ pub(crate) async fn serve_station(start: StationStart) {
         config,
         address,
         nonces,
+        aes,
     } = start;
     let profile = wifi::Profile::new(
         &config,
         address,
         Callbacks(nonces),
+        aes,
         StationObserver::default(),
         STATION_SINK,
     )
@@ -509,15 +516,23 @@ impl Drop for Device {
 impl Station {
     /// Start the station on `wifi`: the radio executor, the actor, the MAC
     /// driver and the station runner. Its tasks run once the executor does.
-    /// It unwraps its EAPOL-Key data in its own step.
+    /// It unwraps its EAPOL-Key data in its own step on `aes`, the
+    /// accelerator, which it owns from here: the image starts no AES
+    /// service beside it.
     ///
     /// # Errors
-    /// The station started already, or a binding or storage was refused.
+    /// [`Error::InterruptRouted`] when the table routes the AES interrupt;
+    /// the station started already, or a binding or storage was refused.
     pub fn start(
         wifi: WifiPeripheral,
+        aes: AesPeripheral,
         config: Config,
         boot: &mut Boot,
     ) -> Result<(Self, NetStatus), Error> {
+        let silent = boot
+            .router()
+            .silent::<oer_esp32s31_hal::peripherals::aes::AesInterrupt>()
+            .map_err(|_| Error::InterruptRouted)?;
         let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
         let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
         let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
@@ -602,6 +617,7 @@ impl Station {
             config: config.chip,
             address,
             nonces,
+            aes: oer_esp32s31_compose::crypto::aes_engine(aes.0, silent),
         });
         boot.device = Some(Device {
             network: Some((network, stopper)),

@@ -440,12 +440,13 @@ coalesces a cached M4 without reinstalling PTK. Every M4 mirrors the received
 M3's MAC protection; an open M3 produces an open M4 even with an installed PTK.
 
 Key data is unwrapped in the step (RFC 3394, `oer-crypto`'s
-`BlockKeyUnwrap`) over the synchronous AES-128 block primitive the
-composition supplies through its callbacks (`StaCallbacks::KeyUnwrapBlocks`,
-lent by `key_unwrap_blocks`): Message 3's when the handshake takes it, a
-connected rekey's in the action turn that follows. The machine stays sans-IO:
-it names no hardware type, and a composition may supply a software block or a
-chip's accelerator behind the same trait. No unwrap is in flight across
+`block::unwrap_now`) over the synchronous AES-128 engine the composition
+supplies through its callbacks (`StaCallbacks::KeyUnwrapEngine`, lent by
+`key_unwrap_engine`): Message 3's when the handshake takes it, a connected
+rekey's in the action turn that follows. The machine stays sans-IO: it names
+no hardware type, and a composition may supply a software block or a chip's
+accelerator behind the same trait. An engine's refusal fails the unwrap like
+key data that fails its integrity check. No unwrap is in flight across
 inputs.
 
 The installed-key phase before connection uses the same group-only exchange,

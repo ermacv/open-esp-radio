@@ -1,40 +1,45 @@
 # S31 crypto
 
-`AesKeyUnwrap` owns the HAL's CPU Typical AES port by value for one client.
-It drives the sole RFC 3394 machine in `oer-crypto`: submit its owned input,
-wait through an owned timer, then feed back the output or a typed block error.
-The mode machine contains no async code. `compose::crypto::key_unwrap`
-builds the hardware engine for its one client: the library's AES service
-(`sdk/espressif`), which the HIL AES image serves to the host, or
-boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart. The
-Wi-Fi station unwraps its key data in its own step and takes no engine. The
-engine runs on the hart its composition places the AES owner on; its timer
-waits are that hart's executor's timers.
+`AesBlocks` owns the HAL's CPU Typical AES port by value for one owner and
+is a synchronous AES-128 engine (`oer_crypto::block::Aes128Engine`): loading
+a key sets the accelerator up, and each block is written, started and waited
+for in place on the `STATE` flag, its output read back before the call
+returns. `oer_crypto::block::unwrap_now` runs the sole RFC 3394 machine of
+`oer-crypto` over it; the machine contains no async code. The engine runs on
+the hart its composition places the AES owner on and never yields.
+`compose::crypto::aes_engine` builds it for its owner: the Wi-Fi station,
+which unwraps its EAPOL-Key data in its own step; the library's AES service
+(`sdk/espressif`), which the HIL AES image serves to the host; or
+boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart.
 
-There is no sourced <=20 us completion bound in TRM v0.1 §10.5.3 or the
-pinned ESP-IDF 4d80c1b2 AES HAL. Every block therefore yields before its first
-completion sample. The scheduling policy samples through timer waits at
-1 us intervals and refuses WORK after 1 ms; these are software policy values,
-not measured or guaranteed hardware latency. A late IDLE sample completes
-successfully before the timeout test. No AES IRQ55 is bound: the HAL retains
-its DMA interrupt part with `Silent`, and the engine disables DMA and AES
-interrupts explicitly.
+A block waits on `STATE` in the named settle `BLOCK_SETTLE`
+(`oer_time::settle`, 10 µs on the engine's clock: the executors' clock in
+`compose`). TRM v0.1 §10.5.3 and the pinned ESP-IDF 4d80c1b2 AES HAL state
+no block latency; the bound comes from the `esp32s31-aes-timing` probe,
+which measured 270–279 cycles (0.87 µs) from the start to `STATE` reading
+idle over 256 blocks at 320 MHz. A block still working at the end of the
+settle is `BlockError::Timeout`; any status but idle or working is
+`BlockError::InvalidState`. No AES IRQ55 is bound: the HAL retains its DMA
+interrupt part with `Silent`, and the engine disables DMA and AES interrupts
+explicitly.
 
 The HAL owns the entire crypto clock/reset word and preserves sibling and
 reserved bits through RMW. It exposes separate clock, reset, configuration,
 key, block, trigger and observation atoms; no whole-word clock image exists.
 Software keys are selected, pseudo-rounds are disabled, and FREE is cleared
-to prevent RSA_DS preemption (TRM §10.4). The driver sequences these atoms.
+to prevent RSA_DS preemption (TRM §10.4). The driver sequences these atoms
+and selects encryption or decryption by the direction of each block.
 
-The request KEK is erased immediately after loading. Normal completion,
-integrity refusal and cancellation reset AES and erase all software key/input
-words before disabling its clock. No DMA can reach the request storage.
-Timeout and unsupported status retain the failed engine's port; subsequent
-requests receive `BlockError::Unavailable` without hardware access. The
-portable request, blocks, continuation and response erase secrets on drop.
+The request KEK is erased immediately after loading. When its keyed view
+drops (after the last block, a refusal or an integrity failure), the engine
+resets AES and erases all software key/input words before disabling its
+clock. No DMA can reach the request storage. A timeout or an unsupported
+status poisons the engine: it keeps its port, and later keys receive
+`BlockError::Unavailable` without hardware access. The portable request,
+blocks, continuation and response erase secrets on drop.
 
-The generic register port and owned timer factory keep the operation movable
-and allocation-free. Tests use a per-test virtual clock and a fake port whose
-block oracle is RustCrypto, including shared RFC 3394 conformance, cancellation,
-typed failures, poisoning and erasure. The HAL's UI case rejects taking AES
-twice from one Root.
+Tests use a fake port whose block oracle is RustCrypto, including the shared
+RFC 3394 conformance, the flag wait and its settle on a clock that advances at
+every read, both directions, typed
+failures, poisoning and erasure. The HAL's UI case rejects taking AES twice
+from one Root.

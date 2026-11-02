@@ -15,7 +15,6 @@ zeroize = { version = "1.9.0", default-features = false }
 
 [dev-dependencies]
 oer-crypto = { path = "../../../portable/crypto", features = ["test-support"] }
-oer-time-virtual = { path = "../../../portable/time-virtual" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 
 [lints]

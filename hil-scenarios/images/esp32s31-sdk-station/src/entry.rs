@@ -60,7 +60,7 @@ oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?;
-    let (station, net) = Station::start(p.wifi, config, &mut boot)?;
+    let (station, net) = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;
     let load = load::serve::LOAD.application(&mut boot)?;

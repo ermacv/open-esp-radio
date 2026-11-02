@@ -179,7 +179,7 @@ async fn measure(mut aes: InterruptingAes) {
             agree = false;
         }
     }
-    agree &= wifi_mode(aes).await;
+    agree &= driver_mode(aes).await;
     text(if agree {
         b"OER-RESULT: pass aes-timing\r\n"
     } else {
@@ -285,14 +285,11 @@ async fn hardware_cases(aes: &mut InterruptingAes, wait: Wait, mode: &str) -> bo
     agree
 }
 
-/// The Wi-Fi station's engine (`oer-esp32s31-crypto`, timer-woken samples
-/// every 1 µs through the system timer), unwrapping as the station does.
-async fn wifi_mode(aes: InterruptingAes) -> bool {
-    let mut engine = oer_esp32s31_crypto::AesKeyUnwrap::new(
-        aes,
-        EmbassyClock,
-        oer_esp32s31_compose::crypto::AesWait,
-    );
+/// The AES driver's engine (`oer-esp32s31-crypto`: each block waited for on
+/// `STATE` within its named settle on the executors' clock), unwrapping in
+/// place as the Wi-Fi station does in its step.
+async fn driver_mode(aes: InterruptingAes) -> bool {
+    let mut engine = oer_esp32s31_crypto::AesBlocks::new(aes, EmbassyClock);
     let mut agree = true;
     for plain in UNWRAP_PLAIN {
         let (plaintext, wrapped) = wrapped(plain);
@@ -303,21 +300,19 @@ async fn wifi_mode(aes: InterruptingAes) -> bool {
             };
             let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&KEY), data);
             let start = oer_riscv::cycle32();
-            let done = engine.unwrap_key(request).await;
+            let response = oer_crypto::block::unwrap_now(&mut engine, request);
             stats.add(oer_riscv::cycle32().wrapping_sub(start));
-            agree &= done
-                .response
+            agree &= response
                 .plaintext()
                 .is_ok_and(|bytes| bytes == plaintext.get(..plain).unwrap_or(&[]));
-            engine = done.engine;
         }
-        report("wifi", "unwrap", plain.saturating_add(8), &stats);
+        report("driver", "unwrap", plain.saturating_add(8), &stats);
         pause().await;
     }
     text(if agree {
-        b"OER-PROBE aes-timing wifi agrees with software\r\n"
+        b"OER-PROBE aes-timing driver agrees with software\r\n"
     } else {
-        b"OER-PROBE aes-timing wifi disagrees with software\r\n"
+        b"OER-PROBE aes-timing driver disagrees with software\r\n"
     });
     agree
 }

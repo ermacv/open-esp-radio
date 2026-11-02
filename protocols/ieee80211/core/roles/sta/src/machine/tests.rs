@@ -207,12 +207,12 @@ struct Callbacks {
     blocks: CountingBlocks,
 }
 impl StaCallbacks for Callbacks {
-    type KeyUnwrapBlocks = CountingBlocks;
+    type KeyUnwrapEngine = CountingBlocks;
     fn nonce(&mut self) -> [u8; 32] {
         self.nonce_calls += 1;
         SNONCE
     }
-    fn key_unwrap_blocks(&mut self) -> &mut CountingBlocks {
+    fn key_unwrap_engine(&mut self) -> &mut CountingBlocks {
         &mut self.blocks
     }
     fn he_packet_padding(
@@ -234,22 +234,30 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     wmm: [0; 9],
 };
 
-/// The software block an image composes, counting its key loads: one per
-/// key-data unwrap.
+/// The software block an image composes as an engine, counting its key
+/// loads (one per key-data unwrap); with `refuse`, it refuses the key as a
+/// failed accelerator does.
 struct CountingBlocks {
     loads: usize,
+    refuse: Option<oer_crypto::block::BlockError>,
 }
-impl oer_crypto::block::Aes128Blocks for CountingBlocks {
+impl oer_crypto::block::Aes128Engine for CountingBlocks {
     type Keyed<'a>
         = oer_ieee80211_core_security_cipher::aes::SoftwareAes128Keyed
     where
         Self: 'a;
-    fn load_key(&mut self, key: &oer_crypto::Aes128Key) -> Self::Keyed<'_> {
+    fn load(
+        &mut self,
+        key: &oer_crypto::Aes128Key,
+    ) -> Result<Self::Keyed<'_>, oer_crypto::block::BlockError> {
         self.loads += 1;
-        oer_crypto::block::Aes128Blocks::load_key(
+        if let Some(error) = self.refuse {
+            return Err(error);
+        }
+        Ok(oer_crypto::block::Aes128Blocks::load_key(
             &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
             key,
-        )
+        ))
     }
 }
 
@@ -525,7 +533,10 @@ impl<'id> World<'id> {
             tx_block_ack: None,
             callbacks: Callbacks {
                 nonce_calls: 0,
-                blocks: CountingBlocks { loads: 0 },
+                blocks: CountingBlocks {
+                    loads: 0,
+                    refuse: None,
+                },
             },
         };
         let resources = StationResources {

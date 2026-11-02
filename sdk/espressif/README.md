@@ -14,7 +14,7 @@ static LINK: Channel<Request, Reply, 1> = Channel::new();
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(*b"DE", 6, 10)?;
-    let (station, status) = Station::start(p.wifi, config, &mut boot)?;
+    let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let link = LINK.application(&mut boot)?;
     Ok(boot.run(app(station, status, link)))
 }
@@ -134,10 +134,13 @@ runs the radio actor.
 clients from `Aes::client` (in the boot or in a task). A request moves into
 the client's seat and its response comes back by value; the service runs
 one request at a time, the next pending client after the last served. A
-client is also a `KeyUnwrap` engine. The Wi-Fi station takes none: it
-unwraps its EAPOL-Key data in its own step.
+client is also a `KeyUnwrap` engine.
 
-`wifi::Station::start` takes the radio and the entropy source. Its configuration names one channel (`wifi::Config::new`) or every
+`wifi::Station::start` takes the radio, the entropy source and the AES
+accelerator, which it owns for good: the station unwraps its EAPOL-Key data
+in its own step on the accelerator, each block waited for on its `STATE`
+flag. An image that starts the station therefore starts no AES service
+(the peripheral moves into one of them). Its configuration names one channel (`wifi::Config::new`) or every
 2.4 GHz channel the country permits, scanned at each connect
 (`wifi::Config::all_channels`). `connect(profile)`
 ends with the result of that connection attempt: `Connected`, or a
@@ -238,8 +241,8 @@ takes differences.
 
 ## Limits
 
-The application runs on hart 0. The AES service computes RFC 3394 key
-unwrap only, on the CPU without DMA. One station and one IP service per
+The application runs on hart 0. The AES service and the station compute
+RFC 3394 key unwrap only, on the accelerator in Typical mode without DMA. One station and one IP service per
 image. `println!("ipv4 {}/{}", Ipv4(address), prefix)` writes a typed line
 (`oer_diagnostics::typed_line!`): the format's static pieces and the
 values, which the host prints; the target formats nothing. A hole is a bare
