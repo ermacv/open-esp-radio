@@ -1062,8 +1062,7 @@ pub use aggregate::{
 };
 mod ethernet;
 pub use ethernet::{
-    EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan,
-    PlannedCopyError, TxMsdu,
+    EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan, PlannedCopyError,
 };
 
 #[cfg(test)]

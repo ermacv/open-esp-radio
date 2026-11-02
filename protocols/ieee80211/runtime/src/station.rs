@@ -121,7 +121,7 @@ use oer_protocols_ieee80211_core_roles_sta::machine::TxRefusal;
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
-use oer_portable_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
@@ -140,7 +140,7 @@ use oer_protocols_ieee80211_core_roles_sta::{
     data,
     data::{
         DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame,
-        MAX_ETHERNET_PAYLOAD_LEN, Msdu, MsduPlan, PlannedCopyError, StaData, TxMsdu,
+        MAX_ETHERNET_PAYLOAD_LEN, Msdu, MsduPlan, PlannedCopyError, StaData,
     },
     machine::{
         Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput, StaNotice, StaReceived,
@@ -558,15 +558,11 @@ pub enum ServiceCommand<K> {
 
 /// What the service tells the application.
 #[derive(Debug)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a refusal returns the original owned packet without allocation"
-)]
 pub enum ServiceOutput<K> {
     CommandStarted(Request),
     /// The original network operation refused before data admission.
+    /// The packet itself went back to the network stack.
     MsduRefused {
-        packet: contract::TransmitPacket,
         reason: contract::MsduRefusal,
     },
     /// An operation refused before admission. Its resources return and the
@@ -673,6 +669,14 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
     }
 }
 
+/// One MSDU the network stack hands the station: its packet owner and the
+/// user priority its marking requests.
+#[derive(Debug)]
+pub struct Outgoing<P> {
+    pub packet: P,
+    pub priority: data::WmmUserPriority,
+}
+
 /// The service's ends to the application and the network stack.
 ///
 /// Commands require an exclusive SPSC receiver rather than a shareable channel:
@@ -683,12 +687,15 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 ///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
 /// use oer_protocols_ieee80211_runtime::station::Received;
-/// use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
+/// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+/// use oer_protocols_ieee80211_runtime::station::Outgoing;
 /// use oer_portable_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
-/// let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_portable_memory::WakingSlotQueue::<Option<Outgoing<EthernetFrame>>, 1>::new();
+/// let mut back = oer_portable_memory::WakingSlotQueue::<Option<EthernetFrame>, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
-/// let (_, transmit) = tx.split(TxMsdu::empty);
+/// let (_, transmit) = tx.split(|| None);
+/// let (returned, _) = back.split(|| None);
 /// let (receive, _) = rx.split();
 /// let mut copies = WakingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, { oer_protocols_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
 /// let (receive_copied, _) = copies.split();
@@ -698,7 +705,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let state = State::new();
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands: commands.dyn_receiver(), transmit, receive, receive_copied, output: &mut output, control,
+///     commands: commands.dyn_receiver(), transmit, returned, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_protocols_ieee80211_runtime::station::NoNetwork, stop: oer_protocols_ieee80211_runtime::station::StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
 /// };
 /// ```
@@ -709,13 +716,16 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// use oer_protocols_ieee80211_runtime::station::{
 ///     Control, ControlCommand, Received, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
+/// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+/// use oer_protocols_ieee80211_runtime::station::Outgoing;
 /// use oer_portable_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-/// let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_portable_memory::WakingSlotQueue::<Option<Outgoing<EthernetFrame>>, 1>::new();
+/// let mut back = oer_portable_memory::WakingSlotQueue::<Option<EthernetFrame>, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (application, commands) = commands.split();
-/// let (_, transmit) = tx.split(TxMsdu::empty);
+/// let (_, transmit) = tx.split(|| None);
+/// let (returned, _) = back.split(|| None);
 /// let (receive, _) = rx.split();
 /// let mut copies = WakingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, { oer_protocols_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
 /// let (receive_copied, _) = copies.split();
@@ -723,7 +733,7 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
-///     commands, transmit, receive, receive_copied, output: &mut output, control,
+///     commands, transmit, returned, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_protocols_ieee80211_runtime::station::NoNetwork, stop: oer_protocols_ieee80211_runtime::station::StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
 /// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
@@ -735,6 +745,7 @@ pub struct ServiceIo<
     O: ServiceOutputSink<K>,
     L,
     S: NetworkStop,
+    P,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
@@ -743,8 +754,12 @@ pub struct ServiceIo<
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
     pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
-    /// The MSDUs the network stack sends.
-    pub transmit: SlotReceiver<'c, TxMsdu, TX_DEPTH, N::Station, N::Network>,
+    /// The MSDUs the network stack sends: its packet owners, read where
+    /// the stack wrote them.
+    pub transmit: SlotReceiver<'c, Option<Outgoing<P>>, TX_DEPTH, N::Station, N::Network>,
+    /// The packets read, back to the network stack, which drops them on
+    /// its own executor.
+    pub returned: SlotSender<'c, Option<P>, TX_DEPTH, N::Network, N::Station>,
     /// The MSDUs the station received for the network stack.
     pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
     /// The copies `receive`'s [`Received::Copied`] marks stand for, in order.
@@ -1372,6 +1387,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1466,6 +1482,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1565,6 +1582,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1738,6 +1756,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -1882,6 +1901,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2229,6 +2249,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2242,30 +2263,37 @@ impl<
                 return Taken::Direct;
             };
             let ServiceIo {
-                transmit, output, ..
+                transmit,
+                returned,
+                output,
+                ..
             } = io;
             let data = &mut self.data;
             let events = &mut self.events;
-            // The queue holds at most `TX_DEPTH`: one pass takes them all.
+            // The queue holds at most `TX_DEPTH`: one pass takes them all,
+            // each while the data machine has a buffer and its packet a
+            // place to go back.
             for _ in 0..TX_DEPTH {
-                if !data.accepts() {
+                if !data.accepts() || returned.free_capacity() == 0 {
                     break;
                 }
-                // The MSDU is read where the network wrote it: the data
-                // path encodes it into its MPDU buffer, its one copy here.
-                let read = transmit.try_receive_with(|packet| {
-                    let parts = packet.frame.parts();
-                    let msdu = Msdu {
-                        destination: parts.destination,
-                        ether_type: parts.ether_type,
-                        priority: packet.priority,
-                        payload: parts.payload,
-                        admitted: now,
-                    };
-                    // A too-long MSDU is refused without changing bytes.
-                    match data.input(
+                let Ok(Some(Outgoing { packet, priority })) =
+                    transmit.try_receive_with(Option::take)
+                else {
+                    break;
+                };
+                // The MSDU is read where the stack wrote it: the data path
+                // encodes it into its MPDU buffer, its one copy here.
+                let refusal = match packet.view() {
+                    Ok(view) => match data.input(
                         DataInput {
-                            msdu,
+                            msdu: Msdu {
+                                destination: view.destination,
+                                ether_type: view.ether_type,
+                                priority,
+                                payload: view.payload,
+                                admitted: now,
+                            },
                             link: &mut link,
                         },
                         events,
@@ -2274,19 +2302,29 @@ impl<
                             if let Some(seen) = tids.get_mut(usize::from(tid.value())) {
                                 *seen = Some(tid);
                             }
+                            None
                         }
                         // The available-pool observation is dynamic and the
-                        // public data input can refuse it. The application
-                        // gets the packet's copy back, rather than a
-                        // manufactured terminal or lost bytes.
-                        Err(reason) => output.emit(ServiceOutput::MsduRefused {
-                            packet: contract::TransmitPacket(packet.clone()),
-                            reason: reason.into(),
-                        }),
-                    }
+                        // public data input can refuse it.
+                        Err(reason) => Some(reason.into()),
+                    },
+                    // The network checked the frame before it queued it.
+                    Err(_) => Some(contract::MsduRefusal::InvalidFrame),
+                };
+                if let Some(reason) = refusal {
+                    output.emit(ServiceOutput::MsduRefused { reason });
+                }
+                // The packet goes back for the network to drop on its own
+                // executor; its place was checked above.
+                let mut packet = Some(packet);
+                let _sent = returned.try_send_with(|slot| {
+                    *slot = packet.take();
+                    Ok::<_, core::convert::Infallible>(())
                 });
-                if read.is_err() {
-                    break;
+                if let Some(packet) = packet {
+                    // A broken return queue: the packet stays quarantined
+                    // rather than dropped on this hart.
+                    let _quarantined = core::mem::ManuallyDrop::new(packet);
                 }
             }
         }
@@ -2315,6 +2353,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2449,6 +2488,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2621,6 +2661,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2696,6 +2737,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2768,6 +2810,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2822,6 +2865,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2877,6 +2921,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2921,6 +2966,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -2981,6 +3027,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3017,6 +3064,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3123,6 +3171,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -3159,6 +3208,7 @@ impl<
             impl ServiceOutputSink<B::Caps>,
             B::LentRx,
             impl NetworkStop,
+            impl oer_protocols_network_port::EthernetFrame,
             TX_DEPTH,
             RX_DEPTH,
             COMMAND_DEPTH,
@@ -4160,6 +4210,7 @@ fn station_action<
         impl ServiceOutputSink<B::Caps>,
         B::LentRx,
         impl NetworkStop,
+        impl oer_protocols_network_port::EthernetFrame,
         TX_DEPTH,
         RX_DEPTH,
         COMMAND_DEPTH,

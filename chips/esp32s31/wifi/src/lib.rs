@@ -21,9 +21,8 @@ pub use credentials::{
     StationSettings,
 };
 use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
-use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_protocols_ieee80211_runtime::station as runtime;
-use oer_protocols_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
+use oer_protocols_network_port::{LinkSnapshot, NetDevice, TransmitRefused};
 pub use runtime::StopPolicy;
 pub use runtime::{ControlError, OperationEnd};
 
@@ -262,9 +261,10 @@ impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for Unlent {
 type Frame<N> = runtime::Received<LentRx<N>>;
 type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 
-/// Affine neutral Ethernet end. The concrete station frame is private.
-pub struct Network<'a, N: Notifies = SameHart> {
-    inner: runtime::Device<'a, LentRx<N>, TX_DEPTH, RX_DEPTH, Ch<N>>,
+/// Affine neutral Ethernet end over the network stack's packet owners `P`.
+/// The concrete station frame is private.
+pub struct Network<'a, N: Notifies, P> {
+    inner: runtime::Device<'a, LentRx<N>, P, TX_DEPTH, RX_DEPTH, Ch<N>>,
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.
@@ -302,8 +302,9 @@ impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
         }
     }
 }
-impl<N: Notifies> NetDevice for Network<'_, N> {
+impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame> NetDevice for Network<'_, N, P> {
     type RxFrame = Received<N>;
+    type TxFrame = P;
     fn link(&self) -> LinkSnapshot {
         self.inner.link()
     }
@@ -329,7 +330,7 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_transmit_ready(cx)
     }
-    fn try_transmit<F: EthernetFrame>(&mut self, frame: F) -> Result<(), TransmitRefused<F>> {
+    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
         self.inner.try_transmit(frame)
     }
 }
@@ -453,7 +454,7 @@ impl<N: Notifies> NetworkStopper<'_, N> {
     /// The composition has no network side: it gives up the station's
     /// network end, the station delivers no frame (each received MSDU's
     /// buffer goes back at once), and its stop needs no answer.
-    pub fn no_network(self, network: Network<'_, N>) {
+    pub fn no_network<P>(self, network: Network<'_, N, P>) {
         drop(network);
         self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
@@ -471,14 +472,21 @@ impl<N: Notifies> Drop for NetworkStopper<'_, N> {
         self.state.station.notify();
     }
 }
-/// The station's channels: its commands, its network's transmit, receive
-/// and copies, the network's stop and the link, with `N`'s notifies.
-pub struct Channels<N: Notifies = SameHart> {
+/// The station's channels: its commands, its network's transmit (the
+/// stack's packet owners `P`, and their way back), receive and copies, the
+/// network's stop and the link, with `N`'s notifies.
+pub struct Channels<N: Notifies, P> {
     network_stop: NetworkStopState<N>,
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
-    tx: oer_portable_memory::WakingSlotQueue<TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
+    tx: oer_portable_memory::WakingSlotQueue<
+        Option<runtime::Outgoing<P>>,
+        TX_DEPTH,
+        Station<N>,
+        Net<N>,
+    >,
+    returned: oer_portable_memory::WakingSlotQueue<Option<P>, TX_DEPTH, Net<N>, Station<N>>,
     rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
     state: runtime::State<Ch<N>>,
@@ -487,7 +495,7 @@ pub struct Channels<N: Notifies = SameHart> {
 type Net<N> = <Ch<N> as runtime::Notifies>::Network;
 /// A station-side queue end's notify of `N`.
 type Station<N> = <Ch<N> as runtime::Notifies>::Station;
-impl Channels {
+impl<P> Channels<SameHart, P> {
     pub const fn new() -> Self {
         Self {
             network_stop: NetworkStopState::new(),
@@ -495,13 +503,14 @@ impl Channels {
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::new(),
+            returned: oer_portable_memory::WakingSlotQueue::new(),
             rx: WakingSpscQueue::new(),
             rx_copied: WakingSpscQueue::new(),
             state: runtime::State::new(),
         }
     }
 }
-impl<NW, SW, D> Channels<AcrossHarts<NW, SW, D>>
+impl<NW, SW, D, P> Channels<AcrossHarts<NW, SW, D>, P>
 where
     NW: oer_portable_memory::QueueNotify + Copy + 'static,
     SW: oer_portable_memory::QueueNotify + Copy + 'static,
@@ -518,32 +527,34 @@ where
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::across_harts(station, network),
+            returned: oer_portable_memory::WakingSlotQueue::across_harts(network, station),
             rx: WakingSpscQueue::across_harts(network, station),
             rx_copied: WakingSpscQueue::across_harts(network, station),
             state: runtime::State::across_harts(network),
         }
     }
 }
-impl<N: Notifies> Channels<N> {
+impl<N: Notifies, P> Channels<N, P> {
     #[allow(clippy::type_complexity, reason = "the four ends of one split")]
     pub fn split(
         &mut self,
     ) -> Result<
         (
             Control<'_, N>,
-            Network<'_, N>,
+            Network<'_, N, P>,
             NetworkStopper<'_, N>,
-            Connection<'_, N>,
+            Connection<'_, N, P>,
         ),
         runtime::ControlCreateError,
     > {
         self.network_stop.reset();
         let (send, commands) = self.commands.split();
-        let (tx, transmit) = self.tx.split(TxMsdu::empty);
+        let (tx, transmit) = self.tx.split(|| None);
+        let (returned, back) = self.returned.split(|| None);
         let (receive, rx) = self.rx.split();
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = runtime::Device::new(tx, rx, rx_copied, &self.state);
+        let network = runtime::Device::new(tx, back, rx, rx_copied, &self.state);
         Ok((
             Control {
                 inner: control,
@@ -560,6 +571,7 @@ impl<N: Notifies> Channels<N> {
                     start: StartGuard(&self.start),
                     commands,
                     transmit,
+                    returned,
                     receive,
                     receive_copied,
                     runner,
@@ -569,23 +581,30 @@ impl<N: Notifies> Channels<N> {
         ))
     }
 }
-impl Default for Channels {
+impl<P> Default for Channels<SameHart, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 /// The runner's ends of the channels and its duty to publish the exit.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-pub struct Connection<'a, N: Notifies = SameHart> {
-    service: ServiceConnection<'a, N>,
+pub struct Connection<'a, N: Notifies, P> {
+    service: ServiceConnection<'a, N, P>,
     stop: StopGuard<'a, Exit>,
 }
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-struct ServiceConnection<'a, N: Notifies> {
+struct ServiceConnection<'a, N: Notifies, P> {
     network_stop: &'a NetworkStopState<N>,
     start: StartGuard<'a>,
     commands: oer_portable_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
-    transmit: oer_portable_memory::SlotReceiver<'a, TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
+    transmit: oer_portable_memory::SlotReceiver<
+        'a,
+        Option<runtime::Outgoing<P>>,
+        TX_DEPTH,
+        Station<N>,
+        Net<N>,
+    >,
+    returned: oer_portable_memory::SlotSender<'a, Option<P>, TX_DEPTH, Net<N>, Station<N>>,
     receive: oer_portable_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     receive_copied: oer_portable_memory::WakingSpscSender<
         'a,
@@ -644,25 +663,25 @@ pub use chip::{
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,fail:$fail:path $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_packet:$tx_packet:ty,fail:$fail:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_packet:$tx_packet,fail:$fail}
    notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
  // task's signal, `station` the station task's, `driver` the driver's, each
  // a notify of the type it names.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,fail:$fail}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_packet:$tx_packet:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_packet:$tx_packet,fail:$fail}
    notifies: $crate::AcrossHarts<$nt,$st,$dt>, storage: $crate::Storage::across_harts($network,$station,$driver));
  };
- (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_packet:$tx_packet:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_chips_family_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
-    type Notifies=$notifies;
+    type Notifies=$notifies;type TxPacket=$tx_packet;
     fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
    }
@@ -699,7 +718,7 @@ mod tests {
             self.0.set(self.0.get() + 1);
         }
     }
-    impl EthernetFrame for Packet {
+    impl oer_protocols_network_port::EthernetFrame for Packet {
         fn view(
             &self,
         ) -> Result<
@@ -725,7 +744,7 @@ mod tests {
         stopper.stopped();
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
         state.reset();
-        let mut channels = Channels::new();
+        let mut channels = Channels::<SameHart, Packet>::new();
         let (_, network, _, _) = channels.split().unwrap();
         assert!(state.takes_frames());
         NetworkStopper { state: &state }.no_network(network);
@@ -777,6 +796,7 @@ mod tests {
                     start,
                     commands,
                     transmit: _,
+                    returned: _,
                     receive: _,
                     receive_copied: _,
                     runner,
@@ -842,7 +862,7 @@ mod tests {
         }
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = core::task::Waker::from(wakes.clone());
-        let mut channels = Channels::new();
+        let mut channels = Channels::<SameHart, Packet>::new();
         let (mut control, _network, _stopper, connection) = channels.split().unwrap();
         let mut cx = Context::from_waker(&waker);
         {

@@ -161,12 +161,15 @@ fn failure(error: wifi::InitializationError) -> ! {
     }
 }
 
+/// The IP stack's packet owner a transmission hands the station.
+type TxPacket = oer_portable_embassy_net::OwnedNetworkTxFrame<'static>;
+
 #[cfg(not(feature = "group"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_packet:TxPacket,fail:failure}}
 // The station's network end runs on hart 1, with the group's IP
 // service.
 #[cfg(feature = "group")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_packet:TxPacket,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
@@ -513,7 +516,7 @@ pub enum StopError {
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
     network: Option<(
-        wifi::Network<'static, Notifies>,
+        wifi::Network<'static, Notifies, TxPacket>,
         wifi::NetworkStopper<'static, Notifies>,
     )>,
     address: [u8; 6],
@@ -758,7 +761,7 @@ type Context = ThreadContext<1>;
 type IpResources<const RX: usize, const TX: usize, const GENERAL: usize> =
     Resources<Context, RX, TX, GENERAL>;
 type IpService<const RX: usize, const TX: usize> =
-    Service<Context, RX, TX, wifi::Network<'static, Notifies>, { wifi::LENT_RX }>;
+    Service<Context, RX, TX, wifi::Network<'static, Notifies, TxPacket>, { wifi::LENT_RX }>;
 
 /// The IP service's packet pools: `RX` receive slots, `TX` transmit
 /// credits and `GENERAL` general slots, each one 1514-byte frame. A static
@@ -979,7 +982,6 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
             bridge_received,
             bridge_refused,
             bridge_copied,
-            |_| {}
         ));
         match select(run.as_mut(), stopper.requested()).await {
             Either::First(result) => result,

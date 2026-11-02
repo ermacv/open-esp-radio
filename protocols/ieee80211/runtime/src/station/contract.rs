@@ -254,19 +254,8 @@ pub enum MsduRefusal {
     NoAdmittedAccessCategory,
     /// The station's buffer memory was not its own; the MSDU is refused.
     BufferUnavailable,
-}
-/// Original refused Ethernet owner. Its private implementation is not a station-core API.
-#[derive(Debug)]
-pub struct TransmitPacket(pub(crate) oer_protocols_ieee80211_core_roles_sta::data::TxMsdu);
-impl oer_protocols_network_port::EthernetFrame for TransmitPacket {
-    fn view(
-        &self,
-    ) -> Result<
-        oer_protocols_network_port::EthernetFrameView<'_>,
-        oer_protocols_network_port::FrameLengthError,
-    > {
-        self.0.frame.view()
-    }
+    /// The network's frame no longer parses as an Ethernet frame.
+    InvalidFrame,
 }
 fn disconnect(reason: StaDisconnectReason) -> DisconnectReason {
     use DisconnectReason as W;

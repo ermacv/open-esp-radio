@@ -15,7 +15,7 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 use oer_portable_memory::{
-    QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender,
+    QueueNotify, SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender,
 };
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::connected_tasks::{
@@ -23,7 +23,7 @@ use oer_portable_time::connected_tasks::{
     ConnectedTaskEndpoint, ConnectedTaskGroup,
 };
 use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MAX_ETHERNET_PAYLOAD_LEN};
 use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
 use oer_protocols_network_port::{
     LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused,
@@ -539,43 +539,69 @@ impl<K, O: ServiceOutputSink<K>, N: Notifies> ServiceOutputSink<K> for Events<'_
 }
 
 /// The Wi-Fi implementation of the neutral Ethernet contract. `L` is the
-/// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)).
-pub struct Device<'c, L, const TX: usize, const RX: usize, N: Notifies = SameHart> {
-    transmit: SlotSender<'c, TxMsdu, TX, N::Station, N::Network>,
+/// backend's lent receive buffer ([`StationPort::LentRx`](super::StationPort::LentRx)),
+/// `P` the network stack's packet owner a transmission hands over.
+pub struct Device<'c, L, P, const TX: usize, const RX: usize, N: Notifies = SameHart> {
+    /// The stack's packets for the station, owners and all: the station
+    /// reads each where the stack wrote it.
+    transmit: SlotSender<'c, Option<super::Outgoing<P>>, TX, N::Station, N::Network>,
+    /// The packets the station read, back for this end to drop on the
+    /// network's executor.
+    returned: SlotReceiver<'c, Option<P>, TX, N::Network, N::Station>,
     receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     link: &'c super::NetworkLink<N::NetworkWaker>,
     observed: LinkSnapshot,
 }
 /// The network end over the station's channels and `state`'s link.
-impl<'c, L, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, TX, RX, N> {
+impl<'c, L, P, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, P, TX, RX, N> {
     pub fn new(
-        transmit: SlotSender<'c, TxMsdu, TX, N::Station, N::Network>,
+        transmit: SlotSender<'c, Option<super::Outgoing<P>>, TX, N::Station, N::Network>,
+        returned: SlotReceiver<'c, Option<P>, TX, N::Network, N::Station>,
         receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
         copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
         state: &'c State<N>,
     ) -> Self {
         Self {
             transmit,
+            returned,
             receive,
             copied,
             link: state.network_link(),
             observed: LinkSnapshot::DOWN,
         }
     }
+    /// Drop every packet the station read and returned, here on the
+    /// network's executor, and register for the next return: its packet
+    /// and credit go back to the stack, whose wakes stay on its hart.
+    fn reclaim(&mut self, cx: &mut Context<'_>) {
+        loop {
+            while let Ok(packet) = self.returned.try_receive_with(Option::take) {
+                drop(packet);
+            }
+            if core::pin::pin!(self.returned.ready()).poll(cx).is_pending() {
+                return;
+            }
+        }
+    }
 }
 impl<
     L: oer_protocols_ieee80211_contracts_port::LentRxBuffer,
+    P: oer_protocols_network_port::EthernetFrame,
     const TX: usize,
     const RX: usize,
     N: Notifies,
-> NetDevice for Device<'_, L, TX, RX, N>
+> NetDevice for Device<'_, L, P, TX, RX, N>
 {
     type RxFrame = Received<L>;
+    type TxFrame = P;
     fn link(&self) -> LinkSnapshot {
         self.link.snapshot()
     }
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
+        // The bridge polls the link on every turn: returned packets are
+        // dropped here even while the stack has nothing to send.
+        self.reclaim(cx);
         self.link.register(cx);
         let link = self.link();
         if link == self.observed {
@@ -614,35 +640,48 @@ impl<
         }
         core::pin::pin!(self.transmit.ready()).poll(cx)
     }
-    fn try_transmit<F: oer_protocols_network_port::EthernetFrame>(
-        &mut self,
-        frame: F,
-    ) -> Result<(), TransmitRefused<F>> {
-        let result = if self.link().state == LinkState::Down {
+    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
+        let checked = if self.link().state == LinkState::Down {
             Err(TransmitError::LinkDown)
         } else {
             frame
                 .view()
                 .map_err(TransmitError::InvalidLength)
                 .and_then(|view| {
+                    if view.payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
+                        return Err(TransmitError::InvalidLength(
+                            oer_protocols_network_port::FrameLengthError::TooLong,
+                        ));
+                    }
                     // The frame requests a priority from its VLAN or IP
                     // marking; the station decides the final one.
-                    let requested = classify_wmm(view.ether_type, view.payload);
-                    // Copied once, into the queue's slot, where the station
-                    // reads it.
-                    self.transmit
-                        .try_send_with(|slot| {
-                            slot.refill_from_network(view, requested.user_priority)
-                        })
-                        .map_err(|error| match error {
-                            SlotSendError::Refused(_) => TransmitError::InvalidLength(
-                                oer_protocols_network_port::FrameLengthError::TooLong,
-                            ),
-                            SlotSendError::Full | SlotSendError::Lost => TransmitError::QueueFull,
-                        })
+                    Ok(classify_wmm(view.ether_type, view.payload).user_priority)
                 })
         };
-        result.map_err(|reason| TransmitRefused { frame, reason })
+        let priority = match checked {
+            Ok(priority) => priority,
+            Err(reason) => return Err(TransmitRefused { frame, reason }),
+        };
+        // The owner itself goes into the slot: the station reads the frame
+        // where the stack wrote it, with no copy here.
+        let mut frame = Some(frame);
+        let sent = self.transmit.try_send_with(|slot| {
+            *slot = frame
+                .take()
+                .map(|packet| super::Outgoing { packet, priority });
+            Ok::<_, core::convert::Infallible>(())
+        });
+        match (sent, frame) {
+            (Ok(()), _) => Ok(()),
+            (Err(_), Some(frame)) => Err(TransmitRefused {
+                frame,
+                reason: TransmitError::QueueFull,
+            }),
+            // A slot the indices named was not free (`SlotSendError::Lost`,
+            // a broken queue) after the fill: the owner stays quarantined
+            // in that slot, released only with the queue's next split.
+            (Err(_), None) => Ok(()),
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 use super::*;
-use oer_portable_memory::WakingSpscQueue;
+use crate::station::Outgoing;
+use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_testing_model::ModelLentRx;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
@@ -41,16 +42,18 @@ impl oer_protocols_network_port::EthernetFrame for Frame {
 #[test]
 fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+    let mut tx = WakingSlotQueue::<Option<Outgoing<Frame>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<Frame>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
-    let (sender, mut receiver) = tx.split(TxMsdu::empty);
+    let (sender, mut receiver) = tx.split(|| None);
+    let (mut returned, back) = back.split(|| None);
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, &state);
+    let mut device = Device::new(sender, back, receive, copied, &state);
     let dropped = Rc::new(Cell::new(0));
     let first = Frame {
         owner: dropped.clone(),
@@ -67,8 +70,9 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
         epoch: 31,
     };
     state.set_status(status);
+    // The owner itself goes into the queue: nothing is copied or dropped.
     assert!(device.try_transmit(first.frame).is_ok());
-    assert_eq!(dropped.get(), 1);
+    assert_eq!(dropped.get(), 0);
     let second = Frame {
         owner: dropped.clone(),
         payload: [9; 4],
@@ -77,16 +81,32 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     assert_eq!(refused.reason, TransmitError::QueueFull);
     assert_eq!(refused.frame.payload, [9; 4]);
     assert!(Rc::ptr_eq(&refused.frame.owner, &dropped));
-    assert_eq!(dropped.get(), 1);
-    assert_eq!(
-        receiver.try_receive_with(|packet| packet.frame.parts().payload.to_vec()),
-        Ok(std::vec![7; 4])
-    );
+    assert_eq!(dropped.get(), 0);
+    let Ok(Some(first)) = receiver.try_receive_with(Option::take) else {
+        panic!("the first owner");
+    };
+    assert_eq!(first.packet.payload, [7; 4]);
     assert!(device.try_transmit(refused.frame).is_ok());
-    assert_eq!(
-        receiver.try_receive_with(|packet| packet.frame.parts().payload.to_vec()),
-        Ok(std::vec![9; 4])
+    let Ok(Some(second)) = receiver.try_receive_with(Option::take) else {
+        panic!("the second owner");
+    };
+    assert_eq!(second.packet.payload, [9; 4]);
+    assert_eq!(dropped.get(), 0);
+    // The station returns what it read: the network end drops it on its
+    // next poll, on its own executor.
+    assert!(
+        returned
+            .try_send_with(|slot| {
+                *slot = Some(first.packet);
+                Ok::<_, ()>(())
+            })
+            .is_ok()
     );
+    assert_eq!(dropped.get(), 0);
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    let _ = device.poll_link(&mut cx);
+    assert_eq!(dropped.get(), 1);
+    drop(second);
     assert_eq!(dropped.get(), 2);
 }
 
@@ -131,16 +151,18 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         }
     }
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+    let mut tx = WakingSlotQueue::<Option<Outgoing<Frame>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<Frame>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
-    let (sender, _) = tx.split(TxMsdu::empty);
+    let (sender, _) = tx.split(|| None);
+    let (_, back) = back.split(|| None);
     let (received, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, &state);
+    let mut device = Device::new(sender, back, receive, copied, &state);
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
     let waker = core::task::Waker::from(wake.clone());
     let mut cx = Context::from_waker(&waker);
@@ -231,16 +253,18 @@ impl oer_protocols_network_port::EthernetFrame for Marked {
 #[test]
 fn a_network_frame_requests_the_priority_of_its_marking() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+    let mut tx = WakingSlotQueue::<Option<Outgoing<Marked>>, 1>::new();
+    let mut back = WakingSlotQueue::<Option<Marked>, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
-    let (sender, mut receiver) = tx.split(TxMsdu::empty);
+    let (sender, mut receiver) = tx.split(|| None);
+    let (_, back) = back.split(|| None);
     let (_, receive) = rx.split();
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
-    let mut device = Device::new(sender, receive, copied, &state);
+    let mut device = Device::new(sender, back, receive, copied, &state);
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,
@@ -269,8 +293,8 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
                 .is_ok()
         );
         assert_eq!(
-            receiver.try_receive_with(|packet| packet.priority),
-            Ok(priority)
+            receiver.try_receive_with(|slot| slot.take().map(|outgoing| outgoing.priority)),
+            Ok(Some(priority))
         );
     }
 }
@@ -590,9 +614,9 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     type Two = AcrossHarts<Side, Side>;
     let (network, station) = (Side::new(), Side::new());
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1, Side, Side>::across_harts(
-        station, network,
-    );
+    let mut tx =
+        WakingSlotQueue::<Option<Outgoing<Frame>>, 1, Side, Side>::across_harts(station, network);
+    let mut back = WakingSlotQueue::<Option<Frame>, 1, Side, Side>::across_harts(network, station);
     let mut rx =
         WakingSpscQueue::<Received<ModelLentRx>, 1, Side, Side>::across_harts(network, station);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH, Side, Side>::across_harts(
@@ -606,24 +630,26 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
         (0, 1),
         "the new epoch's link tells the network"
     );
-    let (sender, mut transmitted) = tx.split(TxMsdu::empty);
+    let (sender, mut transmitted) = tx.split(|| None);
+    let (mut returned, back) = back.split(|| None);
     let (_, receive) = rx.split();
     let (_, copied) = copies.split();
-    let mut device: Device<'_, ModelLentRx, 1, 1, Two> =
-        Device::new(sender, receive, copied, &state);
+    let mut device: Device<'_, ModelLentRx, Frame, 1, 1, Two> =
+        Device::new(sender, back, receive, copied, &state);
     let mut cx = Context::from_waker(core::task::Waker::noop());
 
-    // The network waits on its own side for the link and for frames.
+    // The network waits on its own side for the link, for returned
+    // packets and for frames.
     assert!(device.poll_link(&mut cx).is_pending());
     assert!(device.poll_receive_ready(&mut cx).is_pending());
-    assert_eq!(network.counts(), (2, 1));
+    assert_eq!(network.counts(), (3, 1));
     let mut status = state.status.get();
     status.link = LinkSnapshot {
         state: LinkState::Up,
         epoch: 3,
     };
     state.set_status(status);
-    assert_eq!(network.counts(), (2, 2), "a link change tells the network");
+    assert_eq!(network.counts(), (3, 2), "a link change tells the network");
 
     // A transmitted frame tells the waiting station; its read tells the
     // network waiting for room.
@@ -640,9 +666,21 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     assert!(device.try_transmit(frame).is_ok());
     assert_eq!(station.counts(), (1, 1));
     assert!(device.poll_transmit_ready(&mut cx).is_pending());
-    assert_eq!(network.counts(), (4, 2));
-    assert!(transmitted.try_receive_with(|_| ()).is_ok());
-    assert_eq!(network.counts(), (4, 3));
+    assert_eq!(network.counts(), (5, 2));
+    let Ok(Some(outgoing)) = transmitted.try_receive_with(Option::take) else {
+        panic!("the transmitted owner");
+    };
+    assert_eq!(network.counts(), (5, 3));
+    // The packet the station returns tells the network waiting for it.
+    assert!(
+        returned
+            .try_send_with(|slot| {
+                *slot = Some(outgoing.packet);
+                Ok::<_, ()>(())
+            })
+            .is_ok()
+    );
+    assert_eq!(network.counts(), (5, 4));
 }
 
 #[test]

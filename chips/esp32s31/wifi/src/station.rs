@@ -408,6 +408,7 @@ type Io<'c, W> = ServiceIo<
     Events<'static, Output<<W as Binding>::Events, <W as Binding>::Notifies>, Ch<W>>,
     crate::LentRx<<W as Binding>::Notifies>,
     crate::NetworkStopState<<W as Binding>::Notifies>,
+    <W as Binding>::TxPacket,
     { crate::TX_DEPTH },
     { crate::RX_DEPTH },
     2,
@@ -555,6 +556,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             start,
             commands,
             transmit,
+            returned,
             receive,
             receive_copied,
             runner: control,
@@ -571,6 +573,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         let mut io = ServiceIo {
             commands,
             transmit,
+            returned,
             receive,
             receive_copied,
             control,

@@ -1,4 +1,4 @@
-//! One permanent IP stack over an affine [`NetDevice`].
+//! One permanent IP stack over an affine [`NetDevice`](oer_protocols_network_port::NetDevice).
 //!
 //! Place [`Resources`] once, then call [`Resources::start`]. Reassociation
 //! changes the link epoch and invalidates DHCP, without reconstructing pools,
@@ -8,9 +8,7 @@
 use core::{cell::Cell, future::Future, task::Poll};
 use oer_portable_memory::ExecutionContext;
 use oer_portable_sync::PriorityWaker;
-use oer_protocols_network_port::{
-    EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId,
-};
+use oer_protocols_network_port::{EthernetFrameView, LinkSnapshot, LinkState, NetworkInterfaceId};
 use owned_embassy_net::{
     Stack, StackStorage,
     iface::{Iface, dhcpv4::DhcpConfig},
@@ -176,7 +174,7 @@ impl Control<'_> {
 /// use oer_portable_embassy_net::{NetworkInterfaceId, ip::{Configuration, Resources}};
 /// use oer_portable_memory::ExecutionContext;
 /// use oer_protocols_network_port::NetDevice;
-/// fn twice<X: ExecutionContext, D: NetDevice>(
+/// fn twice<X: ExecutionContext, D: oer_portable_embassy_net::ethernet::OwnedTxDevice<'static>>(
 ///     resources: &'static mut Resources<X, 1, 1, 1>, first: D, second: D,
 /// ) {
 ///     let _ = resources.start(first, NetworkInterfaceId::new(0), [2; 6], 1, Configuration::Dhcpv4);
@@ -230,7 +228,7 @@ impl<X: ExecutionContext + 'static, const RX: usize, const TX: usize, const GENE
 
     /// Build once. Errors retain final storage; the device is returned on
     /// construction refusal, without a second stack or fallback configuration.
-    pub fn start<D: NetDevice, const LENT: usize>(
+    pub fn start<D: crate::ethernet::OwnedTxDevice<'static>, const LENT: usize>(
         &'static mut self,
         device: D,
         lent: Option<&'static crate::ethernet::LentSlots<crate::ethernet::Lent<D>, LENT>>,
@@ -335,7 +333,7 @@ pub struct Service<
     X: ExecutionContext + 'static,
     const RX: usize,
     const TX: usize,
-    D: NetDevice,
+    D: crate::ethernet::OwnedTxDevice<'static>,
     const LENT: usize,
 > {
     iface: Iface<'static, OwnedNetworkDevice<'static, X, RX, TX>>,
@@ -349,7 +347,7 @@ impl<
     X: ExecutionContext + 'static,
     const RX: usize,
     const TX: usize,
-    D: NetDevice,
+    D: crate::ethernet::OwnedTxDevice<'static>,
     const LENT: usize,
 > Service<X, RX, TX, D, LENT>
 {
@@ -370,7 +368,6 @@ impl<
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(crate::ethernet::LentCopy),
-        mut transmitted: impl FnMut(EthernetFrameView<'_>),
     ) -> Result<(), Error> {
         let mut running = core::pin::pin!(self.runner.run());
         drive(
@@ -385,7 +382,6 @@ impl<
             &mut received,
             &mut refused,
             &mut copied,
-            &mut transmitted,
         )
         .await
     }
@@ -434,14 +430,15 @@ impl<X: ExecutionContext, const RX: usize, const TX: usize> Interface
 
 #[allow(clippy::too_many_arguments)]
 async fn drive<
+    'r,
     X: ExecutionContext,
     const RX: usize,
     const TX: usize,
-    D: NetDevice,
+    D: crate::ethernet::OwnedTxDevice<'r>,
     const LENT: usize,
 >(
     state: &State,
-    bridge: &mut EthernetBridge<'_, X, RX, TX, D, LENT>,
+    bridge: &mut EthernetBridge<'r, X, RX, TX, D, LENT>,
     iface: &impl Interface,
     configuration: Configuration,
     mut poll_stack: impl FnMut(&mut core::task::Context<'_>),
@@ -449,7 +446,6 @@ async fn drive<
     mut received: impl FnMut(EthernetFrameView<'_>),
     mut refused: impl FnMut(crate::RxEnqueueError),
     mut copied: impl FnMut(crate::ethernet::LentCopy),
-    mut transmitted: impl FnMut(EthernetFrameView<'_>),
 ) -> Result<(), Error> {
     core::future::poll_fn(|cx| {
         state.runner.register(cx.waker());
@@ -461,13 +457,7 @@ async fn drive<
         if state.stop.get() {
             return finish(state, bridge, iface, Ok(()), &mut events);
         }
-        if let Poll::Ready(Err(_)) = bridge.poll(
-            cx,
-            &mut received,
-            &mut refused,
-            &mut copied,
-            &mut transmitted,
-        ) {
+        if let Poll::Ready(Err(_)) = bridge.poll(cx, &mut received, &mut refused, &mut copied) {
             return finish(
                 state,
                 bridge,
@@ -521,14 +511,15 @@ async fn drive<
 }
 
 fn finish<
+    'r,
     X: ExecutionContext,
     const RX: usize,
     const TX: usize,
-    D: NetDevice,
+    D: crate::ethernet::OwnedTxDevice<'r>,
     const LENT: usize,
 >(
     state: &State,
-    bridge: &mut EthernetBridge<'_, X, RX, TX, D, LENT>,
+    bridge: &mut EthernetBridge<'r, X, RX, TX, D, LENT>,
     iface: &impl Interface,
     result: Result<(), Error>,
     events: &mut impl FnMut(StatusChanged),
