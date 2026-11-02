@@ -190,7 +190,7 @@ publishes it (`WifiIrqRequests::mac_interrupt_enable`).
 
 A start activates the epoch; a pause or retune closes it after the mask,
 the drain and the walker stop; a freeze masks it and its resume activates
-it again. The driver task requests `UnmaskRx` only after the RX frontier drained with no
+it again. The station's receive pull requests `UnmaskRx` only after the RX frontier drained with no
 released buffer left to rearm. Installing a line clears a stale request. A
 lease the upper layer returns posts the RX-capacity fact
 (`RxReturnNotifier`), so the runner rearms the returned descriptors even
@@ -199,17 +199,30 @@ state.
 
 ## Receive path
 
-When the port's RX handoffs are full, the driver task disarms only the RX continuation
-timer and keeps the pending RX work and buffer owners. It waits for a
-returned lease's RX-capacity fact, a TX event or another applicable deadline;
-an overdue RX retry must not keep the driver task running while the station needs to return buffers.
-TX deadlines and the port contract are unchanged.
+The station takes received units in its own turn. When its event queue is
+empty, its next event is its receive pull: a staged unit, or the ring
+serviced once when the RX interrupt left work, one unit per event and at
+most 32 refused units per pull. A unit it returns goes straight back to the
+ring, and its lends come off its count at its next pull. The driver task
+takes the interrupt facts, serves the transmit and TBTT ones and wakes the
+station when they leave ring work; the RX interrupt stays masked until the
+pull drained the ring. A pull runs only while the ring has work for it
+(the driver's wake, a returned unit or work the last pull left); otherwise
+it touches neither the device nor the driver's state. A cut's units and every terminal reach the station
+through the event queue, ahead of what the ring holds. The driver task and
+the pull borrow the device and the driver's state only within one
+synchronous step of their own task on the station's executor.
+
+When the station holds `RX_HELD` units, its pull disarms only the RX
+continuation timer and keeps the pending RX work and buffer owners; it
+services the ring again once the station returned or lent a unit. An
+overdue RX retry wakes the driver task, whose deadline covers it, and the
+driver task wakes the station. TX deadlines and the port contract are
+unchanged.
 
 The station holds at most `RX_HELD` (16) received units besides those it
-lent the network: its queued receive events and the MPDUs its receive Block
-Ack agreements keep, a 16-MPDU reorder window. The driver task queues at
-most eight units the station has not taken yet; at that bound it asks to be
-woken, and the station's next take of a received event wakes it. The units outside the ring come
+lent the network: the units it took and the MPDUs its receive Block Ack
+agreements keep, a 16-MPDU reorder window. The units outside the ring come
 from one stage pool; the network may hold all of it but `RX_HELD` and the
 admission's critical reserve (`port::lent_rx`). The admission discards bulk
 input, which the hardware already acknowledged, once only the reserve is
@@ -221,17 +234,17 @@ One received frame and the owner of its DMA buffer at each step:
    the RX fact in the image's static `IrqSignal` of the driver's executor
    (`oer_espressif_interrupt_table::signal`), the station's, which pends it
    and touches no waker; the buffer is the DMA engine's.
-2. **Driver task.** The executor's next round hands the fact to the receive
-   runner (`rx/receive.rs`) and wakes it in its own context; the runner runs
-   the product service (`rx/transaction`), which takes the completed unit
+2. **Station.** The executor's next round hands the fact to the driver
+   task, which wakes the station; the station's receive pull runs the
+   product service (`rx/transaction`), which takes the completed unit
    and stages it: the original buffer becomes a `NetworkRxFrame` lease of
    the staging pool, with no copy. Chained, oversized, empty and too-long
-   units are dropped and counted there and never leave the driver task.
-3. **Driver task.** `QueueSink` (`rx/upper.rs`), the runner's publisher, marks the
+   units are dropped and counted there and never leave the pull.
+3. **Station.** `QueueSink` (`rx/upper.rs`), the pull's publisher, marks the
    lease's first handoff (the monotonic time and the prefix's raw MAC
    stamp), counts it and sends it into an affine SPSC queue as deep as the
    pool; a send after a pool credit therefore never refuses. The queue owns
-   the lease. The runner unmasks RX through the doorbell once drained.
+   the lease. The pull unmasks RX through the doorbell once drained.
 4. **Station.** `FrameReceiver::next` takes the lease and holds it as a
    `HeldRxFrame`; `normalize` decodes the prefix under `W1_INGRESS` (no
    strict RXEND or dump-length refusal; what they would refuse is counted)
@@ -240,10 +253,10 @@ One received frame and the owner of its DMA buffer at each step:
    `sta::receive::classify` and `observe_scan`.
 6. **Station.** Dropping the held frame releases the lease and posts the
    RX-capacity fact (a raise of its own executor's signal, `FromOwnTask`);
-   the driver task rearms the buffer.
+   the station's next pull rearms the buffer.
 
 The driver task and the station share one executor, so neither preempts the
-other; they share only the queue's cursors and an `AtomicWaker`. Teardown waits,
+other. Teardown waits,
 bounded, until no lease is staged before it stops the walker, and queued
 frames are staged: the station keeps receiving and dropping frames after it requests
 the stop, until the exit is published; otherwise the epoch ends quarantined
@@ -254,7 +267,8 @@ with `DrainTimeout`.
 The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
 The adapter [`src/port.rs`](src/port.rs) implements its lifecycle, phase,
 station and access-point interfaces over that core. One task polls the
-port, beside the station on the station's executor; the P3 handlers own only their interrupt epoch and static typed signals.
+port's driver, beside the station on the station's executor, and the
+station's own task takes received units; the P3 handlers own only their interrupt epoch and static typed signals.
 The task-side `RadioDevice` retains the cooperative registers, PHY actor
 transaction and RX ring. No ISR accesses its task-only `RefCell` state.
 

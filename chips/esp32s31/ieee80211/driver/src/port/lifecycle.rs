@@ -23,7 +23,9 @@ pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Obse
 pub struct Queues<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: Option<Resources<'static, Id, D, B, O>>,
     held: HeldBacking<'static, Id, D, B, O>,
-    driver: driver::Driver<'static, Id, D, B, O>,
+    /// The driver's state: its task polls it, and the body's receive pull
+    /// admits through it, each within one synchronous step.
+    driver: RefCell<driver::Driver<'static, Id, D, B, O>>,
     addresses: Option<[IndividualAddress; 2]>,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id, D, B, O> {
@@ -31,7 +33,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
         Self {
             resources: None,
             held: HeldBacking::vacant(),
-            driver: driver::Driver::vacant(),
+            driver: RefCell::new(driver::Driver::vacant()),
             addresses: None,
         }
     }
@@ -51,12 +53,9 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
         { TERMINAL_CAPACITY + RX_HELD },
         oer_memory::CompactSpscCursor,
     >,
-    recycled: oer_memory::AffineSpscSender<
-        's,
-        ReceiveBuffer<'static, Id, D::Receive>,
-        RX_HELD,
-        oer_memory::CompactSpscCursor,
-    >,
+    port: &'static PortStorage<D, B>,
+    driver: &'s RefCell<driver::Driver<'static, Id, D, B, O>>,
+    rx_out: &'s Cell<usize>,
     failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
     failed_terminal: &'s oer_memory::OnceValue<owned::Retained<'static, Id, D, B, O>>,
     completions: &'s handoff::Completions<'static, Id, D, B, O>,
@@ -71,7 +70,7 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
 }
 pub struct Invocation<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     held: Held<'s, 'static, Id, D, B, O>,
-    driver: &'s mut driver::Driver<'static, Id, D, B, O>,
+    driver: &'s RefCell<driver::Driver<'static, Id, D, B, O>>,
 }
 pub struct Frontend<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     held: FrontHeld<'p, Id, D, B, O>,
@@ -107,13 +106,8 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize, O: Observatio
                     }
                 }
                 owned::OwnedEvent::Received { frame, .. } => {
-                    held.storage.took_received();
-                    if let Err(frame) = held.recycled.try_send(frame).map_err(|error| error.0) {
-                        core::mem::forget(frame);
-                        held.storage.poison(Fault::Capacity);
-                    }
+                    held.recycle(frame);
                     held.loss.set(true);
-                    held.storage.driver.wake();
                 }
                 owned::OwnedEvent::Tbtt(_) => held.loss.set(true),
             }
@@ -121,7 +115,7 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize, O: Observatio
         if let Err(error) = held.storage.check() {
             return Poll::Ready(Err(error));
         }
-        if !held.enabled.get() && held.commands.is_empty() && held.recycled.is_empty() {
+        if !held.enabled.get() && held.commands.is_empty() {
             Poll::Ready(Ok(None))
         } else {
             Poll::Pending
@@ -185,7 +179,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             || !self.storage.shared.returned.all_returned()
             || !self.storage.shared.subframes_vacant()
             || self.storage.shared.network.held() != 0
-            || !backing.driver.retired()
+            || !backing.driver.get_mut().retired()
             || !backing.held.drained()
         {
             return;
@@ -231,7 +225,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 admission: None,
             }
         });
-        backing.driver.prepare(
+        backing.driver.get_mut().prepare(
             core,
             core_tickets,
             queues,
@@ -287,7 +281,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         let (storage, gate) = (*storage, &*gate);
         let (commands, driver_commands) = queues.held.commands.split();
         let (driver_events, events) = queues.held.events.split();
-        let (recycled, driver_recycled) = queues.held.recycled.split();
         let (driver_clock_replies, clock_replies) = queues.held.clock_replies.split();
         Ok((
             RawFrontend {
@@ -295,7 +288,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 storage: &storage.shared,
                 commands,
                 events,
-                recycled,
+                port: storage,
+                driver: &queues.driver,
+                rx_out: &queues.held.rx_out,
                 failed_command: &queues.held.failed_command,
                 failed_terminal: &queues.held.failed_terminal,
                 completions: &queues.held.completions,
@@ -314,14 +309,13 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     storage,
                     commands: Incoming(driver_commands),
                     events: Outgoing(driver_events),
-                    recycled: Incoming(driver_recycled),
                     rx_out: &queues.held.rx_out,
                     gate,
                     failed_terminal: &queues.held.failed_terminal,
                     completions: &queues.held.completions,
                     clock_replies: Outgoing(driver_clock_replies),
                 },
-                driver: &mut queues.driver,
+                driver: &queues.driver,
             },
         ))
     }
@@ -341,7 +335,13 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
             match core::future::pending::<core::convert::Infallible>().await {}
         }
-        let state = &mut *invocation.driver;
+        let state = invocation.driver;
+        // The body's pull borrows the state only within its own step.
+        let driver = || {
+            state
+                .try_borrow_mut()
+                .map_err(|_| Fault::HardwareUnavailable)
+        };
         loop {
             poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
@@ -352,7 +352,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 }
             })
             .await;
-            let deadline = match state.deadline(held) {
+            let deadline = match driver().and_then(|mut state| state.deadline(held)) {
                 Ok(deadline) => deadline,
                 Err(cause) => {
                     storage.poison(cause);
@@ -409,11 +409,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         }
                     }
                 }
-                let polled = match storage.device() {
-                    Ok(mut device) => state.poll(cx, held, &mut **device),
-                    Err(fault) => Err(fault),
-                };
-                let next = match polled.and_then(|()| state.deadline(held)) {
+                // The deadline reads the device itself, after this borrow.
+                let next = storage
+                    .device()
+                    .and_then(|mut device| driver()?.poll(cx, held, &mut **device))
+                    .and_then(|()| driver()?.deadline(held));
+                let next = match next {
                     Ok(next) => next,
                     Err(cause) => {
                         storage.poison(cause);
@@ -440,7 +441,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         }
         if !held.commands.empty()
             || !held.events.empty()
-            || !held.recycled.empty()
             || held.failed_terminal.is_requested()
             || !held.completions_vacant()
             || held.rx_out.get() != 0
@@ -478,7 +478,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         // A stopped port without its transmitter, observation receiver or
         // channel refuses reinstall; release still takes its device.
         let mut reusable = match self.state {
-            BackendState::Running => invocation.driver.retire(),
+            BackendState::Running => match invocation.driver.try_borrow_mut() {
+                Ok(mut driver) => driver.retire(),
+                // The body's pull ends with its step: none holds the state.
+                Err(_) => {
+                    self.storage.poison(Fault::HardwareUnavailable);
+                    None
+                }
+            },
             _ => None,
         };
         let mut config = self.config;
@@ -527,7 +534,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOw
                     storage: frontend.storage,
                     commands: frontend.commands.borrow_local(),
                     events: frontend.events.borrow_local(),
-                    recycled: frontend.recycled.borrow_local(),
+                    port: frontend.port,
+                    driver: frontend.driver,
+                    rx_out: frontend.rx_out,
                     failed_command: frontend.failed_command,
                     failed_terminal: frontend.failed_terminal,
                     completions: frontend.completions,

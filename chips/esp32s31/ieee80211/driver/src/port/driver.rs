@@ -650,13 +650,34 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         Ok(())
     }
+    /// Queue one unit a cut drained for the body, ahead of the cut's
+    /// terminal, or return it to the ring when no rule admits it.
     fn receive(
         &mut self,
         held: &Held<'_, 'id, Id, D, B, O>,
         device: &mut D,
         unit: D::Receive,
     ) -> Result<(), Fault> {
-        if held.rx_out.get() >= RX_HELD {
+        if let Some(event) = self.admit(device, held.rx_out, &held.storage.shared, unit)? {
+            if let Err(event) = held.events.push(event) {
+                core::mem::forget(event);
+                return Err(Fault::Capacity);
+            }
+            held.storage.shared.wake_body();
+        }
+        Ok(())
+    }
+    /// The body's event for one received unit, counted in `rx_out`, or
+    /// `None` once the unit is back in the ring because no receive rule
+    /// admits it. The body's pull and the driver's cut both admit here.
+    pub(super) fn admit(
+        &mut self,
+        device: &mut D,
+        rx_out: &Cell<usize>,
+        shared: &'static PortSharedStorage<B, D::Lent, D::Body>,
+        unit: D::Receive,
+    ) -> Result<Option<owned::OwnedEvent<'id, Id, D, B>>, Fault> {
+        if rx_out.get() >= RX_HELD {
             core::mem::forget(unit);
             return Err(Fault::Capacity);
         }
@@ -678,31 +699,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 Err(_) => None,
             }
         };
-        if let Some((Some(start), len, meta)) = accepted {
-            let mut unit = unit;
-            // The buffer lends the MPDU from here on: its view is narrowed
-            // once, checked against the received unit.
-            unit.narrow(start, len).map_err(|_| Fault::Capacity)?;
-            held.rx_out.set(held.rx_out.get() + 1);
-            if let Err(event) = held.events.push(owned::OwnedEvent::Received {
-                frame: ReceiveBuffer::new(
-                    unit,
-                    super::LossGuard::new(
-                        &held.storage.shared.poisoned,
-                        &held.storage.shared.driver,
-                    ),
-                ),
-                meta,
-            }) {
-                core::mem::forget(event);
-                return Err(Fault::Capacity);
-            }
-            held.storage.shared.received.queue();
-            held.storage.shared.wake_body();
-        } else {
+        let Some((Some(start), len, meta)) = accepted else {
             device.recycle(unit);
-        }
-        Ok(())
+            return Ok(None);
+        };
+        let mut unit = unit;
+        // The buffer lends the MPDU from here on: its view is narrowed
+        // once, checked against the received unit.
+        unit.narrow(start, len).map_err(|_| Fault::Capacity)?;
+        rx_out.set(rx_out.get() + 1);
+        Ok(Some(owned::OwnedEvent::Received {
+            frame: ReceiveBuffer::new(
+                unit,
+                super::LossGuard::new(&shared.poisoned, &shared.driver),
+            ),
+            meta,
+        }))
     }
 }
 /// Publication reports to the driver's observation receiver.
@@ -715,22 +727,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         held: &Held<'_, 'id, Id, D, B, O>,
         device: &mut D,
     ) -> Result<(), Fault> {
-        while let Some(frame) = held.recycled.pop() {
-            device.recycle(frame.into_unit().0);
-            held.rx_out
-                .set(held.rx_out.get().checked_sub(1).ok_or(Fault::Capacity)?);
-        }
-        let network = &held.storage.shared.network;
-        let transferred = network.take_transferred();
-        held.rx_out.set(
-            held.rx_out
-                .get()
-                .checked_sub(transferred)
-                .ok_or(Fault::Capacity)?,
-        );
-        if network.take_returned() {
-            device.returned();
-        }
+        settle_lent(&held.storage.shared.network, held.rx_out, device)?;
         let now = device.timer().now();
         // A start in flight may lend the device's registers to the radio
         // actor (a retune): the clock is sampled once the start ended.
@@ -781,25 +778,18 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if !completion_held {
             self.service_tx(held, device, WifiTxWake::Deadline, stopping)?;
         }
-        // One turn serves up to `EVENTS_PER_POLL` events. A turn that ends
-        // on `Pending` is registered for the next one; a turn that used its
-        // budget, or served a TX wake whose completions freed queues, polls
-        // again. Received units wait in the ring while the body holds
-        // `RX_HELD` or has not taken `RX_IN_FLIGHT` queued ones.
+        // One turn serves up to `EVENTS_PER_POLL` transmit and TBTT events.
+        // A turn that ends on `Pending` is registered for the next one; a
+        // turn that used its budget, or served a TX wake whose completions
+        // freed queues, polls again. Received units stay in the ring for the
+        // body's pull: the driver wakes the body when the ring has work.
         let mut again = true;
         let mut served_tx = false;
-        let received = &held.storage.shared.received;
         for _ in 0..EVENTS_PER_POLL {
-            let room = RX_HELD
-                .saturating_sub(held.rx_out.get())
-                .min(received.room(RX_IN_FLIGHT));
-            match device.poll_receive(room, cx) {
+            match device.poll_event(cx) {
                 Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
                     self.service_tx(held, device, wake, stopping)?;
                     served_tx = true;
-                }
-                Poll::Ready(Ok(DeviceEvent::Receive(unit))) => {
-                    self.receive(held, device, unit)?;
                 }
                 Poll::Ready(Ok(DeviceEvent::Tbtt)) => {
                     let mut sink = Sink::default();
@@ -819,19 +809,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             }
         }
-        // Lends and returns wake the driver only when it asks: out of
-        // receive room, or with many units in the network, where the radio
-        // may run short. Otherwise the next interrupt's poll counts them.
-        let network = &held.storage.shared.network;
-        let starved = held.rx_out.get() >= RX_HELD && network.want_room();
-        let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
-        // The body's take that leaves half the queue wakes a driver its queued
-        // units hold back; takes that reached it meanwhile leave room now.
-        let mut waiting = false;
-        if received.room(RX_IN_FLIGHT) == 0 && held.rx_out.get() < RX_HELD {
-            waiting = received.want(RX_WAKE_AT);
+        if device.receive_due() {
+            held.receive_due.set(true);
+            held.storage.shared.wake_body();
         }
-        if again || served_tx || starved || short || waiting {
+        // Returns wake the driver only when it asks, with many units in
+        // the network, where the radio may run short. Otherwise the next
+        // interrupt's poll counts them.
+        let network = &held.storage.shared.network;
+        let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
+        if again || served_tx || short {
             cx.waker().wake_by_ref();
         }
         // A configuration barrier waits for its role's published aggregates
@@ -1025,6 +1012,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                                 handoff::retain_terminal(held.failed_terminal, terminal.into());
                                 return Err(cause);
                             }
+                            // The resumed ring is the body's again; the
+                            // terminal's wake brings its next pull.
+                            held.receive_due.set(true);
                             held.terminal(terminal);
                         }
                     }
@@ -1541,6 +1531,26 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         }
     }
+}
+/// Take the network's lends off the body's receive count and rearm the
+/// ring with the units it returned. The driver's turn and the body's pull
+/// both settle, whichever runs first.
+pub(super) fn settle_lent<D: Device<B>, const B: usize>(
+    network: &lent::NetworkCredit<D::Lent>,
+    rx_out: &Cell<usize>,
+    device: &mut D,
+) -> Result<(), Fault> {
+    let transferred = network.take_transferred();
+    rx_out.set(
+        rx_out
+            .get()
+            .checked_sub(transferred)
+            .ok_or(Fault::Capacity)?,
+    );
+    if network.take_returned() {
+        device.returned();
+    }
+    Ok(())
 }
 fn queue(category: WmmAccessCategory) -> usize {
     usize::from(LegacyTxQueue::from_access_category(category).hardware_index())

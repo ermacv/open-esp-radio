@@ -1,7 +1,10 @@
-//! The S31 lower-MAC port. Only the driver loan executes hardware operations.
+//! The S31 lower-MAC port. The driver loan executes hardware operations; the
+//! body's receive pull services the RX ring and returns its units.
 //!
 //! The image polls the port's body in the station's task and its driver
 //! registration in the driver's task, beside it on the station's executor.
+//! Each borrows the device and the driver's state only within one
+//! synchronous step.
 //! P3 owns the interrupt epoch and posts
 //! static typed signals through [`crate::irq`]; it never accesses this state.
 //! All DMA allocations and the device remain in static storage through an
@@ -134,21 +137,6 @@ pub const fn lent_rx(units: usize) -> usize {
     units.saturating_sub(RX_HELD + crate::rx::transaction::DEFAULT_CRITICAL_RESERVE)
 }
 
-/// The received units the driver queues for the body that the body has not
-/// taken yet. The driver queues no more until the body takes one.
-const RX_IN_FLIGHT: usize = TX_TICKETS;
-
-/// The queued units at or below which the body's take wakes a driver that
-/// waits for room: half the queue, so a driver held back by the body runs
-/// once per half queue of received units, not once per unit.
-const RX_WAKE_AT: usize = RX_IN_FLIGHT / 2;
-
-const _: () = {
-    if RX_WAKE_AT >= RX_IN_FLIGHT {
-        panic!("a waiting driver wakes before the body took every queued unit");
-    }
-};
-
 /// The device events one driver turn serves before it polls again: a ring's
 /// worth of received units, so a burst costs one turn, not one per unit.
 const EVENTS_PER_POLL: usize = 32;
@@ -250,11 +238,23 @@ pub trait Device<const B: usize>: Sized + 'static {
         channel: oer_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>>;
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>>;
-    fn poll_receive(
+    /// The driver's turn: take the interrupt facts and return a transmit
+    /// or TBTT event. Receive facts only mark ring work for the body's
+    /// pull ([`Self::receive_due`]); this never services the ring.
+    fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>>;
+    /// Whether the body's pull has a staged unit to take or ring work to
+    /// service now. The driver wakes the body when it has.
+    fn receive_due(&mut self) -> bool;
+    /// The body's pull, in its own turn: a staged unit, or the ring
+    /// serviced once when its interrupt left work and the body has
+    /// `receive_room`. It never polls the interrupt facts, which stay the
+    /// driver's; `cx` is the body's, woken when the ring has more at once.
+    /// `None` while a cut or a stop holds the ring.
+    fn pull_received(
         &mut self,
         receive_room: usize,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<DeviceEvent<Self::Receive>, Fault>>;
+    ) -> Result<Option<Self::Receive>, Fault>;
     /// A finite RX cut: mask/drain preceding DMA and ISR facts before a GTK
     /// mutation. Returned RX must be delivered before its command terminal.
     fn poll_rx_cut(
@@ -272,8 +272,7 @@ pub trait Device<const B: usize>: Sized + 'static {
     fn detach(&mut self);
 }
 
-pub enum DeviceEvent<R> {
-    Receive(R),
+pub enum DeviceEvent {
     Tx(WifiTxWake),
     Tbtt,
 }
@@ -325,7 +324,8 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 }
 
 /// The driver's backing, borrowing the retained device and cross-context
-/// storage. Only the driver's registration can reach its device `RefCell`.
+/// storage. The driver's registration and the body's receive pull reach its
+/// device `RefCell`, both from tasks of the station's executor.
 pub struct PortStorage<D: Device<B>, const B: usize> {
     device: RefCell<&'static mut D>,
     shared: &'static mut PortSharedStorage<B, D::Lent, D::Body>,
@@ -357,8 +357,6 @@ pub struct PortSharedStorage<
     subframes: aggregate::SubframeTable<B, Body>,
     /// The receive units lent to the network.
     network: lent::NetworkCredit<P>,
-    /// The received units queued for the body and not yet taken.
-    received: settings::ReceivedInFlight,
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
@@ -454,7 +452,6 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
             returned: oer_memory::ReturnBank::new(),
             subframes: oer_memory::ReturnBank::new(),
             network,
-            received: settings::ReceivedInFlight::new(),
             settings: settings::Settings::new(),
             #[cfg(test)]
             retained_group: oer_memory::OnceValue::new(),
@@ -475,16 +472,6 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
         self.poisoned
             .get()
             .map_or(Ok(()), |cause| Err(radio::Poisoned { cause }))
-    }
-    /// The body took one received unit the driver queued: wake a driver that waits for
-    /// room once the queue is down to [`RX_WAKE_AT`]. A unit never queued
-    /// poisons the installation.
-    fn took_received(&self) {
-        match self.received.take(RX_WAKE_AT) {
-            Ok(true) => self.driver.wake(),
-            Ok(false) => {}
-            Err(fault) => self.poison(Fault::Setting(fault)),
-        }
     }
 }
 

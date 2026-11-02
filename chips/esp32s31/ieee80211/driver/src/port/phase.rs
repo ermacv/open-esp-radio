@@ -70,10 +70,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     {
         poll_fn(|cx| {
             self.held.storage.body.register(cx.waker());
-            if let Some(event) = self.held.events.try_receive().ok() {
-                if matches!(event, owned::OwnedEvent::Received { .. }) {
-                    self.held.storage.took_received();
-                }
+            // Queued events first: a cut's units and every terminal came
+            // before what the ring holds now.
+            let event = match self.held.events.try_receive().ok() {
+                Some(event) => Some(event),
+                None => self.held.pull(cx).unwrap_or_else(|fault| {
+                    self.held.storage.poison(fault);
+                    None
+                }),
+            };
+            if let Some(event) = event {
                 match event.lend(&self.loan, self.held.completions) {
                     Some(event) => return Poll::Ready(Ok(Ok(event))),
                     // A parked terminal's place held none.
@@ -107,16 +113,7 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
         self.held.tuned.get()
     }
     fn recycle(&mut self, buffer: ReceiveBuffer<'id, Id, D::Receive>) {
-        if let Err(buffer) = self
-            .held
-            .recycled
-            .try_send(buffer.into_owned())
-            .map_err(|error| error.0)
-        {
-            core::mem::forget(buffer);
-            self.held.storage.poison(Fault::Capacity);
-        }
-        self.held.storage.driver.wake();
+        self.held.recycle(buffer.into_owned());
     }
     fn lend(
         &mut self,

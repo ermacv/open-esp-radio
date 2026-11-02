@@ -132,7 +132,8 @@ impl<'s, Id: SlotIdentity + 's, D: Device<B> + 's, const B: usize, O: Observatio
                 let outcome = (|| {
                     owner.storage.poison(Fault::Abandoned);
                     // The driver runner ended its poll loan before invoking this guard. The body
-                    // has no device reference, so cleanup has exclusive hardware access.
+                    // borrows the device only within its pull's step, so cleanup has exclusive
+                    // hardware access; a refused borrow leaves the stop unconfirmed.
                     if owner
                         .storage
                         .device()
