@@ -1,7 +1,7 @@
 #![no_std]
-use oer_ieee80211_testing_model::{ModelBackend, ModelCaps, ModelPool, ModelPrepared, ModelTickets};
-use oer_ieee80211_contracts_port::{AdmittedAttempt, Station};
-use oer_radio_port::StaticId;
+use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelCaps, ModelPool, ModelPrepared, ModelTickets};
+use oer_protocols_ieee80211_contracts_port::{AdmittedAttempt, Station};
+use oer_protocols_radio_port::StaticId;
 
 pub enum Declaration {}
 type Id = StaticId<Declaration>;

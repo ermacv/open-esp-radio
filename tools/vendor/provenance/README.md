@@ -1,4 +1,4 @@
-# oer-vendor-provenance
+# oer-tools-vendor-provenance
 
 Vendor function provenance. A recovered fact names the vendor function it
 came from in a `SOURCE(<chip>):` block, and the citation is registered with
@@ -7,7 +7,7 @@ that function's fingerprint in `chips/<chip>/vendor/facts/provenance.toml`
 
 `fingerprint` is the one fingerprint of vendor RV32 functions. It reads each
 defined function of an archive's members, or of one ELF, through
-[`oer-analysis-elf`](../../analysis/elf/README.md) and clears exactly the bits each relocation
+[`oer-tools-analysis-elf`](../../analysis/elf/README.md) and clears exactly the bits each relocation
 patches with that crate's RV32 relocation table. A `Function` carries:
 
 - `code`: the masked bytes and the name-free relocation shape (types, and
@@ -18,7 +18,7 @@ patches with that crate's RV32 relocation table. A `Function` carries:
   `similarity_ppm` (longest common subsequence) and `shingles`;
 - `calls`: the named targets of its `call` and `jal` relocations.
 
-[`oer-vendor-lineage`](../lineage/README.md) uses it too.
+[`oer-tools-vendor-lineage`](../lineage/README.md) uses it too.
 
 The other modules are the provenance check itself; `cargo vendor-check check
 provenance`, `cargo vendor-check provenance` and `cargo vendor-check diff`
@@ -29,11 +29,11 @@ them:
   (`marker`, `is_marker_line`, `blocks_in`, chip attribution);
 - `registry`: the chip's registry (`chips/<chip>/vendor/facts/provenance.toml`),
   the survey of every citation — production `SOURCE` blocks, the register
-  model's descriptions (read through `oer_registers_model::descriptions`),
+  model's descriptions (read through `oer_tools_registers_model::descriptions`),
   verification decisions, ROM summaries and vendor documents — and `check`,
   `violations`, `registered` and `update` (`show` is a callback: the
   library never runs the vendor scenarios);
-- `diff`: function-by-function classification of two archive revisions. A test pins one function's fingerprint and `oer-analysis-elf` pins the
+- `diff`: function-by-function classification of two archive revisions. A test pins one function's fingerprint and `oer-tools-analysis-elf` pins the
 relocation table: changing either changes registered fingerprints, which are
 then regenerated with `cargo vendor-check provenance --chip <chip> --rebuild`
 after `cargo vendor-check check provenance` passed with the previous fingerprints.

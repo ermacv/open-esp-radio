@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::ftm::FtmRequestTransmission;
+use oer_protocols_ieee80211_core_roles_sta::ftm::FtmRequestTransmission;
 pub fn body<const N: usize>(mut transmission: FtmRequestTransmission<N>) {
     #[cfg(ui_reject)]
     { transmission.body[0] = 0; } // ui-error: E0616

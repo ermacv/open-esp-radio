@@ -3,7 +3,7 @@
 //! lent, through the running stream or through a disable drain, and are
 //! submitted again.
 use super::*;
-use oer_ieee80211_testing_conformance::interface_commands::{
+use oer_protocols_ieee80211_testing_conformance::interface_commands::{
     Case, Drain, Harness, Identity, Trace, check,
 };
 

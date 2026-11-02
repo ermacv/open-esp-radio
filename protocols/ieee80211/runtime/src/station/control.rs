@@ -14,15 +14,19 @@ use core::{
     task::{Context, Poll},
 };
 use embassy_futures::select::{Either, select};
-use oer_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
-use oer_ieee80211_core_roles_sta::machine::StaProfile;
-use oer_memory::{QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender};
-use oer_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
-use oer_sync::PriorityWaker;
-use oer_time::connected_tasks::{
+use oer_portable_memory::{
+    QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender,
+};
+use oer_portable_sync::PriorityWaker;
+use oer_portable_time::connected_tasks::{
     ConnectedTaskControlError, ConnectedTaskControlResources, ConnectedTaskController,
     ConnectedTaskEndpoint, ConnectedTaskGroup,
+};
+use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
+use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
+use oer_protocols_network_port::{
+    LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused,
 };
 
 /// Latest product state. Events and command owners still reach the callback once.
@@ -44,7 +48,7 @@ pub struct State<N: Notifies = SameHart> {
     policy_waker: PriorityWaker,
     operations: operation::Operations,
     /// The deadline the last stop request named.
-    stop_deadline: Cell<Option<oer_time::Instant>>,
+    stop_deadline: Cell<Option<oer_portable_time::Instant>>,
     /// The profile of the one Connect in the queue, published in the same
     /// poll as that request; the runner takes it with the request.
     profile: Cell<Option<StaProfile>>,
@@ -230,7 +234,7 @@ pub struct RunnerControl<'c, N: Notifies = SameHart> {
 
 impl<'c, N: Notifies> RunnerControl<'c, N> {
     /// The deadline the stop request named, once one did.
-    pub(super) fn stop_deadline(&self) -> Option<oer_time::Instant> {
+    pub(super) fn stop_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.state.stop_deadline.get()
     }
     /// The profile published with the Connect just received, if its
@@ -256,13 +260,13 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
             .wanted(self.linked())
             .is_none_or(|command| self.state.operations.is_free(command))
     }
-    pub(super) fn policy_deadline(&self) -> Option<oer_time::Instant> {
+    pub(super) fn policy_deadline(&self) -> Option<oer_portable_time::Instant> {
         if !self.policy_admissible() {
             return None;
         }
         self.state.policy.get().deadline()
     }
-    pub(super) fn policy_ready(&self, now: oer_time::Instant) -> bool {
+    pub(super) fn policy_ready(&self, now: oer_portable_time::Instant) -> bool {
         self.policy_admissible() && self.state.policy.get().ready(now, self.linked())
     }
     pub(super) fn policy_register(&self, cx: &Context<'_>) {
@@ -273,7 +277,7 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
     /// permission, the one admission it shares with operations.
     pub(super) fn policy_command<K>(
         &self,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<Option<ServiceCommand<K>>, super::reconnect::DeadlineOverflow> {
         if !self.policy_admissible() {
             return Ok(None);
@@ -354,7 +358,7 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
     /// independent of command queue capacity and never schedules a reconnect.
     /// Disconnect, then stop; the network must return the station's lent
     /// receive buffers by `deadline` ([`Self::stop`]).
-    pub fn stop_gracefully(&mut self, deadline: oer_time::Instant) {
+    pub fn stop_gracefully(&mut self, deadline: oer_portable_time::Instant) {
         self.state.stop_deadline.set(Some(deadline));
         let mut policy = self.state.policy.get();
         policy.stop();
@@ -501,7 +505,7 @@ impl<'c, K, const DEPTH: usize, N: Notifies> Control<'c, K, DEPTH, N> {
     }
     /// Stop the service: the network must return the station's lent
     /// receive buffers by `deadline`, or the port fails to retire.
-    pub fn stop(&mut self, deadline: oer_time::Instant) {
+    pub fn stop(&mut self, deadline: oer_portable_time::Instant) {
         self.state.stop_deadline.set(Some(deadline));
         self.task.request_stop();
     }
@@ -560,8 +564,12 @@ impl<'c, L, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, TX, RX,
         }
     }
 }
-impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: usize, N: Notifies>
-    NetDevice for Device<'_, L, TX, RX, N>
+impl<
+    L: oer_protocols_ieee80211_contracts_port::LentRxBuffer,
+    const TX: usize,
+    const RX: usize,
+    N: Notifies,
+> NetDevice for Device<'_, L, TX, RX, N>
 {
     type RxFrame = Received<L>;
     fn link(&self) -> LinkSnapshot {
@@ -589,15 +597,15 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
     fn read_copied<R>(
         &mut self,
         _: CopiedMark,
-        read: impl FnOnce(oer_network_port::EthernetFrameView<'_>) -> R,
-    ) -> Result<R, oer_network_port::FrameLengthError> {
+        read: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>) -> R,
+    ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
         // Rare (an A-MSDU, or a buffer the backend kept): the copy leaves
         // its queue by value.
         let copy = self
             .copied
             .try_receive()
-            .ok_or(oer_network_port::FrameLengthError::MissingCopy)?;
-        oer_network_port::EthernetFrame::view(&copy).map(read)
+            .ok_or(oer_protocols_network_port::FrameLengthError::MissingCopy)?;
+        oer_protocols_network_port::EthernetFrame::view(&copy).map(read)
     }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.link.register(cx);
@@ -606,7 +614,7 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
         }
         core::pin::pin!(self.transmit.ready()).poll(cx)
     }
-    fn try_transmit<F: oer_network_port::EthernetFrame>(
+    fn try_transmit<F: oer_protocols_network_port::EthernetFrame>(
         &mut self,
         frame: F,
     ) -> Result<(), TransmitRefused<F>> {
@@ -628,7 +636,7 @@ impl<L: oer_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: u
                         })
                         .map_err(|error| match error {
                             SlotSendError::Refused(_) => TransmitError::InvalidLength(
-                                oer_network_port::FrameLengthError::TooLong,
+                                oer_protocols_network_port::FrameLengthError::TooLong,
                             ),
                             SlotSendError::Full | SlotSendError::Lost => TransmitError::QueueFull,
                         })

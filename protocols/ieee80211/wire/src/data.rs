@@ -266,7 +266,7 @@ impl<'a> AmsduSubframes<'a> {
     /// Split the next subframe and its padding off `remaining`; on an error
     /// `remaining` is unchanged.
     fn split_subframe(&mut self) -> Result<MsduParts<'a>, DataDecapError> {
-        let mut reader = oer_wire::Reader::new(self.remaining);
+        let mut reader = oer_portable_wire::Reader::new(self.remaining);
         let header = reader
             .array::<AMSDU_SUBFRAME_HEADER_LEN>()
             .map_err(|_| DataDecapError::Truncated)?;
@@ -288,12 +288,12 @@ impl<'a> AmsduSubframes<'a> {
             length1,
         ] = *header;
         let msdu_length = u16::from_be_bytes([length0, length1]);
-        let mut reader = oer_wire::Reader::new(body);
+        let mut reader = oer_portable_wire::Reader::new(body);
         let msdu = reader
             .take(usize::from(msdu_length))
             .map_err(|_| DataDecapError::Truncated)?;
         let rest = reader.remaining();
-        let mut reader = oer_wire::Reader::new(msdu);
+        let mut reader = oer_portable_wire::Reader::new(msdu);
         let llc = reader
             .array::<LLC_SNAP_HEADER_LEN>()
             .map_err(|_| DataDecapError::Truncated)?;
@@ -317,7 +317,7 @@ impl<'a> AmsduSubframes<'a> {
                 .checked_sub(complete % 4)
                 .ok_or(DataDecapError::Truncated)?
                 % 4;
-            let mut reader = oer_wire::Reader::new(rest);
+            let mut reader = oer_portable_wire::Reader::new(rest);
             let _ = reader
                 .take(padding)
                 .map_err(|_| DataDecapError::Truncated)?;
@@ -332,7 +332,7 @@ impl<'a> AmsduSubframes<'a> {
 /// A raw priority cannot enter the encoder:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
+/// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
 /// let _plan = plan_data_encapsulation(
 ///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu, 8, true, false,
@@ -342,8 +342,8 @@ impl<'a> AmsduSubframes<'a> {
 /// Fixed protocol priorities need no runtime validation:
 ///
 /// ```
-/// use oer_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
-/// use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+/// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
+/// use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 /// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
 /// let plan = plan_data_encapsulation(
 ///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu,
@@ -386,11 +386,11 @@ pub const fn plan_data_encapsulation(
     let qos_control = if qos {
         QosControl::from_bytes([0; 2])
             // User priorities are three-bit values; the TID field is four bits.
-            .with_tid(oer_wire::U8::<3>::from_low_bits(priority.value()).widen())
+            .with_tid(oer_portable_wire::U8::<3>::from_low_bits(priority.value()).widen())
             .with_ack_policy(if no_ack_policy {
-                oer_wire::U8::constant::<1>()
+                oer_portable_wire::U8::constant::<1>()
             } else {
-                oer_wire::U8::ZERO
+                oer_portable_wire::U8::ZERO
             })
             .to_bytes()
     } else {
@@ -567,7 +567,7 @@ fn single_payload<'a>(
     header: crate::frame::DecodedHeader<'_>,
     payload: &'a [u8],
 ) -> Result<MsduParts<'a>, DataDecapError> {
-    let mut reader = oer_wire::Reader::new(payload);
+    let mut reader = oer_portable_wire::Reader::new(payload);
     let llc = reader
         .array::<LLC_SNAP_HEADER_LEN>()
         .map_err(|_| DataDecapError::Truncated)?;
@@ -605,7 +605,7 @@ pub fn amsdu_subframes<'a>(
 }
 
 fn aggregate_payload(payload: &[u8]) -> Result<AmsduSubframes<'_>, DataDecapError> {
-    let mut reader = oer_wire::Reader::new(payload);
+    let mut reader = oer_portable_wire::Reader::new(payload);
     let first = reader
         .array::<{ AMSDU_SUBFRAME_HEADER_LEN + LLC_SNAP_HEADER_LEN }>()
         .map_err(|_| DataDecapError::Truncated)?;

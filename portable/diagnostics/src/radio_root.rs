@@ -10,7 +10,7 @@ pub enum PlatformClock {
     ModemCoexistence,
     ModemLowPowerTimer,
 }
-use oer_trace::{Channel, Domain, Event, Kind};
+use oer_portable_trace::{Channel, Domain, Event, Kind};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RadioRoot {

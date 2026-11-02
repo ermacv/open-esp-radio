@@ -6,14 +6,14 @@ use std::vec::Vec;
 use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 use embassy_futures::block_on;
 use embassy_futures::select::{Either, select};
-use oer_hil_protocol::base::{
+use oer_protocols_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetImageKeys, GetLinkHealth, Hello, ImageKeySet,
     PostMortemCheckpoints, RejectReason, ResetReason, sorted_keys,
 };
-use oer_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
+use oer_protocols_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
-use oer_diagnostics::{Note, Written};
+use oer_portable_diagnostics::{Note, Written};
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
@@ -188,7 +188,10 @@ fn hello_comes_first_and_base_requests_are_answered_in_order() {
     let frames = host.frames();
     assert_eq!(frames[0], (0, 0, Hello::KEY));
     assert_eq!(frames[1], (5, 1, BootEvidence::KEY));
-    assert_eq!(frames[2], (6, 2, oer_hil_protocol::base::LinkHealth::KEY));
+    assert_eq!(
+        frames[2],
+        (6, 2, oer_protocols_hil_protocol::base::LinkHealth::KEY)
+    );
 }
 
 #[test]
@@ -222,7 +225,10 @@ fn a_rejection_names_the_request() {
         |host| host.frames().len() == 2,
     );
     let (request, _, key) = host.frames()[1];
-    assert_eq!((request, key), (4, oer_hil_protocol::base::Rejected::KEY));
+    assert_eq!(
+        (request, key),
+        (4, oer_protocols_hil_protocol::base::Rejected::KEY)
+    );
     let _ = RejectReason::InvalidState;
 }
 
@@ -269,9 +275,9 @@ fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
         .split(|&byte| byte == b'\n')
         .filter_map(|line| line.strip_suffix(b"\r").or(Some(line)))
         .filter_map(|line| {
-            let mut scratch = [0; oer_diagnostics::MAX_PAYLOAD + 7];
-            match oer_diagnostics::decode(line, &mut scratch) {
-                Ok(Some((sequence, oer_diagnostics::Record::Note(note)))) => {
+            let mut scratch = [0; oer_portable_diagnostics::MAX_PAYLOAD + 7];
+            match oer_portable_diagnostics::decode(line, &mut scratch) {
+                Ok(Some((sequence, oer_portable_diagnostics::Record::Note(note)))) => {
                     Some((sequence, note.words().to_vec()))
                 }
                 _ => None,
@@ -465,7 +471,7 @@ fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
         future::Future as _,
         task::{Context, Poll, Waker},
     };
-    use oer_hil_protocol::lifecycle::ResetAccepted;
+    use oer_protocols_hil_protocol::lifecycle::ResetAccepted;
 
     let console = console();
     console.start(BOOT);
@@ -647,7 +653,7 @@ fn note_length_overflow_refuses_the_whole_line() {
 
 #[test]
 fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed() {
-    use oer_diagnostics::fault::{Class, Domain, Record};
+    use oer_portable_diagnostics::fault::{Class, Domain, Record};
     struct Observed {
         retained: RefCell<Record>,
     }
@@ -727,7 +733,7 @@ fn a_service_answers_each_request_through_its_handler_with_the_request_identity(
     let console = console();
     console.start(BOOT);
     let mut prober = Prober { calls: 0 };
-    let identity = oer_hil_protocol::RequestIdentity {
+    let identity = oer_protocols_hil_protocol::RequestIdentity {
         boot_id: BOOT,
         session_id: 0,
         request_id: 21,

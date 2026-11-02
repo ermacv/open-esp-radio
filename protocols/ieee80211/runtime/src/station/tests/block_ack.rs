@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
         BlockAckAction, DelbaParameters, encode_addba_request, parse_block_ack_action,
     },
@@ -496,16 +496,16 @@ fn response_pressure_defers_management_without_overtaking_older_requests() {
 /// idle second.
 fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig {
     configuration.tx_block_ack = Some(
-        oer_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
-            oer_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
+        oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
+            oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
                 window: 32,
                 negotiation_timeout: Duration::from_millis(100),
-                retry: oer_ieee80211_core_upper_mac::block_ack::TxBlockAckRetry {
+                retry: oer_protocols_ieee80211_core_upper_mac::block_ack::TxBlockAckRetry {
                     attempts: 2,
                     interval: Duration::from_millis(50),
                 },
                 inactivity: Duration::from_secs(1),
-                retry_members: oer_ieee80211_core_roles_sta::data::AggregateRetry {
+                retry_members: oer_protocols_ieee80211_core_roles_sta::data::AggregateRetry {
                     lifetime: Duration::from_millis(1_500),
                     attempts: 4,
                 },
@@ -518,9 +518,9 @@ fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig 
 
 fn addba_response(dialog_token: u8, tid: u8, window: u16) -> Vec<u8> {
     management(
-        &oer_ieee80211_core_upper_mac::block_ack::AddbaResponse {
+        &oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
             dialog_token,
-            status: oer_ieee80211_core_upper_mac::block_ack::AddbaStatus::Success,
+            status: oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::Success,
             tid,
             window,
             timeout_tu: 0,
@@ -608,11 +608,15 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
             }
             world
                 .air
-                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b1));
+                .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
+                    0b1,
+                ));
             // The aggregate of 2, 3 and 4 misses 3.
             world
                 .air
-                .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0b101));
+                .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
+                    0b101,
+                ));
             world.air.hold(WmmAccessCategory::BestEffort, false);
             let retried = loop {
                 let frame = world.sent(&mut seen, 0x88).await;
@@ -657,7 +661,9 @@ fn a_member_missed_by_every_attempt_is_dropped_and_a_bar_moves_the_window() {
             for _ in 0..4 {
                 world
                     .air
-                    .answer(oer_ieee80211_testing_model::AirAnswer::BlockAck(0));
+                    .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
+                        0,
+                    ));
             }
             world.send_msdu(BSSID);
             let bar = world.sent(&mut seen, 0x84).await;
@@ -688,9 +694,10 @@ fn a_refused_negotiation_is_not_repeated_and_receive_agreements_still_answer() {
             else {
                 panic!("an ADDBA Request");
             };
-            let refusal = oer_ieee80211_core_upper_mac::block_ack::AddbaResponse {
+            let refusal = oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
                 dialog_token,
-                status: oer_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
+                status:
+                    oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: 0,
                 window: 0,
                 timeout_tu: 0,
@@ -750,7 +757,7 @@ fn only_a_bar_from_the_associated_transmitter_moves_its_tid_window() {
             let _ = world.sent(&mut seen, 0xd0).await;
             world.air.receive(&data(11, 0, 11), meta());
             assert!(world.delivered().await.is_empty());
-            let bar = oer_ieee80211_wire::block_ack::frame::encode_block_ack_request(
+            let bar = oer_protocols_ieee80211_wire::block_ack::frame::encode_block_ack_request(
                 LOCAL,
                 BSSID,
                 0,

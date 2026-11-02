@@ -14,19 +14,19 @@ use crate::{
         PhyCalibrationPbusClearTransition, PhyCalibrationTrackingCompletion,
     },
 };
-use oer_esp32s31_hal::owner::{SharedPhyAccess, SharedPhyContext};
+use oer_chips_esp32s31_hal::owner::{SharedPhyAccess, SharedPhyContext};
 
 /// Run the bounded PBus-clear child, including readiness and work-mode settling.
 /// Once polled, keep the physical maintenance borrow until terminal completion;
 /// an error does not establish a safe state for resuming radio traffic.
-pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?Sized>(
+pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     mut child: PhyCalibrationPbusClearTransition,
     registers: &mut impl SharedPhyContext,
     _observer: &mut O,
 ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
     use crate::analog::pbus::{PhyPbusClearAction as Action, PhyPbusClearCompletion as Completion};
-    use oer_esp32s31_hal::phy::agc;
+    use oer_chips_esp32s31_hal::phy::agc;
 
     // Keep the admitted child and its exact command/settle order. This small
     // runtime child does not need the cold-init action/completion envelopes.
@@ -37,8 +37,8 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
         };
         let completion = match child.action() {
             Action::ConfigureDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 Completion::DebugModeConfigured
             }
@@ -50,8 +50,8 @@ pub fn clear_pbus<D: PhyShortDelay, O: PhyTargetObserver, C: oer_time::Clock + ?
                 }
             }
             Action::ConfigureWorkMode => Completion::WorkModeConfigured {
-                settle_required: oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 ),
             },
             Action::DelayMicros(micros) => {
@@ -94,7 +94,7 @@ impl<F: core::future::Future<Output = Result<Option<bool>, PhyTargetPortError>>>
 /// Run the borrowed D-code cursor through its terminal edge. The caller keeps
 /// the affine child and commits it only after this future has completed.
 /// Hardware ownership and cancellation obligations remain with that caller.
-pub fn dcode<'a, D: PhyShortDelay + 'a, P, T: oer_cooperate::CooperativeTimer>(
+pub fn dcode<'a, D: PhyShortDelay + 'a, P, T: oer_portable_cooperate::CooperativeTimer>(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
     _platform: &mut P,
@@ -122,7 +122,7 @@ fn dcode_poll<
     'a,
     D: PhyShortDelay + 'a,
     R: crate::executor::step::Registers,
-    T: oer_cooperate::CooperativeTimer,
+    T: oer_portable_cooperate::CooperativeTimer,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
@@ -151,7 +151,7 @@ fn dcode_poll<
 }
 
 /// Advance the retained coefficient owner; only its caller publishes the result.
-pub async fn rx_gain_init<D: PhyShortDelay, T: oer_cooperate::CooperativeTimer>(
+pub async fn rx_gain_init<D: PhyShortDelay, T: oer_portable_cooperate::CooperativeTimer>(
     clock: &T,
     child: &mut crate::rx::gain::RxProgram,
     registers: &mut impl SharedPhyContext,
@@ -201,7 +201,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
     observer: &core::cell::RefCell<&mut O>,
-    clock: &impl oer_cooperate::CooperativeTimer,
+    clock: &impl oer_portable_cooperate::CooperativeTimer,
 ) -> Result<(), PhyTargetPortError> {
     child
         .execute_target_direct(
@@ -219,7 +219,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
 
 fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
     observer: &core::cell::RefCell<&mut O>,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
     scope: crate::executor::wait::tx::Scope,
     micros: u32,
 ) -> Result<(), PhyTargetPortError> {
@@ -271,7 +271,7 @@ pub fn channel<
     D: PhyShortDelay + 'a,
     P: 'a,
     O: PhyTargetObserver + 'a,
-    T: oer_cooperate::CooperativeTimer,
+    T: oer_portable_cooperate::CooperativeTimer,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationChannelTransition,
@@ -359,7 +359,7 @@ pub(crate) fn complete_channel_direct<
     D: PhyShortDelay,
     P,
     O: PhyTargetObserver,
-    C: oer_time::Clock + ?Sized,
+    C: oer_portable_time::Clock + ?Sized,
 >(
     clock: &C,
     binding: crate::channel::PhyChipChannelExternalBinding,
@@ -403,7 +403,7 @@ pub(crate) fn complete_channel_direct<
     }
 }
 
-fn complete_temperature_direct<C: oer_time::Clock + ?Sized>(
+fn complete_temperature_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     binding: crate::analog::temperature::PhyTemperatureExternalBinding,
     registers: &mut impl SharedPhyAccess,
@@ -447,7 +447,7 @@ fn complete_temperature_direct<C: oer_time::Clock + ?Sized>(
     }
 }
 
-fn complete_channel_i2c_direct<C: oer_time::Clock + ?Sized>(
+fn complete_channel_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     mut binding: crate::channel::PhyChipChannelI2cBinding,
     registers: &mut impl SharedPhyAccess,

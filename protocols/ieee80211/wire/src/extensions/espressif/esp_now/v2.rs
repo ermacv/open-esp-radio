@@ -148,13 +148,13 @@ impl<'payload> Iterator for EspNowV2Elements<'payload> {
             EspNowV2ElementSource::Encoded(remaining) => {
                 // Construction of this iterator is private and follows a full
                 // validation pass; a body that no longer fits ends the walk.
-                let mut reader = oer_wire::Reader::new(remaining);
+                let mut reader = oer_portable_wire::Reader::new(remaining);
                 let &[_, length] = reader.array::<2>().ok()?;
                 let body = reader.remaining();
-                let mut reader = oer_wire::Reader::new(body);
+                let mut reader = oer_portable_wire::Reader::new(body);
                 let body = reader.take(usize::from(length)).ok()?;
                 let tail = reader.remaining();
-                let mut reader = oer_wire::Reader::new(body);
+                let mut reader = oer_portable_wire::Reader::new(body);
                 let &[_, _, _, _, control] =
                     reader.array::<VENDOR_ELEMENT_FIXED_BODY_LEN>().ok()?;
                 let payload = reader.remaining();
@@ -297,7 +297,7 @@ impl<'payload> EspNowV2Action<'payload> {
             let (target, tail) = core::mem::take(&mut rest)
                 .split_at_mut_checked(element.payload.len())
                 .ok_or(too_small)?;
-            oer_wire::Writer::new(target)
+            oer_portable_wire::Writer::new(target)
                 .write(element.payload)
                 .map_err(|_| too_small)?;
             rest = tail;
@@ -314,7 +314,7 @@ impl<'payload> EspNowV2Action<'payload> {
             return Err(EspNowV2WireError::OutputTooSmall { required });
         }
 
-        let mut writer = oer_wire::Writer::new(output);
+        let mut writer = oer_portable_wire::Writer::new(output);
         let too_small = |_| EspNowV2WireError::OutputTooSmall { required };
         writer.u8(ESP_NOW_ACTION_CATEGORY).map_err(too_small)?;
         writer
@@ -373,7 +373,7 @@ impl<'payload> EspNowV2Action<'payload> {
                 actual: input.len(),
             });
         }
-        let mut reader = oer_wire::Reader::new(input);
+        let mut reader = oer_portable_wire::Reader::new(input);
         let &[category, a0, a1, a2, r0, r1, r2, r3] = reader
             .array::<ESP_NOW_V2_ACTION_PREFIX_LEN>()
             .map_err(|_| EspNowV2WireError::FrameTooShort {
@@ -401,7 +401,7 @@ impl<'payload> EspNowV2Action<'payload> {
                     maximum: ESP_NOW_V2_MAX_ELEMENT_COUNT,
                 });
             }
-            let mut reader = oer_wire::Reader::new(rest);
+            let mut reader = oer_portable_wire::Reader::new(rest);
             let Ok(&[id, length]) = reader.array::<2>() else {
                 return Err(EspNowV2WireError::TruncatedElementHeader {
                     element: element_count,
@@ -430,7 +430,7 @@ impl<'payload> EspNowV2Action<'payload> {
                 });
             };
             let after = reader.remaining();
-            let mut reader = oer_wire::Reader::new(body);
+            let mut reader = oer_portable_wire::Reader::new(body);
             let Ok(&[o0, o1, o2, element_type, control]) =
                 reader.array::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
             else {
@@ -592,7 +592,7 @@ impl<'payload> EspNowV2Frame<'payload> {
         let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
             .with_retry(self.retry)
             .raw();
-        let mut writer = oer_wire::Writer::new(header);
+        let mut writer = oer_portable_wire::Writer::new(header);
         let too_small = |_| EspNowV2WireError::OutputTooSmall { required };
         writer.u16_le(frame_control).map_err(too_small)?;
         writer.u16_le(0).map_err(too_small)?;
@@ -616,7 +616,7 @@ impl<'payload> EspNowV2Frame<'payload> {
         clippy::arithmetic_side_effects
     )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
-        let mut reader = oer_wire::Reader::new(input);
+        let mut reader = oer_portable_wire::Reader::new(input);
         let header = reader
             .array::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
             .map_err(|_| EspNowV2WireError::FrameTooShort {
@@ -846,7 +846,7 @@ impl fmt::Display for EspNowV2WireError {
 
 impl core::error::Error for EspNowV2WireError {}
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// ESP-NOW v2 vendor-specific element control octet.
     /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
     pub struct EspNowV2Control[1] (little) {

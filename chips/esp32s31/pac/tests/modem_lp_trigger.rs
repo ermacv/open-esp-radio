@@ -1,6 +1,6 @@
 //! Bus-image contracts of the silicon-qualified mixed mode word. The host
 //! memory models a bus write, not the silicon's subsequent latch transition.
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances,
     modem_pwr::{BtdmRuntimeControl, word_0058_opaque as mode},
 };

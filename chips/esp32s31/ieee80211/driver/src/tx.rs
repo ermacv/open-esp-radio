@@ -8,8 +8,8 @@
 use core::pin::Pin;
 
 use crate::mac::{tx::TxSlot, tx::runtime::WifiTxRuntimePolicy};
-use oer_esp32s31_phy::PhyTxTargetPowerProfile;
-use oer_radio_regulatory::TxCeiling;
+use oer_chips_esp32s31_phy::PhyTxTargetPowerProfile;
+use oer_protocols_radio_regulatory::TxCeiling;
 
 /// State of one finite ESP32-S31 Wi-Fi TX transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,9 +69,9 @@ impl WifiTxPowerProfile for PhyTxTargetPowerProfile {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ControlTxConfig {
     /// Executor watchdog for each hardware publication.
-    pub completion_timeout: oer_time::Duration,
+    pub completion_timeout: oer_portable_time::Duration,
     /// Cooperative polling interval before the MAC IRQ owner is installed.
-    pub poll_interval: oer_time::Duration,
+    pub poll_interval: oer_portable_time::Duration,
 }
 
 /// Resources whose ownership must stay together for every ordinary TX phase.
@@ -142,8 +142,8 @@ pub(crate) const fn capped_power(pair: WifiTxPowerPair, ceiling: Option<i8>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
-    use oer_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
+    use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
+    use oer_protocols_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 
     struct Calibrated;
     impl WifiTxPowerProfile for Calibrated {
@@ -159,9 +159,11 @@ mod tests {
     fn domain_antenna_chip_and_lab_cap_bound_every_rate_and_both_codes() {
         let domain = RegulatoryDomain::of(Country::new(*b"DE").expect("country")).expect("domain");
         let channel = domain
-            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                WifiChannel::new_2_4_ghz(1, WifiChannelWidth::Mhz20).expect("channel"),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    WifiChannel::new_2_4_ghz(1, WifiChannelWidth::Mhz20).expect("channel"),
+                ),
+            )
             .expect("permitted");
         for (eirp_gain, chip, owner) in [
             (233, 2100, Some(1000)),

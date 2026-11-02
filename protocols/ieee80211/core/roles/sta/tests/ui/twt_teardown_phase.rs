@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::twt::{IndividualTwtTeardownReady, IndividualTwtTransmittingFlow};
-use oer_time::Instant;
+use oer_protocols_ieee80211_core_roles_sta::twt::{IndividualTwtTeardownReady, IndividualTwtTransmittingFlow};
+use oer_portable_time::Instant;
 
 pub fn teardown(ready: IndividualTwtTeardownReady<'_>, now: Instant) {
     ready.queue_teardown(now);

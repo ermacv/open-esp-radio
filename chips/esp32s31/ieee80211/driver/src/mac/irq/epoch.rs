@@ -30,7 +30,7 @@
 //! a fatal cause that arrives after it.
 
 use core::marker::PhantomData;
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
     types::{MacInterruptEnableState, MacInterruptMask},
 };
@@ -260,7 +260,7 @@ impl<M: RxDelivery, I: MacInterrupt, P: MacPowerInterrupt> InterruptEpoch<M, I, 
 /// Clearing without the mask does not compile:
 ///
 /// ```compile_fail,E0599
-/// use oer_esp32s31_ieee80211_driver::mac::irq::epoch::{InterruptEpoch, Moderated};
+/// use oer_chips_esp32s31_ieee80211_driver::mac::irq::epoch::{InterruptEpoch, Moderated};
 /// fn clear(epoch: &mut InterruptEpoch<Moderated>) {
 ///     epoch.clear_all();
 /// }

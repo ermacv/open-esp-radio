@@ -3,21 +3,21 @@
 //! The role performs stop/restart at its ownership boundary; the actor owns
 //! the shared PHY transaction and calibration, as in initial selection.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
-use oer_esp32s31_phy::{
+use oer_chips_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
+use oer_chips_esp32s31_phy::{
     ConcurrentWifiChannelError, PhyTargetObserver, RomShortDelay, concurrent::ConcurrentPhy,
     select_concurrent_wifi_channel,
 };
-use oer_ieee80211_wire::channel::WifiChannel;
-use oer_radio_regulatory::Permitted;
+use oer_protocols_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_radio_regulatory::Permitted;
 
 pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     domain: RadioDomain<B, ConcurrentPhy>,
     wifi: &mut WifiClocked,
-    channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+    channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     observer: &mut O,
 ) -> impl core::future::Future<
     Output = (
@@ -25,7 +25,7 @@ pub(crate) fn select_wifi_channel<B: PlatformClockBackend, O: PhyTargetObserver>
         Result<(), ConcurrentWifiChannelError>,
     ),
 > {
-    let transaction = domain.detach(oer_esp32s31_hal::domain::transaction::Operation::Retune);
+    let transaction = domain.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Retune);
     async move {
         let channel = crate::channel::lower_wifi_channel(channel.channel().channel());
         let mut platform = ();

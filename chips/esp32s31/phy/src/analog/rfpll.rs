@@ -22,7 +22,7 @@ pub const fn phy_get_rf_cal_version() -> u32 {
 }
 
 use crate::analog::i2c::{Address, Field, analog_i2c};
-use oer_esp32s31_hal::layouts::{PhyRfpllCapacitorCodeCode, PhyRfpllSdmCodeEncoded};
+use oer_chips_esp32s31_hal::layouts::{PhyRfpllCapacitorCodeCode, PhyRfpllSdmCodeEncoded};
 
 const LOCK_ATTEMPTS: u8 = 100;
 /// Capacitor-status samples one search direction permits.
@@ -950,30 +950,35 @@ impl RfpllFrequencyMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> RfpllFrequencyCompletion {
         match self.action {
             RfpllFrequencyAction::StartChannelSwitch {
                 frequency_index,
                 crystal_selector,
             } => {
-                oer_esp32s31_hal::phy::frequency::start_channel_switch(registers, frequency_index);
+                oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(
+                    registers,
+                    frequency_index,
+                );
                 RfpllFrequencyCompletion::ChannelSwitchStarted {
                     frequency_index,
                     crystal_selector,
                 }
             }
             RfpllFrequencyAction::ClearChannelSwitch => {
-                oer_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
+                oer_chips_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
                 RfpllFrequencyCompletion::ChannelSwitchCleared
             }
             RfpllFrequencyAction::ReadChannelReady { .. } => {
                 RfpllFrequencyCompletion::ChannelReadyObserved {
-                    ready: oer_esp32s31_hal::phy::frequency::sample_frequency_ready(registers),
+                    ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(
+                        registers,
+                    ),
                 }
             }
             RfpllFrequencyAction::ConfigureNrx { frequency_mhz } => {
-                oer_esp32s31_hal::phy::frequency::configure_nrx_frequency(
+                oer_chips_esp32s31_hal::phy::frequency::configure_nrx_frequency(
                     registers,
                     u32::from(frequency_mhz),
                 );

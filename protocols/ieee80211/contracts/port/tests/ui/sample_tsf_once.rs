@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{BeaconTimingPhase, RoleKeys, TsfPermission};
+use oer_protocols_ieee80211_contracts_port::{BeaconTimingPhase, RoleKeys, TsfPermission};
 pub fn sample<'p, 'id: 'p, P: BeaconTimingPhase<'p, 'id>>(
     phase: &mut P,
     permission: TsfPermission<'id, P::Role, <P::Role as RoleKeys<'id, P::Types>>::CommandPath>,

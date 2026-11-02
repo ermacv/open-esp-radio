@@ -5,7 +5,7 @@
 //! wire representation without retaining an exchange's mutable state.
 //!
 //! The temporal key is not a format: its owner is
-//! `oer-ieee80211-contracts-security`.
+//! `oer-protocols-ieee80211-contracts-security`.
 //!
 //! Received bytes reach this module; nothing here panics on them.
 #![deny(
@@ -76,13 +76,13 @@ pub enum CcmpReceiveSequenceError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CcmpKeyId(oer_wire::U8<2>);
+pub struct CcmpKeyId(oer_portable_wire::U8<2>);
 
 impl CcmpKeyId {
-    pub const PAIRWISE: Self = Self(oer_wire::U8::ZERO);
+    pub const PAIRWISE: Self = Self(oer_portable_wire::U8::ZERO);
 
     pub const fn new(value: u8) -> Option<Self> {
-        match oer_wire::U8::new(value) {
+        match oer_portable_wire::U8::new(value) {
             Some(value) => Some(Self(value)),
             None => None,
         }
@@ -108,7 +108,7 @@ impl CcmpKeyId {
 /// wire value.
 ///
 /// ```
-/// # use oer_ieee80211_wire::ccmp::GroupKeyId;
+/// # use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// assert_eq!(GroupKeyId::new(0).map(GroupKeyId::get), Some(0));
 /// assert_eq!(GroupKeyId::new(1).map(GroupKeyId::get), Some(1));
 /// assert_eq!(GroupKeyId::new(3).map(GroupKeyId::get), Some(3));
@@ -150,10 +150,10 @@ impl GroupKeyId {
     /// The identifier, as a CCMP header names it.
     pub const fn key_id(self) -> CcmpKeyId {
         CcmpKeyId(match self.0 {
-            GroupIndex::Zero => oer_wire::U8::constant::<0>(),
-            GroupIndex::One => oer_wire::U8::constant::<1>(),
-            GroupIndex::Two => oer_wire::U8::constant::<2>(),
-            GroupIndex::Three => oer_wire::U8::constant::<3>(),
+            GroupIndex::Zero => oer_portable_wire::U8::constant::<0>(),
+            GroupIndex::One => oer_portable_wire::U8::constant::<1>(),
+            GroupIndex::Two => oer_portable_wire::U8::constant::<2>(),
+            GroupIndex::Three => oer_portable_wire::U8::constant::<3>(),
         })
     }
 
@@ -251,7 +251,7 @@ pub const fn ccmp_header(low: u32, high: u32, key_id_bits: u8) -> [u8; CCMP_HEAD
     ]
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format).
     pub struct CcmpKeyControl[1] (little) {
         pub reserved, with_reserved: u8 = 0..5;

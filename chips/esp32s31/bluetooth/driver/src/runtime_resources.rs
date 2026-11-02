@@ -8,14 +8,14 @@
 //! The powered task endpoint owns controller-time service and finished-list
 //! capture. Physical scheduler transactions and graph publication stay in HAL.
 
-use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+use oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
-use oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerEpoch;
 
 #[cfg(any(target_arch = "riscv32", test))]
 use crate::resources::TaskResources;
 
-use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_chips_family_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use crate::{
     interrupt::SchedulerWakeCell,
@@ -210,9 +210,10 @@ impl<X: SignalExecutor> ControllerTaskRuntime<'_, X> {
 pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor, M: ControllerMemory> {
     pub(crate) runtime: ControllerTaskRuntime<'runtime, X>,
     pub(crate) task: TaskResources<M>,
-    pub(crate) time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
+    pub(crate) time_scale: oer_chips_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-    pub(crate) config: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
+    pub(crate) config:
+        oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
 }
 
 /// Why the powered task endpoint cannot be retired yet.
@@ -233,9 +234,9 @@ impl<'runtime, X: SignalExecutor, M: ControllerMemory>
     pub(crate) const fn new(
         runtime: ControllerTaskRuntime<'runtime, X>,
         task: TaskResources<M>,
-        time_scale: oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
+        time_scale: oer_chips_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
         standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-        config: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
+        config: oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
     ) -> Self {
         Self {
             runtime,
@@ -310,14 +311,14 @@ impl<'runtime, X: SignalExecutor, M: ControllerMemory>
     /// Scheduler time scale retained by this exact powered Controller epoch.
     pub const fn controller_time_scale(
         &self,
-    ) -> oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale {
+    ) -> oer_chips_esp32s31_hal::bluetooth::BluetoothControllerTimeScale {
         self.time_scale
     }
 
     /// Source-owned scheduler policy retained by this powered epoch.
     pub const fn scheduler_config(
         &self,
-    ) -> oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig {
+    ) -> oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig {
         self.config
     }
 
@@ -420,11 +421,11 @@ mod scheduler;
 mod tests;
 
 #[cfg(test)]
-impl ControllerEventCells<oer_espressif_interrupt_table::signal::host::Deferred> {
+impl ControllerEventCells<oer_chips_family_interrupt_table::signal::host::Deferred> {
     /// Cells over fresh host signals whose facts wait for the take, as
     /// they wait for an executor the interrupt preempted.
     pub(crate) fn host() -> Self {
-        use oer_espressif_interrupt_table::signal::host::deferred_signal;
+        use oer_chips_family_interrupt_table::signal::host::deferred_signal;
         Self::new(deferred_signal().0, deferred_signal().0)
     }
 }

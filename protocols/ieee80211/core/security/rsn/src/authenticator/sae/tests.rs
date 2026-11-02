@@ -7,8 +7,8 @@
 
 use super::*;
 
-use oer_ieee80211_wire::sae::anti_clogging_token;
-use oer_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::sae::anti_clogging_token;
+use oer_protocols_ieee80211_wire::status::status_code;
 
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -102,7 +102,7 @@ fn exchange(h2e: bool) {
 
     let output = access_point.receive(
         frame(STATION, 1, station.status(), &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -115,7 +115,7 @@ fn exchange(h2e: bool) {
     let confirm = keys.own_confirm(1);
     let output = access_point.receive(
         frame(STATION, 2, 0, &confirm),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -131,7 +131,7 @@ fn exchange(h2e: bool) {
     // A repeated Confirm is ignored but the stored Confirm is sent again.
     let output = access_point.receive(
         frame(STATION, 2, 0, &confirm),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -157,7 +157,7 @@ fn a_wrong_password_fails_the_confirm() {
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -166,7 +166,7 @@ fn a_wrong_password_fails_the_confirm() {
 
     let output = access_point.receive(
         frame(STATION, 2, 0, &keys.own_confirm(1)),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -188,7 +188,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
         let (commit, len) = station.commit_body(None);
         let output = access_point.receive(
             frame(peer, 1, 0, &commit[..len]),
-            oer_time::Instant::from_micros(0),
+            oer_portable_time::Instant::from_micros(0),
             0,
             &mut random,
         );
@@ -199,7 +199,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -211,7 +211,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
     let (commit, len) = station.commit_body(Some(token));
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -220,7 +220,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
     // A token is valid once.
     let output = access_point.receive(
         frame([2, 0, 0, 0, 0, 5], 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -240,7 +240,7 @@ fn queued_commits_count_toward_anti_clogging() {
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, status_code::SAE_HASH_TO_ELEMENT, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         2,
         &mut Counter(1),
     );
@@ -257,7 +257,7 @@ fn a_commit_of_another_group_is_refused_with_its_group() {
     commit[0] = 20;
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut Counter(2),
     );
@@ -280,7 +280,7 @@ fn a_reflected_commit_is_dropped() {
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -288,7 +288,7 @@ fn a_reflected_commit_is_dropped() {
 
     let output = access_point.receive(
         frame(STATION, 1, 0, reflected.body()),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -303,7 +303,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
         let peer = [2, 0, 0, 0, 1, index];
         access_point.receive(
             frame(peer, 1, 7, &[]),
-            oer_time::Instant::from_micros(0),
+            oer_portable_time::Instant::from_micros(0),
             0,
             &mut random,
         );
@@ -312,7 +312,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -321,7 +321,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
     access_point.forget([2, 0, 0, 0, 1, 0]);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -336,7 +336,7 @@ fn maximal_queued_commit_count_still_requests_an_anti_clogging_token() {
     let (commit, len) = station.commit_body(None);
     access_point.receive(
         frame(STATION, 1, station.status(), &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         0,
         &mut random,
     );
@@ -344,7 +344,7 @@ fn maximal_queued_commit_count_still_requests_an_anti_clogging_token() {
     let other = [2, 0, 0, 0, 0, 3];
     let output = access_point.receive(
         frame(other, 1, station.status(), &commit[..len]),
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         usize::MAX,
         &mut random,
     );

@@ -91,7 +91,7 @@ fn complete_i2c_control(action: PhyBluetoothTxPowerAction) -> PhyBluetoothTxPowe
     let PhyBluetoothTxPowerAction::I2cControl(operation) = action else {
         panic!("expected I2C action, got {action:?}");
     };
-    use oer_esp32s31_hal::phy::i2c::{
+    use oer_chips_esp32s31_hal::phy::i2c::{
         BluetoothTxPowerControlCompletion as Completion,
         BluetoothTxPowerControlOperation as Operation,
     };
@@ -208,7 +208,7 @@ fn bluetooth_prepare_failure_restores_pac_owned_i2c_control_before_terminal_fail
     assert!(matches!(
         transition.action(),
         PhyBluetoothTxPowerAction::I2cControl(
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::Restore
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::Restore
         )
     ));
 }

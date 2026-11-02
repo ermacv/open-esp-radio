@@ -20,14 +20,14 @@
 //! Subframes are named by their position in the first aggregate (bit `i`
 //! of a mask is subframe `i`); a retry compacts the aggregate to the
 //! selected subframes, so the helpers here ([`unacknowledged`],
-//! [`compact`], [`oer_ieee80211_wire::frame::set_retry_bit`]) work on those masks and on the encoded
+//! [`compact`], [`oer_protocols_ieee80211_wire::frame::set_retry_bit`]) work on those masks and on the encoded
 //! MPDUs.
 
 use crate::sequence::SequenceSpace;
 
-use oer_ieee80211_contracts_port::BlockAckReport;
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_contracts_port::BlockAckReport;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// Subframes one A-MPDU exchange tracks: the width of a 64-bit BlockAck
 /// bitmap.

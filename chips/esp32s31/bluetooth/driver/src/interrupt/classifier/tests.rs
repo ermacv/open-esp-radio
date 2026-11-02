@@ -1,4 +1,4 @@
-use oer_esp32s31_hal::bluetooth::BluetoothPrimaryInterruptEpoch;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothPrimaryInterruptEpoch;
 
 use super::{
     BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,

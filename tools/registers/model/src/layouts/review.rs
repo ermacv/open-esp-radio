@@ -1,6 +1,6 @@
 //! Per-layout review templates, resolved before the existing review checks.
 
-use oer_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
+use oer_tools_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
 use serde::Deserialize;
 
 use crate::review_defaults::ReviewMetadata;

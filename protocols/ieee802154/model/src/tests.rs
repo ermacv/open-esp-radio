@@ -1,5 +1,5 @@
 use core::cell::RefCell;
-use oer_radio_port::PermitPool;
+use oer_protocols_radio_port::PermitPool;
 mod failures;
 use alloc::{sync::Arc, task::Wake};
 use core::{
@@ -9,13 +9,13 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use oer_radio_port::EventsLost;
-use oer_radio_port::{
+use oer_protocols_radio_port::EventsLost;
+use oer_protocols_radio_port::{
     Ended, LocalExecution, LocalId, Owner, PortBody, PortPhase, run_port, with_local_slot,
 };
 
 use super::*;
-use oer_ieee802154_port::owner::{Ieee802154Clients, Transmission};
+use oer_protocols_ieee802154_port::owner::{Ieee802154Clients, Transmission};
 
 /// Poll `future` once with a waker that does nothing.
 fn poll_once<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
@@ -40,12 +40,13 @@ const DATA: [u8; 9] = [0x61, 0x88, 0x01, 0xcd, 0xab, 0x02, 0x00, 0x01, 0x00];
 
 fn transmission<'f>(frame: &'f [u8]) -> SupportedTransmit<'f, ModelCaps> {
     SupportedTransmit::new(Transmission {
-        frame: oer_ieee802154_wire::FrameView::new(frame).unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_protocols_ieee802154_wire::FrameView::new(frame)
+            .unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
-        mode: oer_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
+        mode: oer_protocols_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
         power: None,
         max_frame_retries: 3,
-        security: oer_ieee802154_port::TxSecurity::Radio,
+        security: oer_protocols_ieee802154_port::TxSecurity::Radio,
         time_sync: None,
     })
     .unwrap_or_else(|_| panic!("the model performs every transmission"))
@@ -62,13 +63,16 @@ where
         HANDLE.with(|cell| *cell.borrow_mut() = Some(handle.clone()));
         let end = LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (&mut slot).register(model).ok().expect("fresh local model"),
                 ),
                 async |frontend| run_port(frontend, body).await,
             )
             .await;
-        assert!(matches!(end, oer_radio_port::PortEnd::Uninstalled { .. }));
+        assert!(matches!(
+            end,
+            oer_protocols_radio_port::PortEnd::Uninstalled { .. }
+        ));
         assert!(!handle.abandoned());
         drop(end);
         slot.end_model_world();
@@ -85,7 +89,7 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -103,10 +107,10 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
                 let client = parts.clients.client(&mut configured);
                 let permit = ready(client.operation(&mut seat));
                 let token = client.transmit(permit, transmission(&DATA)).unwrap();
-                end = oer_radio_port::EventEnd::Quarantined {
+                end = oer_protocols_radio_port::EventEnd::Quarantined {
                     cause: ModelFault::Completion(
-                        oer_ieee802154_port::owner::CompletionError::Mismatch(
-                            oer_ieee802154_port::owner::CompletionMismatch {
+                        oer_protocols_ieee802154_port::owner::CompletionError::Mismatch(
+                            oer_protocols_ieee802154_port::owner::CompletionMismatch {
                                 received: RequestId::new(u32::MAX),
                                 held: Some((Interface::new(0), token.id())),
                             },
@@ -145,18 +149,18 @@ fn accounting_quarantine_does_not_prevent_a_confirmed_hardware_stop() {
         let (model, handle) = OwnedModel::new();
         let end = LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (&mut slot).register(model).ok().expect("fresh model slot"),
                 ),
                 async |frontend| run_port(frontend, Body(handle.clone())).await,
             )
             .await;
-        let oer_radio_port::PortEnd::FailStopped { ref outcome, .. } = end else {
+        let oer_protocols_radio_port::PortEnd::FailStopped { ref outcome, .. } = end else {
             panic!("requested fail-stop")
         };
         assert!(matches!(
             outcome.outcome(),
-            oer_radio_port::Abandon::Stopped(_)
+            oer_protocols_radio_port::Abandon::Stopped(_)
         ));
         let owners = Rc::strong_count(&handle.0);
         assert!(owners > 1, "the caller slot retains the model owner");
@@ -181,7 +185,7 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
         type Output = ();
         async fn run<'a, 'p>(
             self,
-            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'p, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -220,7 +224,7 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
         let (backend, handle) = OwnedModel::new();
         let result = LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (&mut slot).register(backend).ok().expect("fresh slot"),
                 ),
                 async |frontend| run_port(frontend, Body(handle.clone())).await,
@@ -228,7 +232,7 @@ fn an_undelivered_admitted_permit_cannot_become_joined_hardware() {
             .await;
         assert!(matches!(
             result,
-            oer_radio_port::PortEnd::FailStopped { .. }
+            oer_protocols_radio_port::PortEnd::FailStopped { .. }
         ));
         assert!(handle.abandoned());
         assert_eq!(
@@ -251,7 +255,7 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
         type Output = ();
         async fn run<'a, 'p>(
             self,
-            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'p, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -283,7 +287,7 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
         let (backend, handle) = OwnedModel::new();
         let first = LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (&mut slot).register(backend).ok().expect("fresh model"),
                 ),
                 async |frontend| {
@@ -298,7 +302,7 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
                 },
             )
             .await;
-        let oer_radio_port::PortEnd::Uninstalled { joined, .. } = first else {
+        let oer_protocols_radio_port::PortEnd::Uninstalled { joined, .. } = first else {
             panic!("joined")
         };
         assert!(
@@ -309,7 +313,7 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
             "ended world remains inspectable"
         );
         let second = LocalExecution.scope(
-            oer_radio_port::conformance::registration::guarded(
+            oer_protocols_radio_port::conformance::registration::guarded(
                 (&mut slot)
                     .reinstall(joined, OwnedModel::resume)
                     .ok()
@@ -335,7 +339,7 @@ fn a_joined_local_model_reinstalls_with_fresh_configuration_on_p2() {
         );
         assert!(matches!(
             second.await,
-            oer_radio_port::PortEnd::Uninstalled { .. }
+            oer_protocols_radio_port::PortEnd::Uninstalled { .. }
         ));
         assert!(!handle.abandoned());
         slot.end_model_world();
@@ -350,7 +354,7 @@ fn the_operation_permit_comes_back_before_its_terminal_is_handed_out() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -405,7 +409,7 @@ fn the_operation_permit_comes_back_before_its_terminal_is_handed_out() {
                 .disable(None, &mut |_| panic!("nothing is left"))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -433,7 +437,7 @@ fn takers_of_the_operation_are_served_in_arrival_order_across_interfaces() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -474,7 +478,7 @@ fn takers_of_the_operation_are_served_in_arrival_order_across_interfaces() {
                 .disable(None, &mut |_| panic!("nothing is left"))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -488,7 +492,7 @@ fn disable_hands_leftover_terminals_to_the_sink_and_takes_their_permits_back() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -536,7 +540,7 @@ fn disable_hands_leftover_terminals_to_the_sink_and_takes_their_permits_back() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -549,7 +553,7 @@ fn rejected_disable_terminal_and_later_events_remain_in_the_uninstalled_model() 
         type Output = ();
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -615,7 +619,7 @@ fn the_radio_receives_while_any_interface_asks_on_one_shared_channel() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -653,7 +657,7 @@ fn the_radio_receives_while_any_interface_asks_on_one_shared_channel() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -667,7 +671,7 @@ fn a_window_is_a_wish_that_owes_no_event() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -725,7 +729,7 @@ fn a_window_is_a_wish_that_owes_no_event() {
                 .disable(None, &mut |_| panic!("no window owes a terminal"))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -739,7 +743,7 @@ fn a_cancel_ends_the_operation_once() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -781,7 +785,7 @@ fn a_cancel_ends_the_operation_once() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -795,7 +799,7 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -827,7 +831,7 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
                 ));
                 assert!(matches!(
                     ready(events.next_event()),
-                    Err(oer_radio_port::EventEnd::Drained {
+                    Err(oer_protocols_radio_port::EventEnd::Drained {
                         cause: ModelFault::Injected
                     })
                 ));
@@ -839,7 +843,7 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
                 );
                 assert!(matches!(
                     ready(events.next_event()),
-                    Err(oer_radio_port::EventEnd::Drained {
+                    Err(oer_protocols_radio_port::EventEnd::Drained {
                         cause: ModelFault::Injected
                     })
                 ));
@@ -854,9 +858,11 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
                 .await
             {
                 Ok(_) => panic!("a poisoned backend does not disable"),
-                Err(oer_radio_port::DisableFailed::Expired(_)) => panic!("no stop deadline"),
-                Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) => {
-                    oer_radio_port::Ended::uninstall(poisoned, (), ())
+                Err(oer_protocols_radio_port::DisableFailed::Expired(_)) => {
+                    panic!("no stop deadline")
+                }
+                Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) => {
+                    oer_protocols_radio_port::Ended::uninstall(poisoned, (), ())
                 }
             }
         }
@@ -872,7 +878,7 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -967,7 +973,7 @@ fn a_reception_overflow_is_reported_once_and_loses_no_terminal() {
                 .unwrap_or_else(|_| panic!("not poisoned"));
             assert_eq!(ended.len(), 1);
             assert!(ended[0].is_some());
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -981,7 +987,7 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1068,7 +1074,7 @@ fn pending_entries_hold_their_interface_slots_across_phases() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -1082,7 +1088,7 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1161,7 +1167,7 @@ fn settings_reach_the_radio_while_disabled_and_while_enabled() {
                     .expect("valid interface")
                     .configured
             );
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -1175,7 +1181,7 @@ fn interface_settings_replace_latest_values_during_work_without_changing_its_sec
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1193,15 +1199,15 @@ fn interface_settings_replace_latest_values_during_work_without_changing_its_sec
                 let mut phase = owner.phase();
                 let parts = &mut *phase;
                 let client = parts.clients.client(&mut zero);
-                let original = oer_ieee802154_port::TxSecurity::Key {
+                let original = oer_protocols_ieee802154_port::TxSecurity::Key {
                     key: [3; 16],
                     address: [4; 8],
                 };
                 let request = SupportedTransmit::new(Transmission {
                     security: original,
-                    frame: oer_ieee802154_wire::FrameView::new(&DATA).expect("MAC frame"),
+                    frame: oer_protocols_ieee802154_wire::FrameView::new(&DATA).expect("MAC frame"),
                     channel: channel(15),
-                    mode: oer_ieee802154_port::TxMode::Direct,
+                    mode: oer_protocols_ieee802154_port::TxMode::Direct,
                     power: None,
                     max_frame_retries: 0,
                     time_sync: None,
@@ -1244,7 +1250,7 @@ fn interface_settings_replace_latest_values_during_work_without_changing_its_sec
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("disabled"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -1258,7 +1264,7 @@ fn a_refused_enable_returns_the_disabled_owner() {
 
         async fn run<'p, 'id>(
             self,
-            owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             _: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1268,8 +1274,8 @@ fn a_refused_enable_returns_the_disabled_owner() {
         {
             parts_handle().refuse_enable(true);
             match owner.enable().await {
-                Err(oer_radio_port::Failed::Refused(owner, ModelRefusal)) => {
-                    oer_radio_port::Ended::uninstall(owner, (), ())
+                Err(oer_protocols_radio_port::Failed::Refused(owner, ModelRefusal)) => {
+                    oer_protocols_radio_port::Ended::uninstall(owner, (), ())
                 }
                 _ => panic!("the radio refused"),
             }
@@ -1298,12 +1304,13 @@ fn validated_values_check_the_capabilities() {
     assert!(SupportedEnergyScan::<Plain>::new(channel(11), 1).is_none());
     assert!(SupportedCca::<Plain>::new(channel(11)).is_none());
     let refused = SupportedTransmit::<Plain>::new(Transmission {
-        frame: oer_ieee802154_wire::FrameView::new(&DATA).unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_protocols_ieee802154_wire::FrameView::new(&DATA)
+            .unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
-        mode: oer_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
+        mode: oer_protocols_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
         power: None,
         max_frame_retries: 3,
-        security: oer_ieee802154_port::TxSecurity::Radio,
+        security: oer_protocols_ieee802154_port::TxSecurity::Radio,
         time_sync: None,
     });
     let Err((_, missing)) = refused else {
@@ -1324,18 +1331,18 @@ fn validated_values_check_the_capabilities() {
         };
     }
     let refused = SupportedTransmit::<Scheduler>::new(Transmission {
-        frame: oer_ieee802154_wire::FrameView::new(&[
+        frame: oer_protocols_ieee802154_wire::FrameView::new(&[
             0x41, 0x88, 0x01, 0xcd, 0xab, 0xff, 0xff, 0x01, 0x00,
         ])
         .unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
-        mode: oer_ieee802154_port::TxMode::Scheduled {
+        mode: oer_protocols_ieee802154_port::TxMode::Scheduled {
             at: Ieee802154Instant::from_micros(10),
             cca: true,
         },
         power: None,
         max_frame_retries: 0,
-        security: oer_ieee802154_port::TxSecurity::Radio,
+        security: oer_protocols_ieee802154_port::TxSecurity::Radio,
         time_sync: None,
     });
     let Err((_, missing)) = refused else {
@@ -1346,17 +1353,21 @@ fn validated_values_check_the_capabilities() {
 
 #[test]
 fn the_operation_pool_serves_takers_in_arrival_order() {
-    ready(oer_radio_port::branded::<
-        oer_radio_port::Permits<Operation, 1, 3>,
+    ready(oer_protocols_radio_port::branded::<
+        oer_protocols_radio_port::Permits<Operation, 1, 3>,
         _,
     >(async |mint| {
-        let oer_radio_port::PermitTokens {
+        let oer_protocols_radio_port::PermitTokens {
             supply,
             line,
             mut seats,
         } = mint.into_pools();
-        let pool = oer_radio_port::FifoPermitPool::new(supply, line);
-        oer_radio_port::conformance::permits_serve_takers_in_arrival_order(&pool, &mut seats, []);
+        let pool = oer_protocols_radio_port::FifoPermitPool::new(supply, line);
+        oer_protocols_radio_port::conformance::permits_serve_takers_in_arrival_order(
+            &pool,
+            &mut seats,
+            [],
+        );
     }));
 }
 
@@ -1377,7 +1388,7 @@ fn a_change_of_wish_wakes_waiting_receives_and_a_window_preempts() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1438,7 +1449,7 @@ fn a_change_of_wish_wakes_waiting_receives_and_a_window_preempts() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -1452,7 +1463,7 @@ fn interfaces_moving_to_one_channel_admit_each_other() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1483,7 +1494,7 @@ fn interfaces_moving_to_one_channel_admit_each_other() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -1497,7 +1508,7 @@ fn removing_an_interface_keeps_its_pending_entries() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1558,7 +1569,7 @@ fn removing_an_interface_keeps_its_pending_entries() {
                 .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);
@@ -1566,11 +1577,13 @@ fn removing_an_interface_keeps_its_pending_entries() {
 
 #[test]
 fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
-    use oer_ieee802154_port::owner::{Operation, OperationPermits};
-    use oer_radio_port::{Permits, branded};
+    use oer_protocols_ieee802154_port::owner::{Operation, OperationPermits};
+    use oer_protocols_radio_port::{Permits, branded};
     ready(branded::<Permits<Operation, 1, 2>, _>(async |mint| {
-        let (permits, [mut first, mut second]) =
-            OperationPermits::new(mint.into_pools(), oer_radio_port::FifoPermitPool::new);
+        let (permits, [mut first, mut second]) = OperationPermits::new(
+            mint.into_pools(),
+            oer_protocols_radio_port::FifoPermitPool::new,
+        );
         let token = ready(permits.pool().take(&mut first));
         drop(permits.guard(token));
         let token = ready(permits.pool().take(&mut second));
@@ -1590,7 +1603,9 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
             );
         }
         let mismatch = match permits.complete(RequestId::new(42)) {
-            Err(oer_ieee802154_port::owner::CompletionError::Mismatch(mismatch)) => mismatch,
+            Err(oer_protocols_ieee802154_port::owner::CompletionError::Mismatch(mismatch)) => {
+                mismatch
+            }
             _ => panic!("another terminal cannot release the held operation"),
         };
         assert_eq!(mismatch.held, Some((Interface::new(1), id)));
@@ -1612,7 +1627,7 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
 
         async fn run<'p, 'id>(
             self,
-            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'p, 'id, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'id, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -1690,7 +1705,7 @@ fn a_running_phase_configures_sets_and_removes_an_interface() {
                 .await
                 .unwrap_or_else(|_| panic!("not poisoned"));
             let _slot = owner.setup().remove(one);
-            oer_radio_port::Ended::uninstall(owner, (), ())
+            oer_protocols_radio_port::Ended::uninstall(owner, (), ())
         }
     }
     run(Body);

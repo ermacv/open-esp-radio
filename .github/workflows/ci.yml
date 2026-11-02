@@ -56,20 +56,20 @@ jobs:
           exit "$status"
       - name: Tests
         # The default members: every package but the chip-only firmware ones.
-        # This includes host tests of chips/espressif/interrupt-table.
+        # This includes host tests of chips/family/interrupt-table.
         run: cargo test --locked
       - name: Tests in the feature sets the workspace run does not build
         run: |
           # The workspace run unifies features: sta and the S31 driver are built
           # with test-support. This list records the other sets.
-          cargo test --locked -p oer-esp32s31-phy --features radio-health
-          cargo clippy --locked -p oer-esp32s31-phy --features radio-health --all-targets
-          cargo test --locked -p oer-ieee80211-core-roles-sta
-          cargo test --locked -p oer-esp32s31-ieee80211-driver
-          cargo test --locked -p oer-time --features serde
-          cargo test --locked -p oer-time --features schema
-          cargo test --locked -p oer-espressif-executor --features port-slots --lib --test slots
-          cargo clippy --locked -p oer-espressif-executor --features port-slots --all-targets
+          cargo test --locked -p oer-chips-esp32s31-phy --features radio-health
+          cargo clippy --locked -p oer-chips-esp32s31-phy --features radio-health --all-targets
+          cargo test --locked -p oer-protocols-ieee80211-core-roles-sta
+          cargo test --locked -p oer-chips-esp32s31-ieee80211-driver
+          cargo test --locked -p oer-portable-time --features serde
+          cargo test --locked -p oer-portable-time --features schema
+          cargo test --locked -p oer-chips-family-executor --features port-slots --lib --test slots
+          cargo clippy --locked -p oer-chips-family-executor --features port-slots --all-targets
       - name: Tests under each instrumentation cfg
         # The default members whose sources hold code under an
         # instrumentation class's cfg, tested once with it, each cfg in a
@@ -102,7 +102,7 @@ jobs:
         # Every library of protocols/, portable/ and chips/ builds for the chip;
         # the platform packages (the boards and the staged runtime and
         # bootstrap) are checked with the images.
-        # chips/espressif/interrupt-table is included by the chips/ selection.
+        # chips/family/interrupt-table is included by the chips/ selection.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
@@ -118,7 +118,7 @@ jobs:
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/hil-scenarios/images/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -135,12 +135,14 @@ jobs:
           # The crates that declare tasks take `type_alias_impl_trait`
           # through RUSTC_BOOTSTRAP in .cargo/config.toml; SDK images declare
           # none.
-          cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware)
+          # The image pipeline selects the chip of the application entry; a
+          # type-check names it here.
+          cargo clippy --locked --target riscv32imafc-unknown-none-elf --features oer/esp32s31 $(firmware)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.
           while read -r package target cfgs; do
             RUSTFLAGS="$cfgs" CARGO_TARGET_DIR="target/instrumented/$package" \
-              cargo clippy --locked --target "$target" -p "$package"
+              cargo clippy --locked --target "$target" -p "$package" --features oer/esp32s31
           done < <(instrumented)
       - name: Firmware packages for the chip target
         run: |
@@ -152,24 +154,24 @@ jobs:
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/hil-scenarios/images/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
-          cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware)
+          cargo check --locked --target riscv32imafc-unknown-none-elf --features oer/esp32s31 $(firmware)
       - name: Image build
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |
-          cargo fw build boot-smoke
-          cargo fw build radio-root
+          cargo fw build esp32s31-boot-smoke
+          cargo fw build esp32s31-radio-root
           cargo fw build wifi-station
-          OER_WIFI_STATION_PROFILE="$PWD/firmware/apps/wifi-station/profiles/open-ci.toml" \
+          OER_WIFI_STATION_PROFILE="$PWD/examples/wifi-station/profiles/open-ci.toml" \
             cargo fw build wifi-station --features station
       - name: HIL image builds
         # Every image the HIL scenarios share, with the linked image's checks.
         run: |
-          for image in hil-scenarios/images/*/; do
-            cargo fw build "$(basename "$image")"
+          for image in hil/images/*/; do
+            cargo fw build "hil-$(basename "$image")"
           done
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.
@@ -177,7 +179,7 @@ jobs:
         run: |
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           packages=$(jq -r '.packages[]
-            | select(.manifest_path | contains("/firmware/probes/"))
+            | select(.manifest_path | contains("/hil/probes/"))
             | .name' <<<"$meta")
           while read -r package; do
             cargo fw probe "$package"

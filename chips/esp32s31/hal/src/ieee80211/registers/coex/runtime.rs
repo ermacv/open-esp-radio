@@ -44,7 +44,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn clear_rx_beacon_pti(&mut self) {
         self.mac.wifi_mac_coex_runtime.modify_clear_request(|w| {
             let requests = w.bits_0_31_opaque()
-                | oer_esp32s31_pac::modem_pwr::clear_request::Bits0_31Opaque::RxBeacon.bits();
+                | oer_chips_esp32s31_pac::modem_pwr::clear_request::Bits0_31Opaque::RxBeacon.bits();
             w.set_bits_0_31_opaque(requests);
         });
     }

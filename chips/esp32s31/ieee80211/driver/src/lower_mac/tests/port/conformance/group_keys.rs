@@ -2,11 +2,11 @@
 //! station GTK mutation is drained by disable, whether its hardware change
 //! is still held behind the receive cut or already applied.
 use super::*;
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_testing_conformance::group_keys::{
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_testing_conformance::group_keys::{
     Completion, Mutation, Owners, ProgressCase, ProgressTrace, Timing, verify_progress,
 };
-use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
+use oer_protocols_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
 
 type GroupTrace = ProgressTrace<Vec<Completion>, Vec<Owners>>;
 
@@ -261,7 +261,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for PublishedBody {
             };
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
-            let published = oer_ieee80211_testing_conformance::group_keys::TxOwners {
+            let published = oer_protocols_ieee80211_testing_conformance::group_keys::TxOwners {
                 ticket: ticket.index(),
                 buffer: usize::from(buffer.index()),
             };
@@ -300,7 +300,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for PublishedBody {
                             AnyBuffer::Sent(sent) => sent.index(),
                         };
                         events.push(Completion::Transmit(
-                            oer_ieee80211_testing_conformance::group_keys::TxOwners {
+                            oer_protocols_ieee80211_testing_conformance::group_keys::TxOwners {
                                 ticket: returned.ticket.index(),
                                 buffer: usize::from(index),
                             },
@@ -658,7 +658,7 @@ fn a_rejected_gtk_replacement_restores_the_old_entry_and_quarantines_its_owners(
     let (admitted, admitted_at) = admitted.get().expect("the replacement was admitted");
     let trace = ProgressTrace {
         rollback: rolled_back.map(|(previous_key_id, attempted_key_id, restored)| {
-            oer_ieee80211_testing_conformance::group_keys::Rollback {
+            oer_protocols_ieee80211_testing_conformance::group_keys::Rollback {
                 previous_key_id,
                 attempted_key_id,
                 restored,
@@ -706,13 +706,15 @@ fn labelled(material: u8, released: &super::super::Released) -> TestReceive {
 /// The S31 station keeps one physical GTK slot, so InstallBeside and
 /// SelectRetained, which need a second installation, do not apply.
 struct CutBody {
-    case: oer_ieee80211_testing_conformance::group_keys::Case,
+    case: oer_protocols_ieee80211_testing_conformance::group_keys::Case,
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
     released: super::super::Released,
-    seen: Rc<RefCell<Option<oer_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>>,
+    seen: Rc<
+        RefCell<Option<oer_protocols_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>,
+    >,
 }
-use oer_ieee80211_testing_conformance::group_keys::{Event, Installation};
+use oer_protocols_ieee80211_testing_conformance::group_keys::{Event, Installation};
 
 /// The protocol-owned replay frontier the harness keeps per installation.
 const FRONTIER: u64 = 7;
@@ -729,7 +731,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
         Id: 'id,
         'id: 'p,
     {
-        use oer_ieee80211_testing_conformance::group_keys::Case;
+        use oer_protocols_ieee80211_testing_conformance::group_keys::Case;
         let Ok(mut owner) = owner.enable().await else {
             panic!("enable")
         };
@@ -871,18 +873,20 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
                     _ => panic!("an unexpected cut event"),
                 }
             }
-            *self.seen.borrow_mut() = Some(oer_ieee80211_testing_conformance::group_keys::Trace {
-                original,
-                submitted_slot: original.slot,
-                timing: Timing {
-                    admitted_at,
-                    completed_at,
+            *self.seen.borrow_mut() = Some(
+                oer_protocols_ieee80211_testing_conformance::group_keys::Trace {
+                    original,
+                    submitted_slot: original.slot,
+                    timing: Timing {
+                        admitted_at,
+                        completed_at,
+                    },
+                    events,
+                    writes: self.observed.borrow().key_writes - writes,
+                    inactive_material_accepted: inactive_accepted,
+                    continuous_rx_at_terminal: continuous,
                 },
-                events,
-                writes: self.observed.borrow().key_writes - writes,
-                inactive_material_accepted: inactive_accepted,
-                continuous_rx_at_terminal: continuous,
-            });
+            );
         }
         let Ok(owner) = owner
             .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
@@ -896,7 +900,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
 
 #[test]
 fn the_s31_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
-    use oer_ieee80211_testing_conformance::group_keys::{Case, verify};
+    use oer_protocols_ieee80211_testing_conformance::group_keys::{Case, verify};
     for case in [Case::Replace, Case::SelectCurrent] {
         let (parts, observed, timer) = installed(Vec::new());
         let seen = Rc::new(RefCell::new(None));

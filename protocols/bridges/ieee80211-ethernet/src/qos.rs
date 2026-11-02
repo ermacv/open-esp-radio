@@ -7,10 +7,10 @@
 //! takes precedence over an encapsulated DSCP. The classifier never invents
 //! priority from transport ports or payload bytes.
 
-use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
-use oer_network_wire::ethernet::EtherType;
-use oer_network_wire::ip::{Dscp, Ipv4Header, Ipv6Header};
-use oer_network_wire::vlan::VlanTag;
+use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_protocols_network_wire::ethernet::EtherType;
+use oer_protocols_network_wire::ip::{Dscp, Ipv4Header, Ipv6Header};
+use oer_protocols_network_wire::vlan::VlanTag;
 
 /// Widely deployed default mapping based on the three DSCP MSBs.
 pub const fn default_user_priority(dscp: Dscp) -> WmmUserPriority {

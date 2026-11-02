@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use oer_os_process::lock::{FileLock, Mode};
+use oer_tools_os_process::lock::{FileLock, Mode};
 use std::fs::OpenOptions;
 
 // Keep this check in its own test process. Concurrent forks in other tests

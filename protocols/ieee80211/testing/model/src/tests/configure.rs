@@ -1,7 +1,7 @@
 use super::*;
 use interface_commands::{Case, Drain, Harness};
-use oer_ieee80211_contracts_port::InterfaceRole;
-use oer_ieee80211_testing_conformance::interface_commands::{self, Identity, Trace};
+use oer_protocols_ieee80211_contracts_port::InterfaceRole;
+use oer_protocols_ieee80211_testing_conformance::interface_commands::{self, Identity, Trace};
 type ConfigureTrace = Trace<Vec<Identity>>;
 
 struct Witness {
@@ -39,7 +39,7 @@ struct ConfigureAcrossDisable {
     drops: Rc<Cell<usize>>,
     trace: Rc<RefCell<Option<ConfigureTrace>>>,
 }
-fn record<'id, R: InterfaceRole, Path: oer_radio_port::PoolPath>(
+fn record<'id, R: InterfaceRole, Path: oer_protocols_radio_port::PoolPath>(
     permission: ConfigurePermission<'id, R, Path, Witness>,
     returned: &mut Vec<Identity>,
 ) -> ConfigurePermission<'id, R, Path, Witness> {
@@ -173,7 +173,7 @@ impl Harness for ModelConfigurationHarness {
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
-            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
         let trace = Rc::new(RefCell::new(None));
         let _port_end = run_model(
@@ -194,7 +194,7 @@ impl Harness for ModelConfigurationHarness {
 fn configure_conformance_preserves_fifo_context_ownership_and_reuse_across_disable() {
     block_on(interface_commands::check(
         &mut ModelConfigurationHarness,
-        oer_ieee80211_testing_conformance::Environment::Model,
+        oer_protocols_ieee80211_testing_conformance::Environment::Model,
     ))
     .expect("the model preserves configuration contexts through every disable point");
 }
@@ -302,7 +302,7 @@ enum Release {
     Watchdog,
 }
 struct ConfigureBarrier {
-    clock: Rc<oer_time_virtual::VirtualClock>,
+    clock: Rc<oer_portable_time_virtual::VirtualClock>,
     release: Release,
     ap_first: bool,
 }
@@ -422,7 +422,7 @@ impl Work for ConfigureBarrier {
 fn configure_waits_for_own_publication_preserves_ac_order_and_holds_later_fifo_commands() {
     for release in [Release::Ack, Release::Retry, Release::Watchdog] {
         for ap_first in [false, true] {
-            let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+            let clock = Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new());
             let _port_end = block_on(run_model(
                 backend_on(clock.clone()).0,
                 Body(ConfigureBarrier {

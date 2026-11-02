@@ -4,12 +4,12 @@
 extern crate std;
 
 use super::*;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, LowerMacCapabilities, PhyFormatSet,
     RateSupport, ReceiveFilter, RxMeta, WidthSet,
 };
-use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
+use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
     block_ack::frame::{encode_addba_request, encode_block_ack_request, parse_block_ack_action},
     frame::{FrameControl, MacHeader},
@@ -24,7 +24,7 @@ const GAP: Duration = Duration::from_micros(10_000);
 struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,

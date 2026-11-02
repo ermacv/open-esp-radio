@@ -1,7 +1,7 @@
 //! Messages of a test image's own services, as an image's dictionary
 //! declares them.
 
-use oer_hil_protocol::{Endpoint, Message, WireKind};
+use oer_protocols_hil_protocol::{Endpoint, Message, WireKind};
 use serde::{Deserialize, Serialize};
 
 /// How a probe request should behave.

@@ -1,17 +1,17 @@
 //! Owned master atoms and the legacy calibration bus binding.
-//! Serial-byte sequencing belongs to `oer_espressif_phy::serial`.
+//! Serial-byte sequencing belongs to `oer_chips_family_phy::serial`.
 #![forbid(unsafe_code)]
 use super::commands::{
     PHY_I2C_COMMAND_MEMORY_DYNAMIC_INDICES, PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT,
     PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cCommandMemoryInputs,
 };
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     analog_i2c::{Address, Host, Profile, Route},
     i2c_ana_mst::I2cAnaMst,
     i2c_ana_mst_mem::PhyI2cCommandRam,
 };
-use oer_espressif_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
-use oer_mmio::{Bits, Index, Placement};
+use oer_chips_family_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
+use oer_portable_mmio::{Bits, Index, Placement};
 
 /// Exclusive atom loan from the master owner.
 pub struct MasterPort<'a, P: Placement> {
@@ -46,7 +46,7 @@ impl<'a, P: Placement> MasterSample<'a, P> {
 /// Its fields are private so a route from a fake port cannot command this master.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::phy::i2c::{Address, Route, master::MasterAddress};
+/// use oer_chips_esp32s31_hal::phy::i2c::{Address, Route, master::MasterAddress};
 /// fn forge(address: Address, route: Route) -> MasterAddress {
 ///     MasterAddress { address, route }
 /// }
@@ -57,7 +57,7 @@ pub struct MasterAddress {
     route: Route,
 }
 fn route(address: Address) -> Option<MasterAddress> {
-    oer_esp32s31_pac::analog_i2c::route(Profile::LibphyNormal, address.block())
+    oer_chips_esp32s31_pac::analog_i2c::route(Profile::LibphyNormal, address.block())
         .map(|route| MasterAddress { address, route })
 }
 fn data<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> u8 {
@@ -114,8 +114,8 @@ impl<P: Placement> Port for MasterPort<'_, P> {
         );
     }
 }
-impl<P: Placement> oer_espressif_phy::i2c::PhyI2cParallelAccess for MasterPort<'_, P> {
-    type Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>;
+impl<P: Placement> oer_chips_family_phy::i2c::PhyI2cParallelAccess for MasterPort<'_, P> {
+    type Pair = oer_chips_family_phy::i2c::PhyI2cParallelWrite<Address>;
     fn is_busy(&self, host: Host) -> bool {
         is_busy(self.master, host)
     }
@@ -143,7 +143,7 @@ impl<P: Placement> oer_espressif_phy::i2c::PhyI2cParallelAccess for MasterPort<'
     }
 
     /// Start both writes of one parallel pair, host zero first.
-    fn start_pair(&mut self, pair: oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>) {
+    fn start_pair(&mut self, pair: oer_chips_family_phy::i2c::PhyI2cParallelWrite<Address>) {
         let (address, value) = pair.first;
         publish_command(
             self.master,
@@ -269,7 +269,7 @@ pub fn configure_master_registers<P: Placement>(master: &mut I2cAnaMst<P>) {
 ///
 /// SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C.
 pub fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, enabled: bool) {
-    use oer_esp32s31_pac::i2c_ana_mst::ana_conf0::BbpllCalMode;
+    use oer_chips_esp32s31_pac::i2c_ana_mst::ana_conf0::BbpllCalMode;
     let mode = if enabled {
         BbpllCalMode::Enabled
     } else {
@@ -316,30 +316,30 @@ impl<'a, P: Placement> ConfigurationBus<'a, P> {
         Self(AnalogBus::new(MasterPort::new(master)))
     }
 }
-impl<P: Placement> oer_espressif_analog::AnalogRegisterBus for ConfigurationBus<'_, P> {
+impl<P: Placement> oer_chips_family_analog::AnalogRegisterBus for ConfigurationBus<'_, P> {
     type Address = Address;
-    fn try_start_read(&mut self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
+    fn try_start_read(&mut self, address: Address) -> Result<(), oer_chips_family_analog::Busy> {
         self.0.try_start_read(address).map_err(port_busy)
     }
-    fn try_finish_read(&self, address: Address) -> Result<u8, oer_espressif_analog::Busy> {
+    fn try_finish_read(&self, address: Address) -> Result<u8, oer_chips_family_analog::Busy> {
         self.0.try_finish_read(address).map_err(port_busy)
     }
     fn try_start_write(
         &mut self,
         address: Address,
         value: u8,
-    ) -> Result<(), oer_espressif_analog::Busy> {
+    ) -> Result<(), oer_chips_family_analog::Busy> {
         self.0.try_start_write(address, value).map_err(port_busy)
     }
-    fn try_finish_write(&self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
+    fn try_finish_write(&self, address: Address) -> Result<(), oer_chips_family_analog::Busy> {
         self.0.try_finish_write(address).map_err(port_busy)
     }
 }
 /// The port's refusal of a busy host. Configuration operations use only
 /// routed addresses, so an unrouted one is a table defect.
-fn port_busy(error: PhyI2cAccessError) -> oer_espressif_analog::Busy {
+fn port_busy(error: PhyI2cAccessError) -> oer_chips_family_analog::Busy {
     match error {
-        PhyI2cAccessError::Busy => oer_espressif_analog::Busy,
+        PhyI2cAccessError::Busy => oer_chips_family_analog::Busy,
         PhyI2cAccessError::UnroutedAddress => {
             panic!("a configuration operation uses only admitted analog routes")
         }

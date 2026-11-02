@@ -327,7 +327,7 @@ fn six_artifact_installation() -> (tempfile::TempDir, Layout, Bundle) {
         source: old.source.clone(),
         artifacts: old.artifacts.clone(),
         runtime_contract: old.runtime_contract.clone(),
-        policy_sha256: oer_os_durable::sha256_bytes(&fs::read(policy).unwrap()),
+        policy_sha256: oer_tools_os_durable::sha256_bytes(&fs::read(policy).unwrap()),
         previous_generation: None,
         checks: vec![],
         state: InstallState::SoftwareVerified,
@@ -1172,10 +1172,10 @@ fn active_session_lock_refuses_upgrade_and_providers_are_independent() {
     let lock_path = root
         .path()
         .join("var/lib/open-radio/fixture/linux-net/session.lock");
-    let lock = oer_os_process::lock::FileLock::try_lock(
+    let lock = oer_tools_os_process::lock::FileLock::try_lock(
         File::open(&lock_path).unwrap(),
         &lock_path,
-        oer_os_process::lock::Mode::Shared,
+        oer_tools_os_process::lock::Mode::Shared,
     )
     .unwrap()
     .unwrap();
@@ -1195,14 +1195,14 @@ fn active_session_lock_refuses_upgrade_and_providers_are_independent() {
     drop(lock);
 
     let install_lock_path = root.path().join("var/lib/open-radio/fixture/install.lock");
-    let install_lock = oer_os_process::lock::FileLock::try_lock(
+    let install_lock = oer_tools_os_process::lock::FileLock::try_lock(
         OpenOptions::new()
             .read(true)
             .write(true)
             .open(&install_lock_path)
             .unwrap(),
         &install_lock_path,
-        oer_os_process::lock::Mode::Exclusive,
+        oer_tools_os_process::lock::Mode::Exclusive,
     )
     .unwrap()
     .unwrap();

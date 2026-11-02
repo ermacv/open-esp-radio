@@ -1,0 +1,55 @@
+[package]
+name = "oer-hil-probes-esp32s31-rx-chain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish.workspace = true
+description = "Bounded passive hardware observation of multi-buffer Wi-Fi RX descriptors"
+build = "build.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+heapless = "0.9.3"
+static_cell = { workspace = true }
+oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-chips-family-usb-serial-jtag.workspace = true
+embedded-io-async = "0.7.0"
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-trace = { path = "../../../portable/trace" }
+oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+oer-chips-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
+oer-chips-esp32s31-radio-system = { path = "../../../chips/esp32s31/radio/system" }
+oer-chips-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
+oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+
+[dev-dependencies]
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+
+[build-dependencies]
+oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+
+[package.metadata.open-radio.panic-budget]
+# Initial composition inventory: existing production/macro sites, no new
+# handwritten panic sites. This diagnostic image is not a panic-free product.
+runtime = { hal = 15, chips = 310, portable = 1, firmware = 23, unnamed = 5, hardware = 1 }
+bootstrap = { unnamed = 2 }

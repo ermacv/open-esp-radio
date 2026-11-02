@@ -22,7 +22,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_sync::PriorityWaker;
+use oer_portable_sync::PriorityWaker;
 
 /// The actual terminal of one admitted control request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

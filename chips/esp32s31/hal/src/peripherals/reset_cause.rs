@@ -1,10 +1,10 @@
 //! Why each HP core last left reset, from the LP always-on reset-cause
 //! words.
 
-pub use oer_esp32s31_knowledge::reset_cause::ResetCause;
-use oer_mmio::{Fixed, Placement};
+pub use oer_chips_esp32s31_knowledge::reset_cause::ResetCause;
+use oer_portable_mmio::{Fixed, Placement};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances, lp_aonclkrst::LpAonResetCause, ownership::ResetCausePeripherals,
 };
 
@@ -54,9 +54,9 @@ impl ResetCauses {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> ResetCauseRegisters<oer_mmio::Host<'a>> {
+impl<'a> ResetCauseRegisters<oer_portable_mmio::Host<'a>> {
     /// The reset-cause words over host memory from the instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         LpAonResetCause::host(words).map(Self)
     }
 }

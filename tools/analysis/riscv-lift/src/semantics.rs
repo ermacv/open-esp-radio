@@ -5,12 +5,12 @@ impl FunctionSemantics for RiscvDecoder {
         match decode_instruction(bytes)?.0 {
             Instruction::Extension(Extension::Csr {
                 csr: 0x340,
-                op: oer_analysis_riscv_decode::CsrOp::Write,
+                op: oer_tools_analysis_riscv_decode::CsrOp::Write,
                 dest: 0,
                 source,
             }) => Some(match source {
-                oer_analysis_riscv_decode::Operand::Register(r) => Operand::Register(r),
-                oer_analysis_riscv_decode::Operand::Immediate(v) => Operand::Immediate(v),
+                oer_tools_analysis_riscv_decode::Operand::Register(r) => Operand::Register(r),
+                oer_tools_analysis_riscv_decode::Operand::Immediate(v) => Operand::Immediate(v),
             }),
             _ => None,
         }
@@ -332,7 +332,7 @@ impl FunctionSemantics for RiscvDecoder {
                 width: 4,
                 dest: Some(dest.0),
                 source: Some(src.0),
-                swap: op == oer_analysis_riscv_decode::AmoOp::Swap,
+                swap: op == oer_tools_analysis_riscv_decode::AmoOp::Swap,
                 signed: false,
             },
             Inst::Beq { .. }
@@ -342,7 +342,7 @@ impl FunctionSemantics for RiscvDecoder {
             | Inst::Bltu { .. }
             | Inst::Bgeu { .. } => SemanticOp::None,
             Inst::Fence { fence } => {
-                let bits = |s: oer_analysis_riscv_decode::FenceSet| {
+                let bits = |s: oer_tools_analysis_riscv_decode::FenceSet| {
                     u8::from(s.device_input) * 8
                         + u8::from(s.device_output) * 4
                         + u8::from(s.memory_read) * 2
@@ -410,8 +410,8 @@ fn lift_extension(extension: Extension) -> SemanticOp {
             dest,
             left: Operand::Register(left),
             right: match right {
-                oer_analysis_riscv_decode::Operand::Register(r) => Operand::Register(r),
-                oer_analysis_riscv_decode::Operand::Immediate(v) => Operand::Immediate(v),
+                oer_tools_analysis_riscv_decode::Operand::Register(r) => Operand::Register(r),
+                oer_tools_analysis_riscv_decode::Operand::Immediate(v) => Operand::Immediate(v),
             },
         },
         Extension::Memory {
@@ -446,8 +446,8 @@ fn lift_extension(extension: Extension) -> SemanticOp {
 }
 
 /// The domain operation of a decoded extension operation.
-fn integer_op(op: oer_analysis_riscv_decode::ExtensionOp) -> IntegerOp {
-    use oer_analysis_riscv_decode::ExtensionOp as E;
+fn integer_op(op: oer_tools_analysis_riscv_decode::ExtensionOp) -> IntegerOp {
+    use oer_tools_analysis_riscv_decode::ExtensionOp as E;
     match op {
         E::And => IntegerOp::And,
         E::Xor => IntegerOp::Xor,
@@ -480,7 +480,7 @@ fn integer_op(op: oer_analysis_riscv_decode::ExtensionOp) -> IntegerOp {
 
 /// FP loads and stores address memory through an integer base; an
 /// operation's only integer effect is an integer destination.
-fn lift_float(float: oer_analysis_riscv_decode::Float) -> SemanticOp {
+fn lift_float(float: oer_tools_analysis_riscv_decode::Float) -> SemanticOp {
     let memory = |kind, base, displacement| SemanticOp::Memory {
         kind,
         base,
@@ -492,17 +492,21 @@ fn lift_float(float: oer_analysis_riscv_decode::Float) -> SemanticOp {
         signed: false,
     };
     match float {
-        oer_analysis_riscv_decode::Float::Load { base, offset, .. } => {
+        oer_tools_analysis_riscv_decode::Float::Load { base, offset, .. } => {
             memory(MemoryKind::FloatLoad, base, offset)
         }
-        oer_analysis_riscv_decode::Float::Store { base, offset, .. } => {
+        oer_tools_analysis_riscv_decode::Float::Store { base, offset, .. } => {
             memory(MemoryKind::FloatStore, base, offset)
         }
-        oer_analysis_riscv_decode::Float::Operation {
-            operands: [Some(oer_analysis_riscv_decode::Register::Integer(dest)), ..],
+        oer_tools_analysis_riscv_decode::Float::Operation {
+            operands:
+                [
+                    Some(oer_tools_analysis_riscv_decode::Register::Integer(dest)),
+                    ..,
+                ],
             ..
         } => SemanticOp::Opaque { dest },
-        oer_analysis_riscv_decode::Float::Operation { .. } => SemanticOp::None,
+        oer_tools_analysis_riscv_decode::Float::Operation { .. } => SemanticOp::None,
     }
 }
 

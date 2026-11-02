@@ -1,7 +1,7 @@
-# oer-bridges-ieee80211-ethernet
+# oer-protocols-bridges-ieee80211-ethernet
 
 The bridge between Ethernet II frames and IEEE 802.11 MSDUs. It depends on
-the two codecs only: `oer-network-wire` and `oer-ieee80211-wire`.
+the two codecs only: `oer-protocols-network-wire` and `oer-protocols-ieee80211-wire`.
 
 `qos::classify_wmm` takes a frame's EtherType and the payload after its
 header and returns the user priority the frame requests:

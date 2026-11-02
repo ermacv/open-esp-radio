@@ -1,4 +1,4 @@
-# oer-esp32s31-radio-client
+# oer-chips-esp32s31-radio-client
 
 The client contract of the ESP32-S31 radio system (docs/architecture.md,
 "Radio system"): what a protocol driver needs to be a member of the shared
@@ -7,7 +7,7 @@ PHY domain, without the actor itself.
 - `claim()` returns the actor's end and the clients' cells once per image.
   Each client has one `MembershipCell`; `join`, `track` and `leave` post
   synchronously and return a `Pending` future of the answer and the cell.
-- The cell is lock-free: it holds the `oer-memory` `RequestSlot`, a
+- The cell is lock-free: it holds the `oer-portable-memory` `RequestSlot`, a
   four-state CAS protocol with two atomic wakers (`docs/unsafe.md`); the
   crate forbids unsafe code.
 - `Member<K, Untracked | Tracked>` is the PHY membership typestate; only

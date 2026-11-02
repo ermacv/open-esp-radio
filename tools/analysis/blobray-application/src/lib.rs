@@ -7,9 +7,9 @@
 
 #![forbid(unsafe_code)]
 
-use oer_analysis_blobray_artifacts::{MemberCursor, inspect_source};
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_artifacts::{MemberCursor, inspect_source};
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 use std::path::Path;
 
 pub mod access_groups;
@@ -35,6 +35,6 @@ mod registers;
 pub mod symbols;
 
 pub use execution::EXECUTION_ENVIRONMENT;
-pub use oer_analysis_blobray_verification::VERIFIER as EXECUTION_VERIFIER;
+pub use oer_tools_analysis_blobray_verification::VERIFIER as EXECUTION_VERIFIER;
 
 pub mod signatures;

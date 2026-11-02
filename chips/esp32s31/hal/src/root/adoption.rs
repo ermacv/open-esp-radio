@@ -1,8 +1,8 @@
 //! Owned adapters of the family adoption driver. Startup order is not HAL policy.
 use super::*;
 use crate::{cores, power::PsramMpll};
-use oer_esp32s31_pac::ownership::{ChipClockPeripherals, DebugPeripherals};
-use oer_espressif_boot::adoption::{self, InitError, Port};
+use oer_chips_esp32s31_pac::ownership::{ChipClockPeripherals, DebugPeripherals};
+use oer_chips_family_boot::adoption::{self, InitError, Port};
 
 /// The HAL's adoption port over the root's unique parts.
 pub struct RuntimePort;

@@ -3,7 +3,7 @@
 use super::*;
 use atomic_words::AtomicWords;
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     channel::ChannelWidth,
     extensions::wmm::{WmmAcParameters, WmmParameterSet},
     qos::WmmAccessCategory,
@@ -129,9 +129,9 @@ impl EdcaSetting {
         let acs = core::array::from_fn(|index| {
             let bits = words[1 + index * 2];
             WmmAcParameters {
-                aifsn: oer_wire::U8::from_low_bits((bits & 15) as u8),
-                ecw_min: oer_wire::U8::from_low_bits(((bits >> 4) & 15) as u8),
-                ecw_max: oer_wire::U8::from_low_bits(((bits >> 8) & 15) as u8),
+                aifsn: oer_portable_wire::U8::from_low_bits((bits & 15) as u8),
+                ecw_min: oer_portable_wire::U8::from_low_bits(((bits >> 4) & 15) as u8),
+                ecw_max: oer_portable_wire::U8::from_low_bits(((bits >> 8) & 15) as u8),
                 admission_control_mandatory: bits & (1 << 12) != 0,
                 txop_limit_units_32_us: (bits >> 16) as u16,
             }
@@ -287,9 +287,11 @@ mod tests {
         let caps = Esp32s31Caps::<512>::CAPS;
         let records = core::array::from_fn(|index| WmmAcParameters {
             admission_control_mandatory: index & 1 != 0,
-            aifsn: oer_wire::U8::new(caps.edca_max_aifsn.saturating_sub(index as u8)).unwrap(),
-            ecw_min: oer_wire::U8::new((index as u8).min(caps.edca_max_cw_exponent)).unwrap(),
-            ecw_max: oer_wire::U8::new(caps.edca_max_cw_exponent).unwrap(),
+            aifsn: oer_portable_wire::U8::new(caps.edca_max_aifsn.saturating_sub(index as u8))
+                .unwrap(),
+            ecw_min: oer_portable_wire::U8::new((index as u8).min(caps.edca_max_cw_exponent))
+                .unwrap(),
+            ecw_max: oer_portable_wire::U8::new(caps.edca_max_cw_exponent).unwrap(),
             txop_limit_units_32_us: caps
                 .edca_max_txop_limit_units_32_us
                 .saturating_sub(index as u16),

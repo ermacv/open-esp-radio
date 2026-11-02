@@ -1,10 +1,10 @@
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::RadioDomain,
     ieee80211::client::{WifiClocked, WifiCold},
     owner::PhyInitializationAccess,
     root::RadioHardware,
 };
-use oer_time_virtual::VirtualClock;
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 use crate::concurrent::ConcurrentAcquire;
@@ -21,7 +21,7 @@ fn registered() -> (
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     {
@@ -72,7 +72,7 @@ fn an_unregistered_domain_admits_no_wifi_client() {
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
@@ -147,7 +147,7 @@ fn a_rejected_resume_returns_the_suspended_client() {
     ));
     // A backwards external clock is still a typed outcome and returns the
     // exact suspended permission, which can subsequently resume normally.
-    let backwards = VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
+    let backwards = VirtualClock::<8>::starting_at(oer_portable_time::Instant::EPOCH);
     let failure = resume_wifi_prepared(domain, clocked.clocks_on(), suspended, &backwards)
         .err()
         .unwrap_or_else(|| panic!("backwards clock rejects resume"));
@@ -164,12 +164,12 @@ fn a_rejected_resume_returns_the_suspended_client() {
 
 /// Join with a proof for the domain's registration.
 fn join_wifi_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+    radio: &mut oer_chips_esp32s31_hal::domain::RadioDomain<
         crate::test_clocks::TestClockBackend,
         crate::concurrent::ConcurrentPhy,
     >,
     clocked: &WifiClocked,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), ConcurrentPhyError> {
     let ready = match crate::concurrent::phy_ready(radio)?.client::<WifiPhyMembership>() {
         crate::concurrent::PhyClientAccess::Available(available) => available,
@@ -182,13 +182,13 @@ fn join_wifi_prepared(
 
 /// Resume with a proof for the domain's registration.
 fn resume_wifi_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+    radio: &mut oer_chips_esp32s31_hal::domain::RadioDomain<
         crate::test_clocks::TestClockBackend,
         crate::concurrent::ConcurrentPhy,
     >,
-    clocks: &oer_esp32s31_hal::ieee80211::client::WifiClocksOn,
+    clocks: &oer_chips_esp32s31_hal::ieee80211::client::WifiClocksOn,
     suspended: WifiPhySuspended,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), WifiPhySuspendedFailure> {
     let ready = match crate::concurrent::phy_ready(radio) {
         Ok(ready) => ready,
@@ -218,7 +218,7 @@ fn a_foreign_membership_is_an_internal_identity_fault() {
 
 #[test]
 fn wifi_due_rejoin_and_clock_refusal_preserve_membership_authority() {
-    use oer_time::{Duration, Instant};
+    use oer_portable_time::{Duration, Instant};
     let (mut radio, clocked) = registered();
     let clock = VirtualClock::<8>::new();
     let (membership, acquired) =

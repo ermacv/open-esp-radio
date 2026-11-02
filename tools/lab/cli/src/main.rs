@@ -17,7 +17,7 @@ mod stand_file;
 
 use std::process::ExitCode;
 
-use oer_os_process::Checkout;
+use oer_tools_os_process::Checkout;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -30,7 +30,7 @@ pub(crate) struct Options {
 
 impl Options {
     pub(crate) fn owner(&self, ctx: &Checkout) -> Result<String> {
-        Ok(oer_lab_arbiter::owner::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
+        Ok(oer_tools_lab_arbiter::owner::resolve(self.owner.as_deref(), &ctx.root)?.to_string())
     }
 }
 
@@ -40,7 +40,7 @@ struct Cli {
     #[command(flatten)]
     options: Options,
     #[command(flatten)]
-    checkout: oer_os_process::CheckoutArgs,
+    checkout: oer_tools_os_process::CheckoutArgs,
     #[command(subcommand)]
     command: Option<StandCommand>,
 }
@@ -92,7 +92,7 @@ enum FixtureCli {
     Install {
         /// Finite Linux fixture provider to provision.
         #[arg(long, value_enum)]
-        provider: oer_lab_fixture::Provider,
+        provider: oer_tools_lab_fixture::Provider,
         /// Print the offline plan without executing any installer step.
         #[arg(long)]
         dry_run: bool,
@@ -108,20 +108,20 @@ enum FixtureCli {
 
 /// `cargo stand __command-tree`: every `cargo stand` command path with its
 /// subcommands and long flags, as JSON, for the documentation check.
-fn command_tree() -> Vec<oer_os_command_tree::CommandNode> {
+fn command_tree() -> Vec<oer_tools_os_command_tree::CommandNode> {
     use clap::CommandFactory as _;
-    oer_os_command_tree::command_tree(&Cli::command(), &[String::from("stand")])
+    oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("stand")])
 }
 
 fn run() -> Result<ExitCode> {
     use clap::{CommandFactory as _, Parser as _};
     let cli = Cli::try_parse_from(std::env::args_os().skip(1))?;
     if matches!(cli.command, Some(StandCommand::CommandTree)) {
-        println!("{}", oer_os_command_tree::json(&command_tree()));
+        println!("{}", oer_tools_os_command_tree::json(&command_tree()));
         return Ok(ExitCode::SUCCESS);
     }
     let ctx = cli.checkout.checkout("cargo stand")?;
-    let _signals = oer_os_process::install_signal_handlers()?;
+    let _signals = oer_tools_os_process::install_signal_handlers()?;
     let options = cli.options;
     match cli.command {
         None => {
@@ -148,19 +148,21 @@ fn run() -> Result<ExitCode> {
             let mut lease = service::lease(
                 options.owner(&ctx)?,
                 String::from("stand fixtures"),
-                vec![oer_lab_arbiter::claims::Claim::shared(
-                    oer_lab_arbiter::readiness::ROUTER,
+                vec![oer_tools_lab_arbiter::claims::Claim::shared(
+                    oer_tools_lab_arbiter::readiness::ROUTER,
                 )],
             )?;
-            let remote: Vec<oer_lab_model::equipment::Fixture> = serde_json::from_value(
-                service::run(&mut lease, oer_lab_client::protocol::Operation::ProbeRouter)?,
-            )?;
+            let remote: Vec<oer_tools_lab_model::equipment::Fixture> =
+                serde_json::from_value(service::run(
+                    &mut lease,
+                    oer_tools_lab_client::protocol::Operation::ProbeRouter,
+                )?)?;
             lease.release()?;
-            let local = local_fixtures::probe_local(&oer_lab_model::paths::stand_file()?);
+            let local = local_fixtures::probe_local(&oer_tools_lab_model::paths::stand_file()?);
             println!("Equipment over SSH (the LAB service):");
-            print!("{}", oer_lab_model::equipment::describe(&remote));
+            print!("{}", oer_tools_lab_model::equipment::describe(&remote));
             println!("Host fixtures:");
-            print!("{}", oer_lab_model::equipment::describe(&local));
+            print!("{}", oer_tools_lab_model::equipment::describe(&local));
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::Install {
@@ -172,7 +174,7 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::StandFile(StandFileCli::Convert { output, in_place })) => {
-            let path = oer_lab_model::paths::stand_file()?;
+            let path = oer_tools_lab_model::paths::stand_file()?;
             let output = match (output, in_place) {
                 (Some(output), _) => output,
                 (None, true) => path.clone(),
@@ -182,11 +184,11 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::BuildHostapd)) => {
-            oer_lab_fixture::hostapd::build(&ctx.root)?;
+            oer_tools_lab_fixture::hostapd::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::Fixture(FixtureCli::BuildUdhcpc)) => {
-            oer_lab_fixture::udhcpc::build(&ctx.root)?;
+            oer_tools_lab_fixture::udhcpc::build(&ctx.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::CommandTree) => {
@@ -224,7 +226,7 @@ fn main() -> ExitCode {
                 ));
             }
             eprintln!("stand: {error}");
-            if oer_os_process::is_cancelled(&*error) {
+            if oer_tools_os_process::is_cancelled(&*error) {
                 ExitCode::from(130)
             } else {
                 ExitCode::FAILURE

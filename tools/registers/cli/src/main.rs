@@ -60,16 +60,16 @@ enum Check {
         output: Option<PathBuf>,
     },
 }
-fn run() -> oer_registers_generate::Result<()> {
-    let _signals = oer_os_process::install_signal_handlers()?;
-    let ctx = oer_os_process::Checkout::discover("registers")?;
+fn run() -> oer_tools_registers_generate::Result<()> {
+    let _signals = oer_tools_os_process::install_signal_handlers()?;
+    let ctx = oer_tools_os_process::Checkout::discover("registers")?;
     match Cli::parse().command {
         Command::Validate { chip } => {
-            oer_registers_generate::validate(&ctx.root, &chip)?;
+            oer_tools_registers_generate::validate(&ctx.root, &chip)?;
             println!("register model of {chip} valid");
         }
         Command::Generate { chip, check } => {
-            oer_registers_generate::generate(&ctx.root, &chip, check)?;
+            oer_tools_registers_generate::generate(&ctx.root, &chip, check)?;
             println!(
                 "register outputs of {chip} {}",
                 if check { "verified" } else { "written" }
@@ -84,9 +84,9 @@ fn run() -> oer_registers_generate::Result<()> {
             check,
             output,
         } => {
-            oer_registers_generate::signatures::run(
+            oer_tools_registers_generate::signatures::run(
                 &ctx,
-                oer_registers_generate::signatures::Options {
+                oer_tools_registers_generate::signatures::Options {
                     chip,
                     idf,
                     sdkconfig,
@@ -98,16 +98,17 @@ fn run() -> oer_registers_generate::Result<()> {
             )?;
         }
         Command::Check(Check::Inventory { chip, output }) => {
-            oer_registers_generate::checks::inventory::run(&ctx, &chip, output)?;
+            oer_tools_registers_generate::checks::inventory::run(&ctx, &chip, output)?;
         }
     }
     Ok(())
 }
 fn main() -> std::process::ExitCode {
-    if oer_os_command_tree::requested() {
+    if oer_tools_os_command_tree::requested() {
         use clap::CommandFactory as _;
-        let tree = oer_os_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
-        println!("{}", oer_os_command_tree::json(&tree));
+        let tree =
+            oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
+        println!("{}", oer_tools_os_command_tree::json(&tree));
         return std::process::ExitCode::SUCCESS;
     }
     match run() {

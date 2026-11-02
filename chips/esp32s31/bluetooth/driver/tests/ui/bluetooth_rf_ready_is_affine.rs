@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::power::PlatformClockBackend;
-use oer_esp32s31_phy::bluetooth_client::BluetoothRfReady;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_phy::bluetooth_client::BluetoothRfReady;
 
 pub fn consume<B: PlatformClockBackend>(ready: BluetoothRfReady<'_, B>) {
     let _ = ready.into_radio();

@@ -8,7 +8,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::analog_i2c::{self, Address, Field};
+use oer_chips_esp32s31_pac::analog_i2c::{self, Address, Field};
 
 // SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 // Existing vendor initialization 0x08 selects class 1 with all other bits 0.
@@ -22,7 +22,7 @@ const TXRF_INITIAL_RATE_CLASS: u8 = match analog_i2c::txrf::byte_0a_opaque::PHY_
 };
 
 pub(crate) const PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT: usize =
-    oer_esp32s31_pac::i2c_ana_mst_mem::command_memory::COUNT;
+    oer_chips_esp32s31_pac::i2c_ana_mst_mem::command_memory::COUNT;
 
 // Complete command order recovered from
 // `libphy.a[phy_i2c.o]::phy_i2c_master_cmd_mem_init`. Values which depend on

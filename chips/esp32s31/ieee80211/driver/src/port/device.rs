@@ -20,11 +20,11 @@ use crate::{
     },
     startup::WifiMacPlatform,
 };
-use oer_esp32s31_hal::{ieee80211::dma::space::ChipDma, owner::RadioAccess};
-use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
-use oer_espressif_interrupt_table::signal::SignalExecutor;
-use oer_memory::HandlerCell;
-use oer_radio_regulatory::{PowerLimits, RegulatoryDomain};
+use oer_chips_esp32s31_hal::{ieee80211::dma::space::ChipDma, owner::RadioAccess};
+use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_portable_memory::HandlerCell;
+use oer_protocols_radio_regulatory::{PowerLimits, RegulatoryDomain};
 
 /// Image-owned policy and opaque operation contexts. No executor is selected.
 pub trait Composition: 'static {
@@ -39,7 +39,7 @@ pub trait Composition: 'static {
         + 'p;
 }
 
-pub type Power = crate::tx::CappedTxPowerProfile<oer_esp32s31_phy::PhyTxTargetPowerProfile>;
+pub type Power = crate::tx::CappedTxPowerProfile<oer_chips_esp32s31_phy::PhyTxTargetPowerProfile>;
 
 /// One retained original DMA allocation; normalization borrows it in place.
 pub struct StagedReceive<const Q: usize, const RB: usize>(NetworkRxFrame<'static, Q, RB>);
@@ -50,7 +50,11 @@ impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
     }
-    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError> {
+    fn narrow(
+        &mut self,
+        offset: usize,
+        length: usize,
+    ) -> Result<(), oer_portable_memory::FrameRangeError> {
         self.0.narrow(offset, length)
     }
     fn storage(&self) -> &[u8] {
@@ -98,7 +102,7 @@ struct Active<W> {
 
 /// The image supplies one hardware partition, actor cell, static RX arena,
 /// the router's proof that the image binds the radio handler's part (`V`,
-/// a [`Bound`](oer_espressif_interrupt_table::Bound) of a
+/// a [`Bound`](oer_chips_family_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)) and the doorbell.
 /// Every one stays with this task-side owner.
 pub struct RadioDevice<
@@ -310,7 +314,7 @@ where
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        channel: oer_ieee80211_wire::channel::WifiChannel,
+        channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>> {
         self.pausing = false;
         if let Some(retune) = self.retune.as_mut() {
@@ -333,9 +337,9 @@ where
                     } = wifi.into_runtime_parts();
                     let permit = self
                         .domain
-                        .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                            channel,
-                        ))
+                        .permit(
+                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel),
+                        )
                         .map_err(|_| Fault::Capacity)?;
                     self.power = Some(Power::new(report.tx_power, permit.tx_ceiling(self.limits)));
                     self.active = Some(Active {
@@ -367,9 +371,7 @@ where
             }
             let permit = self
                 .domain
-                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                    channel,
-                ))
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
                 .map_err(|_| Fault::Capacity)?;
             let ceiling = permit.tx_ceiling(self.limits);
             // The paused radio and its actor cell leave together, or the

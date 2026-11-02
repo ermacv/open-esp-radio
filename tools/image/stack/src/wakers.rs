@@ -46,10 +46,10 @@
 use crate::cha::TypeFacts;
 use crate::dwarf::{Dwarf, Returned};
 use crate::{Analysis, Fact, Resolutions, TransferKind};
-use oer_analysis_elf::rv32::Role;
-use oer_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_analysis_riscv_program::facts::addresses::TargetValue;
+use oer_tools_analysis_elf::rv32::Role;
+use oer_tools_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_program::facts::addresses::TargetValue;
 use std::collections::{BTreeMap, BTreeSet};
 
 const RAW_WAKER: &str = "core::task::wake::RawWaker";
@@ -254,7 +254,7 @@ pub fn waker_resolutions(
         .source
         .as_ref()
         .map(|source| {
-            oer_analysis_elf::Elf::parse(source)
+            oer_tools_analysis_elf::Elf::parse(source)
                 .map_err(|_| crate::dwarf::invalid("invalid typed-location ELF"))
         })
         .transpose()?;

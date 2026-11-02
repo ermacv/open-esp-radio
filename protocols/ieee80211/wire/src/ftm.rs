@@ -176,12 +176,12 @@ impl FtmFormatAndBandwidth {
 /// Parameters carried by an initial FTM Request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FtmRequestParameters {
-    number_of_bursts_exponent: oer_wire::U8<4>,
+    number_of_bursts_exponent: oer_portable_wire::U8<4>,
     burst_duration: FtmBurstDuration,
     min_delta_ftm_100us: u8,
     partial_tsf_timer: Option<u16>,
     asap: bool,
-    ftms_per_burst: oer_wire::U8<5>,
+    ftms_per_burst: oer_portable_wire::U8<5>,
     format_and_bandwidth: FtmFormatAndBandwidth,
     burst_period_100ms: u16,
 }
@@ -201,11 +201,12 @@ impl FtmRequestParameters {
         format_and_bandwidth: FtmFormatAndBandwidth,
         burst_period_100ms: u16,
     ) -> Result<Self, FtmParameterError> {
-        let number_of_bursts_exponent = match oer_wire::U8::new(number_of_bursts_exponent) {
+        let number_of_bursts_exponent = match oer_portable_wire::U8::new(number_of_bursts_exponent)
+        {
             Some(value) => value,
             None => return Err(FtmParameterError::ValueOutOfRange),
         };
-        let ftms_per_burst = match oer_wire::U8::new(ftms_per_burst) {
+        let ftms_per_burst = match oer_portable_wire::U8::new(ftms_per_burst) {
             Some(value) => value,
             None => return Err(FtmParameterError::ValueOutOfRange),
         };
@@ -268,7 +269,9 @@ impl FtmRequestParameters {
         element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
         let mut fields = FtmParameterFields::from_bytes([0; 9]);
         fields = fields.with_bursts(self.number_of_bursts_exponent);
-        fields = fields.with_duration(oer_wire::U8::from_low_bits(self.burst_duration.wire()));
+        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(
+            self.burst_duration.wire(),
+        ));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         let partial_tsf = self.partial_tsf_timer.unwrap_or(0).to_le_bytes();
@@ -278,7 +281,7 @@ impl FtmRequestParameters {
             .with_asap(self.asap);
         fields = fields.with_ftms(self.ftms_per_burst);
         element[7] = fields.to_bytes()[5];
-        fields = fields.with_bandwidth(oer_wire::U8::from_low_bits(
+        fields = fields.with_bandwidth(oer_portable_wire::U8::from_low_bits(
             self.format_and_bandwidth.wire(),
         ));
         element[8] = fields.to_bytes()[6];
@@ -392,10 +395,10 @@ impl FtmResponseParameters {
     }
 
     pub fn encode_element(self) -> Result<[u8; FTM_PARAMETERS_ELEMENT_LEN], FtmParameterError> {
-        let bursts = oer_wire::U8::new(self.number_of_bursts_exponent)
+        let bursts = oer_portable_wire::U8::new(self.number_of_bursts_exponent)
             .ok_or(FtmParameterError::ValueOutOfRange)?;
-        let ftms =
-            oer_wire::U8::new(self.ftms_per_burst).ok_or(FtmParameterError::ValueOutOfRange)?;
+        let ftms = oer_portable_wire::U8::new(self.ftms_per_burst)
+            .ok_or(FtmParameterError::ValueOutOfRange)?;
         let mut element = [0_u8; FTM_PARAMETERS_ELEMENT_LEN];
         element[0] = FTM_PARAMETERS_ELEMENT_ID;
         element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
@@ -411,7 +414,9 @@ impl FtmResponseParameters {
         };
         let mut fields = FtmParameterFields::from_bytes([0; 9]);
         fields = fields.with_bursts(bursts);
-        fields = fields.with_duration(oer_wire::U8::from_low_bits(self.burst_duration.wire()));
+        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(
+            self.burst_duration.wire(),
+        ));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         crate::encoding::write_array::<5, _, _>(
@@ -423,7 +428,7 @@ impl FtmResponseParameters {
             .with_asap(self.asap);
         fields = fields.with_ftms(ftms);
         element[7] = fields.to_bytes()[5];
-        fields = fields.with_bandwidth(oer_wire::U8::from_low_bits(
+        fields = fields.with_bandwidth(oer_portable_wire::U8::from_low_bits(
             self.format_and_bandwidth.wire(),
         ));
         element[8] = fields.to_bytes()[6];
@@ -483,14 +488,14 @@ impl<'a> FtmRequest<'a> {
 /// Encode the complete fixed-size initial request from checked parameters.
 ///
 /// ```compile_fail,E0061
-/// use oer_ieee80211_wire::ftm::{encode_initial_request, FtmRequestParameters, FtmWireError};
+/// use oer_protocols_ieee80211_wire::ftm::{encode_initial_request, FtmRequestParameters, FtmWireError};
 /// fn arbitrary_output(parameters: FtmRequestParameters, output: &mut [u8]) -> Result<usize, FtmWireError> {
 ///     encode_initial_request(parameters, output)
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_wire::ftm::{encode_initial_request, FtmRequestParameters, FTM_INITIAL_REQUEST_BODY_LEN};
+/// use oer_protocols_ieee80211_wire::ftm::{encode_initial_request, FtmRequestParameters, FTM_INITIAL_REQUEST_BODY_LEN};
 /// fn complete_body(parameters: FtmRequestParameters) -> [u8; FTM_INITIAL_REQUEST_BODY_LEN] {
 ///     encode_initial_request(parameters)
 /// }
@@ -510,14 +515,14 @@ pub fn encode_initial_request(
 /// Encode a complete trigger request without a parameters element.
 ///
 /// ```compile_fail,E0061
-/// use oer_ieee80211_wire::ftm::{encode_request_trigger, FtmTrigger, FtmWireError};
+/// use oer_protocols_ieee80211_wire::ftm::{encode_request_trigger, FtmTrigger, FtmWireError};
 /// fn arbitrary_output(trigger: FtmTrigger, output: &mut [u8]) -> Result<usize, FtmWireError> {
 ///     encode_request_trigger(trigger, output)
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_wire::ftm::{encode_request_trigger, FtmTrigger};
+/// use oer_protocols_ieee80211_wire::ftm::{encode_request_trigger, FtmTrigger};
 /// assert_eq!(encode_request_trigger(FtmTrigger::Stop), [4, 32, 0]);
 /// assert_eq!(encode_request_trigger(FtmTrigger::StartOrContinue), [4, 32, 1]);
 /// ```
@@ -716,7 +721,7 @@ pub fn encode_measurement(
         g0,
         g1,
     ];
-    oer_wire::Writer::new(elements)
+    oer_portable_wire::Writer::new(elements)
         .write(information_elements)
         .map_err(|_| FtmWireError::OutputTooShort)?;
     FTM_MEASUREMENT_PREFIX_LEN
@@ -730,7 +735,7 @@ fn validate_prefix<const N: usize>(
     body: &[u8],
     action: u8,
 ) -> Result<(&[u8; N], &[u8]), FtmWireError> {
-    let mut reader = oer_wire::Reader::new(body);
+    let mut reader = oer_portable_wire::Reader::new(body);
     let prefix = reader
         .array::<N>()
         .map_err(|_| FtmWireError::BodyTooShort)?;
@@ -752,14 +757,14 @@ fn find_parameters<T>(
 ) -> Result<Option<T>, FtmWireError> {
     let mut found = None;
     while !bytes.is_empty() {
-        let mut reader = oer_wire::Reader::new(bytes);
+        let mut reader = oer_portable_wire::Reader::new(bytes);
         let &[id, length] = reader
             .array::<2>()
             .map_err(|_| FtmWireError::MalformedInformationElement)?;
         let total = 2_usize
             .checked_add(usize::from(length))
             .ok_or(FtmWireError::MalformedInformationElement)?;
-        let mut whole = oer_wire::Reader::new(bytes);
+        let mut whole = oer_portable_wire::Reader::new(bytes);
         let element = whole
             .take(total)
             .map_err(|_| FtmWireError::MalformedInformationElement)?;
@@ -775,7 +780,7 @@ fn find_parameters<T>(
     Ok(found)
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element).
     pub struct FtmParameterFields[9] (little) {
         pub status, with_status: u8 = 0..2;
@@ -791,7 +796,7 @@ oer_wire::bitfield! {
         pub bandwidth, with_bandwidth: (u8) = 50..56;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame).
     pub struct FtmTimestampErrorFields[2] (little) {
         pub exponent, with_exponent: u8 = 0..5;

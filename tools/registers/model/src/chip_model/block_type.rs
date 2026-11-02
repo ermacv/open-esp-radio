@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_registers_contracts::NameOrigin;
+use oer_tools_registers_contracts::NameOrigin;
 
 use super::{
     Error, ErrorKind,

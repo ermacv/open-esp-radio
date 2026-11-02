@@ -4,17 +4,17 @@
 use super::*;
 use core::num::NonZeroU8;
 use fixture::{Fixture, Report, run_model};
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AckHeader, ChannelWidth, ClassFrame, HeaderSpec, InstalledGroup, MpduLength, Protection,
     RetryPlan, RetryStage, SizedFrame, SupportedPower, TxPower,
 };
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     Configured, LowerMacEvent, LowerMacTerminal, Removed, RemovedKey, TxCompleted,
 };
-use oer_ieee80211_wire::ccmp::GroupKeyId;
-use oer_ieee80211_wire::frame::FrameControl;
-use oer_ieee80211_wire::{phy::LegacyRate, qos::WmmAccessCategory};
-use oer_radio_port::{Disabled, Ended, Owner, PortBody};
+use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
+use oer_protocols_ieee80211_wire::frame::FrameControl;
+use oer_protocols_ieee80211_wire::{phy::LegacyRate, qos::WmmAccessCategory};
+use oer_protocols_radio_port::{Disabled, Ended, Owner, PortBody};
 
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -41,10 +41,10 @@ fn queue_accounting_fault_retains_every_owner_until_teardown() {
 }
 
 fn backend() -> (Fixture, Rc<ModelAir>) {
-    backend_on(Rc::new(oer_time_virtual::VirtualClock::<8>::new()))
+    backend_on(Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()))
 }
 
-fn backend_on(clock: Rc<oer_time_virtual::VirtualClock>) -> (Fixture, Rc<ModelAir>) {
+fn backend_on(clock: Rc<oer_portable_time_virtual::VirtualClock>) -> (Fixture, Rc<ModelAir>) {
     Fixture::<ModelCaps>::new(
         Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
         [
@@ -57,7 +57,7 @@ fn backend_on(clock: Rc<oer_time_virtual::VirtualClock>) -> (Fixture, Rc<ModelAi
 
 #[test]
 fn each_installation_and_retuned_phase_checks_its_own_channel() {
-    use oer_radio_port::Enabled;
+    use oer_protocols_radio_port::Enabled;
 
     struct Channels;
     struct Second<'s, 'p, 'outer: 'p, OuterId: SlotIdentity + 'outer>(
@@ -111,7 +111,7 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                     IndividualAddress::new(STATION).unwrap(),
                     IndividualAddress::new(ACCESS_POINT).unwrap(),
                 ],
-                std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+                std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
             );
             assert!(matches!(
                 run_model(target, Second(&mut source)).await,
@@ -124,10 +124,12 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 .unwrap();
             source.setup().set_channel(
                 SupportedChannel::new(
-                    oer_radio_regulatory::TEST_DOMAIN
-                        .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                            Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
-                        ))
+                    oer_protocols_radio_regulatory::TEST_DOMAIN
+                        .permit(
+                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                                Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
+                            ),
+                        )
                         .unwrap(),
                 )
                 .unwrap(),
@@ -138,9 +140,9 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
                 assert!(phase.rate(PhyRate::Legacy(LegacyRate::Dsss1M)).is_none());
                 let rate = phase.rate(PhyRate::Legacy(LegacyRate::Ofdm6M)).unwrap();
                 assert!(phase.no_ack(rate).is_ok());
-                let ht = oer_ieee80211_wire::phy::HtRate::new(
+                let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap();
@@ -241,14 +243,14 @@ fn submit_frame<'k, 'p, 'id: 'p + 'k, Id: SlotIdentity + 'id, C: ModelClass>(
     phase
         .station()
         .submit(
-            (oer_ieee80211_contracts_port::Attempt {
+            (oer_protocols_ieee80211_contracts_port::Attempt {
                 context: (),
                 ticket,
                 source,
                 access_category: WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
             })
             .admit(),
         )
@@ -286,7 +288,7 @@ fn push_subframe<
     S: AggregateState,
 >(
     aggregate: ModelAggregate<'k, 'p, 'id, Station, ModelCaps, ModelBackend<Id, ModelCaps, X>, S>,
-    numbering: oer_ieee80211_contracts_port::TxNumbering,
+    numbering: oer_protocols_ieee80211_contracts_port::TxNumbering,
     buffer: ModelBuffer<'id, ModelBackend<Id, ModelCaps, X>, ModelSmall>,
     frame: SizedFrame<AckHeader, ModelCaps>,
     body: Option<ModelBody>,
@@ -346,7 +348,7 @@ fn push_retry<
 /// The next terminal's ticket and buffer.
 async fn completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-    terminal_access: &mut oer_ieee80211_contracts_port::TerminalAccess<
+    terminal_access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
         ModelTickets,
         ModelPool<Id, 1>,
@@ -366,7 +368,7 @@ async fn completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
             TxCompleted::Single(terminal),
         ))))) = event
         {
-            let oer_ieee80211_contracts_port::TerminalParts {
+            let oer_protocols_ieee80211_contracts_port::TerminalParts {
                 ticket, payload, ..
             } = terminal.into_parts(terminal_access);
             let (buffer, _) = payload.into_parts();
@@ -390,7 +392,7 @@ impl Work for Numbering {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -609,7 +611,7 @@ impl Work for KeyThenAttempt {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let ModelResources {
@@ -658,13 +660,13 @@ impl Work for ForeignPairwiseKey {
         phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
         resources: ModelResources<'id, ModelBackend<Id>>,
     ) {
-        use oer_ieee80211_core_upper_mac::ccmp::{
+        use oer_protocols_ieee80211_core_upper_mac::ccmp::{
             CcmpPacketNumberStep, ForeignCcmpTxKey, request_ccmp_pairwise_key,
         };
         type Keys<'id, Id> = ModelKeys<'id, ModelBackend<Id>, Station>;
         let association = Keys::<Id>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
         let [first_slot, second_slot] = resources.station_pairwise;
         let peer = IndividualAddress::new(PEER).unwrap();
@@ -688,7 +690,7 @@ impl Work for ForeignPairwiseKey {
         let mut keys = Vec::new();
         while keys.len() < 2 {
             if let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
-                oer_ieee80211_contracts_port::InstalledPairwise::Station(key),
+                oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
             )))) = phase.next_event().await
             {
                 keys.push(key);
@@ -714,7 +716,7 @@ impl Work for ForeignPairwiseKey {
         for installed in [&first, &second] {
             assert_eq!(
                 installed.packet_numbers().last(),
-                oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO
+                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO
             );
         }
         self.0.set(true);
@@ -743,7 +745,7 @@ impl Work for ConfigureThenKey {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
         let [slot, _] = resources.station_pairwise;
         phase
@@ -761,7 +763,7 @@ impl Work for ConfigureThenKey {
             panic!("the earlier configuration terminal comes first")
         };
         let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
-            oer_ieee80211_contracts_port::InstalledPairwise::Station(key),
+            oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
         )))) = phase.next_event().await
         else {
             panic!("the installation terminal returns the key")
@@ -795,7 +797,7 @@ impl Work for GroupReplacement<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [slot, _] = resources.station_group;
@@ -898,7 +900,7 @@ impl Work for KeyAttemptRemoval {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let ModelResources {
@@ -1036,13 +1038,13 @@ impl Work for MaxWork<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let access_point_association =
             ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
                 resources.access_point_association,
-                oer_ieee80211_wire::security::Spp::NotNegotiated,
+                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
 
         let ModelResources {
@@ -1197,7 +1199,7 @@ impl Work for AbortHeld<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -1235,7 +1237,7 @@ impl Work for AbortHeld<'_> {
                 TxCompleted::Single(terminal),
             ))))) = event
             {
-                let oer_ieee80211_contracts_port::TerminalParts {
+                let oer_protocols_ieee80211_contracts_port::TerminalParts {
                     outcome: completion,
                     payload,
                     ..
@@ -1378,7 +1380,7 @@ fn subframe_frame(sequence: u16) -> SizedFrame<AckHeader, ModelCaps> {
         PEER,
         sequence << 4,
         None,
-        Some(oer_ieee80211_contracts_port::QosControl {
+        Some(oer_protocols_ieee80211_contracts_port::QosControl {
             tid: Tid::new(0).unwrap(),
             end_of_service_period: false,
             amsdu_present: false,
@@ -1394,7 +1396,7 @@ fn subframe_frame(sequence: u16) -> SizedFrame<AckHeader, ModelCaps> {
 /// The next terminal: its ticket, complete subframes and Block Ack.
 async fn aggregate_completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-    terminal_access: &mut oer_ieee80211_contracts_port::TerminalAccess<
+    terminal_access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
         ModelTickets,
         ModelPool<Id, 1>,
@@ -1402,7 +1404,7 @@ async fn aggregate_completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
 ) -> (
     Slot<'id, ModelTickets, ModelPool<Id, 1>>,
     ModelSubframes<'id, ModelBackend<Id>>,
-    Option<oer_ieee80211_contracts_port::BlockAckReport>,
+    Option<oer_protocols_ieee80211_contracts_port::BlockAckReport>,
 ) {
     loop {
         yield_now().await;
@@ -1415,7 +1417,7 @@ async fn aggregate_completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
             TxCompleted::Aggregate(terminal),
         ))))) = event
         {
-            let oer_ieee80211_contracts_port::TerminalParts {
+            let oer_protocols_ieee80211_contracts_port::TerminalParts {
                 ticket,
                 payload,
                 outcome,
@@ -1439,7 +1441,7 @@ async fn aggregate_completion<'p, 'id: 'p, Id: SlotIdentity + 'id>(
 /// subframe.
 struct AggregateRetransmission<'t> {
     air: &'t ModelAir,
-    report: &'t Cell<Option<oer_ieee80211_contracts_port::BlockAckReport>>,
+    report: &'t Cell<Option<oer_protocols_ieee80211_contracts_port::BlockAckReport>>,
 }
 
 impl Work for AggregateRetransmission<'_> {
@@ -1450,11 +1452,13 @@ impl Work for AggregateRetransmission<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
-        use oer_ieee80211_contracts_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
+        use oer_protocols_ieee80211_contracts_port::{
+            AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid,
+        };
         let ModelResources {
             mut tickets,
             mut small,
@@ -1471,9 +1475,9 @@ impl Work for AggregateRetransmission<'_> {
         .await
         .expect("the PTK installation terminal")
         .into_core_key();
-        let ht = oer_ieee80211_wire::phy::HtRate::new(
+        let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
             HtMcs::new(7).unwrap(),
-            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
             false,
         )
         .unwrap();
@@ -1607,7 +1611,7 @@ impl Work for TerminalOutcomes<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -1645,7 +1649,7 @@ impl Work for TerminalOutcomes<'_> {
                     LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)),
                 )))) = Future::poll(next, &mut cx)
                 {
-                    let oer_ieee80211_contracts_port::TerminalParts {
+                    let oer_protocols_ieee80211_contracts_port::TerminalParts {
                         ticket,
                         outcome: completion,
                         payload,
@@ -1808,7 +1812,7 @@ impl Work for LongRetryPlan<'_> {
                 terminal,
             ))) = event
             {
-                let oer_ieee80211_contracts_port::TerminalParts {
+                let oer_protocols_ieee80211_contracts_port::TerminalParts {
                     outcome: completion,
                     payload,
                     ..
@@ -1899,7 +1903,7 @@ impl Work for LastRateBeforeCollision<'_> {
                 terminal,
             ))) = event
             {
-                let oer_ieee80211_contracts_port::TerminalParts {
+                let oer_protocols_ieee80211_contracts_port::TerminalParts {
                     ticket,
                     outcome: completion,
                     payload,
@@ -2029,15 +2033,15 @@ trait IntoCoreKey: Sized {
         CoreKey {
             backend: self,
             packet_numbers: core::cell::RefCell::new(TestPacketNumbers::new(
-                oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
+                oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
             )),
         }
     }
 }
 impl<K> IntoCoreKey for K {}
 impl<K> CoreKey<K> {
-    fn numbered(&self) -> oer_ieee80211_contracts_port::NumberedKey<&K> {
-        oer_ieee80211_contracts_port::NumberedKey {
+    fn numbered(&self) -> oer_protocols_ieee80211_contracts_port::NumberedKey<&K> {
+        oer_protocols_ieee80211_contracts_port::NumberedKey {
             key: &self.backend,
             packet_number: self
                 .packet_numbers
@@ -2046,8 +2050,8 @@ impl<K> CoreKey<K> {
                 .expect("the test protocol has PN capacity"),
         }
     }
-    fn numbering(&self) -> oer_ieee80211_contracts_port::TxNumbering {
-        oer_ieee80211_contracts_port::TxNumbering::Ccmp(
+    fn numbering(&self) -> oer_protocols_ieee80211_contracts_port::TxNumbering {
+        oer_protocols_ieee80211_contracts_port::TxNumbering::Ccmp(
             self.packet_numbers
                 .borrow()
                 .allocate()
@@ -2059,8 +2063,8 @@ impl<K> CoreKey<K> {
     }
     fn set_last(&self, last: u64) {
         *self.packet_numbers.borrow_mut() = TestPacketNumbers::continuing_after(
-            oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
-            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
+            oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
+            oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
         );
     }
     fn into_backend(self) -> K {
@@ -2070,27 +2074,30 @@ impl<K> CoreKey<K> {
 
 /// Scripted packet-number inputs for backend tests, independent of core policy.
 struct TestPacketNumbers {
-    last: Cell<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
-    step: oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep,
+    last: Cell<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber>,
+    step: oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep,
 }
 impl TestPacketNumbers {
-    fn new(step: oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep) -> Self {
-        Self::continuing_after(step, oer_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO)
+    fn new(step: oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep) -> Self {
+        Self::continuing_after(
+            step,
+            oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO,
+        )
     }
     fn continuing_after(
-        step: oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep,
-        last: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
+        step: oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep,
+        last: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber,
     ) -> Self {
         Self {
             last: Cell::new(last),
             step,
         }
     }
-    fn last(&self) -> oer_ieee80211_wire::ccmp::CcmpPacketNumber {
+    fn last(&self) -> oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber {
         self.last.get()
     }
-    fn allocate(&self) -> Result<oer_ieee80211_wire::ccmp::CcmpPacketNumber, ()> {
-        let number = oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(
+    fn allocate(&self) -> Result<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber, ()> {
+        let number = oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(
             self.last.get().value() + u64::from(self.step.get()),
         )
         .ok_or(())?;

@@ -33,13 +33,13 @@ pub(super) struct Values {
 /// The type a field's writer takes.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) enum Setter {
-    /// `bool`, `u8`, `u16`, `u32` or `oer_mmio::Bits<WIDTH>`.
+    /// `bool`, `u8`, `u16`, `u32` or `oer_portable_mmio::Bits<WIDTH>`.
     Native,
     /// The field's value enumeration: its only writable values.
     Enum,
     /// The field's bounded type: a write range narrower than its width.
     Range,
-    /// A typed address of the field's placement: `oer_memory::DmaRef` of its
+    /// A typed address of the field's placement: `oer_portable_memory::DmaRef` of its
     /// target layout, or the window's `DmaWindowAddress`.
     Pointer,
 }
@@ -169,7 +169,7 @@ impl FieldPlan<'_> {
             8 => "u8".to_owned(),
             16 => "u16".to_owned(),
             32 => "u32".to_owned(),
-            width => format!("oer_mmio::Bits<{width}>"),
+            width => format!("oer_portable_mmio::Bits<{width}>"),
         }
     }
 
@@ -194,7 +194,7 @@ impl FieldPlan<'_> {
         };
         match (self.setter, &self.values, &self.pointer) {
             (Setter::Pointer, _, Some(pointer)) => match &pointer.target {
-                Some(target) => format!("oer_memory::DmaRef<{layouts}::{target}>"),
+                Some(target) => format!("oer_portable_memory::DmaRef<{layouts}::{target}>"),
                 None => format!("{layouts}::DmaWindowAddress"),
             },
             (Setter::Enum, Some(values), _) => qualify(&values.name),
@@ -263,7 +263,7 @@ impl FieldPlan<'_> {
             8 => format!("{shifted} as u8"),
             16 => format!("{shifted} as u16"),
             _ => format!(
-                "oer_mmio::Bits::truncate({})",
+                "oer_portable_mmio::Bits::truncate({})",
                 shifted.trim_start_matches('(').trim_end_matches(')')
             ),
         }
@@ -291,7 +291,7 @@ pub(super) struct Template<'m> {
     pub(super) width: u32,
     pub(super) elements: Vec<Elem>,
     /// `(offset, stride, count)` when the elements are one evenly spaced
-    /// array, indexed by `oer_mmio::Index<count>`.
+    /// array, indexed by `oer_portable_mmio::Index<count>`.
     pub(super) array: Option<(u64, u64, u64)>,
     pub(super) fields: Vec<FieldPlan<'m>>,
     pub(super) fifo: bool,
@@ -1071,7 +1071,7 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 let ones = field.ones();
                 let _ = writeln!(
                     output,
-                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_mmio::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
+                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_mmio::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
                     family.count,
                     field.write_type(None),
                     field.low,
@@ -1151,11 +1151,11 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
             8 => "bits as u8".into(),
             16 => "bits as u16".into(),
             32 => "bits".into(),
-            _ => "oer_mmio::Bits::truncate(bits)".to_string(),
+            _ => "oer_portable_mmio::Bits::truncate(bits)".to_string(),
         };
         let _ = writeln!(
             output,
-            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_mmio::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
+            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_mmio::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
             field.method(),
             family.count,
             field.native(),
@@ -1341,7 +1341,7 @@ fn render_range(output: &mut String, field: &FieldPlan<'_>, min: u32, max: u32) 
 }
 
 /// How an owner's method names a word: one element, or every element of
-/// an array by an `oer_mmio::Index`.
+/// an array by an `oer_portable_mmio::Index`.
 #[derive(Clone, Copy)]
 pub(super) enum Call {
     Fixed(u64),
@@ -1356,7 +1356,7 @@ impl Call {
     fn parameter(self) -> String {
         match self {
             Self::Fixed(_) => String::new(),
-            Self::Indexed { count, .. } => format!(", index: oer_mmio::Index<{count}>"),
+            Self::Indexed { count, .. } => format!(", index: oer_portable_mmio::Index<{count}>"),
         }
     }
 
@@ -1730,10 +1730,10 @@ fn render_command(
              /// other self-clearing bit, trigger and write-one-to-clear lane is\n\
              /// zero. It refuses, writing nothing, while any self-clearing bit of\n\
              /// the register reads one.\n\
-             #[inline]\npub fn start_{stem}_{}(&mut self{index}{parameters}) -> Result<(), oer_mmio::CommandBusy> {{\n\
+             #[inline]\npub fn start_{stem}_{}(&mut self{index}{parameters}) -> Result<(), oer_portable_mmio::CommandBusy> {{\n\
              let value = self.0.{};\n\
              if value & 0x{busy:08x} != 0 {{\n\
-             return Err(oer_mmio::CommandBusy {{ running: value & 0x{busy:08x} }});\n}}\n\
+             return Err(oer_portable_mmio::CommandBusy {{ running: value & 0x{busy:08x} }});\n}}\n\
              self.0.{};\nOk(())\n}}\n",
             field.field.name,
             field.stem,

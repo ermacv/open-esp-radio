@@ -1,9 +1,9 @@
 use super::*;
-use oer_ieee80211_core_roles_sta::data::EthernetFrame;
-use oer_ieee80211_testing_model::ModelLentRx;
-use oer_ieee80211_wire::qos::WmmUserPriority;
-use oer_memory::WakingSpscQueue;
-use oer_network_port::{EthernetFrameView, FrameLengthError};
+use oer_portable_memory::WakingSpscQueue;
+use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+use oer_protocols_ieee80211_testing_model::ModelLentRx;
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
+use oer_protocols_network_port::{EthernetFrameView, FrameLengthError};
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
 /// An open network's profile.
@@ -14,7 +14,7 @@ fn open_profile() -> StaProfile {
 fn profile(ssid: &[u8]) -> StaProfile {
     StaProfile {
         ssid: heapless::Vec::from_slice(ssid).unwrap(),
-        security: oer_ieee80211_core_roles_sta::machine::StaSecurity::Open,
+        security: oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity::Open,
     }
 }
 
@@ -27,7 +27,7 @@ impl Drop for Frame {
         self.owner.set(self.owner.get() + 1);
     }
 }
-impl oer_network_port::EthernetFrame for Frame {
+impl oer_protocols_network_port::EthernetFrame for Frame {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: [2; 6],
@@ -41,7 +41,7 @@ impl oer_network_port::EthernetFrame for Frame {
 #[test]
 fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
@@ -96,7 +96,7 @@ fn cancellation_poisons_control_reuse_and_stop_wait_retains_completion() {
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, mut runner) = Control::new(sender, &state).unwrap();
-    control.stop(oer_time::Instant::from_micros(u64::MAX));
+    control.stop(oer_portable_time::Instant::from_micros(u64::MAX));
     embassy_futures::block_on(runner.wait_for_stop());
     let mut cx = Context::from_waker(core::task::Waker::noop());
     assert!(
@@ -131,7 +131,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         }
     }
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
@@ -179,7 +179,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
             })
         );
     }
-    let frame = EthernetFrame::from_parts(oer_ieee80211_wire::data::MsduParts {
+    let frame = EthernetFrame::from_parts(oer_protocols_ieee80211_wire::data::MsduParts {
         destination: [2; 6],
         source: [4; 6],
         ether_type: 0x0800,
@@ -208,7 +208,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     assert!(device.try_receive().is_none());
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
-    control.stop(oer_time::Instant::from_micros(u64::MAX));
+    control.stop(oer_portable_time::Instant::from_micros(u64::MAX));
     assert_eq!(delivered.len(), 4);
 }
 
@@ -217,7 +217,7 @@ struct Marked {
     ether_type: u16,
     payload: Vec<u8>,
 }
-impl oer_network_port::EthernetFrame for Marked {
+impl oer_protocols_network_port::EthernetFrame for Marked {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
             destination: [2; 6],
@@ -231,7 +231,7 @@ impl oer_network_port::EthernetFrame for Marked {
 #[test]
 fn a_network_frame_requests_the_priority_of_its_marking() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
     let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
@@ -469,9 +469,9 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
     let (mut control, runner) = Control::new(sender, &state).unwrap();
     let mut events = state.events(|_: ServiceOutput<()>| {});
     control.configure_reconnect(
-        super::super::ReconnectPolicy::every(oer_time::Duration::from_secs(1)).unwrap(),
+        super::super::ReconnectPolicy::every(oer_portable_time::Duration::from_secs(1)).unwrap(),
     );
-    let now = oer_time::Instant::from_micros(0);
+    let now = oer_portable_time::Instant::from_micros(0);
     // Without a profile the policy never connects first.
     assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
     // The application's connect fails: the station stays idle for the
@@ -547,7 +547,7 @@ fn the_reconnect_policy_and_an_operation_share_one_admission() {
     let Some(ServiceCommand::Station(explicit)) = receiver.try_receive() else {
         panic!("the disconnect is admitted")
     };
-    control.stop_gracefully(oer_time::Instant::from_micros(u64::MAX));
+    control.stop_gracefully(oer_portable_time::Instant::from_micros(u64::MAX));
     assert!(matches!(runner.policy_command::<()>(now), Ok(None)));
     assert!(!runner.policy_ready(now));
     assert_eq!(runner.policy_deadline(), None);
@@ -590,8 +590,9 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     type Two = AcrossHarts<Side, Side>;
     let (network, station) = (Side::new(), Side::new());
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx =
-        oer_memory::WakingSlotQueue::<TxMsdu, 1, Side, Side>::across_harts(station, network);
+    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1, Side, Side>::across_harts(
+        station, network,
+    );
     let mut rx =
         WakingSpscQueue::<Received<ModelLentRx>, 1, Side, Side>::across_harts(network, station);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH, Side, Side>::across_harts(

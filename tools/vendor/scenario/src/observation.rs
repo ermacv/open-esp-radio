@@ -97,7 +97,7 @@ pub struct LineMap {
 impl LineMap {
     /// The lines within the chip's hardware scope of every instruction in `pcs` of `elf`.
     pub fn new(elf: &[u8], pcs: &BTreeSet<u32>, root: &Path) -> Result<Self> {
-        let symbolizer = oer_analysis_elf::dwarf::Symbolizer::new(elf)?;
+        let symbolizer = oer_tools_analysis_elf::dwarf::Symbolizer::new(elf)?;
         let root = root.canonicalize()?;
         let mut lines = BTreeMap::new();
         for pc in pcs {
@@ -147,7 +147,7 @@ impl LineMap {
     /// Lines of `executed` instructions, observed when any of `observed` is.
     pub fn lines(
         &self,
-        instructions: &oer_analysis_blobray_application::in_process::ObservedInstructions,
+        instructions: &oer_tools_analysis_blobray_application::in_process::ObservedInstructions,
     ) -> Lines {
         // Mark line indices first, so each line is cloned once per set.
         let mut marks = vec![[false; 4]; self.table.len()];
@@ -387,7 +387,7 @@ mod tests {
             (0x14, vec![line(2), line(3)]),
         ]));
         let lines = map.lines(
-            &oer_analysis_blobray_application::in_process::ObservedInstructions {
+            &oer_tools_analysis_blobray_application::in_process::ObservedInstructions {
                 executed: BTreeSet::from([0x10, 0x14]),
                 observed: BTreeSet::from([0x10]),
                 ..Default::default()

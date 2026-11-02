@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-regulatory-generate"
+name = "oer-tools-regulatory-generate"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

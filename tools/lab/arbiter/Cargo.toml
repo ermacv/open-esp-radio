@@ -1,5 +1,5 @@
 [package]
-name = "oer-lab-arbiter"
+name = "oer-tools-lab-arbiter"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,9 @@ publish = false
 description = "The stand's scheduling for the LAB service: the queue, balances, preemption, maintenance, resource readiness and the stand's records"
 
 [dependencies]
-oer-os-durable = { path = "../../os/durable" }
-oer-os-process = { path = "../../os/process" }
-oer-lab-model = { path = "../model" }
+oer-tools-os-durable = { path = "../../os/durable" }
+oer-tools-os-process = { path = "../../os/process" }
+oer-tools-lab-model = { path = "../model" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

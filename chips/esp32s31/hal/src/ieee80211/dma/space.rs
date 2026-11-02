@@ -27,7 +27,7 @@ impl sealed::Sealed for HostDma {}
 /// substitute an unrelated allocation's DMA address.
 ///
 /// ```compile_fail,E0277
-/// use oer_esp32s31_hal::ieee80211::dma::space::DmaSpace;
+/// use oer_chips_esp32s31_hal::ieee80211::dma::space::DmaSpace;
 /// enum Relocated {}
 /// impl DmaSpace for Relocated {
 ///     fn address<A: ?Sized, F: ?Sized>(_: &A, _: *const F) -> Option<u32> {

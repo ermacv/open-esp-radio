@@ -1,7 +1,7 @@
 //! Owned frames at the network queue boundary, held as MSDU fields.
 
-use oer_ieee80211_wire::data::{MsduHeader, MsduParts};
-use oer_ieee80211_wire::qos::WmmUserPriority;
+use oer_protocols_ieee80211_wire::data::{MsduHeader, MsduParts};
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
 /// Maximum Ethernet-II payload stored by one network queue slot.
 pub const MAX_ETHERNET_PAYLOAD_LEN: usize = 1500;
@@ -23,8 +23,8 @@ pub struct FrameTooLong {
 /// A network adapter constructs a frame from its checked Ethernet parts:
 ///
 /// ```
-/// use oer_ieee80211_wire::data::MsduParts;
-/// use oer_ieee80211_core_roles_sta::data::EthernetFrame;
+/// use oer_protocols_ieee80211_wire::data::MsduParts;
+/// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// let parts = MsduParts {
 ///     destination: [0xff; 6], source: [2, 0, 0, 0, 0, 1],
 ///     ether_type: 0x0800, payload: &[1, 2, 3],
@@ -36,17 +36,17 @@ pub struct FrameTooLong {
 /// Test fixture parsing and serialization are absent from the product API:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_sta::data::EthernetFrame;
+/// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// let frame = EthernetFrame::new(&[0; 14]);
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_sta::data::EthernetFrame;
+/// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// fn bytes(frame: &EthernetFrame) { let _bytes = frame.bytes(); }
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_sta::data::EthernetFrame;
+/// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// fn copy(frame: &EthernetFrame, output: &mut [u8]) {
 ///     let _copied = frame.copy_to(output);
 /// }
@@ -120,12 +120,15 @@ impl EthernetFrame {
     }
 }
 
-impl oer_network_port::EthernetFrame for EthernetFrame {
+impl oer_protocols_network_port::EthernetFrame for EthernetFrame {
     fn view(
         &self,
-    ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
+    ) -> Result<
+        oer_protocols_network_port::EthernetFrameView<'_>,
+        oer_protocols_network_port::FrameLengthError,
+    > {
         let parts = self.parts();
-        Ok(oer_network_port::EthernetFrameView {
+        Ok(oer_protocols_network_port::EthernetFrameView {
             destination: parts.destination,
             source: parts.source,
             ether_type: parts.ether_type,
@@ -152,7 +155,7 @@ impl TxMsdu {
     /// [`FrameTooLong`] when the payload does not fit.
     pub fn refill_from_network(
         &mut self,
-        frame: oer_network_port::EthernetFrameView<'_>,
+        frame: oer_protocols_network_port::EthernetFrameView<'_>,
         priority: WmmUserPriority,
     ) -> Result<(), FrameTooLong> {
         self.frame.refill(MsduParts {
@@ -259,7 +262,7 @@ mod tests {
     #[test]
     fn a_refill_replaces_the_frame_in_place_and_an_oversized_one_changes_nothing() {
         let mut packet = TxMsdu::empty();
-        let view = |payload| oer_network_port::EthernetFrameView {
+        let view = |payload| oer_protocols_network_port::EthernetFrameView {
             destination: [2; 6],
             source: [4; 6],
             ether_type: 0x0800,

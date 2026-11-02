@@ -10,7 +10,7 @@ use core::{
 };
 
 use atomic_waker::AtomicWaker;
-use oer_sync::PriorityWaker;
+use oer_portable_sync::PriorityWaker;
 
 use crate::{Abandon, LocalId, Quarantine, SlotIdentity};
 
@@ -360,7 +360,7 @@ impl<Id: SlotIdentity> SlotClaim<Id> {
 ///
 /// Unclaimed backing cannot publish a frontend without consuming a claim:
 /// ```compile_fail,E0599
-/// use oer_radio_port::{SlotIdentity, SlotOwner, VacantPortSlot};
+/// use oer_protocols_radio_port::{SlotIdentity, SlotOwner, VacantPortSlot};
 /// fn publish<Id: SlotIdentity, S: SlotOwner<Id>>(
 ///     backing: &mut VacantPortSlot<Id, S>, owner: S,
 /// ) {

@@ -1,6 +1,6 @@
 //! Concrete RV32IMAC execution. Instruction fetch, data, and events use explicit ports.
 use super::*;
-use oer_analysis_riscv_decode::{self as extensions, Extension};
+use oer_tools_analysis_riscv_decode::{self as extensions, Extension};
 
 /// Executor of the full decoded ISA: RV32IMAC with Zba, Zbb, Zbs, Zcb and
 /// Zcmp, as ESP-IDF builds the `riscv32imafc` chips.
@@ -27,7 +27,8 @@ impl Profile {
             Self::Full => !matches!(decoded.inst, Instruction::Unimp | Instruction::Float(_)),
             Self::Rv32imac => {
                 !matches!(decoded.inst, Instruction::Unimp)
-                    && oer_analysis_riscv_decode::decode(bytes, Extensions::RV32IMAC).is_some()
+                    && oer_tools_analysis_riscv_decode::decode(bytes, Extensions::RV32IMAC)
+                        .is_some()
             }
         }
     }
@@ -435,7 +436,7 @@ fn run(
                     if fence.fm != 0 {
                         stop!(ExecutionGap::UnsupportedInstruction);
                     }
-                    let bits = |s: oer_analysis_riscv_decode::FenceSet| {
+                    let bits = |s: oer_tools_analysis_riscv_decode::FenceSet| {
                         u8::from(s.device_input) * 8
                             + u8::from(s.device_output) * 4
                             + u8::from(s.memory_read) * 2
@@ -560,12 +561,12 @@ fn run(
         pc = next;
     }
 }
-fn ordering(order: oer_analysis_riscv_decode::AmoOrdering) -> ExecutionOrdering {
+fn ordering(order: oer_tools_analysis_riscv_decode::AmoOrdering) -> ExecutionOrdering {
     let (acquire, release) = order.aq_rl();
     ExecutionOrdering { acquire, release }
 }
-fn atomic(op: oer_analysis_riscv_decode::AmoOp, old: u32, value: u32) -> u32 {
-    use oer_analysis_riscv_decode::AmoOp;
+fn atomic(op: oer_tools_analysis_riscv_decode::AmoOp, old: u32, value: u32) -> u32 {
+    use oer_tools_analysis_riscv_decode::AmoOp;
     match op {
         AmoOp::Swap => value,
         AmoOp::Add => old.wrapping_add(value),

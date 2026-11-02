@@ -5,7 +5,7 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_bluetooth_hci::{
+use oer_protocols_bluetooth_hci::{
     BdAddr, Cmd, CmdMask, CommandComplete, CommandCompleteWithStatus, ControllerToHostFlowControl,
     ControllerToHostPacket, Error as HciError, EventKind, EventMask, EventMaskPage2, FromHciBytes,
     HostBufferSize, LeEventMask, LeReadBufferSize, LeReadFilterAcceptListSize,
@@ -14,7 +14,7 @@ use oer_bluetooth_hci::{
     ReadLocalSupportedCmds, Reset, SetControllerToHostFlowControl, SetEventMask, SetEventMaskPage2,
     Status,
 };
-use oer_bluetooth_hci::{
+use oer_protocols_bluetooth_hci::{
     BluetoothPublicDeviceAddress, BootstrapCommand, BootstrapCommandCompleteEvent,
     HciCommandPacket, LeControllerBootstrapConfig, LeControllerCommandClassification,
     LeDisconnectCommand, OwnedBootstrapCommand, classify_le_controller_command, default_event_mask,

@@ -29,7 +29,7 @@
 //! [`Received::acknowledged`] releases it and resends it when
 //! [`Acknowledgement::transmit`] says so.
 
-use oer_bluetooth_le_wire::data_header::{HeaderFlags, ReceivedHeader, SequenceNumber};
+use oer_protocols_bluetooth_le_wire::data_header::{HeaderFlags, ReceivedHeader, SequenceNumber};
 
 /// The PDU in flight.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

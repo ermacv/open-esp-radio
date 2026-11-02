@@ -9,7 +9,7 @@
 //! critical section; here every step is finite, sequenced through durable P3 replies, and the caller owns the deadline.
 
 #[cfg(feature = "bluetooth-engine")]
-use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
 
 use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionLockDisposition, BluetoothSchedulerExecutionLockPublished,
@@ -21,7 +21,7 @@ use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
 #[cfg(test)]
-use oer_time::settle::Unsettled;
+use oer_portable_time::settle::Unsettled;
 
 /// One execution-lock request and its progress.
 #[must_use = "an admitted execution lock must be stepped and its START cleared"]
@@ -131,7 +131,7 @@ pub(crate) fn clear_start(
     lock: &mut BluetoothSchedulerExecutionLock,
 ) {
     if let Some(published) = lock.take_published() {
-        oer_espressif_bluetooth_engine::port::SchedulerTaskPort::clear_execution_lock(
+        oer_chips_family_bluetooth_engine::port::SchedulerTaskPort::clear_execution_lock(
             task, published,
         );
     }

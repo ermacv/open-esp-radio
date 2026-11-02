@@ -1,5 +1,5 @@
 //! The probe images of the vendor comparison: the packages of
-//! `firmware/probes/`, built with `cfg(oer_probe)`.
+//! `hil/probes/`, built with `cfg(oer_probe)`.
 //!
 //! Only this build sets `cfg(oer_probe)`, only for a verification package,
 //! and in its own target directory (`target/fw-probe`), so the production
@@ -16,23 +16,21 @@ use crate::{Result, strict};
 
 /// The cfg the probe hooks are compiled under.
 pub const PROBE_CFG: &str = "oer_probe";
-/// Every package of `firmware/probes/` (`<chip>-<name>`) is named after its path.
-pub const PROBE_PACKAGE_PREFIX: &str = "oer-firmware-probes-";
+/// Every package of `hil/probes/` (`<chip>-<name>`) is named after its path.
+pub const PROBE_PACKAGE_PREFIX: &str = "oer-hil-probes-";
 /// The target directory of probe builds, below the checkout's `target/`.
 pub const TARGET_SUBDIRECTORY: &str = "fw-probe";
 const PROFILE: &str = crate::FIRMWARE_PROFILE;
 
 /// The chip of the probe package `package`
-/// (`oer-firmware-probes-<chip>-<name>`), one of `chips`.
+/// (`oer-hil-probes-<chip>-<name>`), one of `chips`.
 ///
 /// # Errors
 ///
 /// `package` is not a verification package of one of `chips`.
 pub fn chip_of<'a>(package: &str, chips: &'a [String]) -> Result<&'a str> {
     let rest = package.strip_prefix(PROBE_PACKAGE_PREFIX).ok_or_else(|| {
-        format!(
-            "{package} is not a firmware/probes package, which alone builds with cfg({PROBE_CFG})"
-        )
+        format!("{package} is not a hil/probes package, which alone builds with cfg({PROBE_CFG})")
     })?;
     chips
         .iter()
@@ -59,9 +57,11 @@ pub fn command(
         .get_envs()
         .find(|(name, _)| *name == "CARGO_ENCODED_RUSTFLAGS")
         .and_then(|(_, value)| value)
-        .ok_or(oer_image_checks::codegen::CodegenPrecondition::MissingFlag(
-            "the image compiler's encoded rustflags",
-        ))?;
+        .ok_or(
+            oer_tools_image_checks::codegen::CodegenPrecondition::MissingFlag(
+                "the image compiler's encoded rustflags",
+            ),
+        )?;
     let mut flags = existing
         .to_str()
         .ok_or("probe rustflags must be UTF-8")?
@@ -69,7 +69,7 @@ pub fn command(
         .map(str::to_owned)
         .collect::<Vec<_>>();
     flags.extend(["--cfg".to_owned(), PROBE_CFG.to_owned()]);
-    oer_image_checks::codegen::rustflags(&flags)?;
+    oer_tools_image_checks::codegen::rustflags(&flags)?;
     command
         .current_dir(root)
         .args([
@@ -111,12 +111,12 @@ pub fn image(root: &Path, package: &str, rust_target: &str) -> PathBuf {
 /// `package` is not a verification package of a supported chip, or the
 /// build failed.
 pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf> {
-    let chips: Vec<String> = oer_chip_profile::Profile::all(root)?
+    let chips: Vec<String> = oer_tools_chip_profile::Profile::all(root)?
         .into_iter()
         .map(|profile| profile.facts.id)
         .collect();
     let chip = chip_of(package, &chips)?;
-    let profile = oer_chip_profile::Profile::load(root, chip)?;
+    let profile = oer_tools_chip_profile::Profile::load(root, chip)?;
     let analysis = analysis(
         root,
         package,
@@ -125,8 +125,9 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     )?;
     // The stacks of the harts the probe declares, as an image's: the build
     // script and the image linker size them alike.
-    let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
-        .for_image(&analysis.harts)?;
+    let policy =
+        oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
+            .for_image(&analysis.harts)?;
     let target = profile.facts.rust_target.as_str();
     let cache = target_dir(root);
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
@@ -197,7 +198,7 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     }
     for elf in images.borrow().iter() {
         let name = elf.file_name().ok_or("probe executable has no file name")?;
-        if let Err(error) = oer_image_checks::stack::reachability::probe(
+        if let Err(error) = oer_tools_image_checks::stack::reachability::probe(
             root,
             &profile,
             &policy,
@@ -222,10 +223,10 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
 fn analysis(
     root: &Path,
     package: &str,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     metadata: &serde_json::Value,
-) -> Result<oer_image_checks::linker::strict::Spec> {
-    Ok(oer_image_checks::linker::strict::Spec {
+) -> Result<oer_tools_image_checks::linker::strict::Spec> {
+    Ok(oer_tools_image_checks::linker::strict::Spec {
         root: root.to_owned(),
         chip: profile.facts.id.clone(),
         stack_policy: profile.stack_policy(),
@@ -265,7 +266,7 @@ fn runtime_links_match(
 ) -> Result<bool> {
     for image in images {
         let bytes = std::fs::read(image)?;
-        let elf = oer_analysis_elf::Elf::parse(&bytes)?;
+        let elf = oer_tools_analysis_elf::Elf::parse(&bytes)?;
         // The runtime script defines this boundary. The package's other
         // binary uses a standalone script and writes no placement record.
         if elf.symbol("__runtime_image_start").is_some()
@@ -289,22 +290,22 @@ mod tests {
     fn only_a_verification_package_of_a_known_chip_is_a_probe() {
         let chips = chips();
         assert_eq!(
-            chip_of("oer-firmware-probes-esp32s31-radio", &chips).unwrap(),
+            chip_of("oer-hil-probes-esp32s31-radio", &chips).unwrap(),
             "esp32s31"
         );
         assert_eq!(
-            chip_of("oer-firmware-probes-esp32x9-radio", &chips).unwrap(),
+            chip_of("oer-hil-probes-esp32x9-radio", &chips).unwrap(),
             "esp32x9"
         );
-        assert!(chip_of("oer-firmware-apps-boot-smoke", &chips).is_err());
-        assert!(chip_of("oer-firmware-probes-esp32s3-probe", &chips).is_err());
-        assert!(chip_of("oer-firmware-probes-esp32s31", &chips).is_err());
+        assert!(chip_of("oer-examples-wifi-station", &chips).is_err());
+        assert!(chip_of("oer-hil-probes-esp32s3-probe", &chips).is_err());
+        assert!(chip_of("oer-hil-probes-esp32s31", &chips).is_err());
     }
 
     #[test]
     fn a_probe_that_launches_hart_1_links_hart_1s_stacks() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let profile = oer_chip_profile::Profile::tracked("esp32s31").unwrap();
+        let profile = oer_tools_chip_profile::Profile::tracked("esp32s31").unwrap();
         let metadata = serde_json::json!({"packages": [
             {"name": "two-harts", "metadata": {"open-radio": {"harts": ["boot", 1]}}},
             {"name": "boot-hart", "metadata": null},
@@ -312,7 +313,7 @@ mod tests {
         let policy = |package: &str| {
             let spec = analysis(&root, package, &profile, &metadata).unwrap();
             assert!(spec.diagnostic);
-            oer_chip_profile::policy::StackPolicy::load(&root.join(&spec.stack_policy))
+            oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&spec.stack_policy))
                 .unwrap()
                 .for_image(&spec.harts)
                 .unwrap()
@@ -344,14 +345,7 @@ mod tests {
         let mut compiler = Command::new("cargo");
         let pinned = "-Zmerge-functions=disabled\x1f-Cllvm-args=-enable-machine-outliner=never\x1f-C\x1flinker=image-linker";
         compiler.env("CARGO_ENCODED_RUSTFLAGS", pinned);
-        let command = command(
-            compiler,
-            root,
-            "oer-firmware-probes-esp32s31-radio",
-            "rv",
-            None,
-        )
-        .unwrap();
+        let command = command(compiler, root, "oer-hil-probes-esp32s31-radio", "rv", None).unwrap();
         let env: Vec<_> = command.get_envs().collect();
         assert!(env.contains(&(
             std::ffi::OsStr::new("CARGO_TARGET_DIR"),
@@ -375,7 +369,7 @@ mod tests {
             SymbolScope,
             write::{Object, Symbol, SymbolSection},
         };
-        use oer_image_checks::linker::strict::{FRAGMENT, Fingerprint, PLACEMENT, Placement};
+        use oer_tools_image_checks::linker::strict::{FRAGMENT, Fingerprint, PLACEMENT, Placement};
 
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
@@ -427,11 +421,11 @@ mod tests {
         );
         let placement = Placement {
             fingerprint: Some(Fingerprint {
-                elf_sha256: oer_os_durable::sha256_file(&runtime).unwrap(),
-                linker_sha256: oer_os_durable::sha256_file(&linker).unwrap(),
+                elf_sha256: oer_tools_os_durable::sha256_file(&runtime).unwrap(),
+                linker_sha256: oer_tools_os_durable::sha256_file(&linker).unwrap(),
                 inputs: [(
                     specification.clone(),
-                    oer_os_durable::sha256_file(&specification).unwrap(),
+                    oer_tools_os_durable::sha256_file(&specification).unwrap(),
                 )]
                 .into(),
             }),
@@ -440,7 +434,7 @@ mod tests {
         std::fs::write(root.join(PLACEMENT), toml::to_string(&placement).unwrap()).unwrap();
         std::fs::write(root.join(FRAGMENT), placement.fragment()).unwrap();
         std::fs::write(
-            root.join(oer_image_checks::linker::hot::FRAGMENT),
+            root.join(oer_tools_image_checks::linker::hot::FRAGMENT),
             placement.hot_fragment(),
         )
         .unwrap();

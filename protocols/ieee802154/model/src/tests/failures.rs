@@ -102,7 +102,7 @@ fn request_identity_exhaustion_preserves_the_last_id_and_returns_unadmitted_capa
         type Output = ();
         async fn run<'a, 'p>(
             self,
-            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'p, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where
@@ -148,7 +148,7 @@ fn request_identity_exhaustion_preserves_the_last_id_and_returns_unadmitted_capa
                 );
                 assert_eq!(
                     ready(phase.events.next_event()).unwrap_err(),
-                    oer_radio_port::EventEnd::Drained { cause }
+                    oer_protocols_radio_port::EventEnd::Drained { cause }
                 );
                 drop(ready(client.operation(&mut seat)));
             }
@@ -231,7 +231,7 @@ fn a_fault_injected_from_the_disable_sink_is_reported_by_that_disable() {
         type Output = ();
         async fn run<'a, 'p>(
             self,
-            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_radio_port::Disabled>,
+            mut owner: Owner<'a, 'p, Id, OwnedModel<Id>, oer_protocols_radio_port::Disabled>,
             resources: ModelResources<'p, Id>,
         ) -> Ended<Id, OwnedModel<Id>, ()>
         where

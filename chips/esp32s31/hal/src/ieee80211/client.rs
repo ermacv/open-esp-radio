@@ -90,7 +90,7 @@ pub struct WifiClocked {
 /// to its datapath.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::ieee80211::client::WifiClocksOn;
+/// use oer_chips_esp32s31_hal::ieee80211::client::WifiClocksOn;
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<WifiClocksOn>();
 /// ```

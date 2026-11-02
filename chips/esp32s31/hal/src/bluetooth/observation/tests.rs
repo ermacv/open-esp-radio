@@ -79,9 +79,9 @@ fn production_task_enable_view_is_independent_of_the_diagnostic_word() {
     bank.modify_interrupt_enable(|w| {
         w.set_scheduler_run(false);
         w.set_source_17(false);
-        w.set_bits_0_13_opaque(oer_mmio::Bits::constant::<0>());
-        w.set_bits_15_16_opaque(oer_mmio::Bits::constant::<0>());
-        w.set_bits_18_31_opaque(oer_mmio::Bits::constant::<0>());
+        w.set_bits_0_13_opaque(oer_portable_mmio::Bits::constant::<0>());
+        w.set_bits_15_16_opaque(oer_portable_mmio::Bits::constant::<0>());
+        w.set_bits_18_31_opaque(oer_portable_mmio::Bits::constant::<0>());
     });
     assert_eq!(task_enable(&bank), 0);
     assert_eq!(task(&bank).opaque_state, diagnostic);

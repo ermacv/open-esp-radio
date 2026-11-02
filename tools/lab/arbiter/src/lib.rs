@@ -1,5 +1,5 @@
 //! The scheduling of the single physical stand, for the LAB service that
-//! owns it (`oer-tool-lab-service`).
+//! owns it (`oer-tools-lab-service`).
 //!
 //! Every request claims the boards, fixtures and air it needs. Requests wait
 //! in one queue, ordered by their owners' balances; leases on disjoint
@@ -40,4 +40,4 @@ pub use status::{HolderStatus, QueuedStatus, Status, describe_claims};
 pub use store::Arbiter;
 pub use unknown::Unknown;
 
-pub type Result<T> = oer_os_process::Result<T>;
+pub type Result<T> = oer_tools_os_process::Result<T>;

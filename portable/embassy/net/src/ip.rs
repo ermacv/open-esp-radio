@@ -6,9 +6,11 @@
 //! stack returned by [`Service::stack`]; this module defines no socket API.
 
 use core::{cell::Cell, future::Future, task::Poll};
-use oer_memory::ExecutionContext;
-use oer_network_port::{EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId};
-use oer_sync::PriorityWaker;
+use oer_portable_memory::ExecutionContext;
+use oer_portable_sync::PriorityWaker;
+use oer_protocols_network_port::{
+    EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId,
+};
 use owned_embassy_net::{
     Stack, StackStorage,
     iface::{Iface, dhcpv4::DhcpConfig},
@@ -171,9 +173,9 @@ impl Control<'_> {
 /// slots, RX receive packet/queue slots and TX software admission credits.
 ///
 /// ```compile_fail,E0499
-/// use oer_embassy_net::{NetworkInterfaceId, ip::{Configuration, Resources}};
-/// use oer_memory::ExecutionContext;
-/// use oer_network_port::NetDevice;
+/// use oer_portable_embassy_net::{NetworkInterfaceId, ip::{Configuration, Resources}};
+/// use oer_portable_memory::ExecutionContext;
+/// use oer_protocols_network_port::NetDevice;
 /// fn twice<X: ExecutionContext, D: NetDevice>(
 ///     resources: &'static mut Resources<X, 1, 1, 1>, first: D, second: D,
 /// ) {

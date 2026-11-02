@@ -1,7 +1,7 @@
 //! The PLLs' active-state power over host memory from the PMU's base.
 
 use super::{ActivePower, PllPower};
-use oer_esp32s31_pac::instances;
+use oer_chips_esp32s31_pac::instances;
 use std::{vec, vec::Vec};
 
 fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {

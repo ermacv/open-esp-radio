@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{Station, association::{Association, PairwiseKeySlot, GroupKeySlot, VacantKeyBank, end_association}};
+use oer_protocols_ieee80211_contracts_port::{Station, association::{Association, PairwiseKeySlot, GroupKeySlot, VacantKeyBank, end_association}};
 pub fn end<'id>(owner: Association<'id, Station, 2, 2>, pairwise: [PairwiseKeySlot<'id, Station, 2, 2>; 2], group: [GroupKeySlot<'id, Station, 2, 2>; 2]) {
     let [first, second] = pairwise;
     #[cfg(ui_reject)]

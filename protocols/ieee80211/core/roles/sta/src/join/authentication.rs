@@ -1,11 +1,11 @@
 //! Open Authentication attempts, deadline results and retry ownership.
 
-use oer_ieee80211_wire::address::{Bssid, OwnAddress};
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::status::status_code;
 use {
-    oer_ieee80211_core_upper_mac::sequence::SequenceCounter,
-    oer_ieee80211_wire::station::{
+    oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
+    oer_protocols_ieee80211_wire::station::{
         StaDisconnect, parse_open_authentication_response, parse_sta_disconnect,
     },
 };
@@ -20,7 +20,7 @@ pub const STA_AUTHENTICATION_ATTEMPT_LIMIT: u16 = 3;
 pub struct StaAuthenticationAttempt {
     pub ordinal: u16,
     pub sequence_number: SequenceNumber,
-    pub response_timeout: oer_time::Duration,
+    pub response_timeout: oer_portable_time::Duration,
 }
 
 /// Protocol-level reason why one Authentication attempt ended.

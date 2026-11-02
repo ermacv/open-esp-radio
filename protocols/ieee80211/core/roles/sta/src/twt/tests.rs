@@ -1,10 +1,10 @@
 use super::*;
-use oer_ieee80211_contracts_port::tsf::TsfInstant;
-use oer_ieee80211_wire::twt::IndividualTwtFlowType;
+use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_protocols_ieee80211_wire::twt::IndividualTwtFlowType;
 
 const CONFIG: IndividualTwtRequesterConfig = match IndividualTwtRequesterConfig::new(
-    oer_time::Duration::from_micros(1_000),
-    oer_time::Duration::from_micros(100),
+    oer_portable_time::Duration::from_micros(1_000),
+    oer_portable_time::Duration::from_micros(100),
     2,
     2,
 ) {
@@ -41,11 +41,11 @@ fn generation_exhaustion_never_reissues_a_stale_identity() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
     requester.generation = u32::MAX;
     idle_flow(&mut requester, proposal(true).parameters.flow_id)
-        .queue_setup(proposal(true), oer_time::Instant::from_micros(0))
+        .queue_setup(proposal(true), oer_portable_time::Instant::from_micros(0))
         .unwrap();
 
     assert_eq!(
-        requester.service(oer_time::Instant::from_micros(0)),
+        requester.service(oer_portable_time::Instant::from_micros(0)),
         Err(IndividualTwtRequesterError::GenerationExhausted)
     );
     assert_eq!(
@@ -78,16 +78,20 @@ fn explicit_proposal_reports_the_exact_information_frontier() {
 fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
     idle_flow(&mut requester, proposal(true).parameters.flow_id)
-        .queue_setup(proposal(true), oer_time::Instant::from_micros(0))
+        .queue_setup(proposal(true), oer_portable_time::Instant::from_micros(0))
         .unwrap();
     let IndividualTwtService::Transmit(transmission) = requester
-        .service(oer_time::Instant::from_micros(0))
+        .service(oer_portable_time::Instant::from_micros(0))
         .unwrap()
     else {
         panic!("setup must be ready");
     };
     requester
-        .complete_transmission(transmission, true, oer_time::Instant::from_micros(10))
+        .complete_transmission(
+            transmission,
+            true,
+            oer_portable_time::Instant::from_micros(10),
+        )
         .unwrap();
 
     let mut response_parameters = parameters(false);
@@ -113,10 +117,10 @@ fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     );
     assert_eq!(
         requester.next_deadline(),
-        Some(oer_time::Instant::from_micros(0))
+        Some(oer_portable_time::Instant::from_micros(0))
     );
     let IndividualTwtService::Transmit(teardown) = requester
-        .service(oer_time::Instant::from_micros(10))
+        .service(oer_portable_time::Instant::from_micros(10))
         .unwrap()
     else {
         panic!("rollback teardown must be ready immediately");
@@ -249,8 +253,8 @@ fn idle_flow(
 
 #[test]
 fn queue_authority_follows_the_selected_flow_through_transmission() {
-    use oer_time::Clock as _;
-    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    use oer_portable_time::Clock as _;
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);
     let flow = proposal(true).parameters.flow_id;
     idle_flow(&mut requester, flow)
@@ -268,7 +272,9 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
         requester.flow(flow),
         IndividualTwtFlowAccess::Transmitting(_)
     ));
-    clock.advance(oer_time::Duration::from_micros(10)).unwrap();
+    clock
+        .advance(oer_portable_time::Duration::from_micros(10))
+        .unwrap();
     requester
         .complete_transmission(transmission, true, clock.now())
         .unwrap();
@@ -292,8 +298,8 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
 
 #[test]
 fn a_foreign_proposal_does_not_mutate_either_flow() {
-    use oer_time::Clock as _;
-    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    use oer_portable_time::Clock as _;
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);
     let proposal = proposal(true);
     let selected = IndividualTwtFlowId::new(1).unwrap();
@@ -313,8 +319,8 @@ fn a_foreign_proposal_does_not_mutate_either_flow() {
 
 #[test]
 fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
-    use oer_time::Clock as _;
-    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    use oer_portable_time::Clock as _;
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let flow = proposal(true).parameters.flow_id;
     for phase in [
         FlowPhase::SetupQueued {

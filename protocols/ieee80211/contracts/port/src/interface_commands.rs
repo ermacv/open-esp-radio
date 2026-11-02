@@ -12,8 +12,8 @@
 //! cannot be overwritten; consuming `into_parts` recovers both values.
 use crate::{AccessPoint, InterfaceRole, PhaseTypes, Station, VifRole};
 use core::marker::PhantomData;
-use oer_radio_port::{BodyLoan, LoanedContext, PortContext, SlotOwner};
-use oer_radio_port::{Child, PoolPath, PoolSet, Root, Slot, Slots};
+use oer_protocols_radio_port::{BodyLoan, LoanedContext, PortContext, SlotOwner};
+use oer_protocols_radio_port::{Child, PoolPath, PoolSet, Root, Slot, Slots};
 
 const CONFIGURE_PER_INTERFACE: usize = 1;
 const TSF_PER_INTERFACE: usize = 1;
@@ -32,7 +32,7 @@ impl<R: InterfaceRole> InterfaceCommandPool<R> {
 impl<R: InterfaceRole> PoolSet for InterfaceCommandPool<R> {
     type Pools<'id, Path: PoolPath> = InterfacePermissions<'id, R, Path>;
     fn build<'id, Path: PoolPath>(
-        builder: oer_radio_port::PoolBuilder<'id, Path>,
+        builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
         let ([configure], [tsf]) = builder.into_pools::<(
             Slots<ConfigureKind<R>, CONFIGURE_PER_INTERFACE>,
@@ -52,7 +52,7 @@ impl<R: InterfaceRole> PoolSet for InterfaceCommandPool<R> {
 pub struct InterfacePermissions<
     'id,
     R: InterfaceRole,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     /// One receive-configuration FIFO credit.
     pub configure: ConfigurePermission<'id, R, Path>,
@@ -65,7 +65,7 @@ pub struct InterfacePermissions<
 pub struct ConfigurePermission<
     'id,
     R: InterfaceRole,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
     C = (),
 > {
     slot: Slot<'id, ConfigureKind<R>, Child<Path, 0>>,
@@ -135,8 +135,11 @@ impl<R: InterfaceRole, Path: PoolPath, C: core::fmt::Debug> core::fmt::Debug
 }
 /// One outstanding TSF request on this installation's interface.
 #[must_use = "TSF sampling admission returns only at its terminal"]
-pub struct TsfPermission<'id, R: InterfaceRole, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>>
-{
+pub struct TsfPermission<
+    'id,
+    R: InterfaceRole,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     slot: Slot<'id, TsfKind<R>, Child<Path, 1>>,
 }
 

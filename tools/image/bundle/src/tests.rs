@@ -1,15 +1,15 @@
 use super::*;
 
 /// A chip with a flash map, whose bundles hold an OTA selection.
-fn profile() -> oer_chip_profile::Profile {
+fn profile() -> oer_tools_chip_profile::Profile {
     let repository = tempfile::tempdir().unwrap();
     let root = repository.path();
-    for (path, text) in oer_espressif_facts::tracked::FILES {
+    for (path, text) in oer_chips_family_facts::tracked::FILES {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
-    oer_chip_profile::Profile::all(root)
+    oer_tools_chip_profile::Profile::all(root)
         .unwrap()
         .into_iter()
         .find(|profile| profile.facts.flash.is_some())
@@ -58,7 +58,7 @@ fn a_snapshot_holds_the_published_bytes_in_write_order() {
     assert_eq!(snapshot.segments[2].data, b"app");
     assert_eq!(
         snapshot.segments[2].sha256,
-        oer_os_durable::sha256_bytes(b"app")
+        oer_tools_os_durable::sha256_bytes(b"app")
     );
 }
 

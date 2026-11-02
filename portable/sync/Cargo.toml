@@ -1,5 +1,5 @@
 [package]
-name = "oer-sync"
+name = "oer-portable-sync"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

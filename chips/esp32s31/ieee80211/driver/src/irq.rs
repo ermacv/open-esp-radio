@@ -43,20 +43,20 @@ use core::{
     mem::MaybeUninit,
     sync::atomic::{AtomicU8, AtomicU32, Ordering},
 };
-use oer_espressif_interrupt_table::{Bound, InterruptSources, signal::SignalExecutor};
+use oer_chips_family_interrupt_table::{Bound, InterruptSources, signal::SignalExecutor};
 
 use crate::mac::irq::{
     IrqDisposition, MacInterrupt, MacPowerInterrupt, PowerIrqDisposition,
     consumer::{IrqPublisher, PowerIrqPublisher},
     epoch::{EpochState, InterruptEpoch, Moderated},
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::init::MAC_STATION_INTERRUPT_MASK,
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters, WifiInterruptBanks},
     peripherals::software_interrupt::FromCpu3Irq,
     types::MacInterruptEnableState,
 };
-use oer_memory::{HandlerCell, Installed};
+use oer_portable_memory::{HandlerCell, Installed};
 
 use crate::rx::counters::WifiRxCounters;
 
@@ -68,8 +68,8 @@ use crate::mac::irq::Fault;
 /// The image implements it over its `FROM_CPU` 3 doorbell; host tests run
 /// the handler synchronously, as the interrupt would preempt the driver.
 pub trait RadioDoorbell {
-    const HANDLER: oer_espressif_interrupt_table::Context;
-    const EXECUTOR: oer_espressif_interrupt_table::Context;
+    const HANDLER: oer_chips_family_interrupt_table::Context;
+    const EXECUTOR: oer_chips_family_interrupt_table::Context;
     /// Raise the doorbell. Never waits.
     fn ring(&self);
 }
@@ -89,10 +89,10 @@ pub trait DoorbellAcknowledge {
 /// image's interrupt table binds it once, its sources from its type:
 ///
 /// ```no_run
-/// use oer_esp32s31_hal::{owner::WifiInterruptBanks, peripherals::software_interrupt::FromCpu3Irq};
-/// use oer_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
-/// # const LINES: oer_espressif_interrupt_table::Lines =
-/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
+/// use oer_chips_esp32s31_hal::{owner::WifiInterruptBanks, peripherals::software_interrupt::FromCpu3Irq};
+/// use oer_chips_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
+/// # const LINES: oer_chips_family_interrupt_table::Lines =
+/// #     oer_chips_family_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
 /// pub struct Lower;
 /// impl DoorbellAcknowledge for Lower {
 ///     fn acknowledge(&mut self) {}
@@ -100,14 +100,14 @@ pub trait DoorbellAcknowledge {
 /// pub fn on_wifi(_part: &mut WifiIrqPart<Lower>) {
 ///     // service_wifi_line(&LINE, part)
 /// }
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
 ///     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, context radio, hart 0, Hardware;
 /// }
 /// fn start(
-///     router: &mut oer_espressif_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController, 0>,
+///     router: &mut oer_chips_family_interrupt_table::Router<oer_chips_esp32s31_hal::platform::InterruptController, 0>,
 ///     token: WifiToken,
 ///     banks: WifiInterruptBanks,
 ///     bell: FromCpu3Irq,
@@ -120,22 +120,22 @@ pub trait DoorbellAcknowledge {
 /// The part moves into its one binding:
 ///
 /// ```compile_fail,E0382
-/// # use oer_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
-/// # const LINES: oer_espressif_interrupt_table::Lines =
-/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
+/// # use oer_chips_esp32s31_ieee80211_driver::irq::{DoorbellAcknowledge, WifiIrqPart};
+/// # const LINES: oer_chips_family_interrupt_table::Lines =
+/// #     oer_chips_family_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: 2, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
 /// # pub struct Lower;
 /// # impl DoorbellAcknowledge for Lower {
 /// #     fn acknowledge(&mut self) {}
 /// # }
 /// # pub fn on_wifi(_part: &mut WifiIrqPart<Lower>) {}
-/// # oer_espressif_interrupt_table::interrupt_table! {
+/// # oer_chips_family_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     contexts { radio: 3; }
 /// #     wifi: WifiToken = WifiIrqPart<Lower> => on_wifi, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(
-///     router: &mut oer_espressif_interrupt_table::Router<oer_esp32s31_hal::platform::InterruptController, 0>,
+///     router: &mut oer_chips_family_interrupt_table::Router<oer_chips_esp32s31_hal::platform::InterruptController, 0>,
 ///     token: WifiToken,
 ///     part: WifiIrqPart<Lower>,
 /// ) {
@@ -188,16 +188,18 @@ impl<A, B, I: MacInterrupt, P: MacPowerInterrupt> WifiLinePart for WifiIrqPart<A
 /// [`Bound`] proof that the image's interrupt table binds a [`WifiLinePart`]
 /// (host tests use their own host proof). Sealed: only the router makes one.
 pub trait WifiIrqActivation: sealed::Sealed {
-    const CONTEXT: oer_espressif_interrupt_table::Context;
+    const CONTEXT: oer_chips_family_interrupt_table::Context;
 }
 
-impl<E: oer_espressif_interrupt_table::Entry> sealed::Sealed for Bound<E> where E::Part: WifiLinePart
-{}
-impl<E: oer_espressif_interrupt_table::Entry> WifiIrqActivation for Bound<E>
+impl<E: oer_chips_family_interrupt_table::Entry> sealed::Sealed for Bound<E> where
+    E::Part: WifiLinePart
+{
+}
+impl<E: oer_chips_family_interrupt_table::Entry> WifiIrqActivation for Bound<E>
 where
     E::Part: WifiLinePart,
 {
-    const CONTEXT: oer_espressif_interrupt_table::Context = E::CONTEXT;
+    const CONTEXT: oer_chips_family_interrupt_table::Context = E::CONTEXT;
 }
 
 /// The host tests' stand-in for the binding's proof: no table binds a host
@@ -209,12 +211,12 @@ pub(crate) struct HostActivation;
 impl sealed::Sealed for HostActivation {}
 #[cfg(test)]
 impl WifiIrqActivation for HostActivation {
-    const CONTEXT: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 3, hart: 0 };
+    const CONTEXT: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
 }
 
 impl<A> InterruptSources for WifiIrqPart<A> {
-    const SOURCES: &'static [u16] = oer_espressif_interrupt_table::interrupt_sources![
+    const SOURCES: &'static [u16] = oer_chips_family_interrupt_table::interrupt_sources![
         MacInterruptRegisters,
         MacPowerInterruptRegisters,
         FromCpu3Irq
@@ -312,7 +314,7 @@ impl WifiIrqRequests {
     /// handler serves every event the epoch enables. Never waits.
     ///
     /// ```compile_fail,E0061
-    /// # use oer_esp32s31_ieee80211_driver::irq::{RadioDoorbell, WifiIrqRequests};
+    /// # use oer_chips_esp32s31_ieee80211_driver::irq::{RadioDoorbell, WifiIrqRequests};
     /// fn start(requests: &WifiIrqRequests, doorbell: &impl RadioDoorbell) {
     ///     // The activation takes the binding's proof.
     ///     requests.activate(doorbell);
@@ -320,13 +322,13 @@ impl WifiIrqRequests {
     /// ```
     ///
     /// ```compile_fail,E0277
-    /// # use oer_esp32s31_ieee80211_driver::irq::{RadioDoorbell, WifiIrqRequests};
-    /// # use oer_espressif_interrupt_table::Bound;
+    /// # use oer_chips_esp32s31_ieee80211_driver::irq::{RadioDoorbell, WifiIrqRequests};
+    /// # use oer_chips_family_interrupt_table::Bound;
     /// struct OtherIrq;
-    /// impl oer_mmio::InterruptSource for OtherIrq {
+    /// impl oer_portable_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;
     /// }
-    /// fn start<E: oer_espressif_interrupt_table::Entry<Part = OtherIrq>>(requests: &WifiIrqRequests, bound: &Bound<E>, doorbell: &impl RadioDoorbell) {
+    /// fn start<E: oer_chips_family_interrupt_table::Entry<Part = OtherIrq>>(requests: &WifiIrqRequests, bound: &Bound<E>, doorbell: &impl RadioDoorbell) {
     ///     // Another part's binding proves nothing about the Wi-Fi banks.
     ///     requests.activate(bound, doorbell);
     /// }
@@ -334,7 +336,7 @@ impl WifiIrqRequests {
     pub fn activate<A: WifiIrqActivation, D: RadioDoorbell>(&self, bound: &A, doorbell: &D) {
         const {
             assert!(
-                oer_espressif_interrupt_table::request_direction(A::CONTEXT, D::EXECUTOR),
+                oer_chips_family_interrupt_table::request_direction(A::CONTEXT, D::EXECUTOR),
                 "a request handler must be above its executor on the same hart"
             );
             assert!(

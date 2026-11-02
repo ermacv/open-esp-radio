@@ -1,6 +1,6 @@
 use crate::lifecycle::Request as LifecycleRequest;
-use oer_hil_protocol::base::{ImageKeyPage, sorted_keys};
-use oer_hil_protocol::lifecycle::{RequestReset, ResetAccepted};
+use oer_protocols_hil_protocol::base::{ImageKeyPage, sorted_keys};
+use oer_protocols_hil_protocol::lifecycle::{RequestReset, ResetAccepted};
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
@@ -8,7 +8,7 @@ crate::requests! {
     }
 }
 use crate::test_messages::{Probe, ProbeMode};
-use oer_hil_protocol::{Envelope, FrameEncoder, Key};
+use oer_protocols_hil_protocol::{Envelope, FrameEncoder, Key};
 
 use super::*;
 
@@ -85,7 +85,7 @@ fn image_key_discovery_needs_no_boot_but_every_other_request_does() {
             &mut intake,
             0,
             0,
-            oer_hil_protocol::base::GetHello
+            oer_protocols_hil_protocol::base::GetHello
         )),
         Answer::Hello(_)
     ));
@@ -174,14 +174,14 @@ crate::requests! {
         #[cfg(any())]
         Absent(crate::test_messages::Switch),
     }
-    publishes [oer_hil_protocol::lifecycle::ResetAccepted, #[cfg(any())] crate::test_messages::Switched]
+    publishes [oer_protocols_hil_protocol::lifecycle::ResetAccepted, #[cfg(any())] crate::test_messages::Switched]
 }
 
 crate::requests! {
     enum Sharing (sessions = false) {
         Reset(RequestReset),
     }
-    publishes [oer_hil_protocol::lifecycle::ResetAccepted]
+    publishes [oer_protocols_hil_protocol::lifecycle::ResetAccepted]
 }
 
 crate::image_keys! {

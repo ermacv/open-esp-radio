@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee80211-core-security-cipher"
+name = "oer-protocols-ieee80211-core-security-cipher"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,16 +8,16 @@ repository.workspace = true
 description = "Stateless IEEE 802.11 CCMP, BIP and bounded AES key-wrap transforms over a caller's AES engine"
 
 [dependencies]
-oer-crypto = { path = "../../../../../portable/crypto" }
-oer-ieee80211-wire = { path = "../../../wire" }
-oer-ieee80211-contracts-security = { path = "../../../contracts/security" }
+oer-portable-crypto = { path = "../../../../../portable/crypto" }
+oer-protocols-ieee80211-wire = { path = "../../../wire" }
+oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
-oer-crypto = { path = "../../../../../portable/crypto", features = ["test-support"] }
-oer-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
-oer-ieee80211-wire = { path = "../../../wire", features = ["test-support"] }
+oer-portable-crypto = { path = "../../../../../portable/crypto", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
+oer-protocols-ieee80211-wire = { path = "../../../wire", features = ["test-support"] }
 
 [lints]
 workspace = true

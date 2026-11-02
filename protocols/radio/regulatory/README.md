@@ -1,6 +1,6 @@
 # Regulatory domain
 
-`oer-radio-regulatory` decides which channels a country permits and at what
+`oer-protocols-radio-regulatory` decides which channels a country permits and at what
 power. It speaks frequencies and power, not protocol channels: each protocol
 crate implements `RadioChannel` for its own channel type and receives a
 `Permitted<C>` back.

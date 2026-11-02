@@ -75,7 +75,7 @@ pub enum AffineSpscTryReceiveError {
 /// a producer cannot manufacture another receiver.
 ///
 /// ```compile_fail,E0499
-/// use oer_memory::AffineSpscQueue;
+/// use oer_portable_memory::AffineSpscQueue;
 /// let mut queue = AffineSpscQueue::<u8, 2>::new();
 /// let (first, consumer) = queue.split();
 /// let second = queue.split();
@@ -85,12 +85,12 @@ pub enum AffineSpscTryReceiveError {
 /// Capacity checks run at compile time even in an ordinary function call.
 ///
 /// ```compile_fail,E0080
-/// use oer_memory::AffineSpscQueue;
+/// use oer_portable_memory::AffineSpscQueue;
 /// let queue = AffineSpscQueue::<u8, 0>::new();
 /// ```
 ///
 /// ```compile_fail,E0080
-/// use oer_memory::AffineSpscQueue;
+/// use oer_portable_memory::AffineSpscQueue;
 /// let queue = AffineSpscQueue::<(), { usize::MAX / 2 + 1 }>::new();
 /// ```
 pub struct AffineSpscQueue<T, const DEPTH: usize, C: SpscCursor = CachedSpscCursor> {
@@ -294,7 +294,7 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
     /// Neither refusal nor dropping a permit advances the producer cursor.
     ///
     /// ```compile_fail,E0502
-    /// use oer_memory::AffineSpscQueue;
+    /// use oer_portable_memory::AffineSpscQueue;
     /// let mut queue = AffineSpscQueue::<u8, 1>::new();
     /// let (mut sender, receiver) = queue.split();
     /// let permit = sender.try_reserve().ok().unwrap();
@@ -303,7 +303,7 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
     /// ```
     ///
     /// ```
-    /// use oer_memory::AffineSpscQueue;
+    /// use oer_portable_memory::AffineSpscQueue;
     /// let mut queue = AffineSpscQueue::<u8, 1>::new();
     /// let (mut sender, receiver) = queue.split();
     /// sender.try_reserve().ok().unwrap().send(1);

@@ -1,13 +1,15 @@
 use super::*;
-use oer_espressif_ieee802154_engine::{
+use oer_chips_family_ieee802154_engine::{
     engine::{
         Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo, Ieee802154ReceivedAck,
         Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
     },
     ll::model::Ieee802154LlModel,
 };
-use oer_espressif_ieee802154_mac_values::FRAME_SIZE;
-use oer_espressif_ieee802154_mac_values::{Ieee802154Channel, Ieee802154Event, Ieee802154RxStatus};
+use oer_chips_family_ieee802154_mac_values::FRAME_SIZE;
+use oer_chips_family_ieee802154_mac_values::{
+    Ieee802154Channel, Ieee802154Event, Ieee802154RxStatus,
+};
 use std::boxed::Box;
 
 static LEVELS: [i8; 1] = [0];
@@ -54,10 +56,10 @@ fn model() -> (
     let rx = core::ptr::from_ref(&buffers.rx_frames()[0]).addr() as u32;
     let tx = core::ptr::from_ref(buffers.tx_frame()).addr() as u32;
     let levels = Ieee802154TxPowerLevels::new(&LEVELS).unwrap();
-    let permitted = oer_radio_regulatory::TEST_DOMAIN
+    let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
         .permit(Ieee802154Channel::new(11).unwrap())
         .unwrap();
-    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+    let ceiling = permitted.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: None,
@@ -149,14 +151,14 @@ fn service_quarantines_the_placed_owner_with_its_exact_fault() {
     assert_eq!(std::format!("{:?}", fault._owners.inner.model_ll()), before);
     assert_eq!(
         fault.fault(),
-        oer_espressif_ieee802154_engine::engine::Fault::UnhandledEvents {
+        oer_chips_family_ieee802154_engine::engine::Fault::UnhandledEvents {
             observation:
-                oer_espressif_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
+                oer_chips_family_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
                     Ieee802154Event::ClockCountMatch.mask(),
                     false,
                     false,
                 ),
-            state: oer_espressif_ieee802154_engine::engine::Ieee802154State::Disable,
+            state: oer_chips_family_ieee802154_engine::engine::Ieee802154State::Disable,
         }
     );
 }
@@ -173,12 +175,12 @@ fn dropping_quarantine_keeps_both_affine_owners_without_reuse() {
     let mac_drops = Rc::new(Cell::new(0));
     let dma_drops = Rc::new(Cell::new(0));
     let fault = Fault::UnhandledEvents {
-        observation: oer_espressif_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
+        observation: oer_chips_family_ieee802154_mac_values::Ieee802154EventObservation::from_parts(
             Ieee802154Event::RxDone.mask(),
             true,
             true,
         ),
-        state: oer_espressif_ieee802154_engine::engine::Ieee802154State::Rx,
+        state: oer_chips_family_ieee802154_engine::engine::Ieee802154State::Rx,
     };
     let quarantine = Quarantined::new((Owner(mac_drops.clone()), Owner(dma_drops.clone())), fault);
     assert_eq!(quarantine.fault(), fault);
@@ -204,7 +206,7 @@ fn successful_service_returns_the_same_placed_owner_for_the_next_entry() {
 
 #[test]
 fn a_fault_after_dispatch_retains_the_same_dma_owner_and_actual_progress() {
-    use oer_espressif_ieee802154_engine::engine::{Ieee802154State, fault::ServiceError};
+    use oer_chips_family_ieee802154_engine::engine::{Ieee802154State, fault::ServiceError};
     let (mut engine, _, tx) = model();
     engine.enable();
     engine.mac_init();

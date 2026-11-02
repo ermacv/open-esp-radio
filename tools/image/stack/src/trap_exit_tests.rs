@@ -4,10 +4,10 @@
 //! the entry and exit checks, and each way of losing the interrupted state
 //! fails them.
 use super::*;
-use oer_espressif_facts::generate::{self, Vectors};
+use oer_chips_family_facts::generate::{self, Vectors};
 
 /// The runtime's hand-written trap assembly: the common entry and exit.
-const VECTORS: &str = include_str!("../../../../chips/espressif/staged-runtime/src/vectors.s");
+const VECTORS: &str = include_str!("../../../../chips/family/staged-runtime/src/vectors.s");
 
 /// The vectors the runtime's build generates for chip `id`.
 fn chip(id: &str) -> Vectors {
@@ -45,19 +45,19 @@ fn runtime_built(vectors: &str, chip: &Vectors, trace: bool) -> Vec<u8> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let riscv = root.join("portable/riscv/src/lib.rs");
     let volatile = root.join("portable/memory/src/volatile.rs");
-    let tcontrol = root.join("chips/espressif/staged-runtime/src/stacks/tcontrol.rs");
+    let tcontrol = root.join("chips/family/staged-runtime/src/stacks/tcontrol.rs");
     // Compile the runtime's frame declaration and assembly invocation verbatim:
     // adding or changing an operand must affect this fixture as well. Only the
     // include paths change to select this test's generated files and mutations.
-    let trap = include_str!("../../../../chips/espressif/staged-runtime/src/trap.rs")
+    let trap = include_str!("../../../../chips/family/staged-runtime/src/trap.rs")
         .split_once("\n/// Vectors of a hart's CLIC")
         .unwrap()
         .0;
-    let layout = include_str!("../../../../chips/espressif/staged-runtime/src/layout.rs")
+    let layout = include_str!("../../../../chips/family/staged-runtime/src/layout.rs")
         .split_once("\n/// The linked image's sections and stacks")
         .unwrap()
         .0;
-    let (_, assembly) = include_str!("../../../../chips/espressif/staged-runtime/src/stacks.rs")
+    let (_, assembly) = include_str!("../../../../chips/family/staged-runtime/src/stacks.rs")
         .split_once("core::arch::global_asm!(")
         .unwrap();
     let assembly = format!("core::arch::global_asm!({assembly}")
@@ -91,13 +91,13 @@ fn runtime_built(vectors: &str, chip: &Vectors, trace: bool) -> Vec<u8> {
 #![no_main]
 #![allow(dead_code, unused_imports, unused_macros)]
 
-extern crate self as oer_riscv;
-extern crate self as oer_memory;
-#[allow(unused_attributes, reason = "oer-riscv's crate root is a fixture module")]
+extern crate self as oer_portable_riscv;
+extern crate self as oer_portable_memory;
+#[allow(unused_attributes, reason = "oer-portable-riscv's crate root is a fixture module")]
 #[path = {riscv:?}]
 mod architecture;
 pub use architecture::*;
-// The layout's volatile read, from oer-memory's own module.
+// The layout's volatile read, from oer-portable-memory's own module.
 #[path = {volatile:?}]
 mod volatile;
 pub use volatile::read_volatile;
@@ -185,7 +185,7 @@ fn checked(elf: &[u8]) -> Result<(Vec<Option<TrapEntry>>, TrapEntry)> {
 }
 
 fn address(elf: &[u8], name: &str) -> u32 {
-    oer_analysis_elf::Elf::parse(elf)
+    oer_tools_analysis_elf::Elf::parse(elf)
         .unwrap()
         .address(name)
         .unwrap() as u32
@@ -215,7 +215,7 @@ fn every_runtime_entry_returns_through_the_checked_exit() {
         }
         assert_eq!(exception.frame, 96);
         assert_eq!(
-            exception_copies(&oer_analysis_elf::Elf::parse(&elf).unwrap()).unwrap(),
+            exception_copies(&oer_tools_analysis_elf::Elf::parse(&elf).unwrap()).unwrap(),
             3
         );
         assert_eq!(exception.handler, address(&elf, "oer_exception_handler"));
@@ -239,7 +239,7 @@ fn every_traced_entry_records_ra_and_returns_through_the_checked_exit() {
     }
     // The traced entries reference the hart words; the plain ones do not.
     let words = |elf: &[u8]| {
-        oer_analysis_elf::Elf::parse(elf)
+        oer_tools_analysis_elf::Elf::parse(elf)
             .unwrap()
             .symbols()
             .any(|symbol| symbol.demangled().contains("INTERRUPTED_RA"))
@@ -430,6 +430,6 @@ fn malformed_exception_nesting_metadata_is_refused() {
         ),
     ] {
         let elf = runtime(&vectors, &s31());
-        assert!(exception_copies(&oer_analysis_elf::Elf::parse(&elf).unwrap()).is_err());
+        assert!(exception_copies(&oer_tools_analysis_elf::Elf::parse(&elf).unwrap()).is_err());
     }
 }

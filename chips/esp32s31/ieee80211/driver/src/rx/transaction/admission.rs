@@ -13,7 +13,7 @@ pub const DEFAULT_CRITICAL_RESERVE: usize = 1;
 /// ordinary credit, so a one-slot pool or queue requires explicit zero reserve.
 ///
 /// ```ignore-riscv32
-/// use oer_esp32s31_ieee80211_driver::rx::transaction::CreditPolicy;
+/// use oer_chips_esp32s31_ieee80211_driver::rx::transaction::CreditPolicy;
 /// assert_eq!(CreditPolicy::new(1).validate(2, 2).unwrap().critical_reserved_credits(), 1);
 /// assert!(CreditPolicy::new(1).validate(32, 1).is_err());
 /// assert_eq!(CreditPolicy::new(0).validate(32, 1).unwrap().critical_reserved_credits(), 0);
@@ -92,10 +92,12 @@ impl IngressClass {
         match frame_control {
             Some(value)
                 if matches!(
-                    oer_ieee80211_wire::frame::FrameControlFields::from_raw(value).kind(),
-                    oer_ieee80211_wire::frame::FrameType::Data
-                ) && oer_ieee80211_wire::frame::FrameControlFields::from_raw(value)
-                    .protected() =>
+                    oer_protocols_ieee80211_wire::frame::FrameControlFields::from_raw(value).kind(),
+                    oer_protocols_ieee80211_wire::frame::FrameType::Data
+                ) && oer_protocols_ieee80211_wire::frame::FrameControlFields::from_raw(
+                    value,
+                )
+                .protected() =>
             {
                 Self::BulkProtectedData
             }

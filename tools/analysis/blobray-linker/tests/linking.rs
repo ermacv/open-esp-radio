@@ -9,11 +9,11 @@ use object::{
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_analysis_blobray_application::in_process::Executable;
-use oer_analysis_blobray_application::linking::{LinkedImage, link, propose_companions};
-use oer_analysis_blobray_domain::*;
-use oer_analysis_blobray_linker::ElfLinker;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_application::in_process::Executable;
+use oer_tools_analysis_blobray_application::linking::{LinkedImage, link, propose_companions};
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_blobray_linker::ElfLinker;
+use oer_tools_analysis_riscv_model::*;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -187,7 +187,7 @@ fn layout() -> ImageLayout {
 /// The exact symbol `name` of object `member` of `executable`.
 fn defined(executable: &Executable, member: usize, name: &[u8]) -> SymbolId {
     let memory = WorkingMemory::new(16 * 1024 * 1024).unwrap();
-    let inventory = oer_analysis_blobray_application::captured::inventory(
+    let inventory = oer_tools_analysis_blobray_application::captured::inventory(
         executable,
         &memory,
         &mut WorkBudget::new(),

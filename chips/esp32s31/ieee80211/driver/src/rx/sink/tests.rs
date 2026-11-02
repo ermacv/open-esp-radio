@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word;
+use oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word;
 
 use super::*;
 use crate::rx::{

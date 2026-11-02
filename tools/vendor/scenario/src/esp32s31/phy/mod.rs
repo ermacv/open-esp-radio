@@ -2,7 +2,7 @@
 //! ([`crate::phy`]) and [`crate::esp32s31::layout::PHY_LAYOUT`].
 
 pub mod calibration_leaves;
-pub use oer_esp32s31_knowledge::phy_relation::committed;
+pub use oer_chips_esp32s31_knowledge::phy_relation::committed;
 pub mod gain;
 pub mod gain_state;
 pub mod i2c;

@@ -1,6 +1,6 @@
 //! Consumer projections of the image's structural address-use index.
-use oer_analysis_riscv_model::{Ledger, Result, RunControl};
-use oer_analysis_riscv_program::facts::{ImageFacts, addresses::AddressUse};
+use oer_tools_analysis_riscv_model::{Ledger, Result, RunControl};
+use oer_tools_analysis_riscv_program::facts::{ImageFacts, addresses::AddressUse};
 
 /// Every numerical address taken through a symbol or absolute relocation.
 /// Keep this consumer's existing policy: direct section targets do not enter
@@ -25,7 +25,7 @@ pub fn taken_addresses(
 pub(super) fn taken_address(address_use: &AddressUse<'_>) -> Option<u32> {
     if matches!(
         address_use.relocation.target,
-        oer_analysis_elf::Target::Section(_) | oer_analysis_elf::Target::Other
+        oer_tools_analysis_elf::Target::Section(_) | oer_tools_analysis_elf::Target::Other
     ) {
         None
     } else {
@@ -63,14 +63,14 @@ pub(super) fn function_use(
     };
     let symbol = address_use.symbol.as_ref().filter(|symbol| {
         matches!(policy, FunctionUsePolicy::TypedStorage)
-            || symbol.kind == oer_analysis_elf::SymbolKind::Text
+            || symbol.kind == oer_tools_analysis_elf::SymbolKind::Text
     });
     let symbol = symbol
         .and_then(|symbol| u32::try_from(symbol.address).ok())
         .filter(|address| analysis.functions.contains_key(address));
     let canonical = address_use.value.canonical().ok_or_else(|| {
-        oer_analysis_riscv_model::Error::new(
-            oer_analysis_riscv_model::ErrorCode::Integrity,
+        oer_tools_analysis_riscv_model::Error::new(
+            oer_tools_analysis_riscv_model::ErrorCode::Integrity,
             "address-use value exceeds RV32",
         )
     })?;

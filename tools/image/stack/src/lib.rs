@@ -3,7 +3,7 @@
 //!
 //! Every function is a defined code symbol of the image. Its frame is the
 //! compiler's `.stack_sizes` entry, cross-checked with the deepest entry-relative
-//! `sp` the bounded value analysis of `oer-analysis-riscv-analysis` observes; a function
+//! `sp` the bounded value analysis of `oer-tools-analysis-riscv-analysis` observes; a function
 //! without an entry takes the observed depth only when its control-flow graph
 //! is complete. Its callees are every direct call and out-of-function jump of a
 //! linear sweep over its whole extent, which also reaches code behind jump
@@ -43,11 +43,11 @@ mod wakers;
 #[cfg(test)]
 mod write_summary_tests;
 
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     CallBehavior, CodeRange, Error, ErrorCode, FunctionRecord, JumpDispatch, Ledger, Result,
     RunControl, WorkingMemory,
 };
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -61,8 +61,10 @@ pub use dwarf::{DebugMetadata, Dwarf, Marked, Returned, read as read_debug};
 use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
-pub use oer_analysis_riscv_analysis::TrapSemantics;
-use oer_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
+pub use oer_tools_analysis_riscv_analysis::TrapSemantics;
+use oer_tools_analysis_riscv_analysis::{
+    JumpTableSource, KnownJump, ProvenTables, RecognizedTables,
+};
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};
@@ -365,7 +367,7 @@ pub struct Analysis {
 /// charges `control`; running out of either fails the analysis with
 /// [`ErrorCode::ResourceLimited`].
 /// `call_behavior` supplies explicit proofs, such as the [`Dwarf`] facts
-/// from [`read_debug`]; pass [`oer_analysis_riscv_model::UnknownCallBehavior`]
+/// from [`read_debug`]; pass [`oer_tools_analysis_riscv_model::UnknownCallBehavior`]
 /// when no such facts are available.
 pub fn analyze(
     image: &ImageFacts<'_>,
@@ -548,10 +550,10 @@ pub fn inspect_function(
     image: &ImageFacts<'_>,
     function: &Function,
     call_behavior: &dyn CallBehavior,
-    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
+    options: oer_tools_analysis_riscv_analysis::ResearchOptions<'_>,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
-    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+    sink: &mut dyn oer_tools_analysis_riscv_model::FunctionSink,
 ) -> Result<()> {
     inspect_function_as(
         image,
@@ -559,7 +561,7 @@ pub fn inspect_function(
         call_behavior,
         options,
         &[],
-        &oer_analysis_riscv_lift::StructuralRiscvDecoder,
+        &oer_tools_analysis_riscv_lift::StructuralRiscvDecoder,
         TrapSemantics::Unknown,
         memory,
         control,
@@ -573,11 +575,11 @@ pub fn inspect_stack_context(
     image: &ImageFacts<'_>,
     function: &Function,
     call_behavior: &dyn CallBehavior,
-    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
+    options: oer_tools_analysis_riscv_analysis::ResearchOptions<'_>,
     extra: &[KnownJump],
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
-    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+    sink: &mut dyn oer_tools_analysis_riscv_model::FunctionSink,
 ) -> Result<()> {
     inspect_function_as(
         image,
@@ -585,7 +587,7 @@ pub fn inspect_stack_context(
         call_behavior,
         options,
         extra,
-        &oer_analysis_riscv_lift::StackRiscvDecoder,
+        &oer_tools_analysis_riscv_lift::StackRiscvDecoder,
         TrapSemantics::Unknown,
         memory,
         control,
@@ -598,19 +600,19 @@ fn inspect_function_as(
     image: &ImageFacts<'_>,
     function: &Function,
     call_behavior: &dyn CallBehavior,
-    options: oer_analysis_riscv_analysis::ResearchOptions<'_>,
+    options: oer_tools_analysis_riscv_analysis::ResearchOptions<'_>,
     extra: &[KnownJump],
-    decoder: &dyn oer_analysis_riscv_model::FunctionSemantics,
+    decoder: &dyn oer_tools_analysis_riscv_model::FunctionSemantics,
     traps: TrapSemantics,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
-    sink: &mut dyn oer_analysis_riscv_model::FunctionSink,
+    sink: &mut dyn oer_tools_analysis_riscv_model::FunctionSink,
 ) -> Result<()> {
-    use oer_analysis_riscv_analysis::{
+    use oer_tools_analysis_riscv_analysis::{
         FunctionInput, PreparedReferences, research_following_tables_with_options,
     };
-    use oer_analysis_riscv_model::NoSummaries;
-    use oer_analysis_riscv_program::ProgramView;
+    use oer_tools_analysis_riscv_model::NoSummaries;
+    use oer_tools_analysis_riscv_program::ProgramView;
     let mut work = Ledger::new(memory, control)?;
     let swept = sweep::transfers(image, function, &mut work, control)?;
     let mut jumps = Vec::new();

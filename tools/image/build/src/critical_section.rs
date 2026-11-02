@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use oer_chip_profile::Profile;
+use oer_tools_chip_profile::Profile;
 use serde_json::Value;
 
 use crate::Result;
@@ -114,7 +114,10 @@ mod tests {
                 (
                     manifest["package"].clone(),
                     dependencies,
-                    Path::new(member).starts_with("firmware"),
+                    crate::images::DIRECTORIES
+                        .iter()
+                        .any(|(images, _)| Path::new(member).starts_with(images))
+                        || Path::new(member).ends_with("bootstrap"),
                 ),
             );
         }
@@ -127,7 +130,7 @@ mod tests {
                 let mut pending = vec![name.as_str()];
                 let mut visited = BTreeSet::new();
                 while let Some(dependency) = pending.pop() {
-                    if dependency == "oer-espressif-staged-runtime" {
+                    if dependency == "oer-chips-family-staged-runtime" {
                         return Some(package.clone());
                     }
                     if visited.insert(dependency)
@@ -169,15 +172,15 @@ mod tests {
             root.join("Cargo.toml"),
             r#"
 [workspace]
-members = ["firmware/apps/new", "firmware/probes/new", "tools/host", "chips/adapter"]
+members = ["examples/new", "hil/probes/new", "tools/host", "chips/adapter"]
 [workspace.dependencies]
-rt = { package = "oer-espressif-staged-runtime", version = "0.1" }
+rt = { package = "oer-chips-family-staged-runtime", version = "0.1" }
 "#,
         )
         .unwrap();
         for (member, source) in [
             (
-                "firmware/apps/new",
+                "examples/new",
                 r#"
 [package]
 name = "new-app"
@@ -186,12 +189,12 @@ adapter = "0.1"
 "#,
             ),
             (
-                "firmware/probes/new",
+                "hil/probes/new",
                 r#"
 [package]
 name = "new-probe"
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-rt = { package = "oer-espressif-staged-runtime", version = "0.1" }
+rt = { package = "oer-chips-family-staged-runtime", version = "0.1" }
 "#,
             ),
             (
@@ -209,7 +212,7 @@ rt.workspace = true
 [package]
 name = "host-tool"
 [dependencies]
-oer-espressif-staged-runtime = "0.1"
+oer-chips-family-staged-runtime = "0.1"
 "#,
             ),
         ] {

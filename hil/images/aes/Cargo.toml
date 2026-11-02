@@ -1,0 +1,38 @@
+[package]
+name = "oer-hil-images-aes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+description = "The HIL image of the radio-free scenarios: the oer AES engine served over the HIL console, without Wi-Fi"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer = { path = "../../../oer", features = ["console"] }
+oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-hil-agent = { path = "../../agent" }
+oer-protocols-hil-protocol = { workspace = true }
+oer-hil-services-aes = { path = "../../services/aes" }
+static_cell.workspace = true
+
+[dev-dependencies]
+oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-protocols-hil-protocol = { workspace = true }
+oer-hil-services-aes = { path = "../../services/aes" }
+heapless = "0.9.3"
+postcard = { version = "1.1.3", default-features = false }
+
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+# Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
+task-stack = "proven"
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each a
+# report with a target of 0, never a build gate.
+runtime = {}
+bootstrap = {}

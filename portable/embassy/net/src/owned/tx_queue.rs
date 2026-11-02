@@ -3,8 +3,8 @@
 use core::task::{Context, Poll, Waker};
 
 use crate::datapath::{DestinationTxHead, TxQueues};
-use oer_memory::{ContextCell, Entered, ExecutionContext};
-use oer_network_port::TransportFlow;
+use oer_portable_memory::{ContextCell, Entered, ExecutionContext};
+use oer_protocols_network_port::TransportFlow;
 
 use super::{
     AccessRefused, QueuedPacket,
@@ -290,7 +290,7 @@ mod tests {
     extern crate std;
     use self::std::boxed::Box;
     use super::*;
-    use oer_memory::{HostContext, Never};
+    use oer_portable_memory::{HostContext, Never};
     use xarxa_driver::{PacketBufAllocator, PacketPool, PacketPoolStorage};
 
     fn allocator() -> PacketBufAllocator {

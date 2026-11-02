@@ -130,7 +130,7 @@ fn guarded<T>(
     cleanup: impl FnOnce(&mut T) -> Result<()>,
 ) -> Result<()> {
     let operation = operation(owner);
-    let cleanup = oer_os_process::cleanup(|| cleanup(owner));
+    let cleanup = oer_tools_os_process::cleanup(|| cleanup(owner));
     match (operation, cleanup) {
         (Ok(()), Ok(())) => Ok(()),
         (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
@@ -143,7 +143,7 @@ fn guarded<T>(
 fn hold() -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(120);
     loop {
-        oer_os_process::check_cancelled()?;
+        oer_tools_os_process::check_cancelled()?;
         if Instant::now() >= deadline {
             return Err("ATT parameter lease expired".into());
         }
@@ -182,7 +182,7 @@ pub(crate) fn run(adapter: Adapter, recovery: bool) -> Result<()> {
             .custom_flags(libc::O_NOFOLLOW)
             .open(path)?;
         let snapshot: Snapshot = serde_json::from_reader(file.take(4096))?;
-        return oer_os_process::cleanup(|| restore(&mut owner, &snapshot));
+        return oer_tools_os_process::cleanup(|| restore(&mut owner, &snapshot));
     }
     if owner.powered {
         return Err("ATT parameters require an initially powered-off adapter".into());

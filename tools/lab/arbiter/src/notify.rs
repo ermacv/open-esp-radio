@@ -11,7 +11,7 @@ pub fn send(summary: &str, body: &str) {
     if std::env::var(NOTIFY_ENV).is_ok_and(|value| value == "0") || cfg!(test) {
         return;
     }
-    let mut command = oer_os_process::command("notify-send");
+    let mut command = oer_tools_os_process::command("notify-send");
     command.args(["--app-name=HIL stand", summary, body]);
-    let _ = oer_os_process::output(&mut command, Some(Duration::from_secs(5)));
+    let _ = oer_tools_os_process::output(&mut command, Some(Duration::from_secs(5)));
 }

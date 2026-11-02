@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_wire::twt::IndividualTwtFlowId;
-use oer_ieee80211_core_roles_sta::twt::IndividualTwtRequester;
+use oer_protocols_ieee80211_wire::twt::IndividualTwtFlowId;
+use oer_protocols_ieee80211_core_roles_sta::twt::IndividualTwtRequester;
 
 pub fn select(owner: &mut IndividualTwtRequester, flow: IndividualTwtFlowId) {
     let first = owner.flow(flow);

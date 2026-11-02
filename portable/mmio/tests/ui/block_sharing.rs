@@ -1,5 +1,5 @@
 #![no_std]
-use oer_mmio::{Block, Fixed, Part, Reader, Registers, Words, sharing};
+use oer_portable_mmio::{Block, Fixed, Part, Reader, Registers, Words, sharing};
 
 pub struct Owned;
 impl Registers for Owned {
@@ -31,6 +31,6 @@ pub fn sharing() {
     {
         sync::<Block<Fixed<0x1000>, Owned>>(); // ui-error: E0277
         sync::<Part<Fixed<0x1000>, Owned, Owned>>(); // ui-error: E0277
-        sync::<Block<oer_mmio::Host<'static>, Shared>>(); // ui-error: E0277
+        sync::<Block<oer_portable_mmio::Host<'static>, Shared>>(); // ui-error: E0277
     }
 }

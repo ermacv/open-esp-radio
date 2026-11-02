@@ -6,8 +6,8 @@ error[E0308]: mismatched types
    |                         |
    |                         arguments to this method are incorrect
    |
-   = note: expected struct `GateOpen<'_, oer_radio_port::Child<Root<LocalId<'id>>, 0>>`
-              found struct `GateOpen<'id, oer_radio_port::Child<oer_radio_port::Child<Root<LocalId<'id>>, 1>, 0>>`
+   = note: expected struct `GateOpen<'_, oer_protocols_radio_port::Child<Root<LocalId<'id>>, 0>>`
+              found struct `GateOpen<'id, oer_protocols_radio_port::Child<oer_protocols_radio_port::Child<Root<LocalId<'id>>, 1>, 0>>`
 note: method defined here
   --> src/phase.rs
    |

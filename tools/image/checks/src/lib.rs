@@ -29,8 +29,8 @@ pub mod stack;
 use std::{collections::BTreeSet, path::Path};
 
 use crate::interrupts::Required;
-use oer_chip_profile::{Profile, policy::StackPolicy};
-use oer_image_bundle::{CheckResult, CheckedElf};
+use oer_tools_chip_profile::{Profile, policy::StackPolicy};
+use oer_tools_image_bundle::{CheckResult, CheckedElf};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -75,7 +75,7 @@ pub struct CheckOutcome {
 }
 
 /// The ROM ranges of `profile`'s chip no image may call into.
-fn forbidden_rom(profile: &oer_chip_profile::Profile) -> &[oer_espressif_facts::RomRange] {
+fn forbidden_rom(profile: &oer_tools_chip_profile::Profile) -> &[oer_chips_family_facts::RomRange] {
     profile.facts.rom.as_ref().map_or(&[], |rom| &rom.forbidden)
 }
 
@@ -83,7 +83,7 @@ fn forbidden_rom(profile: &oer_chip_profile::Profile) -> &[oer_espressif_facts::
 pub const PLACEMENT_REPORT: &str = "placement.txt";
 
 /// An audit of the runtime ELF that the caller adds to the checks.
-pub type Audit = Box<dyn Fn(&oer_analysis_elf::Elf<'_>) -> Result<()> + Send + Sync>;
+pub type Audit = Box<dyn Fn(&oer_tools_analysis_elf::Elf<'_>) -> Result<()> + Send + Sync>;
 
 /// One check a developer can request.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -195,20 +195,20 @@ const AUDIT: &str = "audit";
 
 /// The code sections of the mask ROM, from `profile`'s pinned `[rom]` ELF at
 /// `root`; none for a chip without one.
-fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_espressif_facts::Region>> {
+fn rom_code(root: &Path, profile: &Profile) -> Result<Vec<oer_chips_family_facts::Region>> {
     let Some(rom) = &profile.facts.rom else {
         return Ok(Vec::new());
     };
-    let bytes = std::fs::read(oer_pins_artifacts::artifacts::ensure(
+    let bytes = std::fs::read(oer_tools_pins_artifacts::artifacts::ensure(
         root,
         &profile.facts.id,
         &rom.elf,
     )?)?;
-    let elf = oer_analysis_elf::Elf::parse(&bytes)?;
+    let elf = oer_tools_analysis_elf::Elf::parse(&bytes)?;
     elf.sections()
         .filter(|section| section.allocated && section.executable && section.size > 0)
         .map(|section| {
-            Ok(oer_espressif_facts::Region::new(
+            Ok(oer_chips_family_facts::Region::new(
                 u32::try_from(section.address)?,
                 u32::try_from(section.size)?,
             )?)
@@ -592,7 +592,9 @@ impl Gates {
         }
         if let Some(audit) = &self.audit {
             let result = ran((|| -> Result<()> {
-                audit(&oer_analysis_elf::Elf::parse(&std::fs::read(input.elf)?)?)
+                audit(&oer_tools_analysis_elf::Elf::parse(&std::fs::read(
+                    input.elf,
+                )?)?)
             })());
             outcome.results.push((AUDIT.to_owned(), result));
         }
@@ -693,7 +695,7 @@ impl Gates {
                 let mut audit = crate::stack::StackAudit::of(
                     &image,
                     input.policy,
-                    &[oer_chip_profile::policy::StackRoot::bootstrap(stack)],
+                    &[oer_tools_chip_profile::policy::StackRoot::bootstrap(stack)],
                 )?;
                 outcome
                     .coverage_reviews

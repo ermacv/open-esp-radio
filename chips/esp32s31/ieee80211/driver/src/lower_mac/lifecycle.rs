@@ -186,7 +186,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -249,7 +249,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -294,7 +294,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -368,7 +368,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -408,7 +408,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -435,7 +435,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -476,7 +476,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -520,7 +520,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -533,7 +533,7 @@ impl<
 {
     /// The published prefix's next deadline.
     #[inline]
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.core.next_deadline()
     }
     /// Reset contention when an earlier publication ends.
@@ -584,7 +584,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -597,7 +597,7 @@ impl<
 {
     /// The published prefix's next deadline.
     #[inline]
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.core.next_deadline()
     }
     /// Reset contention when an earlier publication ends.
@@ -658,7 +658,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,
@@ -672,7 +672,7 @@ impl<
     }
     /// The next deadline of the prefix published before failure.
     #[inline]
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.owner.core.next_deadline()
     }
     /// Preserve each published predecessor's own terminal outcome.
@@ -714,7 +714,7 @@ impl<
     'slot,
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
     Path: PoolPath,

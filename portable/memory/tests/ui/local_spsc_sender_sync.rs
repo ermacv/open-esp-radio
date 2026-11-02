@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::AffineSpscQueue;
+use oer_portable_memory::AffineSpscQueue;
 
 fn sync<T: Sync>(_: &T) {}
 pub fn endpoint() {

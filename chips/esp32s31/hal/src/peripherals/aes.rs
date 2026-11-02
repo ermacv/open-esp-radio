@@ -5,12 +5,12 @@
 //! AES's AXI-DMA channel ([`super::aes_dma`]).
 //! SOURCE: ESP_IDF_4D80C1B2_S31_AES and TRM_S31_V01_AES in registers/evidence.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     aes, hp_sys_clkrst,
     ownership::{AesPeripherals, AxiDmaPeripherals, CryptoClockPeripherals},
 };
-use oer_espressif_interrupt_table::Silent;
-use oer_mmio::{Bits, Index, InterruptSource};
+use oer_chips_family_interrupt_table::Silent;
+use oer_portable_mmio::{Bits, Index, InterruptSource};
 
 use super::aes_dma::{AesDma, AesDmaChannel, DmaLengthError};
 

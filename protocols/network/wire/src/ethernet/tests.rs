@@ -1,6 +1,6 @@
 use super::{EtherType, EthernetHeader, HEADER_LEN};
 use crate::vlan::{TAG_LEN, VlanTag};
-use oer_wire::{Error, Writer};
+use oer_portable_wire::{Error, Writer};
 
 const FRAME: [u8; 18] = [
     0x02, 0x11, 0x22, 0x33, 0x44, 0x55, // destination

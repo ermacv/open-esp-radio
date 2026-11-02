@@ -1,6 +1,6 @@
 //! Fallible, side-effect-free HT/HE submission preparation.
 
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::types::{
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid, MacHeTxParameters,
     MacHtTxParameters,
 };

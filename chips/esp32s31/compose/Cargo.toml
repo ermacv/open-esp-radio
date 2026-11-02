@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-compose"
+name = "oer-chips-esp32s31-compose"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,34 +17,34 @@ wifi-fault = []
 radio-fault = []
 
 [dependencies]
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-esp32s31-crypto = { path = "../crypto" }
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-time = { path = "../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-esp32s31-crypto = { path = "../crypto" }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
-oer-esp32s31-hal = { path = "../hal" }
-oer-espressif-staged-runtime.workspace = true
-oer-memory = { path = "../../../portable/memory" }
-oer-trace = { path = "../../../portable/trace" }
+oer-chips-esp32s31-hal = { path = "../hal" }
+oer-chips-family-staged-runtime.workspace = true
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-trace = { path = "../../../portable/trace" }
 
 # The executor runs on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 embedded-io-async = "0.7.0"
-oer-espressif-usb-serial-jtag.workspace = true
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-esp32s31-phy = { path = "../phy" }
-oer-espressif-interrupt-table = { path = "../../espressif/interrupt-table" }
-oer-espressif-platform-port = { path = "../../espressif/platform-port" }
-oer-memory = { path = "../../../portable/memory" }
-oer-riscv = { path = "../../../portable/riscv" }
-oer-time = { path = "../../../portable/time" }
+oer-chips-family-usb-serial-jtag.workspace = true
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-chips-esp32s31-phy = { path = "../phy" }
+oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
+oer-chips-family-platform-port = { path = "../../family/platform-port" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-portable-time = { path = "../../../portable/time" }
 static_cell.workspace = true
-oer-espressif-executor = { path = "../../espressif/executor", features = ["chip"] }
-oer-espressif-boot = { path = "../../espressif/boot" }
+oer-chips-family-executor = { path = "../../family/executor", features = ["chip"] }
+oer-chips-family-boot = { path = "../../family/boot" }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-oer-esp32s31-hal = { path = "../hal", features = ["test-support"] }
+oer-chips-esp32s31-hal = { path = "../hal", features = ["test-support"] }

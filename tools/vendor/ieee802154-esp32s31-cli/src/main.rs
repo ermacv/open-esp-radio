@@ -9,10 +9,10 @@ use std::process::ExitCode;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use oer_vendor_ieee802154_esp32s31::{catalog, claim, compare_scenario, port};
+use oer_tools_vendor_ieee802154_esp32s31::{catalog, claim, compare_scenario, port};
 
 #[derive(clap::Parser)]
-#[command(name = "oer-tool-vendor-ieee802154-esp32s31-cli")]
+#[command(name = "oer-tools-vendor-ieee802154-esp32s31-cli")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -109,7 +109,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 fn compare_all() -> Result<()> {
     let program = std::env::current_exe()?;
     compare_scenarios(|name| {
-        let status = oer_os_process::command(&program)
+        let status = oer_tools_os_process::command(&program)
             .args(["compare", name])
             .status()?;
         if !status.success() {

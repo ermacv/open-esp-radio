@@ -1,5 +1,5 @@
 use super::*;
-use oer_image_checks::sizes::{Hole, SectionClass, StackBound, TYPE_MIN_BYTES};
+use oer_tools_image_checks::sizes::{Hole, SectionClass, StackBound, TYPE_MIN_BYTES};
 
 fn summary() -> Summary {
     Summary {
@@ -19,7 +19,7 @@ fn summary() -> Summary {
             profile_settings: "opt-level=3".into(),
             features: vec![],
             default_features: false,
-            purpose: oer_image_bundle::Purpose::Analysis,
+            purpose: oer_tools_image_bundle::Purpose::Analysis,
             layout_seed: None,
             configuration_sha256: BTreeMap::new(),
             stack_policy: "stack.toml".into(),
@@ -495,7 +495,7 @@ fn embedded_copy_is_identified_by_bytes_not_section_name() {
         (embedded.address, embedded.bytes),
         (17, payload.len() as u64)
     );
-    assert_eq!(embedded.sha256, oer_os_durable::sha256_bytes(payload));
+    assert_eq!(embedded.sha256, oer_tools_os_durable::sha256_bytes(payload));
     assert_eq!(s.image_files["application.bin"], 11);
     std::fs::write(
         directory.path().join("runtime.bin"),
@@ -522,7 +522,7 @@ fn refresh_cannot_write_inside_its_input_tree() {
 fn embedded_runtime_alignment_is_not_own_bootstrap_code() {
     let mut a = summary();
     let mut rodata = psram_contents(4096, false);
-    rodata.filler.push(oer_image_checks::sizes::Filler {
+    rodata.filler.push(oer_tools_image_checks::sizes::Filler {
         address: rodata.address + 2048,
         bytes: 2048,
         contract: "payload alignment".into(),

@@ -1,4 +1,4 @@
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 use super::next_tbtt;
 

@@ -2,7 +2,7 @@ use crate::{support::*, *};
 
 type Arena<const COUNT: usize> = HostRxArena<COUNT, 256, 256>;
 const BUFFER_SIZE: u32 = 256;
-const COMPLETED: oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl =
+const COMPLETED: oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl =
     rx_landed_word(BUFFER_SIZE, 80, true);
 
 #[test]
@@ -971,7 +971,7 @@ fn live_rx_ring_transfers_and_recycles_one_chained_unit_atomically() {
         arena.dma_write(&live, index, &[0xa5; 80]);
     }
     descriptors[0].write_word0(
-        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
             BUFFER_SIZE,
             BUFFER_SIZE,
             false,
@@ -1178,7 +1178,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
     }
     arena.dma_write(&live, 0, &unit);
     arena.descriptors()[0].write_word0(
-        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
             BUFFER_SIZE,
             RECEIVED as u32,
             true,
@@ -1194,7 +1194,7 @@ fn a_staged_network_frame_is_viewed_at_the_normalized_boundary() {
         .expect("completed unit")
         .detach_single(&mut mmio)
         .unwrap();
-    let pool = oer_esp32s31_ieee80211_driver::mac::rx::pool::RxStagePool::<1, 256>::new();
+    let pool = oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::RxStagePool::<1, 256>::new();
     let frame = pool.stage_detached_unit(detached, 256).unwrap();
     let config = RxIngressConfig {
         ring_entry_limit: 1,

@@ -107,7 +107,7 @@ impl ApDataFrame<'_> {
             &mut header,
             &self.sequence_number.sequence_control().to_le_bytes(),
         );
-        let mut reader = oer_wire::Reader::new(&header);
+        let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
                 required: usize::from(plan.header_len),
@@ -161,7 +161,7 @@ impl ApUnprotectedDataFrame<'_> {
             &mut header,
             &self.sequence_number.sequence_control().to_le_bytes(),
         );
-        let mut reader = oer_wire::Reader::new(&header);
+        let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
                 required: usize::from(plan.header_len),
@@ -226,7 +226,7 @@ impl ApProtectedDataFrame<'_> {
             &mut header,
             &self.sequence_number.sequence_control().to_le_bytes(),
         );
-        let mut reader = oer_wire::Reader::new(&header);
+        let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
                 required: usize::from(plan.header_len),
@@ -435,7 +435,7 @@ pub fn parse_ap_management_request<'a>(
     frame: &'a [u8],
     access_point: [u8; 6],
 ) -> Option<ApManagementRequest<'a>> {
-    let mut reader = oer_wire::Reader::new(frame);
+    let mut reader = oer_portable_wire::Reader::new(frame);
     let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;
     let body = reader.remaining();
     let [
@@ -510,7 +510,7 @@ pub fn parse_ap_management_request<'a>(
     }
     let management_body = if protected {
         {
-            let mut reader = oer_wire::Reader::new(body);
+            let mut reader = oer_portable_wire::Reader::new(body);
             reader.take(CCMP_HEADER_LEN).ok()?;
             reader.remaining()
         }
@@ -519,7 +519,7 @@ pub fn parse_ap_management_request<'a>(
     };
     match subtype {
         11 => {
-            let mut reader = oer_wire::Reader::new(management_body);
+            let mut reader = oer_portable_wire::Reader::new(management_body);
             let &[a0, a1, t0, t1, s0, s1] = reader.array().ok()?;
             let body = reader.remaining();
             let algorithm = u16::from_le_bytes([a0, a1]);
@@ -538,7 +538,7 @@ pub fn parse_ap_management_request<'a>(
             }
         }
         0 => {
-            let mut reader = oer_wire::Reader::new(management_body);
+            let mut reader = oer_portable_wire::Reader::new(management_body);
             let &[c0, c1, _listen0, _listen1] = reader.array().ok()?;
             let information_elements = reader.remaining();
             let capabilities = u16::from_le_bytes([c0, c1]);
@@ -562,7 +562,7 @@ pub fn parse_ap_management_request<'a>(
             })
         }
         10 | 12 => {
-            let mut reader = oer_wire::Reader::new(management_body);
+            let mut reader = oer_portable_wire::Reader::new(management_body);
             let reason = reader.array().ok()?;
             let reason = u16::from_le_bytes(*reason);
             if subtype == 10 {
@@ -612,7 +612,7 @@ impl ApManagementSubtype {
 
     /// A robust subtype in a management header, without authenticating it.
     pub fn parse(frame: &[u8]) -> Option<Self> {
-        let mut reader = oer_wire::Reader::new(frame);
+        let mut reader = oer_portable_wire::Reader::new(frame);
         let control = reader.array().ok()?;
         let control = u16::from_le_bytes(*control);
         if FrameControlFields::from_raw(control).version() != 0
@@ -702,7 +702,7 @@ impl ApProtectedManagementFrame<'_> {
     clippy::arithmetic_side_effects
 )]
 fn supports_wmm(bytes: &[u8]) -> bool {
-    let mut remaining = oer_wire::Reader::new(bytes);
+    let mut remaining = oer_portable_wire::Reader::new(bytes);
     while let [_, length, ..] = *remaining.remaining() {
         let length = usize::from(length);
         let Some(record) = length
@@ -730,7 +730,7 @@ fn association_security_observation(
     bytes: &[u8],
     privacy: bool,
 ) -> ApAssociationSecurityObservation<'_> {
-    let mut remaining = oer_wire::Reader::new(bytes);
+    let mut remaining = oer_portable_wire::Reader::new(bytes);
     let mut observation = ApAssociationSecurityObservation {
         privacy,
         rsn_ie: None,
@@ -778,7 +778,7 @@ fn association_security_observation(
 )]
 fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
     let mut maximum = 0;
-    let mut remaining = oer_wire::Reader::new(bytes);
+    let mut remaining = oer_portable_wire::Reader::new(bytes);
     while let Ok(&[id, length]) = remaining.array::<2>() {
         let Ok(value) = remaining.take(usize::from(length)) else {
             break;
@@ -953,7 +953,7 @@ pub fn write_ht_association_response(
     let encoded_association_id = if status == 0 {
         u16::from_le_bytes(
             crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
-                .with_marker(oer_wire::U8::constant::<3>())
+                .with_marker(oer_portable_wire::U8::constant::<3>())
                 .to_bytes(),
         )
     } else {
@@ -1016,7 +1016,7 @@ pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
     clippy::arithmetic_side_effects
 )]
 fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])> {
-    let mut reader = oer_wire::Reader::new(frame);
+    let mut reader = oer_portable_wire::Reader::new(frame);
     let &[fc0, fc1] = reader.array().ok()?;
     let frame_control = u16::from_le_bytes([fc0, fc1]);
     let frame_type = FrameControlFields::from_raw(frame_control)
@@ -1027,7 +1027,7 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
     // PS-Poll: Frame Control, AID, Receiver and Transmitter Address.
     if frame_type == 1
         && subtype == 10
-        && let Ok(ps_poll) = oer_wire::Reader::new(frame).array::<16>()
+        && let Ok(ps_poll) = oer_portable_wire::Reader::new(frame).array::<16>()
     {
         let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;
         let raw_association_id = u16::from_le_bytes([a0, a1]);
@@ -1050,7 +1050,7 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         ));
     }
 
-    let mut reader = oer_wire::Reader::new(frame);
+    let mut reader = oer_portable_wire::Reader::new(frame);
     let header = reader.array::<24>().ok()?;
     let [
         _,

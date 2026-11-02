@@ -4,7 +4,7 @@
 use crate::captured::visit_members;
 use crate::in_process::{Executable, find};
 use crate::*;
-use oer_analysis_elf::classify as elf;
+use oer_tools_analysis_elf::classify as elf;
 use std::path::PathBuf;
 
 pub const LINK_METADATA_BYTES: u64 = 8 * 1024 * 1024;
@@ -253,7 +253,7 @@ struct Collected {
     members: Vec<Member>,
     /// Companion then absent-name definitions of the request.
     definitions: Vec<(String, u32)>,
-    roots: Vec<oer_analysis_blobray_artifacts::LinkRootFacts>,
+    roots: Vec<oer_tools_analysis_blobray_artifacts::LinkRootFacts>,
     blockers: Vec<String>,
 }
 
@@ -370,7 +370,7 @@ fn collect(
                     .filter(|s| s.object == m.id)
                     .cloned()
                     .collect();
-                match oer_analysis_blobray_artifacts::inspect_link_input(
+                match oer_tools_analysis_blobray_artifacts::inspect_link_input(
                     bytes, payload, &selected, memory, c,
                 ) {
                     Ok(facts) => {
@@ -640,7 +640,7 @@ pub fn link(
     let mut outputs = Outputs::default();
     run(host, &invocation, &mut outputs, control)?;
     let (roots, mappings) = evidence::roots(&outputs, &found, &invocation, control)?;
-    let validated = oer_analysis_blobray_artifacts::validate_image(
+    let validated = oer_tools_analysis_blobray_artifacts::validate_image(
         &outputs.elf.as_slice(),
         &request.layout,
         &roots,

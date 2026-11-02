@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::data::{DataInterfaceRole, MsduHeader};
+use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader};
 
 #[test]
 fn queue_class_and_descriptor_byte_match_every_priority() {
@@ -21,7 +21,7 @@ fn queue_class_and_descriptor_byte_match_every_priority() {
 
 #[test]
 fn portable_data_intent_preserves_every_existing_s31_queue_and_packet_profile() {
-    use oer_ieee80211_wire::data::plan_data_encapsulation;
+    use oer_protocols_ieee80211_wire::data::plan_data_encapsulation;
 
     // Existing queue and packet-type profiles, ordered by IEEE 802.1D UP.
     // ACI discriminants have a different order and cannot be cast to queue IDs.

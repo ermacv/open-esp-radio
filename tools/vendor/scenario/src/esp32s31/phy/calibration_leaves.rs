@@ -10,7 +10,7 @@ use crate::esp32s31::harness::{Result, case};
 use crate::esp32s31::i2c::{I2c, all_complete, returned_low, word_writes};
 use crate::esp32s31::layout::*;
 use crate::esp32s31::session::request;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     ComparisonVerdict, DeviceBehavior, DeviceDeclaration, ExecutionCase, ExecutionGap,
     ExecutionStop, Invocation, MemoryAccess, RegionLifetime, RegisterCell, SessionReset,
 };

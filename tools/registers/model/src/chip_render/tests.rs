@@ -1,6 +1,6 @@
 //! The thin PAC renderer on a synthetic chip (`fixture/`): every field
 //! class, register construct and ownership flag. Rendered code is compiled
-//! against the workspace's `oer-mmio` and `oer-memory` and run on host memory; compile-fail
+//! against the workspace's `oer-portable-mmio` and `oer-portable-memory` and run on host memory; compile-fail
 //! programs show what an owner cannot do.
 
 use std::path::{Path, PathBuf};
@@ -90,8 +90,8 @@ fn cargo(directory: &Path, rendered: &str, main: &str, command: &str) -> std::pr
         directory.join("Cargo.toml"),
         format!(
             "[package]\nname = \"rendered\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
-             [dependencies]\noer-mmio = {{ path = {:?} }}\n\
-             oer-memory = {{ path = {:?} }}\n\
+             [dependencies]\noer-portable-mmio = {{ path = {:?} }}\n\
+             oer-portable-memory = {{ path = {:?} }}\n\
              bytemuck = {{ version = \"1.25.2\", default-features = false, features = [\"derive\", \"min_const_generics\"] }}\n\
              [workspace]\n",
             mmio.display().to_string(),
@@ -148,7 +148,7 @@ fn only_the_irreducible_policy_items_render() {
         "pub fn mask_and_clear_events(&mut self)",
         "pub fn sample_radio_events(&self)",
         "pub fn acknowledge_radio_events(",
-        "pub fn publish_low(&mut self, low: oer_mmio::Bits<24>)",
+        "pub fn publish_low(&mut self, low: oer_portable_mmio::Bits<24>)",
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
     }
@@ -275,8 +275,8 @@ fn names_lose_the_block_prefix() {
     for item in [
         "pub fn modify_config(&mut self, change: impl FnOnce(&mut config::W))",
         "pub fn set_enable(&mut self, value: bool)",
-        "pub fn read_slot(&self, index: oer_mmio::Index<4>) -> slot::R",
-        "pub fn read_ch_conf(&self, index: oer_mmio::Index<2>) -> ch_conf::R",
+        "pub fn read_slot(&self, index: oer_portable_mmio::Index<4>) -> slot::R",
+        "pub fn read_ch_conf(&self, index: oer_portable_mmio::Index<2>) -> ch_conf::R",
         "pub fn read_ch1_cnt(&self) -> ch_cnt::R",
         "pub fn modify_word_0060_opaque(",
     ] {
@@ -407,7 +407,7 @@ fn a_template_beside_its_single_register_keeps_its_index_place() {
         "{rust}"
     );
     assert!(
-        rust.contains("pub fn read_slot_n(&self, index: oer_mmio::Index<4>) -> slot_n::R"),
+        rust.contains("pub fn read_slot_n(&self, index: oer_portable_mmio::Index<4>) -> slot_n::R"),
         "{rust}"
     );
 }
@@ -437,12 +437,12 @@ fn a_part_of_several_sources_names_them_all_and_no_single_one() {
     let rendered = rendered_with(TWO_SOURCES);
     let output = run(
         &rendered,
-        "fn main() { println!(\"{:?}\", <radio::Irq as oer_mmio::InterruptSources>::SOURCES); }",
+        "fn main() { println!(\"{:?}\", <radio::Irq as oer_portable_mmio::InterruptSources>::SOURCES); }",
     );
     assert_eq!(output.trim(), "[0, 3]");
     let errors = refused(
         &rendered,
-        "fn main() { let _ = <radio::Irq as oer_mmio::InterruptSource>::SOURCE; }",
+        "fn main() { let _ = <radio::Irq as oer_portable_mmio::InterruptSource>::SOURCE; }",
     );
     assert!(
         errors.contains("InterruptSource` is not implemented"),
@@ -547,15 +547,15 @@ fn main() {
         println!("pop {:x}", task.pop_fifo());
         task.push_fifo(0x12);
         task.write_port(0xdead_beef);
-        task.modify_slot(oer_mmio::Index::constant::<2>(), |w| {
+        task.modify_slot(oer_portable_mmio::Index::constant::<2>(), |w| {
             w.set_value(0x1234);
         });
-        task.modify_ch_conf(oer_mmio::Index::new(1).expect("index 1"), |w| {
+        task.modify_ch_conf(oer_portable_mmio::Index::new(1).expect("index 1"), |w| {
             w.set_en(true);
         });
         println!("ch1 cnt {:x}", task.read_ch1_cnt().n());
         task.store_vendor_word();
-        task.publish_low(oer_mmio::Bits::new(0x00ab_cdef).expect("24 bits"));
+        task.publish_low(oer_portable_mmio::Bits::new(0x00ab_cdef).expect("24 bits"));
         println!("mixed on={}", task.read_mixed().on());
         println!("observed version {}", irq.read_config().version());
         let events = irq.sample_radio_events();
@@ -585,7 +585,7 @@ fn main() {
         println!("cmd busy={}", task.cmd_go_busy());
     }
     println!("cmd {}", hex(memory[0x18 / 4]));
-    println!("source {}", <radio::Irq as oer_mmio::InterruptSource>::SOURCE);
+    println!("source {}", <radio::Irq as oer_portable_mmio::InterruptSource>::SOURCE);
 
     // ETM: two parts split one trigger word by field.
     let mut memory = [0_u32; 0x10];
@@ -631,7 +631,7 @@ fn main() {
     );
 }
 
-fn memory_word(_low: &etm::EtmLow<oer_mmio::Host<'_>>) -> u32 {
+fn memory_word(_low: &etm::EtmLow<oer_portable_mmio::Host<'_>>) -> u32 {
     0
 }
 "#;
@@ -690,72 +690,72 @@ fn every_owner_reaches_its_words_with_the_accessors_of_their_classes() {
 const FORBIDDEN: &[(&str, &str)] = &[
     // The handler only observes the configuration.
     (
-        "fn observed(irq: &mut radio::Irq<oer_mmio::Host<'_>>) { irq.modify_config(|_| {}); }",
+        "fn observed(irq: &mut radio::Irq<oer_portable_mmio::Host<'_>>) { irq.modify_config(|_| {}); }",
         "no method named `modify_config`",
     ),
     // The clear word of a snapshot is written only by its acknowledgement.
     (
-        "fn clear(irq: &mut radio::Irq<oer_mmio::Host<'_>>) { irq.trigger_event_clr_rx(); }",
+        "fn clear(irq: &mut radio::Irq<oer_portable_mmio::Host<'_>>) { irq.trigger_event_clr_rx(); }",
         "no method named `trigger_event_clr_rx`",
     ),
     // A write-only word has no read.
     (
-        "fn command(task: &radio::Task<oer_mmio::Host<'_>>) { task.read_command(); }",
+        "fn command(task: &radio::Task<oer_portable_mmio::Host<'_>>) { task.read_command(); }",
         "no method named `read_command`",
     ),
     // A readable word with a write-only lane has no generic writer.
     (
-        "fn mixed(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_mixed(|_| {}); }",
+        "fn mixed(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_mixed(|_| {}); }",
         "no method named `modify_mixed`",
     ),
     // A word the hardware also writes is only read.
     (
-        "fn hardware(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_hw(|_| {}); }",
+        "fn hardware(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_hw(|_| {}); }",
         "no method named `modify_hw`",
     ),
     // An unknown field has no accessor.
     (
-        "fn vague(task: &radio::Task<oer_mmio::Host<'_>>) { task.read_vague(); }",
+        "fn vague(task: &radio::Task<oer_portable_mmio::Host<'_>>) { task.read_vague(); }",
         "no method named `read_vague`",
     ),
     // A word a read changes has none either.
     (
-        "fn state(task: &radio::Task<oer_mmio::Host<'_>>) { task.read_state(); }",
+        "fn state(task: &radio::Task<oer_portable_mmio::Host<'_>>) { task.read_state(); }",
         "no method named `read_state`",
     ),
     // An address field takes its typed address, never an integer.
     (
-        "fn pointer(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_desc(|w| { w.set_ptr(0x4080_0000); }); }",
+        "fn pointer(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_desc(|w| { w.set_ptr(0x4080_0000); }); }",
         "expected `DmaRef<RxDescriptor>`, found integer",
     ),
     // A field written only with its values takes no integer.
     (
-        "fn values(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_config(|w| { w.set_mode(1); }); }",
+        "fn values(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_config(|w| { w.set_mode(1); }); }",
         "expected `Mode`, found integer",
     ),
     // A bounded field takes its bounded type.
     (
-        "fn bounded(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_config(|w| { w.set_level(3); }); }",
+        "fn bounded(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_config(|w| { w.set_level(3); }); }",
         "expected `LevelRange`, found integer",
     ),
     // An unclaimed word has no owner.
     (
-        "fn unclaimed(task: &radio::Task<oer_mmio::Host<'_>>) { task.read_ch0_cnt(); }",
+        "fn unclaimed(task: &radio::Task<oer_portable_mmio::Host<'_>>) { task.read_ch0_cnt(); }",
         "no method named `read_ch0_cnt`",
     ),
     // A part strobes only its own trigger fields.
     (
-        "fn foreign(low: &mut etm::EtmLow<oer_mmio::Host<'_>>) { low.trigger_channel_enable_set_ch2(); }",
+        "fn foreign(low: &mut etm::EtmLow<oer_portable_mmio::Host<'_>>) { low.trigger_channel_enable_set_ch2(); }",
         "no method named `trigger_channel_enable_set_ch2`",
     ),
     // ... and holds only its own elements.
     (
-        "fn element(high: &mut etm::EtmHigh<oer_mmio::Host<'_>>) { high.modify_ch0_event(|_| {}); }",
+        "fn element(high: &mut etm::EtmHigh<oer_portable_mmio::Host<'_>>) { high.modify_ch0_event(|_| {}); }",
         "no method named `modify_ch0_event`",
     ),
     // A shared word is stored whole, never read and written back.
     (
-        "fn shared(counter: &mut counter::Counter<oer_mmio::Host<'_>>) { counter.modify_latch(|_| {}); }",
+        "fn shared(counter: &mut counter::Counter<oer_portable_mmio::Host<'_>>) { counter.modify_latch(|_| {}); }",
         "no method named `modify_latch`",
     ),
     // A snapshot is made only by its sample.
@@ -866,7 +866,7 @@ fn hex(word: u32) -> String {
 
 /// A typed address reaches the pointer's setter; never called, as only
 /// the hardware's placement makes one.
-fn publish(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_memory::DmaRef<layouts::RxDescriptor>) {
+fn publish(task: &mut radio::Task<oer_portable_mmio::Host<'_>>, next: oer_portable_memory::DmaRef<layouts::RxDescriptor>) {
     task.modify_low(|w| {
         w.set_address(next);
     });
@@ -907,7 +907,7 @@ fn main() {
             w.set_on(true).set_key(0x5a);
         });
         // The FIFO of a repeated group, by index.
-        println!("fifo {:x} {:x}", task.pop_ch_cnt(oer_mmio::Index::constant::<0>()), task.pop_ch_cnt(oer_mmio::Index::constant::<1>()));
+        println!("fifo {:x} {:x}", task.pop_ch_cnt(oer_portable_mmio::Index::constant::<0>()), task.pop_ch_cnt(oer_portable_mmio::Index::constant::<1>()));
         // The whole-word image masks its sources first.
         irq.mask_and_clear_events();
     }
@@ -934,7 +934,7 @@ fn main() {
     {
         let counter = counter::Counter::host(&mut memory).expect("memory holds the block");
         let shared = &counter;
-        shared.trigger_update_update(oer_mmio::Bits::new(9).expect("4 bits"));
+        shared.trigger_update_update(oer_portable_mmio::Bits::new(9).expect("4 bits"));
         shared.store_latch1(5);
     }
     println!("counter {} {}", hex(memory[1]), hex(memory[4]));
@@ -975,17 +975,17 @@ fn the_reviewed_shapes_keep_their_lanes_and_constraints() {
 fn the_reviewed_shapes_refuse_unadmitted_values() {
     let program = [
         // A data port's address takes its typed address.
-        "fn port(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.write_desc(0xdead_beef); }",
+        "fn port(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.write_desc(0xdead_beef); }",
         // ARGUMENT is never written zero: the write takes it.
-        "fn omitted(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.write_command(|w: &mut radio::command::W| { w.set_opcode(radio::command::Opcode::Run); }); }",
+        "fn omitted(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.write_command(|w: &mut radio::command::W| { w.set_opcode(radio::command::Opcode::Run); }); }",
         // The high field takes no integer.
-        "fn high(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_high(|w| { w.set_address_high(0x1234); }); }",
+        "fn high(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_high(|w| { w.set_address_high(0x1234); }); }",
         // The doorbell is rung only by its trigger.
-        "fn ring(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.modify_rxctl(|w| { w.set_append(true); }); }",
+        "fn ring(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.modify_rxctl(|w| { w.set_append(true); }); }",
         // The step's write range wins over its complete enumeration.
-        "fn step(mode: &mut counter::Mode<oer_mmio::Host<'_>>) { mode.modify_mode(|w| { w.set_step(counter::mode::Step::Off); }); }",
+        "fn step(mode: &mut counter::Mode<oer_portable_mmio::Host<'_>>) { mode.modify_mode(|w| { w.set_step(counter::mode::Step::Off); }); }",
         // A zero-only trigger has no trigger.
-        "fn quiet(task: &mut radio::Task<oer_mmio::Host<'_>>) { task.trigger_config_start(); }",
+        "fn quiet(task: &mut radio::Task<oer_portable_mmio::Host<'_>>) { task.trigger_config_start(); }",
         "fn main() {}",
     ]
     .join("\n");
@@ -1177,7 +1177,7 @@ fn hex(word: u32) -> String {
 
 /// The vendor's OR takes a typed reference alone; never called, as only the
 /// hardware's placement makes one.
-fn or(task: &mut radio::Task<oer_mmio::Host<'_>>, next: oer_memory::DmaRef<layouts::RxDescriptor>) {
+fn or(task: &mut radio::Task<oer_portable_mmio::Host<'_>>, next: oer_portable_memory::DmaRef<layouts::RxDescriptor>) {
     task.or_descriptor(next);
 }
 
@@ -1192,7 +1192,7 @@ fn main() {
         });
         // Two triggers in one write.
         task.trigger_kick(|t| {
-            t.go().level(oer_mmio::Bits::new(5).expect("3 bits"));
+            t.go().level(oer_portable_mmio::Bits::new(5).expect("3 bits"));
         });
     }
     println!("low {}", hex(memory[0x68 / 4]));
@@ -1240,7 +1240,7 @@ fn a_pointer_takes_its_zero_image_and_triggers_share_one_write() {
 fn a_pointer_or_renders_on_its_part_and_reads_the_word_fresh() {
     let rust = rendered_with(&with_trigger_word_and_pointer_or());
     for item in [
-        "pub fn or_descriptor(&mut self, value: oer_memory::DmaRef<super::layouts::RxDescriptor>)",
+        "pub fn or_descriptor(&mut self, value: oer_portable_memory::DmaRef<super::layouts::RxDescriptor>)",
         "self.0.write::<0x5c>(self.0.read::<0x5c>() | value.bits());",
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
@@ -1295,8 +1295,8 @@ fn main() {
     let view = radio::SecondEvents::host(&mut events).expect("memory holds the block");
     println!(
         "{:x?} {:x?}",
-        radio::Second::<oer_mmio::Host<'_>>::SECOND_IMAGE_OFFSETS,
-        radio::SecondEvents::<oer_mmio::Host<'_>>::SECOND_IMAGE_OFFSETS,
+        radio::Second::<oer_portable_mmio::Host<'_>>::SECOND_IMAGE_OFFSETS,
+        radio::SecondEvents::<oer_portable_mmio::Host<'_>>::SECOND_IMAGE_OFFSETS,
     );
     println!("{:08x} {:08x}", second.second_image(0).expect("word 0"), view.second_image(0).expect("word 0"));
     println!("{:?}", second.second_image(1));
@@ -1550,7 +1550,8 @@ fn layout_constant_values_are_checked_even_in_runtime_builders() {
 #[test]
 fn hart_geometry_accepts_one_and_three_and_rejects_runtime_constant_misuse() {
     for n in [1, 3] {
-        let rust = oer_espressif_facts::generate::hart_geometry(n, 0).expect("synthetic geometry");
+        let rust =
+            oer_chips_family_facts::generate::hart_geometry(n, 0).expect("synthetic geometry");
         let main = format!(
             r#"fn main() {{
             assert_eq!(HARTS, {n});
@@ -1610,7 +1611,7 @@ fn symbolic_hart_fields_preserve_every_other_lane_for_n_one_and_three() {
             let mut words = [u32::MAX; 4];
             let mut mode = counter::Mode::host(&mut words).unwrap();
             for hart in Hart::ALL {
-                mode.modify_mode(|w| { w.set_step(hart.index(), oer_mmio::Bits::constant::<0>()); });
+                mode.modify_mode(|w| { w.set_step(hart.index(), oer_portable_mmio::Bits::constant::<0>()); });
                 let r = mode.read_mode();
                 for peer in Hart::ALL {
                     assert_eq!(r.step(peer.index()).get(), if peer.get() <= hart.get() { 0 } else { 15 });
@@ -1769,7 +1770,11 @@ fn a_hart_local_instance_is_claimed_once_per_hart() {
 fn an_instance_without_hart_local_keeps_one_claim_and_one_check() {
     let rust = rendered();
     assert!(!rust.contains("super::HARTS]"), "{rust}");
-    assert_eq!(rust.matches("oer_mmio::check::disjoint_blocks(").count(), 1);
+    assert_eq!(
+        rust.matches("oer_portable_mmio::check::disjoint_blocks(")
+            .count(),
+        1
+    );
     // With hart facts but no hart-local instance, the ownership is the same.
     let with_facts = hart_local(2, &[]).expect("the fixture with hart facts renders");
     let ownership = |text: &str| {
@@ -1799,9 +1804,9 @@ fn indexed_fields_follow_the_block_prefix_rule() {
         r#"fn main() {
         let mut memory = [0_u32; 0x40];
         let (mut task, _) = radio::radio0_host(&mut memory).unwrap();
-        task.modify_config(|w| { w.set_hart_enable(oer_mmio::Index::constant::<1>(), true); });
-        assert!(task.read_config().hart_enable(oer_mmio::Index::constant::<1>()));
-        assert!(!task.read_config().hart_enable(oer_mmio::Index::constant::<0>()));
+        task.modify_config(|w| { w.set_hart_enable(oer_portable_mmio::Index::constant::<1>(), true); });
+        assert!(task.read_config().hart_enable(oer_portable_mmio::Index::constant::<1>()));
+        assert!(!task.read_config().hart_enable(oer_portable_mmio::Index::constant::<0>()));
     }"#,
     );
 }

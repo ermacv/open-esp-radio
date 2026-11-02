@@ -12,7 +12,7 @@ use crate::esp32s31::mac::{
     Domain, Leaf, Objects, Replacement, Suite, Vendor, in_archive, leaf, objects, ordered, prefix,
     quiet, released, replaced, ruled, stated, tail_prefix,
 };
-use oer_analysis_blobray_domain::ReadRun;
+use oer_tools_analysis_blobray_domain::ReadRun;
 
 /// Session inputs of the second to fourth suite archives.
 const BTDM_COMMON_INPUT: u64 = 4;
@@ -148,19 +148,21 @@ const MODIFY_STATES: &[u32] = &[
 
 /// The multiplexed diagnostic port answering `sequences` of agreeing
 /// sample pairs per selector.
-fn diagnostic_port(sequences: &[(u32, &[u32])]) -> oer_analysis_blobray_domain::DeviceDeclaration {
-    oer_analysis_blobray_domain::DeviceDeclaration {
+fn diagnostic_port(
+    sequences: &[(u32, &[u32])],
+) -> oer_tools_analysis_blobray_domain::DeviceDeclaration {
+    oer_tools_analysis_blobray_domain::DeviceDeclaration {
         id: "scheduler-diagnostic".into(),
         applicability: "the scheduler diagnostic multiplexer: agreeing pairs per selector".into(),
-        lifetime: oer_analysis_blobray_domain::RegionLifetime::Phase,
-        behavior: oer_analysis_blobray_domain::DeviceBehavior::SelectedSequence {
+        lifetime: oer_tools_analysis_blobray_domain::RegionLifetime::Phase,
+        behavior: oer_tools_analysis_blobray_domain::DeviceBehavior::SelectedSequence {
             selector_address: DIAGNOSTIC_SELECTOR,
             value_address: DIAGNOSTIC_VALUE,
             width: 4,
             sequences: sequences
                 .iter()
                 .map(
-                    |(selector, samples)| oer_analysis_blobray_domain::SelectedRuns {
+                    |(selector, samples)| oer_tools_analysis_blobray_domain::SelectedRuns {
                         selector: *selector,
                         runs: samples
                             .iter()
@@ -228,16 +230,16 @@ fn execution_modify_abi(words: &[u32], _vendor: &Vendor<'_>) -> Result<Objects> 
 /// model checks the selections instead: an undeclared selector is an issue,
 /// and every sample must read exactly the runs declared for the selector in
 /// force, so each side selects the right signal before each sample.
-fn scheduler_rules() -> Vec<oer_analysis_blobray_domain::EffectRule> {
+fn scheduler_rules() -> Vec<oer_tools_analysis_blobray_domain::EffectRule> {
     vec![
         crate::esp32s31::contracts::ignored(
             "diagnostic-selections".into(),
-            oer_analysis_blobray_domain::EffectPattern {
-                selector: oer_analysis_blobray_domain::EffectSelector::MmioWrite {
+            oer_tools_analysis_blobray_domain::EffectPattern {
+                selector: oer_tools_analysis_blobray_domain::EffectSelector::MmioWrite {
                     address: DIAGNOSTIC_SELECTOR,
                     width: 4,
                 },
-                value: oer_analysis_blobray_domain::EffectValue::Any,
+                value: oer_tools_analysis_blobray_domain::EffectValue::Any,
                 preceded_by: None,
                 occurrence: None,
                 followed_by: None,
@@ -248,20 +250,20 @@ fn scheduler_rules() -> Vec<oer_analysis_blobray_domain::EffectRule> {
             critical section across the polling loop; the diagnostic model checks every \
             selection against the sample that follows",
         ),
-        oer_analysis_blobray_domain::EffectRule {
+        oer_tools_analysis_blobray_domain::EffectRule {
             name: "publication-ordering-fences".into(),
             vendor: None,
-            replacement: Some(oer_analysis_blobray_domain::EffectPattern {
-                selector: oer_analysis_blobray_domain::EffectSelector::Fence {
+            replacement: Some(oer_tools_analysis_blobray_domain::EffectPattern {
+                selector: oer_tools_analysis_blobray_domain::EffectSelector::Fence {
                     predecessor: FULL_FENCE,
                     successor: FULL_FENCE,
                 },
-                value: oer_analysis_blobray_domain::EffectValue::Any,
+                value: oer_tools_analysis_blobray_domain::EffectValue::Any,
                 preceded_by: None,
                 occurrence: None,
                 followed_by: None,
             }),
-            disposition: oer_analysis_blobray_domain::EffectDisposition::Added,
+            disposition: oer_tools_analysis_blobray_domain::EffectDisposition::Added,
             min_occurrences: 1,
             max_occurrences: MAX_ORDERING_FENCES,
             reason: "production orders each command publication and START clear against the \
@@ -273,25 +275,25 @@ fn scheduler_rules() -> Vec<oer_analysis_blobray_domain::EffectRule> {
 /// The BUSY selections production repeats between diagnostic reads. The first
 /// selection, and every read, still compare exactly; another selector value
 /// or a read without a selection stays a difference.
-fn busy_reselection_rules() -> Vec<oer_analysis_blobray_domain::EffectRule> {
-    let read = oer_analysis_blobray_domain::EffectSelector::MmioRead {
+fn busy_reselection_rules() -> Vec<oer_tools_analysis_blobray_domain::EffectRule> {
+    let read = oer_tools_analysis_blobray_domain::EffectSelector::MmioRead {
         address: DIAGNOSTIC_VALUE,
         width: 4,
     };
-    vec![oer_analysis_blobray_domain::EffectRule {
+    vec![oer_tools_analysis_blobray_domain::EffectRule {
         name: "busy-reselections".into(),
         vendor: None,
-        replacement: Some(oer_analysis_blobray_domain::EffectPattern {
-            selector: oer_analysis_blobray_domain::EffectSelector::MmioWrite {
+        replacement: Some(oer_tools_analysis_blobray_domain::EffectPattern {
+            selector: oer_tools_analysis_blobray_domain::EffectSelector::MmioWrite {
                 address: DIAGNOSTIC_SELECTOR,
                 width: 4,
             },
-            value: oer_analysis_blobray_domain::EffectValue::Exact { value: SELECT_BUSY },
+            value: oer_tools_analysis_blobray_domain::EffectValue::Exact { value: SELECT_BUSY },
             preceded_by: Some(read),
             occurrence: None,
             followed_by: Some(read),
         }),
-        disposition: oer_analysis_blobray_domain::EffectDisposition::Added,
+        disposition: oer_tools_analysis_blobray_domain::EffectDisposition::Added,
         min_occurrences: 0,
         max_occurrences: MAX_SELECTIONS,
         reason: "the HAL repeats the PAC's single select-plus-two-read diagnostic transaction \
@@ -734,7 +736,9 @@ const PLATFORM_GATE_ACCESSES: u32 = 1;
 
 /// The vendor's read-modify-write of a platform-owned `MODEM_LPCON.CLK_CONF`
 /// gate, which production leaves to the platform for `reason`.
-pub(crate) fn platform_gate_rules(reason: &str) -> Vec<oer_analysis_blobray_domain::EffectRule> {
+pub(crate) fn platform_gate_rules(
+    reason: &str,
+) -> Vec<oer_tools_analysis_blobray_domain::EffectRule> {
     vec![
         crate::esp32s31::contracts::omitted_read(
             "platform-gate-read".into(),
@@ -753,7 +757,7 @@ pub(crate) fn platform_gate_rules(reason: &str) -> Vec<oer_analysis_blobray_doma
 
 /// The Bluetooth selection sets the low-power timer gate and the
 /// deselection clears it.
-fn low_power_timer_gate_rules() -> Vec<oer_analysis_blobray_domain::EffectRule> {
+fn low_power_timer_gate_rules() -> Vec<oer_tools_analysis_blobray_domain::EffectRule> {
     platform_gate_rules(
         "production acquires and releases the modem low-power timer gate through the \
         platform clock provider; ESP-HAL writes MODEM_LPCON.CLK_CONF under its own lock",
@@ -852,7 +856,7 @@ pub const BLUETOOTH: Suite = Suite {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_analysis_blobray_domain::{EffectDisposition, ExecutionEvent};
+    use oer_tools_analysis_blobray_domain::{EffectDisposition, ExecutionEvent};
 
     /// The `MODEM_LPCON` word holding the Bluetooth low-power clock source and
     /// divider, which the selection writes and production compares.
@@ -888,7 +892,7 @@ mod tests {
         assert!(!pattern.selects_after(&select(SELECT_BUSY), None, &history));
         assert_eq!(
             pattern.value,
-            oer_analysis_blobray_domain::EffectValue::Exact { value: SELECT_BUSY }
+            oer_tools_analysis_blobray_domain::EffectValue::Exact { value: SELECT_BUSY }
         );
     }
 

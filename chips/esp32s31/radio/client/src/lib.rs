@@ -25,7 +25,7 @@
 //! The client contract of the ESP32-S31 radio system.
 //!
 //! One actor owns the shared RF front-end: the PHY domain, the shared radio
-//! registers, the modem clocks and coexistence (`oer-esp32s31-radio-system`).
+//! registers, the modem clocks and coexistence (`oer-chips-esp32s31-radio-system`).
 //! A protocol driver is one of its clients ([`Client`]) and reaches it only
 //! through its [`MembershipCell`]: it posts `join`, `track` or `leave`
 //! synchronously, never waiting and never refused at the post, and awaits the
@@ -36,7 +36,7 @@
 //!   second call. Posting consumes the cell token and the answer returns it,
 //!   so a cell holds at most one request. The protocol is lock-free: two
 //!   atomic wakers per operation and a CAS on each typed slot's state
-//!   (`oer_memory::RequestSlot`). Dropping a
+//!   (`oer_portable_memory::RequestSlot`). Dropping a
 //!   [`Pending`] future loses nothing: the answer stays in the cell for the
 //!   next poll of the same `Pending`.
 //! - **Membership.** `join` answers [`Member<K, Untracked>`](Member) and the
@@ -71,7 +71,7 @@ use core::{
 
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
 pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
-pub use oer_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
+pub use oer_portable_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 pub use poison::{
     CalibrationTrackingFailure, CalibrationTrackingFault, PhyFault, Poison, PoisonCause,
     PoisonOrigin, RegistrationFailure, RegistrationFault, RequestKind,
@@ -79,7 +79,8 @@ pub use poison::{
 
 /// The provisional bound of one poll of the actor future
 /// (docs/architecture.md, "Radio system").
-pub const ACTOR_STEP_BOUND: oer_time::Duration = oer_time::Duration::from_micros(50);
+pub const ACTOR_STEP_BOUND: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_micros(50);
 
 mod sealed {
     pub trait Sealed {}
@@ -132,7 +133,7 @@ pub trait Client: sealed::Sealed + Sized + 'static {
 ///
 /// A join responder cannot publish a different operation's answer:
 /// ```compile_fail,E0308
-/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// use oer_chips_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
 /// fn wrong<K: Client>(request: Request<K>, answer: Left<K>) {
 ///     if let Request::Join(_, responder) = request { responder.answer(answer); }
 /// }
@@ -140,7 +141,7 @@ pub trait Client: sealed::Sealed + Sized + 'static {
 ///
 /// A track responder cannot publish a different operation's answer:
 /// ```compile_fail,E0308
-/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// use oer_chips_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
 /// fn wrong<K: Client>(request: Request<K>, answer: JoinAnswer<K>) {
 ///     if let Request::Track(_, _, responder) = request { responder.answer(answer); }
 /// }
@@ -148,7 +149,7 @@ pub trait Client: sealed::Sealed + Sized + 'static {
 ///
 /// A retune responder cannot publish a different operation's answer:
 /// ```compile_fail,E0308
-/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// use oer_chips_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
 /// fn wrong<K: Client>(request: Request<K>, answer: JoinAnswer<K>) {
 ///     if let Request::Retune(_, _, responder) = request { responder.answer(answer); }
 /// }
@@ -156,7 +157,7 @@ pub trait Client: sealed::Sealed + Sized + 'static {
 ///
 /// A leave responder cannot publish a different operation's answer:
 /// ```compile_fail,E0308
-/// use oer_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
+/// use oer_chips_esp32s31_radio_client::{Client, Request, JoinAnswer, Left};
 /// fn wrong<K: Client>(request: Request<K>, answer: JoinAnswer<K>) {
 ///     if let Request::Leave(_, _, responder) = request { responder.answer(answer); }
 /// }
@@ -189,11 +190,11 @@ pub enum PhyPreparation {
     Woke { micros: u64 },
     /// The domain was registered.
     Registered {
-        calibration_path: oer_esp32s31_phy::PhyCalibrationPath,
+        calibration_path: oer_chips_esp32s31_phy::PhyCalibrationPath,
         micros: u64,
         /// The registration's complete outcome, with its diagnostics.
         #[cfg(oer_trace)]
-        outcome: oer_esp32s31_phy::PhyRegisterOutcome,
+        outcome: oer_chips_esp32s31_phy::PhyRegisterOutcome,
     },
 }
 
@@ -301,7 +302,7 @@ impl<K: Client> ClientSlot<K> {
 /// A client's unique authority to post one request to the actor.
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_radio_client::{Client, MembershipCell};
+/// use oer_chips_esp32s31_radio_client::{Client, MembershipCell};
 /// fn twice<K: Client>(cell: MembershipCell<K>, one: K::Join, two: K::Join) {
 ///     let _first = cell.join(one);
 ///     let _second = cell.join(two);
@@ -437,7 +438,7 @@ impl<K: Client, O: sealed::Reply<K>> Pending<K, O> {
 }
 
 impl<K: Client, O: sealed::Reply<K>> Future for Pending<K, O> {
-    type Output = Result<(MembershipCell<K>, O), oer_memory::RequestError>;
+    type Output = Result<(MembershipCell<K>, O), oer_portable_memory::RequestError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let Some((mut awaiting, idle)) = self.state.take() else {

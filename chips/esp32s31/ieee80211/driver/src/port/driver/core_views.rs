@@ -160,7 +160,7 @@ pub(super) fn received<'frame, 'id, Id: SlotIdentity, D: Device<B>, const B: usi
 #[inline]
 pub(super) fn tune<'id, Id: SlotIdentity, D: Device<B>, const B: usize>(
     view: CoreView<'_, Core<'id, Id, D, B>>,
-    channel: oer_ieee80211_wire::channel::WifiChannel,
+    channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
     power: Option<D::Power>,
 ) -> Result<(), Fault> {
     match view {

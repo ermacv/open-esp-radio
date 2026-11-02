@@ -1,8 +1,8 @@
 //! Read-only records from the policy that selected the actual publication.
 use super::*;
 use crate::mac::tx::{LegacyTxQueue, runtime::WifiTxRuntimePolicy};
-use oer_ieee80211_contracts_port::{EdcaAcParameters, VifRole};
-use oer_ieee80211_wire::{extensions::wmm::WmmAcParameters, qos::WmmAccessCategory};
+use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, VifRole};
+use oer_protocols_ieee80211_wire::{extensions::wmm::WmmAcParameters, qos::WmmAccessCategory};
 fn role(value: u32) -> VifRole {
     if value == 0 {
         VifRole::Station
@@ -72,12 +72,12 @@ impl Event for EdcaRecord {
             parameters: EdcaAcParameters {
                 wmm: WmmAcParameters {
                     admission_control_mandatory: w & (1 << 28) != 0,
-                    aifsn: oer_wire::U8::from_low_bits((w & 15) as u8),
-                    ecw_min: oer_wire::U8::from_low_bits(((w >> 4) & 15) as u8),
-                    ecw_max: oer_wire::U8::from_low_bits(((w >> 8) & 15) as u8),
+                    aifsn: oer_portable_wire::U8::from_low_bits((w & 15) as u8),
+                    ecw_min: oer_portable_wire::U8::from_low_bits(((w >> 4) & 15) as u8),
+                    ecw_max: oer_portable_wire::U8::from_low_bits(((w >> 8) & 15) as u8),
                     txop_limit_units_32_us: ((w >> 12) & 0xffff) as u16,
                 },
-                msdu_lifetime: oer_time::Duration::from_micros(u64::from(life)),
+                msdu_lifetime: oer_portable_time::Duration::from_micros(u64::from(life)),
             },
         })
     }
@@ -116,26 +116,26 @@ pub(crate) fn contention(
     ac: WmmAccessCategory,
     backoff: u16,
 ) {
-    if !oer_espressif_staged_runtime::trace::enabled(Publication::CHANNEL) {
+    if !oer_chips_family_staged_runtime::trace::enabled(Publication::CHANNEL) {
         return;
     }
     for role in [VifRole::Station, VifRole::AccessPoint] {
         let set = policy.debug_edca(role);
         let wmm = set.wmm();
-        oer_espressif_staged_runtime::trace::emit(&EdcaTable {
+        oer_chips_family_staged_runtime::trace::emit(&EdcaTable {
             role,
             count: wmm.parameter_set_count,
             uapsd: wmm.uapsd,
         });
         for category in WmmAccessCategory::ALL {
-            oer_espressif_staged_runtime::trace::emit(&EdcaRecord {
+            oer_chips_family_staged_runtime::trace::emit(&EdcaRecord {
                 role,
                 category,
                 parameters: set.access_category(category),
             });
         }
     }
-    oer_espressif_staged_runtime::trace::emit(&EdcaDraw {
+    oer_chips_family_staged_runtime::trace::emit(&EdcaDraw {
         role: head,
         category: ac,
         exponent: policy.contention_exponent(LegacyTxQueue::from_access_category(ac)),
@@ -152,13 +152,13 @@ mod tests {
             for category in WmmAccessCategory::ALL {
                 for updated in [false, true] {
                     let mut parameters =
-                        oer_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
+                        oer_protocols_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
                             .access_category(category);
                     if updated {
                         parameters.wmm.admission_control_mandatory = true;
-                        parameters.wmm.aifsn = oer_wire::U8::constant::<15>();
-                        parameters.wmm.ecw_min = oer_wire::U8::constant::<6>();
-                        parameters.wmm.ecw_max = oer_wire::U8::constant::<10>();
+                        parameters.wmm.aifsn = oer_portable_wire::U8::constant::<15>();
+                        parameters.wmm.ecw_min = oer_portable_wire::U8::constant::<6>();
+                        parameters.wmm.ecw_max = oer_portable_wire::U8::constant::<10>();
                         parameters.wmm.txop_limit_units_32_us = 350;
                     }
                     let input = EdcaRecord {

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_bluetooth_driver::interrupt::{
+use oer_chips_esp32s31_bluetooth_driver::interrupt::{
     CapturedWakeBatch, PrimaryInterruptCapture, PrimaryWakeFault, SchedulerWakeBatch,
 };
 

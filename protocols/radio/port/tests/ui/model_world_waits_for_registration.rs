@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{LocalId, ModelSlotOwner, PortSlot};
+use oer_protocols_radio_port::{LocalId, ModelSlotOwner, PortSlot};
 
 pub fn end<'scope, S: ModelSlotOwner<LocalId<'scope>>>(mut slot: PortSlot<LocalId<'scope>, S>, owner: S) {
     let (frontend, registration) = slot.register(owner).ok().expect("fresh slot");

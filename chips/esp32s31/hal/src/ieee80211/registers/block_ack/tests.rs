@@ -1,6 +1,6 @@
 //! The BlockAck register leaves over host memory.
 
-use oer_esp32s31_pac::wifi_mac::{
+use oer_chips_esp32s31_pac::wifi_mac::{
     bitmap_high, bitmap_low, extra_softap_rx_block_ack_bitmap_high,
     extra_softap_rx_block_ack_bitmap_low, extra_softap_rx_block_ack_control,
     extra_softap_rx_block_ack_peer_head, extra_softap_rx_block_ack_peer_tail_and_policy,

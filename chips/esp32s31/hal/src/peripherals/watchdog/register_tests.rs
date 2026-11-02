@@ -1,6 +1,6 @@
 //! The watchdog owners over host memory from each instance's base: each
 //! test fills the words with a pattern, runs one sequence of
-//! `oer-espressif-watchdog` on an owner, reads the fields back through a
+//! `oer-chips-family-watchdog` on an owner, reads the fields back through a
 //! typed view of the same words and checks that no other word changed.
 //!
 //! Word offsets are ESP-IDF 4d80c1b2's: `timer_group_reg.h`
@@ -12,13 +12,13 @@
 use core::num::NonZeroU32;
 use std::{vec, vec::Vec};
 
-use oer_espressif_watchdog::{
+use oer_chips_family_watchdog::{
     LOCK, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog, StoppedMainWatchdog,
     SuperWatchdog,
 };
 
 use super::{Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters};
-use oer_esp32s31_pac::instances;
+use oer_chips_esp32s31_pac::instances;
 
 fn memory(size: usize, fill: u32) -> Vec<u32> {
     vec![fill; size / 4]
@@ -134,7 +134,7 @@ fn arming_a_main_watchdog_writes_its_timeout_stages_and_reset_lengths() {
             config.wdt_stg2(),
             config.wdt_stg3()
         ]
-        .map(oer_mmio::Bits::get),
+        .map(oer_portable_mmio::Bits::get),
         [3, 0, 0, 0]
     );
     assert_eq!(config.wdt_cpu_reset_length().get(), 7);

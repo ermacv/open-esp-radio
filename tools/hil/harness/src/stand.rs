@@ -16,19 +16,19 @@ use std::{
     time::Duration,
 };
 
-use oer_hil_link::Link;
-use oer_image_build::images;
-use oer_image_bundle::ImageBundle;
-use oer_lab_arbiter::{
+use oer_tools_hil_link::Link;
+use oer_tools_image_build::images;
+use oer_tools_image_bundle::ImageBundle;
+use oer_tools_lab_arbiter::{
     claims::{AIR, Claim},
     journal::ImageIdentity,
     readiness::ROUTER,
 };
-use oer_lab_client::{
+use oer_tools_lab_client::{
     client::{Client, Running},
     protocol::{FlashVia, LeaseRequest, Operation},
 };
-use oer_lab_model::{BoardRole, Stand};
+use oer_tools_lab_model::{BoardRole, Stand};
 
 use crate::Scenario;
 use crate::finish::{self, Cleanup, Ending, Waits};
@@ -56,16 +56,16 @@ impl Session {
     /// one device under test of the image's chip), write the image unless
     /// the board runs it, and open the link with a reset.
     pub(crate) fn open(scenario: &Scenario, selector: Option<&str>) -> Result<Self> {
-        let root = oer_os_process::Checkout::discover("HIL scenario")?.root;
+        let root = oer_tools_os_process::Checkout::discover("HIL scenario")?.root;
         let bundle = build(&root, scenario.image)?;
         let image_crc32 = bundle
             .staged
             .as_ref()
             .map(|staged| staged.runtime_crc32)
             .ok_or("the image is not staged: it has no identity to check")?;
-        let stand = Stand::load(&oer_lab_model::path()?)?;
+        let stand = Stand::load(&oer_tools_lab_model::path()?)?;
         let board = device_under_test(&stand, selector)?.clone();
-        let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+        let owner = oer_tools_lab_arbiter::owner::from_environment()?.to_string();
         let mut client = Client::open(&format!("hil {}", scenario.name))?;
         eprintln!("hil: waiting for board {}", board.id);
         client.acquire(
@@ -158,7 +158,7 @@ impl StandBoard {
     /// Write `bundle` unless the board runs it; the service journals it.
     fn write(&self, root: &Path, image: &str, bundle: &ImageBundle) -> Result<()> {
         eprintln!("hil: writing {image} unless the board runs it");
-        let git = |arguments: &[&str]| oer_os_process::git::text(root, arguments).ok();
+        let git = |arguments: &[&str]| oer_tools_os_process::git::text(root, arguments).ok();
         let written = self.run(Operation::Flash {
             board: self.board.clone(),
             bundle: bundle.directory().display().to_string(),
@@ -252,7 +252,7 @@ impl finish::Board for StandBoard {
 
     fn router(
         &self,
-        request: oer_lab_client::protocol::RouterOperation,
+        request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> std::result::Result<serde_json::Value, String> {
         self.run(Operation::Router { request })
     }
@@ -280,8 +280,8 @@ fn claims(mac: &str, scenario: &Scenario) -> Vec<Claim> {
 /// Build `image` through the image pipeline into its bundle.
 fn build(root: &Path, image: &str) -> Result<ImageBundle> {
     eprintln!("hil: building {image}");
-    let spec = images::spec(root, image, oer_image_checks::Enforced::Reported)?;
-    let bundle = oer_image_build::build(&spec)?;
+    let spec = images::spec(root, image, oer_tools_image_checks::Enforced::Reported)?;
+    let bundle = oer_tools_image_build::build(&spec)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -293,7 +293,7 @@ fn build(root: &Path, image: &str) -> Result<ImageBundle> {
 fn device_under_test<'a>(
     stand: &'a Stand,
     selector: Option<&str>,
-) -> Result<&'a oer_lab_model::Board> {
+) -> Result<&'a oer_tools_lab_model::Board> {
     if let Some(selector) = selector {
         return stand
             .board(selector)
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn a_run_leases_the_air_only_for_a_scenario_that_turns_a_radio_on() {
         let mac = "02:00:00:00:00:01";
-        let quiet = Scenario::new("aes", "esp32s31-sdk-rpc", &[]);
+        let quiet = Scenario::new("aes", "hil-aes", &[]);
         assert_eq!(claims(mac, &quiet), [Claim::board(mac)]);
         assert_eq!(
             claims(mac, &quiet.using_air()),
@@ -352,12 +352,12 @@ mod tests {
 
     #[test]
     fn two_router_runs_on_different_boards_conflict_on_the_router() {
-        use oer_lab_arbiter::claims::{conflict, normalize};
+        use oer_tools_lab_arbiter::claims::{conflict, normalize};
         let station = Scenario::new("wifi-station", "image", &[]).using_router();
         let one = normalize(&claims("02:00:00:00:00:01", &station));
         let other = normalize(&claims("02:00:00:00:00:02", &station));
         assert!(conflict(&one, &other), "both change the router's network");
-        let quiet = Scenario::new("aes", "esp32s31-sdk-rpc", &[]);
+        let quiet = Scenario::new("aes", "hil-aes", &[]);
         assert!(!conflict(
             &one,
             &normalize(&claims("02:00:00:00:00:02", &quiet))

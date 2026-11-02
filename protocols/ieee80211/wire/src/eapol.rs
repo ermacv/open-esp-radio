@@ -14,7 +14,7 @@
 use crate::ccmp::GroupKeyId;
 use crate::security::rsn::RSN_OUI;
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// The Key Information field of an EAPOL-Key frame, big-endian on air.
     /// SOURCE: IEEE Std 802.11-2020, 12.7.2, Figure 12-33 (Key Information
     /// field); bits 4..6 are reserved.
@@ -68,7 +68,7 @@ pub const IGTK_KDE_TYPE: u8 = 9;
 /// Octets of a KDE before its data: Type, Length, OUI and Data Type.
 pub const KDE_HEADER_LEN: usize = 6;
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// The first octet of a GTK KDE's data.
     /// SOURCE: IEEE Std 802.11-2020, 12.7.2, Figure 12-36 (GTK KDE format):
     /// Key ID in bits 0..2, Tx in bit 2, bits 3..8 reserved.
@@ -84,7 +84,7 @@ impl GtkKdeInfo {
     /// `transmit` holds.
     pub const fn new(key_id: GroupKeyId, transmit: bool) -> Self {
         Self::from_bytes([0])
-            .with_key_id(oer_wire::U8::<2>::from_low_bits(key_id.get()))
+            .with_key_id(oer_portable_wire::U8::<2>::from_low_bits(key_id.get()))
             .with_transmit(transmit)
     }
 
@@ -206,7 +206,7 @@ impl<'a> EapolKey<'a> {
     /// both of its lengths.
     pub fn parse(bytes: &'a [u8]) -> Result<Self, EapolParseError> {
         let () = GEOMETRY;
-        let mut reader = oer_wire::Reader::new(bytes);
+        let mut reader = oer_portable_wire::Reader::new(bytes);
         let truncated = |_| EapolParseError::Truncated;
         let [protocol_version, packet_type, length_high, length_low] =
             reader.read::<EAPOL_HEADER_LEN>().map_err(truncated)?;
@@ -237,7 +237,7 @@ impl<'a> EapolKey<'a> {
         if key_data_len != key_data.len() {
             return Err(EapolParseError::LengthMismatch);
         }
-        let mut around_mic = oer_wire::Reader::new(bytes);
+        let mut around_mic = oer_portable_wire::Reader::new(bytes);
         let before_mic = around_mic.take(BEFORE_MIC_LEN).map_err(truncated)?;
         let _ = around_mic.array::<EAPOL_KEY_MIC_LEN>().map_err(truncated)?;
         let after_mic = around_mic.remaining();
@@ -342,7 +342,7 @@ pub enum EapolEncodeError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EapolKeyBuffer<const N: usize> {
     bytes: [u8; N],
-    length: oer_wire::PrefixLength<N>,
+    length: oer_portable_wire::PrefixLength<N>,
 }
 
 impl<const N: usize> EapolKeyBuffer<N> {
@@ -357,10 +357,10 @@ impl<const N: usize> EapolKeyBuffer<N> {
         let required = EAPOL_HEADER_LEN
             .checked_add(usize::from(body_len))
             .ok_or(EapolEncodeError::KeyDataTooLong)?;
-        let length = oer_wire::PrefixLength::new(required)
+        let length = oer_portable_wire::PrefixLength::new(required)
             .ok_or(EapolEncodeError::BufferTooSmall { required })?;
         let mut bytes = [0; N];
-        let mut writer = oer_wire::Writer::new(&mut bytes);
+        let mut writer = oer_portable_wire::Writer::new(&mut bytes);
         for field in [
             &[fields.protocol_version, EAPOL_PACKET_TYPE_KEY][..],
             &body_len.to_be_bytes(),
@@ -591,7 +591,7 @@ mod tests {
     #[test]
     fn key_information_round_trips_big_endian() {
         let info = KeyInformation::EMPTY
-            .with_descriptor_version(oer_wire::U8::constant::<2>())
+            .with_descriptor_version(oer_portable_wire::U8::constant::<2>())
             .with_pairwise(true)
             .with_install(true)
             .with_ack(true)

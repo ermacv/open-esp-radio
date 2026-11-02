@@ -1,9 +1,9 @@
 //! The variant paths of a poison, for retained diagnostics that do not
 //! format. Each `match` is exhaustive: a new variant breaks the build.
 
-use oer_diagnostics::{DiagPath, DiagnosticPath};
-use oer_esp32s31_hal::domain::{CommonRadioPowerError, RadioClient};
-use oer_esp32s31_phy::{PhyRegisterBindingError, PhyRegisterStage};
+use oer_chips_esp32s31_hal::domain::{CommonRadioPowerError, RadioClient};
+use oer_chips_esp32s31_phy::{PhyRegisterBindingError, PhyRegisterStage};
+use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use super::{
     CalibrationTrackingFailure, CalibrationTrackingFault, PhyFault, Poison, PoisonCause,
@@ -202,8 +202,8 @@ impl DiagnosticPath for RegistrationFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_phy::concurrent::ConcurrentPhyError;
-    use oer_esp32s31_phy::state::client::{PhyPllTrackClass, PhyTrackTimeError};
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError;
+    use oer_chips_esp32s31_phy::state::client::{PhyPllTrackClass, PhyTrackTimeError};
 
     #[test]
     fn a_tracking_poison_names_its_whole_path() {
@@ -245,7 +245,7 @@ mod tests {
         );
         assert_eq!(path.words(), [3, 700]);
         let release = DiagPath::of(&PoisonCause::CommonPower(CommonRadioPowerError::Release(
-            oer_esp32s31_hal::power::PlatformClock::Mpll,
+            oer_chips_esp32s31_hal::power::PlatformClock::Mpll,
         )));
         assert_eq!(release.names(), ["CommonPower", "Release"]);
         assert!(release.overflowed());

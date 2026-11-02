@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{ConfigurePermission, Station, TsfPermission};
+use oer_protocols_ieee80211_contracts_port::{ConfigurePermission, Station, TsfPermission};
 pub fn permissions<'id>(
     configure: ConfigurePermission<'id, Station>,
     tsf: TsfPermission<'id, Station>,

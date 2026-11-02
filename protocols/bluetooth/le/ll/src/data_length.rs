@@ -1,6 +1,6 @@
 //! Data Length Update negotiation state.
 
-use oer_bluetooth_le_wire::data_length::{LeDataLength, LeDataLengths};
+use oer_protocols_bluetooth_le_wire::data_length::{LeDataLength, LeDataLengths};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LocalRequest {

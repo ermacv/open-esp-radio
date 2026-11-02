@@ -1,14 +1,14 @@
 //! The platform values the Wi-Fi MAC cold start reads, answered by the radio
 //! system.
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::init::{
         MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy, MacSlowClockCalibration,
         MacSlowClockCalibrationSource, MacTxPowerSource,
     },
     types::MacTxPowerPair,
 };
-use oer_esp32s31_phy::PhyTxTargetPowerProfile;
+use oer_chips_esp32s31_phy::PhyTxTargetPowerProfile;
 
 /// The MAC cold start's queries, in `MacColdCoexPti::query` order.
 pub(crate) const MAC_COEX_EVENTS: [MacCoexEvent; 4] = [
@@ -65,12 +65,12 @@ impl MacTxPowerSource for MacSources {
 mod tests;
 
 pub(crate) fn probe_priority(
-    table: oer_espressif_coex::CoexPtiTable,
-) -> oer_esp32s31_radio_client::wifi::ProbePriority {
-    use oer_espressif_coex::wifi_events;
+    table: oer_chips_family_coex::CoexPtiTable,
+) -> oer_chips_esp32s31_radio_client::wifi::ProbePriority {
+    use oer_chips_family_coex::wifi_events;
     let packet = table.pti(wifi_events::PROBE_REQUEST);
     let scheduler = packet.min(table.pti(wifi_events::SLICE));
-    oer_esp32s31_radio_client::wifi::ProbePriority {
+    oer_chips_esp32s31_radio_client::wifi::ProbePriority {
         packet: packet.into(),
         scheduler: scheduler.into(),
     }
@@ -81,7 +81,7 @@ mod probe_tests {
     use super::*;
     #[test]
     fn probe_priority_follows_the_live_shared_operation_and_slice_entries() {
-        use oer_espressif_coex::{CoexPti, CoexPtiTable, wifi_events};
+        use oer_chips_family_coex::{CoexPti, CoexPtiTable, wifi_events};
         let event = wifi_events::PROBE_REQUEST;
         let mut table = CoexPtiTable::VENDOR;
         table.set(event, CoexPti::new(2).expect("PTI"));

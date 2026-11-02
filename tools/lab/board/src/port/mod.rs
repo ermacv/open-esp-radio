@@ -201,7 +201,7 @@ impl AsRawFd for Port {
 
 impl From<Port> for OwnedFd {
     fn from(port: Port) -> Self {
-        oer_os_serial::owned_descriptor(port.serial)
+        oer_tools_os_serial::owned_descriptor(port.serial)
     }
 }
 

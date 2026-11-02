@@ -29,14 +29,14 @@ pub struct Registers {
 impl Registers {
     /// The MMIO registers of `chip`'s register model in the checkout `root`.
     pub fn load(root: &Path, chip: &str) -> crate::harness::Result<Self> {
-        let loaded = oer_registers_model::Chip::load(root, chip)?;
+        let loaded = oer_tools_registers_model::Chip::load(root, chip)?;
         Ok(Self::from_registers(
             loaded
                 .model
                 .registers()
                 .iter()
                 .filter_map(|register| match register.location {
-                    oer_registers_model::chip_model::Location::Mmio { address } => Some((
+                    oer_tools_registers_model::chip_model::Location::Mmio { address } => Some((
                         u32::try_from(address).ok()?,
                         register.identity.clone(),
                         register
@@ -45,7 +45,7 @@ impl Registers {
                             .map(|field| (field.name.clone(), field.low, field.width))
                             .collect(),
                     )),
-                    oer_registers_model::chip_model::Location::AnalogI2c(_) => None,
+                    oer_tools_registers_model::chip_model::Location::AnalogI2c(_) => None,
                 }),
         ))
     }

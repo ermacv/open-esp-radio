@@ -6,14 +6,14 @@
 //! ([`RateSelection::completed`]): the rates and transmissions the attempt
 //! made teach it the next plan. It hears when its interface associates
 //! with a peer and when it leaves: a controller adapts per peer. The selection is an integrator's policy;
-//! the Espressif one (`oer-espressif-ieee80211-policy::rate_selection`)
+//! the Espressif one (`oer-chips-family-ieee80211-policy::rate_selection`)
 //! sends as the vendor's station does.
 
-use oer_ieee80211_contracts_port::{
+use oer_portable_time::Instant;
+use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Band, RetryPlan, RxMetadata, SingleOutcome, TxOutcome,
 };
-use oer_ieee80211_wire::phy::{LegacyRate, PhyRate};
-use oer_time::Instant;
+use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
 
 use crate::protection::BasicRates;
 use crate::rate_control::{BlockAckTally, RatePeer};
@@ -40,7 +40,7 @@ pub fn management_rate(band: Band, basic_rates: Option<&BasicRates>) -> Option<L
 #[cfg(test)]
 mod management_tests {
     use super::*;
-    use oer_ieee80211_wire::phy::DsssPreamble;
+    use oer_protocols_ieee80211_wire::phy::DsssPreamble;
 
     #[test]
     fn unknown_bss_uses_the_bands_lowest_rate() {
@@ -199,7 +199,7 @@ pub trait RateSelection<M: RxMetadata, A, BA = A> {
 mod learn_tests {
     use super::*;
     use core::num::NonZeroU16;
-    use oer_ieee80211_contracts_port::{
+    use oer_protocols_ieee80211_contracts_port::{
         Air, RxMeta, SingleEnd, SingleResponse, TxOutcome, WithdrawCause,
     };
     use std::vec::Vec;

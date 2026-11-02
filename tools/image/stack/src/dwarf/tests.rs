@@ -2,7 +2,7 @@ use super::locations::Place;
 use super::*;
 use object::write::Object;
 use object::{Architecture, BinaryFormat, Endianness, SectionKind};
-use oer_analysis_riscv_model::{Callee, WorkingMemory};
+use oer_tools_analysis_riscv_model::{Callee, WorkingMemory};
 
 /// Tiny DWARF4 fixtures. Attribute values are already encoded in their
 /// declared forms; the production reader still parses every section/DIE.

@@ -940,7 +940,7 @@ impl PhyPowerControlPointMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyPowerControlPointCompletion {
         match self.action {
             PhyPowerControlPointAction::ConfigureTone {
@@ -983,7 +983,7 @@ impl PhyTxPowerMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxPowerCompletion {
         match self.action {
             PhyTxPowerAction::ConfigureTone {
@@ -999,7 +999,7 @@ impl PhyTxPowerMmioBinding {
                 }
             }
             PhyTxPowerAction::WriteReferenceControl { value } => {
-                oer_esp32s31_hal::phy::power_detector::write_reference(registers, value);
+                oer_chips_esp32s31_hal::phy::power_detector::write_reference(registers, value);
                 PhyTxPowerCompletion::ReferenceControlWritten { value }
             }
             _ => unreachable!(),
@@ -1085,7 +1085,7 @@ impl PhyTxPowerI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -1093,7 +1093,7 @@ impl PhyTxPowerI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<

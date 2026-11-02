@@ -1,6 +1,6 @@
 //! The direct pre-COEX tail of `hal_init`.
 
-use oer_esp32s31_pac::wifi_mac::rx_csi_control::{Bits0_7Opaque, Bits8_15Opaque};
+use oer_chips_esp32s31_pac::wifi_mac::rx_csi_control::{Bits0_7Opaque, Bits8_15Opaque};
 
 use super::{
     MacPlacement, MacSlowClockCalibrationValue, WifiRadioRegisters, WifiRxDmaRegisters, bits,

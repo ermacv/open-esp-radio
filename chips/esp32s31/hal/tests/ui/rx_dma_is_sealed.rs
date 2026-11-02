@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::ieee80211::dma::rx_dma::{RxDma, WifiRxDmaEngine};
-use oer_esp32s31_hal::owner::RadioAccess;
+use oer_chips_esp32s31_hal::ieee80211::dma::rx_dma::{RxDma, WifiRxDmaEngine};
+use oer_chips_esp32s31_hal::owner::RadioAccess;
 
 // Code above the HAL drives the walker generically, through the engine the
 // running owner lends.
@@ -19,4 +19,4 @@ pub fn engine(owner: &mut RadioAccess) -> &mut WifiRxDmaEngine {
 pub struct Foreign;
 
 #[cfg(ui_reject)]
-impl oer_esp32s31_hal::ieee80211::dma::rx_dma::sealed::Sealed for Foreign {} // ui-error: E0603
+impl oer_chips_esp32s31_hal::ieee80211::dma::rx_dma::sealed::Sealed for Foreign {} // ui-error: E0603

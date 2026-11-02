@@ -158,7 +158,7 @@ impl PhyTxDcPwdetSearchTransition {
     #[cfg(target_arch = "riscv32")]
     pub(crate) async fn execute_target_direct(
         &mut self,
-        clock: &impl oer_time::Timer,
+        clock: &impl oer_portable_time::Timer,
         physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
@@ -797,7 +797,7 @@ impl PhyTxDcPwdetTransition {
     #[cfg(target_arch = "riscv32")]
     pub(crate) async fn execute_target_direct(
         &mut self,
-        clock: &impl oer_time::Timer,
+        clock: &impl oer_portable_time::Timer,
         physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
@@ -810,14 +810,14 @@ impl PhyTxDcPwdetTransition {
         if self.step != RootStep::Prepare {
             return Err(PhyTargetPortError::UnexpectedBinding);
         }
-        oer_esp32s31_hal::phy::power_detector::prepare_txdc_calibration(physical.hardware())
+        oer_chips_esp32s31_hal::phy::power_detector::prepare_txdc_calibration(physical.hardware())
             .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
 
-        oer_esp32s31_hal::phy::pbus::configure_tx_clock(physical.hardware(), true);
-        oer_esp32s31_hal::phy::power_detector::configure_enabled(physical.hardware());
-        oer_espressif_phy::pbus::configure_debug_mode(&mut oer_esp32s31_hal::phy::pbus::port(
-            physical.hardware(),
-        ));
+        oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(physical.hardware(), true);
+        oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(physical.hardware());
+        oer_chips_family_phy::pbus::configure_debug_mode(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(physical.hardware()),
+        );
 
         let mut terminal = RootTerminal::Complete;
         for index in 0..5 {
@@ -855,7 +855,7 @@ impl PhyTxDcPwdetTransition {
         if terminal == RootTerminal::Complete
             && let PhyTxDcPwdetMode::Bluetooth { tx_path_value } = self.mode
         {
-            let value = require_pbus_result(oer_esp32s31_hal::phy::pbus::read_result(
+            let value = require_pbus_result(oer_chips_esp32s31_hal::phy::pbus::read_result(
                 physical.hardware(),
                 1,
                 1,
@@ -872,7 +872,7 @@ impl PhyTxDcPwdetTransition {
             }
         }
         if terminal == RootTerminal::Complete {
-            oer_esp32s31_hal::phy::power_detector::configure_txdc_sar(physical.hardware());
+            oer_chips_esp32s31_hal::phy::power_detector::configure_txdc_sar(physical.hardware());
             for row in 0..3_u8 {
                 for transaction in [
                     PhyPbusForceTest::new(5, 1, if row == 2 { 0x1e7 } else { 0x1ef }),
@@ -925,16 +925,16 @@ impl PhyTxDcPwdetTransition {
             0x80,
             0x78,
         );
-        if oer_espressif_phy::pbus::configure_work_mode(&mut oer_esp32s31_hal::phy::pbus::port(
-            physical.hardware(),
-        )) {
+        if oer_chips_family_phy::pbus::configure_work_mode(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(physical.hardware()),
+        ) {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
-            oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(physical.hardware());
+            oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(physical.hardware());
             settle(crate::executor::wait::tx::Scope::Root, 2)?;
-            oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(physical.hardware());
+            oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(physical.hardware());
         }
-        oer_esp32s31_hal::phy::pbus::configure_tx_clock(physical.hardware(), false);
-        oer_esp32s31_hal::phy::power_detector::restore_txdc_calibration(physical.hardware())
+        oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(physical.hardware(), false);
+        oer_chips_esp32s31_hal::phy::power_detector::restore_txdc_calibration(physical.hardware())
             .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
         self.step = match terminal {
             RootTerminal::Complete => RootStep::Complete,
@@ -1321,30 +1321,30 @@ impl PhyTxDcPwdetMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> Result<PhyTxDcPwdetCompletion, PhyTxDcPwdetHardwareInvariant> {
         match self.action {
             PhyTxDcPwdetAction::PrepareRegisters => {
-                oer_esp32s31_hal::phy::power_detector::prepare_txdc_calibration(registers)
+                oer_chips_esp32s31_hal::phy::power_detector::prepare_txdc_calibration(registers)
                     .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreAlreadyPending)?;
                 Ok(PhyTxDcPwdetCompletion::RegistersPrepared)
             }
             PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 Ok(PhyTxDcPwdetCompletion::TxClockConfigured { enabled })
             }
             PhyTxDcPwdetAction::ConfigurePowerDetector => {
-                oer_esp32s31_hal::phy::power_detector::configure_enabled(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(registers);
                 Ok(PhyTxDcPwdetCompletion::PowerDetectorConfigured)
             }
             PhyTxDcPwdetAction::ConfigurePbusDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 Ok(PhyTxDcPwdetCompletion::PbusDebugModeConfigured)
             }
             PhyTxDcPwdetAction::ReadPbus { selector, path } => {
-                let value = require_pbus_result(oer_esp32s31_hal::phy::pbus::read_result(
+                let value = require_pbus_result(oer_chips_esp32s31_hal::phy::pbus::read_result(
                     registers, selector, path,
                 ))?;
                 Ok(PhyTxDcPwdetCompletion::PbusRead {
@@ -1371,26 +1371,26 @@ impl PhyTxDcPwdetMmioBinding {
                 })
             }
             PhyTxDcPwdetAction::ConfigureSarCalibration => {
-                oer_esp32s31_hal::phy::power_detector::configure_txdc_sar(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_txdc_sar(registers);
                 Ok(PhyTxDcPwdetCompletion::SarCalibrationConfigured)
             }
             PhyTxDcPwdetAction::ConfigurePbusWorkMode => {
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_espressif_phy::pbus::configure_work_mode(
-                        &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                    settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                        &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                     ),
                 })
             }
             PhyTxDcPwdetAction::ConfigurePbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModePulseConfigured)
             }
             PhyTxDcPwdetAction::ClearPbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 Ok(PhyTxDcPwdetCompletion::PbusWorkModePulseCleared)
             }
             PhyTxDcPwdetAction::RestoreRegisters => {
-                oer_esp32s31_hal::phy::power_detector::restore_txdc_calibration(registers)
+                oer_chips_esp32s31_hal::phy::power_detector::restore_txdc_calibration(registers)
                     .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreNotPending)?;
                 Ok(PhyTxDcPwdetCompletion::RegistersRestored)
             }
@@ -1446,7 +1446,7 @@ impl PhyTxDcPwdetSearchPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -1454,7 +1454,7 @@ impl PhyTxDcPwdetSearchPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,
@@ -1587,7 +1587,7 @@ impl PhyTxDcPwdetPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -1595,7 +1595,7 @@ impl PhyTxDcPwdetPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,

@@ -1,6 +1,6 @@
 //! The SoftAP TSF lifecycle edges over host memory.
 
-use oer_esp32s31_pac::modem_pwr::{softap_control, tsf_load_control, value_high, value_low};
+use oer_chips_esp32s31_pac::modem_pwr::{softap_control, tsf_load_control, value_high, value_low};
 
 use crate::ieee80211::registers::HostWords;
 

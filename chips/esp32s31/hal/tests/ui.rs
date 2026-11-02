@@ -3,7 +3,7 @@
 
 #[test]
 fn ui() {
-    oer_test_ui_cases::run(
+    oer_tools_test_ui_cases::run(
         env!("CARGO_MANIFEST_DIR"),
         env!("CARGO_TARGET_TMPDIR"),
         &[("bluetooth-engine", cfg!(feature = "bluetooth-engine"))],
@@ -21,11 +21,11 @@ fn dtm_profile_chip() {
         .prefix("dtm-profile-chip-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .expect("own chip UI build directory");
-    oer_test_ui_cases::run_chip(
+    oer_tools_test_ui_cases::run_chip(
         root,
         scratch.path(),
         "riscv32imafc-unknown-none-elf",
-        &[("oer-esp32s31-hal", "bluetooth-engine")],
+        &[("oer-chips-esp32s31-hal", "bluetooth-engine")],
         &[
             "chips/esp32s31/hal/tests/ui/bluetooth_dtm_profile_has_no_other_roles.rs",
             "chips/esp32s31/hal/tests/chip-ui/bluetooth_dtm_submit_requires_dtm_profile.rs",
@@ -43,11 +43,11 @@ fn psram_mapping_owns_its_single_loan() {
         .prefix("psram-loan-chip-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .expect("own chip UI build directory");
-    oer_test_ui_cases::run_chip(
+    oer_tools_test_ui_cases::run_chip(
         root,
         scratch.path(),
         "riscv32imafc-unknown-none-elf",
-        &[("oer-esp32s31-hal", "test-support")],
+        &[("oer-chips-esp32s31-hal", "test-support")],
         &[
             "chips/esp32s31/hal/tests/chip-ui/psram_double_loan.rs",
             "chips/esp32s31/hal/tests/chip-ui/psram_mapping_cannot_be_forged.rs",

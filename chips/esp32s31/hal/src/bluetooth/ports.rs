@@ -1,6 +1,6 @@
 //! Bind the family contracts to the existing disjoint register owners.
 
-use oer_espressif_bluetooth_engine::port::{SchedulerInterruptPort, SchedulerTaskPort};
+use oer_chips_family_bluetooth_engine::port::{SchedulerInterruptPort, SchedulerTaskPort};
 
 use super::registers::*;
 
@@ -84,7 +84,7 @@ impl<P: BluetoothPlacements> SchedulerInterruptPort for BluetoothInterruptRegist
 }
 
 #[cfg(feature = "bluetooth-engine")]
-impl<M: super::engine::ControllerMemory> oer_espressif_bluetooth_engine::port::ControllerTimePort
+impl<M: super::engine::ControllerMemory> oer_chips_family_bluetooth_engine::port::ControllerTimePort
     for super::engine::Engine<M>
 {
     type BeginError = super::BluetoothControllerTimeLatchBeginError;
@@ -101,7 +101,7 @@ impl<M: super::engine::ControllerMemory> oer_espressif_bluetooth_engine::port::C
 
 macro_rules! output_phases {
     ($owner:ty) => {
-        impl oer_espressif_bluetooth_engine::port::OutputPhases for $owner {
+        impl oer_chips_family_bluetooth_engine::port::OutputPhases for $owner {
             type Error = super::BluetoothControllerOutputReleaseError;
             type Admitted = super::BluetoothOutputReleaseAdmitted;
             type IdleSampled = super::BluetoothOutputIdleSampled;
@@ -115,7 +115,7 @@ macro_rules! output_phases {
 output_phases!(super::TaskOwner);
 output_phases!(super::InterruptRegistersOwner);
 
-impl oer_espressif_bluetooth_engine::port::OutputTaskPort for super::TaskOwner {
+impl oer_chips_family_bluetooth_engine::port::OutputTaskPort for super::TaskOwner {
     fn admit_release(&mut self) -> Result<Self::Admitted, Self::Error> {
         self.admit_output_release()
     }
@@ -130,11 +130,13 @@ impl oer_espressif_bluetooth_engine::port::OutputTaskPort for super::TaskOwner {
     }
 }
 
-impl oer_espressif_bluetooth_engine::port::OutputInterruptPort for super::InterruptRegistersOwner {
-    fn sample_idle<C: oer_time::Clock + ?Sized>(
+impl oer_chips_family_bluetooth_engine::port::OutputInterruptPort
+    for super::InterruptRegistersOwner
+{
+    fn sample_idle<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         admitted: &Self::Admitted,
-        settle: oer_time::settle::Settle<'_, C>,
+        settle: oer_portable_time::settle::Settle<'_, C>,
     ) -> Result<Self::IdleSampled, Self::Error> {
         self.sample_idle_output(admitted, settle)
     }
@@ -144,10 +146,10 @@ impl oer_espressif_bluetooth_engine::port::OutputInterruptPort for super::Interr
     ) -> Result<Self::DynamicMasked, Self::Error> {
         self.mask_output_dynamic_sources(heads)
     }
-    fn release_idle<C: oer_time::Clock + ?Sized>(
+    fn release_idle<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         run: &Self::RunDisabled,
-        settle: oer_time::settle::Settle<'_, C>,
+        settle: oer_portable_time::settle::Settle<'_, C>,
     ) -> Result<Self::Released, Self::Error> {
         self.release_idle_output(run, settle)
     }

@@ -1,8 +1,8 @@
 //! The terminal status of one logical A-MPDU exchange: aggregate attempts
 //! and the individual retries of MPDUs taken out of it.
 
-use oer_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
-use oer_ieee80211_wire::phy::PhyRate;
+use oer_protocols_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
+use oer_protocols_ieee80211_wire::phy::PhyRate;
 
 /// Terminal result of one logical A-MPDU exchange.
 ///

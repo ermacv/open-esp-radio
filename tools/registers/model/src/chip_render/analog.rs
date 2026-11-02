@@ -21,9 +21,9 @@ pub(super) fn render(model: &ChipModel) -> Result<String, Error> {
          /// register bytes and their fields. These values perform no hardware\n\
          /// access.\n\
          pub mod analog_i2c {\n\
-         pub use oer_espressif_analog::model::{BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset, RegisterFacts, Route, SampledByte};\n\
+         pub use oer_chips_family_analog::model::{BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset, RegisterFacts, Route, SampledByte};\n\
          /// One field of an analog-I2C byte.\n\
-         pub type Field = oer_espressif_analog::AnalogField<Address>;\n\n\
+         pub type Field = oer_chips_family_analog::AnalogField<Address>;\n\n\
          /// The block codes.\npub mod blocks {\nuse super::Block;\n",
     );
     for instance in instances {

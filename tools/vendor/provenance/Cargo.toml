@@ -1,5 +1,5 @@
 [package]
-name = "oer-vendor-provenance"
+name = "oer-tools-vendor-provenance"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ readme = "README.md"
 
 [dependencies]
 hex = "=0.4.3"
-oer-os-process = { path = "../../os/process" }
-oer-analysis-elf = { path = "../../analysis/elf" }
-oer-registers-model = { path = "../../registers/model" }
-oer-pins-artifacts = { path = "../../pins/artifacts" }
+oer-tools-os-process = { path = "../../os/process" }
+oer-tools-analysis-elf = { path = "../../analysis/elf" }
+oer-tools-registers-model = { path = "../../registers/model" }
+oer-tools-pins-artifacts = { path = "../../pins/artifacts" }
 sha2 = "=0.10.9"
 toml = "=1.1.4"
 

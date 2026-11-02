@@ -2,8 +2,8 @@
 
 use core::{fmt::Debug, future::Future};
 
-use oer_radio_port::{ClockError, PortResult};
-use oer_time::RadioInstant;
+use oer_portable_time::RadioInstant;
+use oer_protocols_radio_port::{ClockError, PortResult};
 
 /// One admitted operation: what a client's submission returns. It holds
 /// the backend's token, which is neither `Clone` nor `Copy` and only the
@@ -65,7 +65,7 @@ pub trait RadioPortClient {
     type Fault: Copy + Debug;
 
     /// The radio clock: the epoch of the port's scheduled work and receive
-    /// timestamps, at the resolution its [`ClockInfo`](oer_radio_port::ClockInfo)
+    /// timestamps, at the resolution its [`ClockInfo`](oer_protocols_radio_port::ClockInfo)
     /// states.
     fn now(
         &self,

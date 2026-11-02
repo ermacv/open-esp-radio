@@ -20,9 +20,11 @@
 )]
 
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
-use oer_crypto::block::{Aes128Engine, BlockError};
-use oer_ieee80211_core_security_cipher::bip::{self, BipError, BipFrame, BipProtectError};
-use oer_ieee80211_core_upper_mac::packet_number::{PacketNumber48, PacketNumberFrontier};
+use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee80211_core_security_cipher::bip::{
+    self, BipError, BipFrame, BipProtectError,
+};
+use oer_protocols_ieee80211_core_upper_mac::packet_number::{PacketNumber48, PacketNumberFrontier};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A six-octet BIP IPN. This value cannot be used as a CCMP PN.
@@ -31,18 +33,18 @@ pub struct BipPacketNumber(u64);
 
 impl BipPacketNumber {
     pub const fn from_bytes(bytes: [u8; RSN_IPN_LEN]) -> Self {
-        Self(oer_ieee80211_wire::bip::ipn_from_bytes(bytes))
+        Self(oer_protocols_ieee80211_wire::bip::ipn_from_bytes(bytes))
     }
 
     pub const fn to_bytes(self) -> [u8; RSN_IPN_LEN] {
-        oer_ieee80211_wire::bip::ipn_to_bytes(self.0)
+        oer_protocols_ieee80211_wire::bip::ipn_to_bytes(self.0)
     }
 }
 
 impl PacketNumber48 for BipPacketNumber {
     fn checked_add(self, distance: u64) -> Option<Self> {
         let next = self.0.checked_add(distance)?;
-        (next <= oer_ieee80211_wire::bip::IPN_MAX).then_some(Self(next))
+        (next <= oer_protocols_ieee80211_wire::bip::IPN_MAX).then_some(Self(next))
     }
 }
 

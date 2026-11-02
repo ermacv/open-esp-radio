@@ -1,7 +1,7 @@
 //! Queries compose Blobray operations and format their typed results.
 use super::*;
 use app::library::{FunctionResult, LibraryOutcome};
-use oer_analysis_riscv_model::AbstractValue;
+use oer_tools_analysis_riscv_model::AbstractValue;
 
 fn mode(kind: MemoryKind) -> &'static str {
     match kind {
@@ -111,9 +111,9 @@ pub fn xref(corpus: &Corpus, start: u32, end: u32) -> Result<String> {
 
 fn domain_error(
     error: Box<dyn std::error::Error + Send + Sync>,
-) -> oer_analysis_riscv_model::Error {
-    oer_analysis_riscv_model::Error::new(
-        oer_analysis_riscv_model::ErrorCode::Integrity,
+) -> oer_tools_analysis_riscv_model::Error {
+    oer_tools_analysis_riscv_model::Error::new(
+        oer_tools_analysis_riscv_model::ErrorCode::Integrity,
         error.to_string(),
     )
 }
@@ -204,7 +204,7 @@ pub fn show(corpus: &Corpus, name: &str) -> Result<Option<String>> {
                                 if !matches!(value, AbstractValue::Unknown) {
                                     extra.entry(*offset).or_default().push(format!(
                                         "{} = {}",
-                                        oer_analysis_riscv_lift::register_name(*register),
+                                        oer_tools_analysis_riscv_lift::register_name(*register),
                                         format::value(value, &metadata)
                                     ));
                                 }
@@ -285,7 +285,7 @@ pub fn show(corpus: &Corpus, name: &str) -> Result<Option<String>> {
                 }
                 LibraryOutcome::Blocked { function, error } => {
                     let function = metadata.function(function).map_err(domain_error)?;
-                    return Err(oer_analysis_riscv_model::Error::new(
+                    return Err(oer_tools_analysis_riscv_model::Error::new(
                         error.code,
                         format!("{}::{}: {}", function.origin, function.name, error.message),
                     ));
@@ -325,7 +325,7 @@ pub fn fields(corpus: &Corpus, offsets: &[i32]) -> Result<String> {
                         let mut location = match &field.root {
                             app::field::FieldRoot::Address { address } => format!("{address:#x}"),
                             app::field::FieldRoot::EntryRegister { register } => {
-                                oer_analysis_riscv_lift::register_name(*register).to_owned()
+                                oer_tools_analysis_riscv_lift::register_name(*register).to_owned()
                             }
                             app::field::FieldRoot::Symbol { name, symbol } => name
                                 .as_ref()
@@ -451,7 +451,8 @@ pub fn prints(corpus: &Corpus, start: u32, end: u32) -> Result<String> {
                             );
                             for record in a.records {
                                 if let FunctionRecord::Reference {
-                                    reference_kind: oer_analysis_riscv_model::ReferenceKind::Call,
+                                    reference_kind:
+                                        oer_tools_analysis_riscv_model::ReferenceKind::Call,
                                     target,
                                     ..
                                 } = record
@@ -532,7 +533,7 @@ pub fn prints(corpus: &Corpus, start: u32, end: u32) -> Result<String> {
                 && (start..end).contains(address)
             {
                 for usage in &reads.uses {
-                    let oer_analysis_blobray_domain::ReadSink::CallArgument {
+                    let oer_tools_analysis_blobray_domain::ReadSink::CallArgument {
                         site,
                         register,
                         shift,

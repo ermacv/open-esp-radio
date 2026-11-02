@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{SlotClaim, SlotIdentity};
+use oer_protocols_radio_port::{SlotClaim, SlotIdentity};
 
 pub fn claim<Id: SlotIdentity>(original: SlotClaim<Id>) -> SlotClaim<Id> {
     #[cfg(ui_reject)]

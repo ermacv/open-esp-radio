@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 pub fn transfer(key: Ccmp128Key) -> Ccmp128Key {
     #[cfg(ui_reject)]
     let installed = key.clone(); // ui-error: E0599

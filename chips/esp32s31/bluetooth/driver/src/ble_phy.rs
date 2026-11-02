@@ -1,34 +1,34 @@
 //! Owned BLE PHY engine activation after common PHY and BTBB initialization.
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+use oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 #[cfg(target_arch = "riscv32")]
-use oer_espressif_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
 
 #[cfg(target_arch = "riscv32")]
 use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::InterruptBankOwner};
 #[cfg(target_arch = "riscv32")]
-use oer_bluetooth_le_wire::LePublicDeviceAddress;
+use oer_chips_esp32s31_hal::bluetooth::ControllerPublicAddress;
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::ControllerPublicAddress;
+use oer_chips_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
+use oer_chips_esp32s31_hal::bluetooth::engine::BlePhyLe1MPacketStartCalibration;
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::engine::BlePhyLe1MPacketStartCalibration;
-#[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::engine::{
+use oer_chips_esp32s31_hal::bluetooth::engine::{
     LePacketCapturedTime, PeripheralConnectionCapturedAnchorTime,
 };
+#[cfg(target_arch = "riscv32")]
+use oer_protocols_bluetooth_le_wire::LePublicDeviceAddress;
 
 /// Observation that the source-owned normal BLE PHY transaction completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BlePhyInitializationReport {
     /// Inherited LP timer state cleared before rollover delivery was armed.
     pub stale_lp_timer_pending:
-        oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+        oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
 }
 
 /// One post-enable timing observation in the retained always-awake epoch.
@@ -41,7 +41,7 @@ pub struct BlePhyInitializationReport {
 #[must_use = "the always-awake timing observation must be consumed by DTM scheduling"]
 #[cfg(target_arch = "riscv32")]
 pub struct AlwaysAwakeTimingReady {
-    scheduler_instant: oer_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant,
+    scheduler_instant: oer_chips_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -52,7 +52,7 @@ impl AlwaysAwakeTimingReady {
     ) -> Self {
         Self {
             scheduler_instant:
-                oer_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant::from_image(
+                oer_chips_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant::from_image(
                     epoch.project_without_reanchor(&sample),
                 ),
         }
@@ -61,7 +61,7 @@ impl AlwaysAwakeTimingReady {
     /// Consume the post-enable timing proof into its microsecond-domain instant.
     pub const fn into_scheduler_instant(
         self,
-    ) -> oer_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant {
+    ) -> oer_chips_esp32s31_hal::bluetooth::engine::scheduler::time::SchedulerInstant {
         self.scheduler_instant
     }
 }
@@ -150,7 +150,7 @@ pub struct BlePhyRuntime<'runtime, const MT: usize, X: SignalExecutor, M: Contro
     pub endpoints: crate::low_power::ControllerRuntimeEndpoints<'runtime, MT, X, M>,
     /// The controller's interrupt bank, its output not prepared: the gate
     /// of its interrupt handler prepares it when the epoch opens.
-    pub interrupts: oer_esp32s31_hal::bluetooth::InterruptSetupOwner,
+    pub interrupts: oer_chips_esp32s31_hal::bluetooth::InterruptSetupOwner,
     /// Initialized low-power timer hardware, not yet started: the gate of
     /// its interrupt handler starts it after the output is prepared.
     pub timer: ModemLpTimerLowPowerHardwareInitializedOwner,
@@ -215,7 +215,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     /// proves both BLE PHY completion and public-address readiness.
     pub fn initialize_ble_phy_engine<B: PlatformClockBackend>(
         mut self,
-        ready: oer_esp32s31_phy::bluetooth_client::BluetoothRfReady<'_, B>,
+        ready: oer_chips_esp32s31_phy::bluetooth_client::BluetoothRfReady<'_, B>,
         public_address: LePublicDeviceAddress,
     ) -> Result<
         ControllerBlePhyEngineInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
@@ -249,6 +249,6 @@ pub struct ControllerBlePhyInitializationFailure<
     X: SignalExecutor,
     M: ControllerMemory,
 > {
-    pub error: oer_esp32s31_hal::bluetooth::engine::EngineInitError,
+    pub error: oer_chips_esp32s31_hal::bluetooth::engine::EngineInitError,
     _controller: ControllerLowPowerHardwareInitialized<'cells, MT, X, M>,
 }

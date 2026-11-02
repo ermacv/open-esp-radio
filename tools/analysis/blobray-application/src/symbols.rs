@@ -3,12 +3,12 @@
 //! These views replace extracting archive members and running `nm` or
 //! `strings` on vendor objects: the bytes stay inside the process.
 use crate::in_process::Executable;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     ArtifactInventory, ElfInventory, LibraryFunction, SectionRecord,
 };
-use oer_analysis_elf::classify::{self, ObjectKind, SectionFlags};
-use oer_analysis_elf::{SectionKind, SymbolKind};
-use oer_analysis_riscv_model::{FunctionRecord, ObjectId, Result, RunControl, WorkingMemory};
+use oer_tools_analysis_elf::classify::{self, ObjectKind, SectionFlags};
+use oer_tools_analysis_elf::{SectionKind, SymbolKind};
+use oer_tools_analysis_riscv_model::{FunctionRecord, ObjectId, Result, RunControl, WorkingMemory};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -246,7 +246,7 @@ pub fn referenced_strings(
 ) -> BTreeMap<u64, Vec<String>> {
     let mut texts: BTreeMap<u64, Vec<String>> = BTreeMap::new();
     for record in records {
-        let oer_analysis_riscv_model::FunctionRecord::Reference {
+        let oer_tools_analysis_riscv_model::FunctionRecord::Reference {
             raw,
             target,
             addend,
@@ -275,15 +275,15 @@ pub fn referenced_strings(
 /// sizes it, without another inventory pass.
 pub fn section_bytes(
     object: &ObjectId,
-    section: &oer_analysis_blobray_domain::SectionRecord,
+    section: &oer_tools_analysis_blobray_domain::SectionRecord,
     executables: &[Executable],
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
 ) -> Result<Vec<u8>> {
-    let request = oer_analysis_blobray_domain::DataRequest {
+    let request = oer_tools_analysis_blobray_domain::DataRequest {
         object: object.clone(),
         symbol: None,
-        ranges: vec![oer_analysis_blobray_domain::DataSelector::Section {
+        ranges: vec![oer_tools_analysis_blobray_domain::DataSelector::Section {
             section: section.index,
             offset: 0,
             length: section.size,

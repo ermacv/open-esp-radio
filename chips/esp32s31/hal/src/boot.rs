@@ -1,6 +1,6 @@
 //! The ESP32-S31 bootstrap owners and memory/CPU profiles.
-//! LP-fast, brownout and TRNG profiles live in `oer-esp32s31-boot`.
-//! The remaining facts for the `oer-espressif-boot` sequences are:
+//! LP-fast, brownout and TRNG profiles live in `oer-chips-esp32s31-boot`.
+//! The remaining facts for the `oer-chips-family-boot` sequences are:
 //! the CPU clock profiles, the flash read commands and timing candidates,
 //! the octal PSRAM's profile, the named boot waits and the boot budget below
 //! the RTC watchdog the bootloader armed.
@@ -25,7 +25,7 @@ pub use clock::{
     MemDivider, PsramSupplyLevel, RuntimeCpuClock,
 };
 pub use flash::{FlashRegisters, FlashTimingCandidate, FlashTimingWords};
-pub use oer_espressif_boot::{
+pub use oer_chips_family_boot::{
     BootFailure,
     cache::{CacheGeometry, SuspendWaits},
     clock::{ClockRates, ClockWaits, CpuClockProfile},
@@ -37,9 +37,9 @@ pub use oer_espressif_boot::{
 pub use psram::PsramRegisters;
 pub use soc::Soc;
 
-use oer_esp32s31_pac::{lp_ana::LpAnaBrownout, ownership::AnalogBusPeripherals};
-pub use oer_mmio::Bits;
-use oer_time::Duration;
+use oer_chips_esp32s31_pac::{lp_ana::LpAnaBrownout, ownership::AnalogBusPeripherals};
+pub use oer_portable_mmio::Bits;
+use oer_portable_time::Duration;
 
 #[cfg(test)]
 mod register_tests;
@@ -58,8 +58,8 @@ pub const FLASH_MMU_WINDOW: MmuWindow = MmuWindow {
     virtual_base: 0x4000_0000,
     page_bytes: 0x1_0000,
     first_entry: 0,
-    entries: oer_esp32s31_pac::spi_mem_c::MMU_ENTRIES as u16,
-    physical_pages: oer_esp32s31_pac::spi_mem_c::mmu_item_content::PADDR_MAX + 1,
+    entries: oer_chips_esp32s31_pac::spi_mem_c::MMU_ENTRIES as u16,
+    physical_pages: oer_chips_esp32s31_pac::spi_mem_c::mmu_item_content::PADDR_MAX + 1,
 };
 
 /// The PSRAM MMU's window: 64-KiB pages from `0x5000_0000`, 1024 entries of
@@ -74,8 +74,8 @@ pub const PSRAM_MMU_WINDOW: MmuWindow = MmuWindow {
     virtual_base: 0x5000_0000,
     page_bytes: 0x1_0000,
     first_entry: 0,
-    entries: oer_esp32s31_pac::spi_mem_s::MMU_ENTRIES as u16,
-    physical_pages: oer_esp32s31_pac::spi_mem_s::mmu_item_content::PADDR_MAX + 1,
+    entries: oer_chips_esp32s31_pac::spi_mem_s::MMU_ENTRIES as u16,
+    physical_pages: oer_chips_esp32s31_pac::spi_mem_s::mmu_item_content::PADDR_MAX + 1,
 };
 
 /// The brownout detector and the analog bus whose threshold it writes,
@@ -102,7 +102,7 @@ impl Brownout {
         &mut BrownoutRegisters,
         crate::phy::i2c::master::ConfigurationBus<
             '_,
-            oer_mmio::Fixed<{ oer_esp32s31_pac::instances::i2c_ana_mst::BASE }>,
+            oer_portable_mmio::Fixed<{ oer_chips_esp32s31_pac::instances::i2c_ana_mst::BASE }>,
         >,
     ) {
         (
@@ -269,9 +269,9 @@ pub const CLOCK_WAITS: ClockWaits = ClockWaits {
 /// `components/soc/esp32s31/register/soc/cache_reg.h:1633-1660`
 /// (`SYNC_MAP`; `SYNC_SIZE` 28 bits).
 pub const CACHE_GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
-    line_bytes: oer_esp32s31_pac::cache::LINE_BYTES,
-    max_range_bytes: oer_esp32s31_pac::cache::sync_size::SYNC_SIZE_MAX
-        & !(oer_esp32s31_pac::cache::LINE_BYTES - 1),
+    line_bytes: oer_chips_esp32s31_pac::cache::LINE_BYTES,
+    max_range_bytes: oer_chips_esp32s31_pac::cache::sync_size::SYNC_SIZE_MAX
+        & !(oer_chips_esp32s31_pac::cache::LINE_BYTES - 1),
     data: CacheMap::Data,
     writeback_passes: 2,
     instruction: Some(CacheMap::BothInstructionCaches),
@@ -289,7 +289,7 @@ pub const CACHE_SYNC: BootWait = const {
 
 /// The fetch suspension's waits: each replaces an unbounded poll of the
 /// pinned rev0 ROM's `Cache_Suspend_L1_CORE0_ICache` and its callees
-/// (`oer_espressif_boot::cache`), and the same polls of
+/// (`oer_chips_family_boot::cache`), and the same polls of
 /// `Cache_Suspend_L1_CORE1_ICache` when the bootstrap opens hart 1's bus.
 pub const SUSPEND_WAITS: SuspendWaits = SuspendWaits {
     autoload: const {
@@ -333,7 +333,7 @@ pub const SUSPEND_WAITS: SuspendWaits = SuspendWaits {
 /// One user command of the flash or PSRAM command port: 64 bytes or a
 /// 16-bit mode register at the bootloader's 80 MHz take microseconds. The
 /// ROM's `Wait_SPI_Idle` and `SPI_read_data` poll `CMD.USR` without a
-/// time limit (`oer_espressif_boot::flash`); this bound is this crate's.
+/// time limit (`oer_chips_family_boot::flash`); this bound is this crate's.
 pub const COMMAND_WAIT: BootWait = const {
     match BootWait::new("spi-command", Duration::from_millis(1)) {
         Ok(wait) => wait,
@@ -373,32 +373,32 @@ const fn read_command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashRe
 /// (the S31 bootloader sets no `dummy_len_plus`).
 pub const FLASH_READ_COMMANDS: FlashReadCommands = FlashReadCommands {
     qio: read_command(
-        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QioRead.bits() as u8,
+        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QioRead.bits() as u8,
         24 + 8,
         4,
     ),
     dio: read_command(
-        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DioRead.bits() as u8,
+        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DioRead.bits() as u8,
         24 + 4,
         2,
     ),
     qout: read_command(
-        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QoutRead.bits() as u8,
+        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QoutRead.bits() as u8,
         24,
         8,
     ),
     dout: read_command(
-        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DoutRead.bits() as u8,
+        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DoutRead.bits() as u8,
         24,
         8,
     ),
     fast_read: read_command(
-        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::FastRead.bits() as u8,
+        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::FastRead.bits() as u8,
         24,
         8,
     ),
     slow_read: read_command(
-        oer_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::SlowRead.bits() as u8,
+        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::SlowRead.bits() as u8,
         24,
         0,
     ),

@@ -4,7 +4,7 @@ use crate::interrupts::{
     placement::tests::facts,
     tests::{ledger, partial},
 };
-use oer_image_stack::{TableEntry, Transfer, TransferKind, TrapEntry};
+use oer_tools_image_stack::{TableEntry, Transfer, TransferKind, TrapEntry};
 
 fn transfer(site: u32, target: Option<u32>) -> Transfer {
     Transfer {
@@ -402,7 +402,7 @@ impl MultipleHandlers {
             .table
             .iter()
             .filter_map(|entry| {
-                entry.handler.map(|handler| oer_image_stack::Vector {
+                entry.handler.map(|handler| oer_tools_image_stack::Vector {
                     hart: entry.core,
                     line: entry.line,
                     entry: TrapEntry {
@@ -425,11 +425,13 @@ impl MultipleHandlers {
             exception_copies: 1,
             resolutions: &self.resolutions,
         };
-        self.stacks.harts =
-            oer_image_stack::interrupt_stacks(&self.analysis, &inputs, &mut ledger(), &mut || {
-                Ok(())
-            })
-            .unwrap();
+        self.stacks.harts = oer_tools_image_stack::interrupt_stacks(
+            &self.analysis,
+            &inputs,
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
         self.stacks.code_placement = CodePlacement::of(
             &self.analysis,
             &self
@@ -508,7 +510,7 @@ fn forbidden_operation_in_a_non_worst_handler_is_reported() {
 
 #[test]
 fn a_non_worst_executor_root_keeps_its_task_side_after_the_poll_cut() {
-    use oer_image_stack::Violation;
+    use oer_tools_image_stack::Violation;
     let mut fixture = MultipleHandlers::new();
     let worst = fixture.exception + 0x100;
     let executor = worst + 0x100;

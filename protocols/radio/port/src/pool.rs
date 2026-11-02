@@ -64,7 +64,7 @@
 //! one, so no caller adds capacity:
 //!
 //! ```compile_fail,E0599
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn copy<'id, K>(slot: &Slot<'id, K>) -> Slot<'id, K> {
 //!     slot.clone()
 //! }
@@ -72,14 +72,14 @@
 //!
 //! ```compile_fail,E0451
 //! # use core::marker::PhantomData;
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn forge<'id, Kind>() -> Slot<'id, Kind> {
 //!     Slot { index: 0, brand: PhantomData, kind: PhantomData }
 //! }
 //! ```
 //!
 //! ```compile_fail,E0382
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn install_twice<'id, Kind>(slot: Slot<'id, Kind>, install: impl Fn(Slot<'id, Kind>)) {
 //!     install(slot);
 //!     install(slot);
@@ -89,7 +89,7 @@
 //! A seat, too, is neither cloned nor forged, and no caller makes a line:
 //!
 //! ```compile_fail,E0599
-//! # use oer_radio_port::Seat;
+//! # use oer_protocols_radio_port::Seat;
 //! fn copy<'id, K>(seat: &Seat<'id, K>) -> Seat<'id, K> {
 //!     seat.clone()
 //! }
@@ -97,7 +97,7 @@
 //!
 //! ```compile_fail,E0451
 //! # use core::marker::PhantomData;
-//! # use oer_radio_port::Seat;
+//! # use oer_protocols_radio_port::Seat;
 //! fn forge<'id, K>() -> Seat<'id, K> {
 //!     Seat { index: 0, brand: PhantomData, kind: PhantomData }
 //! }
@@ -105,7 +105,7 @@
 //!
 //! ```compile_fail,E0451
 //! # use core::marker::PhantomData;
-//! # use oer_radio_port::Line;
+//! # use oer_protocols_radio_port::Line;
 //! fn forge<'id, K>() -> Line<'id, K, 4> {
 //!     Line { brand: PhantomData, kind: PhantomData }
 //! }
@@ -114,14 +114,14 @@
 //! A take needs a seat, of the pool's own kind:
 //!
 //! ```compile_fail,E0061
-//! # use oer_radio_port::PermitPool;
+//! # use oer_protocols_radio_port::PermitPool;
 //! async fn unseated<'id, K>(pool: &impl PermitPool<'id, K>) {
 //!     let _ = pool.take().await;
 //! }
 //! ```
 //!
 //! ```compile_fail,E0308
-//! # use oer_radio_port::{PermitPool, Seat};
+//! # use oer_protocols_radio_port::{PermitPool, Seat};
 //! async fn elsewhere<'id, K, J>(pool: &impl PermitPool<'id, K>, seat: &mut Seat<'id, J>) {
 //!     let _ = pool.take(seat).await;
 //! }
@@ -131,7 +131,7 @@
 //! for the next take:
 //!
 //! ```
-//! # use oer_radio_port::{Permit, PermitPool, Seat};
+//! # use oer_protocols_radio_port::{Permit, PermitPool, Seat};
 //! async fn twice<'id, K>(
 //!     pool: &impl PermitPool<'id, K>,
 //!     mut seat: Seat<'id, K>,
@@ -146,14 +146,14 @@
 //! `'static`; neither has an error code of its own (a lifetime error):
 //!
 //! ```compile_fail
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn mix<'a, 'b, Kind>(slot: Slot<'a, Kind>) -> Slot<'b, Kind> {
 //!     slot
 //! }
 //! ```
 //!
 //! ```compile_fail
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn keep<'id, Kind>(slot: Slot<'id, Kind>) -> Slot<'static, Kind> {
 //!     slot
 //! }
@@ -164,7 +164,7 @@
 //! one's:
 //!
 //! ```compile_fail
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn shrink<'a: 'b, 'b, K>(slot: Slot<'a, K>) -> Slot<'b, K> {
 //!     slot
 //! }
@@ -173,7 +173,7 @@
 //! The compiling twins of the slot rules move a slot within its own install:
 //!
 //! ```
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn install_once<'id, Kind>(slot: Slot<'id, Kind>, install: impl Fn(Slot<'id, Kind>)) {
 //!     install(slot);
 //! }

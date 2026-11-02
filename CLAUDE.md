@@ -1,8 +1,7 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for the Espressif ESP32-S31: Wi-Fi, Bluetooth LE
-and IEEE 802.15.4, without vendor radio binaries. The ESP32-C5 appears in the
-repository only as the stand's ESP-IDF peers; it has no Rust code.
+Rust 2024 `no_std` radio stack for Espressif chips, today the ESP32-S31:
+Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries.
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
 system these rules serve.
 
@@ -25,9 +24,7 @@ system these rules serve.
   or bridges. Host `espflash` and its transitive image-format dependency are
   host tools. The PAC's single `take()` claims the chip; the HAL's
   `Root::take` splits it through `into_bootstrap` or `into_runtime`.
-  Only these owned partitions grant register access. The repository holds
-  no Rust code for the ESP32-C5: its ESP-IDF peers (`firmware/peers`,
-  `firmware/vendor/esp32c5`), their pins and their flash map are all of it.
+  Only these owned partitions grant register access.
 - **Compile time first.** Every check that can run at compile time runs there.
   A `const fn` alone does not enforce this: fixed values use const items or
   blocks, and generic geometry uses inline const checks at monomorphization.
@@ -43,17 +40,17 @@ system these rules serve.
   const, never assertion macros. Compile-time panics and test assertions
   are allowed. Unsafe contracts cover memory safety; operation order and
   lifecycle are enforced by `&mut` ownership and typestate. Moving existing
-  unsafe sites into their narrow home (`oer-riscv` for architectural
-  instructions, `oer-memory` for cells, placement, DMA proofs and typed symbol exports, the HAL's
+  unsafe sites into their narrow home (`oer-portable-riscv` for architectural
+  instructions, `oer-portable-memory` for cells, placement, DMA proofs and typed symbol exports, the HAL's
   PSRAM owner for slice creation) may increase the home's count only by the
   moved sites, when the touched crates' total decreases and no calling crate's
   count increases; each site retains its narrow
   contract and `// SAFETY:` proof.
   The PHY-fault slot's ABI declaration belongs to the HAL, with one narrow
   `LinkSlot` unsafe implementation; its one-site caller-count increase is
-  permitted. The trace clock slot belongs to `oer-memory`, and trace retains
+  permitted. The trace clock slot belongs to `oer-portable-memory`, and trace retains
   `forbid(unsafe_code)`. Other callers retain the no-growth rule.
-  Context-local mutable payloads use `oer-memory::ContextCell` with a private
+  Context-local mutable payloads use `oer-portable-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
   A hardware state is impossible only with a `SOURCE:` proof naming the
   model, revision, preconditions, event order and limits; a cited value alone
@@ -80,7 +77,7 @@ system these rules serve.
   sessions. A task never borrows its handler cell. Runtime acknowledgements
   consume affine samples;
   polling requires `Silent` after the same pre-bind discard.
-  Transmit security validates PHR-bounded MAC fields through `oer-wire`
+  Transmit security validates PHR-bounded MAC fields through `oer-portable-wire`
   before every security setter. A malformed generated secured ACK is handled
   API input: STOP, report its typed security error to the environment, deliver
   the received frame without an ACK and select the next operation. It neither
@@ -179,11 +176,11 @@ system these rules serve.
   Generated register code has no `unsafe`: volatile access lives in
   `portable/mmio` alone. `unsafe` stays in `portable/mmio`, architectural
   instructions in `portable/riscv`, Espressif interrupt bindings in
-  `chips/espressif/interrupt-table`, typed symbol export attributes in
+  `chips/family/interrupt-table`, typed symbol export attributes in
   `portable/memory`, the PAC's one root claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
-  Only `oer-riscv` contains `asm!` for architectural operations. Entry/trap
+  Only `oer-portable-riscv` contains `asm!` for architectural operations. Entry/trap
   ABI assembly uses `global_asm!` or `naked_asm!` only in staged entry/trap
   code, bootstrap and probes; host compiler fixtures are test inputs.
 - **Hardware dictionaries and geometry.** Field codes and opcodes are named
@@ -193,12 +190,12 @@ system these rules serve.
   Sequence settings remain HAL constants with `SOURCE:`. An observed image
   without an established code meaning stays cited configuration, not a model
   dictionary entry.
-- **Air formats** use the `oer-wire` field macro and its bounded cursor; each
+- **Air formats** use the `oer-portable-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
-  constants; time comes from `oer-time-virtual`. A test is hermetic and safe
+  constants; time comes from `oer-portable-time-virtual`. A test is hermetic and safe
   in parallel: its own memory and its own temporary directory (`tempfile`);
   no external program, process-wide state, fixed path, network port or real
   time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
@@ -219,23 +216,31 @@ system these rules serve.
   a vendor image, use Blobray (`cargo blobray`,
   [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md)) first.
 - **Where code goes** ([docs/repository-layout.md](docs/repository-layout.md)):
-  `protocols/` sans-IO protocols, `portable/` generic support, `chips/`
-  everything Espressif, `firmware/` chip images, `hil-scenarios/` the HIL
-  scenarios (their shared images, test-only services and host programs),
-  `tools/<domain>/` the developer's machine. Executables only in
-  `firmware/`, `hil-scenarios/` and `tools/`. A library is `oer-` plus its
-  path below the root; an executable keeps its root
-  (`oer-firmware-apps-boot-smoke`). A crate never sits inside another; a new crate
-  needs a reason (dependency direction, license, target, independent
-  consumer). Only the image pipeline builds images: `cargo fw`, and the HIL
-  harness for a scenario's image. Every package builds.
+  `tools/<domain>/` the developer's machine, `portable/` generic `no_std`
+  support, `protocols/` sans-IO protocols, `chips/` the hardware layers
+  (`chips/family` what every chip of the family shares, `chips/<chip>` one
+  chip, `chips/<chip>/app` its application entry), `oer/` the application
+  entry an image uses, `examples/` examples on it, `hil/` checks on hardware
+  (`agent`, `services`, `images` on the entry, `probes` below it,
+  `scenarios` their host programs). Executables only in `examples/`, `hil/`,
+  `tools/` and a chip's `bootstrap`. Every package is `oer-` plus its whole
+  path (`oer-chips-esp32s31-hal`, `oer-hil-probes-esp32s31-mcycle`); the
+  entry is `oer`. A crate never sits inside another; a new crate needs a
+  reason (dependency direction, license, target, independent consumer).
+  Only the image pipeline builds images: `cargo fw`, and the HIL harness for
+  a scenario's image; an image is named by its directory (a HIL image as
+  `hil-<directory>`). An example or HIL image names no chip: it depends on
+  `oer` with the capabilities it needs (`wifi`, `console`, `group`, …), and
+  the pipeline selects the board's chip and links the image for it. Every
+  package builds.
 - **HIL.** The HIL core (`protocols/hil`, `tools/hil/link`) only carries
   data and commands between the host and the device under test; it stores
   nothing and knows no scenario, service or stand equipment. A scenario's
   host program holds its cases and verdict; the image it runs serves
-  services whose every endpoint has a handler (`oer_hil_agent::service!`);
-  several scenarios share one image. Stand equipment and its drivers belong
-  to `tools/lab`.
+  services whose every endpoint has a handler (`oer_protocols_hil_agent::service!`);
+  several scenarios share one image. A HIL image is built on the product API
+  (`oer`) and takes its runs' control at runtime from the host. Stand
+  equipment, its drivers and its ESP-IDF peer firmware belong to `tools/lab`.
 
 ## Work
 
@@ -251,7 +256,7 @@ system these rules serve.
   that can be rebuilt.
 - **Checks on the host:** `cargo test -p <pkg>`, `cargo clippy -p <pkg>
   --all-targets` and `cargo fmt --check` for what you changed, plus `cargo
-  test -p oer-test-layers`. Images, image checks and sizes are built by CI.
+  test -p oer-tools-test-layers`. Images, image checks and sizes are built by CI.
   Changed chip packages may also run `cargo check` and `cargo clippy` with
   `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks only,
   without images or linking. A targeted image build measures one concrete

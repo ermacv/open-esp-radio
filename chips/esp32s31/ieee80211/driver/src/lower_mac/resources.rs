@@ -1,8 +1,8 @@
 //! One core and its four independently owned EDCA queue places.
 
 use crate::mac::tx::LegacyTxQueue;
-use oer_ieee80211_wire::qos::WmmAccessCategory;
-use oer_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
 
 enum CorePlace {}
 enum TicketPlace {}
@@ -14,7 +14,7 @@ pub struct CorePools<const TICKETS: usize = 4>;
 /// Construction authority and the queues of the one core it constructs.
 pub struct CoreResources<
     'core,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
     pub authority: CoreAuthority<'core, Path, TICKETS>,
@@ -28,7 +28,7 @@ pub struct CoreResources<
 /// Unique authority to construct the core associated with these queue places.
 pub struct CoreAuthority<
     'core,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
     _place: Slot<'core, CorePlace, Child<Path, 0>>,
@@ -40,7 +40,7 @@ pub struct CoreAuthority<
 /// No API issues a second owner while an attempt occupies the queue.
 /// Forgetting a place only removes capacity; it cannot permit an overwrite.
 #[must_use = "retain the queue place until its next submission"]
-pub struct FreeQueue<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
+pub struct FreeQueue<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
     _place: Slot<'core, CorePlace, Child<Path, 0>>,
     queue: LegacyTxQueue,
 }
@@ -64,13 +64,13 @@ impl<const TICKETS: usize> PoolSet for CorePools<TICKETS> {
             .into_pools::<(
                 Slots<CorePlace, 5>,
                 Slots<TicketPlace, TICKETS>,
-                oer_ieee80211_contracts_port::association::AssociationPool<
-                    oer_ieee80211_contracts_port::Station,
+                oer_protocols_ieee80211_contracts_port::association::AssociationPool<
+                    oer_protocols_ieee80211_contracts_port::Station,
                     1,
                     1,
                 >,
-                oer_ieee80211_contracts_port::association::AssociationPool<
-                    oer_ieee80211_contracts_port::AccessPoint,
+                oer_protocols_ieee80211_contracts_port::association::AssociationPool<
+                    oer_protocols_ieee80211_contracts_port::AccessPoint,
                     15,
                     3,
                 >,
@@ -101,7 +101,7 @@ impl<const TICKETS: usize> PoolSet for CorePools<TICKETS> {
 /// open and protected attempts consume one; a `KeyUse` contains its ticket,
 /// so the number of key uses cannot exceed that same compile-time bound.
 #[must_use = "the ticket is the capacity for one attempt"]
-pub struct TxTicket<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
+pub struct TxTicket<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
     place: Slot<'core, TicketPlace, Child<Path, 1>>,
 }
 

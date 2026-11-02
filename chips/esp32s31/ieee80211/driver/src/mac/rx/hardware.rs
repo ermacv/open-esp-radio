@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
     owner::RadioAccess,
     types::{
@@ -15,7 +15,7 @@ use oer_esp32s31_hal::{
         RxBlockAckEntrySnapshot,
     },
 };
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 const RX_BLOCK_ACK_CAPACITY: u8 = 8;
 /// Highest receive BlockAck TID accepted by the vendor net80211 state machine.
@@ -221,7 +221,7 @@ impl S31RxBlockAckAgreement {
                 self.hardware_index,
             ));
         }
-        if oer_ieee80211_wire::address::AddressFlags::from_bytes([self.peer[0]]).group() {
+        if oer_protocols_ieee80211_wire::address::AddressFlags::from_bytes([self.peer[0]]).group() {
             return Err(S31RxBlockAckAgreementError::MulticastPeer);
         }
         if self.tid > S31_RX_BLOCK_ACK_MAX_TID {

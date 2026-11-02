@@ -1,8 +1,8 @@
 //! The LP-fast selector atom; source and settle belong to the chip profile.
-pub use oer_esp32s31_pac::lp_aonclkrst::root_clk_conf::FastClkSel as LpFastSource;
-use oer_esp32s31_pac::{instances, lp_aonclkrst::LpAonRadioClock};
-use oer_espressif_boot::{Access, drivers::clock::LpFastRegisters};
-use oer_mmio::{Fixed, Placement};
+pub use oer_chips_esp32s31_pac::lp_aonclkrst::root_clk_conf::FastClkSel as LpFastSource;
+use oer_chips_esp32s31_pac::{instances, lp_aonclkrst::LpAonRadioClock};
+use oer_chips_family_boot::{Access, drivers::clock::LpFastRegisters};
+use oer_portable_mmio::{Fixed, Placement};
 
 /// The existing LP root word, owned by the bootstrap before LP consumers.
 /// Runtime PHY receives this part separately through its runtime root.

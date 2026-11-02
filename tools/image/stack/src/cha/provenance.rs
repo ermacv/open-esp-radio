@@ -3,8 +3,8 @@ use super::FunctionPointerAudit;
 use crate::{
     Fact, FunctionFacts, FunctionPointerType, Load, RegisterWitness, Resolutions, TransferKind,
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
 use std::collections::BTreeSet;
 
 /// The storage type of a callback load, with the PC-scoped register witness

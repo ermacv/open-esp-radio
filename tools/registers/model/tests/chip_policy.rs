@@ -3,7 +3,7 @@
 
 use std::{error::Error as StdError, fs};
 
-use oer_registers_model::{
+use oer_tools_registers_model::{
     RegisterEvidenceSet,
     chip_model::ChipModel,
     chip_policy::{ChipPolicy, Claim, Error, ErrorKind, Holder, PartId},

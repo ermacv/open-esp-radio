@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::note::Note;
 use crate::record::{self, EncodeError, MAX_PAYLOAD, PreviousPanic, Record};
-use oer_trace::Event;
+use oer_portable_trace::Event;
 
 pub const PREFIX: &[u8] = b"OER-DIAG:01";
 

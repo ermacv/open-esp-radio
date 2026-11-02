@@ -3,11 +3,11 @@
 //! fatal note.
 //!
 //! Platform startup installs the reset root's console parts once ([`install`]) in this
-//! chip's one [`Ownership`](oer_espressif_usb_serial_jtag::ownership::Ownership):
+//! chip's one [`Ownership`](oer_chips_family_usb_serial_jtag::ownership::Ownership):
 //! each early record borrows the endpoint while it writes, until the
 //! console's driver takes the parts for good ([`retire_early_writer`]);
 //! then every early record goes through the driver
-//! ([`oer_espressif_usb_serial_jtag::Endpoint`]). The fatal note
+//! ([`oer_chips_family_usb_serial_jtag::Endpoint`]). The fatal note
 //! ([`fatal_note`]) takes only a free block, for good. A record before the
 //! root installed the parts is counted as lost.
 //!
@@ -22,16 +22,16 @@
 
 use core::marker::PhantomData;
 
-use oer_diagnostics::{Note, Written};
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances,
     ownership::UsbSerialJtagPeripherals,
     usb_serial_jtag::{UsbSerialJtagIrq, UsbSerialJtagPads, UsbSerialJtagTask},
 };
-pub use oer_espressif_usb_serial_jtag::ownership::RetireError;
-use oer_espressif_usb_serial_jtag::ownership::{Console, Ownership};
-use oer_espressif_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
-use oer_mmio::{Fixed, InterruptSource, Placement};
+pub use oer_chips_family_usb_serial_jtag::ownership::RetireError;
+use oer_chips_family_usb_serial_jtag::ownership::{Console, Ownership};
+use oer_chips_family_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
+use oer_portable_diagnostics::{Note, Written};
+use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -153,7 +153,7 @@ impl<P: Placement> EndpointRegisters for Endpoint<P> {
 
     fn enable_events(
         &mut self,
-        _authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
+        _authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.modify_int_ena(|enables| {
             enables
@@ -188,7 +188,7 @@ impl<P: Placement> EndpointRegisters for UsbEndpoint<P> {
 
     fn enable_events(
         &mut self,
-        authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
+        authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
     ) {
         self.0.enable_events(authority);
     }
@@ -285,12 +285,15 @@ pub fn fatal_note(note: &Note<'_>) -> FatalNote {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> ConsoleRegisters<oer_mmio::Host<'a>> {
+impl<'a> ConsoleRegisters<oer_portable_mmio::Host<'a>> {
     /// The console's parts over host memory from the block's base: one
     /// memory for the task's and the handler's divided words, one for the
     /// pads.
-    pub fn host(words: &'a mut [u32], pads: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-        let (task, irq) = oer_esp32s31_pac::usb_serial_jtag::usb_device_host(words)?;
+    pub fn host(
+        words: &'a mut [u32],
+        pads: &'a mut [u32],
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+        let (task, irq) = oer_chips_esp32s31_pac::usb_serial_jtag::usb_device_host(words)?;
         Ok(Self {
             task: Endpoint(task),
             irq,

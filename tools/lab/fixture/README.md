@@ -1,6 +1,6 @@
 # Linux fixture contract
 
-`oer-lab-fixture` is the library of the Linux fixture software of the HIL
+`oer-tools-lab-fixture` is the library of the Linux fixture software of the HIL
 stand: its versioned provisioning (`cargo stand fixture install`), the fixed
 launchers' admission, and the requests and reports of the finite helpers
 `open-radio-bluetooth` and `open-radio-probe`, and the pinned builds of the
@@ -10,9 +10,9 @@ The programs are packages without a library, so the contract has one
 definition: `tools/lab/fixture-install` (the privileged
 `open-radio-fixture-install` and the fixed launchers) and `tools/lab/fixture-helpers`
 (the finite helpers). The privileged programs' repository dependencies are this library and
-`oer-os-process`, without its `linux-socket` feature; nothing else of the
+`oer-tools-os-process`, without its `linux-socket` feature; nothing else of the
 stand (SSH, the router, the boards) reaches root through them. The library's
-dependencies are foundation crates and `oer-hil-protocol`.
+dependencies are foundation crates and `oer-protocols-hil-protocol`.
 
 Updates classify the installed artifact set from the receipt of the selected
 generation. Roles added by the new bundle must have absent stable paths; an

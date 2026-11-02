@@ -17,9 +17,9 @@ pub enum ControllerTimeRetirementError {
 }
 
 #[cfg(any(target_arch = "riscv32", test))]
-use oer_esp32s31_hal::bluetooth::BluetoothControllerLatchedTime;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerLatchedTime;
 /// Controller-time to scheduler-time scale of one HAL configuration.
-pub use oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale;
+pub use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerTimeScale;
 
 /// A physical duration cannot form a nonempty, unambiguous hardware delta.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,14 +78,14 @@ impl ControllerTimeSample {
 #[cfg(any(target_arch = "riscv32", test))]
 mod worker {
 
-    use oer_esp32s31_hal::bluetooth::{
+    use oer_chips_esp32s31_hal::bluetooth::{
         BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchStep,
         BluetoothControllerTimeLatchStepError,
     };
 
     use super::ControllerTimeSample;
 
-    use oer_espressif_bluetooth_engine::port::ControllerTimePort;
+    use oer_chips_family_bluetooth_engine::port::ControllerTimePort;
 
     /// Opaque identity of one logical controller-time request.
     ///
@@ -184,7 +184,7 @@ mod worker {
     /// # #[cfg(target_arch = "riscv32")]
     /// # #[panic_handler]
     /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
-    /// use oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeIdle;
+    /// use oer_chips_esp32s31_bluetooth_driver::controller_time::ControllerTimeIdle;
     /// fn duplicate(idle: ControllerTimeIdle) {
     ///     let first = idle;
     ///     let duplicate = idle;
@@ -706,7 +706,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(target_arch = "riscv32")]
     pub(crate) const fn project_le_packet_capture(
         self,
-        captured: oer_esp32s31_hal::bluetooth::engine::LePacketCapturedTime,
+        captured: oer_chips_esp32s31_hal::bluetooth::engine::LePacketCapturedTime,
     ) -> u32 {
         self.project_raw_ticks(captured.wrapping_controller_ticks())
     }
@@ -718,7 +718,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(target_arch = "riscv32")]
     pub(crate) const fn project_peripheral_connection_capture(
         self,
-        captured: oer_esp32s31_hal::bluetooth::engine::PeripheralConnectionCapturedAnchorTime,
+        captured: oer_chips_esp32s31_hal::bluetooth::engine::PeripheralConnectionCapturedAnchorTime,
     ) -> u32 {
         self.project_raw_ticks(captured.wrapping_controller_ticks())
     }
@@ -726,7 +726,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_start(
         self,
-        window: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
+        window: oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.start())
     }
@@ -734,7 +734,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_event_end(
         self,
-        window: oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
+        window: oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow,
     ) -> u32 {
         self.project_raw_ticks(window.end())
     }
@@ -742,7 +742,7 @@ impl ControllerSchedulerEpoch {
     #[cfg(any(target_arch = "riscv32", test))]
     pub const fn project_peripheral_receive_time(
         self,
-        time: oer_esp32s31_hal::bluetooth::engine::PeripheralConnectionReceiveTime,
+        time: oer_chips_esp32s31_hal::bluetooth::engine::PeripheralConnectionReceiveTime,
     ) -> u32 {
         self.project_raw_ticks(time.wrapping_controller_ticks())
     }
@@ -812,7 +812,7 @@ impl ControllerSchedulerEpoch {
     /// absolute projections.
     pub fn raw_duration_ticks(
         self,
-        duration: oer_time::RadioDuration<oer_bluetooth_le_port::LeRadio>,
+        duration: oer_portable_time::RadioDuration<oer_protocols_bluetooth_le_port::LeRadio>,
     ) -> Result<u32, ControllerDurationError> {
         let projection = self
             .scale

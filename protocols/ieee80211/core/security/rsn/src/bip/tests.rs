@@ -5,8 +5,8 @@
     clippy::unreachable
 )]
 use super::*;
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 
 use std::vec::Vec;
 
@@ -240,7 +240,7 @@ fn invalid_lengths_do_not_mutate_the_frame_or_consume_an_ipn() {
 
 #[test]
 fn ipn_advancement_carries_octets_and_refuses_both_domain_and_integer_overflow() {
-    use oer_ieee80211_core_upper_mac::packet_number::{PacketNumberExhausted, advance};
+    use oer_protocols_ieee80211_core_upper_mac::packet_number::{PacketNumberExhausted, advance};
 
     let last = BipPacketNumber::from_bytes([0xff, 0, 0, 0, 0, 0]);
     assert_eq!(advance(last, 1).unwrap().to_bytes(), [0, 1, 0, 0, 0, 0]);

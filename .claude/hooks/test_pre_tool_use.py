@@ -49,7 +49,7 @@ class Edits(unittest.TestCase):
             "/w/chips/esp32s31/vendor/artifacts.toml",
             "/w/chips/esp32s31/vendor/facts/names/README.md",
             "/w/.claude/hooks/pre_tool_use.py",
-            "/w/chips/espressif/staged-layout/linker/runtime/sections.x",
+            "/w/chips/family/staged-layout/linker/runtime/sections.x",
         ]:
             self.assertEqual(run("Edit", file_path=path), (0, ""), path)
 

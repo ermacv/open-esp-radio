@@ -186,7 +186,7 @@ impl BluetoothSchedulerHardwareListHead {
         BleSchedulerItemHardwareNext::from_bits(self.0).address_address()
     }
 
-    const fn from_image(image: oer_mmio::Bits<20>) -> Self {
+    const fn from_image(image: oer_portable_mmio::Bits<20>) -> Self {
         Self(image.get())
     }
 }
@@ -414,7 +414,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Read the current head of one hardware list once, then fence.
     ///
     /// SOURCE: complete current `r_sym_bt_qkNMymdnaJnYUfzpKgEp`, carried by
-    /// `oer-vendor-lineage` from same-chip named
+    /// `oer-tools-vendor-lineage` from same-chip named
     /// `r_btdm_sched_delete_specified_items`, retains a final hardware-list head read at +0x1f2. Its former
     /// pre-loop head/time guard is absent. This open observation supports the
     /// cancellation policy; it does not reproduce that removed vendor guard.
@@ -428,7 +428,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
     /// Observe whether the hardware list admitted by one RUN is now empty.
     ///
     /// SOURCE: the post-picker tail of current
-    /// `brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV`, carried by `oer-vendor-lineage`
+    /// `brk_sym_sched_MzeSZzbQ4ZKhWW6Wu5jV`, carried by `oer-tools-vendor-lineage`
     /// from same-chip named `r_sched_txn_onSchedHwListDone`, freshly reads the
     /// hardware-list head
     /// after the source manager becomes empty and asserts that head is empty
@@ -558,7 +558,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         self.bluetooth
             .bluetooth_controller_core
             .write_scheduler_control(
-                oer_esp32s31_pac::bt_mac::scheduler_control::Command::Run,
+                oer_chips_esp32s31_pac::bt_mac::scheduler_control::Command::Run,
                 |_| {},
             );
         device_fence();

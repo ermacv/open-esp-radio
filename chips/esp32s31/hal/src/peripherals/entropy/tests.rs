@@ -3,8 +3,8 @@
 use core::cell::Cell;
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_pac::instances;
-use oer_time::{Clock, Instant};
+use oer_chips_esp32s31_pac::instances;
+use oer_portable_time::{Clock, Instant};
 
 use super::{Entropy, EntropyRegisters, READ_GAP};
 

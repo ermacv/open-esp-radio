@@ -1,7 +1,7 @@
 //! The PHY source payload in the common diagnostic envelope. No storage owner.
 use super::{Fault, FaultReason, Operation, SarSetupFault, SarTransferFault};
 use core::fmt;
-use oer_diagnostics::fault::{Class, Domain, Error, Record};
+use oer_portable_diagnostics::fault::{Class, Domain, Error, Record};
 /// Encode every source observation without truncation.
 pub fn encode_fault(fault: Fault) -> Result<Record, Error> {
     let reason = match fault.reason {
@@ -89,7 +89,7 @@ pub fn encode_fault(fault: Fault) -> Result<Record, Error> {
         class,
         Domain::Phy,
         reason,
-        oer_diagnostics::fault::UNKNOWN_HART,
+        oer_portable_diagnostics::fault::UNKNOWN_HART,
         0,
         &words,
     )
@@ -277,7 +277,7 @@ mod source_tests {
             (SarTransferFault::ReplyOccupied { queued: 1 }, [1, 0]),
             (
                 SarTransferFault::InvalidDelay {
-                    requested: oer_time::Duration::from_micros(u64::MAX),
+                    requested: oer_portable_time::Duration::from_micros(u64::MAX),
                 },
                 [u32::MAX, u32::MAX],
             ),

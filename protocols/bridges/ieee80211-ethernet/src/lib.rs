@@ -27,7 +27,7 @@
 //!
 //! It classifies an outgoing frame's requested user priority from its VLAN
 //! and IP fields. Each format stays its codec's: Ethernet, VLAN and IP fields
-//! are `oer-network-wire`'s, the priority values `oer-ieee80211-wire`'s. An
+//! are `oer-protocols-network-wire`'s, the priority values `oer-protocols-ieee80211-wire`'s. An
 //! IEEE 802.11 protocol crate reaches network fields only through this
 //! crate.
 

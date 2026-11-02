@@ -24,7 +24,7 @@
 //! `pmksa_cache_auth_get`) and `src/ap/wpa_auth.c` (`wpa_auth_pmksa_add_sae`).
 
 use crate::Pmk;
-use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 
 /// Entries the vendor's supplicant and authenticator PMKSA caches hold.
 pub const PMKSA_CAPACITY: usize = 10;

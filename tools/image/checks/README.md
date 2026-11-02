@@ -1,6 +1,6 @@
 # Image checks
 
-`oer-image-checks` owns the image pipeline's frame, interrupt, stack, placement and
+`oer-tools-image-checks` owns the image pipeline's frame, interrupt, stack, placement and
 post-link input checks. The chip profile and stack policy supply their
 contracts; `cargo fw build`, including analysis builds, enforces the
 `interrupts` check and reports frame sizes and panic inventories. Proven task
@@ -87,7 +87,7 @@ ceiling_bytes = 8192
 ```
 
 `function` is the complete demangled symbol without Rust hashes, as printed
-by `oer_analysis_elf::demangle` and the frame report. Concrete type and const
+by `oer_tools_analysis_elf::demangle` and the frame report. Concrete type and const
 arguments, closure identities and compiler shims remain part of the key;
 there are no prefixes or wildcards. Matching examines every alias; aliases
 at one address count as one implementation. A key matching zero or multiple
@@ -114,7 +114,7 @@ SRAM or the analysed mask ROM. The panic path, compiler panic entries and the
 image panic hook retain their independent checks; static references from the
 hook and its resolved callees must also avoid cached memory.
 
-Each interrupt table entry declares its class (`oer_espressif_interrupt_table::Class`,
+Each interrupt table entry declares its class (`oer_chips_family_interrupt_table::Class`,
 the byte at `table-class`); the level of a hart's `Executor` entry is the
 executor's level, every other level is a hardware level. The class, never a
 level number or a handler's name, decides the rules:
@@ -267,11 +267,11 @@ The existing checks of floating-point instructions, interrupt entry points,
 direct handler calls, nesting rules, bounds and admitted assumptions still
 apply to the full resolved interrupt context, including its tasks.
 
-Run host regressions with `cargo test -p oer-image-checks`.
+Run host regressions with `cargo test -p oer-tools-image-checks`.
 
 ## Size summary format
 
-`sizes.json` schema 2 is published by `oer-image-build` beside the image's
+`sizes.json` schema 2 is published by `oer-tools-image-build` beside the image's
 ELFs. The check outcome carries `sizes::Measurements` from the same `Image`
 used for checking. During a normal build, task bounds and context-specific
 interrupt bounds are captured when the checks compute them; no second analysis
@@ -279,7 +279,7 @@ or firmware compilation is run. The explicit refresh command reanalyses saved
 ELFs without compiling or changing the original reports.
 
 The top level contains `schema`, `type_min_bytes` (the constant
-`oer_image_checks::sizes::TYPE_MIN_BYTES`, **256 B**), `provenance`, `elfs`
+`oer_tools_image_checks::sizes::TYPE_MIN_BYTES`, **256 B**), `provenance`, `elfs`
 (`runtime` and `bootstrap`), `image_files` and `embedded_payloads`. The latter
 records the byte-verified runtime copy excluded from the image code total. Provenance contains commit/dirty status, rustc's
 verbose version, chip, target, profile/settings, application/features, purpose,
@@ -359,7 +359,7 @@ a `stop` requires a question to the owner. The build README gives a radio-root e
 ## Reachability reports
 
 The family's `observed-functions`
-([`family.toml`](../../../chips/espressif/platform/family.toml)) and an
+([`family.toml`](../../../chips/family/platform/family.toml)) and an
 image stack policy's `observed_functions` select demangled linked function
 names, examining every alias and the analysed ROM companions. `*` matches
 any substring; every other character is literal. An extending image policy

@@ -1,6 +1,6 @@
 //! Product reconnect policy. Runner owns admission; Control only supplies intent.
 use super::{Request, ServiceCommand, ServiceOutput, contract::Command};
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReconnectPolicy {

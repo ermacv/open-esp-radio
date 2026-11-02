@@ -5,12 +5,12 @@
 
 use core::{fmt, num::NonZeroU16};
 
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     MonitorFrame, MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
     RxEvidence,
 };
-pub use oer_ieee80211_wire::monitor_injection::MonitorInjectionFrameError;
-use oer_ieee80211_wire::{
+pub use oer_protocols_ieee80211_wire::monitor_injection::MonitorInjectionFrameError;
+use oer_protocols_ieee80211_wire::{
     channel::WifiChannel,
     frame::{AddressFields, FrameControlFields, FrameType},
     monitor_injection::MonitorInjectionMpdu,

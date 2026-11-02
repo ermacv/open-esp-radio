@@ -1,7 +1,9 @@
 //! Register-local cold MAC preparation and runtime start.
 
-use oer_esp32s31_pac::wifi_mac::{control::PowerSaveTxBlock, core_enable_control::Bits4_7Opaque};
-use oer_mmio::Bits;
+use oer_chips_esp32s31_pac::wifi_mac::{
+    control::PowerSaveTxBlock, core_enable_control::Bits4_7Opaque,
+};
+use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters};
 
@@ -14,7 +16,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_core_enable_control(|w| {
                 w.set_bits_4_7_opaque(Bits4_7Opaque::Disabled);
             });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         // Initialize the cold runtime image while the core is held, then
         // retain its no-power-save stop through BASE and walker publication.
         self.open_mac_control_cold();
@@ -47,7 +49,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_core_enable_control(|w| {
                 w.set_bits_4_7_opaque(Bits4_7Opaque::Enabled);
             });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Whether every common MAC disable gate is still asserted.

@@ -1,7 +1,7 @@
 use super::PhyMode;
 use crate::seq;
-use oer_ieee80211_wire::station::association::AssociationPhy;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::station::association::AssociationPhy;
+use oer_protocols_ieee80211_wire::{
     scan::ScanRecord,
     security::{AssociationAkm, Spp},
     station::*,
@@ -37,7 +37,7 @@ fn non_he_modes_refuse_he_power_elements() {
 /// without RSN capabilities.
 fn wpa2_rsn() -> SelectedRsn {
     SelectedRsn::rsn(
-        oer_ieee80211_wire::security::RsnAssociation {
+        oer_protocols_ieee80211_wire::security::RsnAssociation {
             akm: AssociationAkm::Psk,
             spp: Spp::NotNegotiated,
             management: None,
@@ -51,14 +51,14 @@ fn wpa2_rsn() -> SelectedRsn {
 
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     let mut record = ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
     );
     record.set_ssid(b"test").unwrap();
-    record.bssid = oer_ieee80211_wire::address::Bssid::new(
-        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+    record.bssid = oer_protocols_ieee80211_wire::address::Bssid::new(
+        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
     )
     .unwrap();
     record.ds_channel = Some(6);
@@ -68,7 +68,7 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     record
         .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])
         .unwrap();
-    let mut rsn_ie = [0; oer_ieee80211_wire::scan::RSN_IE_CAPACITY];
+    let mut rsn_ie = [0; oer_protocols_ieee80211_wire::scan::RSN_IE_CAPACITY];
     let mut offset = 2;
     rsn_ie[offset..offset + 2].copy_from_slice(&1_u16.to_le_bytes());
     offset += 2;
@@ -96,8 +96,8 @@ fn association_request_contains_selected_rsn() {
     let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
     let mut output = [0; 96];
     let length = AssociationRequest {
-        source: oer_ieee80211_wire::address::OwnAddress::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+        source: oer_protocols_ieee80211_wire::address::OwnAddress::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
         access_point: &record,
         channel: 6,
@@ -126,8 +126,8 @@ fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
     let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
     assert_eq!(
         AssociationRequest {
-            source: oer_ieee80211_wire::address::OwnAddress::new(
-                oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap()
+            source: oer_protocols_ieee80211_wire::address::OwnAddress::new(
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap()
             ),
             access_point: &record,
             channel: 6,
@@ -146,14 +146,16 @@ fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
 #[test]
 fn association_encoder_uses_the_explicit_local_profile() {
     let mut record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    record.set_ht_capability_ie(Some([0; oer_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN]));
+    record.set_ht_capability_ie(Some(
+        [0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN],
+    ));
     let mut capabilities = TEST_ASSOCIATION_CAPABILITIES;
     capabilities.ht20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
     capabilities.wmm = [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0];
     let mut output = [0; 160];
     let length = AssociationRequest {
-        source: oer_ieee80211_wire::address::OwnAddress::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+        source: oer_protocols_ieee80211_wire::address::OwnAddress::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
         access_point: &record,
         channel: 6,

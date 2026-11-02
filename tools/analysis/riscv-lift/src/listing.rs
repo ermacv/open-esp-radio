@@ -10,7 +10,7 @@
 //! what `cargo fw compare` compares. Compressed and full encodings of
 //! one instruction list alike too.
 
-use oer_analysis_riscv_decode::{Extension, Float, Inst, Instruction, Reg, Register};
+use oer_tools_analysis_riscv_decode::{Extension, Float, Inst, Instruction, Reg, Register};
 use std::collections::HashMap;
 
 /// Where the image placed what an address names.

@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
-pub fn release<B: oer_esp32s31_hal::power::PlatformClockBackend, T>(
+use oer_chips_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocked};
+pub fn release<B: oer_chips_esp32s31_hal::power::PlatformClockBackend, T>(
     clocked: WifiClocked,
     radio: &mut RadioDomain<B, T>,
 ) {

@@ -14,7 +14,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use oer_image_checks::panics::{Budget, Contract, Layers};
+use oer_tools_image_checks::panics::{Budget, Contract, Layers};
 
 use crate::Result;
 
@@ -67,18 +67,18 @@ fn contract_of_metadata(metadata: &Value, package: &str) -> Result<Contract> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_image_bundle::CheckedElf;
-    use oer_image_checks::panics::Layer;
+    use oer_tools_image_bundle::CheckedElf;
+    use oer_tools_image_checks::panics::Layer;
 
     fn metadata(declared: Value) -> Value {
         serde_json::json!({
             "workspace_root": "/w",
             "packages": [
-                { "name": "oer-esp32s31-pac", "manifest_path": "/w/chips/esp32s31/pac/Cargo.toml",
+                { "name": "oer-chips-esp32s31-pac", "manifest_path": "/w/chips/esp32s31/pac/Cargo.toml",
                   "metadata": null },
-                { "name": "oer-esp32s31-hal", "manifest_path": "/w/chips/esp32s31/hal/Cargo.toml",
+                { "name": "oer-chips-esp32s31-hal", "manifest_path": "/w/chips/esp32s31/hal/Cargo.toml",
                   "metadata": null },
-                { "name": "image", "manifest_path": "/w/firmware/apps/image/Cargo.toml",
+                { "name": "image", "manifest_path": "/w/examples/image/Cargo.toml",
                   "metadata": { "open-radio": { "panic-budget": declared } } },
             ],
         })
@@ -94,18 +94,18 @@ mod tests {
         assert_eq!(contract.budget.of(CheckedElf::Runtime, Layer::Hal), 2);
         assert_eq!(contract.budget.of(CheckedElf::Runtime, Layer::Core), 0);
         assert_eq!(contract.budget.of(CheckedElf::Bootstrap, Layer::Core), 1);
-        assert_eq!(contract.layers.of("oer_esp32s31_pac::x"), Layer::Pac);
-        assert_eq!(contract.layers.of("oer_esp32s31_hal::x"), Layer::Hal);
+        assert_eq!(contract.layers.of("oer_chips_esp32s31_pac::x"), Layer::Pac);
+        assert_eq!(contract.layers.of("oer_chips_esp32s31_hal::x"), Layer::Hal);
         assert_eq!(contract.layers.of("image::main"), Layer::Firmware);
     }
 
     #[test]
     fn every_image_declares_a_budget_that_parses() -> Result<()> {
         for text in [
-            include_str!("../../../../firmware/apps/boot-smoke/Cargo.toml"),
-            include_str!("../../../../firmware/apps/radio-root/Cargo.toml"),
-            include_str!("../../../../hil-scenarios/images/esp32s31-sdk-rpc/Cargo.toml"),
-            include_str!("../../../../hil-scenarios/images/esp32s31-sdk-station/Cargo.toml"),
+            include_str!("../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"),
+            include_str!("../../../../hil/probes/esp32s31-radio-root/Cargo.toml"),
+            include_str!("../../../../hil/images/aes/Cargo.toml"),
+            include_str!("../../../../hil/images/wifi-station/Cargo.toml"),
         ] {
             let manifest: toml::Value = toml::from_str(text).expect("the manifest parses");
             let name = manifest["package"]["name"]

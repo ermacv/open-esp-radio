@@ -19,7 +19,7 @@
 //! read past its frame.
 
 use crate::frame::{FrameView, MAX_MAC_FRAME_LEN};
-use oer_wire::{PrefixLength, Reader, Writer};
+use oer_portable_wire::{PrefixLength, Reader, Writer};
 
 const FCF_FRAME_TYPE_ACK: u16 = 0x0002;
 const FCF_SECURITY_ENABLED: u16 = 1 << 3;

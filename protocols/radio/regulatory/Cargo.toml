@@ -1,5 +1,5 @@
 [package]
-name = "oer-radio-regulatory"
+name = "oer-protocols-radio-regulatory"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

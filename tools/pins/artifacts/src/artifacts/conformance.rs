@@ -88,7 +88,7 @@ pub fn inputs(root: &Path) -> Result<Inputs> {
 }
 
 fn git(directory: &Path) -> std::process::Command {
-    let mut command = oer_os_process::command("git");
+    let mut command = oer_tools_os_process::command("git");
     command.arg("-C").arg(directory);
     command
 }
@@ -140,7 +140,7 @@ fn fetch_arch_test(arch: &ArchTest, destination: &Path) -> Result<()> {
         git(&staging).args(["checkout", "--quiet", "FETCH_HEAD"]),
         "git checkout",
     )?;
-    let head = oer_os_process::capture(git(&staging).args(["rev-parse", "HEAD"]))?;
+    let head = oer_tools_os_process::capture(git(&staging).args(["rev-parse", "HEAD"]))?;
     let head = String::from_utf8_lossy(&head.stdout);
     if head.trim() != arch.revision {
         return Err(format!(
@@ -163,12 +163,12 @@ fn fetch_sail(sail: &Sail, directory: &Path) -> Result<()> {
     std::fs::create_dir_all(&staging)?;
     let archive = staging.join("sail.tar.gz");
     crate::artifacts::download(&sail.url, &archive)?;
-    let actual = oer_os_durable::sha256_file(&archive)?;
+    let actual = oer_tools_os_durable::sha256_file(&archive)?;
     if actual != sail.sha256 {
         return Err(format!("{}: sha256 {actual}, pinned {}", sail.url, sail.sha256).into());
     }
     run(
-        oer_os_process::command("tar")
+        oer_tools_os_process::command("tar")
             .arg("-xzf")
             .arg(&archive)
             .arg("-C")

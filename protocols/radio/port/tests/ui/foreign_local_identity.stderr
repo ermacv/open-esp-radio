@@ -10,7 +10,7 @@ error: lifetime may not live long enough
    |            ^^^^^^^ function was supposed to return data with lifetime `'second` but it is returning data with lifetime `'first`
    |
    = help: consider adding the following bound: `'first: 'second`
-   = note: requirement occurs because of the type `Slot<'_, Kind, oer_radio_port::Child<Root<LocalId<'_>>, 0>>`, which makes the generic argument `'_` invariant
+   = note: requirement occurs because of the type `Slot<'_, Kind, oer_protocols_radio_port::Child<Root<LocalId<'_>>, 0>>`, which makes the generic argument `'_` invariant
    = note: the struct `Slot<'id, Kind, Path>` is invariant over the parameter `'id`
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
@@ -26,7 +26,7 @@ error: lifetime may not live long enough
    |            ^^^^^^^ function was supposed to return data with lifetime `'first` but it is returning data with lifetime `'second`
    |
    = help: consider adding the following bound: `'second: 'first`
-   = note: requirement occurs because of the type `Slot<'_, Kind, oer_radio_port::Child<Root<LocalId<'_>>, 0>>`, which makes the generic argument `'_` invariant
+   = note: requirement occurs because of the type `Slot<'_, Kind, oer_protocols_radio_port::Child<Root<LocalId<'_>>, 0>>`, which makes the generic argument `'_` invariant
    = note: the struct `Slot<'id, Kind, Path>` is invariant over the parameter `'id`
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 

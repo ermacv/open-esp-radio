@@ -6,16 +6,16 @@
 //! returning an error for used reserved or absent bits; unknown bits remain separate.
 use super::{self as inventory, Region};
 use crate::Result;
-use oer_analysis_blobray_application::{
+use oer_tools_analysis_blobray_application::{
     in_process::{Executable, Limits},
     library::{self, Assumptions},
 };
-use oer_analysis_blobray_domain::ImageRegion;
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_domain::ImageRegion;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::{
     AnalysisResources, AnalysisUsage, CallAbi, Error, ErrorCode, WorkingMemory,
 };
-use oer_os_process::Checkout;
+use oer_tools_os_process::Checkout;
 use std::{
     collections::BTreeSet,
     fs,
@@ -28,12 +28,12 @@ use std::{
 fn inputs(ctx: &Checkout, chip: &str) -> Result<(Vec<inventory::uses::Input>, Vec<Executable>)> {
     let mut inputs = Vec::new();
     let mut executables = Vec::new();
-    for pinned in oer_pins_artifacts::artifacts::pinned(&ctx.root, chip)? {
+    for pinned in oer_tools_pins_artifacts::artifacts::pinned(&ctx.root, chip)? {
         if pinned.firmware {
             continue;
         }
         let bytes = fs::read(&pinned.path)?;
-        if !oer_analysis_elf::is_binary(&bytes) {
+        if !oer_tools_analysis_elf::is_binary(&bytes) {
             continue;
         }
         let executable = Executable::new(bytes);
@@ -52,7 +52,7 @@ fn inputs(ctx: &Checkout, chip: &str) -> Result<(Vec<inventory::uses::Input>, Ve
 /// Analyze typed accesses and fold them into words as each record arrives.
 fn accesses(
     chip: &str,
-    signatures: &oer_analysis_blobray_application::signatures::Signatures,
+    signatures: &oer_tools_analysis_blobray_application::signatures::Signatures,
     inputs: &[inventory::uses::Input],
     executables: &[Executable],
     regions: &[Region],
@@ -117,12 +117,12 @@ fn accesses(
 /// Build the inventory of `chip` into `output`, by default
 /// `target/register-inventory/<chip>`.
 pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
-    oer_pins_artifacts::artifacts::project::Project::new(&ctx.root, chip)?;
+    oer_tools_pins_artifacts::artifacts::project::Project::new(&ctx.root, chip)?;
     let directory = output.unwrap_or_else(|| ctx.root.join("target/register-inventory").join(chip));
     fs::create_dir_all(&directory)?;
     let (inputs, executables) = inputs(ctx, chip)?;
     let (registers, regions) = inventory::model(&ctx.root, chip)?;
-    let signatures = oer_analysis_blobray_application::signatures::Signatures::parse(
+    let signatures = oer_tools_analysis_blobray_application::signatures::Signatures::parse(
         &fs::read_to_string(ctx.root.join(inventory::uses::signatures_file(chip)))?,
     )?;
     let (mut report, resources) = accesses(
@@ -135,7 +135,7 @@ pub fn run(ctx: &Checkout, chip: &str, output: Option<PathBuf>) -> Result<()> {
         &inventory::arrays(&registers),
     )?;
     let cited: BTreeSet<inventory::Function> =
-        oer_pins_artifacts::provenance::registered(&ctx.root, chip)?
+        oer_tools_pins_artifacts::provenance::registered(&ctx.root, chip)?
             .into_iter()
             .map(|entry| (entry.artifact, entry.symbol))
             .collect();

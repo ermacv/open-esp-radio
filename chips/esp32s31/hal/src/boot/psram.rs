@@ -1,7 +1,7 @@
 //! The PSRAM owner: the cache's controller (`PSRAM_MSPI0`), the command port
 //! (`PSRAM_MSPI1`), the PSRAM pads and the PSRAM MMU.
 
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     Access, Busy,
     mmu::{MmuEntry, MmuRegisters, MmuTarget},
     psram::{
@@ -9,9 +9,9 @@ use oer_espressif_boot::{
         PsramControllerRegisters,
     },
 };
-use oer_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_mmio::{Bits, Fixed, Index, Placement};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances, iomux_mspi_pin::IomuxMspiPsramPins, spi_mem_s::Memspi2Psram,
     spi1_mem_s::Memspi3Psram,
 };
@@ -45,7 +45,9 @@ impl PsramRegisters {
     /// Consume this exact mapped controller/MMU owner to lend its bytes once.
     /// Copyable range observations and unrelated owners grant no loan.
     #[cfg(target_arch = "riscv32")]
-    pub fn into_region(mapped: oer_espressif_boot::psram::MappedPsram<Self>) -> &'static mut [u8] {
+    pub fn into_region(
+        mapped: oer_chips_family_boot::psram::MappedPsram<Self>,
+    ) -> &'static mut [u8] {
         let (registers, mapped) = mapped.into_parts();
         // Retire every remap authority before issuing the static loan.
         drop(registers);
@@ -65,10 +67,10 @@ impl PsramRegisters {
     }
 }
 
-impl<P: Placement, Q: Placement, R: Placement> oer_espressif_boot::psram::PsramMemory
+impl<P: Placement, Q: Placement, R: Placement> oer_chips_family_boot::psram::PsramMemory
     for PsramRegisters<P, Q, R>
 {
-    const WINDOW: oer_espressif_boot::mmu::MmuWindow = super::PSRAM_MMU_WINDOW;
+    const WINDOW: oer_chips_family_boot::mmu::MmuWindow = super::PSRAM_MMU_WINDOW;
 }
 
 /// The pads' drive strength.
@@ -207,16 +209,16 @@ impl<P: Placement, Q: Placement, R: Placement> PsramControllerRegisters
         spi.modify_sram_drd_cmd(|w| {
             w.set_cache_sram_usr_rd_cmd_bitlen(COMMAND_BITLEN)
                 .set_cache_sram_usr_rd_cmd_value(
-                    oer_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead
-                        .bits() as u16,
-                );
+                oer_chips_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead
+                    .bits() as u16,
+            );
         });
         spi.modify_sram_dwr_cmd(|w| {
             w.set_cache_sram_usr_wr_cmd_bitlen(COMMAND_BITLEN)
                 .set_cache_sram_usr_wr_cmd_value(
-                    oer_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite
-                        .bits() as u16,
-                );
+                oer_chips_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite
+                    .bits() as u16,
+            );
         });
         spi.modify_ctrl1(|w| {
             w.set_ar_splice_en(true).set_aw_splice_en(true);
@@ -382,13 +384,19 @@ impl<P: Placement, Q: Placement, R: Placement> MmuRegisters for PsramRegisters<P
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a, 'b, 'c> PsramRegisters<oer_mmio::Host<'a>, oer_mmio::Host<'b>, oer_mmio::Host<'c>> {
+impl<'a, 'b, 'c>
+    PsramRegisters<
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'b>,
+        oer_portable_mmio::Host<'c>,
+    >
+{
     /// The PSRAM owner over host memory from each instance's base.
     pub fn host(
         memspi2: &'a mut [u32],
         memspi3: &'b mut [u32],
         pins: &'c mut [u32],
-    ) -> Result<Self, oer_mmio::HostTooSmall> {
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             memspi2: Memspi2Psram::host(memspi2)?,
             memspi3: Memspi3Psram::host(memspi3)?,

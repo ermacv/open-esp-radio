@@ -322,7 +322,7 @@ pub fn build(root: &Path, image: &str, out_dir: &Path) -> Result<()> {
 /// undefined, duplicate or non-executable entries, including malformed catalogs.
 /// Code folding may give different symbols the same address; that is valid.
 pub fn validate_elf(bytes: &[u8], image: &str) -> Result<Catalog> {
-    let file = oer_analysis_elf::Elf::executable(bytes)
+    let file = oer_tools_analysis_elf::Elf::executable(bytes)
         .map_err(|_| "probe image must be a linked little-endian RV32 ELF")?;
     let sections: Vec<_> = file.sections().filter(|s| s.name == SECTION).collect();
     if sections.len() != 1 {
@@ -349,7 +349,7 @@ pub fn validate_elf(bytes: &[u8], image: &str) -> Result<Catalog> {
                 && symbol.address < segment.address.saturating_add(segment.data.len() as u64)
         });
         if !executable_mapping
-            || symbol.kind != oer_analysis_elf::SymbolKind::Text
+            || symbol.kind != oer_tools_analysis_elf::SymbolKind::Text
             || !section.executable
             || section.nobits
             || symbol.address < section.address

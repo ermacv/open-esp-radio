@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-hci"
+name = "oer-protocols-bluetooth-hci"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Allocation-free, sans-IO HCI packets and codecs for open ESP radio Bluetooth controllers"
 
 [dependencies]
-oer-wire = { path = "../../../portable/wire" }
+oer-portable-wire = { path = "../../../portable/wire" }
 bt-hci = "=0.10.1"
 
 [lints]

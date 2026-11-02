@@ -129,10 +129,10 @@ struct ReceivedManagementHeader {
     clippy::arithmetic_side_effects
 )]
 fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, [u16; 3], &[u8])> {
-    let mut reader = oer_wire::Reader::new(frame);
+    let mut reader = oer_portable_wire::Reader::new(frame);
     let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;
     let body = reader.remaining();
-    let mut reader = oer_wire::Reader::new(body);
+    let mut reader = oer_portable_wire::Reader::new(body);
     let &[f0, f1, f2, f3, f4, f5] = reader.array().ok()?;
     let rest = reader.remaining();
     let [

@@ -3,7 +3,7 @@ use object::write::{Object, Symbol, SymbolSection};
 use object::{
     Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
 };
-use oer_analysis_blobray_domain::MmioFunctionState::{Analyzed, Blocked};
+use oer_tools_analysis_blobray_domain::MmioFunctionState::{Analyzed, Blocked};
 
 const RET: u32 = 0x0000_8067;
 const BUDGET: Budget = Budget {
@@ -481,9 +481,9 @@ fn copies_work_exhaustion_returns_an_error_without_a_report() {
     .unwrap_err();
     assert_eq!(
         error
-            .downcast_ref::<oer_analysis_riscv_model::Error>()
+            .downcast_ref::<oer_tools_analysis_riscv_model::Error>()
             .unwrap()
             .code,
-        oer_analysis_riscv_model::ErrorCode::ResourceLimited
+        oer_tools_analysis_riscv_model::ErrorCode::ResourceLimited
     );
 }

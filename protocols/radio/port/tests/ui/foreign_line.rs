@@ -1,11 +1,11 @@
 #![no_std]
-use oer_radio_port::{Child, Line, Mint, Permits, Root};
+use oer_protocols_radio_port::{Child, Line, Mint, Permits, Root};
 
 pub enum Kind {}
 
 pub fn line<'id>(
     mint: Mint<'id, (Permits<Kind, 1, 1>, Permits<Kind, 1, 1>)>,
-) -> Line<'id, Kind, 1, Child<Root<oer_radio_port::LocalId<'id>>, 0>> {
+) -> Line<'id, Kind, 1, Child<Root<oer_protocols_radio_port::LocalId<'id>>, 0>> {
     let (first, second) = mint.into_pools();
     #[cfg(ui_reject)]
     return second.line; // ui-error: E0308

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc, vec::Vec};
 
 use crate::modem::WifiPowerBaseline;
-use oer_espressif_radio::baseline::PowerRestoreCheckpoint;
+use oer_chips_family_radio::baseline::PowerRestoreCheckpoint;
 
 use crate::power::test_clocks::{ClockEvent, CountingPlatformClocks, abandoned, held, holding};
 use crate::power::{PlatformClock, PlatformClockBackend, PlatformClockProvider};
@@ -20,8 +20,8 @@ enum Operation {
     RestorePower(WifiPowerBaseline),
     SelectWifiLowPowerClock,
     PowerSequence,
-    CalibrationComplete(oer_time::Instant),
-    ResetWifi(oer_time::Instant),
+    CalibrationComplete(oer_portable_time::Instant),
+    ResetWifi(oer_portable_time::Instant),
 }
 
 type Log = Rc<RefCell<Vec<Operation>>>;
@@ -30,9 +30,9 @@ struct Port {
     power: WifiPowerBaseline,
     power_readback: Result<(), PowerRestoreCheckpoint>,
     /// Fail the sequence after it took the 160 MHz reference.
-    power_sequence_failure: Option<oer_espressif_radio::power::PowerError>,
+    power_sequence_failure: Option<oer_chips_family_radio::power::PowerError>,
     log: Log,
-    clock: oer_time_virtual::VirtualClock,
+    clock: oer_portable_time_virtual::VirtualClock,
     calibrated_window: bool,
 }
 
@@ -43,7 +43,7 @@ impl Port {
             power_readback: Ok(()),
             power_sequence_failure: None,
             log: log.clone(),
-            clock: oer_time_virtual::VirtualClock::default(),
+            clock: oer_portable_time_virtual::VirtualClock::default(),
             calibrated_window: false,
         }
     }
@@ -71,7 +71,7 @@ impl ClockPort for Port {
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(), oer_espressif_radio::power::PowerError> {
+    ) -> Result<(), oer_chips_family_radio::power::PowerError> {
         self.log.borrow_mut().push(Operation::PowerSequence);
         refs.acquire(PlatformClock::Mpll, platform).unwrap();
         refs.acquire(PlatformClock::Pll160m, platform).unwrap();
@@ -86,7 +86,7 @@ impl ClockPort for Port {
 
 impl crate::ieee80211::client::WifiPowerPort for Port {
     fn pulse_wifi_baseband_and_mac_reset(&mut self) {
-        use oer_time::Clock;
+        use oer_portable_time::Clock;
         self.log
             .borrow_mut()
             .push(Operation::ResetWifi(self.clock.now()));
@@ -195,8 +195,8 @@ fn common_power_holds_one_platform_reference_of_each_shared_gate() {
 #[test]
 fn a_failed_power_sequence_admits_no_client_and_retries_without_a_second_reference() {
     let (log, mut port, platform) = setup();
-    let error = oer_espressif_radio::power::PowerError {
-        checkpoint: oer_espressif_radio::power::PowerCheckpoint::ModemClockSource,
+    let error = oer_chips_family_radio::power::PowerError {
+        checkpoint: oer_chips_family_radio::power::PowerCheckpoint::ModemClockSource,
         expected: true,
         observed: false,
     };
@@ -276,8 +276,8 @@ fn a_refused_release_keeps_the_last_client_and_its_reference_for_retry() {
 #[test]
 fn a_failed_power_sequence_is_abandoned_with_its_references_on() {
     let (_, mut port, platform) = setup();
-    port.power_sequence_failure = Some(oer_espressif_radio::power::PowerError {
-        checkpoint: oer_espressif_radio::power::PowerCheckpoint::ModemClockSource,
+    port.power_sequence_failure = Some(oer_chips_family_radio::power::PowerError {
+        checkpoint: oer_chips_family_radio::power::PowerCheckpoint::ModemClockSource,
         expected: true,
         observed: false,
     });
@@ -331,8 +331,8 @@ fn repeated_common_power_does_not_repeat_global_clock_selection() {
 #[test]
 fn a_failed_initial_domain_entry_retries_the_clock_selection() {
     let (log, mut port, platform) = setup();
-    port.power_sequence_failure = Some(oer_espressif_radio::power::PowerError {
-        checkpoint: oer_espressif_radio::power::PowerCheckpoint::ResetReleased,
+    port.power_sequence_failure = Some(oer_chips_family_radio::power::PowerError {
+        checkpoint: oer_chips_family_radio::power::PowerCheckpoint::ResetReleased,
         expected: true,
         observed: false,
     });
@@ -358,8 +358,8 @@ fn a_failed_initial_domain_entry_retries_the_clock_selection() {
     power.abandon_for_test();
 }
 
-fn calibrated(port: &mut Port) -> oer_time::Instant {
-    use oer_time::{Clock, Duration};
+fn calibrated(port: &mut Port) -> oer_portable_time::Instant {
+    use oer_portable_time::{Clock, Duration};
     port.clock.advance(Duration::from_micros(10)).unwrap();
     port.calibrated_window = true;
     let at = port.clock.now();
@@ -427,8 +427,8 @@ fn wifi_reset_is_retried_after_power_failure_but_not_on_duplicate_admission() {
     let (log, mut port, platform) = setup();
     let mut power = CommonRadioPower::default();
     calibrated(&mut port);
-    port.power_sequence_failure = Some(oer_espressif_radio::power::PowerError {
-        checkpoint: oer_espressif_radio::power::PowerCheckpoint::ModemClockSource,
+    port.power_sequence_failure = Some(oer_chips_family_radio::power::PowerError {
+        checkpoint: oer_chips_family_radio::power::PowerCheckpoint::ModemClockSource,
         expected: true,
         observed: false,
     });

@@ -27,9 +27,9 @@ fn a_peer_without_ht_is_legacy_whatever_the_preference() {
 }
 
 mod associated_peer {
-    use oer_ieee80211_core_upper_mac::protection::{BasicRates, HePacketPadding};
+    use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, HePacketPadding};
 
-    use oer_ieee80211_wire::{
+    use oer_protocols_ieee80211_wire::{
         ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
         protection::{ErpProtection, HtProtectionMode},
         scan::ScanRecord,
@@ -46,8 +46,9 @@ mod associated_peer {
 
     fn he20_access_point() -> ScanRecord {
         let mut access_point = ScanRecord::new(
-            oer_ieee80211_wire::address::Bssid::new(
-                oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+            oer_protocols_ieee80211_wire::address::Bssid::new(
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                    .unwrap(),
             )
             .unwrap(),
         );
@@ -87,7 +88,7 @@ mod associated_peer {
         let padding = std::boxed::Box::new(HePacketPadding::Us8);
         let peer = StaAssociatedPeer::derive(
             &he20_access_point(),
-            oer_ieee80211_wire::protection::ErpProtection::NONE,
+            oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             PhyMode::He20,
             move |capability| {
@@ -107,7 +108,7 @@ mod associated_peer {
         // An HT association keeps the HE capabilities but no HE state.
         let ht = StaAssociatedPeer::derive(
             &he20_access_point(),
-            oer_ieee80211_wire::protection::ErpProtection::NONE,
+            oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             PhyMode::Ht20,
             eight_microseconds,
@@ -121,7 +122,7 @@ mod associated_peer {
         assert_eq!(
             StaAssociatedPeer::derive(
                 &he20_access_point(),
-                oer_ieee80211_wire::protection::ErpProtection::NONE,
+                oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
                 &response(17),
                 PhyMode::He20,
                 eight_microseconds,
@@ -133,8 +134,9 @@ mod associated_peer {
     #[test]
     fn the_peer_carries_every_bss_protection_fact() {
         let mut access_point = ScanRecord::new(
-            oer_ieee80211_wire::address::Bssid::new(
-                oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+            oer_protocols_ieee80211_wire::address::Bssid::new(
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                    .unwrap(),
             )
             .unwrap(),
         );
@@ -151,7 +153,7 @@ mod associated_peer {
         access_point.set_ht_operation_ie(Some(ht_operation));
         let peer = StaAssociatedPeer::derive(
             &access_point,
-            oer_ieee80211_wire::protection::ErpProtection::from_information(Some(0x07)),
+            oer_protocols_ieee80211_wire::protection::ErpProtection::from_information(Some(0x07)),
             &response(0),
             PhyMode::Ht20,
             eight_microseconds,
@@ -162,7 +164,7 @@ mod associated_peer {
         assert!(
             rate_peer
                 .legacy_rates
-                .contains(oer_ieee80211_wire::phy::LegacyRate::Ofdm54M)
+                .contains(oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm54M)
         );
         let protection = peer.protection;
         assert_eq!(protection.erp, ErpProtection::new(true, true));

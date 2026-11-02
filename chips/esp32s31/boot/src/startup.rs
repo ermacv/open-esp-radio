@@ -1,14 +1,14 @@
 //! The S31 binding: owned parts, unchanged profiles and narrow HAL adapters.
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     boot,
     peripherals::{system_timer, usb_serial_jtag, watchdog},
     root::{Bootstrap, Root},
 };
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     drivers::system_timer::{LatchStuck, Monotonic},
     watchdog::BootWatchdogs,
 };
-use oer_espressif_staged_bootstrap::startup::{BootProfile, Owners};
+use oer_chips_family_staged_bootstrap::startup::{BootProfile, Owners};
 
 type WatchdogParts = (
     watchdog::Mwdt0Registers,
@@ -22,7 +22,7 @@ type Watchdogs =
 pub struct S31;
 
 impl BootProfile for S31 {
-    type Port = oer_esp32s31_hal::platform::Port;
+    type Port = oer_chips_esp32s31_hal::platform::Port;
     type Root = Root;
     type Console = usb_serial_jtag::ConsoleRegisters;
     type Timer = system_timer::BootstrapTimer;
@@ -40,9 +40,9 @@ impl BootProfile for S31 {
     type Watchdogs = Watchdogs;
 
     const BUDGET: boot::BootBudget = boot::BOOT_BUDGET;
-    const LP_FAST: oer_espressif_boot::drivers::clock::LpFastProfile<boot::LpFastSource> =
+    const LP_FAST: oer_chips_family_boot::drivers::clock::LpFastProfile<boot::LpFastSource> =
         crate::LP_FAST;
-    const ENTROPY: oer_espressif_boot::drivers::entropy::Profile<boot::Bits<5>, boot::Bits<9>> =
+    const ENTROPY: oer_chips_family_boot::drivers::entropy::Profile<boot::Bits<5>, boot::Bits<9>> =
         crate::ENTROPY;
     const CPU: boot::CpuClockProfile<boot::CpuRoot, boot::BusDividers, boot::CpllDividers> =
         boot::CpuProfile::DEFAULT.clock();
@@ -112,11 +112,11 @@ impl BootProfile for S31 {
     fn brownout(
         owner: &mut Self::Brownout,
         deadline: &boot::BootDeadline<'_, Self::Monotonic>,
-    ) -> Result<(), oer_espressif_boot::drivers::brownout::BrownoutFailure> {
+    ) -> Result<(), oer_chips_family_boot::drivers::brownout::BrownoutFailure> {
         crate::apply_brownout(owner, deadline)
     }
     fn loan_psram(
-        mapped: oer_espressif_boot::psram::MappedPsram<boot::PsramRegisters>,
+        mapped: oer_chips_family_boot::psram::MappedPsram<boot::PsramRegisters>,
     ) -> &'static mut [u8] {
         boot::PsramRegisters::into_region(mapped)
     }

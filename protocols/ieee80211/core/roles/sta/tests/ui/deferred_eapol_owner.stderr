@@ -12,7 +12,7 @@ error[E0382]: use of moved value: `pending`
 note: `PendingM3::into_frame` takes ownership of the receiver `self`, which moves `pending`
  --> src/machine/deferred_eapol.rs
   |
-  |     pub fn into_frame(self) -> oer_ieee80211_core_security_rsn::OwnedEapolFrame {
+  |     pub fn into_frame(self) -> oer_protocols_ieee80211_core_security_rsn::OwnedEapolFrame {
   |                       ^^^^
 
 error[E0382]: use of moved value: `pending`
@@ -29,5 +29,5 @@ error[E0382]: use of moved value: `pending`
 note: `PendingGroupM1::into_frame` takes ownership of the receiver `self`, which moves `pending`
   --> src/machine/deferred_eapol.rs
    |
-   |     pub fn into_frame(self) -> oer_ieee80211_core_security_rsn::OwnedEapolFrame {
+   |     pub fn into_frame(self) -> oer_protocols_ieee80211_core_security_rsn::OwnedEapolFrame {
    |                       ^^^^

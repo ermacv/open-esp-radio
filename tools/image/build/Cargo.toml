@@ -1,5 +1,5 @@
 [package]
-name = "oer-image-build"
+name = "oer-tools-image-build"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,16 +9,19 @@ publish = false
 description = "The one image pipeline: build(ImageSpec) -> ImageBundle, with the flash contents encoded at build time and the checks a caller requests"
 
 [dependencies]
-oer-analysis-elf = { path = "../../analysis/elf" }
-oer-image-bundle = { path = "../bundle" }
-oer-image-checks = { path = "../checks" }
-oer-image-esp-idf = { path = "../esp-idf" }
-oer-chip-profile = { path = "../../chip/profile" }
-oer-espressif-facts = { path = "../../../chips/espressif/facts" }
-oer-os-toolchain = { path = "../../os/toolchain" }
-oer-os-durable = { path = "../../os/durable" }
-oer-os-process = { path = "../../os/process" }
-oer-wire = { path = "../../../portable/wire" }
+oer-tools-analysis-elf = { path = "../../analysis/elf" }
+oer-tools-image-bundle = { path = "../bundle" }
+oer-tools-image-checks = { path = "../checks" }
+oer-tools-image-esp-idf = { path = "../esp-idf" }
+oer-tools-chip-profile = { path = "../../chip/profile" }
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
+# The chips' runtime layouts the image linker gets for an image on the
+# application entry.
+oer-chips-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["build"] }
+oer-tools-os-toolchain = { path = "../../os/toolchain" }
+oer-tools-os-durable = { path = "../../os/durable" }
+oer-tools-os-process = { path = "../../os/process" }
+oer-portable-wire = { path = "../../../portable/wire" }
 espflash = { version = "=4.5.0", default-features = false }
 md-5 = "=0.11.0"
 serde = { version = "=1.0.229", features = ["derive"] }

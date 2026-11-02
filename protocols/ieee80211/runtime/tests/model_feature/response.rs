@@ -1,16 +1,16 @@
 //! Public-port response policy, independent of the model's private classifiers.
 use super::*;
 use embassy_futures::yield_now;
-use oer_ieee80211_contracts_port::PhaseTypes;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::PhaseTypes;
+use oer_protocols_ieee80211_contracts_port::{
     AggregateAttempt, AggregateEnd, Air, AmpduPhase, BlockAckReport, CheckedAggregate,
     ClassSubframe, GroupAddress, IndeterminateCause, MpduStartSpacing, NoAckHeader, QosControl,
     SingleEnd, SingleResponse, SubframeSource, Tid, TxMpdu, TxOutcome, WithdrawCause,
 };
-use oer_ieee80211_testing_model::{
+use oer_protocols_ieee80211_testing_model::{
     AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
 };
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     phy::{HtMcs, HtRate, PpduBandwidth},
     sequence::SequenceNumber,
 };
@@ -192,7 +192,7 @@ impl Case {
         &self,
         event: LowerMacEvent<'id, ModelTypes<ModelBackend<Id>>>,
         ticket_index: u8,
-        terminal_access: &mut oer_ieee80211_contracts_port::TerminalAccess<
+        terminal_access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
             'id,
             <ModelTypes<ModelBackend<Id>> as PhaseTypes<'id>>::TicketKind,
             <ModelTypes<ModelBackend<Id>> as PhaseTypes<'id>>::TicketPath,
@@ -309,7 +309,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Case {
                     TxProtection::Open,
                 );
                 let source = SubframeSource::Fresh {
-                    numbering: oer_ieee80211_contracts_port::TxNumbering::Open,
+                    numbering: oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                     buffer,
                     frame: ClassSubframe::new(
                         SizedFrame::new(

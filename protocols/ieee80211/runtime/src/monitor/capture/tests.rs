@@ -1,4 +1,4 @@
-use oer_ieee80211_contracts_port::{ChannelContextId, MacRxMetadata, MonitorTapPoint};
+use oer_protocols_ieee80211_contracts_port::{ChannelContextId, MacRxMetadata, MonitorTapPoint};
 
 use super::*;
 

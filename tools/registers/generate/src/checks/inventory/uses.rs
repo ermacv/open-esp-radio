@@ -2,12 +2,14 @@
 //! masks are deliberately not evidence of read use.
 use super::{DeclaredWord, Function, Region, Target, region_of};
 use crate::Result;
-use oer_analysis_blobray_application::library::Assumptions;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_application::library::Assumptions;
+use oer_tools_analysis_blobray_domain::{
     IndexedAddress, ReadPrecision, ReadUses, RegisterAccess, RegisterAccessSummary, RegisterMask,
     RegisterMaskKind, StoredBits, StoredBitsSource,
 };
-use oer_analysis_riscv_model::{ArtifactId, CallAbi, FunctionRecord, MemoryKind, ReadOnlyWindow};
+use oer_tools_analysis_riscv_model::{
+    ArtifactId, CallAbi, FunctionRecord, MemoryKind, ReadOnlyWindow,
+};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -102,8 +104,8 @@ pub struct Report {
 }
 
 /// The analysis profile of the native inventory run.
-pub const PROFILE: oer_analysis_riscv_model::AnalysisProfile =
-    oer_analysis_riscv_model::AnalysisProfile::RegisterInventory;
+pub const PROFILE: oer_tools_analysis_riscv_model::AnalysisProfile =
+    oer_tools_analysis_riscv_model::AnalysisProfile::RegisterInventory;
 
 /// The chip's IDF function contracts, relative to the repository root, which
 /// the native run always loads.

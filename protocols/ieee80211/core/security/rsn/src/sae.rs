@@ -19,11 +19,11 @@
 
 use core::ops::{Mul, Neg};
 use hmac::Mac;
-use oer_ieee80211_wire::sae::{
+use oer_protocols_ieee80211_wire::sae::{
     SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_CONFIRM_LEN, SAE_ELEMENT_LEN, SAE_PRIME_LEN, SaeBodyError,
     SaeCommitValues, SaeConfirm,
 };
-use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use p256::{
     AffinePoint, FieldBytes, FieldElement, ProjectivePoint, Scalar,
     elliptic_curve::{
@@ -38,7 +38,7 @@ use p256::{
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::kdf::kdf_sha256;
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 /// Octets of the KCK and of the PMK of group 19.
 pub const SAE_KEY_LEN: usize = 32;
@@ -552,7 +552,7 @@ impl Default for SaeComebackTokens {
     clippy::arithmetic_side_effects
 )]
 fn peer_element(element: &[u8; SAE_ELEMENT_LEN]) -> Option<AffinePoint> {
-    let (x, y) = oer_ieee80211_wire::sae::element_coordinates(element)?;
+    let (x, y) = oer_protocols_ieee80211_wire::sae::element_coordinates(element)?;
     let x = FieldElement::from_bytes(&FieldBytes::from(*x));
     let y = FieldElement::from_bytes(&FieldBytes::from(*y));
     Option::<ProjectivePoint>::from(x.and_then(|x| y.and_then(|y| point(&x, &y))))

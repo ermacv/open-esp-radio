@@ -6,11 +6,11 @@
 //! is an exhaustive match so adding a suite forces every dependent decision.
 
 use hmac::{Hmac, Mac};
-use oer_crypto::{
+use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
     cmac::Cmac,
 };
-use oer_ieee80211_wire::security::rsn::Akm;
+use oer_protocols_ieee80211_wire::security::rsn::Akm;
 use sha1::Sha1;
 use zeroize::Zeroize;
 
@@ -24,7 +24,7 @@ pub const RSN_MIC_LEN: usize = 16;
 /// The per-suite key hierarchy and EAPOL-Key integrity of an [`Akm`].
 pub(crate) trait AkmKeys {
     /// Key Information descriptor version carried by every EAPOL-Key frame.
-    fn key_descriptor_version(self) -> oer_wire::U8<3>;
+    fn key_descriptor_version(self) -> oer_portable_wire::U8<3>;
     /// Expand a PMK over the canonical address/nonce context into a PTK.
     fn expand_ptk(self, pmk: &[u8; 32], context: &[u8; 76], output: &mut [u8; RSN_PTK_LEN]);
     /// Start the suite's EAPOL-Key MIC under `kck`. An AES-CMAC suite runs it
@@ -37,14 +37,14 @@ pub(crate) trait AkmKeys {
 }
 
 impl AkmKeys for Akm {
-    fn key_descriptor_version(self) -> oer_wire::U8<3> {
+    fn key_descriptor_version(self) -> oer_portable_wire::U8<3> {
         // SOURCE: IEEE Std 802.11-2020, 12.7.2 (Key Descriptor Version: 2 for
         // HMAC-SHA-1-128 with AES key wrap, 3 for AES-128-CMAC, 0 when the
         // AKM defines the algorithms).
         match self {
-            Self::Psk => oer_wire::U8::constant::<2>(),
-            Self::PskSha256 => oer_wire::U8::constant::<3>(),
-            Self::Sae => oer_wire::U8::ZERO,
+            Self::Psk => oer_portable_wire::U8::constant::<2>(),
+            Self::PskSha256 => oer_portable_wire::U8::constant::<3>(),
+            Self::Sae => oer_portable_wire::U8::ZERO,
         }
     }
 
@@ -65,7 +65,7 @@ impl AkmKeys for Akm {
         match self {
             Self::Psk => Ok(EapolMic::HmacSha1(crate::mac::sha1(kck))),
             Self::PskSha256 | Self::Sae => {
-                let key = oer_crypto::Aes128Key::copy_from(kck);
+                let key = oer_portable_crypto::Aes128Key::copy_from(kck);
                 let keyed = engine.load(&key)?;
                 drop(key);
                 Ok(EapolMic::AesCmac(Cmac::new(keyed)?))
@@ -150,7 +150,7 @@ mod tests {
     )]
     use super::*;
     use crate::test_engine::Refusing;
-    use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 
     fn expanded(akm: Akm, pmk: &[u8; 32], context: &[u8; 76]) -> [u8; RSN_PTK_LEN] {
         let mut bytes = [0; RSN_PTK_LEN];

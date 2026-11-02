@@ -8,7 +8,7 @@ pub trait PacketNumber48: Copy + Ord {
     fn checked_add(self, distance: u64) -> Option<Self>;
 }
 
-impl PacketNumber48 for oer_ieee80211_wire::ccmp::CcmpPacketNumber {
+impl PacketNumber48 for oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber {
     fn checked_add(self, distance: u64) -> Option<Self> {
         self.value().checked_add(distance).and_then(Self::new)
     }

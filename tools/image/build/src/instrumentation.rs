@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn the_workspace_images_declare_their_classes() {
         let packages: Vec<_> = [include_str!(
-            "../../../../firmware/apps/boot-smoke/Cargo.toml"
+            "../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"
         )]
         .into_iter()
         .map(|text| {
@@ -203,6 +203,6 @@ mod tests {
                 .classes()
                 .collect::<Vec<_>>()
         };
-        assert_eq!(classes("oer-firmware-apps-boot-smoke"), []);
+        assert_eq!(classes("oer-hil-probes-esp32s31-boot-smoke"), []);
     }
 }

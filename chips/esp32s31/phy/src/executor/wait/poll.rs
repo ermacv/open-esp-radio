@@ -1,8 +1,8 @@
 //! Direct hardware observation: a named settle bounded in time, and the
 //! the time bounds of measured direct observations.
 
-use oer_time::settle::{self, Settle, SettleLimit, Unsettled};
-use oer_time::{Clock, Duration};
+use oer_portable_time::settle::{self, Settle, SettleLimit, Unsettled};
+use oer_portable_time::{Clock, Duration};
 
 /// The longest a direct observation of a measured site may wait: the worst
 /// measured direct wait was 87 reads, 2976 cycles (18.6 µs at 160 MHz)
@@ -47,7 +47,7 @@ pub(crate) fn bounded<E, C: Clock + ?Sized>(
 mod tests {
     use super::*;
 
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time_virtual::VirtualClock;
 
     /// Advance the clock by `step` microseconds at every read.
     fn read_step(clock: &VirtualClock, step: u64) {

@@ -49,7 +49,7 @@ pub enum ApBeaconTxOutcome {
 /// the current TIM, a TBTT event or the current group queue length.
 ///
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_roles_ap::beacon::{ApBeaconTxContext, ApBeaconTxOutcome};
+/// use oer_protocols_ieee80211_core_roles_ap::beacon::{ApBeaconTxContext, ApBeaconTxOutcome};
 /// fn twice(context: ApBeaconTxContext) {
 ///     let first = context.complete(ApBeaconTxOutcome::Delivered);
 ///     let second = context.complete(ApBeaconTxOutcome::Delivered);
@@ -57,7 +57,7 @@ pub enum ApBeaconTxOutcome {
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_roles_ap::beacon::{ApBeaconTxContext, ApBeaconTxOutcome, ApDtimRelease};
+/// use oer_protocols_ieee80211_core_roles_ap::beacon::{ApBeaconTxContext, ApBeaconTxOutcome, ApDtimRelease};
 /// fn once(context: ApBeaconTxContext) -> Option<ApDtimRelease> {
 ///     context.complete(ApBeaconTxOutcome::Delivered)
 /// }
@@ -88,7 +88,7 @@ impl ApBeaconTxContext {
 /// Transferring it to the caller's retained group queue consumes the grant.
 ///
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_roles_ap::beacon::ApDtimRelease;
+/// use oer_protocols_ieee80211_core_roles_ap::beacon::ApDtimRelease;
 /// fn twice(grant: ApDtimRelease) {
 ///     let first = grant.into_frame_count();
 ///     let second = grant.into_frame_count();
@@ -96,7 +96,7 @@ impl ApBeaconTxContext {
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_roles_ap::beacon::ApDtimRelease;
+/// use oer_protocols_ieee80211_core_roles_ap::beacon::ApDtimRelease;
 /// fn once(grant: ApDtimRelease) -> core::num::NonZeroU16 {
 ///     grant.into_frame_count()
 /// }

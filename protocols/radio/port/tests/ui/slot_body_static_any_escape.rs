@@ -2,7 +2,7 @@
 extern crate alloc;
 use alloc::boxed::Box;
 use core::any::Any;
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     Abandon, BodyLoan, Mint, Quarantine, Root, Slot, SlotBody, SlotBodyOwner,
     SlotFrontend, SlotOwner, SlotRetire, SlotStopped, SlotWakes, Slots, StaticId,
 };
@@ -23,7 +23,7 @@ impl SlotOwner<Id> for Owner {
         let [token] = mint.into_pools();
         *queues = Some(token);
     }
-    fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> Result<(Self::Frontend<'s>, ()), oer_radio_port::SlotInitError>
+    fn split<'s>(queues: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> Result<(Self::Frontend<'s>, ()), oer_protocols_radio_port::SlotInitError>
     where Self: 's, Id: 's {
         Ok((queues, ()))
     }
@@ -39,7 +39,7 @@ impl SlotBodyOwner<Id> for Owner {
     type Body<'p> = Token<'p>;
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>, loan: BodyLoan<'p, Id, Self>,
-    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+    ) -> Result<Self::Body<'p>, oer_protocols_radio_port::SlotInitError>
     where Self: 's, Id: 's, 's: 'p {
         Ok(loan.lend_slot(frontend.take().expect("one body resource")))
     }
@@ -57,6 +57,6 @@ impl SlotBody<Id, Owner> for Body {
     }
 }
 
-pub async fn body(frontend: &mut SlotFrontend<'_, Id, Owner>) -> Result<Box<dyn Any>, oer_radio_port::SlotInitError> {
+pub async fn body(frontend: &mut SlotFrontend<'_, Id, Owner>) -> Result<Box<dyn Any>, oer_protocols_radio_port::SlotInitError> {
     frontend.run_body(Body).await
 }

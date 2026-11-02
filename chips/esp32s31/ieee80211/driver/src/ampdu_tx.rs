@@ -6,7 +6,7 @@
 //! a station publication.
 
 use crate::mac::tx::{HtAmpduTxConfig, HtProtectionSpacing, HtRate, TxControlFrame};
-use oer_esp32s31_hal::types::MacInterface;
+use oer_chips_esp32s31_hal::types::MacInterface;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduTxRoleAdapter {

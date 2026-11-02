@@ -2,7 +2,7 @@
 use super::*;
 use crate::captured::visit_members;
 use crate::in_process::Executable;
-use oer_analysis_elf::{SymbolKind, classify as elf};
+use oer_tools_analysis_elf::{SymbolKind, classify as elf};
 
 struct Definition {
     input: u64,

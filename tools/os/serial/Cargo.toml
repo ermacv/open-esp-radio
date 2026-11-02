@@ -1,5 +1,5 @@
 [package]
-name = "oer-os-serial"
+name = "oer-tools-os-serial"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

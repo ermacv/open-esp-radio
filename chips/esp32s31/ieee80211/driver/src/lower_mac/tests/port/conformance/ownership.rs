@@ -7,12 +7,12 @@
 //! publication log; requests, returns and the gate confirmation are placed
 //! by the number of publications observed when they happened.
 use super::*;
-use oer_esp32s31_hal::types::MacLegacyTxProgram;
-use oer_ieee80211_testing_conformance::{
+use oer_chips_esp32s31_hal::types::MacLegacyTxProgram;
+use oer_protocols_ieee80211_testing_conformance::{
     self as shared, Class, Classes, End, Harness, Held, Operation, PublicationEvent, Resources,
     ReturnEvidence, Returned, Scenario, Trace,
 };
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 type Rows = Rc<RefCell<Vec<Returned>>>;
 type Evidence = Rc<RefCell<Vec<ReturnEvidence>>>;
@@ -140,7 +140,7 @@ fn frame<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
         .expect("rate");
     let header = HeaderSpec::new(
-        FrameControl::new(oer_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
+        FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
         0,
         IndividualAddress::new(BSSID).expect("receiver"),
         STATION,

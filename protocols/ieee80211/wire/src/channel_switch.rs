@@ -142,7 +142,7 @@ impl ChannelSwitch {
                 self.channel_number,
                 self.count,
             ];
-            oer_wire::Writer::new(out).write(&element).ok()?;
+            oer_portable_wire::Writer::new(out).write(&element).ok()?;
             return Some(element.len());
         }
         let announcement = [
@@ -171,7 +171,9 @@ impl ChannelSwitch {
             }
         };
         let (written, _) = out.split_at_mut_checked(elements.len())?;
-        oer_wire::Writer::new(written).write(elements).ok()?;
+        oer_portable_wire::Writer::new(written)
+            .write(elements)
+            .ok()?;
         Some(elements.len())
     }
 
@@ -193,7 +195,7 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
     let mut secondary = SecondaryChannelOffset::None;
     let mut remaining = elements;
     while !remaining.is_empty() {
-        let mut reader = oer_wire::Reader::new(remaining);
+        let mut reader = oer_portable_wire::Reader::new(remaining);
         let &[id, length] = reader
             .array::<2>()
             .map_err(|_| ChannelSwitchError::Malformed)?;

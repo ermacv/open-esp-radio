@@ -1,7 +1,7 @@
 //! Whole model-owner conversions under the concrete frontend's private loan.
 
 use super::*;
-use oer_ieee80211_contracts_port::{BodyPayload, OwnedPayload};
+use oer_protocols_ieee80211_contracts_port::{BodyPayload, OwnedPayload};
 
 impl<'p, B: ModelComposition, C: ModelClass> ModelBuffer<'p, B, C> {
     fn into_owned(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelBuffer<'static, B, C> {

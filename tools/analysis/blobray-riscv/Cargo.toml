@@ -1,5 +1,5 @@
 [package]
-name = "oer-analysis-blobray-riscv"
+name = "oer-tools-analysis-blobray-riscv"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,10 @@ publish = false
 description = "Concrete RV32 execution over the shared decoding and lifting"
 
 [dependencies]
-oer-analysis-blobray-domain = { path = "../blobray-domain" }
-oer-analysis-riscv-decode = { path = "../riscv-decode" }
-oer-analysis-riscv-lift = { path = "../riscv-lift" }
-oer-analysis-riscv-model = { path = "../riscv-model" }
+oer-tools-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-tools-analysis-riscv-decode = { path = "../riscv-decode" }
+oer-tools-analysis-riscv-lift = { path = "../riscv-lift" }
+oer-tools-analysis-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

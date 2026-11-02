@@ -10,13 +10,13 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-use oer_ieee802154_port::TimeSync;
+use oer_protocols_ieee802154_port::TimeSync;
 
 /// Fill the Time IE at the supplied SFD observation with the sequence and
 /// wrapping network time. A refused write leaves the frame unchanged.
 pub fn write_time_sync(sync: &TimeSync, mac: &mut [u8], now_micros: u64) -> bool {
     let network_time = (now_micros as i64).wrapping_add(sync.network_time_offset) as u64;
-    oer_ieee802154_wire::write_time_ie(mac, sync.ie_offset, sync.sequence, network_time)
+    oer_protocols_ieee802154_wire::write_time_ie(mac, sync.ie_offset, sync.sequence, network_time)
 }
 
 #[cfg(test)]

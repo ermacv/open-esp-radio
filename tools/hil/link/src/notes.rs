@@ -2,8 +2,8 @@
 //! text the host prints for them. A line that is lost, garbled or unknown
 //! becomes an `OER-DIAG-ERROR` text with the raw line, never dropped.
 
-use oer_diagnostics::MAX_PAYLOAD;
-use oer_diagnostics::render::{Gap, Next, Stream};
+use oer_portable_diagnostics::MAX_PAYLOAD;
+use oer_portable_diagnostics::render::{Gap, Next, Stream};
 
 const MARKER: &[u8] = b"OER-DIAG:";
 /// The longest diagnostic line kept while it is incomplete.
@@ -69,9 +69,9 @@ impl Notes {
                     ));
                 }
                 texts.push(match record {
-                    oer_diagnostics::Record::Note(note) => {
+                    oer_portable_diagnostics::Record::Note(note) => {
                         let mut text = String::new();
-                        match oer_diagnostics::render::note(&note, &mut text) {
+                        match oer_portable_diagnostics::render::note(&note, &mut text) {
                             Ok(()) => text,
                             Err(_) => error(format!("note does not render ({:?})", note.topic)),
                         }
@@ -91,15 +91,15 @@ mod tests {
     use super::*;
 
     /// The line of diagnostic number `sequence` carrying `note`.
-    fn line(sequence: u32, note: &oer_diagnostics::Note<'_>) -> Vec<u8> {
+    fn line(sequence: u32, note: &oer_portable_diagnostics::Note<'_>) -> Vec<u8> {
         let bytes = std::cell::RefCell::new(Vec::new());
-        let mut console = oer_diagnostics::Console::new(|chunk: &[u8]| {
+        let mut console = oer_portable_diagnostics::Console::new(|chunk: &[u8]| {
             bytes.borrow_mut().extend_from_slice(chunk);
             Ok::<_, ()>(())
         });
         for _ in 0..sequence {
             console
-                .note(&oer_diagnostics::Note::placement_pass())
+                .note(&oer_portable_diagnostics::Note::placement_pass())
                 .unwrap();
         }
         let skip = bytes.borrow().len();
@@ -110,9 +110,9 @@ mod tests {
     #[test]
     fn diagnostic_lines_between_binary_bytes_render_in_order_and_report_a_gap() {
         let mut stream = vec![0x00, 0x13, 0x0a, b'O', 0x00];
-        stream.extend(line(0, &oer_diagnostics::Note::placement_pass()));
+        stream.extend(line(0, &oer_portable_diagnostics::Note::placement_pass()));
         stream.extend([0x05, b'x', 0x00]);
-        stream.extend(line(2, &oer_diagnostics::Note::placement_pass()));
+        stream.extend(line(2, &oer_portable_diagnostics::Note::placement_pass()));
         let mut notes = Notes::new();
         let mut out = Vec::new();
         // Split mid-marker and mid-line to follow serial chunking.

@@ -3,15 +3,17 @@
 //! Branded controller memory stays in this P2 owner. Membership cells carry
 //! installation numbers, never an Engine or a controller address.
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::engine::{ControllerMemory, Engine},
     bluetooth::{ClockedOwner, InterruptSetupOwner, TaskOwner},
     domain::RadioDomain,
     power::PlatformClockBackend,
 };
-use oer_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
-use oer_esp32s31_radio_client::bluetooth::{ControllerFault, PreparationFailure, RadioController};
-use oer_espressif_interrupt_table::signal::SignalExecutor;
+use oer_chips_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
+use oer_chips_esp32s31_radio_client::bluetooth::{
+    ControllerFault, PreparationFailure, RadioController,
+};
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
 
 use crate::{
     ble_phy::{BlePhyRuntime, ControllerBlePhyEngineInitialized},
@@ -45,7 +47,7 @@ pub struct ControllerLifecycle<
 > {
     cells: &'static ControllerEventCells<X>,
     gate: BluetoothInterruptGate<ChipGate, X, R>,
-    address: oer_bluetooth_le_wire::LePublicDeviceAddress,
+    address: oer_protocols_bluetooth_le_wire::LePublicDeviceAddress,
     installation: Option<u32>,
     state: State<F, E, X, M, MT>,
 }
@@ -69,8 +71,8 @@ enum State<F, E, X: SignalExecutor, M: ControllerMemory, const MT: usize> {
     Running,
     Retired(ControllerRetired<M>),
     Reset {
-        arena: oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
-        pending: oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+        arena: oer_chips_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
+        pending: oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
     },
     FactoryFailed {
         _error: E,
@@ -97,7 +99,7 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         runtime: ControllerRuntimeResources<'static, MT, X>,
         cells: &'static ControllerEventCells<X>,
         gate: BluetoothInterruptGate<ChipGate, X, R>,
-        address: oer_bluetooth_le_wire::LePublicDeviceAddress,
+        address: oer_protocols_bluetooth_le_wire::LePublicDeviceAddress,
     ) -> Self
     where
         F: ControllerFactory<M, Error = E>,
@@ -163,9 +165,9 @@ impl<F, E, X: SignalExecutor + 'static, M: ControllerMemory, R, const MT: usize>
         self,
     ) -> Result<
         (
-            oer_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
+            oer_chips_esp32s31_hal::memory::dma_static::Placed<M::Storage>,
             BluetoothInterruptGate<ChipGate, X, R>,
-            oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+            oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
         ),
         Self,
     > {

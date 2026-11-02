@@ -1,0 +1,43 @@
+[package]
+name = "oer-examples-wifi-station"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish.workspace = true
+description = "Wi-Fi station of a build profile; without a profile it reports NotConfigured and starts no RF"
+build = "build.rs"
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer = { path = "../../oer" }
+
+[features]
+# The station of a profile: the SDK's Wi-Fi and the task group of its IP
+# service and exchanges. A build with a profile needs it, one without builds
+# the NotConfigured image, which links no Wi-Fi and runs no group.
+station = ["oer/wifi", "oer/group"]
+
+[dev-dependencies]
+toml = "=1.1.4"
+oer-protocols-radio-regulatory = { path = "../../protocols/radio/regulatory" }
+oer-protocols-ieee80211-contracts-port = { path = "../../protocols/ieee80211/contracts/port" }
+
+[build-dependencies]
+toml = "=1.1.4"
+# The profile's country and channel are checked against the same domain
+# table and channel permit as the image's configuration.
+oer-protocols-radio-regulatory = { path = "../../protocols/radio/regulatory" }
+oer-protocols-ieee80211-contracts-port = { path = "../../protocols/ieee80211/contracts/port" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each a
+# report with a target of 0, never a build gate.
+runtime = {}
+bootstrap = {}

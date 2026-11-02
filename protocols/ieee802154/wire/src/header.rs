@@ -26,13 +26,13 @@ const FRAME_COUNTER_SIZE: u8 = 4;
 const COMMAND_ID_LEN: u8 = 1;
 
 const COMMAND_DATA_REQUEST: u8 = 0x04;
-use oer_wire::Reader;
+use oer_portable_wire::Reader;
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     // SOURCE: IEEE Std 802.15.4-2020, 12.1.3 (PHR frame length).
     struct Phr[1] (little) { length, with_length: u8 = 0..7; }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     // SOURCE: IEEE Std 802.15.4-2020, 7.2.2 (Frame Control field).
     struct Control[2] (little) {
         kind, with_kind: u8 = 0..3;
@@ -46,7 +46,7 @@ oer_wire::bitfield! {
         source, with_source: u8 = 14..16;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     // SOURCE: IEEE Std 802.15.4-2020, 9.4.2 (Security Control field).
     struct SecurityControl[1] (little) {
         level, with_level: u8 = 0..3;
@@ -54,7 +54,7 @@ oer_wire::bitfield! {
         suppress_counter, with_suppress_counter: bool = 5..6;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     // SOURCE: IEEE Std 802.15.4-2020, 7.4.2.1 (Header IE descriptor).
     struct HeaderIe[2] (little) {
         length, with_length: u8 = 0..7;

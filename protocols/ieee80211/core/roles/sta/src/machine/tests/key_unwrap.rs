@@ -4,17 +4,19 @@
 use super::*;
 
 /// Message 3 with group key 1 and replay counter `counter`.
-fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk, counter: u64) -> Vec<u8> {
-    use oer_ieee80211_core_security_rsn::frames::RsnTxFrame;
-    use oer_ieee80211_wire::security::rsn::Akm;
+fn message3(ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk, counter: u64) -> Vec<u8> {
+    use oer_protocols_ieee80211_core_security_rsn::frames::RsnTxFrame;
+    use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
     let mut plain = Vec::from(RSN);
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[0x99; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped =
-        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, counter, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -26,22 +28,24 @@ fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk, counter: u64) -> Vec<u8>
 /// Group Message 1 of key `key_id` with replay counter `replay`, protected
 /// under packet number `pn`; `corrupt` flips a bit of the wrapped key data.
 fn group_message1_at(
-    ptk: &oer_ieee80211_core_security_rsn::Ptk,
+    ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
     replay: u64,
     key_id: u8,
     pn: u64,
     corrupt: bool,
 ) -> Vec<u8> {
-    use oer_ieee80211_core_security_rsn::frames::RsnTxFrame;
-    use oer_ieee80211_wire::security::rsn::Akm;
+    use oer_protocols_ieee80211_core_security_rsn::frames::RsnTxFrame;
+    use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
     let mut plain = Vec::new();
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, key_id, 0x00]);
     plain.extend_from_slice(&[0x77; 16]);
     plain.extend_from_slice(&[0xdd, 0, 0, 0, 0, 0, 0, 0]);
-    let wrapped =
-        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let mut wrapped = wrapped.as_bytes().to_vec();
     if corrupt {
         wrapped[0] ^= 1;
@@ -109,7 +113,7 @@ fn an_engine_that_refuses_the_unwrap_is_a_counted_drop_and_the_link_stays() {
         let before = world.losses.rsn;
         let frames = world.frames.len();
         world.station.config.callbacks.blocks.refuse =
-            Some(oer_crypto::block::BlockError::Timeout { observation: 1 });
+            Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
         world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, false));
         world.run(at(50));
         assert_eq!(world.losses.rsn, before + 1);

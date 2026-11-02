@@ -1,7 +1,7 @@
 #![no_std]
-use oer_esp32s31_hal::peripherals::{system_timer::SystimerAlarm0, timg0_alarm::{Timg0AlarmProgram, Timg0AlarmInterrupt}};
-use oer_espressif_interrupt_table::Silent;
-use oer_time::Duration;
+use oer_chips_esp32s31_hal::peripherals::{system_timer::SystimerAlarm0, timg0_alarm::{Timg0AlarmProgram, Timg0AlarmInterrupt}};
+use oer_chips_family_interrupt_table::Silent;
+use oer_portable_time::Duration;
 
 pub fn arm(
     timer: &mut Timg0AlarmProgram,

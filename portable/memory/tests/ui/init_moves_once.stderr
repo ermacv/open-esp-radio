@@ -6,7 +6,7 @@ error[E0382]: use of moved value: `first`
  8 |     #[cfg(all())]
  9 |     let second = first;
    |                  ----- value moved here
-10 |     oer_memory::init_in_place!(storage, Pair {
+10 |     oer_portable_memory::init_in_place!(storage, Pair {
 11 |         first: first, // ui-error: E0382
    |                ^^^^^ value used here after move
    |

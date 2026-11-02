@@ -2,9 +2,9 @@
 //! Alternatives overapproximate all incoming paths. No memory forwarding,
 //! register-set equality, source names, or neighbouring scopes supply a proof.
 use crate::{FunctionFacts, Load, TypeFacts};
-use oer_analysis_elf::Elf;
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_elf::Elf;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

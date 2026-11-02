@@ -34,7 +34,7 @@ fn shared_transition_closes_the_body_with_one_fence() {
 
 #[test]
 fn the_body_writes_the_gain_byte_into_both_gain_fields() {
-    use oer_esp32s31_pac::{
+    use oer_chips_esp32s31_pac::{
         bt_bb::{BtV32Baseband, PhyBtagcRecovered, SharedBasebandTxTiming, ZbbbRadioControl},
         fe::PhyBasebandConfigOracleFe,
         instances,
@@ -79,8 +79,8 @@ fn the_body_writes_the_gain_byte_into_both_gain_fields() {
 struct HostBtbb<'a>(core::marker::PhantomData<&'a ()>);
 
 impl<'a> super::BtbbPlacements for HostBtbb<'a> {
-    type BtBb = oer_mmio::Host<'a>;
-    type Fe = oer_mmio::Host<'a>;
-    type WifiBb = oer_mmio::Host<'a>;
-    type WifiMac = oer_mmio::Host<'a>;
+    type BtBb = oer_portable_mmio::Host<'a>;
+    type Fe = oer_portable_mmio::Host<'a>;
+    type WifiBb = oer_portable_mmio::Host<'a>;
+    type WifiMac = oer_portable_mmio::Host<'a>;
 }

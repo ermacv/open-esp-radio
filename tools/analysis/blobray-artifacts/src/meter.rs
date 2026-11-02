@@ -1,6 +1,6 @@
 //! Adapt object::ReadRef so delimiter scans have bounded cooperative checkpoints.
 use object::read::ReadRef;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 use std::{cell::RefCell, ops::Range};
 
 pub(crate) struct Meter<'a> {

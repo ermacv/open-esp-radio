@@ -56,7 +56,7 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
             assert_eq!(
                 reservation.next(position).unwrap(),
                 if position + 1 == capacity {
-                    oer_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
                 } else {
                     index + 1
                 }
@@ -127,7 +127,7 @@ fn a_trigger_queue_links_its_lengths_and_publishes_validity_last() {
         (last.mpdu_length, last.next_link),
         (
             300,
-            oer_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
+            oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
         )
     );
     // Logical queue one is CONF1 element six.

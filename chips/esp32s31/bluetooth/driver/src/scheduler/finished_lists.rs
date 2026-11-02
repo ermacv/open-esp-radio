@@ -6,17 +6,19 @@
 
 use crate::interrupt::SchedulerWakeBatch;
 
-use oer_esp32s31_hal::bluetooth::engine::{EngineFinishedListObservation, EngineFinishedListPop};
+use oer_chips_esp32s31_hal::bluetooth::engine::{
+    EngineFinishedListObservation, EngineFinishedListPop,
+};
 
-pub use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex;
-pub use oer_esp32s31_hal::bluetooth::engine::EngineFinishedHardwareListObserved;
+pub use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex;
+pub use oer_chips_esp32s31_hal::bluetooth::engine::EngineFinishedHardwareListObserved;
 
 trait SchedulerFinishedListBackend {
     fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation;
 }
 
-impl<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory> SchedulerFinishedListBackend
-    for oer_esp32s31_hal::bluetooth::engine::Engine<M>
+impl<M: oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory> SchedulerFinishedListBackend
+    for oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>
 {
     fn transfer_scheduler_finished_lists(&mut self) -> EngineFinishedListObservation {
         Self::transfer_scheduler_finished_lists(self)
@@ -64,9 +66,9 @@ impl SchedulerFinishedListWorker {
     }
 
     /// Capture one fresh hardware observation through the unique task-side HAL owner.
-    pub fn capture<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(
+    pub fn capture<M: oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory>(
         &mut self,
-        controller: &mut oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        controller: &mut oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
         wake: SchedulerWakeBatch,
     ) -> Result<(), SchedulerFinishedListCaptureError> {
         self.capture_with(controller, wake)
@@ -74,9 +76,9 @@ impl SchedulerFinishedListWorker {
 
     /// Capture the finished lists of a stopped scheduler, which raises no
     /// further wake.
-    pub fn capture_stopped<M: oer_esp32s31_hal::bluetooth::engine::ControllerMemory>(
+    pub fn capture_stopped<M: oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory>(
         &mut self,
-        controller: &mut oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        controller: &mut oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
     ) -> Result<(), SchedulerFinishedListCaptureError> {
         if !controller.scheduler_is_stopped() {
             return Err(SchedulerFinishedListCaptureError::SchedulerNotStopped);

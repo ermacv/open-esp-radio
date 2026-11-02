@@ -776,16 +776,16 @@ impl PhyPwdetReadyBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<C: oer_time::Clock + ?Sized>(
+    pub fn execute_target<C: oer_portable_time::Clock + ?Sized>(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
         clock: &C,
     ) -> PhyPwdetCompletion {
         // The settle limit is this crate's, not a recovered value.
         let mut reads = 0_u16;
         match crate::executor::wait::poll::settled(clock, || {
             reads = reads.saturating_add(1);
-            oer_esp32s31_hal::phy::power_detector::sample_ready(registers).then_some(())
+            oer_chips_esp32s31_hal::phy::power_detector::sample_ready(registers).then_some(())
         }) {
             Ok(()) => PhyPwdetCompletion::SarReadyObserved {
                 measurement_index: self.measurement_index,
@@ -830,25 +830,25 @@ impl PhyPwdetMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyPwdetCompletion {
         match self.action {
             PhyPwdetAction::ConfigurePbusDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyPwdetCompletion::PbusDebugModeConfigured
             }
             PhyPwdetAction::ConfigureTxClock { enabled } => {
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 PhyPwdetCompletion::TxClockConfigured { enabled }
             }
             PhyPwdetAction::ConfigurePowerDetector => {
-                oer_esp32s31_hal::phy::power_detector::configure_enabled(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(registers);
                 PhyPwdetCompletion::PowerDetectorConfigured
             }
             PhyPwdetAction::ConfigureCalibrationMode => {
-                oer_esp32s31_hal::phy::power_detector::configure_calibration_mode(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_calibration_mode(registers);
                 PhyPwdetCompletion::CalibrationModeConfigured
             }
             PhyPwdetAction::ConfigureTone => {
@@ -860,7 +860,7 @@ impl PhyPwdetMmioBinding {
                 PhyPwdetCompletion::ToneConfigured
             }
             PhyPwdetAction::WriteReferenceControl { value } => {
-                oer_esp32s31_hal::phy::power_detector::write_reference(registers, value);
+                oer_chips_esp32s31_hal::phy::power_detector::write_reference(registers, value);
                 PhyPwdetCompletion::ReferenceControlWritten { value }
             }
             PhyPwdetAction::ArmTone {
@@ -877,7 +877,7 @@ impl PhyPwdetMmioBinding {
                 measurement_index,
                 sample_index,
             } => {
-                oer_esp32s31_hal::phy::power_detector::trigger_sar(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::trigger_sar(registers);
                 PhyPwdetCompletion::SarTriggered {
                     measurement_index,
                     sample_index,
@@ -899,23 +899,23 @@ impl PhyPwdetMmioBinding {
             } => PhyPwdetCompletion::SarSampled {
                 measurement_index,
                 sample_index,
-                value: oer_esp32s31_hal::phy::power_detector::sample_sar(registers),
+                value: oer_chips_esp32s31_hal::phy::power_detector::sample_sar(registers),
             },
             PhyPwdetAction::StopTone => {
                 crate::hardware::stop_phy_power_detector_tone(registers);
                 PhyPwdetCompletion::ToneStopped
             }
             PhyPwdetAction::ConfigurePbusWorkMode => PhyPwdetCompletion::PbusWorkModeConfigured {
-                settle_required: oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 ),
             },
             PhyPwdetAction::ConfigurePbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyPwdetCompletion::PbusWorkModePulseConfigured
             }
             PhyPwdetAction::ClearPbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyPwdetCompletion::PbusWorkModePulseCleared
             }
             _ => unreachable!(),
@@ -1010,7 +1010,7 @@ impl PhyPwdetPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), PhyPwdetPbusBindingError> {
         self.hardware
             .start_target(registers)
@@ -1020,7 +1020,7 @@ impl PhyPwdetPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn sample_target_once(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyPwdetPbusObservation, PhyPwdetPbusBindingError> {
         match self
             .hardware

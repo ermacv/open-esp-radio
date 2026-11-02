@@ -40,8 +40,8 @@ fn mode(spp: bool) -> CcmpAssociation {
         Spp::NotNegotiated
     })
 }
-fn key() -> oer_ieee80211_contracts_security::Ccmp128Key {
-    oer_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
+fn key() -> oer_protocols_ieee80211_contracts_security::Ccmp128Key {
+    oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
 }
 
 #[test]
@@ -162,24 +162,24 @@ struct RefusingKeyed {
 impl Aes128Engine for Refusing {
     type Keyed<'a> = RefusingKeyed;
 
-    fn load(&mut self, key: &oer_crypto::Aes128Key) -> Result<RefusingKeyed, BlockError> {
+    fn load(&mut self, key: &oer_portable_crypto::Aes128Key) -> Result<RefusingKeyed, BlockError> {
         Ok(RefusingKeyed {
-            blocks: oer_crypto::block::Aes128Blocks::load_key(&mut SoftwareAes128, key),
+            blocks: oer_portable_crypto::block::Aes128Blocks::load_key(&mut SoftwareAes128, key),
             left: self.refuse_from,
         })
     }
 }
 
-impl oer_crypto::block::BlockEngine for RefusingKeyed {
-    fn encrypt(&mut self, block: &mut oer_crypto::block::Block) -> Result<(), BlockError> {
+impl oer_portable_crypto::block::BlockEngine for RefusingKeyed {
+    fn encrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), BlockError> {
         self.left = self.left.checked_sub(1).ok_or(BlockError::Unavailable)?;
-        oer_crypto::block::BlockCipher::encrypt_block(&mut self.blocks, block);
+        oer_portable_crypto::block::BlockCipher::encrypt_block(&mut self.blocks, block);
         Ok(())
     }
 
-    fn decrypt(&mut self, block: &mut oer_crypto::block::Block) -> Result<(), BlockError> {
+    fn decrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), BlockError> {
         self.left = self.left.checked_sub(1).ok_or(BlockError::Unavailable)?;
-        oer_crypto::block::BlockCipher::decrypt_block(&mut self.blocks, block);
+        oer_portable_crypto::block::BlockCipher::decrypt_block(&mut self.blocks, block);
         Ok(())
     }
 }

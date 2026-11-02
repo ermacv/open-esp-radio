@@ -58,7 +58,7 @@ macro_rules! unsigned {
             ///
             /// ```compile_fail,E0080
             /// // A five-bit extraction cannot be a four-bit proof.
-            /// let _ = oer_wire::U8::<4>::from_field::<0, 5, true, 1>(&[0xff]);
+            /// let _ = oer_portable_wire::U8::<4>::from_field::<0, 5, true, 1>(&[0xff]);
             /// ```
             #[doc(hidden)]
             pub const fn from_field<

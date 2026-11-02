@@ -2,7 +2,7 @@
 //! owns its vacant place, so its return cannot overflow a retirement pool.
 
 use super::{Ccmp128Key, CcmpRxReplayEpoch, GroupKeyId, Pool};
-use oer_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Index {
@@ -198,7 +198,7 @@ impl<Key> GroupKeys<Key> {
     pub(super) fn release(
         &mut self,
         place: GroupPlace,
-        events: &mut impl oer_events::EventSink<crate::events::StaEvent>,
+        events: &mut impl oer_portable_events::EventSink<crate::events::StaEvent>,
     ) {
         self.vacant.put(place, events);
     }

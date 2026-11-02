@@ -1,18 +1,22 @@
 //! The stand's clients reach its hardware only through the LAB service:
 //! `cargo fw`, `cargo hil`, `cargo stand` and the HIL harness build against
-//! its protocol and client (`oer-lab-client`), never against the service,
+//! its protocol and client (`oer-tools-lab-client`), never against the service,
 //! the board drivers or the router's SSH, directly or through another crate.
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The service's implementation and the drivers only it runs.
-const IMPLEMENTATION: [&str; 3] = ["oer-tool-lab-service", "oer-lab-board", "oer-lab-router"];
+const IMPLEMENTATION: [&str; 3] = [
+    "oer-tools-lab-service",
+    "oer-tools-lab-board",
+    "oer-tools-lab-router",
+];
 /// The service's clients.
 const CLIENTS: [&str; 5] = [
-    "oer-lab-client",
-    "oer-hil-harness",
-    "oer-tool-hil-cli",
-    "oer-tool-image-cli",
-    "oer-tool-lab-cli",
+    "oer-tools-lab-client",
+    "oer-tools-hil-harness",
+    "oer-tools-hil-cli",
+    "oer-tools-image-cli",
+    "oer-tools-lab-cli",
 ];
 
 /// Every package of `Cargo.lock` with the names of its dependencies.
@@ -72,8 +76,8 @@ fn clients_reach_the_hardware_only_through_the_lab_service() {
             .collect::<Vec<_>>();
         assert!(
             forbidden.is_empty(),
-            "{client} builds against {forbidden:?}: use oer-lab-client and a service operation"
+            "{client} builds against {forbidden:?}: use oer-tools-lab-client and a service operation"
         );
     }
-    assert!(closure(&lock, "oer-tool-lab-service").contains("oer-lab-board"));
+    assert!(closure(&lock, "oer-tools-lab-service").contains("oer-tools-lab-board"));
 }

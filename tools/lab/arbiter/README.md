@@ -1,7 +1,7 @@
 # Stand scheduling
 
-`oer-lab-arbiter` is the scheduling library of the LAB service
-(`oer-tool-lab-service`), the one owner of the stand's leases and hardware. It
+`oer-tools-lab-arbiter` is the scheduling library of the LAB service
+(`oer-tools-lab-service`), the one owner of the stand's leases and hardware. It
 decides who is granted what and when a resource may be granted again; it
 runs no hardware and reads no clock: the service passes the time, runs the
 recoveries the scheduler returns and reports each driver's confirmation.

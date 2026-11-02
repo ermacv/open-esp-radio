@@ -1,5 +1,5 @@
 [package]
-name = "oer-cooperate"
+name = "oer-portable-cooperate"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Executor-independent cooperative admission for timer-driven hardware futures"
 
 [dependencies]
-oer-time = { path = "../time" }
+oer-portable-time = { path = "../time" }
 
 [lints]
 workspace = true

@@ -14,7 +14,7 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     address::AddressFlags,
     frame::{AddressFields, AddressFieldsError, FrameType, ManagementSubtype},
 };

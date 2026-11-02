@@ -6,7 +6,7 @@
 //! chip's module ([`esp32s31`]) installs its [`chip::Chip`] and builds its
 //! scenarios on them; chip addresses, pins and reviewed decisions stay
 //! there. [`report`] holds the reviewer reports and the command line the
-//! `oer-tool-vendor-scenario-cli` binary runs.
+//! `oer-tools-vendor-scenario-cli` binary runs.
 
 #![forbid(unsafe_code)]
 pub mod artifacts;

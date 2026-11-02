@@ -6,15 +6,15 @@ use super::{
 };
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use core::{cell::Cell, future::poll_fn, task::Poll};
-use oer_bluetooth_le_port::{
+use oer_portable_time::Instant;
+use oer_protocols_bluetooth_le_port::{
     backend::{OwnedCommand, OwnedRequest, OwnedSession},
     *,
 };
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     BodyLoan, Child, Correlation, FifoPermitPool, Permit, PermitPool, PortContext, PortPhase, Root,
     Seat, SlotIdentity,
 };
-use oer_time::Instant;
 
 pub(crate) const CAPACITY: usize = 2;
 pub(crate) const SEATS: usize = 3;
@@ -131,9 +131,9 @@ impl<Id: SlotIdentity, X> Shared<Id, X> {
         &self,
         initial: &mut Option<Initial<Id>>,
         loan: &BodyLoan<'p, Id, Backend<Id, X>>,
-    ) -> Result<super::Resources<'p, Id>, oer_radio_port::SlotInitError> {
+    ) -> Result<super::Resources<'p, Id>, oer_protocols_radio_port::SlotInitError> {
         if self.attachment.is_none() {
-            return Err(oer_radio_port::SlotInitError::QueuesUnprepared);
+            return Err(oer_protocols_radio_port::SlotInitError::QueuesUnprepared);
         }
         Initial::lend(initial, loan)
     }
@@ -317,12 +317,13 @@ impl<Id: SlotIdentity> Initial<Id> {
     pub fn lend<'p, X>(
         initial: &mut Option<Self>,
         loan: &BodyLoan<'p, Id, Backend<Id, X>>,
-    ) -> Result<super::Resources<'p, Id>, oer_radio_port::SlotInitError> {
-        let initial = initial
-            .take()
-            .ok_or(oer_radio_port::SlotInitError::MissingResource(
-                "BLE initial resources",
-            ))?;
+    ) -> Result<super::Resources<'p, Id>, oer_protocols_radio_port::SlotInitError> {
+        let initial =
+            initial
+                .take()
+                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
+                    "BLE initial resources",
+                ))?;
         Ok(super::Resources {
             seats: initial.seats.map(|seat| loan.lend_seat(seat)),
             session: initial.idle.lend(loan),
@@ -360,7 +361,7 @@ impl<'p, Id: SlotIdentity, X> LePhase<'p, Path<Id>, X> for ModelPhase<'_, 'p, Id
             let owned = request.retain(&self.view.loan);
             // Poison consumes custody into durable backing even before admission.
             q.poisoned_requests.with(|requests| requests.push(owned));
-            return Err(oer_radio_port::Poisoned { cause: fault });
+            return Err(oer_protocols_radio_port::Poisoned { cause: fault });
         }
         let attachment = match q.attachment() {
             Ok(attachment) => attachment,
@@ -368,7 +369,7 @@ impl<'p, Id: SlotIdentity, X> LePhase<'p, Path<Id>, X> for ModelPhase<'_, 'p, Id
                 q.poisoned_requests
                     .with(|requests| requests.push(request.retain(&self.view.loan)));
                 q.poison(fault);
-                return Err(oer_radio_port::Poisoned { cause: fault });
+                return Err(oer_protocols_radio_port::Poisoned { cause: fault });
             }
         };
         let refusal = if request.id.is_backend_reserved() {

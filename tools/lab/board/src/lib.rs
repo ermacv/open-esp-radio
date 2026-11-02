@@ -3,8 +3,8 @@
 //! board with every operation on it (`stand`). What is known of a board
 //! apart from its hardware (reset paths, the ladder, ROM lines, the
 //! reference peers' line grammar) is the stand model's
-//! (`oer_lab_model::rom`, `oer_lab_model::peer_line`). `devices` finds boards by port, MAC and known
-//! chip. Only the LAB service (`oer-tool-lab-service`), the one owner of the
+//! (`oer_tools_lab_model::rom`, `oer_tools_lab_model::peer_line`). `devices` finds boards by port, MAC and known
+//! chip. Only the LAB service (`oer-tools-lab-service`), the one owner of the
 //! stand's hardware, runs these operations.
 //!
 //! A write goes through `image::write`,
@@ -29,6 +29,6 @@ pub mod image;
 
 pub use device::{Device, devices, find};
 pub use image::Receipt;
-pub use oer_lab_model::device_id::DeviceId;
+pub use oer_tools_lab_model::device_id::DeviceId;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

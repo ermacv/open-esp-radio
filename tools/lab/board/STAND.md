@@ -1,8 +1,8 @@
 # HIL board I/O
 
-`oer-lab-board` is everything the host does to a board of the stand. It
-encodes nothing (the image pipeline, `oer-image-build`, builds every bundle),
-leases nothing and journals nothing; the LAB service (`oer-tool-lab-service`),
+`oer-tools-lab-board` is everything the host does to a board of the stand. It
+encodes nothing (the image pipeline, `oer-tools-image-build`, builds every bundle),
+leases nothing and journals nothing; the LAB service (`oer-tools-lab-service`),
 its one caller, puts them together for its clients.
 
 | Module | Owns |
@@ -14,7 +14,7 @@ its one caller, puts them together for its clients.
 | `ProfiledBoard` | A `Board` whose chip has a profile (`Board::profiled`): `write(bundle, via)` (USB or JTAG), `start` as the chip profile's `[flash] start` says, its reset ladder's rungs, `reset(path)` through RTS, JTAG, download entry or power, a console opened by a reset and the proof of power loss; a board off USB is put into the ROM's download mode before a write |
 | `reset` | The USB Serial/JTAG openers and resets: the rungs of a board's reset ladder, which the LAB service takes after a lease and `cargo stand board reset` names |
 | `openocd` | The one OpenOCD: located in the ESP-IDF tools of the shared cache; reset, register reads without a reset, flash programming |
-| `power` | Hub port power through `uhubctl`: on, cycles and the proof of power loss; its report's parser is `oer_lab_model::hubs` |
+| `power` | Hub port power through `uhubctl`: on, cycles and the proof of power loss; its report's parser is `oer_tools_lab_model::hubs` |
 | `console` | The one serial line reader, bounded reads and the ROM's reset line |
 
 A board's start policy belongs to its chip profile: `reset` (the writer's
@@ -24,5 +24,5 @@ the image, an RTS reset on a board that does not reset by power; an RTS reset
 out of download mode starts an esp32c5's image with its USB console silent).
 
 ```console
-cargo test -p oer-lab-board
+cargo test -p oer-tools-lab-board
 ```

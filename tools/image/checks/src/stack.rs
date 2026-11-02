@@ -1,5 +1,5 @@
 //! The stack gate of an image build. One analysis of each ELF
-//! (`oer-image-stack`, with the pinned ROM ELF and its reviewed summaries)
+//! (`oer-tools-image-stack`, with the pinned ROM ELF and its reviewed summaries)
 //! bounds every stack the image runs on:
 //!
 //! - the runtime's interrupt stacks ([`crate::interrupts`]);
@@ -30,9 +30,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::rc::Rc;
 
-use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_image_stack::{
+use oer_tools_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_image_stack::{
     Analysis, Bound, DebugMetadata, Dwarf, Function, Reason, Resolutions, Summary, analyze,
     image_resolutions, parse_summaries, read_debug, stack_sizes,
 };
@@ -41,8 +41,8 @@ use crate::stack::budget::{Budget, LIMITS};
 
 pub use coverage::{Coverage, CoverageCategory, CoveragePolicy, CoverageReview};
 #[cfg(test)]
-use oer_chip_profile::policy::TaskStack;
-use oer_chip_profile::policy::{StackPolicy, Storage};
+use oer_tools_chip_profile::policy::TaskStack;
+use oer_tools_chip_profile::policy::{StackPolicy, Storage};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -51,14 +51,14 @@ use crate::stack::contract::Contract;
 /// The assumptions a check admits in a bound, each by name: a bound resting
 /// on one is conditional and passes with a warning; any other fails. Each
 /// leaves this list in the pull request that proves it.
-pub const ADMITTED: &[oer_image_stack::Assumption] =
-    &[oer_image_stack::Assumption::ExecutorInvariant];
+pub const ADMITTED: &[oer_tools_image_stack::Assumption] =
+    &[oer_tools_image_stack::Assumption::ExecutorInvariant];
 
 /// What a bound with a number rests on, by short name: each assumption, and
 /// `nesting` where a handler may lower the interrupt level. `None` when it
 /// rests on nothing: the bound is proven.
 pub fn conditions(
-    assumptions: &BTreeSet<oer_image_stack::Assumption>,
+    assumptions: &BTreeSet<oer_tools_image_stack::Assumption>,
     nesting: bool,
 ) -> Option<String> {
     let names: Vec<&str> = assumptions
@@ -73,7 +73,7 @@ pub fn conditions(
 /// `conditional (…)` naming what it rests on, `partial` without a number.
 pub fn bound_state(
     bytes: Option<u64>,
-    assumptions: &BTreeSet<oer_image_stack::Assumption>,
+    assumptions: &BTreeSet<oer_tools_image_stack::Assumption>,
     nesting: bool,
 ) -> String {
     match (bytes, conditions(assumptions, nesting)) {
@@ -119,7 +119,9 @@ pub fn audit_bootstrap_stack(
     let audit = StackAudit::of(
         image,
         policy,
-        &[oer_chip_profile::policy::StackRoot::bootstrap(bootstrap)],
+        &[oer_tools_chip_profile::policy::StackRoot::bootstrap(
+            bootstrap,
+        )],
     )?;
     std::fs::write(output.join(BOOTSTRAP_REPORT), audit.render())?;
     std::fs::write(
@@ -132,7 +134,7 @@ pub fn audit_bootstrap_stack(
 /// One image's analysis with its pinned ROM, and the facts outside the
 /// machine code every stack bound resolves indirect sites with.
 pub struct Image {
-    pub traps: oer_image_stack::TrapFact,
+    pub traps: oer_tools_image_stack::TrapFact,
     pub elf: Rc<[u8]>,
     pub analysis: Analysis,
     /// The image's own functions.
@@ -146,7 +148,7 @@ pub struct Image {
     /// The chip's address map and interrupt contract, when it names them.
     pub contract: Option<Contract>,
     /// What the analysis used of its [`budget`].
-    pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
+    pub resources: Box<oer_tools_analysis_riscv_model::AnalysisResources>,
     /// Retained analysis and ELF allocations, reserved beside bound evidence.
     pub retained_bytes: u64,
     /// The family's selectors, which apply even when an image supplies its
@@ -157,12 +159,16 @@ pub struct Image {
 impl Image {
     /// The analysis of `elf` with the chip's pinned ROM ELF and its
     /// reviewed summaries (`[rom]` of the chip profile).
-    pub fn read(root: &Path, profile: &oer_chip_profile::Profile, elf: &Path) -> Result<Self> {
+    pub fn read(
+        root: &Path,
+        profile: &oer_tools_chip_profile::Profile,
+        elf: &Path,
+    ) -> Result<Self> {
         Self::read_with_inputs(
             root,
             profile,
             elf,
-            &mut oer_os_durable::inputs::Inputs::default(),
+            &mut oer_tools_os_durable::inputs::Inputs::default(),
         )
     }
 
@@ -170,9 +176,9 @@ impl Image {
     /// after the final link, since placement can change its first-pass bytes.
     pub fn read_with_inputs(
         root: &Path,
-        profile: &oer_chip_profile::Profile,
+        profile: &oer_tools_chip_profile::Profile,
         elf: &Path,
-        inputs: &mut oer_os_durable::inputs::Inputs,
+        inputs: &mut oer_tools_os_durable::inputs::Inputs,
     ) -> Result<Self> {
         let elf = std::fs::read(elf)
             .map_err(|error| format!("cannot read {}: {error}", elf.display()))?;
@@ -182,22 +188,22 @@ impl Image {
     /// [`Self::read`] of the ELF bytes `elf`.
     pub fn of_bytes(
         root: &Path,
-        profile: &oer_chip_profile::Profile,
+        profile: &oer_tools_chip_profile::Profile,
         elf: Vec<u8>,
     ) -> Result<Self> {
         Self::of_bytes_with_inputs(
             root,
             profile,
             elf,
-            &mut oer_os_durable::inputs::Inputs::default(),
+            &mut oer_tools_os_durable::inputs::Inputs::default(),
         )
     }
 
     fn of_bytes_with_inputs(
         root: &Path,
-        profile: &oer_chip_profile::Profile,
+        profile: &oer_tools_chip_profile::Profile,
         elf: Vec<u8>,
-        inputs: &mut oer_os_durable::inputs::Inputs,
+        inputs: &mut oer_tools_os_durable::inputs::Inputs,
     ) -> Result<Self> {
         let rom = profile.facts.rom.as_ref().ok_or_else(|| {
             format!(
@@ -205,7 +211,7 @@ impl Image {
                 profile.facts.id
             )
         })?;
-        let rom_path = oer_pins_artifacts::artifacts::ensure_with_inputs(
+        let rom_path = oer_tools_pins_artifacts::artifacts::ensure_with_inputs(
             root,
             &profile.facts.id,
             &rom.elf,
@@ -252,7 +258,7 @@ impl Image {
         let companions = companions
             .iter()
             .map(|companion| ImageFacts::new(companion, &[], &memory, &mut control))
-            .collect::<oer_analysis_riscv_model::Result<Vec<_>>>()?;
+            .collect::<oer_tools_analysis_riscv_model::Result<Vec<_>>>()?;
         let companions: Vec<&ImageFacts<'_>> = companions.iter().collect();
         // What the image keeps of the analysis, admitted while it counts
         // against the budget.
@@ -289,7 +295,7 @@ impl Image {
                     preliminary.insert(address, function.limit_events);
                 }
             }
-            oer_image_stack::prove_traps(
+            oer_tools_image_stack::prove_traps(
                 &facts,
                 &unknown,
                 &entries,
@@ -298,15 +304,15 @@ impl Image {
                 &mut control,
             )?
         } else {
-            oer_image_stack::TrapFact {
-                failure: Some(oer_image_stack::TrapFailure::Entry {
+            oer_tools_image_stack::TrapFact {
+                failure: Some(oer_tools_image_stack::TrapFailure::Entry {
                     hart: None,
                     entry: None,
                 }),
                 ..Default::default()
             }
         };
-        let analysis = oer_image_stack::analyze_with_traps(
+        let analysis = oer_tools_image_stack::analyze_with_traps(
             &facts,
             &companions,
             summaries,
@@ -326,7 +332,7 @@ impl Image {
             )?;
             keep.push(&mut functions, function.clone(), &mut control)?;
             if let Some(name) = function.names.first() {
-                let name = keep.string(&oer_analysis_elf::demangle(name), &mut control)?;
+                let name = keep.string(&oer_tools_analysis_elf::demangle(name), &mut control)?;
                 keep.insert(&mut names, function.address, name, &mut control)?;
             }
         }
@@ -350,10 +356,10 @@ impl Image {
             retained_bytes: 0,
             observed_functions: Vec::new(),
         };
-        let mut limited = oer_analysis_riscv_model::AnalysisLimited::default();
+        let mut limited = oer_tools_analysis_riscv_model::AnalysisLimited::default();
         for (&address, function) in &image.analysis.functions {
             let first = preliminary.remove(&address).unwrap_or_default();
-            let limits = oer_analysis_riscv_model::FunctionLimits::value_events([
+            let limits = oer_tools_analysis_riscv_model::FunctionLimits::value_events([
                 first[0] + function.limit_events[0],
                 first[1] + function.limit_events[1],
             ]);
@@ -423,22 +429,25 @@ impl Image {
             .names
             .get(&start)
             .cloned()
-            .unwrap_or_else(|| oer_analysis_elf::demangle(&facts.function.label()));
+            .unwrap_or_else(|| oer_tools_analysis_elf::demangle(&facts.function.label()));
         Some((name, address - start))
     }
 
     /// The linked bounds of `storage`, or `None` when the image links
     /// none of its symbols.
-    pub fn storage(&self, storage: Storage<'_>) -> Result<Option<oer_analysis_elf::StorageBounds>> {
-        let file = oer_analysis_elf::Elf::parse(&self.elf)?;
+    pub fn storage(
+        &self,
+        storage: Storage<'_>,
+    ) -> Result<Option<oer_tools_analysis_elf::StorageBounds>> {
+        let file = oer_tools_analysis_elf::Elf::parse(&self.elf)?;
         let bounds = match storage {
-            Storage::Symbol(name) => oer_analysis_elf::StorageBounds::symbol(&file, name)?,
+            Storage::Symbol(name) => oer_tools_analysis_elf::StorageBounds::symbol(&file, name)?,
             Storage::Range { bottom, top } => {
-                oer_analysis_elf::StorageBounds::range(&file, bottom, top)?
+                oer_tools_analysis_elf::StorageBounds::range(&file, bottom, top)?
             }
         };
         Ok(bounds
-            .map(oer_analysis_elf::StorageBounds::nonempty)
+            .map(oer_tools_analysis_elf::StorageBounds::nonempty)
             .transpose()?)
     }
 }
@@ -447,11 +456,11 @@ impl Image {
 #[derive(Debug)]
 pub struct StackAudit {
     pub expression_limited_functions: usize,
-    pub traps: oer_image_stack::TrapFact,
+    pub traps: oer_tools_image_stack::TrapFact,
     pub coverage: Coverage,
     pub stacks: Vec<StackBound>,
     /// What the image's analysis used of its [`budget`].
-    pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
+    pub resources: Box<oer_tools_analysis_riscv_model::AnalysisResources>,
     pub witness_memory_peak: u64,
     /// Independent task roots, reported without changing the stack gate.
     pub task_bounds: Vec<Bound>,
@@ -512,7 +521,7 @@ impl StackAudit {
     pub(crate) fn of(
         image: &Image,
         policy: &StackPolicy,
-        stacks: &[oer_chip_profile::policy::StackRoot<'_>],
+        stacks: &[oer_tools_chip_profile::policy::StackRoot<'_>],
     ) -> Result<Self> {
         let coverage = CoveragePolicy::load(policy.stacks()?.coverage_policy)?
             .coverage(&image.functions, &image.stack_sizes)?;
@@ -701,8 +710,8 @@ impl StackAudit {
         if self.expression_limited_functions != 0 {
             resources
                 .limited
-                .result(oer_analysis_riscv_model::LimitReason::LocalBudget(
-                    oer_analysis_riscv_model::LocalBudgetScope::FunctionExpressions,
+                .result(oer_tools_analysis_riscv_model::LimitReason::LocalBudget(
+                    oer_tools_analysis_riscv_model::LocalBudgetScope::FunctionExpressions,
                 ));
         }
         let mut out = budget::header(&resources, resources.usage.peak_admitted_bytes);

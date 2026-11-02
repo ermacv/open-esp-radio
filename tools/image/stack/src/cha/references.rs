@@ -1,11 +1,11 @@
 //! Narrow adapter from prepared image observations to the shared ISA normalizer.
 //! No ELF/symbol walk and no private PC-relative pairing algorithm live here.
-use oer_analysis_elf::Target;
-use oer_analysis_elf::rv32::Role;
-use oer_analysis_riscv_analysis::PreparedReferences;
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_elf::Target;
+use oer_tools_analysis_elf::rv32::Role;
+use oer_tools_analysis_riscv_analysis::PreparedReferences;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::sync::Arc;
 
 type Visitor<'a> = dyn FnMut(
@@ -136,7 +136,9 @@ pub(super) fn visit(
                 PreparedReferences::new(&raw, section as u32, &RiscvDecoder, memory, control)?;
             for (index, raw) in references.iter().enumerate() {
                 control.checkpoint(1)?;
-                if oer_analysis_elf::rv32::kind(raw.relocation_type).role == Role::PcRelativeLow {
+                if oer_tools_analysis_elf::rv32::kind(raw.relocation_type).role
+                    == Role::PcRelativeLow
+                {
                     let normalized = references.normalized(index);
                     let high = references
                         .pair(index)

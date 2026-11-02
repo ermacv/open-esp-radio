@@ -2,11 +2,11 @@ extern crate std;
 
 use self::std::boxed::Box;
 use super::*;
-use oer_time::settle::{Settle, SettleLimit};
-use oer_time::{Clock, Duration, Instant};
+use oer_portable_time::settle::{Settle, SettleLimit};
+use oer_portable_time::{Clock, Duration, Instant};
 
-fn frozen_settle() -> Settle<'static, oer_time_virtual::VirtualClock> {
-    let clock = Box::leak(Box::new(oer_time_virtual::VirtualClock::new()));
+fn frozen_settle() -> Settle<'static, oer_portable_time_virtual::VirtualClock> {
+    let clock = Box::leak(Box::new(oer_portable_time_virtual::VirtualClock::new()));
     Settle::new(SettleLimit::new(Duration::from_micros(20)).unwrap(), clock)
 }
 use crate::ieee80211::dma::{rx_dma::RxDmaBinding, space::HostDma};
@@ -281,7 +281,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
         .expect("completed rotated unit")
         .detach_single(&mut mmio)
         .expect("rotated buffer detaches");
-    let pool = oer_memory::ExternalRxHandoffPool::<16, 1>::new();
+    let pool = oer_portable_memory::ExternalRxHandoffPool::<16, 1>::new();
     let radio = pool
         .try_claim_radio(detached.into_buffer(), 0)
         .map_err(drop)
@@ -292,7 +292,7 @@ fn completed_ownership_follows_a_permuted_descriptor_buffer_binding() {
             radio
                 .republish(
                     0,
-                    oer_memory::FrameLen::new(length).expect("test frame length"),
+                    oer_portable_memory::FrameLen::new(length).expect("test frame length"),
                 )
                 .ok()
                 .expect("valid test range"),
@@ -347,7 +347,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
         .expect("completed unit")
         .detach_single(&mut mmio)
         .expect("single descriptor detaches");
-    let pool = oer_memory::ExternalRxHandoffPool::<16, 1>::new();
+    let pool = oer_portable_memory::ExternalRxHandoffPool::<16, 1>::new();
     let radio = pool
         .try_claim_radio(detached.into_buffer(), 0)
         .map_err(drop)
@@ -358,7 +358,7 @@ fn detached_buffer_cannot_rearm_until_the_network_lease_returns() {
             radio
                 .republish(
                     0,
-                    oer_memory::FrameLen::new(length).expect("test frame length"),
+                    oer_portable_memory::FrameLen::new(length).expect("test frame length"),
                 )
                 .ok()
                 .expect("valid test range"),
@@ -416,7 +416,7 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
         .expect("completed unit")
         .detach_single(&mut mmio)
         .expect("single descriptor detaches");
-    let pool = oer_memory::ExternalRxHandoffPool::<16, 1>::new();
+    let pool = oer_portable_memory::ExternalRxHandoffPool::<16, 1>::new();
     let radio = pool
         .try_claim_radio(detached.into_buffer(), 0)
         .map_err(drop)
@@ -427,7 +427,7 @@ fn role_neutral_prefix_recycle_normalizes_a_returned_staged_buffer() {
             radio
                 .republish(
                     0,
-                    oer_memory::FrameLen::new(length).expect("test frame length"),
+                    oer_portable_memory::FrameLen::new(length).expect("test frame length"),
                 )
                 .ok()
                 .expect("valid test range"),
@@ -490,7 +490,7 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
         .expect("second completed unit")
         .detach_single(&mut mmio)
         .expect("second single descriptor");
-    let pool = oer_memory::ExternalRxHandoffPool::<16, 2>::new();
+    let pool = oer_portable_memory::ExternalRxHandoffPool::<16, 2>::new();
     let first = pool
         .try_claim_radio(first.into_buffer(), 0)
         .map_err(drop)
@@ -501,7 +501,7 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
             first
                 .republish(
                     0,
-                    oer_memory::FrameLen::new(first_length).expect("test frame length"),
+                    oer_portable_memory::FrameLen::new(first_length).expect("test frame length"),
                 )
                 .ok()
                 .expect("valid test range"),
@@ -517,7 +517,7 @@ fn released_dma_buffers_rearm_only_as_a_contiguous_ring_prefix() {
             second
                 .republish(
                     0,
-                    oer_memory::FrameLen::new(second_length).expect("test frame length"),
+                    oer_portable_memory::FrameLen::new(second_length).expect("test frame length"),
                 )
                 .ok()
                 .expect("valid test range"),
@@ -1556,7 +1556,7 @@ fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
 
 #[test]
 fn zeroed_arena_is_the_reusable_identity_bound_arena_new_builds() {
-    let zeroed = oer_memory::zeroed::zeroed::<RxDmaStorage<4, 16, 16>>();
+    let zeroed = oer_portable_memory::zeroed::zeroed::<RxDmaStorage<4, 16, 16>>();
     let new = RxDmaStorage::<4, 16, 16, HostDma>::new();
     assert_eq!(zeroed.lifecycle_state(), RxDmaArenaState::Reusable);
     assert_eq!(zeroed.lifecycle_state(), new.lifecycle_state());
@@ -2205,7 +2205,7 @@ fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_relea
     );
     assert_eq!(ring.walker.descriptor_base, ring.reserved_address());
     ring.walker.clear_operations();
-    let pool = oer_memory::ExternalRxHandoffPool::<16, COUNT>::new();
+    let pool = oer_portable_memory::ExternalRxHandoffPool::<16, COUNT>::new();
 
     // The epoch's first frame lands in R.
     assert!(ring.land(4, true));
@@ -2235,7 +2235,7 @@ fn base_names_only_the_reserved_descriptor_once_per_epoch_across_full_ring_relea
                     radio
                         .republish(
                             0,
-                            oer_memory::FrameLen::new(length).expect("test frame length"),
+                            oer_portable_memory::FrameLen::new(length).expect("test frame length"),
                         )
                         .ok()
                         .expect("valid test range"),
@@ -2774,8 +2774,8 @@ impl<const COUNT: usize> Walked<COUNT> {
     /// Take and detach every completed unit, as staging does.
     fn detach_all(
         &mut self,
-        pool: &'static oer_memory::ExternalRxHandoffPool<16, COUNT>,
-    ) -> std::vec::Vec<oer_memory::ExternalRxNetworkLease<'static, 16>> {
+        pool: &'static oer_portable_memory::ExternalRxHandoffPool<16, COUNT>,
+    ) -> std::vec::Vec<oer_portable_memory::ExternalRxNetworkLease<'static, 16>> {
         let mut leases = std::vec::Vec::new();
         let frozen = self.live.freeze_cursor(&mut self.walker).unwrap();
         while let Some(unit) = self
@@ -2794,7 +2794,7 @@ impl<const COUNT: usize> Walked<COUNT> {
                     radio
                         .republish(
                             0,
-                            oer_memory::FrameLen::new(length).expect("test frame length"),
+                            oer_portable_memory::FrameLen::new(length).expect("test frame length"),
                         )
                         .ok()
                         .expect("valid test range"),
@@ -2849,9 +2849,10 @@ fn rearm_restores_the_owner_bit_and_a_doorbell_still_follows_a_detached_last() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
-    let pool = Box::leak(Box::new(
-        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let leases = ring.detach_all(pool);
     assert_eq!(leases.len(), COUNT);
     // Every detached descriptor, LAST (the accepted tail) included, carries
@@ -2891,9 +2892,10 @@ fn a_frozen_cursor_naming_a_detached_descriptor_fails_closed_and_is_counted() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
-    let pool = Box::leak(Box::new(
-        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let leases = ring.detach_all(pool);
     assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
     // The walker stopped on the barrier of a held lease's descriptor.
@@ -2916,9 +2918,10 @@ fn a_settled_doorbell_leaving_next_on_a_detached_descriptor_fails_closed() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
-    let pool = Box::leak(Box::new(
-        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let mut leases = ring.detach_all(pool);
     // Every lease but LAST's returns; LAST stays held, detached.
     let held = leases.pop().expect("LAST's lease");
@@ -2973,9 +2976,10 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
         .unwrap();
     // The LAST-bounded frontier stops at LAST: descriptor 2 is not in it.
     assert_eq!((frontier.unit_count, frontier.descriptor_count), (2, 2));
-    let pool = Box::leak(Box::new(
-        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let mut leases = std::vec::Vec::new();
     let mut remaining = frontier.descriptor_count;
     while remaining != 0 {
@@ -2996,7 +3000,7 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
                 radio
                     .republish(
                         0,
-                        oer_memory::FrameLen::new(length).expect("test frame length"),
+                        oer_portable_memory::FrameLen::new(length).expect("test frame length"),
                     )
                     .ok()
                     .expect("valid test range"),
@@ -3059,9 +3063,10 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
         .completed_unit_frontier_through_cursor(&ring.live, cursor)
         .unwrap();
     assert_eq!(frontier.descriptor_count, COUNT);
-    let pool = Box::leak(Box::new(
-        oer_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let leases = ring.detach_all(pool);
     assert_eq!(leases.len(), COUNT);
     // LAST, the accepted tail, is detached; NEXT = 0 names no descriptor.

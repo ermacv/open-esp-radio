@@ -1,5 +1,5 @@
 use crate::{support::*, *};
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 #[test]
 fn mac_delay_slot_reproduces_vendor_modulo_eleven() {
@@ -29,7 +29,7 @@ fn cold_start_prepares_mac_without_opening_its_core() {
 
     let station = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
     let access_point = [0x02, 0xaa, 0xbb, 0xcc, 0xdd, 0xee];
-    let clock = oer_time_virtual::VirtualClock::default();
+    let clock = oer_portable_time_virtual::VirtualClock::default();
     let outcome = run(
         &clock,
         initialize_wifi_mac(
@@ -146,7 +146,7 @@ fn cold_mac_handshake_resamples_every_ten_microseconds_until_ready() {
         cold_handshake_ready_after: Some(2),
         ..MockMmio::default()
     };
-    let clock = oer_time_virtual::VirtualClock::default();
+    let clock = oer_portable_time_virtual::VirtualClock::default();
     let start = clock.now();
 
     let outcome = run(
@@ -168,7 +168,7 @@ fn cold_mac_handshake_resamples_every_ten_microseconds_until_ready() {
     assert_eq!(outcome.handshake_observations, 3);
     assert_eq!(
         clock.now().saturating_duration_since(start),
-        oer_time::Duration::from_micros(20)
+        oer_portable_time::Duration::from_micros(20)
     );
 }
 
@@ -176,8 +176,8 @@ fn cold_mac_handshake_resamples_every_ten_microseconds_until_ready() {
 fn cold_mac_handshake_timeout_stops_mac_initialization() {
     let mut platform = MockPlatform::default();
     let mut mmio = MockMmio::default();
-    let clock = oer_time_virtual::VirtualClock::default();
-    let deadline = oer_time::Duration::from_micros(30);
+    let clock = oer_portable_time_virtual::VirtualClock::default();
+    let deadline = oer_portable_time::Duration::from_micros(30);
 
     let error = run(
         &clock,

@@ -6,7 +6,7 @@
 )]
 use super::*;
 use crate::frames::RsnTxFrame;
-use oer_ieee80211_wire::eapol::{
+use oer_protocols_ieee80211_wire::eapol::{
     EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN, EAPOL_PACKET_TYPE_KEY, RSN_KEY_DESCRIPTOR_TYPE,
 };
 

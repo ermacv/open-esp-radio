@@ -5,7 +5,7 @@ use object::{
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},

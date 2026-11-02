@@ -32,12 +32,12 @@
 //! [`CacheCounters::start`] turns the trace on, clears the selected buses'
 //! counters and then enables them.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     cache::{self, CacheAccessCounters, CacheGeometry},
     instances,
     ownership::CacheCounterPeripherals,
 };
-use oer_mmio::{Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -145,13 +145,13 @@ impl CacheCounters {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> CacheCounters<oer_mmio::Host<'a>> {
+impl<'a> CacheCounters<oer_portable_mmio::Host<'a>> {
     /// The counter and geometry words over two host memories, each from
     /// the instance's base.
     pub fn host(
         counters: &'a mut [u32],
         geometry: &'a mut [u32],
-    ) -> Result<Self, oer_mmio::HostTooSmall> {
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             counters: CacheAccessCounters::host(counters)?,
             geometry: CacheGeometry::host(geometry)?,

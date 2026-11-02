@@ -1,11 +1,11 @@
 //! Neutral Ethernet device integration; Xarxa packet owners stay in this adapter.
 
 use crate::OwnedNetworkTxFrame;
-use oer_network_port::{
+use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, LentParts,
     NetDevice, ReceivedFrame, TransmitRefused,
 };
-use oer_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 
 impl EthernetFrame for OwnedNetworkTxFrame<'_> {
     fn view(&self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
@@ -47,7 +47,9 @@ impl OwnedNetworkTxFrame<'_> {
                 }
                 Err(refused) => Err(refused.reason),
             },
-            Err(reason) => Err(oer_network_port::TransmitError::InvalidLength(reason)),
+            Err(reason) => Err(oer_protocols_network_port::TransmitError::InvalidLength(
+                reason,
+            )),
         };
         result.map_err(|reason| TransmitRefused {
             frame: self,
@@ -160,19 +162,19 @@ impl crate::OwnedLinkController<'_> {
     pub fn follow_device(
         &mut self,
         device: &impl NetDevice,
-        previous: &mut oer_network_port::LinkSnapshot,
+        previous: &mut oer_protocols_network_port::LinkSnapshot,
     ) {
         let current = device.link();
         if current == *previous {
             return;
         }
-        if current.state == oer_network_port::LinkState::Up
-            && previous.state == oer_network_port::LinkState::Up
+        if current.state == oer_protocols_network_port::LinkState::Up
+            && previous.state == oer_protocols_network_port::LinkState::Up
             && current.epoch != previous.epoch
         {
             self.set_link_up(false);
         }
-        self.set_link_up(current.state == oer_network_port::LinkState::Up);
+        self.set_link_up(current.state == oer_protocols_network_port::LinkState::Up);
         *previous = current;
     }
 }
@@ -192,7 +194,7 @@ mod tests;
 /// waits. Observations are callbacks owned by the image, never counters here.
 pub struct EthernetBridge<
     'r,
-    X: oer_memory::ExecutionContext,
+    X: oer_portable_memory::ExecutionContext,
     const RX: usize,
     const TX: usize,
     D: NetDevice,
@@ -201,7 +203,7 @@ pub struct EthernetBridge<
     radio: crate::OwnedNetworkRunner<'r, X, RX, TX>,
     device: D,
     lent: Option<&'static LentSlots<Lent<D>, LENT>>,
-    link: oer_network_port::LinkSnapshot,
+    link: oer_protocols_network_port::LinkSnapshot,
     pending: Option<(u64, OwnedNetworkTxFrame<'r>)>,
 }
 
@@ -210,7 +212,7 @@ pub type Lent<D> = <<D as NetDevice>::RxFrame as ReceivedFrame>::Storage;
 
 impl<
     'r,
-    X: oer_memory::ExecutionContext,
+    X: oer_portable_memory::ExecutionContext,
     const RX: usize,
     const TX: usize,
     D: NetDevice,
@@ -228,11 +230,11 @@ impl<
             radio,
             device,
             lent,
-            link: oer_network_port::LinkSnapshot::DOWN,
+            link: oer_protocols_network_port::LinkSnapshot::DOWN,
             pending: None,
         }
     }
-    pub(crate) const fn link(&self) -> oer_network_port::LinkSnapshot {
+    pub(crate) const fn link(&self) -> oer_protocols_network_port::LinkSnapshot {
         self.link
     }
 
@@ -364,9 +366,9 @@ impl<
         match packet.transmit_to(&mut self.device, &mut observe) {
             Ok(()) => Ok(true),
             Err(refused) => match refused.reason {
-                oer_network_port::TransmitError::InvalidLength(_) => Ok(true),
-                oer_network_port::TransmitError::QueueFull
-                | oer_network_port::TransmitError::LinkDown => {
+                oer_protocols_network_port::TransmitError::InvalidLength(_) => Ok(true),
+                oer_protocols_network_port::TransmitError::QueueFull
+                | oer_protocols_network_port::TransmitError::LinkDown => {
                     self.pending = Some((epoch, refused.frame));
                     // Readiness is only an observation. Rearm after a refusal;
                     // if credit is already back, schedule another bounded turn.

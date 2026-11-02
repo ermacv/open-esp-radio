@@ -1,7 +1,7 @@
 #![no_std]
-use oer_ieee80211_core_arbiter::{Arbiter, ArbiterPolicy};
-use oer_ieee80211_contracts_port::{GateOpen, Ieee80211Capabilities, SupportedChannel};
-use oer_time::Duration;
+use oer_protocols_ieee80211_core_arbiter::{Arbiter, ArbiterPolicy};
+use oer_protocols_ieee80211_contracts_port::{GateOpen, Ieee80211Capabilities, SupportedChannel};
+use oer_portable_time::Duration;
 
 pub fn construct<'id, K: Ieee80211Capabilities>(
     authority: ArbiterAuthority<'id>,
@@ -18,4 +18,4 @@ pub fn construct<'id, K: Ieee80211Capabilities>(
     );
 }
 
-use oer_ieee80211_contracts_port::ArbiterAuthority;
+use oer_protocols_ieee80211_contracts_port::ArbiterAuthority;

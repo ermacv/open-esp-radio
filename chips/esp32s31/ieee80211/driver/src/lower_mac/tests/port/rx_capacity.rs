@@ -1,7 +1,7 @@
 //! The real driver and body tasks on one executor, the driver's task polled
 //! first when both are ready.
 use super::*;
-use oer_time::Duration;
+use oer_portable_time::Duration;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},

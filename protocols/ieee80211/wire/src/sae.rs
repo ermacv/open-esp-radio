@@ -1,7 +1,7 @@
 //! SAE Authentication frame bodies: the Commit and Confirm fields as byte
 //! values and the extension elements an SAE exchange carries. What a scalar,
 //! an element or a confirm value means is the cryptography of
-//! `oer-ieee80211-core-security-rsn`.
+//! `oer-protocols-ieee80211-core-security-rsn`.
 //!
 //! SOURCE: IEEE Std 802.11-2020, 9.3.3.12, Table 9-41 (Authentication frame
 //! body), 12.4.7.4 (Encoding and decoding of SAE Commit messages) and 12.4.7.5
@@ -12,7 +12,7 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use oer_wire::{Reader, Writer};
+use oer_portable_wire::{Reader, Writer};
 
 /// Element ID that introduces an Element ID Extension.
 ///
@@ -167,7 +167,7 @@ impl SaeCommitValues {
             .and_then(|length| length.checked_add(if container.is_some() { 3 } else { 0 }))
             .ok_or(SaeBodyError::Malformed)?;
         let mut writer = Writer::new(output.get_mut(..length).ok_or(SaeBodyError::Malformed)?);
-        let mut write = || -> Result<(), oer_wire::Error> {
+        let mut write = || -> Result<(), oer_portable_wire::Error> {
             writer.u16_le(SAE_GROUP_P256)?;
             if !h2e {
                 writer.write(token)?;

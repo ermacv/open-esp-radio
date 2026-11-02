@@ -1,5 +1,5 @@
 //! Primary-channel scheduler images and execution timing for advertising.
-use oer_esp32s31_hal::bluetooth::engine::{
+use oer_chips_esp32s31_hal::bluetooth::engine::{
     AdvertisingEventImage, AdvertisingItemImage, LegacyAdvertisingPrimaryChannel,
     SchedulerEventPriority,
 };

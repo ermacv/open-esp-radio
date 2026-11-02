@@ -1,11 +1,11 @@
 //! One corpus producer for the shared result/argument port, in two analyses.
 use super::*;
 use crate::registers::{CallKey, CallLinks, CallSites, Callees, Calls};
-use oer_analysis_blobray_analysis::registers::{ArgumentProgram, ArgumentSource};
-use oer_analysis_blobray_artifacts::{MemberIndex, PreparedObject, prepare_captured};
-use oer_analysis_elf::classify as elf;
-use oer_analysis_riscv_analysis::{AnalysisSummary, PreparedReferences, ProvenTables};
-use oer_analysis_riscv_program::{
+use oer_tools_analysis_blobray_analysis::registers::{ArgumentProgram, ArgumentSource};
+use oer_tools_analysis_blobray_artifacts::{MemberIndex, PreparedObject, prepare_captured};
+use oer_tools_analysis_elf::classify as elf;
+use oer_tools_analysis_riscv_analysis::{AnalysisSummary, PreparedReferences, ProvenTables};
+use oer_tools_analysis_riscv_program::{
     facts::ImageFacts,
     tables::{ImageTables, ObjectTables},
 };
@@ -1430,7 +1430,7 @@ mod tests {
         };
         let links = CallLinks::new(&facts, &function, &catalog, memory, &mut setup)?;
         let mut conflicts = AdmittedVec::new(memory);
-        let decoder = oer_analysis_riscv_lift::RiscvDecoder;
+        let decoder = oer_tools_analysis_riscv_lift::RiscvDecoder;
         if auditing {
             audit(
                 &facts,

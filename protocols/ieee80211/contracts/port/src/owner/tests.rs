@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::frame::MacHeader;
+use oer_protocols_ieee80211_wire::frame::MacHeader;
 
 const A: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const B: [u8; 6] = [2, 0, 0, 0, 0, 2];

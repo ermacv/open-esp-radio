@@ -83,7 +83,7 @@ pub enum ScanRecordError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanRecord {
     ssid: [u8; 32],
-    ssid_len: oer_wire::PrefixLength<32>,
+    ssid_len: oer_portable_wire::PrefixLength<32>,
     /// Individual infrastructure BSS address, validated while parsing.
     pub bssid: Bssid,
     /// The DS Parameter Set's Current Channel; `None` when the frame carries
@@ -101,21 +101,21 @@ pub struct ScanRecord {
     pub timestamp: crate::tsf::TsfTimestamp,
     pub beacon_interval_tu: u16,
     supported_rates: [u8; 8],
-    supported_rates_len: oer_wire::PrefixLength<8>,
+    supported_rates_len: oer_portable_wire::PrefixLength<8>,
     extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
-    extended_supported_rates_len: oer_wire::PrefixLength<EXTENDED_RATES_CAPACITY>,
+    extended_supported_rates_len: oer_portable_wire::PrefixLength<EXTENDED_RATES_CAPACITY>,
     ht_capability_ie: Option<[u8; HT_CAPABILITY_IE_LEN]>,
     ht_operation_ie: Option<[u8; HT_OPERATION_IE_LEN]>,
     he_capability_ie: [u8; HE_CAPABILITY_IE_CAPACITY],
-    he_capability_ie_len: oer_wire::PrefixLength<HE_CAPABILITY_IE_CAPACITY>,
+    he_capability_ie_len: oer_portable_wire::PrefixLength<HE_CAPABILITY_IE_CAPACITY>,
     he_operation_ie: [u8; HE_OPERATION_IE_CAPACITY],
-    he_operation_ie_len: oer_wire::PrefixLength<HE_OPERATION_IE_CAPACITY>,
+    he_operation_ie_len: oer_portable_wire::PrefixLength<HE_OPERATION_IE_CAPACITY>,
     wmm_ie: [u8; WMM_IE_CAPACITY],
-    wmm_ie_len: oer_wire::PrefixLength<WMM_IE_CAPACITY>,
+    wmm_ie_len: oer_portable_wire::PrefixLength<WMM_IE_CAPACITY>,
     rsn_ie: [u8; RSN_IE_CAPACITY],
-    rsn_ie_len: oer_wire::PrefixLength<RSN_IE_CAPACITY>,
+    rsn_ie_len: oer_portable_wire::PrefixLength<RSN_IE_CAPACITY>,
     rsnxe: [u8; RSNXE_CAPACITY],
-    rsnxe_len: oer_wire::PrefixLength<RSNXE_CAPACITY>,
+    rsnxe_len: oer_portable_wire::PrefixLength<RSNXE_CAPACITY>,
 }
 
 impl ScanRecord {
@@ -124,7 +124,7 @@ impl ScanRecord {
     pub const fn new(bssid: Bssid) -> Self {
         Self {
             ssid: [0; 32],
-            ssid_len: oer_wire::PrefixLength::ZERO,
+            ssid_len: oer_portable_wire::PrefixLength::ZERO,
             bssid,
             ds_channel: None,
             privacy: false,
@@ -136,21 +136,21 @@ impl ScanRecord {
             timestamp: crate::tsf::TsfTimestamp::from_micros(0),
             beacon_interval_tu: 0,
             supported_rates: [0; 8],
-            supported_rates_len: oer_wire::PrefixLength::ZERO,
+            supported_rates_len: oer_portable_wire::PrefixLength::ZERO,
             extended_supported_rates: [0; EXTENDED_RATES_CAPACITY],
-            extended_supported_rates_len: oer_wire::PrefixLength::ZERO,
+            extended_supported_rates_len: oer_portable_wire::PrefixLength::ZERO,
             ht_capability_ie: None,
             ht_operation_ie: None,
             he_capability_ie: [0; HE_CAPABILITY_IE_CAPACITY],
-            he_capability_ie_len: oer_wire::PrefixLength::ZERO,
+            he_capability_ie_len: oer_portable_wire::PrefixLength::ZERO,
             he_operation_ie: [0; HE_OPERATION_IE_CAPACITY],
-            he_operation_ie_len: oer_wire::PrefixLength::ZERO,
+            he_operation_ie_len: oer_portable_wire::PrefixLength::ZERO,
             wmm_ie: [0; WMM_IE_CAPACITY],
-            wmm_ie_len: oer_wire::PrefixLength::ZERO,
+            wmm_ie_len: oer_portable_wire::PrefixLength::ZERO,
             rsn_ie: [0; RSN_IE_CAPACITY],
-            rsn_ie_len: oer_wire::PrefixLength::ZERO,
+            rsn_ie_len: oer_portable_wire::PrefixLength::ZERO,
             rsnxe: [0; RSNXE_CAPACITY],
-            rsnxe_len: oer_wire::PrefixLength::ZERO,
+            rsnxe_len: oer_portable_wire::PrefixLength::ZERO,
         }
     }
 
@@ -221,7 +221,7 @@ impl ScanRecord {
     /// SOURCE(esp32s31): the complete IEs copied by this module from Beacon/Probe
     /// Response frames; the ESP32-S31 mapping from above/below to CBW 2/3 is
     /// independently recovered in
-    /// `oer-esp32s31-pac/src/phy/frequency.rs::bss_tx_offset` from the
+    /// `oer-chips-esp32s31-pac/src/phy/frequency.rs::bss_tx_offset` from the
     /// complete rev0 ROM `phy_bb_bss_cbw40`.
     pub fn ht40_secondary_channel(&self, primary_channel: u8) -> Option<HtSecondaryChannel> {
         let capability = self.ht_capability_ie_bytes()?;
@@ -383,10 +383,10 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     if control.is_data() || !matches!(control.subtype(), 5 | 8) {
         return None;
     }
-    let mut reader = oer_wire::Reader::new(header.body());
+    let mut reader = oer_portable_wire::Reader::new(header.body());
     let fixed = reader.array::<12>().ok()?;
     let element_bytes = reader.remaining();
-    let mut elements = oer_wire::Reader::new(element_bytes);
+    let mut elements = oer_portable_wire::Reader::new(element_bytes);
     let [t0, t1, t2, t3, t4, t5, t6, t7, i0, i1, c0, c1] = *fixed;
     let [b0, b1, b2, b3, b4, b5] = header.address3();
 
@@ -437,7 +437,7 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
                     .zip(value)
                     .map(|(stored, rate)| *stored = *rate)
                     .count();
-                record.extended_supported_rates_len = oer_wire::PrefixLength::new(copied)?;
+                record.extended_supported_rates_len = oer_portable_wire::PrefixLength::new(copied)?;
                 record.information_elements_truncated |= copied != value.len();
             }
             (61, _) => {
@@ -478,7 +478,7 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
 }
 
 /// The first `length` bytes of a record buffer: the bytes it holds.
-fn front<const N: usize>(buffer: &[u8; N], length: oer_wire::PrefixLength<N>) -> &[u8] {
+fn front<const N: usize>(buffer: &[u8; N], length: oer_portable_wire::PrefixLength<N>) -> &[u8] {
     length.borrow(buffer)
 }
 
@@ -486,16 +486,16 @@ fn front<const N: usize>(buffer: &[u8; N], length: oer_wire::PrefixLength<N>) ->
 /// refuse a value longer than the buffer and change nothing.
 fn replace<const N: usize>(
     buffer: &mut [u8; N],
-    length: &mut oer_wire::PrefixLength<N>,
+    length: &mut oer_portable_wire::PrefixLength<N>,
     value: &[u8],
 ) -> Result<(), ScanRecordError> {
     let too_long = ScanRecordError::TooLong {
         length: value.len(),
         capacity: N,
     };
-    let value_length = oer_wire::PrefixLength::new(value.len()).ok_or(too_long)?;
+    let value_length = oer_portable_wire::PrefixLength::new(value.len()).ok_or(too_long)?;
     buffer.fill(0);
-    oer_wire::Writer::new(value_length.borrow_mut(buffer))
+    oer_portable_wire::Writer::new(value_length.borrow_mut(buffer))
         .write(value)
         .map_err(|_| too_long)?;
     *length = value_length;
@@ -507,9 +507,9 @@ fn replace<const N: usize>(
 fn store_value<const N: usize>(
     buffer: &mut [u8; N],
     value: &[u8],
-) -> Option<oer_wire::PrefixLength<N>> {
-    let length = oer_wire::PrefixLength::new(value.len())?;
-    oer_wire::Writer::new(length.borrow_mut(buffer))
+) -> Option<oer_portable_wire::PrefixLength<N>> {
+    let length = oer_portable_wire::PrefixLength::new(value.len())?;
+    oer_portable_wire::Writer::new(length.borrow_mut(buffer))
         .write(value)
         .ok()?;
     Some(length)
@@ -521,11 +521,13 @@ fn store_element<const N: usize>(
     buffer: &mut [u8; N],
     header: [u8; 2],
     value: &[u8],
-) -> Option<oer_wire::PrefixLength<N>> {
-    let length = oer_wire::PrefixLength::new(value.len().checked_add(2)?)?;
+) -> Option<oer_portable_wire::PrefixLength<N>> {
+    let length = oer_portable_wire::PrefixLength::new(value.len().checked_add(2)?)?;
     let (stored_header, stored_value) = length.borrow_mut(buffer).split_first_chunk_mut::<2>()?;
     *stored_header = header;
-    oer_wire::Writer::new(stored_value).write(value).ok()?;
+    oer_portable_wire::Writer::new(stored_value)
+        .write(value)
+        .ok()?;
     Some(length)
 }
 
@@ -537,6 +539,8 @@ fn exact_element<const N: usize>(header: [u8; 2], value: &[u8]) -> Option<[u8; N
         return None;
     }
     *stored_header = header;
-    oer_wire::Writer::new(stored_value).write(value).ok()?;
+    oer_portable_wire::Writer::new(stored_value)
+        .write(value)
+        .ok()?;
     Some(element)
 }

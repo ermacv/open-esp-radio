@@ -5,7 +5,7 @@ use crate::{
 
 use std::{cell::RefCell, rc::Rc, vec::Vec};
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::{BluetoothSchedulerHardwareListsCleared, ClockedOwner},
     root::RadioHardware,
 };
@@ -15,7 +15,7 @@ fn controller_hal_precedes_complete_scheduler_init() {
     let (_shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .ok()
         .expect("host radio split");
@@ -66,7 +66,7 @@ fn initialized_for_rejection_test() -> ControllerHalInitialized<crate::test_cloc
     let (_, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .ok()
         .expect("host radio split");
@@ -116,7 +116,7 @@ fn rejected_scheduler_initialization_retains_owners_and_pending_notifications() 
 
 #[test]
 fn foreign_scheduler_context_is_a_checked_rejection_before_hardware_writes() {
-    use oer_espressif_interrupt_table::signal::host;
+    use oer_chips_family_interrupt_table::signal::host;
     let cells = ControllerEventCells::new(host::foreign_signal(), host::foreign_signal());
     let mut writes = 0;
     let result = initialized_for_rejection_test().initialize_scheduler_with(

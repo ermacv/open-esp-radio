@@ -275,7 +275,7 @@ pub fn update_bss_protection(
     let mut erp = None;
     let mut ht_operation = None;
     let mut dsss = false;
-    let mut reader = oer_wire::Reader::new(frame);
+    let mut reader = oer_portable_wire::Reader::new(frame);
     reader
         .array::<FIXED_BEACON_LENGTH>()
         .map_err(|_| ApBeaconProtectionError::MalformedElement)?;
@@ -458,7 +458,7 @@ pub fn write_channel_switch_count(template: &mut [u8], len: usize, count: u8) ->
 pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
     const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
 
-    let mut reader = oer_wire::Reader::new(bytes);
+    let mut reader = oer_portable_wire::Reader::new(bytes);
     let fixed = reader.array::<FIXED_BEACON_LENGTH>().ok()?;
     if FrameControlFields::from_bytes([fixed[0], fixed[1]]).type_and_subtype() != 32 {
         return None;
@@ -466,11 +466,12 @@ pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
     let mut offset = FIXED_BEACON_LENGTH;
     macro_rules! inspect_element {
         () => {{
-            let mut reader = oer_wire::Reader::new(bytes.get(offset..)?);
+            let mut reader = oer_portable_wire::Reader::new(bytes.get(offset..)?);
             let [id, length] = reader.read::<2>().ok()?;
             let element = reader.take(usize::from(length)).ok()?;
             if id == 5 {
-                let [count, period, _, _] = oer_wire::Reader::new(element).read::<4>().ok()?;
+                let [count, period, _, _] =
+                    oer_portable_wire::Reader::new(element).read::<4>().ok()?;
                 return (period != 0 && count < period).then_some((offset, count, period));
             }
             offset = offset.checked_add(2)?.checked_add(usize::from(length))?;
@@ -556,7 +557,7 @@ pub fn write_tim_partial_virtual_bitmap(
         TimBitmapControl::from_bytes([partial.bitmap_offset])
             .with_group(group_indication)
             .to_bytes()[0];
-    oer_wire::Writer::new(storage.get_mut(tim_offset.checked_add(5)?..desired_end)?)
+    oer_portable_wire::Writer::new(storage.get_mut(tim_offset.checked_add(5)?..desired_end)?)
         .write(partial.octets)
         .ok()?;
     if new_len < frame_len {
@@ -571,12 +572,14 @@ pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u
     if bytes.len() < FIXED_BEACON_LENGTH {
         return None;
     }
-    oer_wire::Writer::new(bytes.get_mut(24..32)?)
+    oer_portable_wire::Writer::new(bytes.get_mut(24..32)?)
         .write(&timestamp.to_le_bytes())
         .ok()?;
 
     let (tim_offset, _, period) = dtim(bytes)?;
-    let interval_tu = oer_wire::Reader::new(bytes.get(32..)?).u16_le().ok()?;
+    let interval_tu = oer_portable_wire::Reader::new(bytes.get(32..)?)
+        .u16_le()
+        .ok()?;
     if interval_tu == 0 {
         return None;
     }
@@ -597,7 +600,7 @@ pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u
     Some((count, period))
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.5 (TIM element).
     pub struct TimBitmapControl[1] (little) {
         pub group, with_group: bool = 0..1;

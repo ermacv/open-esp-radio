@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee80211-core-roles-ap"
+name = "oer-protocols-ieee80211-core-roles-ap"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,15 +8,15 @@ repository.workspace = true
 description = "Executor- and chip-independent single-peer Wi-Fi access-point MLME"
 
 [dependencies]
-oer-crypto = { path = "../../../../../portable/crypto" }
-oer-ieee80211-core-security-cipher = { path = "../../security/cipher" }
-oer-ieee80211-core-upper-mac = { path = "../../upper-mac" }
-oer-ieee80211-wire = { path = "../../../wire" }
-oer-ieee80211-core-security-rsn = { path = "../../security/rsn" }
-oer-time = { path = "../../../../../portable/time" }
+oer-portable-crypto = { path = "../../../../../portable/crypto" }
+oer-protocols-ieee80211-core-security-cipher = { path = "../../security/cipher" }
+oer-protocols-ieee80211-core-upper-mac = { path = "../../upper-mac" }
+oer-protocols-ieee80211-wire = { path = "../../../wire" }
+oer-protocols-ieee80211-core-security-rsn = { path = "../../security/rsn" }
+oer-portable-time = { path = "../../../../../portable/time" }
 
 [dev-dependencies]
-oer-wire = { path = "../../../../../portable/wire" }
+oer-portable-wire = { path = "../../../../../portable/wire" }
 
 [lints]
 workspace = true

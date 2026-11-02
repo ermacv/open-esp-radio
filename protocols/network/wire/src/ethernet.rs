@@ -3,7 +3,7 @@
 //! SOURCE: IEEE Std 802.3-2022, 3.1.1 (MAC frame format) and 3.2.6
 //! (Length/Type field); the FCS is not part of these frames.
 
-use oer_wire::{Error, Reader, Writer};
+use oer_portable_wire::{Error, Reader, Writer};
 
 /// Length of the header, without an FCS.
 pub const HEADER_LEN: usize = 14;

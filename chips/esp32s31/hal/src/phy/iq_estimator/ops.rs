@@ -2,8 +2,8 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::fe::PhyIqEstimatorOracle;
-use oer_mmio::{Bits, Placement};
+use oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle;
+use oer_portable_mmio::{Bits, Placement};
 
 /// Capture only the software fields this engine changes.
 pub fn capture_configuration<P: Placement>(
@@ -63,9 +63,9 @@ pub fn configure<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, control:
 pub fn set_start_enabled<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, enabled: bool) {
     estimator.modify_estimator_control(|w| {
         w.set_start_enable(if enabled {
-            oer_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
+            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
         } else {
-            oer_esp32s31_pac::fe::estimator_control::StartEnable::Disabled
+            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Disabled
         });
     });
 }
@@ -77,9 +77,9 @@ pub fn set_measurement_enabled<P: Placement>(
 ) {
     estimator.modify_estimator_control(|w| {
         w.set_measurement_enable(if enabled {
-            oer_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
+            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
         } else {
-            oer_esp32s31_pac::fe::estimator_control::MeasurementEnable::Disabled
+            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Disabled
         });
     });
 }

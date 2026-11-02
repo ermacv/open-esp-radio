@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use oer_registers_model::{
+use oer_tools_registers_model::{
     RegisterEvidenceSet,
     chip_model::{ChipModel, ControlKind, FieldClass, Location},
     chip_policy::{ChipPolicy, Claim, Holder},
@@ -204,8 +204,10 @@ fn curated_registers_keep_their_absolute_words() {
 
 #[test]
 fn unestablished_facts_stay_unestablished() {
-    use oer_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
-    use oer_registers_model::chip_model::FieldClass;
+    use oer_tools_registers_contracts::{
+        FactAccuracy, FactCompleteness, FactProvenance, NameOrigin,
+    };
+    use oer_tools_registers_model::chip_model::FieldClass;
 
     let model = model();
     // A curated name without its own source cites the record that found the
@@ -275,7 +277,7 @@ fn unestablished_facts_stay_unestablished() {
 
 #[test]
 fn the_esp32s31_policy_loads_over_the_root() {
-    use oer_registers_model::chip_model::FieldClass;
+    use oer_tools_registers_model::chip_model::FieldClass;
 
     let evidence = evidence();
     let model =
@@ -613,7 +615,7 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
         ChipModel::load(&registers().join("chip.toml"), &evidence).expect("the chip root loads");
     let policy = ChipPolicy::load(&registers().join("policy.toml"), &model, &evidence)
         .unwrap_or_else(|error| panic!("the policy loads: {error}"));
-    let rendered = oer_registers_model::chip_render::render(&model, &policy)
+    let rendered = oer_tools_registers_model::chip_render::render(&model, &policy)
         .unwrap_or_else(|error| panic!("the thin PAC renders: {error}"));
     // Each part the policy gives an interrupt serves its source: the
     // handlers', the software lines' and the modem low-power timer's.
@@ -625,16 +627,16 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
         ("BtdmRuntimeControl", 127),
     ] {
         let item = format!(
-            "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {part}<P> {{\nconst SOURCE: u16 = {source};"
+            "impl<P: oer_portable_mmio::Placement> oer_portable_mmio::InterruptSource for {part}<P> {{\nconst SOURCE: u16 = {source};"
         );
         assert!(rendered.contains(&item), "{item}");
     }
     // The Bluetooth bank acknowledges the primary source 124 and the NRT
     // source 133, so its part serves both and names no single one.
-    let bank = "impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for BluetoothInterruptBank<P> {\nconst SOURCES: &'static [u16] = &[124, 133];";
+    let bank = "impl<P: oer_portable_mmio::Placement> oer_portable_mmio::InterruptSources for BluetoothInterruptBank<P> {\nconst SOURCES: &'static [u16] = &[124, 133];";
     assert!(rendered.contains(bank), "{bank}");
     assert!(!rendered.contains(
-        "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for BluetoothInterruptBank<P>"
+        "impl<P: oer_portable_mmio::Placement> oer_portable_mmio::InterruptSource for BluetoothInterruptBank<P>"
     ));
     // The irreducible acknowledgements render; ordinary transactions do not.
     for item in [
@@ -650,7 +652,7 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
     // window's prefix, the RX append doorbell, the analog-I2C host words
     // written from zero and the console's own snapshot events.
     for item in [
-        "pub fn set_address(&mut self, value: oer_memory::DmaRef<super::super::layouts::WifiRxDmaDescriptor>) -> &mut Self",
+        "pub fn set_address(&mut self, value: oer_portable_memory::DmaRef<super::super::layouts::WifiRxDmaDescriptor>) -> &mut Self",
         "pub fn set_address_high_prefix(&mut self) -> &mut Self",
         "self.0 = (self.0 & 0x000fffff) | 0x2f000000;",
         "pub fn rx_control_append_descriptor_reload_pending(&self) -> bool",
@@ -664,7 +666,8 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
     ] {
         assert!(rendered.contains(item), "{item}");
     }
-    let linker = oer_registers_model::chip_render::dma_window(&model).expect("the window renders");
+    let linker =
+        oer_tools_registers_model::chip_render::dma_window(&model).expect("the window renders");
     for item in [
         "DMA_WINDOW_ORIGIN = 0x2f000000;",
         "DMA_WINDOW_LENGTH = 0x00080000;",

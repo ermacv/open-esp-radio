@@ -1,7 +1,7 @@
 use super::*;
 use alloc::collections::BTreeSet;
-use oer_ieee80211_contracts_port::association::RxBlockAckPool;
-use oer_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
+use oer_protocols_ieee80211_contracts_port::association::RxBlockAckPool;
+use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
 
 struct Window {
     sequences: &'static [u16],
@@ -24,9 +24,9 @@ impl Work for Window {
         let air = phase.held.air.clone();
         let rate = phase
             .rate(PhyRate::Ht(
-                oer_ieee80211_wire::phy::HtRate::new(
+                oer_protocols_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap(),
@@ -44,7 +44,7 @@ impl Work for Window {
         let mut indices = alloc::vec![buffer.slot.index()];
         let mut aggregate = push_subframe(
             aggregate,
-            oer_ieee80211_contracts_port::TxNumbering::Open,
+            oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
             buffer,
             subframe_frame(self.sequences[0]),
             Some(ModelBody(alloc::vec![0x5a])),
@@ -54,7 +54,7 @@ impl Work for Window {
             indices.push(buffer.slot.index());
             aggregate = push_subframe(
                 aggregate,
-                oer_ieee80211_contracts_port::TxNumbering::Open,
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                 buffer,
                 subframe_frame(sequence),
                 None,
@@ -66,7 +66,7 @@ impl Work for Window {
             let operation = CheckedAggregate::new(
                 aggregate,
                 SubframeSource::Fresh {
-                    numbering: oer_ieee80211_contracts_port::TxNumbering::Open,
+                    numbering: oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                     buffer,
                     frame: ClassSubframe::new(subframe_frame(sequence)).ok().unwrap(),
                     body: Some(ModelBody(alloc::vec![0x7a])),
@@ -207,9 +207,9 @@ impl Work for RefusedSent {
         } = resources;
         let rate = phase
             .rate(PhyRate::Ht(
-                oer_ieee80211_wire::phy::HtRate::new(
+                oer_protocols_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap(),
@@ -227,7 +227,7 @@ impl Work for RefusedSent {
         let index = original.slot.index();
         let aggregate = push_subframe(
             aggregate,
-            oer_ieee80211_contracts_port::TxNumbering::Open,
+            oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
             original,
             subframe_frame(40),
             Some(ModelBody(alloc::vec![0x7a])),
@@ -266,7 +266,7 @@ impl Work for RefusedSent {
         );
         let aggregate = push_subframe(
             aggregate,
-            oer_ieee80211_contracts_port::TxNumbering::Open,
+            oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
             small.remove(0),
             subframe_frame(self.0),
             None,

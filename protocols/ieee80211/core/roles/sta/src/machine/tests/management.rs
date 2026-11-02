@@ -1,8 +1,8 @@
 //! Full negotiated PMF exchanges with independent AESCCM/CMAC wire vectors.
 use super::*;
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_core_security_rsn::{Ptk, frames::RsnTxFrame};
-use oer_ieee80211_wire::security::rsn::Akm;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_core_security_rsn::{Ptk, frames::RsnTxFrame};
+use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
 #[test]
 fn sa_query_requests_fresh_entropy_only_for_a_new_procedure() {
@@ -19,13 +19,13 @@ fn sa_query_requests_fresh_entropy_only_for_a_new_procedure() {
     start(&mut management);
     start(&mut management);
     assert_eq!(calls.get(), 1);
-    let Some(oer_ieee80211_wire::management_protection::SaQuery::Request { transaction }) =
+    let Some(oer_protocols_ieee80211_wire::management_protection::SaQuery::Request { transaction }) =
         management.pending(at(50))
     else {
         panic!("a new procedure owes its first request");
     };
     management.received_query(
-        oer_ieee80211_wire::management_protection::SaQuery::Response { transaction },
+        oer_protocols_ieee80211_wire::management_protection::SaQuery::Response { transaction },
     );
     start(&mut management);
     assert_eq!(calls.get(), 2);
@@ -94,9 +94,11 @@ fn associated<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
     beacon[55..].copy_from_slice(&rsn);
     let (world, ptk) = wpa2_associated_by::<2>(mint, &beacon);
     let plain = key_data(Some(&rsn), 0x99, 0x77);
-    let wrapped =
-        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let m3 = RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
         .authenticate(&ptk, &mut SoftwareAes128)
@@ -113,7 +115,7 @@ fn connected<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
 }
 
 fn rekey(ptk: &Ptk, counter: u64, gtk: u8, igtk: u8) -> Vec<u8> {
-    let wrapped = oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
         ptk.kek(),
         &key_data(None, gtk, igtk),
     )
@@ -214,7 +216,7 @@ fn a_refused_engine_drops_a_protected_disconnect_without_advancing_its_replay_st
             let valid = wire(vector);
             let loads = world.station.config.callbacks.blocks.loads;
             world.station.config.callbacks.blocks.refuse =
-                Some(oer_crypto::block::BlockError::Timeout { observation: 1 });
+                Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
             world.receive_verified(at(40), &valid);
             assert!(world.station.is_connected(), "a refused CCMP or BIP key");
             assert_eq!(world.station.config.callbacks.blocks.loads, loads + 1);
@@ -257,15 +259,15 @@ fn query_requests_are_protected_and_replays_cannot_create_another_response() {
 
 #[test]
 fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once() {
-    use oer_ieee80211_wire::{
+    use oer_portable_time::Clock;
+    use oer_protocols_ieee80211_wire::{
         block_ack::frame::{BlockAckAction, encode_addba_request, parse_block_ack_action},
         ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
         sequence::SequenceNumber,
     };
-    use oer_time::Clock;
     installed(|mint| {
         let (mut world, ptk, _) = connected(mint);
-        let clock = oer_time_virtual::VirtualClock::<8>::starting_at(at(40));
+        let clock = oer_portable_time_virtual::VirtualClock::<8>::starting_at(at(40));
         world.frames.clear();
         let body = encode_addba_request(17, 15, 16, 0, true, SequenceNumber::ZERO).unwrap();
         let mut request = plain_disconnect(0xd0, 0);
@@ -288,8 +290,8 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         );
         request.extend_from_slice(&body);
         request.extend_from_slice(&[0; 8]);
-        oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+        oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         )
         .seal(
             &mut SoftwareAes128,
@@ -384,10 +386,10 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
             Some(ended(End::Delivered)),
             Some(ended(End::AckTimeout)),
             Some(TxOutcome::Withdrawn(
-                oer_ieee80211_contracts_port::WithdrawCause::Disabled,
+                oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
             )),
             Some(TxOutcome::Indeterminate(
-                oer_ieee80211_contracts_port::IndeterminateCause::HardwareTimeout,
+                oer_protocols_ieee80211_contracts_port::IndeterminateCause::HardwareTimeout,
             )),
             None,
         ] {

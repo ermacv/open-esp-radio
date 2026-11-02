@@ -210,8 +210,8 @@ fn rate_control_code_is_decoded_in_its_ht_or_he_arena() {
 
     let he_long = TxPhyRate::from_rate_control_code(
         RateScheduleKind::Dot11Ax,
-        oer_espressif_ieee80211_policy::rate_schedule::schedule_state(
-            oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+        oer_chips_family_ieee80211_policy::rate_schedule::schedule_state(
+            oer_chips_family_ieee80211_policy::rate_schedule::rate_schedule(
                 RateScheduleKind::Dot11Ax,
                 1,
             )
@@ -231,8 +231,8 @@ fn rate_control_code_is_decoded_in_its_ht_or_he_arena() {
 
     let he_short = TxPhyRate::from_rate_control_code(
         RateScheduleKind::Dot11Ax,
-        oer_espressif_ieee80211_policy::rate_schedule::schedule_state(
-            oer_espressif_ieee80211_policy::rate_schedule::rate_schedule(
+        oer_chips_family_ieee80211_policy::rate_schedule::schedule_state(
+            oer_chips_family_ieee80211_policy::rate_schedule::rate_schedule(
                 RateScheduleKind::Dot11Ax,
                 0,
             )

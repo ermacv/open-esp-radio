@@ -13,26 +13,28 @@ use core::pin::Pin;
 use core::task::{Poll, Waker};
 
 use embassy_futures::join::join;
-use oer_espressif_ieee80211_policy::{
+use oer_chips_family_ieee80211_policy::{
     rate_control::EspressifRateControl, rate_selection::EspressifRateSelection,
 };
-use oer_ieee80211_contracts_port::{Channel, ChannelWidth, LowerMacSetup, SignalMetadata};
-use oer_ieee80211_core_arbiter::ArbiterPolicy;
-use oer_ieee80211_core_roles_sta::machine::{
+use oer_portable_time::{Clock as _, Duration};
+use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_contracts_port::{
+    Channel, ChannelWidth, LowerMacSetup, SignalMetadata,
+};
+use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
+use oer_protocols_ieee80211_core_roles_sta::machine::{
     GroupCapacity, StaConfig, StaSecurity, StationResources,
 };
-use oer_ieee80211_core_security_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
-use oer_ieee80211_core_upper_mac::rate_control::RateControl;
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_radio_port::{Ended, LocalId, PortBody, SlotIdentity, run_port, with_local_slot};
-use oer_time::{Clock as _, Duration};
-use oer_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_core_security_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
+use oer_protocols_ieee80211_core_upper_mac::rate_control::RateControl;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_radio_port::{Ended, LocalId, PortBody, SlotIdentity, run_port, with_local_slot};
 use std::boxed::Box;
 use std::rc::Rc;
 use std::vec::Vec;
 use {
-    oer_ieee80211_core_upper_mac::phy_mode::PhyMode,
-    oer_ieee80211_wire::{
+    oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
+    oer_protocols_ieee80211_wire::{
         phy::{LegacyRate, PhyRate},
         security::rsn::Akm,
         station::AssociationCapabilities,
@@ -41,12 +43,12 @@ use {
 
 use super::contract::{AccessPointCommand, AccessPointFact};
 use super::*;
-use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
-use oer_memory::WakingSpscQueue;
+use oer_portable_memory::WakingSpscQueue;
+use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 
 mod block_ack;
 mod contracts;
-use oer_ieee80211_testing_model::{
+use oer_protocols_ieee80211_testing_model::{
     AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
     ModelBackend, ModelBlockAckEvidence, ModelCaps24, ModelLarge, ModelLentRx, ModelPhase,
     ModelResources, ModelRxMeta, ModelSetup, ModelSmall, ModelTypes,
@@ -66,21 +68,21 @@ const RSN: [u8; 22] = [
 
 struct ServiceContexts;
 
-impl oer_ieee80211_testing_model::ModelContext for ServiceContexts {
+impl oer_protocols_ieee80211_testing_model::ModelContext for ServiceContexts {
     type Body = core::convert::Infallible;
     type OwnedContext<Id: SlotIdentity> = ();
     type Context<'p, Id: SlotIdentity + 'p> = ();
-    type OwnedStationConfigureContext<Id: SlotIdentity> = oer_radio_port::ContextChoice<
+    type OwnedStationConfigureContext<Id: SlotIdentity> = oer_protocols_radio_port::ContextChoice<
         (),
-        oer_ieee80211_core_roles_sta::epoch::EpochContext<
-            oer_ieee80211_testing_model::ModelPool<Id, 4>,
+        oer_protocols_ieee80211_core_roles_sta::epoch::EpochContext<
+            oer_protocols_ieee80211_testing_model::ModelPool<Id, 4>,
             (),
         >,
     >;
     type StationConfigureContext<'p, Id: SlotIdentity + 'p> =
-        oer_ieee80211_core_roles_sta::machine::StaConfigurationContext<
+        oer_protocols_ieee80211_core_roles_sta::machine::StaConfigurationContext<
             'p,
-            oer_ieee80211_testing_model::ModelPool<Id, 4>,
+            oer_protocols_ieee80211_testing_model::ModelPool<Id, 4>,
         >;
     type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
     type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
@@ -99,7 +101,7 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
         Self: 'p,
         Id: 'p;
     type TerminalStorage<T> = TestTerminalStorage<T>;
-    type TxContextStorage<T> = [Option<T>; oer_ieee80211_testing_model::MODEL_TICKETS];
+    type TxContextStorage<T> = [Option<T>; oer_protocols_ieee80211_testing_model::MODEL_TICKETS];
     type Small = ModelSmall;
     type Large = ModelLarge;
 
@@ -166,11 +168,11 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
 // owners. Each test runs on its own thread; normal storage uses its full bound.
 std::thread_local! { static CUSTODY_LIMIT: Cell<Option<usize>> = const { Cell::new(None) }; }
 struct TestTerminalStorage<T> {
-    values: Box<heapless::Deque<T, { oer_ieee80211_testing_model::MODEL_TERMINALS }>>,
+    values: Box<heapless::Deque<T, { oer_protocols_ieee80211_testing_model::MODEL_TERMINALS }>>,
     limit: usize,
 }
 impl<T> TerminalStorage<T> for TestTerminalStorage<T> {
-    const CAPACITY: usize = oer_ieee80211_testing_model::MODEL_TERMINALS;
+    const CAPACITY: usize = oer_protocols_ieee80211_testing_model::MODEL_TERMINALS;
     fn empty() -> Self {
         Self {
             values: Box::new(heapless::Deque::new()),
@@ -198,9 +200,9 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     wmm: [0; 9],
 };
 
-struct Callbacks(oer_ieee80211_core_security_cipher::aes::SoftwareAes128);
-impl oer_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
-    type AesEngine = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
+struct Callbacks(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128);
+impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
+    type AesEngine = oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
         SNONCE
     }
@@ -210,8 +212,8 @@ impl oer_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
     fn he_packet_padding(
         &self,
         _: &[u8],
-    ) -> oer_ieee80211_core_upper_mac::protection::HePacketPadding {
-        oer_ieee80211_core_upper_mac::protection::HePacketPadding::None
+    ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
+        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
     }
 }
 
@@ -223,8 +225,8 @@ fn channel6() -> Channel {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Observation {
     Service(ServiceEvent),
-    Station(oer_ieee80211_core_roles_sta::events::StaEvent),
-    BlockAck(oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent),
+    Station(oer_protocols_ieee80211_core_roles_sta::events::StaEvent),
+    BlockAck(oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent),
 }
 
 /// The station's, data machine's and service's events of one case, in
@@ -244,8 +246,8 @@ impl EventSink<ServiceEvent> for &Observations {
     }
 }
 
-impl EventSink<oer_ieee80211_core_roles_sta::events::StaEvent> for &Observations {
-    fn event(&mut self, event: oer_ieee80211_core_roles_sta::events::StaEvent) {
+impl EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent> for &Observations {
+    fn event(&mut self, event: oer_protocols_ieee80211_core_roles_sta::events::StaEvent) {
         self.events
             .lock()
             .unwrap()
@@ -253,8 +255,10 @@ impl EventSink<oer_ieee80211_core_roles_sta::events::StaEvent> for &Observations
     }
 }
 
-impl EventSink<oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent> for &Observations {
-    fn event(&mut self, event: oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent) {
+impl EventSink<oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent>
+    for &Observations
+{
+    fn event(&mut self, event: oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent) {
         self.events
             .lock()
             .unwrap()
@@ -307,7 +311,9 @@ impl Observations {
     fn tokens_lost(&self) -> u32 {
         self.count(|event| {
             *event
-                == Observation::Station(oer_ieee80211_core_roles_sta::events::StaEvent::TokenLost)
+                == Observation::Station(
+                    oer_protocols_ieee80211_core_roles_sta::events::StaEvent::TokenLost,
+                )
         })
     }
 
@@ -337,18 +343,16 @@ type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
 
 fn config(security: StaSecurity) -> TestConfig {
     let channels = heapless::Vec::from_slice(&[SupportedChannel::new(
-        oer_radio_regulatory::TEST_DOMAIN
-            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                channel6(),
-            ))
+        oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel6()))
             .unwrap(),
     )
     .unwrap()])
     .unwrap();
     (
         StaConfig {
-            address: oer_ieee80211_wire::address::OwnAddress::new(
-                oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            address: oer_protocols_ieee80211_wire::address::OwnAddress::new(
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
             ),
             channels,
             wide_channels: heapless::Vec::new(),
@@ -357,11 +361,12 @@ fn config(security: StaSecurity) -> TestConfig {
             access_point_margin_db: 6,
             supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
             association: &CAPABILITIES,
-            listen_interval: oer_ieee80211_core_roles_sta::request::StationListenInterval::new(10)
-                .unwrap(),
+            listen_interval:
+                oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::new(10)
+                    .unwrap(),
             phy: PhyMode::Legacy,
             tx_block_ack: None,
-            callbacks: Callbacks(oer_ieee80211_core_security_cipher::aes::SoftwareAes128),
+            callbacks: Callbacks(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128),
         },
         security,
     )
@@ -435,31 +440,37 @@ fn eapol_frame(eapol: &[u8]) -> Vec<u8> {
 }
 
 /// Group Message 1 of key `key_id` with replay counter `replay`.
-fn group_message1(ptk: &oer_ieee80211_core_security_rsn::Ptk, replay: u64, key_id: u8) -> Vec<u8> {
+fn group_message1(
+    ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
+    replay: u64,
+    key_id: u8,
+) -> Vec<u8> {
     let mut plain = Vec::new();
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, key_id, 0x00]);
     plain.extend_from_slice(&[0x77; 16]);
     plain.extend_from_slice(&[0xdd, 0, 0, 0, 0, 0, 0, 0]);
-    let wrapped =
-        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
             .unwrap()
             .authenticate(
                 ptk,
-                &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
             )
             .unwrap();
     eapol_frame(message.as_bytes())
 }
 
 fn protected_group_message1(
-    ptk: &oer_ieee80211_core_security_rsn::Ptk,
+    ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
     replay: u64,
     key_id: u8,
 ) -> Vec<u8> {
-    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
+    use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
     let mut frame = group_message1(ptk, replay, key_id);
     frame[1] |= 0x40;
     let header = CcmpHeader::new(
@@ -530,7 +541,7 @@ impl NetworkStop for TestNetwork {
 /// Poll with a test-owned watchdog clock. Each pending poll advances it by
 /// one millisecond; the model's clock remains under the scenario's control.
 fn block_on<F: Future>(future: F) -> F::Output {
-    use oer_time::Timer as _;
+    use oer_portable_time::Timer as _;
 
     let watchdog = VirtualClock::<1>::new();
     let mut expired = core::pin::pin!(watchdog.wait_for(Duration::from_secs(30)));
@@ -578,7 +589,7 @@ struct World<'b> {
     network: TestNetwork,
     restart_stopped_service: Cell<Option<bool>>,
     /// The network stack's end of the transmit queue.
-    stack: RefCell<oer_memory::SlotSender<'b, TxMsdu, 2>>,
+    stack: RefCell<oer_portable_memory::SlotSender<'b, TxMsdu, 2>>,
     /// The network stack's end of the receive queue.
     delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, 8>>,
     delivered_copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
@@ -597,15 +608,17 @@ struct RecordingRates<'a> {
 }
 
 impl RateSelection<ModelRxMeta, ModelAck, ModelBlockAckEvidence> for RecordingRates<'_> {
-    fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
-        oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE
+    fn packet_number_step(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+        oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE
     }
 
     fn plan<R>(
         &self,
         frame: FrameRates,
         carried: impl Fn(PhyRate) -> Option<R>,
-    ) -> Option<oer_ieee80211_contracts_port::RetryPlan<R>> {
+    ) -> Option<oer_protocols_ieee80211_contracts_port::RetryPlan<R>> {
         if self.refuse_rate.replace(false) {
             return None;
         }
@@ -623,7 +636,7 @@ impl RateSelection<ModelRxMeta, ModelAck, ModelBlockAckEvidence> for RecordingRa
 
     fn associated(
         &mut self,
-        peer: &oer_ieee80211_core_upper_mac::rate_control::RatePeer,
+        peer: &oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer,
         response: &ModelRxMeta,
     ) {
         <EspressifRateSelection<ModelCaps24> as RateSelection<
@@ -645,7 +658,7 @@ impl RateSelection<ModelRxMeta, ModelAck, ModelBlockAckEvidence> for RecordingRa
         &mut self,
         now: Instant,
         frame: FrameRates,
-        completion: &oer_ieee80211_contracts_port::SingleOutcome<ModelAck, D>,
+        completion: &oer_protocols_ieee80211_contracts_port::SingleOutcome<ModelAck, D>,
     ) {
         self.completions.borrow_mut().push(frame);
         <EspressifRateSelection<ModelCaps24> as RateSelection<
@@ -658,8 +671,11 @@ impl RateSelection<ModelRxMeta, ModelAck, ModelBlockAckEvidence> for RecordingRa
     fn completed_aggregate<D>(
         &mut self,
         now: Instant,
-        tally: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
-        completion: &oer_ieee80211_contracts_port::AggregateOutcome<ModelBlockAckEvidence, D>,
+        tally: oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        completion: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<
+            ModelBlockAckEvidence,
+            D,
+        >,
     ) {
         self.completions.borrow_mut().push(FrameRates::Aggregate);
         <EspressifRateSelection<ModelCaps24> as RateSelection<
@@ -740,8 +756,10 @@ fn duplicate(security: &StaSecurity) -> StaSecurity {
             pmk: pmk.duplicate(),
         },
         StaSecurity::Personal { password, pmk } => StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(password.as_bytes())
-                .unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                password.as_bytes(),
+            )
+            .unwrap(),
             pmk: pmk.duplicate(),
         },
     }
@@ -749,8 +767,8 @@ fn duplicate(security: &StaSecurity) -> StaSecurity {
 
 impl Application<'_, '_, '_> {
     /// The test's network, in a fresh profile.
-    fn profile(&self) -> oer_ieee80211_core_roles_sta::machine::StaProfile {
-        oer_ieee80211_core_roles_sta::machine::StaProfile {
+    fn profile(&self) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
+        oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
             ssid: heapless::Vec::from_slice(SSID).unwrap(),
             security: duplicate(&self.security),
         }
@@ -857,7 +875,7 @@ impl Application<'_, '_, '_> {
         let delivered = self.delivered.borrow();
         let mut frames = Vec::new();
         while let Some(msdu) = delivered.try_receive() {
-            let bytes = |parts: oer_network_port::EthernetFrameView<'_>| {
+            let bytes = |parts: oer_protocols_network_port::EthernetFrameView<'_>| {
                 let mut bytes = Vec::from(parts.destination);
                 bytes.extend_from_slice(&parts.source);
                 bytes.extend_from_slice(&parts.ether_type.to_be_bytes());
@@ -871,7 +889,7 @@ impl Application<'_, '_, '_> {
                 }
                 Received::Copied(_) => {
                     let copy = self.delivered_copies.borrow().try_receive().unwrap();
-                    bytes(oer_network_port::EthernetFrame::view(&copy).unwrap())
+                    bytes(oer_protocols_network_port::EthernetFrame::view(&copy).unwrap())
                 }
             });
         }
@@ -891,7 +909,10 @@ impl Application<'_, '_, '_> {
 
     /// Begin the 4-way handshake after association and return the derived
     /// key once the station has answered Message 1 with Message 2.
-    async fn start_handshake(&self, seen: &mut usize) -> oer_ieee80211_core_security_rsn::Ptk {
+    async fn start_handshake(
+        &self,
+        seen: &mut usize,
+    ) -> oer_protocols_ieee80211_core_security_rsn::Ptk {
         let message1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
         self.air.receive(&eapol_frame(message1.as_bytes()), meta());
         let message2 = self.sent(seen, DATA).await;
@@ -907,7 +928,7 @@ impl Application<'_, '_, '_> {
         )
     }
 
-    async fn handshake(&self, seen: &mut usize) -> oer_ieee80211_core_security_rsn::Ptk {
+    async fn handshake(&self, seen: &mut usize) -> oer_protocols_ieee80211_core_security_rsn::Ptk {
         let ptk = self.start_handshake(seen).await;
         self.air.receive(&message3(&ptk), meta());
         // Message 4: the association's record, and unprotected.
@@ -948,7 +969,7 @@ impl Application<'_, '_, '_> {
     fn try_send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
         let packet = TxMsdu {
             priority: WmmUserPriority::new(priority).unwrap(),
-            frame: EthernetFrame::from_parts(oer_ieee80211_wire::data::MsduParts {
+            frame: EthernetFrame::from_parts(oer_protocols_ieee80211_wire::data::MsduParts {
                 destination,
                 source: LOCAL,
                 ether_type: 0x0800,
@@ -996,7 +1017,7 @@ impl Application<'_, '_, '_> {
 struct Body<'w, 'b, S, O, const GROUPS: usize> {
     world: &'w World<'b>,
     sink: PhantomData<O>,
-    transmit: oer_memory::SlotReceiver<'b, TxMsdu, 2>,
+    transmit: oer_portable_memory::SlotReceiver<'b, TxMsdu, 2>,
     receive: WakingSpscSender<'b, Received<ModelLentRx>, 8>,
     receive_copied: WakingSpscSender<'b, EthernetFrame, RX_COPIED_DEPTH>,
     config: TestConfig,
@@ -1055,10 +1076,10 @@ where
             let large: [_; 4] = large.try_into().ok().unwrap();
 
             let channel = SupportedChannel::new(
-                oer_radio_regulatory::TEST_DOMAIN
-                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                        channel6(),
-                    ))
+                oer_protocols_radio_regulatory::TEST_DOMAIN
+                    .permit(
+                        oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel6()),
+                    )
                     .unwrap(),
             )
             .unwrap();
@@ -1074,14 +1095,16 @@ where
             let (config, security) = self.config;
             let resources = StationResources::<_, 4, 4, GROUPS> {
                 configure: station_commands.configure,
-                epochs: oer_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(connection_epoch),
+                epochs: oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(
+                    connection_epoch,
+                ),
                 tickets: station_tickets,
                 buffers: small,
                 place,
                 absence_place: absence,
-                keys: oer_ieee80211_contracts_port::association::reunite_vacant(
+                keys: oer_protocols_ieee80211_contracts_port::association::reunite_vacant(
                     station_association,
-                    oer_ieee80211_contracts_port::association::VacantKeyBank::new(
+                    oer_protocols_ieee80211_contracts_port::association::VacantKeyBank::new(
                         station_pairwise,
                         station_group,
                     ),
@@ -1104,7 +1127,7 @@ where
                 Box::leak(Box::new(RxBlockAckStorage::<
                     _,
                     2,
-                    { oer_ieee80211_testing_model::MODEL_RX_EVENTS },
+                    { oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS },
                 >::new(
                     block_acks, Duration::from_millis(100)
                 )))
@@ -1115,10 +1138,12 @@ where
                 service
                     .state
                     .station
-                    .set_profile(oer_ieee80211_core_roles_sta::machine::StaProfile {
-                        ssid: heapless::Vec::from_slice(SSID).unwrap(),
-                        security: duplicate(&security),
-                    })
+                    .set_profile(
+                        oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
+                            ssid: heapless::Vec::from_slice(SSID).unwrap(),
+                            security: duplicate(&security),
+                        },
+                    )
                     .unwrap();
                 let request = service
                     .state
@@ -1179,9 +1204,10 @@ where
                 #[cfg(feature = "placement")]
                 true => {
                     let mut service_storage = core::mem::MaybeUninit::uninit();
-                    let service = oer_memory::Placed::init(&mut service_storage, |place| {
-                        place.write(service)
-                    });
+                    let service =
+                        oer_portable_memory::Placed::init(&mut service_storage, |place| {
+                            place.write(service)
+                        });
                     let mut completed_storage = core::mem::MaybeUninit::uninit();
                     let (completed, ()) = join(
                         Runner::run_placed(
@@ -1215,7 +1241,7 @@ where
                     .expect("complete resource bank");
                 assert!(matches!(
                     deferred_eapol,
-                    oer_ieee80211_core_roles_sta::machine::DeferredEapol::Empty
+                    oer_protocols_ieee80211_core_roles_sta::machine::DeferredEapol::Empty
                 ));
                 assert!(notice.is_none());
                 world.outputs.borrow_mut().clear();
@@ -1543,7 +1569,7 @@ where
             ],
             clock.clone(),
         );
-        let mut transmit = oer_memory::WakingSlotQueue::<TxMsdu, 2>::new();
+        let mut transmit = oer_portable_memory::WakingSlotQueue::<TxMsdu, 2>::new();
         let mut receive = WakingSpscQueue::<Received<ModelLentRx>, 8>::new();
         let (stack, transmit) = transmit.split(TxMsdu::empty);
         let (receive, delivered) = receive.split();
@@ -1569,9 +1595,9 @@ where
             delivered_copies: RefCell::new(delivered_copies),
             lent: Cell::new(0),
         };
-        let uninstalled = oer_radio_port::LocalExecution
+        let uninstalled = oer_protocols_radio_port::LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (&mut slot)
                         .register(backend)
                         .ok()
@@ -1597,8 +1623,8 @@ where
             )
             .await;
         match uninstalled {
-            oer_radio_port::PortEnd::Uninstalled { .. } => {}
-            oer_radio_port::PortEnd::FailStopped { outcome, .. } => {
+            oer_protocols_radio_port::PortEnd::Uninstalled { .. } => {}
+            oer_protocols_radio_port::PortEnd::FailStopped { outcome, .. } => {
                 // Past a stop's deadline the supervisor waits no longer:
                 // nothing confirms the stop then.
                 let past_deadline = matches!(
@@ -1609,7 +1635,10 @@ where
                     })
                 );
                 assert_eq!(
-                    matches!(outcome.outcome(), oer_radio_port::Abandon::Unconfirmed(_)),
+                    matches!(
+                        outcome.outcome(),
+                        oer_protocols_radio_port::Abandon::Unconfirmed(_)
+                    ),
                     past_deadline
                 );
                 assert_eq!(
@@ -1621,7 +1650,9 @@ where
                     "P2 quarantine never starts another disable"
                 );
             }
-            oer_radio_port::PortEnd::Abandoned { .. } => panic!("service must return its output"),
+            oer_protocols_radio_port::PortEnd::Abandoned { .. } => {
+                panic!("service must return its output")
+            }
         }
         slot.end_model_world();
         world.observed
@@ -1825,24 +1856,24 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
             assert_eq!(
                 world
                     .air
-                    .edca(oer_ieee80211_contracts_port::VifRole::Station),
-                oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
-                    oer_ieee80211_wire::extensions::wmm::WmmParameterSet::DCF
+                    .edca(oer_protocols_ieee80211_contracts_port::VifRole::Station),
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+                    oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::DCF
                 )
             );
             assert_eq!(
                 world
                     .air
-                    .edca(oer_ieee80211_contracts_port::VifRole::AccessPoint),
-                oer_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
+                    .edca(oer_protocols_ieee80211_contracts_port::VifRole::AccessPoint),
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
             );
             // Connected at once on an open network: data at the rate control's
             // rate, the next control frame on the association's record.
             world.send_msdu([0x02, 0, 0, 0, 0, 0x07]);
             let data = world.sent(&mut seen, DATA).await;
-            let peer = oer_ieee80211_core_upper_mac::rate_control::RatePeer {
+            let peer = oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer {
                 phy: PhyMode::Legacy,
-            legacy_rates: oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+            legacy_rates: oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[0x82, 0x84, 0x8b, 0x96], &[],
             ).unwrap(),
                 ht_capabilities: None,
@@ -1864,7 +1895,8 @@ fn on_an_open_network_the_join_goes_on_the_default_record_and_then_the_associati
 fn on_wpa2_the_join_goes_on_the_default_record_and_the_handshake_on_the_associations() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -1902,7 +1934,8 @@ fn on_wpa2_the_join_goes_on_the_default_record_and_the_handshake_on_the_associat
 fn message3_key_data_is_unwrapped_in_the_service_step_and_message4_follows() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -1929,7 +1962,8 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
     use super::contract::DisconnectReason as StaDisconnectReason;
     run_with_groups::<_, 1>(
         config(StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         }),
         |world| {
@@ -1958,21 +1992,23 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
     );
 }
 
-fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk) -> Vec<u8> {
+fn message3(ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk) -> Vec<u8> {
     let mut plain = Vec::new();
     plain.extend_from_slice(&RSN);
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[0x99; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped =
-        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
             .authenticate(
                 ptk,
-                &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
             )
             .unwrap();
     eapol_frame(message3.as_bytes())
@@ -1982,7 +2018,8 @@ fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk) -> Vec<u8> {
 fn refusing_m4_releases_handshake_resources_without_connecting_and_service_can_reconnect() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2035,7 +2072,8 @@ fn refusing_m4_releases_handshake_resources_without_connecting_and_service_can_r
 fn a_data_preparation_refusal_releases_admission_and_the_next_msdu_can_go() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2087,9 +2125,11 @@ fn protected_data(packet_number: u8, source: [u8; 6], payload: &[u8]) -> Vec<u8>
 }
 
 fn decrypted() -> ModelRxMeta {
-    meta().with_crypto(oer_ieee80211_contracts_port::RxEvidence::HardwareObserved(
-        oer_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
-    ))
+    meta().with_crypto(
+        oer_protocols_ieee80211_contracts_port::RxEvidence::HardwareObserved(
+            oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
+        ),
+    )
 }
 
 /// The whole path on the model, the test playing the access point and the
@@ -2099,7 +2139,8 @@ fn decrypted() -> ModelRxMeta {
 fn a_station_scans_joins_handshakes_carries_data_both_ways_and_disconnects() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2193,7 +2234,8 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
     // A second channel, so the background scan leaves the home channel
     // and announces its absence with a Null.
     let mut config = config(StaSecurity::Personal {
-        password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+        password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+            .unwrap(),
         pmk: Pmk::from_bytes(PMK),
     });
     config
@@ -2201,10 +2243,12 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
         .channels
         .push(
             SupportedChannel::new(
-                oer_radio_regulatory::TEST_DOMAIN
-                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                        Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
-                    ))
+                oer_protocols_radio_regulatory::TEST_DOMAIN
+                    .permit(
+                        oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                            Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
+                        ),
+                    )
                     .unwrap(),
             )
             .unwrap(),
@@ -2281,10 +2325,12 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
         .channels
         .push(
             SupportedChannel::new(
-                oer_radio_regulatory::TEST_DOMAIN
-                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                        Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
-                    ))
+                oer_protocols_radio_regulatory::TEST_DOMAIN
+                    .permit(
+                        oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                            Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
+                        ),
+                    )
                     .unwrap(),
             )
             .unwrap(),
@@ -2361,17 +2407,19 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
 /// none lost.
 #[test]
 fn beside_an_access_point_msdus_survive_an_absence() {
-    use oer_time::Clock as _;
+    use oer_portable_time::Clock as _;
     let mut config = config(StaSecurity::Open);
     config
         .0
         .channels
         .push(
             SupportedChannel::new(
-                oer_radio_regulatory::TEST_DOMAIN
-                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                        Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
-                    ))
+                oer_protocols_radio_regulatory::TEST_DOMAIN
+                    .permit(
+                        oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                            Channel::ghz2_4(1, ChannelWidth::Mhz20).unwrap(),
+                        ),
+                    )
                     .unwrap(),
             )
             .unwrap(),
@@ -2391,10 +2439,12 @@ fn beside_an_access_point_msdus_survive_an_absence() {
             world
                 .command(ControlCommand::AccessPoint(AccessPointFact::Running {
                     channel: SupportedChannel::new(
-                        oer_radio_regulatory::TEST_DOMAIN
-                            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                                channel6(),
-                            ))
+                        oer_protocols_radio_regulatory::TEST_DOMAIN
+                            .permit(
+                                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                                    channel6(),
+                                ),
+                            )
                             .unwrap(),
                     )
                     .unwrap(),
@@ -2470,7 +2520,8 @@ fn data_before(air: &[AirFrame], from: usize, until: impl Fn(&AirFrame) -> bool)
 fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_five() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2491,13 +2542,13 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
                 ip[0] = 0x45;
                 ip[1] = 46 << 2;
                 ip[3] = 20;
-                let view = oer_network_port::EthernetFrameView {
+                let view = oer_protocols_network_port::EthernetFrameView {
                     destination: [2, 0, 0, 0, 0, 9],
                     source: LOCAL,
                     ether_type: 0x0800,
                     payload: &ip,
                 };
-                let requested = oer_bridges_ieee80211_ethernet::qos::classify_wmm(
+                let requested = oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm(
                     view.ether_type,
                     view.payload,
                 );
@@ -2533,7 +2584,8 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
 fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2614,7 +2666,8 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
 fn eapol_and_deauthentication_wait_for_at_most_the_queue_depth_and_one_data_attempt() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2784,10 +2837,11 @@ fn application_requests_return_correlated_refusals_and_unique_completions() {
 
 #[test]
 fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admission() {
-    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
+    use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
     let counters = run_with(
         config(StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         }),
         |world| {
@@ -2813,8 +2867,8 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 }
                 assert!(world.observed.contains(Observation::Service(
                     ServiceEvent::RxFrameDropped(RxDrop::Station(
-                        oer_ieee80211_core_roles_sta::machine::StaRxError::Frame(
-                            oer_ieee80211_core_upper_mac::receive::RxDropReason::Integrity
+                        oer_protocols_ieee80211_core_roles_sta::machine::StaRxError::Frame(
+                            oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Integrity
                         )
                     ))
                 )));
@@ -2822,7 +2876,8 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 let reply = world.sent(&mut seen, DATA).await;
                 assert!(reply.key.is_some());
                 let header =
-                    oer_ieee80211_wire::frame::DecodedHeader::decode(&reply.plaintext).unwrap();
+                    oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(&reply.plaintext)
+                        .unwrap();
                 assert_eq!(header.body()[14..16], [0x88, 0x8e]);
                 let after = world.air.sent().len();
                 world.air.receive(&protected, decrypted());
@@ -2832,8 +2887,8 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
                 assert_eq!(world.air.sent().len(), after);
                 assert!(world.observed.contains(Observation::Service(
                     ServiceEvent::RxFrameDropped(RxDrop::Station(
-                        oer_ieee80211_core_roles_sta::machine::StaRxError::Frame(
-                            oer_ieee80211_core_upper_mac::receive::RxDropReason::Replay
+                        oer_protocols_ieee80211_core_roles_sta::machine::StaRxError::Frame(
+                            oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Replay
                         )
                     ))
                 )));
@@ -2847,7 +2902,8 @@ fn protected_qos_ht_group_message_rekeys_once_after_integrity_and_replay_admissi
 fn message4_waits_for_the_actual_group_installation_terminal() {
     run(
         StaSecurity::Personal {
-            password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         |world| {
@@ -2889,8 +2945,10 @@ fn stop_or_fault_with_an_accepted_group_install_keeps_owners_and_sends_no_messag
     for poisoned in [false, true] {
         run(
             StaSecurity::Personal {
-                password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                    .unwrap(),
+                password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                    b"password",
+                )
+                .unwrap(),
                 pmk: Pmk::from_bytes(PMK),
             },
             |world| {
@@ -2974,8 +3032,10 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
     for peer_disconnect in [false, true] {
         run(
             StaSecurity::Personal {
-                password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                    .unwrap(),
+                password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                    b"password",
+                )
+                .unwrap(),
                 pmk: Pmk::from_bytes(PMK),
             },
             |world| {
@@ -2998,7 +3058,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                     plain.extend_from_slice(&[0x77; 16]);
                     plain.extend_from_slice(&[0xdd, 0, 0, 0]);
                     let wrapped =
-                        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+                        oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
                             ptk.kek(),
                             &plain,
                         )
@@ -3014,7 +3074,7 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                     .unwrap()
                     .authenticate(
                         &ptk,
-                        &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
                     )
                     .unwrap();
                     world.air.receive(&eapol_frame(m3.as_bytes()), meta());
@@ -3103,8 +3163,10 @@ fn stopped_service_reconnects_and_sends_data_on_the_same_installation() {
     {
         let security = if protected {
             StaSecurity::Personal {
-                password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                    .unwrap(),
+                password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                    b"password",
+                )
+                .unwrap(),
                 pmk: Pmk::from_bytes(PMK),
             }
         } else {
@@ -3196,7 +3258,10 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
             let mut previous = 0;
             for _ in 0..2 {
                 world.outputs.borrow_mut().clear();
-                assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
+                assert_eq!(
+                    world.status().link.state,
+                    oer_protocols_network_port::LinkState::Down
+                );
                 world.associate(&mut seen, false).await;
                 world
                     .notice(StaNotice::Connected {
@@ -3205,7 +3270,10 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
                     })
                     .await;
                 let connected = world.status();
-                assert_eq!(connected.link.state, oer_network_port::LinkState::Up);
+                assert_eq!(
+                    connected.link.state,
+                    oer_protocols_network_port::LinkState::Up
+                );
                 assert_ne!(connected.link.epoch, previous);
                 previous = connected.link.epoch;
                 world.station_command(StaCommand::Disconnect).await;
@@ -3214,8 +3282,8 @@ fn control_and_runner_publish_status_and_distinct_core_epochs_on_reconnect() {
                     .await;
                 assert_eq!(
                     world.status().link,
-                    oer_network_port::LinkSnapshot {
-                        state: oer_network_port::LinkState::Down,
+                    oer_protocols_network_port::LinkSnapshot {
+                        state: oer_protocols_network_port::LinkState::Down,
                         epoch: previous
                     }
                 );
@@ -3236,7 +3304,10 @@ fn control_cooperative_stop_retires_the_model_runner_and_publishes_the_last_noti
             world
                 .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
-            assert_eq!(world.status().link.state, oer_network_port::LinkState::Down);
+            assert_eq!(
+                world.status().link.state,
+                oer_protocols_network_port::LinkState::Down
+            );
         })
     });
 }
@@ -3487,7 +3558,7 @@ fn product_policy_connects_reconnects_after_peer_departure_and_gracefully_stops(
                 }
             }
             let mut control = world.commands.take().unwrap();
-            control.stop_gracefully(oer_time::Instant::from_micros(u64::MAX));
+            control.stop_gracefully(oer_portable_time::Instant::from_micros(u64::MAX));
             world.commands.set(Some(control));
             let _deauth = world.sent(&mut seen, DEAUTHENTICATION).await;
             world

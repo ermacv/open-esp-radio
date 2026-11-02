@@ -5,23 +5,23 @@
 //! the chip key-selector/construct/decrypt callback ABI. It therefore owns
 //! secrets and peer generations, but never claims to produce or authenticate
 //! encrypted on-air bytes. Each peer's transmit packet numbers and receive
-//! replay frontier are the CCMP owners of `oer-ieee80211-core-upper-mac`.
+//! replay frontier are the CCMP owners of `oer-protocols-ieee80211-core-upper-mac`.
 
 use crate::extensions::espressif::phy::EspNowPhyMode;
 use core::{array, fmt};
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
-use oer_events::{EventSink, report};
+use oer_portable_events::{EventSink, report};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use {
-    oer_ieee80211_core_upper_mac::{
+    oer_protocols_ieee80211_core_upper_mac::{
         ccmp::{
             CcmpPacketNumberStep, CcmpReplayCandidate, CcmpReplayFrontier, CcmpReplayed,
             InstalledCcmpTxKey, SoftwareCcmpKey,
         },
         sequence::SequenceCounter,
     },
-    oer_ieee80211_wire::{
+    oer_protocols_ieee80211_wire::{
         ccmp::CcmpPacketNumber,
         channel::WifiChannel,
         extensions::espressif::esp_now::{
@@ -35,8 +35,8 @@ use {
 use crate::extensions::espressif::esp_now::protocol::{
     ESP_NOW_DEFAULT_PEER_CAPACITY, EspNowConfig, EspNowPeerSecurity,
 };
-use oer_ieee80211_contracts_port::ChannelContextId;
-use oer_ieee80211_core_arbiter::interface::BoundVirtualInterface;
+use oer_protocols_ieee80211_contracts_port::ChannelContextId;
+use oer_protocols_ieee80211_core_arbiter::interface::BoundVirtualInterface;
 
 pub const ESP_NOW_KEY_LEN: usize = 16;
 /// Portable encrypted-peer storage default. This is not a hardware-key-slot
@@ -351,7 +351,7 @@ pub struct EspNowEncryptedPeerView {
 }
 
 /// One peer's key, its transmit packet numbers and its receive replay
-/// frontier, all from `oer-ieee80211-core-upper-mac::ccmp`.
+/// frontier, all from `oer-protocols-ieee80211-core-upper-mac::ccmp`.
 struct EspNowEncryptedPeerState {
     key: InstalledCcmpTxKey<EspNowEncryptedPeerConfig>,
     replay: CcmpReplayFrontier,

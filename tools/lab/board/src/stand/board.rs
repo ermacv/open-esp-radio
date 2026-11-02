@@ -16,15 +16,15 @@ use std::{
 };
 
 use crate::image::{Receipt, Store, Transport};
-use oer_espressif_facts::Start;
-use oer_lab_model::device_id::DeviceId;
-use oer_lab_model::{BoardRef, ResetStep, Stand};
+use oer_chips_family_facts::Start;
+use oer_tools_lab_model::device_id::DeviceId;
+use oer_tools_lab_model::{BoardRef, ResetStep, Stand};
 
 use crate::console;
 use crate::openocd::Openocd;
 use crate::port::{Port, retrying};
 use crate::reset;
-use oer_lab_model::rom::{RecoveryStep, ResetPath, Rung};
+use oer_tools_lab_model::rom::{RecoveryStep, ResetPath, Rung};
 
 use crate::power::{HubPower, PowerCycle, PowerLoss, ResetCauseField};
 
@@ -87,7 +87,7 @@ impl Board {
     /// read; [`Self::profiled`] reads it.
     pub fn new(
         stand: &Stand,
-        board: &oer_lab_model::Board,
+        board: &oer_tools_lab_model::Board,
         port: PathBuf,
     ) -> crate::stand::Result<Self> {
         Self::with_power(
@@ -98,7 +98,7 @@ impl Board {
     }
 
     fn with_power(
-        board: &oer_lab_model::Board,
+        board: &oer_tools_lab_model::Board,
         port: PathBuf,
         power: Option<HubPower>,
     ) -> crate::stand::Result<Self> {
@@ -122,7 +122,7 @@ impl Board {
     /// refused for a chip without one, naming what still works.
     pub fn profiled(self, root: &Path) -> crate::stand::Result<ProfiledBoard> {
         let profile =
-            oer_chip_profile::Profile::load(root, &self.reference.chip).map_err(|error| {
+            oer_tools_chip_profile::Profile::load(root, &self.reference.chip).map_err(|error| {
                 format!(
                     "board `{}`: {error}; without a chip profile only its hub port's power, \
                      its console without a reset and its description work",
@@ -228,7 +228,7 @@ impl Board {
     pub fn carries(
         &self,
         store: &Store,
-        bundle: &oer_image_bundle::ImageBundle,
+        bundle: &oer_tools_image_bundle::ImageBundle,
     ) -> crate::stand::Result<Option<Receipt>> {
         crate::image::carries(store, self.mac(), bundle)
     }
@@ -282,7 +282,7 @@ impl Board {
     /// reset line is read from the console once the port is back.
     pub fn power_reset(&self) -> crate::stand::Result<Option<String>> {
         Power(self).reset()?;
-        Ok(oer_lab_model::rom::reset_line(&self.console(BANNER)))
+        Ok(oer_tools_lab_model::rom::reset_line(&self.console(BANNER)))
     }
 }
 
@@ -298,7 +298,7 @@ impl ProfiledBoard {
     pub fn flash(
         &self,
         store: &Store,
-        bundle: &oer_image_bundle::ImageBundle,
+        bundle: &oer_tools_image_bundle::ImageBundle,
         image: &str,
         via: Via,
         by: &str,
@@ -373,7 +373,7 @@ impl ProfiledBoard {
         eprintln!(
             "hil: board `{}` was not on USB; its ROM now waits for the flash: {}",
             self.reference.id,
-            oer_lab_model::rom::reset_line(&banner)
+            oer_tools_lab_model::rom::reset_line(&banner)
                 .as_deref()
                 .unwrap_or("no reset line")
         );
@@ -409,8 +409,8 @@ impl ProfiledBoard {
         // before the port returns: read the console again once it is back.
         Ok(banner
             .as_deref()
-            .and_then(oer_lab_model::rom::reset_line)
-            .or_else(|| oer_lab_model::rom::reset_line(&self.console(BANNER))))
+            .and_then(oer_tools_lab_model::rom::reset_line)
+            .or_else(|| oer_tools_lab_model::rom::reset_line(&self.console(BANNER))))
     }
 
     /// Reset the board through the first reset its stand file lists, into
@@ -423,8 +423,8 @@ impl ProfiledBoard {
         let banner = rung.reset()?;
         Ok(banner
             .as_deref()
-            .and_then(oer_lab_model::rom::reset_line)
-            .or_else(|| oer_lab_model::rom::reset_line(&self.console(BANNER))))
+            .and_then(oer_tools_lab_model::rom::reset_line)
+            .or_else(|| oer_tools_lab_model::rom::reset_line(&self.console(BANNER))))
     }
 
     /// Reset the board into its flashed application over RTS and return
@@ -472,7 +472,7 @@ impl ProfiledBoard {
                     Ok(word) => return Ok(field.cause(word)),
                     Err(error) => last = Some(error),
                 }
-                oer_os_process::sleep(RESET_CAUSE_RETRY)?;
+                oer_tools_os_process::sleep(RESET_CAUSE_RETRY)?;
             }
             Err(last.unwrap_or_else(|| "no attempt was made".into()))
         })

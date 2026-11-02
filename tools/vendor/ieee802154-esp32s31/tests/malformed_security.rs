@@ -1,4 +1,6 @@
-use oer_vendor_ieee802154_esp32s31::{Record, Verdict, catalog, claim, compare_scenario, port};
+use oer_tools_vendor_ieee802154_esp32s31::{
+    Record, Verdict, catalog, claim, compare_scenario, port,
+};
 
 #[test]
 fn malformed_security_returns_invalid_argument_without_ll_writes() {

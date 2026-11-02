@@ -1,7 +1,7 @@
 use super::keys::{self, PortKeys, Role};
 use super::*;
 #[cfg(oer_debug_control)]
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 pub struct Esp32s31Setup<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
@@ -120,7 +120,7 @@ impl<'p, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Obser
         buffer: ReceiveBuffer<'id, Id, D::Receive>,
     ) -> Result<
         super::LentReceive<D::Receive, D::Lent>,
-        oer_ieee80211_contracts_port::LendRefused<ReceiveBuffer<'id, Id, D::Receive>>,
+        oer_protocols_ieee80211_contracts_port::LendRefused<ReceiveBuffer<'id, Id, D::Receive>>,
     > {
         let shared = self.held.storage;
         buffer.lend_to(&shared.network, D::LENT_RX, shared.check().is_err())
@@ -325,9 +325,9 @@ where
 }
 /// The access category of an aggregate's TID: the user priority's
 /// (IEEE Std 802.11-2020, Table 10-1); best effort for a TID beyond them.
-fn aggregate_category(tid: Tid) -> oer_ieee80211_wire::qos::WmmAccessCategory {
-    oer_ieee80211_wire::qos::WmmUserPriority::new(tid.get()).map_or(
-        oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+fn aggregate_category(tid: Tid) -> oer_protocols_ieee80211_wire::qos::WmmAccessCategory {
+    oer_protocols_ieee80211_wire::qos::WmmUserPriority::new(tid.get()).map_or(
+        oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
         |priority| priority.access_category(),
     )
 }

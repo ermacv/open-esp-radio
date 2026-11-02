@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee802154-wire"
+name = "oer-protocols-ieee802154-wire"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,8 @@ repository.workspace = true
 description = "IEEE 802.15.4 frame and information-element codecs"
 
 [dependencies]
-oer-radio-regulatory = { path = "../../radio/regulatory" }
-oer-wire = { path = "../../../portable/wire" }
+oer-protocols-radio-regulatory = { path = "../../radio/regulatory" }
+oer-portable-wire = { path = "../../../portable/wire" }
 
 [lints]
 workspace = true

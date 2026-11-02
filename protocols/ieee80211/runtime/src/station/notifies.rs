@@ -10,8 +10,8 @@
 
 use core::marker::PhantomData;
 
-use oer_memory::{AtomicWaker, QueueNotify};
-use oer_sync::PriorityWaker;
+use oer_portable_memory::{AtomicWaker, QueueNotify};
+use oer_portable_sync::PriorityWaker;
 
 /// The notify types of the station's network channels.
 pub trait Notifies: 'static {

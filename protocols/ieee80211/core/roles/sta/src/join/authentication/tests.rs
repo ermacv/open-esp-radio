@@ -1,8 +1,8 @@
 use super::super::test_support::{BSSID, LOCAL, authentication_response, deauthentication};
 use super::*;
-use oer_ieee80211_core_upper_mac::sequence::SequenceSpace;
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::station::StaDisconnectKind;
+use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::station::StaDisconnectKind;
 
 fn runtime() -> StaAuthenticationRuntime {
     StaAuthenticationRuntime::new(

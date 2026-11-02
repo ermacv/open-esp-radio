@@ -2,7 +2,7 @@
 #![allow(clippy::disallowed_macros, reason = "test assertions")]
 
 use core::mem::MaybeUninit;
-use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 #[test]

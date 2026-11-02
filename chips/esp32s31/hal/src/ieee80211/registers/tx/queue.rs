@@ -4,11 +4,11 @@
 //! queue-vector arrays; every leaf here takes the logical queue.
 
 use crate::types::MacTxQueueIndex;
-use oer_esp32s31_pac::wifi_mac::{
+use oer_chips_esp32s31_pac::wifi_mac::{
     AcknowledgeMacTxCompletionConsumed, WifiMacTxCommon, WifiMacTxQueueControl,
     WifiMacTxQueueVector,
 };
-use oer_mmio::{Index, Placement};
+use oer_portable_mmio::{Index, Placement};
 
 use super::MacTxProtection;
 use crate::ieee80211::registers::{MacInterface, bits};
@@ -287,9 +287,9 @@ pub(crate) fn configure_edca<P: Placement>(
         writer.set_contention_window(bits(u32::from(contention_window)));
     });
     registers.modify_config(bank, |writer| {
-        writer.set_interface(oer_esp32s31_pac::wifi_mac::config::Interface::from_field(
-            interface.bits(),
-        ));
+        writer.set_interface(
+            oer_chips_esp32s31_pac::wifi_mac::config::Interface::from_field(interface.bits()),
+        );
     });
 }
 

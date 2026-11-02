@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use oer_chip_profile::policy::StackPolicy;
+use oer_tools_chip_profile::policy::StackPolicy;
 
 use crate::{Result, interrupts::InterruptStacks, stack::Image};
 
@@ -14,8 +14,8 @@ pub const REPORT: &str = "critical-section.txt";
 const ENTRIES: &[&str] = &[
     "_critical_section_1_0_acquire",
     "_critical_section_1_0_release",
-    "oer_espressif_staged_runtime::critical::hart::_critical_section_1_0_acquire",
-    "oer_espressif_staged_runtime::critical::hart::_critical_section_1_0_release",
+    "oer_chips_family_staged_runtime::critical::hart::_critical_section_1_0_acquire",
+    "oer_chips_family_staged_runtime::critical::hart::_critical_section_1_0_release",
 ];
 
 /// Functions containing an out-of-line or inlined critical-section entry.
@@ -49,8 +49,8 @@ fn callers(image: &Image) -> BTreeSet<u32> {
 pub(crate) fn roots(
     image: &Image,
     policy: &StackPolicy,
-    table: &[oer_image_stack::TableEntry],
-    harts: &[oer_image_stack::HartStack],
+    table: &[oer_tools_image_stack::TableEntry],
+    harts: &[oer_tools_image_stack::HartStack],
 ) -> Result<BTreeMap<(u32, u32), String>> {
     let mut roots = BTreeMap::new();
     for root in policy.runtime_task_stacks() {

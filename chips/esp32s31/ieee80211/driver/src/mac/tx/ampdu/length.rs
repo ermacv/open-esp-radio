@@ -226,7 +226,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
             } else {
                 0
             };
-        let next = oer_ieee80211_wire::ampdu::length_after_append(
+        let next = oer_protocols_ieee80211_wire::ampdu::length_after_append(
             u32::from(self.prepared_length),
             previous,
             next_psdu,

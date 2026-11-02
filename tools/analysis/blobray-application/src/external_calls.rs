@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn response_owners_release_on_closure_and_failed_admission() {
         let mut d = CallDeclaration {
-            repetition: oer_analysis_blobray_domain::CallRepetition::Finite,
+            repetition: oer_tools_analysis_blobray_domain::CallRepetition::Finite,
             id: "fixture".into(),
             applicability: "lifecycle".into(),
             lifetime: RegionLifetime::Session,

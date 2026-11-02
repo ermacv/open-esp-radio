@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_testing_conformance::{
+use oer_protocols_ieee80211_testing_conformance::{
     self as conformance,
     edca::{self as contract, Case, Draw, Scenario, Trace},
 };
@@ -36,14 +36,14 @@ fn submit_role<'p, 'id: 'p, Id: SlotIdentity + 'id>(
             phase
                 .$interface()
                 .submit(
-                    (oer_ieee80211_contracts_port::Attempt {
+                    (oer_protocols_ieee80211_contracts_port::Attempt {
                         context: (),
                         ticket,
                         source,
                         access_category: category,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                        coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                     })
                     .admit(),
                 )
@@ -184,19 +184,19 @@ fn supported_edca_refuses_whole_records_without_clamping() {
             ..ModelCaps::CAPS
         };
     }
-    use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+    use oer_protocols_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
     let standard = EdcaParameterSet::STANDARD_DEFAULT;
     let wmm = standard.wmm();
     for ac in WmmAccessCategory::ALL {
         let baseline = wmm.access_category(ac);
         for invalid in [
             WmmAcParameters {
-                ecw_min: oer_wire::U8::constant::<11>(),
-                ecw_max: oer_wire::U8::constant::<10>(),
+                ecw_min: oer_portable_wire::U8::constant::<11>(),
+                ecw_max: oer_portable_wire::U8::constant::<10>(),
                 ..baseline
             },
             WmmAcParameters {
-                ecw_max: oer_wire::U8::constant::<11>(),
+                ecw_max: oer_portable_wire::U8::constant::<11>(),
                 ..baseline
             },
             WmmAcParameters {

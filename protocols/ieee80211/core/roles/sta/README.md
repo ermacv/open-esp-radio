@@ -85,7 +85,7 @@ names what one request admits, `matches_security` admits a scanned BSS for
 one exact mode and `select_association_rsn` chooses the AKM and management
 protection; `personal_rsn` chooses the RSN capabilities (SPP A-MSDU capable,
 MFPC under management protection, MFPR and the H2E RSNXE under SAE), whose
-RSN element and RSNXE `oer-ieee80211-wire` encodes (`station::SelectedRsn::rsn`).
+RSN element and RSNXE `oer-protocols-ieee80211-wire` encodes (`station::SelectedRsn::rsn`).
 The scan table keeps each observation's signal level (`None` when the
 receiver reported none, ranked below every known level) and reception time
 beside its decoded `ScanRecord` (`scan::BssObservation`). A connect's scan
@@ -151,7 +151,7 @@ Module map:
 - `machine::block_ack`: the machine validates association addresses and PMF
   before handing over Block Ack management (`PendingRxBlockAck`), and uses
   its control TX credits for replies (`RxBlockAckReply`); the recipient
-  agreements themselves are `oer-ieee80211-core-upper-mac`'s `block_ack::banks`;
+  agreements themselves are `oer-protocols-ieee80211-core-upper-mac`'s `block_ack::banks`;
 - `machine::tx_block_ack`: the station's transmit agreements
   (`StaTxBlockAck`), one `TxBlockAckOriginator` of the eight TIDs that the
   composition builds from its `StaTxBlockAckPolicy` and hands over in
@@ -198,7 +198,7 @@ Module map:
   settled as `BlockAckMarks`; `Station::tx_block_ack_settled` moves the
   agreement's window and owes a BlockAckReq (`StaFrame::BlockAckRequest`,
   encoded by the port) when the window passed a dropped member. The
-  per-aggregate vendor retry machine (`oer-ieee80211-core-upper-mac`
+  per-aggregate vendor retry machine (`oer-protocols-ieee80211-core-upper-mac`
   `ampdu`) is not used. No reorder, replay check or power save yet. It owns
   the
   network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
@@ -227,7 +227,7 @@ Module map:
 - `sa_query`: the SA Query procedure of an association under management
   frame protection;
 - `link_monitor`: beacon-loss decisions;
-- the station's SAE PMKSA cache, `oer_ieee80211_core_security_rsn::pmksa::PmksaCache` keyed
+- the station's SAE PMKSA cache, `oer_protocols_ieee80211_core_security_rsn::pmksa::PmksaCache` keyed
   by BSSID and SSID, owned by the station across connections;
 - `ftm`, `twt`: bounded requester state and deadlines; their presence does not
   establish a chip timestamp or wake-schedule implementation. FTM local
@@ -444,7 +444,7 @@ M3's MAC protection; an open M3 produces an open M4 even with an installed PTK.
 Every AES operation of the station runs in the step over the synchronous
 AES-128 engine the composition supplies through its callbacks
 (`StaCallbacks::AesEngine`, lent by `aes_engine`): the key-data unwrap
-(RFC 3394, `oer-crypto`'s `block::unwrap_now`), Message 3's when the
+(RFC 3394, `oer-portable-crypto`'s `block::unwrap_now`), Message 3's when the
 handshake takes it and a connected rekey's in the action turn that follows;
 the AES-CMAC EAPOL-Key MIC of PSK-SHA256 and SAE; and the CCMP and BIP of
 received protected management frames. A refusal drops such a frame like one
@@ -467,7 +467,7 @@ group-exchange and TX-callback paths and its empty auth-timeout cancellation.
 
 Station alone issues `LinkEpoch`, before starting Connect. Its non-cloneable
 `LinkEpochSource` consumes the install's unique `Slot<ConnectionEpochKind>`
-from `oer-ieee80211-contracts-port`; there is no reset or slot extraction. The
+from `oer-protocols-ieee80211-contracts-port`; there is no reset or slot extraction. The
 backend supplies that slot, while Station constructs and owns its source. The epoch and contexts carry the invariant
 install brand. Recreating Station therefore cannot restart its counter
 while earlier operations can return. Issuance is total with a wrapping `u64`.
@@ -581,7 +581,7 @@ requirement rather than an inferred meaning of EAPOL's Secure bit. The same
 vendor file's `wpa_supplicant_install_ptk` at line 834 guards against repeated PTK installs.
 
 Key actions and pending/installed GTK records keep material in the shared
-`oer_ieee80211_contracts_security::Ccmp128Key` owner. Its Debug is redacted and its destructor zeroizes the
+`oer_protocols_ieee80211_contracts_security::Ccmp128Key` owner. Its Debug is redacted and its destructor zeroizes the
 owned bytes when a record retires or an unfinished action is dropped.
 Material comparison borrows those bytes; this makes no claim about
 arbitrary compiler temporaries or copies made inside hardware adapters.

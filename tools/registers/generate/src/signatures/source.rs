@@ -1,6 +1,6 @@
 //! Do not label dirty or unpinned header bytes as facts from a pinned tree.
 use crate::Result;
-use oer_os_process::git;
+use oer_tools_os_process::git;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -60,8 +60,8 @@ pub(super) fn verify(idf: &Path, headers: &BTreeMap<String, String>, revision: &
         verify_repository(&root, &repo, revision, &mut checked)?;
         let relative = path.strip_prefix(&repo)?.to_string_lossy();
         let committed = git::output(&repo, ["show", &format!("HEAD:{relative}")])?;
-        if oer_os_durable::sha256_bytes(&committed) != *expected
-            || oer_os_durable::sha256_file(&path)? != *expected
+        if oer_tools_os_durable::sha256_bytes(&committed) != *expected
+            || oer_tools_os_durable::sha256_file(&path)? != *expected
         {
             return Err(format!("{header} differs from its pinned committed bytes").into());
         }

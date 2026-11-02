@@ -1,5 +1,5 @@
 use super::model::{self, Config, Report};
-use oer_os_process::linux_socket::LinkAddress;
+use oer_tools_os_process::linux_socket::LinkAddress;
 use rustix::{
     event::{PollFd, PollFlags, Timespec, poll},
     net::{
@@ -16,8 +16,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 const MONITOR: &str = "oerprobe0";
 
 fn iw(args: &[&str]) -> Result<String> {
-    let output = oer_os_process::output(
-        oer_os_process::command("/usr/bin/iw").args(args),
+    let output = oer_tools_os_process::output(
+        oer_tools_os_process::command("/usr/bin/iw").args(args),
         Some(std::time::Duration::from_secs(5)),
     )?;
     if !output.status.success() {
@@ -32,7 +32,7 @@ struct Monitor {
 impl Drop for Monitor {
     fn drop(&mut self) {
         if self.owned {
-            oer_os_process::cleanup(|| {
+            oer_tools_os_process::cleanup(|| {
                 let _ = iw(&["dev", MONITOR, "del"]);
             });
         }
@@ -42,13 +42,13 @@ impl Drop for Monitor {
 struct Control<I> {
     input: I,
     cancel: std::os::unix::net::UnixStream,
-    _notification: oer_os_process::CancellationNotification,
+    _notification: oer_tools_os_process::CancellationNotification,
 }
 impl<I: AsFd> Control<I> {
     fn new(input: I) -> Result<Self> {
         let (read, write) = std::os::unix::net::UnixStream::pair()?;
         write.set_nonblocking(true)?;
-        let notification = oer_os_process::notify_on_cancel(move || {
+        let notification = oer_tools_os_process::notify_on_cancel(move || {
             let _ = (&write).write(&[1]);
         });
         Ok(Self {
@@ -59,7 +59,7 @@ impl<I: AsFd> Control<I> {
     }
     fn wait(&self, deadline: Instant) -> Result<bool> {
         loop {
-            oer_os_process::check_cancelled()?;
+            oer_tools_os_process::check_cancelled()?;
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 return Ok(false);
@@ -70,7 +70,7 @@ impl<I: AsFd> Control<I> {
                 PollFd::new(&self.cancel, PollFlags::IN),
             ];
             poll(&mut fds, Some(&timeout))?;
-            oer_os_process::check_cancelled()?;
+            oer_tools_os_process::check_cancelled()?;
             if !fds[0].revents().is_empty() {
                 return Ok(true);
             }
@@ -112,7 +112,7 @@ fn socket() -> Result<OwnedFd> {
 }
 
 pub fn run() -> Result<()> {
-    let _signals = oer_os_process::install_signal_handlers()?;
+    let _signals = oer_tools_os_process::install_signal_handlers()?;
     let control = Control::new(std::io::stdin())?;
     use std::os::unix::fs::OpenOptionsExt as _;
     let lock = std::fs::OpenOptions::new()
@@ -123,10 +123,10 @@ pub fn run() -> Result<()> {
         .mode(0o600)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open("/run/open-radio-probe.lock")?;
-    let _lock = oer_os_process::lock::FileLock::try_lock(
+    let _lock = oer_tools_os_process::lock::FileLock::try_lock(
         lock,
         std::path::Path::new("/run/open-radio-probe.lock"),
-        oer_os_process::lock::Mode::Exclusive,
+        oer_tools_os_process::lock::Mode::Exclusive,
     )?
     .ok_or("another probe holds /run/open-radio-probe.lock")?;
     let config: Config =
@@ -176,8 +176,8 @@ pub fn run() -> Result<()> {
         "type",
         "monitor",
     ])?;
-    let status = oer_os_process::output(
-        oer_os_process::command("/usr/bin/ip").args(["link", "set", MONITOR, "up"]),
+    let status = oer_tools_os_process::output(
+        oer_tools_os_process::command("/usr/bin/ip").args(["link", "set", MONITOR, "up"]),
         Some(std::time::Duration::from_secs(5)),
     )?
     .status;

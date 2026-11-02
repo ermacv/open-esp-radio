@@ -1,6 +1,6 @@
 # RV32 instruction decoding
 
-`oer-analysis-riscv-decode` turns instruction bytes into a typed instruction and its
+`oer-tools-analysis-riscv-decode` turns instruction bytes into a typed instruction and its
 length (2 or 4 bytes), and prints it as assembler text. It has no I/O and no
 ELF knowledge and builds for the host and `no_std`; its only dependency is the
 pinned rv-asm 0.2.1, which is itself `no_std` and dependency-free. Blobray's
@@ -46,6 +46,6 @@ are outside `Extensions::ALL`, FENCE decodes with the reserved `rd`, `rs1` and
 is reserved.
 
 ```console
-cargo test -p oer-analysis-riscv-decode
-cargo test -p oer-analysis-riscv-decode --test llvm_reference -- --ignored
+cargo test -p oer-tools-analysis-riscv-decode
+cargo test -p oer-tools-analysis-riscv-decode --test llvm_reference -- --ignored
 ```

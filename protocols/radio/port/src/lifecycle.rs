@@ -13,7 +13,7 @@ use core::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
-use oer_time::{Instant, RadioInstant};
+use oer_portable_time::{Instant, RadioInstant};
 
 /// The latest monotonic time, on the backend's clock, by which a stop must
 /// have ended; `None` leaves only the backend's own bounds. Each later stage

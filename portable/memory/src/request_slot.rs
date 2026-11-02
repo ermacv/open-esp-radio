@@ -34,7 +34,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_sync::PriorityWaker;
+use oer_portable_sync::PriorityWaker;
 
 const IDLE: u8 = 0;
 const POSTED: u8 = 1;

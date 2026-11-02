@@ -14,7 +14,7 @@
     clippy::disallowed_methods
 )]
 
-//! Portable LE submission and resource custody on `oer-radio-port` lifecycle.
+//! Portable LE submission and resource custody on `oer-protocols-radio-port` lifecycle.
 //!
 //! DTM starts and End are synchronous admissions. Every command owns a capacity
 //! bundle until its mandatory terminal is dequeued; an active test additionally
@@ -25,8 +25,8 @@
 //!
 //! Caller IDs use the shared allocator, skipping the backend-reserved range:
 //! ```
-//! use oer_bluetooth_le_port::LeOperationId;
-//! use oer_radio_port::{Correlation, CorrelationIds};
+//! use oer_protocols_bluetooth_le_port::LeOperationId;
+//! use oer_protocols_radio_port::{Correlation, CorrelationIds};
 //! let mut ids = CorrelationIds::starting_at(0xffff_feff);
 //! assert_eq!(ids.next::<LeOperationId>().0, 0xffff_feff);
 //! assert_eq!(ids.next::<LeOperationId>().0, 0);
@@ -34,15 +34,15 @@
 //! ```
 //! Session states remain affine; an idle session cannot issue End:
 //! ```compile_fail,E0308
-//! use oer_bluetooth_le_port::{DtmCommand, Idle, LeCapabilities, Session};
-//! use oer_radio_port::PoolPath;
+//! use oer_protocols_bluetooth_le_port::{DtmCommand, Idle, LeCapabilities, Session};
+//! use oer_protocols_radio_port::PoolPath;
 //! fn end<'p, P: PoolPath, C: LeCapabilities>(session: Session<'p, P, Idle>) -> DtmCommand<'p, P, C> {
 //!     DtmCommand::End(session)
 //! }
 //! ```
 
 use core::{future::Future, marker::PhantomData};
-use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
+use oer_protocols_bluetooth_le_wire::{TestChannel, TestPayloadType};
 mod capabilities;
 pub mod dtm;
 mod outcome;
@@ -53,17 +53,17 @@ pub use capabilities::{
     LeCapabilities, LeConnectionCapabilities, LePhy, LePhys, LeRadioCapabilities,
     LegacyAdvertisingTypes, LinkAcknowledgement, NoCapabilities,
 };
-pub use oer_time::{NonZeroRadioDuration, RadioDuration, WindowError};
+pub use oer_portable_time::{NonZeroRadioDuration, RadioDuration, WindowError};
 
 /// The clock domain of the LE radio: its instants never mix with another
 /// radio's.
 pub enum LeRadio {}
 
 /// An instant on the LE radio's clock.
-pub type LeInstant = oer_time::RadioInstant<LeRadio>;
+pub type LeInstant = oer_portable_time::RadioInstant<LeRadio>;
 
 /// A window reserved on the LE radio's clock.
-pub type LeWindow = oer_time::RadioWindow<LeRadio>;
+pub type LeWindow = oer_portable_time::RadioWindow<LeRadio>;
 pub use outcome::{EventResult, ReceivedPdu, TestReport};
 pub use request::{
     AboveCeiling, AcceptListChange, AcceptListDevice, AdvertisingConfiguration, AdvertisingEvent,
@@ -75,10 +75,10 @@ pub use request::{
 };
 pub use supported::{Capability, Supported, Timed, Unplaced, Untimed};
 
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     BodyLoan, Child, Correlation, Permit, PoolPath, PortContext, PortPhase, Seat, Slot, SlotOwner,
 };
-pub use oer_radio_port::{EventEnd, EventsLost, PortResult};
+pub use oer_protocols_radio_port::{EventEnd, EventsLost, PortResult};
 
 /// LE correlation key; the upper 256 values are reserved to backends.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -272,7 +272,7 @@ pub struct Terminal<'p, P: PoolPath, X> {
     /// Operation identity read from the admitted request.
     pub admitted: Admitted,
     /// Monotonic instant sampled before enqueue.
-    pub admitted_at: oer_time::Instant,
+    pub admitted_at: oer_portable_time::Instant,
     /// Execution versus withdrawal versus unknown completion.
     pub result: EventResult,
     /// Execution or lost-air fact.

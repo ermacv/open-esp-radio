@@ -5,7 +5,7 @@
 
 use std::{path::Path, time::Duration};
 
-use oer_lab_model::Stand;
+use oer_tools_lab_model::Stand;
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -32,7 +32,7 @@ fn check(name: &'static str, result: Result<()>) -> Check {
 pub fn doctor(root: &Path, path: &Path) -> Vec<Check> {
     let stand = Stand::load(path);
     let stand_check = match &stand {
-        Ok(stand) => oer_chip_profile::Profile::all(root)
+        Ok(stand) => oer_tools_chip_profile::Profile::all(root)
             .map_err(|error| error.to_string().into())
             .and_then(|chips| stand.validate_chips(&chips).map_err(Into::into)),
         Err(error) => Err(error.to_string().into()),
@@ -96,8 +96,8 @@ fn uhubctl_reaches(stand: &Stand) -> Result<()> {
 }
 
 fn wlan0_unmanaged() -> Result<()> {
-    let output = oer_os_process::output(
-        oer_os_process::command("nmcli").args(["-t", "-f", "DEVICE,STATE", "device"]),
+    let output = oer_tools_os_process::output(
+        oer_tools_os_process::command("nmcli").args(["-t", "-f", "DEVICE,STATE", "device"]),
         Some(Duration::from_secs(10)),
     )?;
     wlan0_state(&String::from_utf8_lossy(&output.stdout))

@@ -1,7 +1,9 @@
 use super::*;
-use oer_ieee80211_core_security_rsn::{Ptk, PtkContext, frames::RsnTxFrame, sae::SaeKeys};
-use oer_ieee80211_wire::sae::SaeCommitValues;
-use oer_ieee80211_wire::security::rsn::{Akm, RsnElement};
+use oer_protocols_ieee80211_core_security_rsn::{
+    Ptk, PtkContext, frames::RsnTxFrame, sae::SaeKeys,
+};
+use oer_protocols_ieee80211_wire::sae::SaeCommitValues;
+use oer_protocols_ieee80211_wire::security::rsn::{Akm, RsnElement};
 use std::vec;
 
 fn advertised(transition: bool, h2e: bool) -> Vec<u8> {
@@ -88,7 +90,7 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     };
     let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
     let keys = peer.process(station).unwrap();
-    let mut body = [0; oer_ieee80211_wire::sae::SAE_COMMIT_LEN];
+    let mut body = [0; oer_protocols_ieee80211_wire::sae::SAE_COMMIT_LEN];
     let length = peer.values().encode(None, h2e, &mut body).unwrap();
     world.receive(at(now), &peer_authentication(1, status, &body[..length]));
     let (status, confirm) = outgoing_authentication(world.frames.last().unwrap(), 3, 2);
@@ -169,9 +171,11 @@ fn finish_handshake(
             plain.push(0);
         }
     }
-    let wrapped =
-        oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message3 = RsnTxFrame::<512>::message3(akm, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
         .authenticate(&ptk, &mut SoftwareAes128)
@@ -257,7 +261,7 @@ fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
         world.receive(at(31), &peer_authentication(2, 0, &confirm));
         assert!(world.seen.contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::Sae(StaSaeFailure::Protocol(
-                oer_ieee80211_core_security_rsn::sae::SaeError::ConfirmMismatch
+                oer_protocols_ieee80211_core_security_rsn::sae::SaeError::ConfirmMismatch
             ))
         ))));
         assert!(matches!(world.station.state, State::Idle));
@@ -268,8 +272,10 @@ fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
                 .station
                 .pmksa
                 .resume(
-                    oer_ieee80211_wire::address::Bssid::new(IndividualAddress::new(BSSID).unwrap())
-                        .unwrap(),
+                    oer_protocols_ieee80211_wire::address::Bssid::new(
+                        IndividualAddress::new(BSSID).unwrap()
+                    )
+                    .unwrap(),
                     SSID
                 )
                 .is_none()
@@ -331,12 +337,12 @@ fn anti_clogging_response_waits_for_credit_without_extending_the_deadline() {
 #[test]
 fn password_element_invariant_is_a_local_fault_with_its_peer_and_derivation() {
     for pwe in [
-        oer_ieee80211_wire::security::SaePwe::HuntingAndPecking,
-        oer_ieee80211_wire::security::SaePwe::HashToElement,
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+        oer_protocols_ieee80211_wire::security::SaePwe::HashToElement,
     ] {
         assert_eq!(
             sae_derivation_failure(
-                oer_ieee80211_core_security_rsn::sae::SaeError::Crypto,
+                oer_protocols_ieee80211_core_security_rsn::sae::SaeError::Crypto,
                 BSSID,
                 pwe
             ),
@@ -347,12 +353,12 @@ fn password_element_invariant_is_a_local_fault_with_its_peer_and_derivation() {
         );
         assert_eq!(
             sae_derivation_failure(
-                oer_ieee80211_core_security_rsn::sae::SaeError::NoPasswordElement,
+                oer_protocols_ieee80211_core_security_rsn::sae::SaeError::NoPasswordElement,
                 BSSID,
                 pwe
             ),
             StaDisconnectReason::Sae(StaSaeFailure::Protocol(
-                oer_ieee80211_core_security_rsn::sae::SaeError::NoPasswordElement
+                oer_protocols_ieee80211_core_security_rsn::sae::SaeError::NoPasswordElement
             ))
         );
     }

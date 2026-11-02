@@ -1,8 +1,10 @@
 //! The executor/task boundary comes from resolution facts, never names.
 
 use super::Result;
-use oer_espressif_facts::Memory;
-use oer_image_stack::{Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites};
+use oer_chips_family_facts::Memory;
+use oer_tools_image_stack::{
+    Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites,
+};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Write as _};
 
@@ -129,8 +131,8 @@ impl CodePlacement {
         inputs: &Stacks<'_>,
         panic: BTreeSet<u32>,
         memory: &Memory,
-        keep: &mut oer_analysis_riscv_model::Ledger<'_>,
-        control: &mut dyn oer_analysis_riscv_model::RunControl,
+        keep: &mut oer_tools_analysis_riscv_model::Ledger<'_>,
+        control: &mut dyn oer_tools_analysis_riscv_model::RunControl,
     ) -> Result<Self> {
         let mut contexts = Vec::new();
         let mut strict = panic.clone();

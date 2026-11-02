@@ -1,5 +1,5 @@
 use super::*;
-use oer_image_stack::{Assumption, Fact};
+use oer_tools_image_stack::{Assumption, Fact};
 
 #[path = "handoff_tests.rs"]
 mod handoff;
@@ -224,8 +224,8 @@ pub(crate) fn from_bytes(elf: Vec<u8>) -> Image {
 mod frame_limits {
     use super::*;
     use crate::stack::frames::FrameAudit;
-    use oer_chip_profile::policy::FrameException;
-    use oer_image_bundle::CheckedElf;
+    use oer_tools_chip_profile::policy::FrameException;
+    use oer_tools_image_bundle::CheckedElf;
 
     fn subject(bytes: u64) -> Image {
         let mut image = image(
@@ -544,7 +544,7 @@ flash-xip = { executable = true, cached = true, dma = false, retained = false, w
 "#,
     )
     .unwrap();
-    let profile = oer_chip_profile::Profile::load(chip.path(), "esp32s31")
+    let profile = oer_tools_chip_profile::Profile::load(chip.path(), "esp32s31")
         .expect("the synthetic chip profile is valid");
     let (directory, policy) = policy_with(BASE, ASM_REVIEW);
     let input = CheckInput {
@@ -583,7 +583,7 @@ fn audit(
     let mut audit = StackAudit::of(
         image,
         policy,
-        &[oer_chip_profile::policy::StackRoot {
+        &[oer_tools_chip_profile::policy::StackRoot {
             hart: Some(0),
             name: "test stack".into(),
             stack: stack(policy),
@@ -837,13 +837,13 @@ fn the_fact_boot_identity_selects_which_partial_task_bound_can_pass() {
     for harts in [3, 7] {
         let boot = harts - 1;
         let mut contract =
-            Contract::of(&oer_chip_profile::Profile::tracked("esp32s31").unwrap()).unwrap();
+            Contract::of(&oer_tools_chip_profile::Profile::tracked("esp32s31").unwrap()).unwrap();
         contract.interrupts.harts = (0..harts).collect();
         contract.interrupts.boot_hart = boot;
         let mut image = image_with_stack(1024);
         image.contract = Some(contract);
         for hart in 0..harts {
-            let root = oer_chip_profile::policy::StackRoot {
+            let root = oer_tools_chip_profile::policy::StackRoot {
                 hart: Some(hart),
                 name: format!("hart {hart} task stack"),
                 stack: policy.task_stack(0).unwrap(),
@@ -1167,21 +1167,25 @@ fn reviews_match_without_crate_disambiguators_only() {
 fn the_repository_policies_load() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
-        (
-            "chips/esp32s31/platform/stack.toml",
-            include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
-        ),
-        (
-            "chips/espressif/staged-layout/stack-coverage.toml",
-            include_str!("../../../../../chips/espressif/staged-layout/stack-coverage.toml"),
-        ),
-    ]) {
+    for (path, text) in oer_chips_family_facts::tracked::FILES
+        .iter()
+        .copied()
+        .chain([
+            (
+                "chips/esp32s31/platform/stack.toml",
+                include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
+            ),
+            (
+                "chips/family/staged-layout/stack-coverage.toml",
+                include_str!("../../../../../chips/family/staged-layout/stack-coverage.toml"),
+            ),
+        ])
+    {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
-    for chip in oer_chip_profile::Profile::all(&root).unwrap() {
+    for chip in oer_tools_chip_profile::Profile::all(&root).unwrap() {
         let policy = StackPolicy::load(&root.join(chip.stack_policy())).unwrap();
         if let Some(coverage) = &policy.coverage_policy {
             CoveragePolicy::load(coverage).unwrap();
@@ -1237,8 +1241,8 @@ minimum_free_bytes = 16
     /// The same word of an image that also runs core 1.
     const BOTH: (&str, u32, u32) = ("__runtime_used_harts", 0b11, 0);
 
-    fn chip() -> oer_chip_profile::Profile {
-        oer_chip_profile::Profile::load(
+    fn chip() -> oer_tools_chip_profile::Profile {
+        oer_tools_chip_profile::Profile::load(
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
             "esp32s31",
         )
@@ -1286,9 +1290,9 @@ minimum_free_bytes = 16
     fn a_linked_starter_with_core_one_unused_fails() {
         let (_directory, policy) = policy_with(POLICY, "");
         for name in [
-            "oer_esp32s31_hal::cores::Cores::start_hart1::<closure>",
-            "<oer_esp32s31_hal::cores::Cores>::start_hart1",
-            "oer_esp32s31_hal::cores::Cores::start_hart1",
+            "oer_chips_esp32s31_hal::cores::Cores::start_hart1::<closure>",
+            "<oer_chips_esp32s31_hal::cores::Cores>::start_hart1",
+            "oer_chips_esp32s31_hal::cores::Cores::start_hart1",
         ] {
             let image = image(
                 &with(Some(starter(name))),
@@ -1306,7 +1310,7 @@ minimum_free_bytes = 16
         }
         // A function that only resembles a starter is none.
         let image = image(
-            &with(Some(starter("oer_esp32s31_hal::cores::Cores::park"))),
+            &with(Some(starter("oer_chips_esp32s31_hal::cores::Cores::park"))),
             &[("boot_stack", 0, 1024), BOOT_ONLY],
         );
         cores::audit_runtime(&image, &policy, &chip()).unwrap();
@@ -1358,7 +1362,9 @@ minimum_free_bytes = 16
         for (root, proven) in [("leaf", true), ("indirect", false)] {
             let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
             let image = image(
-                &with(Some(starter("oer_esp32s31_hal::cores::Cores::start_hart1"))),
+                &with(Some(starter(
+                    "oer_chips_esp32s31_hal::cores::Cores::start_hart1",
+                ))),
                 &[
                     ("boot_stack", 0, 1024),
                     ("secondary_stack", 0x400, 1024),
@@ -1443,7 +1449,7 @@ fn a_root_that_reaches_forbidden_rom_fails() {
         )
         .expect("the synthetic image is valid")
     };
-    let forbidden = [oer_espressif_facts::RomRange {
+    let forbidden = [oer_chips_family_facts::RomRange {
         name: "radio".into(),
         start: ROM + 4,
         end: ROM + 8,

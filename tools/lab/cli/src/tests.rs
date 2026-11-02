@@ -81,7 +81,7 @@ fn the_complete_tree_parses_existing_forms_and_an_opaque_lease_command() {
 
 #[test]
 fn command_tree_keeps_the_json_contract_with_explicit_corrections() {
-    let mut expected: Vec<oer_os_command_tree::CommandNode> =
+    let mut expected: Vec<oer_tools_os_command_tree::CommandNode> =
         serde_json::from_str(include_str!("../tests/fixtures/command-tree.json")).unwrap();
     // --owner is inherited from the root, rather than declared again by lease.
     expected

@@ -1,6 +1,6 @@
 //! A fixed timer discard must leave delivery configuration and sibling words
 //! alone. Host storage observes bus writes, not silicon W1C behavior.
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     bt_mac::{BluetoothInterruptBank, irq_clear_1},
     instances,
 };

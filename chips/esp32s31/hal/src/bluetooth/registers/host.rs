@@ -7,7 +7,7 @@
 
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     ble_accelerator::BleHwAccelerator,
     bt_mac::{
         BleControllerAddressSlots, BleHwCteRingControl, BleHwPositionalWord1ff0,
@@ -19,7 +19,7 @@ use oer_esp32s31_pac::{
     modem_etm::{self, BleHwPositionalWord891c},
     modem_pwr::{BtdmLpTimerStatus, BtdmRuntimeControl},
 };
-use oer_mmio::Host;
+use oer_portable_mmio::Host;
 
 use super::{
     BluetoothInterruptRegisters, BluetoothModemLpTimerRegisters, BluetoothPlacements,
@@ -66,7 +66,7 @@ fn words(size: usize, fill: u32) -> Vec<u32> {
 
 fn host<'a, T>(
     memory: &'a mut [u32],
-    make: impl FnOnce(&'a mut [u32]) -> Result<T, oer_mmio::HostTooSmall>,
+    make: impl FnOnce(&'a mut [u32]) -> Result<T, oer_portable_mmio::HostTooSmall>,
 ) -> T {
     make(memory).expect("memory holds the instance")
 }

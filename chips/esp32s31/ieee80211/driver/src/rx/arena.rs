@@ -11,13 +11,13 @@
 //! [`bind`]: WifiRxArena::bind
 
 use core::mem::MaybeUninit;
-use oer_espressif_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::{
     irq::consumer::{IrqConsumer, IrqPublisher, IrqStorage, PowerIrqConsumer, PowerIrqStorage},
     rx::pool::RxStagePool,
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::dma::{
         rx_storage::{PlacedRxDma, RxDmaStorage, RxDmaStorageError},
         space::{ChipDma, DmaSpace},
@@ -37,9 +37,9 @@ use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 /// line's facts: the MAC facts but the receive ones, the receive facts and
 /// the power facts.
 pub struct WifiIrqSignals<X: SignalExecutor> {
-    pub mac: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
-    pub receive: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
-    pub power: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
+    pub mac: &'static oer_chips_family_interrupt_table::signal::IrqSignal<X>,
+    pub receive: &'static oer_chips_family_interrupt_table::signal::IrqSignal<X>,
+    pub power: &'static oer_chips_family_interrupt_table::signal::IrqSignal<X>,
 }
 
 /// The static arena of one receive epoch.
@@ -75,7 +75,7 @@ pub struct WifiRxArena<
 }
 
 /// The zeroed static of one receive epoch: the arena and the RX DMA
-/// storage, placed together ([`oer_esp32s31_hal::dma_static!`]).
+/// storage, placed together ([`oer_chips_esp32s31_hal::dma_static!`]).
 pub type WifiRxStatic<
     const COUNT: usize,
     const BUFFER: usize,
@@ -125,7 +125,7 @@ impl<
     /// travel in `signals`, whose task is the runner on their executor.
     ///
     /// The static is `placed` in the DMA window
-    /// ([`oer_esp32s31_hal::dma_static!`]): the storage's descriptors and
+    /// ([`oer_chips_esp32s31_hal::dma_static!`]): the storage's descriptors and
     /// buffers are published to the MAC by their own addresses.
     ///
     /// # Errors
@@ -152,7 +152,9 @@ impl<
         // (`rx_ring_outspans_any_unit`).
         const {
             assert!(
-                oer_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(COUNT, BUFFER),
+                oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(
+                    COUNT, BUFFER
+                ),
                 "one receive unit could span the whole ring"
             );
         }

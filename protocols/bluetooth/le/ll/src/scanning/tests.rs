@@ -1,5 +1,7 @@
 use super::LegacyAdvertisingDuplicateFilter;
-use oer_bluetooth_le_wire::scanning::{PrimaryScanChannel, parse_legacy_advertising_report};
+use oer_protocols_bluetooth_le_wire::scanning::{
+    PrimaryScanChannel, parse_legacy_advertising_report,
+};
 
 const ADV_NONCONN: [u8; 11] = [2, 9, 1, 2, 3, 4, 5, 6, 2, 1, 6];
 

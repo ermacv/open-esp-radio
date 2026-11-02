@@ -1,7 +1,7 @@
 //! Typed LMAC boundary for complete runtime Wi-Fi COEX register leaves.
 
-use oer_esp32s31_hal::ieee80211::mac::WifiMacHal;
-use oer_esp32s31_hal::ieee80211::mac::{
+use oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal;
+use oer_chips_esp32s31_hal::ieee80211::mac::{
     MacItwtClearIndex, MacPti, MacTxPtiProgram, MacTxQueueIndex,
 };
 

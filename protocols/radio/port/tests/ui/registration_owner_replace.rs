@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{SlotIdentity, SlotOwner, SlotRegistration};
+use oer_protocols_radio_port::{SlotIdentity, SlotOwner, SlotRegistration};
 pub fn owner<Id: SlotIdentity, S: SlotOwner<Id>>(mut registration: SlotRegistration<'_, Id, S>) {
     #[cfg(ui_reject)]
     let _owner = &mut registration.owner; // ui-error: E0616

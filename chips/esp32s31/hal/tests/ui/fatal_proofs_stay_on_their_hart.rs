@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::cores::{Fatal, StopTheWorld};
+use oer_chips_esp32s31_hal::cores::{Fatal, StopTheWorld};
 
 fn other_hart<T: Send>(_: T) {}
 

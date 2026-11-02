@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_esp32s31_hal::bluetooth::engine::{DtmPool, SchedulerRoleInstance};
+use oer_chips_esp32s31_hal::bluetooth::engine::{DtmPool, SchedulerRoleInstance};
 
 pub fn release<'pool, 'epoch>(
     pool: &mut DtmPool<'pool, 'epoch, 1>,

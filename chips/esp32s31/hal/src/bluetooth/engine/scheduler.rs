@@ -18,7 +18,7 @@ pub mod window;
 
 pub use config::SchedulerSoftwareConfig;
 
-use oer_time::settle::SettleLimit;
+use oer_portable_time::settle::SettleLimit;
 
 /// The named settle of one scheduler diagnostic-pair sample.
 ///

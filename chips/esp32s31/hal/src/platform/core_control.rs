@@ -5,7 +5,7 @@
 //! after a software reset.
 
 use super::{Hart, SecondaryHart};
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::{HpSysClkrstCore, HpSysClkrstUart0},
     hp_system::HpSysCoreStallStatus,
     instances,
@@ -14,7 +14,7 @@ use oer_esp32s31_pac::{
     ownership::{CoreControlPeripherals, Uart0ClockPeripherals},
     pmu::PmuCpuStall,
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -239,11 +239,11 @@ impl<P: Placement> Uart0ClockRegisters<P> {
 #[cfg(any(test, feature = "test-support"))]
 impl<'a>
     CoreControlRegisters<
-        oer_mmio::Host<'a>,
-        oer_mmio::Host<'a>,
-        oer_mmio::Host<'a>,
-        oer_mmio::Host<'a>,
-        oer_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
     >
 {
     /// Each block over its own host memory from its instance's base.
@@ -253,7 +253,7 @@ impl<'a>
         clocks: &'a mut [u32],
         reset: &'a mut [u32],
         system: &'a mut [u32],
-    ) -> Result<Self, oer_mmio::HostTooSmall> {
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             stall: PmuCpuStall::host(stall)?,
             status: HpSysCoreStallStatus::host(status)?,
@@ -276,9 +276,9 @@ pub const HOST_SIZES: [usize; 5] = [
 ];
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> Uart0ClockRegisters<oer_mmio::Host<'a>> {
+impl<'a> Uart0ClockRegisters<oer_portable_mmio::Host<'a>> {
     /// The block over host memory from its instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         HpSysClkrstUart0::host(words).map(Self)
     }
 }
@@ -291,26 +291,27 @@ pub const UART0_HOST_SIZE: usize = instances::hp_sys_clkrst::SIZE;
 // The containment port can only clear an entry; the launch port, whose release
 // writes a nonzero entry, is reached only through `Cores::start_secondary`.
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
-    oer_espressif_boot::drivers::cores::Registers for CoreControlRegisters<P, Q, R, S, T>
+    oer_chips_family_boot::drivers::cores::Registers for CoreControlRegisters<P, Q, R, S, T>
 {
     type Secondary = SecondaryHart;
     const SECONDARIES: &'static [SecondaryHart] = &Hart::SECONDARIES;
-    fn request_stall(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+    fn request_stall(&mut self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) {
         self.request_stall(hart.hart());
     }
-    fn hold(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+    fn hold(&mut self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) {
         self.hold(hart);
     }
-    fn clear_boot_address(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+    fn clear_boot_address(&mut self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) {
         self.set_boot_address(hart, 0);
     }
 }
 
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
-    oer_espressif_boot::drivers::cores::RuntimeRegisters for CoreControlRegisters<P, Q, R, S, T>
+    oer_chips_family_boot::drivers::cores::RuntimeRegisters
+    for CoreControlRegisters<P, Q, R, S, T>
 {
     type Hart = Hart;
-    type Stops = [Option<oer_espressif_boot::drivers::cores::Stopped>; super::HARTS];
+    type Stops = [Option<oer_chips_family_boot::drivers::cores::Stopped>; super::HARTS];
     const HARTS: &'static [Hart] = &Hart::ALL;
     const BOOT: Hart = super::BOOT_HART;
     fn hart(secondary: SecondaryHart) -> Hart {
@@ -319,51 +320,51 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
     fn save_stop(
         stops: &mut Self::Stops,
         hart: Hart,
-        stopped: oer_espressif_boot::drivers::cores::Stopped,
+        stopped: oer_chips_family_boot::drivers::cores::Stopped,
     ) {
         *hart.at_mut(stops) = Some(stopped);
     }
-    fn fence(&self, _: oer_espressif_boot::Access<'_>) {
-        oer_riscv::fence();
+    fn fence(&self, _: oer_chips_family_boot::Access<'_>) {
+        oer_portable_riscv::fence();
     }
-    fn held(&self, _: oer_espressif_boot::Access<'_>, hart: Hart) -> bool {
+    fn held(&self, _: oer_chips_family_boot::Access<'_>, hart: Hart) -> bool {
         self.held(hart)
     }
-    fn is_stalled(&self, _: oer_espressif_boot::Access<'_>, hart: Hart) -> bool {
+    fn is_stalled(&self, _: oer_chips_family_boot::Access<'_>, hart: Hart) -> bool {
         self.is_stalled(hart)
     }
-    fn request_peer_stall(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
+    fn request_peer_stall(&mut self, _: oer_chips_family_boot::Access<'_>, hart: Hart) {
         self.request_stall(hart);
     }
-    fn request_run(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
+    fn request_run(&mut self, _: oer_chips_family_boot::Access<'_>, hart: Hart) {
         self.request_run(hart);
     }
-    fn reset_core(&mut self, _: oer_espressif_boot::Access<'_>, hart: Hart) {
+    fn reset_core(&mut self, _: oer_chips_family_boot::Access<'_>, hart: Hart) {
         self.reset_core(hart);
     }
 }
 
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
-    oer_espressif_boot::drivers::cores::LaunchRegisters for CoreControlRegisters<P, Q, R, S, T>
+    oer_chips_family_boot::drivers::cores::LaunchRegisters for CoreControlRegisters<P, Q, R, S, T>
 {
-    fn enable_cpu_clock(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+    fn enable_cpu_clock(&mut self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) {
         self.enable_cpu_clock(hart);
     }
-    fn enable_clic_clock(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+    fn enable_clic_clock(&mut self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) {
         self.enable_clic_clock(hart);
     }
-    fn release_reset(&mut self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) {
+    fn release_reset(&mut self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) {
         self.release_reset(hart);
     }
     fn set_boot_address(
         &mut self,
-        _: oer_espressif_boot::Access<'_>,
+        _: oer_chips_family_boot::Access<'_>,
         hart: SecondaryHart,
         entry: u32,
     ) {
         self.set_boot_address(hart, entry);
     }
-    fn boot_address(&self, _: oer_espressif_boot::Access<'_>, hart: SecondaryHart) -> u32 {
+    fn boot_address(&self, _: oer_chips_family_boot::Access<'_>, hart: SecondaryHart) -> u32 {
         self.boot_address(hart)
     }
 }

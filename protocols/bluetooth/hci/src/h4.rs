@@ -12,7 +12,7 @@
 //! that owns the wire.
 
 use bt_hci::{FromHciBytesError, PacketKind, cmd::Opcode};
-use oer_wire::{Reader, Writer};
+use oer_portable_wire::{Reader, Writer};
 
 use crate::HciCommandPacket;
 
@@ -58,7 +58,7 @@ pub enum Error {
     /// The stream carries commands only, and its next frame has another kind.
     NotCommand(PacketKind),
     /// The cursor refused the input or the destination.
-    Wire(oer_wire::Error),
+    Wire(oer_portable_wire::Error),
     /// A command's parameters do not fit its one-octet length.
     ParametersTooLong,
     /// A complete command still awaits consumption, so no octet may follow.
@@ -71,8 +71,8 @@ pub enum Error {
     Command(FromHciBytesError),
 }
 
-impl From<oer_wire::Error> for Error {
-    fn from(error: oer_wire::Error) -> Self {
+impl From<oer_portable_wire::Error> for Error {
+    fn from(error: oer_portable_wire::Error) -> Self {
         Self::Wire(error)
     }
 }
@@ -115,7 +115,7 @@ pub fn split(frame: &[u8]) -> Result<(PacketKind, &[u8]), Error> {
 pub fn frame_length(prefix: &[u8]) -> Result<Option<usize>, Error> {
     let (kind, header) = match split(prefix) {
         Ok(split) => split,
-        Err(Error::Wire(oer_wire::Error::Truncated { .. })) => return Ok(None),
+        Err(Error::Wire(oer_portable_wire::Error::Truncated { .. })) => return Ok(None),
         Err(error) => return Err(error),
     };
     let (header_length, payload) = match kind {
@@ -127,13 +127,13 @@ pub fn frame_length(prefix: &[u8]) -> Result<Option<usize>, Error> {
     };
     let payload = match payload {
         Ok(payload) => payload,
-        Err(oer_wire::Error::Truncated { .. }) => return Ok(None),
+        Err(oer_portable_wire::Error::Truncated { .. }) => return Ok(None),
         Err(error) => return Err(error.into()),
     };
     let length = 1_usize
         .checked_add(header_length)
         .and_then(|length| length.checked_add(payload))
-        .ok_or(oer_wire::Error::LengthOverflow)?;
+        .ok_or(oer_portable_wire::Error::LengthOverflow)?;
     Ok(Some(length))
 }
 
@@ -146,7 +146,11 @@ enum Width {
 }
 
 /// Read the payload length that starts `offset` octets into `header`.
-fn payload_length(header: &[u8], offset: usize, width: Width) -> Result<usize, oer_wire::Error> {
+fn payload_length(
+    header: &[u8],
+    offset: usize,
+    width: Width,
+) -> Result<usize, oer_portable_wire::Error> {
     let mut reader = Reader::new(header);
     reader.take(offset)?;
     let length = match width {
@@ -154,7 +158,7 @@ fn payload_length(header: &[u8], offset: usize, width: Width) -> Result<usize, o
         Width::Short => usize::from(reader.u16_le()?),
         Width::Iso => {
             let bits = reader.bits::<ISO_LENGTH_BITS>(0)?;
-            usize::try_from(bits).map_err(|_| oer_wire::Error::LengthOverflow)?
+            usize::try_from(bits).map_err(|_| oer_portable_wire::Error::LengthOverflow)?
         }
     };
     Ok(length)

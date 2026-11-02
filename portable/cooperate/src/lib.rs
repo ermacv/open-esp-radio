@@ -25,7 +25,7 @@
 /// becoming ready after a `false` answer can wait for at most that next atom.
 /// The binding also returns true before its continuous-poll guard expires,
 /// reserving enough time for the atom and the caller's return path.
-pub trait CooperativeTimer: oer_time::Timer {
+pub trait CooperativeTimer: oer_portable_time::Timer {
     fn should_yield(&self) -> bool;
 }
 

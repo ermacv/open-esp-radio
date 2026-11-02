@@ -1,6 +1,6 @@
 //! The IEEE 802.15.4 radio port on the shared owner shape of
-//! `oer-radio-port` ([`Owner`](oer_radio_port::Owner),
-//! [`PortBody`](oer_radio_port::PortBody)).
+//! `oer-protocols-radio-port` ([`Owner`](oer_protocols_radio_port::Owner),
+//! [`PortBody`](oer_protocols_radio_port::PortBody)).
 //!
 //! Every refusal of a command port (its `CommandError`) that a
 //! caller's own state explains is a type here (`docs/architecture.md`,
@@ -22,11 +22,11 @@
 //!
 //! These stay the world's outcomes: [`Poisoned`] (a radio fault poisons
 //! the port; the work admitted before it ends first),
-//! [`EventsLost`](oer_radio_port::EventsLost) (only received frames), a
+//! [`EventsLost`](oer_protocols_radio_port::EventsLost) (only received frames), a
 //! clock that could not be read, an operation's status on the air, and a
 //! cancel that finds the work already ended
 //! ([`CancelError::NotRunning`](crate::CancelError::NotRunning)).
-//! The event stream alone ends with [`oer_radio_port::EventEnd`]: `Drained`
+//! The event stream alone ends with [`oer_protocols_radio_port::EventEnd`]: `Drained`
 //! accounts every admitted terminal, while `Quarantined` leaves unread
 //! ownership in `PortEnd` and requires fail-stop without further draining.
 //! Its variant and cause remain final across phase loans.
@@ -54,7 +54,7 @@
 //! One interface has one client at a time:
 //!
 //! ```compile_fail,E0499
-//! # use oer_ieee802154_port::owner::Ieee802154Clients;
+//! # use oer_protocols_ieee802154_port::owner::Ieee802154Clients;
 //! fn twice<'id, C: Ieee802154Clients<'id>>(clients: &C, zero: &mut C::Configured<0>) {
 //!     let first = clients.client(zero);
 //!     let second = clients.client(zero);
@@ -65,7 +65,7 @@
 //! Its compiling twin lends it again after the first client:
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::Ieee802154Clients;
+//! # use oer_protocols_ieee802154_port::owner::Ieee802154Clients;
 //! fn again<'id, C: Ieee802154Clients<'id>>(clients: &C, zero: &mut C::Configured<0>) {
 //!     drop(clients.client(&mut *zero));
 //!     drop(clients.client(zero));
@@ -75,7 +75,7 @@
 //! A setting reaches the interface while its client lives:
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::{Ieee802154Clients, Ieee802154Client};
+//! # use oer_protocols_ieee802154_port::owner::{Ieee802154Clients, Ieee802154Client};
 //! fn set<'id, C: Ieee802154Clients<'id>>(clients: &C, zero: &mut C::Configured<0>) {
 //!     let client = clients.client(zero);
 //!     client.set_pan_id(1);
@@ -86,7 +86,7 @@
 //! Removal needs the lifecycle token back from the client:
 //!
 //! ```compile_fail,E0505
-//! # use oer_ieee802154_port::owner::{Ieee802154Clients, Ieee802154Interfaces};
+//! # use oer_protocols_ieee802154_port::owner::{Ieee802154Clients, Ieee802154Interfaces};
 //! fn remove<'id, I, C>(control: &mut I, clients: &C, zero: I::Configured<0>)
 //! where
 //!     I: Ieee802154Interfaces<'id>,
@@ -113,7 +113,7 @@
 //! Every token carries the install's brand `'id`. The operation permit
 //! stays in the backend's held part of the install ([`OperationPermits`]):
 //! a client awaits it with its interface's seat in the operation's line
-//! ([`Permits`](oer_radio_port::Permits) issues one per interface client to [`WorkPermits::new`], which the body's
+//! ([`Permits`](oer_protocols_radio_port::Permits) issues one per interface client to [`WorkPermits::new`], which the body's
 //! resources hand out and the caller keeps across takes) as a guard that
 //! gives it back when dropped before a submission; a submission moves it in, and the backend gives it back when
 //! it takes the operation's terminal, before it hands the event out. No
@@ -125,7 +125,7 @@
 //! No caller makes an operation permit:
 //!
 //! ```compile_fail,E0451
-//! # use oer_ieee802154_port::owner::{OperationPermit, WorkPermit};
+//! # use oer_protocols_ieee802154_port::owner::{OperationPermit, WorkPermit};
 //! fn forge<'q, 'id>() -> OperationPermit<'q, 'id> {
 //!     WorkPermit { held: todo!() }
 //! }
@@ -134,7 +134,7 @@
 //! Its compiling twin reads the permit a client gave:
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::OperationPermit;
+//! # use oer_protocols_ieee802154_port::owner::OperationPermit;
 //! fn held<'q, 'id>(permit: &'q OperationPermit<'q, 'id>) -> &'q OperationPermit<'q, 'id> {
 //!     permit
 //! }
@@ -144,14 +144,14 @@
 //!
 //! ```compile_fail,E0451
 //! # use core::marker::PhantomData;
-//! # use oer_ieee802154_port::owner::SupportedPower;
+//! # use oer_protocols_ieee802154_port::owner::SupportedPower;
 //! fn forge<K>() -> SupportedPower<K> {
 //!     SupportedPower { dbm: 20, brand: PhantomData }
 //! }
 //! ```
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::{Ieee802154Caps, SupportedPower};
+//! # use oer_protocols_ieee802154_port::owner::{Ieee802154Caps, SupportedPower};
 //! fn checked<K: Ieee802154Caps>() -> Option<SupportedPower<K>> {
 //!     SupportedPower::new(20).ok()
 //! }
@@ -161,8 +161,8 @@
 //! constant:
 //!
 //! ```compile_fail,E0080
-//! # use oer_ieee802154_port::owner::{Has, Ieee802154Caps, Promiscuous};
-//! # use oer_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_protocols_ieee802154_port::owner::{Has, Ieee802154Caps, Promiscuous};
+//! # use oer_protocols_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
 //! # struct Plain;
 //! # impl Ieee802154Caps for Plain {
 //! #     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {
@@ -182,8 +182,8 @@
 //! Its compiling twin names a feature the capabilities state:
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::{Has, Ieee802154Caps, Promiscuous};
-//! # use oer_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_protocols_ieee802154_port::owner::{Has, Ieee802154Caps, Promiscuous};
+//! # use oer_protocols_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
 //! # struct Sniffer;
 //! # impl Ieee802154Caps for Sniffer {
 //! #     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {
@@ -203,9 +203,9 @@
 //! An interface the capabilities do not state has no resources:
 //!
 //! ```compile_fail,E0080
-//! # use oer_ieee802154_port::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
-//! # use oer_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
-//! # use oer_radio_port::Mint;
+//! # use oer_protocols_ieee802154_port::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
+//! # use oer_protocols_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_protocols_radio_port::Mint;
 //! # struct One;
 //! # impl Ieee802154Caps for One {
 //! #     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {
@@ -227,9 +227,9 @@
 //! Its compiling twin mints the resources of the interface it has:
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
-//! # use oer_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
-//! # use oer_radio_port::Mint;
+//! # use oer_protocols_ieee802154_port::owner::{Ieee802154Caps, InterfacePool, InterfaceResources};
+//! # use oer_protocols_ieee802154_port::{Ieee802154Capabilities, RadioCapabilities};
+//! # use oer_protocols_radio_port::Mint;
 //! # struct One;
 //! # impl Ieee802154Caps for One {
 //! #     const CAPS: Ieee802154Capabilities = Ieee802154Capabilities {
@@ -251,16 +251,16 @@
 //! A pending-table slot of one interface does not fit another's table:
 //!
 //! ```compile_fail,E0308
-//! # use oer_ieee802154_port::owner::{ShortPending};
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_ieee802154_port::owner::{ShortPending};
+//! # use oer_protocols_radio_port::Slot;
 //! fn cross<'id>(slot: Slot<'id, ShortPending<0>>) -> Slot<'id, ShortPending<1>> {
 //!     slot
 //! }
 //! ```
 //!
 //! ```
-//! # use oer_ieee802154_port::owner::{ShortPending};
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_ieee802154_port::owner::{ShortPending};
+//! # use oer_protocols_radio_port::Slot;
 //! fn same<'id>(slot: Slot<'id, ShortPending<1>>) -> Slot<'id, ShortPending<1>> {
 //!     slot
 //! }
@@ -268,12 +268,12 @@
 
 use core::{cell::RefCell, future::Future, marker::PhantomData};
 
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     Child, Line, Permit, PermitPool, PermitSupply, Poisoned, PoolPath, Root, Seat, Slot,
 };
-use oer_radio_port::{PortBackend, PortPhase};
+use oer_protocols_radio_port::{PortBackend, PortPhase};
 
-use oer_ieee802154_wire::{Channel, FrameView};
+use oer_protocols_ieee802154_wire::{Channel, FrameView};
 
 use crate::{
     AppliedSecurity, CcaMode, CslReceiver, EnhancedAckGeneration, FrameCounterUpdate,
@@ -628,7 +628,7 @@ pub struct InterfaceResources<
     'id,
     const I: u8,
     const P: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     /// The slot [`Ieee802154Interfaces::configure`] takes.
     pub interface: Slot<'id, InterfaceKind<I>, Child<Path, 0>>,
@@ -643,13 +643,13 @@ pub struct InterfaceResources<
 /// matching, is rejected at compile time when the layout is issued.
 pub struct InterfacePool<K, const I: u8, const P: usize>(PhantomData<fn() -> K>);
 
-impl<K: Ieee802154Caps, const I: u8, const P: usize> oer_radio_port::PoolSet
+impl<K: Ieee802154Caps, const I: u8, const P: usize> oer_protocols_radio_port::PoolSet
     for InterfacePool<K, I, P>
 {
     type Pools<'id, Path: PoolPath> = InterfaceResources<'id, I, P, Path>;
 
     fn build<'id, Path: PoolPath>(
-        builder: oer_radio_port::PoolBuilder<'id, Path>,
+        builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
         const {
             if !(I < K::CAPS.interfaces) {
@@ -660,9 +660,9 @@ impl<K: Ieee802154Caps, const I: u8, const P: usize> oer_radio_port::PoolSet
             }
         };
         let ([interface], short, extended) = builder.into_pools::<(
-            oer_radio_port::Slots<InterfaceKind<I>, 1>,
-            oer_radio_port::Slots<ShortPending<I>, P>,
-            oer_radio_port::Slots<ExtendedPending<I>, P>,
+            oer_protocols_radio_port::Slots<InterfaceKind<I>, 1>,
+            oer_protocols_radio_port::Slots<ShortPending<I>, P>,
+            oer_protocols_radio_port::Slots<ExtendedPending<I>, P>,
         )>();
         InterfaceResources {
             interface,
@@ -689,7 +689,7 @@ trait Release<'id, K, Path: PoolPath> {
     clippy::type_complexity,
     reason = "the affine permit and its return function are held by the same guard"
 )]
-pub struct WorkPermit<'q, 'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct WorkPermit<'q, 'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     held: scopeguard::ScopeGuard<HeldPermit<'q, 'id, K, Path>, fn(HeldPermit<'q, 'id, K, Path>)>,
 }
 
@@ -703,7 +703,7 @@ fn release_held<K, Path: PoolPath>(held: HeldPermit<'_, '_, K, Path>) {
 }
 
 /// The radio's one operation permit.
-pub type OperationPermit<'q, 'id, Path = Root<oer_radio_port::LocalId<'id>>> =
+pub type OperationPermit<'q, 'id, Path = Root<oer_protocols_radio_port::LocalId<'id>>> =
     WorkPermit<'q, 'id, Operation, Path>;
 
 /// The terminal whose matching permit has been returned to its pool.
@@ -775,27 +775,33 @@ struct InFlight<'id, K, Path: PoolPath> {
 /// interface's seat in the pool's line, never refused; a submission moves
 /// it in, and the backend gives it back when it takes the work's terminal,
 /// before it hands the event out.
-pub struct WorkPermits<'id, K, P, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct WorkPermits<'id, K, P, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     pool: P,
     in_flight: RefCell<Option<InFlight<'id, K, Path>>>,
 }
 
 /// The operation permit of one install.
-pub type OperationPermits<'id, P, Path = Root<oer_radio_port::LocalId<'id>>> =
+pub type OperationPermits<'id, P, Path = Root<oer_protocols_radio_port::LocalId<'id>>> =
     WorkPermits<'id, Operation, P, Path>;
 
 /// Body-loaned access to owned Id capacity retained in the caller slot.
 /// The conversion authority stays private; admitted permits contain no body loan.
-pub struct LentWorkPermits<'p, K, P, Path: PoolPath, S: oer_radio_port::SlotOwner<Path::Identity>> {
+pub struct LentWorkPermits<
+    'p,
+    K,
+    P,
+    Path: PoolPath,
+    S: oer_protocols_radio_port::SlotOwner<Path::Identity>,
+> {
     owned: &'p WorkPermits<'static, K, P, Path>,
-    loan: oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+    loan: oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
 }
 
 impl<K, P, Path: PoolPath> WorkPermits<'static, K, P, Path> {
     /// Lend accounting while keeping the pool and every admitted owner in its slot.
-    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
         &'p self,
-        loan: oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+        loan: oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> LentWorkPermits<'p, K, P, Path, S> {
         LentWorkPermits { owned: self, loan }
     }
@@ -806,7 +812,7 @@ impl<
     K,
     Path: PoolPath,
     P: PermitPool<'static, K, Path>,
-    S: oer_radio_port::SlotOwner<Path::Identity>,
+    S: oer_protocols_radio_port::SlotOwner<Path::Identity>,
 > LentWorkPermits<'p, K, P, Path, S>
 {
     /// Guard body capacity; cancellation returns the same owned permit to its pool.
@@ -861,7 +867,7 @@ impl<
     K,
     Path: PoolPath,
     P: PermitPool<'static, K, Path>,
-    S: oer_radio_port::SlotOwner<Path::Identity>,
+    S: oer_protocols_radio_port::SlotOwner<Path::Identity>,
 > Release<'p, K, Path> for LentWorkPermits<'p, K, P, Path, S>
 {
     fn release(&self, permit: Permit<'p, K, Path>) {
@@ -875,10 +881,10 @@ impl<'id, K, Path: PoolPath, P: PermitPool<'id, K, Path>> WorkPermits<'id, K, P,
     /// seats, one per interface client, which the body's resources hand
     /// out.
     pub fn new<const S: usize>(
-        tokens: oer_radio_port::PermitTokens<'id, K, 1, S, Path>,
+        tokens: oer_protocols_radio_port::PermitTokens<'id, K, 1, S, Path>,
         pool: impl FnOnce(PermitSupply<'id, K, 1, Path>, Line<'id, K, S, Path>) -> P,
     ) -> (Self, [Seat<'id, K, Path>; S]) {
-        let oer_radio_port::PermitTokens {
+        let oer_protocols_radio_port::PermitTokens {
             supply,
             line,
             seats,
@@ -987,7 +993,7 @@ impl<'id, K, Path: PoolPath, P: PermitPool<'id, K, Path>> Release<'id, K, Path>
 /// permit ([`OperationPermits`]), and the body's resources give each
 /// interface's configuration and pending-table slots once
 /// ([`InterfaceResources`]).
-pub trait Ieee802154Backend<Id: oer_radio_port::SlotIdentity>: PortBackend<Id> {
+pub trait Ieee802154Backend<Id: oer_protocols_radio_port::SlotIdentity>: PortBackend<Id> {
     /// The backend's capabilities marker.
     type Caps: Ieee802154Caps;
 }

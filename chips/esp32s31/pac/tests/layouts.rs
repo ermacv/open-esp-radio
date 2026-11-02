@@ -3,7 +3,7 @@
 //! they were given, and typed addresses round-trip. Field positions are the
 //! generator's to prove (`tools/registers/generate`), not repeated here.
 
-use oer_esp32s31_pac::layouts::{
+use oer_chips_esp32s31_pac::layouts::{
     DmaRef, DmaWindowAddress, WifiRxDmaDescriptor, WifiRxDmaDescriptorControl, WifiTxDmaDescriptor,
     WifiTxDmaDescriptorControl,
 };
@@ -103,7 +103,7 @@ fn both_descriptors_have_the_same_geometry() {
 
 #[test]
 fn the_tx_metadata_head_sets_only_the_container_bit() {
-    use oer_esp32s31_pac::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
+    use oer_chips_esp32s31_pac::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
 
     let mut bytes = [0x1c, 0x00, 0x00, 0x00];
     let mut head = WifiTxMetadataHeadMut::new(&mut bytes);

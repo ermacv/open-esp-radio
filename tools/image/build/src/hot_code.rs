@@ -1,7 +1,7 @@
 //! The hot-code list an image declares:
 //! `[package.metadata.open-radio] hot-code = "<file>"`, a path relative to
 //! its package directory. The image linker moves the listed functions into
-//! SRAM ([`oer_image_checks::linker::hot`]).
+//! SRAM ([`oer_tools_image_checks::linker::hot`]).
 
 use std::path::{Path, PathBuf};
 

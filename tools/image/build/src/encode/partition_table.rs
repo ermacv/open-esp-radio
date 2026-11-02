@@ -15,7 +15,7 @@ use std::{
 };
 
 use md5::{Digest as _, Md5};
-use oer_wire::{Reader, Writer};
+use oer_portable_wire::{Reader, Writer};
 
 // SOURCE: gen_esp32part.py, MAX_PARTITION_LENGTH, MD5_PARTITION_BEGIN and
 // PartitionDefinition.STRUCT_FORMAT; esp_flash_partitions.h, ESP_PARTITION_MAGIC*.
@@ -27,7 +27,7 @@ const MAX_PARTITIONS: usize = TABLE_BYTES / RECORD_BYTES - 2; // MD5 and end mar
 
 // SOURCE: esp_flash_partitions.h, esp_partition_info_t; gen_esp32part.py,
 // PartitionDefinition.STRUCT_FORMAT specifies little-endian byte order.
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     struct Header[12] (little) {
         magic, with_magic: u16 = 0..16;
         kind, with_kind: u8 = 16..24;
@@ -39,7 +39,7 @@ oer_wire::bitfield! {
 
 // SOURCE: esp_flash_partitions.h, PART_FLAG_ENCRYPTED and PART_FLAG_READONLY.
 // Unknown bits remain in the value when a binary table is read and written.
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     struct Flags[4] (little) {
         encrypted, with_encrypted: bool = 0..1;
         readonly, with_readonly: bool = 1..2;
@@ -70,7 +70,7 @@ pub(super) enum Error {
     Empty,
     Length(usize),
     TooMany,
-    Wire(oer_wire::Error),
+    Wire(oer_portable_wire::Error),
     Magic(u16),
     Md5Record,
     Md5Mismatch,
@@ -122,8 +122,8 @@ impl std::error::Error for Error {
     }
 }
 
-impl From<oer_wire::Error> for Error {
-    fn from(error: oer_wire::Error) -> Self {
+impl From<oer_portable_wire::Error> for Error {
+    fn from(error: oer_portable_wire::Error) -> Self {
         Self::Wire(error)
     }
 }

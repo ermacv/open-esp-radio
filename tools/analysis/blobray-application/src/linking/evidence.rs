@@ -201,7 +201,7 @@ mod tests {
                 payload: Some(id.clone()),
                 alias: "root.o".into(),
             }],
-            roots: vec![oer_analysis_blobray_artifacts::LinkRootFacts {
+            roots: vec![oer_tools_analysis_blobray_artifacts::LinkRootFacts {
                 symbol: selected,
                 name: b"root".to_vec(),
                 section: b"code".to_vec(),

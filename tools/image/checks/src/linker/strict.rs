@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::Result;
 use crate::interrupts::{InterruptPlacement, interrupt_stacks_of};
 use crate::stack::{Image, StackAudit};
-use oer_chip_profile::policy::StackPolicy;
-use oer_os_durable::inputs::Inputs;
+use oer_tools_chip_profile::policy::StackPolicy;
+use oer_tools_os_durable::inputs::Inputs;
 
 mod fingerprint;
 pub use fingerprint::Fingerprint;
@@ -53,14 +53,17 @@ impl Spec {
         &self,
         elf: &Path,
         inputs: &mut Inputs,
-    ) -> Result<Option<(Image, oer_chip_profile::Profile, StackPolicy)>> {
-        let profile = oer_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
+    ) -> Result<Option<(Image, oer_tools_chip_profile::Profile, StackPolicy)>> {
+        let profile =
+            oer_tools_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
         if profile.facts.memory.is_none() || profile.facts.interrupts.is_none() {
             return Ok(None);
         }
-        let policy =
-            oer_chip_profile::policy::StackPolicy::load_with_inputs(&self.stack_policy, inputs)?
-                .for_image(&self.harts)?;
+        let policy = oer_tools_chip_profile::policy::StackPolicy::load_with_inputs(
+            &self.stack_policy,
+            inputs,
+        )?
+        .for_image(&self.harts)?;
         let profile = policy.runtime_profile(&profile)?;
         let image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
         Ok(Some((image, profile, policy)))
@@ -289,7 +292,7 @@ impl Placement {
     /// Relaxation after relocation can change the final function sizes.
     fn final_sizes(&mut self, output: &Path) -> Result<()> {
         let bytes = std::fs::read(output)?;
-        let elf = oer_analysis_elf::Elf::parse(&bytes)?;
+        let elf = oer_tools_analysis_elf::Elf::parse(&bytes)?;
         let functions = elf.functions()?;
         for function in self.functions.iter_mut().chain(&mut self.hot) {
             function.size = u64::from(

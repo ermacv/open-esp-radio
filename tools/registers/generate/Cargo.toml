@@ -1,5 +1,5 @@
 [package]
-name = "oer-registers-generate"
+name = "oer-tools-registers-generate"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,23 +9,23 @@ publish = false
 description = "The generated outputs of a chip's register model and the register checks: the service behind `cargo registers`"
 
 [dependencies]
-oer-registers-model = { path = "../model" }
-oer-os-process = { path = "../../os/process" }
-oer-os-durable = { path = "../../os/durable" }
-oer-os-toolchain = { path = "../../os/toolchain" }
-oer-analysis-elf = { path = "../../analysis/elf" }
-oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
-oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
-oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
-oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
-oer-pins-artifacts = { path = "../../pins/artifacts" }
+oer-tools-registers-model = { path = "../model" }
+oer-tools-os-process = { path = "../../os/process" }
+oer-tools-os-durable = { path = "../../os/durable" }
+oer-tools-os-toolchain = { path = "../../os/toolchain" }
+oer-tools-analysis-elf = { path = "../../analysis/elf" }
+oer-tools-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
+oer-tools-analysis-blobray-application = { path = "../../analysis/blobray-application" }
+oer-tools-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
+oer-tools-analysis-riscv-model = { path = "../../analysis/riscv-model" }
+oer-tools-pins-artifacts = { path = "../../pins/artifacts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 toml = "=1.1.4"
 tempfile = "=3.27.0"
 
 [dev-dependencies]
-oer-registers-contracts = { path = "../contracts" }
+oer-tools-registers-contracts = { path = "../contracts" }
 tempfile = "=3.27.0"
 
 [lints]

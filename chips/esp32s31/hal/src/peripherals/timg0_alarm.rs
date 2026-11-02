@@ -7,7 +7,7 @@
 //! The SAR/PWDET pilot and the host composition fixture select P2
 //! `Exempt(ExecutorLevel)` and a lower line ID than FROM_CPU2. Its arbitration
 //! interpretation follows the family CLIC contract:
-//! SOURCE: chips/espressif/platform/family.toml [interrupts], RISC-V CLIC
+//! SOURCE: chips/family/platform/family.toml [interrupts], RISC-V CLIC
 //! specification 3f8ee744, "Specifying Interrupt Priority"; ESP-IDF 4d80c1b2
 //! components/soc/esp32s31/include/soc/clic_reg.h (NLBITS/INT_INFO geometry).
 //! SOURCE for same-level priority/ID arbitration: ESP32-C5 TRM v1.1,
@@ -16,10 +16,10 @@
 //! on S31 hart0 at P2, with TIMG0/FROM_CPU2 assigned both ways. Other line
 //! pairs and levels are not measured by that observation.
 
-use oer_esp32s31_pac::{instances, ownership::TimerGroup0Peripherals, timg};
-use oer_espressif_interrupt_table::EventAuthority;
-use oer_mmio::{Bits, Fixed, InterruptSource, Placement};
-use oer_time::Duration;
+use oer_chips_esp32s31_pac::{instances, ownership::TimerGroup0Peripherals, timg};
+use oer_chips_family_interrupt_table::EventAuthority;
+use oer_portable_mmio::{Bits, Fixed, InterruptSource, Placement};
+use oer_portable_time::Duration;
 
 #[cfg(test)]
 mod tests;
@@ -163,23 +163,23 @@ pub(super) fn arm_after(
     registers.load_interval(micros);
     // An expiry under the mask remains in RAW for ENA to deliver (HW7).
     registers.start();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     registers.enable(true);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     Ok(())
 }
 
 pub(super) fn disarm(registers: &mut impl ProgramRegisters) {
     registers.stop();
     registers.enable(false);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 pub(super) fn acknowledge(registers: &mut impl InterruptRegisters) -> Observation {
     let observation = registers.observe();
     if observation.pending {
         registers.clear_timer0();
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
     observation
 }

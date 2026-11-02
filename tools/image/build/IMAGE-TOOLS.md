@@ -4,13 +4,13 @@ Image packages share one directory, grouped by their contracts.
 
 | Path | Owns |
 | --- | --- |
-| pipeline (`oer-image-build`) | `build(ImageSpec) -> ImageBundle`, boot flows, build exclusion and source inputs |
-| `bundle/` (`oer-image-bundle`) | The bundle format, verified snapshots and flash segments; device writers consume it without the build pipeline |
-| `encode/` (`oer-image-build`) | Build-time ESP image encoding and stage-two packing |
-| `policy/` (`oer-chip-profile`) | Stack policy and compiler limits |
-| `checks/` (`oer-image-checks`) | Optional pipeline checks assembled for a caller |
+| pipeline (`oer-tools-image-build`) | `build(ImageSpec) -> ImageBundle`, boot flows, build exclusion and source inputs |
+| `bundle/` (`oer-tools-image-bundle`) | The bundle format, verified snapshots and flash segments; device writers consume it without the build pipeline |
+| `encode/` (`oer-tools-image-build`) | Build-time ESP image encoding and stage-two packing |
+| `policy/` (`oer-tools-chip-profile`) | Stack policy and compiler limits |
+| `checks/` (`oer-tools-image-checks`) | Optional pipeline checks assembled for a caller |
 | `check/interrupts/`, `check/placement/`, `check/stack/` | Individual image audits over the shared ELF and RISC-V analysis layers |
-| `compare/` (`oer-image-compare`) | Function comparison modulo placement |
+| `compare/` (`oer-tools-image-compare`) | Function comparison modulo placement |
 | `tools/image/linker` (`oer-image-linker`) | Link-input checks followed by the target's `rust-lld` |
 
 The pipeline compiles, checks and encodes each image. Device operations

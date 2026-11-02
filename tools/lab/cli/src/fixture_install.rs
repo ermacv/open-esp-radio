@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use oer_lab_fixture::{INSTALLER_BINARY, Provider, build_plan, inspect_system, prepare};
+use oer_tools_lab_fixture::{INSTALLER_BINARY, Provider, build_plan, inspect_system, prepare};
 
 use crate::Result;
 
@@ -41,8 +41,8 @@ pub(crate) fn run(
         // All downloads, patching and compilation happen without root, before
         // the installer takes terminal control for its narrow system writes.
         if provider == Provider::LinuxNet {
-            oer_lab_fixture::hostapd::build(root)?;
-            oer_lab_fixture::udhcpc::build(root)?;
+            oer_tools_lab_fixture::hostapd::build(root)?;
+            oer_tools_lab_fixture::udhcpc::build(root)?;
         }
 
         let provider_binaries: &[&str] = match provider {
@@ -54,14 +54,14 @@ pub(crate) fn run(
             ],
             Provider::LinuxBluetooth => &["open-radio-bluetooth-launcher", "open-radio-bluetooth"],
         };
-        let mut build = oer_os_process::command(oer_os_toolchain::cargo_program());
+        let mut build = oer_tools_os_process::command(oer_tools_os_toolchain::cargo_program());
         build.current_dir(root).args([
             "build",
             "--locked",
             "-p",
-            "oer-tool-lab-fixture-install",
+            "oer-tools-lab-fixture-install",
             "-p",
-            "oer-tool-lab-fixture-helpers",
+            "oer-tools-lab-fixture-helpers",
         ]);
         for binary in provider_binaries {
             build.args(["--bin", binary]);
@@ -71,19 +71,19 @@ pub(crate) fn run(
         build
             .args(["--bin", INSTALLER_BINARY])
             .env("CARGO_TARGET_DIR", root.join("target"));
-        oer_os_process::run(&mut build)?;
+        oer_tools_os_process::run(&mut build)?;
         let operator = current_operator()?;
         let bundle = prepare(root, provider, &operator, &plan.allowed_bluetooth_adapters)?;
         eprintln!(
             "stand: queueing for {}",
-            oer_lab_fixture::resource(provider)
+            oer_tools_lab_fixture::resource(provider)
         );
         let mut lease = install_lease(provider)?;
         // sudo runs in this foreground process group with the terminal's
         // standard streams, so it owns password echo, input and job control,
         // and its exit status is the command's. Nothing stops it: a partial
         // installation is worse than a late one.
-        let status = oer_os_process::command("sudo")
+        let status = oer_tools_os_process::command("sudo")
             .arg(root.join("target/debug").join(INSTALLER_BINARY))
             .args(["--provider", provider.as_str(), "--bundle"])
             .arg(bundle)
@@ -106,17 +106,17 @@ pub(crate) fn run(
 /// served before every waiting request; every run that uses the fixture is
 /// preempted, its client told why, and the lease is granted once they ended.
 #[cfg(target_os = "linux")]
-fn install_lease(provider: Provider) -> Result<oer_lab_client::client::Client> {
-    let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+fn install_lease(provider: Provider) -> Result<oer_tools_lab_client::client::Client> {
+    let owner = oer_tools_lab_arbiter::owner::from_environment()?.to_string();
     let mut client = crate::service::client()?;
     client.acquire(
-        oer_lab_client::protocol::LeaseRequest {
+        oer_tools_lab_client::protocol::LeaseRequest {
             owner: owner.clone(),
             work: format!("fixture install --provider {}", provider.as_str()),
             scenarios: Vec::new(),
             run: None,
-            claims: vec![oer_lab_arbiter::claims::Claim::exclusive(
-                oer_lab_fixture::resource(provider),
+            claims: vec![oer_tools_lab_arbiter::claims::Claim::exclusive(
+                oer_tools_lab_fixture::resource(provider),
             )],
             maintenance: Some(format!(
                 "fixture maintenance: {} install by {owner}",
@@ -131,7 +131,9 @@ fn install_lease(provider: Provider) -> Result<oer_lab_client::client::Client> {
 
 #[cfg(target_os = "linux")]
 fn current_operator() -> Result<String> {
-    let output = oer_os_process::command("/usr/bin/id").arg("-un").output()?;
+    let output = oer_tools_os_process::command("/usr/bin/id")
+        .arg("-un")
+        .output()?;
     if !output.status.success() {
         return Err("cannot resolve the non-root fixture operator".into());
     }

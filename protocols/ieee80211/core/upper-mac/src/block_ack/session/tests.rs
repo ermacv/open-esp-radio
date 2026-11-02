@@ -212,26 +212,31 @@ fn responses(count: usize) {
     // An HE peer's ADDBA Extension element after the fixed fields.
     extended.extend_from_slice(&[159, 1, 0]);
     let rejected = [3, 1, 1, 37, 0, 0, 0, 0, 0];
-    oer_ieee80211_wire::fuzz::inputs(&[&accepted, &extended, &rejected], count, 32, |bytes| {
-        let mut session = TxBlockAckSession::new(CONFIG).unwrap();
-        let request = session.begin(seq(0x100), at(0)).unwrap();
-        assert_eq!(request.dialog_token, 1);
-        if let Ok(TxBlockAckResponse::Operational(agreement)) = session.on_response(bytes) {
-            assert!(agreement.window != 0 && agreement.window <= CONFIG.window);
-            assert_eq!(session.operational(), Some(agreement));
-        }
-    });
+    oer_protocols_ieee80211_wire::fuzz::inputs(
+        &[&accepted, &extended, &rejected],
+        count,
+        32,
+        |bytes| {
+            let mut session = TxBlockAckSession::new(CONFIG).unwrap();
+            let request = session.begin(seq(0x100), at(0)).unwrap();
+            assert_eq!(request.dialog_token, 1);
+            if let Ok(TxBlockAckResponse::Operational(agreement)) = session.on_response(bytes) {
+                assert!(agreement.window != 0 && agreement.window <= CONFIG.window);
+                assert_eq!(session.operational(), Some(agreement));
+            }
+        },
+    );
 }
 
 #[test]
 fn response_handling_never_panics() {
-    responses(oer_ieee80211_wire::fuzz::QUICK);
+    responses(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn response_handling_never_panics_full() {
-    responses(oer_ieee80211_wire::fuzz::FULL);
+    responses(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 // Fixture encoding for independently constructed peer responses.

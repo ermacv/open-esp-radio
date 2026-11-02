@@ -3,7 +3,7 @@ use super::{
     keys::{GroupCommand, Installation, Installed, RawKeyIdentity, Removal},
     lifecycle::PortCoreOwner,
 };
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 mod aggregate;
 pub(super) use aggregate::PendingAggregate;
@@ -1215,7 +1215,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(Fault::Capacity);
         }
         #[cfg(all(oer_trace, oer_debug_control))]
-        oer_espressif_staged_runtime::trace::emit(&publication);
+        oer_chips_family_staged_runtime::trace::emit(&publication);
         let _ = held;
         Ok(())
     }
@@ -1481,7 +1481,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                         ..
                     }) = &self.pending_command
                     {
-                        oer_espressif_staged_runtime::trace::emit(&trace::GroupRollback {
+                        oer_chips_family_staged_runtime::trace::emit(&trace::GroupRollback {
                             owners: [key.identity.slot, permission.index()],
                             previous_key_id: key.identity.key_id.get(),
                             attempted_key_id: key_id.get(),

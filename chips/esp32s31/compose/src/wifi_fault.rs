@@ -1,13 +1,13 @@
 //! Wi-Fi fatal source observations, retained until complete successful output.
+use oer_chips_family_staged_runtime::retained_fault;
 #[cfg(any(test, target_arch = "riscv32"))]
-use oer_diagnostics::fault::Class;
-use oer_diagnostics::fault::{Domain, Record};
-use oer_espressif_staged_runtime::retained_fault;
-oer_espressif_staged_runtime::retained_static! { static WIFI_FAULT: Record; }
+use oer_portable_diagnostics::fault::Class;
+use oer_portable_diagnostics::fault::{Domain, Record};
+oer_chips_family_staged_runtime::retained_static! { static WIFI_FAULT: Record; }
 
 #[cfg(target_arch = "riscv32")]
 pub fn reset(raw: u32) -> ! {
-    oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
+    oer_chips_family_staged_runtime::fatal::reset_recording::<oer_chips_esp32s31_hal::platform::Port>(
         |claim, _| {
             if let Ok(record) = encode(raw) {
                 let _committed = claim.commit(&WIFI_FAULT, record);
@@ -16,12 +16,12 @@ pub fn reset(raw: u32) -> ! {
     )
 }
 #[cfg(any(test, target_arch = "riscv32"))]
-fn encode(raw: u32) -> Result<Record, oer_diagnostics::fault::Error> {
+fn encode(raw: u32) -> Result<Record, oer_portable_diagnostics::fault::Error> {
     Record::encode(
         Class::UnexpectedHardware,
         Domain::Wifi,
         1,
-        oer_diagnostics::fault::UNKNOWN_HART,
+        oer_portable_diagnostics::fault::UNKNOWN_HART,
         0,
         &raw.to_le_bytes(),
     )
@@ -29,7 +29,7 @@ fn encode(raw: u32) -> Result<Record, oer_diagnostics::fault::Error> {
 pub fn report_previous() {
     if let Some(mut record) = retained_fault::peek(&WIFI_FAULT) {
         let _reported = report(&mut record, |bytes: &[u8]| {
-            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole()
+            oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole()
         });
     }
 }

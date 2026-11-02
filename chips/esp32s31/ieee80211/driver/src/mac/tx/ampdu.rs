@@ -8,13 +8,13 @@
 #![forbid(unsafe_code)]
 
 use crate::mac::tx_work::MacTxWork;
-use oer_esp32s31_hal::types::MacTxQueueIndex;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_chips_esp32s31_hal::types::MacTxQueueIndex;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use core::{marker::PhantomPinned, pin::Pin};
 
-use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError;
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError;
+use oer_chips_esp32s31_hal::types::{
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTriggerTxQueueSnapshot,
 };
 use pin_project::pin_project;
@@ -45,14 +45,16 @@ pub use model::{
 };
 #[cfg(test)]
 pub(crate) use model::{TX_BUFFER_END_BIT, TX_DESCRIPTOR_HE_BIT};
-pub use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDmaStorage;
+pub use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDmaStorage;
 pub use owner::{HtAmpduTxResources, RetainedDmaAmpduTx};
 pub use request::{
     AmpduFrameLayout, AmpduFrameSize, HeAmpduFrameRequest, HeAmpduPolicy, HtAmpduFrameRequest,
 };
 
 use crate::mac::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxDmaState};
-use oer_ieee80211_contracts_port::backend_aggregate::{AmpduRetryDecision, AmpduRetryError};
+use oer_protocols_ieee80211_contracts_port::backend_aggregate::{
+    AmpduRetryDecision, AmpduRetryError,
+};
 pub const TX_AMPDU_METADATA_SIZE: usize = 8;
 const TX_FCS_SIZE: u16 = 4;
 const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
@@ -399,7 +401,7 @@ impl<const SLOTS: usize> Default for HtAmpduTxStorage<SLOTS> {
 mod tests;
 
 impl From<HtAmpduTxCompletion>
-    for oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion
+    for oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion
 {
     fn from(completion: HtAmpduTxCompletion) -> Self {
         Self {

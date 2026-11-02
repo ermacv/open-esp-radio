@@ -521,7 +521,7 @@ impl DtmReceiveWait {
     /// A receiver timing image with a five-bit extension.
     ///
     /// ```compile_fail,E0080
-    /// use oer_esp32s31_hal::bluetooth::engine::DtmReceiveWait;
+    /// use oer_chips_esp32s31_hal::bluetooth::engine::DtmReceiveWait;
     /// const WAIT: DtmReceiveWait =
     ///     DtmReceiveWait::new(1, 32).expect("reviewed timing fits");
     /// ```

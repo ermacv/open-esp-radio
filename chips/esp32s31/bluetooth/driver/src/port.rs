@@ -12,17 +12,17 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
-use oer_bluetooth_le_port::{LePhys, LeRadioCapabilities};
-use oer_bluetooth_le_port::{
-    backend::{OwnedCommand, OwnedRequest, OwnedSession},
-    *,
-};
-use oer_memory::{
+use oer_portable_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, LocalSpscReceiver,
     LocalSpscSender, OnceValue,
 };
-use oer_radio_port::*;
-use oer_time::{Clock, Duration, Instant, Timer};
+use oer_portable_time::{Clock, Duration, Instant, Timer};
+use oer_protocols_bluetooth_le_port::{LePhys, LeRadioCapabilities};
+use oer_protocols_bluetooth_le_port::{
+    backend::{OwnedCommand, OwnedRequest, OwnedSession},
+    *,
+};
+use oer_protocols_radio_port::*;
 
 #[cfg(any(target_arch = "riscv32", test))]
 mod event;
@@ -51,7 +51,7 @@ impl LeCapabilities for DtmCaps {
     const CAPS: LeRadioCapabilities = LeRadioCapabilities {
         direct_test_mode: true,
         test_phys: LePhys::LE_1M,
-        min_tx_power_dbm: oer_esp32s31_hal::bluetooth::engine::LeTxPower::LOWEST_DBM,
+        min_tx_power_dbm: oer_chips_esp32s31_hal::bluetooth::engine::LeTxPower::LOWEST_DBM,
         ..LeRadioCapabilities::NONE
     };
 }
@@ -132,7 +132,9 @@ pub trait ClockClient {
     fn activate(&mut self) -> Result<(), Fault>;
     /// P1 drains an abandoned clock response before uninstall can join.
     async fn retire(&mut self) -> Result<(), Fault>;
-    async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault>;
+    async fn now(
+        &mut self,
+    ) -> PortResult<oer_portable_time::RadioInstant<LeRadio>, ClockError, Fault>;
 }
 /// A complete start description copied only after the request is retained.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

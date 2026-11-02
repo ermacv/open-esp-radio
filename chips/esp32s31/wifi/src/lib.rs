@@ -20,10 +20,10 @@ pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
     StationSettings,
 };
-use oer_ieee80211_core_roles_sta::data::TxMsdu;
-use oer_ieee80211_runtime::station as runtime;
-use oer_memory::{QueueNotify as _, WakingSpscQueue};
-use oer_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
+use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
+use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
+use oer_protocols_ieee80211_runtime::station as runtime;
+use oer_protocols_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
 pub use runtime::StopPolicy;
 pub use runtime::{ControlError, OperationEnd};
 
@@ -39,10 +39,10 @@ pub trait Notifies: 'static {
     type Channels: runtime::Notifies;
     /// The host build's receive buffer, which it never lends.
     #[cfg(not(target_arch = "riscv32"))]
-    type LentRx: oer_ieee80211_contracts_port::LentRxBuffer + Send + 'static;
+    type LentRx: oer_protocols_ieee80211_contracts_port::LentRxBuffer + Send + 'static;
     /// How a lent buffer's return tells the driver and the station's stop.
     #[cfg(target_arch = "riscv32")]
-    type Lent: oer_esp32s31_ieee80211_driver::port::LentNotifies;
+    type Lent: oer_chips_esp32s31_ieee80211_driver::port::LentNotifies;
 }
 
 /// The station and its network end on one hart: local wakers throughout.
@@ -53,7 +53,7 @@ impl Notifies for SameHart {
     #[cfg(not(target_arch = "riscv32"))]
     type LentRx = Unlent;
     #[cfg(target_arch = "riscv32")]
-    type Lent = oer_esp32s31_ieee80211_driver::port::SameHart;
+    type Lent = oer_chips_esp32s31_ieee80211_driver::port::SameHart;
 }
 
 /// The network end on another hart: `N` raises the network task's executor
@@ -65,15 +65,15 @@ type Three<N, S, D> = fn() -> (N, S, D);
 
 impl<N, S, D> Notifies for AcrossHarts<N, S, D>
 where
-    N: oer_memory::QueueNotify + Copy + 'static,
-    S: oer_memory::QueueNotify + Copy + 'static,
-    D: oer_memory::QueueNotify + Copy + 'static,
+    N: oer_portable_memory::QueueNotify + Copy + 'static,
+    S: oer_portable_memory::QueueNotify + Copy + 'static,
+    D: oer_portable_memory::QueueNotify + Copy + 'static,
 {
     type Channels = runtime::AcrossHarts<N, S>;
     #[cfg(not(target_arch = "riscv32"))]
     type LentRx = Unlent;
     #[cfg(target_arch = "riscv32")]
-    type Lent = oer_esp32s31_ieee80211_driver::port::NetworkPeers<D, S>;
+    type Lent = oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers<D, S>;
 }
 
 /// The channels' notify types of `N`.
@@ -89,7 +89,7 @@ pub const RX_DEPTH: usize = 32;
 pub const TX_DEPTH: usize = 16;
 pub const FRAME_CAPACITY: usize = 1664;
 #[cfg(target_arch = "riscv32")]
-type Caps = oer_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
+type Caps = oer_chips_esp32s31_ieee80211_driver::port::Esp32s31Caps<FRAME_CAPACITY>;
 #[cfg(not(target_arch = "riscv32"))]
 type Caps = ();
 /// The station's exit, as its runner publishes it.
@@ -154,7 +154,7 @@ impl<'a, N: Notifies> Control<'a, N> {
     /// [`NetworkStopper`] must return the station's lent receive buffers by
     /// `deadline`, or the radio does not retire
     /// ([`RetirementCause::NetworkDrain`](crate::RetirementCause::NetworkDrain)).
-    pub fn stop(&mut self, deadline: oer_time::Instant) {
+    pub fn stop(&mut self, deadline: oer_portable_time::Instant) {
         self.inner.stop_gracefully(deadline);
     }
     /// The station's exit, published by its runner after the radio release
@@ -169,13 +169,13 @@ pub struct RunnerLost;
 /// The one exit a runner publishes, and its waiter.
 struct StopState<E> {
     result: core::cell::Cell<Option<Result<E, RunnerLost>>>,
-    waker: oer_sync::PriorityWaker,
+    waker: oer_portable_sync::PriorityWaker,
 }
 impl<E: Copy> StopState<E> {
     const fn new() -> Self {
         Self {
             result: core::cell::Cell::new(None),
-            waker: oer_sync::PriorityWaker::new(),
+            waker: oer_portable_sync::PriorityWaker::new(),
         }
     }
     async fn wait(&self) -> Result<E, RunnerLost> {
@@ -225,8 +225,8 @@ impl<N: Notifies> StatusReader<'_, N> {
 /// A received buffer the station lends to the network: the S31 port's
 /// receive unit on the chip, whose return tells through `P`.
 #[cfg(target_arch = "riscv32")]
-type LentReceive<P> = oer_esp32s31_ieee80211_driver::port::LentReceive<
-    oer_esp32s31_ieee80211_driver::port::device::StagedReceive<{ chip::Q }, { chip::B }>,
+type LentReceive<P> = oer_chips_esp32s31_ieee80211_driver::port::LentReceive<
+    oer_chips_esp32s31_ieee80211_driver::port::device::StagedReceive<{ chip::Q }, { chip::B }>,
     P,
 >;
 /// The lent buffer of `N`'s station.
@@ -237,12 +237,12 @@ type LentRx<N> = <N as Notifies>::LentRx;
 /// The received buffers the station may lend the network at once: the
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
-pub const LENT_RX: usize = oer_esp32s31_ieee80211_driver::port::lent_rx(chip::Q);
+pub const LENT_RX: usize = oer_chips_esp32s31_ieee80211_driver::port::lent_rx(chip::Q);
 /// The host build has no receive buffer to lend.
 #[cfg(not(target_arch = "riscv32"))]
 pub enum Unlent {}
 #[cfg(not(target_arch = "riscv32"))]
-impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
+impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for Unlent {
     fn storage(&self) -> &[u8] {
         match *self {}
     }
@@ -252,12 +252,15 @@ impl oer_ieee80211_contracts_port::LentRxBuffer for Unlent {
     fn mpdu_len(&self) -> usize {
         match *self {}
     }
-    fn advance(&mut self, _: usize) -> Result<(), oer_ieee80211_contracts_port::AdvanceRefused> {
+    fn advance(
+        &mut self,
+        _: usize,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
         match *self {}
     }
 }
 type Frame<N> = runtime::Received<LentRx<N>>;
-type EthernetCopy = oer_ieee80211_core_roles_sta::data::EthernetFrame;
+type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 
 /// Affine neutral Ethernet end. The concrete station frame is private.
 pub struct Network<'a, N: Notifies = SameHart> {
@@ -273,21 +276,26 @@ pub struct Copied(runtime::CopiedMark);
 /// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
 /// returns the buffer to the radio.
 pub struct ReceivedStorage<N: Notifies = SameHart>(runtime::NetworkRx<LentRx<N>>);
-impl<N: Notifies> oer_network_port::FrameStorage for ReceivedStorage<N> {
+impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N> {
     fn bytes(&self) -> &[u8] {
         self.0.bytes()
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0.bytes_mut()
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
         self.0.advance(by)
     }
 }
-impl<N: Notifies> oer_network_port::ReceivedFrame for Received<N> {
+impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
     type Storage = ReceivedStorage<N>;
     type Copied = Copied;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
+    fn into_lent(
+        self,
+    ) -> Result<oer_protocols_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
         match self.inner {
             runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
             runtime::Received::Copied(mark) => Err(Copied(mark)),
@@ -314,8 +322,8 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
     fn read_copied<R>(
         &mut self,
         copied: Copied,
-        read: impl FnOnce(oer_network_port::EthernetFrameView<'_>) -> R,
-    ) -> Result<R, oer_network_port::FrameLengthError> {
+        read: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>) -> R,
+    ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
         self.inner.read_copied(copied.0, read)
     }
     fn poll_transmit_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
@@ -332,13 +340,13 @@ pub enum StartError {
 }
 struct StartState {
     result: core::cell::Cell<Option<Result<(), StartError>>>,
-    waker: oer_sync::PriorityWaker,
+    waker: oer_portable_sync::PriorityWaker,
 }
 impl StartState {
     const fn new() -> Self {
         Self {
             result: core::cell::Cell::new(None),
-            waker: oer_sync::PriorityWaker::new(),
+            waker: oer_portable_sync::PriorityWaker::new(),
         }
     }
     fn complete(&self, result: Result<(), StartError>) {
@@ -374,8 +382,8 @@ struct NetworkStopState<N: Notifies> {
 impl NetworkStopState<SameHart> {
     const fn new() -> Self {
         Self::with(
-            oer_sync::PriorityWaker::new(),
-            oer_sync::PriorityWaker::new(),
+            oer_portable_sync::PriorityWaker::new(),
+            oer_portable_sync::PriorityWaker::new(),
         )
     }
 }
@@ -470,7 +478,7 @@ pub struct Channels<N: Notifies = SameHart> {
     start: StartState,
     stop: StopState<Exit>,
     commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
-    tx: oer_memory::WakingSlotQueue<TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
+    tx: oer_portable_memory::WakingSlotQueue<TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
     rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
     rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
     state: runtime::State<Ch<N>>,
@@ -486,7 +494,7 @@ impl Channels {
             start: StartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
-            tx: oer_memory::WakingSlotQueue::new(),
+            tx: oer_portable_memory::WakingSlotQueue::new(),
             rx: WakingSpscQueue::new(),
             rx_copied: WakingSpscQueue::new(),
             state: runtime::State::new(),
@@ -495,9 +503,9 @@ impl Channels {
 }
 impl<NW, SW, D> Channels<AcrossHarts<NW, SW, D>>
 where
-    NW: oer_memory::QueueNotify + Copy + 'static,
-    SW: oer_memory::QueueNotify + Copy + 'static,
-    D: oer_memory::QueueNotify + Copy + 'static,
+    NW: oer_portable_memory::QueueNotify + Copy + 'static,
+    SW: oer_portable_memory::QueueNotify + Copy + 'static,
+    D: oer_portable_memory::QueueNotify + Copy + 'static,
 {
     /// Channels whose network end ([`Network`], [`NetworkStopper`]) runs
     /// on another hart than the station: `network` raises the network
@@ -509,7 +517,7 @@ where
             start: StartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
-            tx: oer_memory::WakingSlotQueue::across_harts(station, network),
+            tx: oer_portable_memory::WakingSlotQueue::across_harts(station, network),
             rx: WakingSpscQueue::across_harts(network, station),
             rx_copied: WakingSpscQueue::across_harts(network, station),
             state: runtime::State::across_harts(network),
@@ -576,10 +584,10 @@ pub struct Connection<'a, N: Notifies = SameHart> {
 struct ServiceConnection<'a, N: Notifies> {
     network_stop: &'a NetworkStopState<N>,
     start: StartGuard<'a>,
-    commands: oer_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
-    transmit: oer_memory::SlotReceiver<'a, TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
-    receive: oer_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
-    receive_copied: oer_memory::WakingSpscSender<
+    commands: oer_portable_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
+    transmit: oer_portable_memory::SlotReceiver<'a, TxMsdu, TX_DEPTH, Station<N>, Net<N>>,
+    receive: oer_portable_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    receive_copied: oer_portable_memory::WakingSpscSender<
         'a,
         EthernetCopy,
         { runtime::RX_COPIED_DEPTH },
@@ -608,14 +616,14 @@ pub mod station;
 pub use dma::{DmaError, DmaResources};
 /// One reading of the S31 receive driver's counters.
 #[cfg(target_arch = "riscv32")]
-pub use oer_esp32s31_ieee80211_driver::rx::counters::WifiRxReport;
+pub use oer_chips_esp32s31_ieee80211_driver::rx::counters::WifiRxReport;
 
 /// The receive driver's counters, once the station's receive path is bound:
 /// a trace build's diagnostic reading, never a product value.
 #[cfg(all(target_arch = "riscv32", oer_trace))]
-pub(crate) static RX_COUNTERS: oer_memory::OnceValue<
-    &'static oer_esp32s31_ieee80211_driver::rx::counters::WifiRxCounters,
-> = oer_memory::OnceValue::new();
+pub(crate) static RX_COUNTERS: oer_portable_memory::OnceValue<
+    &'static oer_chips_esp32s31_ieee80211_driver::rx::counters::WifiRxCounters,
+> = oer_portable_memory::OnceValue::new();
 
 /// The receive driver's counters now; `None` before the station's receive
 /// path was first bound. Only a trace build reads them.
@@ -651,7 +659,7 @@ macro_rules! bind_station {
   $vis mod $name {
    use super::*;
    pub struct Binding;
-   oer_espressif_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
+   oer_chips_family_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
     type Notifies=$notifies;
@@ -694,9 +702,11 @@ mod tests {
     impl EthernetFrame for Packet {
         fn view(
             &self,
-        ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError>
-        {
-            Ok(oer_network_port::EthernetFrameView {
+        ) -> Result<
+            oer_protocols_network_port::EthernetFrameView<'_>,
+            oer_protocols_network_port::FrameLengthError,
+        > {
+            Ok(oer_protocols_network_port::EthernetFrameView {
                 destination: [2; 6],
                 source: [4; 6],
                 ether_type: 0x0800,
@@ -738,7 +748,10 @@ mod tests {
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
         let refused = net.try_transmit(Packet(dropped.clone())).err().unwrap();
-        assert_eq!(refused.reason, oer_network_port::TransmitError::LinkDown);
+        assert_eq!(
+            refused.reason,
+            oer_protocols_network_port::TransmitError::LinkDown
+        );
         assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
         assert_eq!(dropped.get(), 0);
         let credentials =

@@ -73,13 +73,13 @@ impl Work for Cut {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let access_point_association =
             ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
                 resources.access_point_association,
-                oer_ieee80211_wire::security::Spp::NotNegotiated,
+                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
 
         let old = if matches!(self.change, Change::Select) {

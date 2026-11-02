@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::GatePool;
-use oer_radio_port::Mint;
+use oer_protocols_ieee80211_contracts_port::GatePool;
+use oer_protocols_radio_port::Mint;
 
 pub fn close<'id>(mint: Mint<'id, (GatePool, GatePool)>) {
     let ((first, mut issuer), (second, _)) = mint.into_pools();

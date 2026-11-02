@@ -1,6 +1,6 @@
 //! Real decoder/ELF regressions for a table dispatch split by a conditional.
 use super::*;
-use oer_analysis_riscv_model::{FunctionRecord, FunctionSink};
+use oer_tools_analysis_riscv_model::{FunctionRecord, FunctionSink};
 
 fn branch(from: usize, to: usize, register: u32) -> u32 {
     let delta = (to as u32).wrapping_sub(from as u32).wrapping_mul(4);
@@ -71,7 +71,7 @@ fn capture(elf: &[u8]) -> Vec<FunctionRecord> {
             facts,
             &facts.functions()[0],
             &UnknownCallBehavior,
-            oer_analysis_riscv_analysis::ResearchOptions::default(),
+            oer_tools_analysis_riscv_analysis::ResearchOptions::default(),
             &memory,
             &mut || Ok(()),
             &mut records,
@@ -88,7 +88,7 @@ fn targets(records: &[FunctionRecord]) -> Vec<u64> {
             FunctionRecord::Edge {
                 from,
                 target,
-                relation: oer_analysis_riscv_model::EdgeKind::Jump,
+                relation: oer_tools_analysis_riscv_model::EdgeKind::Jump,
                 ..
             } if *from == u64::from(TEXT + 56) => *target,
             _ => None,
@@ -107,7 +107,7 @@ fn the_real_split_dispatch_shape_retains_its_preheader_base() {
     assert!(
         records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
 }
 
@@ -123,7 +123,7 @@ fn split_dispatch_unites_every_proved_base_and_closes_the_common_cfg() {
     assert!(
         records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
     let analysis = analyze(&elf, &[], &[]).unwrap();
     assert!(analysis.functions[&TEXT].complete);
@@ -143,7 +143,7 @@ fn one_unknown_incoming_base_blocks_closure() {
     assert!(
         !records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
 }
 
@@ -157,7 +157,7 @@ fn a_discarded_target_load_does_not_prove_a_jump_through_zero() {
     assert!(
         !records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
 }
 
@@ -170,7 +170,7 @@ fn an_unproved_table_alternative_blocks_the_entire_dispatch() {
     assert!(
         !records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
 }
 
@@ -186,7 +186,7 @@ fn a_new_incoming_case_retracts_the_stale_dispatch_proof() {
     assert!(
         !records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
 }
 
@@ -204,7 +204,7 @@ fn proved_dispatch_does_not_hide_a_decode_gap_or_another_unknown_edge() {
         assert!(
             !records
                 .iter()
-                .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+                .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
         );
     }
 }
@@ -218,7 +218,7 @@ fn a_table_reachable_unimp_keeps_both_observers_open_at_unknown() {
     assert!(
         !structural
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
     assert!(structural.iter().any(|record| matches!(record,
         FunctionRecord::Edge { from, target: Some(target), .. }
@@ -244,7 +244,7 @@ fn a_table_reachable_unimp_keeps_both_observers_open_at_unknown() {
         image::observing(
             facts,
             &UnknownCallBehavior,
-            oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+            oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
             &memory,
             &mut || Ok(()),
             |observe, control| {
@@ -283,12 +283,12 @@ fn displaced_root() -> Symbol {
 
 fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
     with_facts(elf, |facts| {
-        use oer_analysis_riscv_analysis::{
+        use oer_tools_analysis_riscv_analysis::{
             FunctionInput, PreparedReferences, research_following_tables,
         };
-        use oer_analysis_riscv_model::NoSummaries;
+        use oer_tools_analysis_riscv_model::NoSummaries;
         let memory = WorkingMemory::new(TEST_MEMORY)?;
-        let view = oer_analysis_riscv_program::ProgramView::new(
+        let view = oer_tools_analysis_riscv_program::ProgramView::new(
             facts.bytes(),
             facts.file(),
             &[],
@@ -300,7 +300,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
         let mut records = Records::default();
         let (_, found) = research_following_tables(
             FunctionInput {
-                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+                traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: Some(&view),
                 section: function.section as u32,
                 extent: CodeRange {
@@ -318,7 +318,7 @@ fn recognized(elf: &[u8]) -> (Vec<FunctionRecord>, Vec<JumpDispatch>) {
                 entries: &ReadOnlyTables { image: facts },
                 section: function.section as u32,
             },
-            &oer_analysis_riscv_lift::StructuralRiscvDecoder,
+            &oer_tools_analysis_riscv_lift::StructuralRiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut records,
@@ -344,7 +344,7 @@ fn the_displaced_state_dispatch_proves_a_table_and_closes_the_stack_graph() {
     assert!(
         records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
     assert_eq!(
         found,
@@ -381,10 +381,10 @@ fn a_displaced_table_is_revalidated_after_following_its_targets() {
     assert!(
         !records
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
     assert!(!records.iter().any(|record| matches!(record,
-        FunctionRecord::Edge { from, target: Some(_), relation: oer_analysis_riscv_model::EdgeKind::Jump, external: false }
+        FunctionRecord::Edge { from, target: Some(_), relation: oer_tools_analysis_riscv_model::EdgeKind::Jump, external: false }
             if *from == u64::from(TEXT + 32)
     )));
 }

@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::AkmKeys;
-use oer_crypto::block::{Aes128Engine, BlockError};
-use oer_ieee80211_wire::eapol::{EapolEncodeError, EapolKeyBuffer, EapolKeyFields};
+use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee80211_wire::eapol::{EapolEncodeError, EapolKeyBuffer, EapolKeyFields};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
@@ -229,7 +229,7 @@ impl<const N: usize> RsnTxFrame<N> {
 
     pub fn key_frame(
         &self,
-    ) -> Result<EapolKeyFrame<'_>, oer_ieee80211_wire::eapol::EapolParseError> {
+    ) -> Result<EapolKeyFrame<'_>, oer_protocols_ieee80211_wire::eapol::EapolParseError> {
         EapolKeyFrame::parse(self.as_bytes())
     }
 

@@ -89,7 +89,7 @@ impl ControllerTimeLatch {
     }
 }
 
-use oer_espressif_bluetooth_engine::port::ControllerTimeRegisters;
+use oer_chips_family_bluetooth_engine::port::ControllerTimeRegisters;
 
 fn execute_latch_publication(
     ownership: &mut ControllerTimeLatch,

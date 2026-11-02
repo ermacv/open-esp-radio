@@ -7,10 +7,10 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_chip_profile::Profile;
+use oer_tools_chip_profile::Profile;
 
-use oer_espressif_facts::{BluetoothMode, Start, WifiBand};
-use oer_lab_model::Stand;
+use oer_chips_family_facts::{BluetoothMode, Start, WifiBand};
+use oer_tools_lab_model::Stand;
 
 use crate::Result;
 
@@ -23,7 +23,7 @@ pub(crate) struct InitCli {
 }
 
 pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> {
-    let path = oer_lab_model::paths::stand_file()?;
+    let path = oer_tools_lab_model::paths::stand_file()?;
     if path.exists() && !cli.force {
         return Err(format!(
             "{} exists; `cargo stand init --force` replaces it",
@@ -34,21 +34,24 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
     let chips = Profile::all(root)?;
     // The LAB service asks each board's ROM, under stand maintenance: it
     // owns every board, also before the stand file names one.
-    let owner = oer_lab_arbiter::owner::from_environment()?.to_string();
+    let owner = oer_tools_lab_arbiter::owner::from_environment()?.to_string();
     let mut client = crate::service::client()?;
     client.acquire(
-        oer_lab_client::protocol::LeaseRequest {
+        oer_tools_lab_client::protocol::LeaseRequest {
             owner: owner.clone(),
             work: String::from("stand init"),
             scenarios: Vec::new(),
             run: None,
-            claims: vec![oer_lab_arbiter::claims::Claim::stand()],
+            claims: vec![oer_tools_lab_arbiter::claims::Claim::stand()],
             maintenance: Some(format!("stand init by {owner}")),
             divisible: false,
         },
         &mut |message| eprintln!("stand: {message}"),
     )?;
-    let detected = crate::service::run(&mut client, oer_lab_client::protocol::Operation::Detect)?;
+    let detected = crate::service::run(
+        &mut client,
+        oer_tools_lab_client::protocol::Operation::Detect,
+    )?;
     let mut boards = Vec::new();
     for device in detected.as_array().ok_or("the service detected no list")? {
         let mac = device["mac"]
@@ -73,7 +76,7 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
     parsed.validate_chips(&chips)?;
     write_private(&path, &text)?;
     // The service recovers the boards it reads to their end states.
-    client.administer(oer_lab_client::protocol::Request::Reload)?;
+    client.administer(oer_tools_lab_client::protocol::Request::Reload)?;
     client.release()?;
     println!("wrote {} with {} board(s)", path.display(), boards.len());
     println!(

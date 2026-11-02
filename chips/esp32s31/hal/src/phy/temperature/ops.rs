@@ -6,8 +6,8 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::{lp_peri_clkrst::LpPericlkrst, tsens::LpTsens};
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::{lp_peri_clkrst::LpPericlkrst, tsens::LpTsens};
+use oer_portable_mmio::Placement;
 
 /// Enable the LP temperature-sensor register bank.
 ///
@@ -24,9 +24,9 @@ pub fn enable_register_bank<P: Placement>(tsens: &mut LpTsens<P>) {
 pub fn set_clock<P: Placement>(periclkrst: &mut LpPericlkrst<P>, enabled: bool) {
     periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(if enabled {
-            oer_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled
+            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled
         } else {
-            oer_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Disabled
+            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Disabled
         });
     });
 }
@@ -65,9 +65,9 @@ pub fn enable_phy_conversion<P: Placement>(tsens: &mut LpTsens<P>) {
 pub fn set_power<P: Placement>(tsens: &mut LpTsens<P>, enabled: bool) {
     tsens.modify_ctrl(|w| {
         w.set_power_up(if enabled {
-            oer_esp32s31_pac::tsens::ctrl::PowerUp::Enabled
+            oer_chips_esp32s31_pac::tsens::ctrl::PowerUp::Enabled
         } else {
-            oer_esp32s31_pac::tsens::ctrl::PowerUp::Disabled
+            oer_chips_esp32s31_pac::tsens::ctrl::PowerUp::Disabled
         });
     });
 }

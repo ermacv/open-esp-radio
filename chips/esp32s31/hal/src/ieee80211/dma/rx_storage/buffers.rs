@@ -1,7 +1,7 @@
 use super::*;
 use crate::ieee80211::dma::rx_ring::{ReadOnly, Rearm, ScopedBuffers};
 use core::{cell::UnsafeCell, marker::PhantomData, ptr::NonNull};
-use oer_memory::{ExternalRxBuffer, ExternalRxReturn, ExternalRxReturnState};
+use oer_portable_memory::{ExternalRxBuffer, ExternalRxReturn, ExternalRxReturnState};
 
 /// One aligned DMA-visible buffer and its affine return state.
 #[repr(C, align(4))]

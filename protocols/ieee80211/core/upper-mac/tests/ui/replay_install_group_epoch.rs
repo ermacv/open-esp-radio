@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_core_upper_mac::ccmp::{CcmpRxReplayEpoch, CcmpRxReplayState};
-use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpRxReplayEpoch, CcmpRxReplayState};
+use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 pub fn rewind(epoch: &mut CcmpRxReplayEpoch, id: GroupKeyId) {
     #[cfg(ui_reject)]
     epoch.install_group_epoch(id, CcmpRxReplayState::default()); // ui-error: E0599

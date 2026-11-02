@@ -1,6 +1,6 @@
 //! External ELF capability dispatcher. Application owns selection and publication.
 use super::*;
-use oer_analysis_blobray_application::linking::{
+use oer_tools_analysis_blobray_application::linking::{
     LinkInput, LinkInvocation, LinkOutput, LinkOutputSink, LinkWorkspace, LinkerHost,
     UnresolvedSymbols,
 };

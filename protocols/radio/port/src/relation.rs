@@ -15,7 +15,7 @@ use core::{
     marker::PhantomData,
 };
 
-use oer_time::{Coordinate, Duration, Instant, RadioInstant};
+use oer_portable_time::{Coordinate, Duration, Instant, RadioInstant};
 
 /// How the clocks of two domains advance relative to each other.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -40,8 +40,8 @@ pub enum RelationRate {
 /// A relation of another pair does not project this pair's samples:
 ///
 /// ```compile_fail,E0308
-/// use oer_radio_port::{ClockRelation, GenerationSource, RelationSample};
-/// use oer_time::{Duration, Instant, RadioInstant};
+/// use oer_protocols_radio_port::{ClockRelation, GenerationSource, RelationSample};
+/// use oer_portable_time::{Duration, Instant, RadioInstant};
 ///
 /// enum Radio {}
 /// enum Tsf {}
@@ -122,11 +122,11 @@ impl<A, B> fmt::Debug for ClockRelation<A, B> {
 /// does not compare with it:
 ///
 /// ```compile_fail,E0308
-/// use oer_radio_port::GenerationSource;
+/// use oer_protocols_radio_port::GenerationSource;
 ///
 /// enum Radio {}
 /// enum Tsf {}
-/// let radio = GenerationSource::<Radio, oer_time::Instant>::new(1).current();
+/// let radio = GenerationSource::<Radio, oer_portable_time::Instant>::new(1).current();
 /// let tsf = GenerationSource::<Tsf, Radio>::new(1).current();
 /// let _ = radio == tsf;
 /// ```
@@ -188,10 +188,10 @@ impl<A, B> fmt::Debug for Generation<A, B> {
 /// would hand out the same generation for two different breaks.
 ///
 /// ```compile_fail,E0599
-/// use oer_radio_port::GenerationSource;
+/// use oer_protocols_radio_port::GenerationSource;
 ///
 /// enum Radio {}
-/// let source = GenerationSource::<Radio, oer_time::Instant>::new(0);
+/// let source = GenerationSource::<Radio, oer_portable_time::Instant>::new(0);
 /// let _ = source.clone();
 /// ```
 pub struct GenerationSource<A, B> {
@@ -360,7 +360,7 @@ pub type ClockSample<D> = RelationSample<RadioInstant<D>, Instant>;
 
 /// A converted value and how far the true value may lie from it, as a span
 /// `S` of the domain it was converted into: monotonic by default, a radio
-/// domain's [`RadioDuration`](oer_time::RadioDuration) for a projection into
+/// domain's [`RadioDuration`](oer_portable_time::RadioDuration) for a projection into
 /// that domain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Projected<T, S = Duration> {

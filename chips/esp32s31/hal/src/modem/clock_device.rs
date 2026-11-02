@@ -119,11 +119,11 @@ pub(super) trait PllSourceGatePort {
     fn select(&mut self, enabled: bool);
 }
 
-pub(super) struct PllSourceGate<'a, P: oer_mmio::Placement>(
-    pub(super) &'a mut oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P>,
+pub(super) struct PllSourceGate<'a, P: oer_portable_mmio::Placement>(
+    pub(super) &'a mut oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P>,
 );
 
-impl<P: oer_mmio::Placement> PllSourceGatePort for PllSourceGate<'_, P> {
+impl<P: oer_portable_mmio::Placement> PllSourceGatePort for PllSourceGate<'_, P> {
     fn prepare(&mut self, enabled: bool) {
         if enabled {
             self.0.prepare_open_modem_pll_source_gate();
@@ -152,10 +152,10 @@ trait BasebandClockPort {
     fn reset(&mut self, asserted: bool);
     fn clock(&mut self, enabled: bool);
 }
-struct BasebandClock<'a, P: oer_mmio::Placement>(
-    &'a mut oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
+struct BasebandClock<'a, P: oer_portable_mmio::Placement>(
+    &'a mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 );
-impl<P: oer_mmio::Placement> BasebandClockPort for BasebandClock<'_, P> {
+impl<P: oer_portable_mmio::Placement> BasebandClockPort for BasebandClock<'_, P> {
     fn reset(&mut self, asserted: bool) {
         super::ops::set_wifi_baseband_reset(
             self.0,
@@ -212,8 +212,8 @@ mod tests {
 
     #[test]
     fn pinned_pll_gate_opens_without_xtal_and_closes_on_xtal() {
-        use oer_esp32s31_pac::hp_sys_clkrst::{HpSysClkrstRadio, HpSysClkrstRadioWords};
-        use oer_mmio::Registers;
+        use oer_chips_esp32s31_pac::hp_sys_clkrst::{HpSysClkrstRadio, HpSysClkrstRadioWords};
+        use oer_portable_mmio::Registers;
 
         let words = HpSysClkrstRadioWords::WORDS.iter().copied().max().unwrap() / 4 + 1;
         let mut memory = std::vec![u32::MAX; words];

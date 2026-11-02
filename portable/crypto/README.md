@@ -1,4 +1,4 @@
-# oer-crypto
+# oer-portable-crypto
 
 Owned cryptographic operation contracts and the mode algorithms behind them,
 shared by every protocol that needs them.

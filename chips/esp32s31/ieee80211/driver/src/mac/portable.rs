@@ -7,10 +7,10 @@
 //! meaning, such as an HE MU reception or a rate the S31 formatter cannot
 //! send, fails closed instead of approximating.
 
-use oer_esp32s31_hal::types::MacLegacyRate;
-use oer_ieee80211_contracts_port::MacRxMetadata;
-use oer_ieee80211_contracts_port::RxMeta;
-use oer_ieee80211_wire::{
+use oer_chips_esp32s31_hal::types::MacLegacyRate;
+use oer_protocols_ieee80211_contracts_port::MacRxMetadata;
+use oer_protocols_ieee80211_contracts_port::RxMeta;
+use oer_protocols_ieee80211_wire::{
     channel::Channel,
     phy,
     phy::{DsssPreamble, FecCoding, HeGiLtf, PhyRate, PpduBandwidth, SpatialStreams},
@@ -280,7 +280,7 @@ impl RxPhyInfo {
 }
 
 /// The portable receive metadata of an S31 prefix decoded by
-/// [`oer_esp32s31_ieee80211_driver::mac::rx::decode_normalized_rx_metadata`], on the configured
+/// [`oer_chips_esp32s31_ieee80211_driver::mac::rx::decode_normalized_rx_metadata`], on the configured
 /// `channel`.
 ///
 /// The S31 prefix fields this driver has proven carry no noise floor or

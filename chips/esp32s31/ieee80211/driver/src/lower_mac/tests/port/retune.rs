@@ -2,11 +2,11 @@
 //! port's periodic clock sample never reads a device whose registers the
 //! radio actor holds.
 use super::*;
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_radio_client::{
     Failure, PhyFault, Poison, PoisonCause, PoisonOrigin, RequestKind,
 };
-use oer_ieee80211_wire::channel::Channel;
-use oer_time::Duration;
+use oer_portable_time::Duration;
+use oer_protocols_ieee80211_wire::channel::Channel;
 
 async fn yield_once() {
     let mut yielded = false;
@@ -52,13 +52,15 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Retune {
             .expect("disable");
         owner.setup().set_channel(
             SupportedChannel::new(
-                oer_radio_regulatory::RegulatoryDomain::of(
-                    oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
+                oer_protocols_radio_regulatory::RegulatoryDomain::of(
+                    oer_protocols_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                    Channel::from_wifi_channel(channel(1)),
-                ))
+                .permit(
+                    oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                        Channel::from_wifi_channel(channel(1)),
+                    ),
+                )
                 .expect("permitted test channel"),
             )
             .expect("supported test channel"),
@@ -110,14 +112,14 @@ fn a_failed_retune_poisons_the_port_with_its_named_cause() {
     for cause in [
         WifiRetuneError::Radio(Failure::Poisoned(tick)),
         WifiRetuneError::Radio(Failure::Poisoned(Poison::request(
-            oer_esp32s31_hal::domain::RadioClient::Wifi,
+            oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
             RequestKind::Retune,
             PoisonCause::Channel(PhyFault::UnexpectedBinding),
         ))),
         WifiRetuneError::Radio(Failure::Refused),
-        WifiRetuneError::NotStopped(oer_esp32s31_hal::owner::maintenance::Error::MacActive {
-            state: 3,
-        }),
+        WifiRetuneError::NotStopped(
+            oer_chips_esp32s31_hal::owner::maintenance::Error::MacActive { state: 3 },
+        ),
     ] {
         let (parts, observed, _) = installed(Vec::new());
         crate::port::FIRST_POISON.with(|first| first.set(None));

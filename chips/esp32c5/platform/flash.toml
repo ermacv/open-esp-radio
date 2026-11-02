@@ -1,7 +1,7 @@
 # The flash map of the ESP32-C5 reference peer board: what the image bundle of
 # an ESP-IDF peer image needs from the chip. The chip has no profile and no
-# Rust code in this repository; `oer-image-build` reads this file for the
-# chip of a catalog image (`firmware/peers/esp32c5-*`) that has no profile.
+# Rust code in this repository; `oer-tools-image-build` reads this file for the
+# chip of a catalog image (`tools/lab/peers/esp32c5-*`) that has no profile.
 schema = 1
 # The ISA layer of the chip's hart; the bundle records its `rust-target`.
 isa = "rv32imac"

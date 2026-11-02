@@ -125,8 +125,8 @@ mod linux {
         }
 
         fn verify_capabilities(&mut self, helper: &Path, expected: &str) -> Result<()> {
-            let output = oer_os_process::output(
-                oer_os_process::command(helper).arg("capabilities"),
+            let output = oer_tools_os_process::output(
+                oer_tools_os_process::command(helper).arg("capabilities"),
                 Some(std::time::Duration::from_secs(5)),
             )?;
             if !output.status.success() || String::from_utf8(output.stdout)?.trim() != expected {
@@ -175,12 +175,13 @@ mod linux {
     }
 
     fn run_visudo(layout: &Layout, args: &[&str], file: Option<&Path>) -> Result<()> {
-        let mut command = oer_os_process::command(&layout.visudo);
+        let mut command = oer_tools_os_process::command(&layout.visudo);
         command.args(args);
         if let Some(file) = file {
             command.arg(file);
         }
-        let output = oer_os_process::output(&mut command, Some(std::time::Duration::from_secs(5)))?;
+        let output =
+            oer_tools_os_process::output(&mut command, Some(std::time::Duration::from_secs(5)))?;
         if !output.status.success() {
             return Err(format!(
                 "visudo rejected fixture policy: {}",
@@ -319,10 +320,10 @@ mod linux {
             layout.expected_uid,
             layout.expected_gid,
         )?;
-        let _install_lock = oer_os_process::lock::FileLock::try_lock(
+        let _install_lock = oer_tools_os_process::lock::FileLock::try_lock(
             install_lock,
             &layout.install_lock,
-            oer_os_process::lock::Mode::Exclusive,
+            oer_tools_os_process::lock::Mode::Exclusive,
         )?
         .ok_or_else(|| {
             format!(
@@ -336,10 +337,10 @@ mod linux {
             layout.expected_uid,
             layout.expected_gid,
         )?;
-        let _session_lock = oer_os_process::lock::FileLock::try_lock(
+        let _session_lock = oer_tools_os_process::lock::FileLock::try_lock(
             session_lock,
             &layout.session_lock(),
-            oer_os_process::lock::Mode::Exclusive,
+            oer_tools_os_process::lock::Mode::Exclusive,
         )?
         .ok_or_else(|| format!("provider {provider} is in use by an active HIL session"))?;
         effects.require_provider_idle(provider)?;
@@ -354,7 +355,7 @@ mod linux {
         };
         let previous_generation = previous_current.clone();
         let policy = policy_bytes(&bundle)?;
-        let policy_sha256 = oer_os_durable::sha256_bytes(&policy);
+        let policy_sha256 = oer_tools_os_durable::sha256_bytes(&policy);
         let mut base = InstallResult {
             schema: RECEIPT_SCHEMA,
             provider,
@@ -729,7 +730,8 @@ mod linux {
         }
         let mut identity = bundle.clone();
         identity.generation.clear();
-        if oer_os_durable::sha256_bytes(&serde_json::to_vec(&identity)?) != bundle.generation {
+        if oer_tools_os_durable::sha256_bytes(&serde_json::to_vec(&identity)?) != bundle.generation
+        {
             return Err("prepared bundle generation does not match its manifest".into());
         }
         Ok(())
@@ -829,7 +831,7 @@ mod linux {
             require_secure_file(layout, &path, artifact.mode)?;
             let bytes = fs::read(&path)?;
             if bytes.len() as u64 != artifact.size_bytes
-                || oer_os_durable::sha256_bytes(&bytes) != artifact.sha256
+                || oer_tools_os_durable::sha256_bytes(&bytes) != artifact.sha256
             {
                 return Err(
                     format!("installed artifact identity mismatch: {}", path.display()).into(),
@@ -904,7 +906,7 @@ mod linux {
             };
             if spec.role.is_launcher() {
                 require_secure_file(layout, &target, spec.mode)?;
-                if oer_os_durable::sha256_bytes(&fs::read(&target)?) != installed.sha256 {
+                if oer_tools_os_durable::sha256_bytes(&fs::read(&target)?) != installed.sha256 {
                     return Err(format!(
                         "installed launcher identity mismatch: {}",
                         target.display()
@@ -1142,7 +1144,7 @@ mod linux {
                     || metadata.uid() != layout.expected_uid
                     || metadata.gid() != layout.expected_gid
                     || metadata.mode() & 0o777 != artifact.mode
-                    || oer_os_durable::sha256_bytes(&fs::read(&target)?) != artifact.sha256
+                    || oer_tools_os_durable::sha256_bytes(&fs::read(&target)?) != artifact.sha256
                 {
                     return Err(format!(
                         "stable fixture launcher differs from the committed artifact: {}",
@@ -1410,7 +1412,7 @@ mod linux {
         recovery_error: Option<String>,
     ) -> InstallResult {
         let policy_sha256 = policy_bytes(&journal.bundle)
-            .map(|bytes| oer_os_durable::sha256_bytes(&bytes))
+            .map(|bytes| oer_tools_os_durable::sha256_bytes(&bytes))
             .unwrap_or_default();
         InstallResult {
             schema: RECEIPT_SCHEMA,
@@ -1595,7 +1597,7 @@ mod linux {
         if sudo_uid == 0 {
             return Err("SUDO_UID must identify a non-root operator".into());
         }
-        let output = oer_os_process::command("/usr/bin/id")
+        let output = oer_tools_os_process::command("/usr/bin/id")
             .args(["-u", operator])
             .output()?;
         if !output.status.success()

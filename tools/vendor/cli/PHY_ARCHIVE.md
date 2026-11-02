@@ -13,7 +13,7 @@ cargo vendor-check phy-archive <archive.rlib> --source <crate>
 Repeat `--source` for each allowed crate. Crate names accept hyphens and
 are normalized to their Rust namespace spelling.
 
-ELF and archive containers are read through [`oer-analysis-elf`](../../analysis/elf/README.md).
+ELF and archive containers are read through [`oer-tools-analysis-elf`](../../analysis/elf/README.md).
 LLVM bitcode members use `llvm-nm` from the active Rust toolchain. Unknown
 members, compiled ELF members without symbol tables, tool failures and
 malformed symbol output fail the audit.
@@ -22,5 +22,5 @@ The tests compile native ELF and LLVM bitcode fixtures and check the symbol
 policy and invalid archive handling:
 
 ```console
-cargo test -p oer-tool-vendor-cli
+cargo test -p oer-tools-vendor-cli
 ```

@@ -2,10 +2,10 @@
 use super::locations::Locations;
 use super::{Field, TypeFacts};
 use crate::Analysis;
-use oer_analysis_elf::rv32::Role;
-use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::{ImageFacts, addresses::TargetValue};
+use oer_tools_analysis_elf::rv32::Role;
+use oer_tools_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::{ImageFacts, addresses::TargetValue};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The missing proof for one address use. These are analysis outcomes, not

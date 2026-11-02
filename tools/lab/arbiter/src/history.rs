@@ -77,9 +77,9 @@ impl LeaseRecord {
 /// rewrite that bounds the file.
 /// Append `record` to the history at `path`, keeping it bounded.
 pub fn append(path: &Path, record: &LeaseRecord) -> crate::Result<()> {
-    oer_os_durable::jsonl::append(path, record)?;
+    oer_tools_os_durable::jsonl::append(path, record)?;
     if fs::metadata(path)?.len() > MAX_BYTES {
-        oer_os_durable::jsonl::retain_newest::<LeaseRecord>(path, RETAINED_RECORDS)?;
+        oer_tools_os_durable::jsonl::retain_newest::<LeaseRecord>(path, RETAINED_RECORDS)?;
     }
     Ok(())
 }
@@ -105,14 +105,14 @@ pub fn rename_owner(path: &Path, old: &str, new: &str) -> crate::Result<()> {
         }
         renamed.push('\n');
     }
-    oer_os_durable::atomic_write(path, renamed.as_bytes())
+    oer_tools_os_durable::atomic_write(path, renamed.as_bytes())
 }
 
 /// The lease history, a telemetry view (estimates, status): lines another
 /// version cannot parse are skipped.
 /// The history at `path`, unreadable lines skipped.
 pub fn read(path: &Path) -> crate::Result<Vec<LeaseRecord>> {
-    oer_os_durable::jsonl::read_lossy(path)
+    oer_tools_os_durable::jsonl::read_lossy(path)
 }
 
 #[cfg(test)]
@@ -150,9 +150,9 @@ mod tests {
         append(&path, &record).unwrap();
         assert_eq!(read(&path).unwrap(), [record.clone(), record.clone()]);
         for _ in 0..RETAINED_RECORDS + 10 {
-            oer_os_durable::jsonl::append(&path, &record).unwrap();
+            oer_tools_os_durable::jsonl::append(&path, &record).unwrap();
         }
-        oer_os_durable::jsonl::retain_newest::<LeaseRecord>(&path, RETAINED_RECORDS).unwrap();
+        oer_tools_os_durable::jsonl::retain_newest::<LeaseRecord>(&path, RETAINED_RECORDS).unwrap();
         assert_eq!(read(&path).unwrap().len(), RETAINED_RECORDS);
     }
 }

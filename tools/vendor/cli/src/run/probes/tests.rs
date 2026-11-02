@@ -17,7 +17,9 @@ fn repository() -> tempfile::TempDir {
         ),
         ("chip-b", "imac", &[("rust-artifact", "radio")][..]),
     ] {
-        let profile = directory.path().join(oer_chip_profile::platform_dir(chip));
+        let profile = directory
+            .path()
+            .join(oer_tools_chip_profile::platform_dir(chip));
         std::fs::create_dir_all(&profile).unwrap();
         let mut text = format!(
             "schema = 2\nid = \"{chip}\"\nfamily = \"f\"\nisa = \"rv32{isa}\"\n\
@@ -27,7 +29,7 @@ fn repository() -> tempfile::TempDir {
         );
         for (role, name) in probes {
             text.push_str(&format!(
-                "[[probe]]\nrole = \"{role}\"\npackage = \"oer-firmware-probes-{chip}-{name}\"\n"
+                "[[probe]]\nrole = \"{role}\"\npackage = \"oer-hil-probes-{chip}-{name}\"\n"
             ));
         }
         std::fs::write(profile.join("chip.toml"), text).unwrap();
@@ -130,9 +132,9 @@ fn a_chip_builds_only_its_own_probes() {
         Ok(())
     })
     .unwrap();
-    assert_eq!(seen, ["oer-firmware-probes-chip-b-radio"]);
+    assert_eq!(seen, ["oer-hil-probes-chip-b-radio"]);
     assert!(
         output(&context, &probes(&context.root, "chip-b").unwrap()[0])
-            .ends_with("target/verification/chip-b/oer-firmware-probes-chip-b-radio")
+            .ends_with("target/verification/chip-b/oer-hil-probes-chip-b-radio")
     );
 }

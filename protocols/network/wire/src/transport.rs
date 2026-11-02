@@ -4,7 +4,7 @@
 //! protocol numbers from the IANA Assigned Internet Protocol Numbers
 //! registry. Checksums are not checked.
 
-use oer_wire::Reader;
+use oer_portable_wire::Reader;
 
 /// Transmission Control Protocol.
 pub const PROTOCOL_TCP: u8 = 6;
@@ -21,7 +21,7 @@ pub enum TransportError {
     Length,
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// TCP's Data Offset octet.
     /// SOURCE: RFC 9293, 3.1 (Header Format).
     pub struct TcpDataOffset[1] (little) {

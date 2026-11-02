@@ -161,14 +161,14 @@ fn environment_completion(
 
 fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompletion {
     match action {
-        PhyTxIqLoopbackAction::I2c(oer_espressif_analog::Action::Read { address }) => {
-            PhyTxIqLoopbackCompletion::I2c(oer_espressif_analog::Completion::Read {
+        PhyTxIqLoopbackAction::I2c(oer_chips_family_analog::Action::Read { address }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_analog::Completion::Read {
                 address,
                 value: 0,
             })
         }
-        PhyTxIqLoopbackAction::I2c(oer_espressif_analog::Action::Write { address, .. }) => {
-            PhyTxIqLoopbackCompletion::I2c(oer_espressif_analog::Completion::Written { address })
+        PhyTxIqLoopbackAction::I2c(oer_chips_family_analog::Action::Write { address, .. }) => {
+            PhyTxIqLoopbackCompletion::I2c(oer_chips_family_analog::Completion::Written { address })
         }
         PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
             PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
@@ -580,7 +580,7 @@ fn external_lowering_covers_every_txiq_operation_layer() {
     ));
     assert!(matches!(
         PhyTxIqCalibrationExternalBinding::lower(PhyTxIqCalibrationAction::Loopback(
-            PhyTxIqLoopbackAction::I2c(oer_espressif_analog::Action::Read {
+            PhyTxIqLoopbackAction::I2c(oer_chips_family_analog::Action::Read {
                 address: analog_i2c::bbtop::tx_iq_loopback_enable::TX_IQ_LOOPBACK_ENABLE.address(),
             })
         )),

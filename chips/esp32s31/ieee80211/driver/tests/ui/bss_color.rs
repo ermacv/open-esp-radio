@@ -1,12 +1,12 @@
 #![no_std]
-use oer_esp32s31_ieee80211_driver::{
+use oer_chips_esp32s31_ieee80211_driver::{
     lower_mac::LowerMacCore,
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
-use oer_ieee80211_contracts_port::BssColor;
-use oer_time::Timer;
+use oer_protocols_ieee80211_contracts_port::BssColor;
+use oer_portable_time::Timer;
 
-pub fn install<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities>(
+pub fn install<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities>(
     core: &mut LowerMacCore<'_, '_, P, E, T, C, 512>,
     color: BssColor,
 ) {

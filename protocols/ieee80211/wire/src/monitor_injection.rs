@@ -57,7 +57,7 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
             required: BASE_HEADER_LENGTH,
             available: bytes.len(),
         };
-        let mut reader = oer_wire::Reader::new(bytes);
+        let mut reader = oer_portable_wire::Reader::new(bytes);
         let control = FrameControlFields::from_bytes(reader.read().map_err(|_| too_short)?);
         // Duration/ID and Address 1 to Address 3 precede Sequence Control.
         reader.take(20).map_err(|_| too_short)?;

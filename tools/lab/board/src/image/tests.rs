@@ -11,7 +11,7 @@ fn receipt(image: &str) -> Receipt {
         chip: "chip".into(),
         image: image.into(),
         segments: Vec::new(),
-        digest: oer_os_durable::sha256_bytes(image.as_bytes()),
+        digest: oer_tools_os_durable::sha256_bytes(image.as_bytes()),
         by: "test".into(),
         unix_millis: 0,
     }

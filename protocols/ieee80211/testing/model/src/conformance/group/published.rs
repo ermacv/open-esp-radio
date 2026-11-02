@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_testing_conformance::group_keys::TxOwners;
-use oer_ieee80211_wire::{ccmp::CcmpPacketNumber, qos::WmmAccessCategory};
+use oer_protocols_ieee80211_testing_conformance::group_keys::TxOwners;
+use oer_protocols_ieee80211_wire::{ccmp::CcmpPacketNumber, qos::WmmAccessCategory};
 pub(super) struct Exercise {
     pub air: Rc<ModelAir>,
     pub rate: LegacyRate,

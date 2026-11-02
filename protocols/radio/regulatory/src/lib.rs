@@ -22,7 +22,7 @@
 //! Without a domain nothing is permitted.
 //!
 //! ```compile_fail,E0451
-//! # use oer_radio_regulatory::{Permitted, Initiate};
+//! # use oer_protocols_radio_regulatory::{Permitted, Initiate};
 //! # fn make<C>(channel: C) -> Permitted<C> {
 //! Permitted { channel, ceiling_mbm: 2000, initiate: Initiate::Allowed, indoor_only: false }
 //! # }

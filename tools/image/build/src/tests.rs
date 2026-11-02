@@ -26,7 +26,7 @@ fn an_application_selects_its_features_alone() {
 fn every_chip_with_images_names_its_flash_map() {
     let repository = repository();
     let root = repository.path();
-    for chip in oer_chip_profile::supported(&root).unwrap() {
+    for chip in oer_tools_chip_profile::supported(&root).unwrap() {
         let profile = profile(&root, &chip).unwrap();
         let flash = profile.facts.flash.unwrap();
         assert!(
@@ -65,20 +65,20 @@ fn requested(placement: bool) -> Gates {
         frames: false,
         stack: true,
         placement,
-        interrupts: Some(oer_image_checks::interrupts::Required::Product),
+        interrupts: Some(oer_tools_image_checks::interrupts::Required::Product),
         panics: false,
         audit: None,
     }
 }
 
 /// An empty bundle in `directory` of the first chip with a flash map.
-fn empty_bundle(directory: &Path) -> oer_image_bundle::ImageBundle {
+fn empty_bundle(directory: &Path) -> oer_tools_image_bundle::ImageBundle {
     let repository = repository();
     let root = repository.path();
-    let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
+    let chip = oer_tools_chip_profile::supported(&root).unwrap().remove(0);
     let profile = profile(&root, &chip).unwrap();
     let flash = profile.facts.flash.clone().unwrap();
-    oer_image_bundle::ImageBundle::new(directory, &profile, flash)
+    oer_tools_image_bundle::ImageBundle::new(directory, &profile, flash)
 }
 
 fn outcome(results: &[(&str, CheckResult)]) -> CheckOutcome {
@@ -124,7 +124,7 @@ fn passed_and_not_applicable_checks_are_recorded_and_pass() {
         "{:?}",
         bundle.warnings
     );
-    assert!(!bundle.path(oer_image_bundle::files::CHECKS).exists());
+    assert!(!bundle.path(oer_tools_image_bundle::files::CHECKS).exists());
 }
 
 #[test]
@@ -160,7 +160,7 @@ fn a_requested_check_with_missing_data_or_no_result_fails_the_build() {
     // Every requested result is recorded, machine-readable, beside the
     // failed build.
     let written: Vec<CheckRecord> = serde_json::from_slice(
-        &std::fs::read(bundle.path(oer_image_bundle::files::CHECKS)).unwrap(),
+        &std::fs::read(bundle.path(oer_tools_image_bundle::files::CHECKS)).unwrap(),
     )
     .unwrap();
     assert_eq!(written, bundle.checks);
@@ -206,7 +206,7 @@ fn a_reported_check_that_does_not_pass_is_a_warning() {
         "{:?}",
         bundle.warnings
     );
-    assert!(!bundle.path(oer_image_bundle::files::CHECKS).exists());
+    assert!(!bundle.path(oer_tools_image_bundle::files::CHECKS).exists());
 }
 
 #[test]
@@ -214,9 +214,9 @@ fn runtime_checks_refuse_requested_link_time_gates() {
     let directory = tempfile::tempdir().unwrap();
     let repository = repository();
     let root = repository.path();
-    let chip = oer_chip_profile::supported(&root).unwrap().remove(0);
+    let chip = oer_tools_chip_profile::supported(&root).unwrap().remove(0);
     let spec = ImageSpec {
-        purpose: oer_image_bundle::Purpose::Flash,
+        purpose: oer_tools_image_bundle::Purpose::Flash,
         root: root.to_owned(),
         chip,
         application: Application {
@@ -240,48 +240,56 @@ fn runtime_checks_refuse_requested_link_time_gates() {
 pub(crate) fn repository() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
-        (
-            "chips/esp32c5/platform/flash.toml",
-            include_str!("../../../../chips/esp32c5/platform/flash.toml"),
-        ),
-        (
-            "chips/esp32c5/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
-        ),
-        (
-            "chips/esp32s31/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
-        ),
-        (
-            "firmware/peers/esp32c5-ieee802154/firmware.toml",
-            include_str!("../../../../firmware/peers/esp32c5-ieee802154/firmware.toml"),
-        ),
-        (
-            "firmware/peers/esp32c5-openthread/firmware.toml",
-            include_str!("../../../../firmware/peers/esp32c5-openthread/firmware.toml"),
-        ),
-        (
-            "firmware/vendor/esp32c5/ble-scan-request-counter/firmware.toml",
-            include_str!(
-                "../../../../firmware/vendor/esp32c5/ble-scan-request-counter/firmware.toml"
+    for (path, text) in oer_chips_family_facts::tracked::FILES
+        .iter()
+        .copied()
+        .chain([
+            (
+                "chips/esp32c5/platform/flash.toml",
+                include_str!("../../../../chips/esp32c5/platform/flash.toml"),
             ),
-        ),
-        (
-            "firmware/vendor/esp32s31/ble-scan-reference/firmware.toml",
-            include_str!("../../../../firmware/vendor/esp32s31/ble-scan-reference/firmware.toml"),
-        ),
-        (
-            "firmware/vendor/esp32s31/ieee802154-reference/firmware.toml",
-            include_str!("../../../../firmware/vendor/esp32s31/ieee802154-reference/firmware.toml"),
-        ),
-        (
-            "firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml",
-            include_str!(
-                "../../../../firmware/vendor/esp32s31/phy-tracking-reference/firmware.toml"
+            (
+                "chips/esp32c5/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
             ),
-        ),
-    ]) {
+            (
+                "chips/esp32s31/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+            ),
+            (
+                "tools/lab/peers/esp32c5-ieee802154/firmware.toml",
+                include_str!("../../../lab/peers/esp32c5-ieee802154/firmware.toml"),
+            ),
+            (
+                "tools/lab/peers/esp32c5-openthread/firmware.toml",
+                include_str!("../../../lab/peers/esp32c5-openthread/firmware.toml"),
+            ),
+            (
+                "tools/vendor/references/esp32c5/ble-scan-request-counter/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32c5/ble-scan-request-counter/firmware.toml"
+                ),
+            ),
+            (
+                "tools/vendor/references/esp32s31/ble-scan-reference/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32s31/ble-scan-reference/firmware.toml"
+                ),
+            ),
+            (
+                "tools/vendor/references/esp32s31/ieee802154-reference/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32s31/ieee802154-reference/firmware.toml"
+                ),
+            ),
+            (
+                "tools/vendor/references/esp32s31/phy-tracking-reference/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32s31/phy-tracking-reference/firmware.toml"
+                ),
+            ),
+        ])
+    {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
@@ -329,7 +337,7 @@ fn only_interrupts_rejects_failed_missing_and_absent_results() {
                     && warning.contains("task has no bound"))
         );
         let written: Vec<CheckRecord> = serde_json::from_slice(
-            &std::fs::read(bundle.path(oer_image_bundle::files::CHECKS)).unwrap(),
+            &std::fs::read(bundle.path(oer_tools_image_bundle::files::CHECKS)).unwrap(),
         )
         .unwrap();
         assert_eq!(written, bundle.checks);
@@ -348,7 +356,7 @@ fn enforced_frame_configuration_errors_and_missing_results_still_reject_both_elf
             let mut bundle = empty_bundle(directory.path());
             let checks = Gates {
                 enforced: Enforced::Only([Check::Frames, Check::Interrupts].into()),
-                ..Gates::all(oer_image_checks::interrupts::Required::Product)
+                ..Gates::all(oer_tools_image_checks::interrupts::Required::Product)
             };
             let mut results = vec![
                 ("stack", CheckResult::Passed),
@@ -362,7 +370,7 @@ fn enforced_frame_configuration_errors_and_missing_results_still_reject_both_elf
                 .unwrap_err()
                 .to_string();
             assert!(error.contains(&format!("frames ({elf:?})")), "{error}");
-            assert!(bundle.path(oer_image_bundle::files::CHECKS).is_file());
+            assert!(bundle.path(oer_tools_image_bundle::files::CHECKS).is_file());
         }
     }
 }
@@ -374,7 +382,7 @@ fn frame_and_panic_warnings_pass_but_stack_bound_failures_still_reject() {
             let directory = tempfile::tempdir().unwrap();
             let checks = Gates {
                 enforced,
-                ..Gates::all(oer_image_checks::interrupts::Required::Product)
+                ..Gates::all(oer_tools_image_checks::interrupts::Required::Product)
             };
             let results = [
                 ("frames", CheckResult::Passed),
@@ -445,7 +453,7 @@ fn only_interrupts_reports_failed_runtime_and_bootstrap_stacks() {
                         && warning.contains("outside SRAM"))
             );
         }
-        assert!(!bundle.path(oer_image_bundle::files::CHECKS).exists());
+        assert!(!bundle.path(oer_tools_image_bundle::files::CHECKS).exists());
     }
 }
 

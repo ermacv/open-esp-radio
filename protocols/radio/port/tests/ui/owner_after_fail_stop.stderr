@@ -2,7 +2,7 @@ error[E0382]: use of moved value: `owner`
  --> tests/ui/owner_after_fail_stop.rs:6:13
   |
 3 | pub fn stop<Id: SlotIdentity, B: PortBackend<Id>>(owner: Owner<'_, '_, Id, B, Disabled>) {
-  |                                                   ----- move occurs because `owner` has type `Owner<'_, '_, Id, B, oer_radio_port::Disabled>`, which does not implement the `Copy` trait
+  |                                                   ----- move occurs because `owner` has type `Owner<'_, '_, Id, B, oer_protocols_radio_port::Disabled>`, which does not implement the `Copy` trait
 4 |     let request = owner.fail_stop();
   |                         ----------- `owner` moved due to this method call
 5 |     #[cfg(all())]

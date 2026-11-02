@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Disabled, Owner, PortBackend, SlotIdentity};
+use oer_protocols_radio_port::{Disabled, Owner, PortBackend, SlotIdentity};
 pub fn stop<Id: SlotIdentity, B: PortBackend<Id>>(owner: Owner<'_, '_, Id, B, Disabled>) {
     let request = owner.fail_stop();
     #[cfg(ui_reject)]

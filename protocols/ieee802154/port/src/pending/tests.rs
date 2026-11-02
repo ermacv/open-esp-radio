@@ -1,7 +1,7 @@
 //! Pending-bit rules of the pinned `esp_ieee802154_ack.c`.
 
 use super::{AckPending, AutoPendingMode, PendingTable, PendingTableFull, ack_pending};
-use oer_ieee802154_wire::{FrameAddress, PhrFrame};
+use oer_protocols_ieee802154_wire::{FrameAddress, PhrFrame};
 
 /// 2006 data frame from short source 0x5678.
 const DATA_SHORT: [u8; 13] = [

@@ -7,14 +7,14 @@ use std::{
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 
 // Exact lexical counts, including tests: remove or reduce an entry when its
-// implementations move to oer-memory. No new exceptions belong here.
+// implementations move to oer-portable-memory. No new exceptions belong here.
 const EXCEPTIONS: &[(&str, usize)] = &[
     ("chips/esp32s31/hal/src/ieee80211/dma/rx_storage.rs", 1),
     (
         "chips/esp32s31/hal/src/ieee80211/dma/rx_storage/buffers.rs",
         1,
     ),
-    ("chips/espressif/executor/src/task.rs", 1),
+    ("chips/family/executor/src/task.rs", 1),
 ];
 
 fn sync_or_send_trait<'a>(tokens: impl Iterator<Item = &'a TokenTree>) -> bool {
@@ -149,7 +149,7 @@ fn unsafe_sync_and_send_impls_stay_in_oer_memory() {
 #[should_panic(expected = "unsafe Sync/Send implementation ownership")]
 fn a_new_crate_with_unsafe_sync_is_rejected_even_below_the_unsafe_boundary() {
     let root = fixture(
-        "firmware/probes/unreviewed",
+        "hil/probes/unreviewed",
         "src/lib.rs",
         "struct Cell; unsafe impl Sync for Cell {}",
     );
@@ -158,9 +158,9 @@ fn a_new_crate_with_unsafe_sync_is_rejected_even_below_the_unsafe_boundary() {
 
 #[test]
 fn exception_counts_must_match_including_removed_files_and_zero_entries() {
-    let file = "chips/espressif/interrupt-table/src/signal.rs";
+    let file = "chips/family/interrupt-table/src/signal.rs";
     let root = fixture(
-        "chips/espressif/interrupt-table",
+        "chips/family/interrupt-table",
         "src/signal.rs",
         "struct Cell; unsafe impl Sync for Cell {}",
     );
@@ -192,9 +192,9 @@ fn exception_counts_must_match_including_removed_files_and_zero_entries() {
 
 #[test]
 fn an_exception_does_not_allow_more_impls_or_another_file() {
-    let file = "chips/espressif/interrupt-table/src/signal.rs";
+    let file = "chips/family/interrupt-table/src/signal.rs";
     let root = fixture(
-        "chips/espressif/interrupt-table",
+        "chips/family/interrupt-table",
         "src/signal.rs",
         "struct Cell; unsafe impl Sync for Cell {} unsafe impl Send for Cell {}",
     );
@@ -207,7 +207,7 @@ fn an_exception_does_not_allow_more_impls_or_another_file() {
     std::fs::rename(
         root.path().join(file),
         root.path()
-            .join("chips/espressif/interrupt-table/src/other.rs"),
+            .join("chips/family/interrupt-table/src/other.rs"),
     )
     .expect("move source");
     assert_eq!(violations(root.path(), &[(file, 2)]).len(), 2);

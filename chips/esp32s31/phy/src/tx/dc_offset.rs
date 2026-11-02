@@ -801,9 +801,9 @@ impl PhyTxDcReadyBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<C: oer_time::Clock + ?Sized>(
+    pub fn execute_target<C: oer_portable_time::Clock + ?Sized>(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
         clock: &C,
     ) -> PhyTxDcCompletion {
         // The settle limit is this crate's, not a recovered value.
@@ -854,12 +854,12 @@ impl PhyTxDcMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyTxDcCompletion {
         match self.action {
             PhyTxDcAction::ConfigurePbusDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyTxDcCompletion::PbusDebugModeConfigured
             }
@@ -868,7 +868,7 @@ impl PhyTxDcMmioBinding {
                 path,
                 value: {
                     let result =
-                        oer_esp32s31_hal::phy::pbus::read_result(registers, selector, path);
+                        oer_chips_esp32s31_hal::phy::pbus::read_result(registers, selector, path);
                     debug_assert!(
                         result.is_some(),
                         "TX-DC transition emitted an unrecovered PBus selector"
@@ -877,7 +877,7 @@ impl PhyTxDcMmioBinding {
                 },
             },
             PhyTxDcAction::ConfigureTxClock => {
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, true);
+                oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, true);
                 PhyTxDcCompletion::TxClockConfigured
             }
             PhyTxDcAction::ConfigureTone {
@@ -931,16 +931,16 @@ impl PhyTxDcMmioBinding {
                 PhyTxDcCompletion::MeasurementCleared
             }
             PhyTxDcAction::ConfigurePbusWorkMode => PhyTxDcCompletion::PbusWorkModeConfigured {
-                settle_required: oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 ),
             },
             PhyTxDcAction::ConfigurePbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyTxDcCompletion::PbusWorkModePulseConfigured
             }
             PhyTxDcAction::ClearPbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyTxDcCompletion::PbusWorkModePulseCleared
             }
             _ => unreachable!(),
@@ -974,7 +974,7 @@ impl PhyTxDcPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -982,7 +982,7 @@ impl PhyTxDcPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,

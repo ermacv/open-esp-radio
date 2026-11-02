@@ -31,15 +31,15 @@ error[E0277]: `P` cannot be sent between threads safely
    |     |
    |     required by a bound introduced by this call
    |
-note: required because it appears within the type `Part<P, oer_esp32s31_pac::generated::usb_serial_jtag::UsbDeviceDivision, oer_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagTaskWords>`
+note: required because it appears within the type `Part<P, oer_chips_esp32s31_pac::generated::usb_serial_jtag::UsbDeviceDivision, oer_chips_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagTaskWords>`
       --> $WORKSPACE/portable/mmio/src/lib.rs
        |
        | pub struct Part<P: Placement, R: Registers, W: Words> {
        |            ^^^^
-note: required because it appears within the type `oer_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagTask<P>`
+note: required because it appears within the type `oer_chips_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagTask<P>`
       --> $WORKSPACE/chips/esp32s31/pac/src/generated.rs
        |
-       |     pub struct UsbSerialJtagTask<P: oer_mmio::Placement = oer_mmio::Fixed<0x20391000>>(
+       |     pub struct UsbSerialJtagTask<P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<0x20391000>>(
        |                ^^^^^^^^^^^^^^^^^
 note: required because it appears within the type `Endpoint<P>`
       --> src/peripherals/usb_serial_jtag.rs
@@ -94,15 +94,15 @@ error[E0277]: `P` cannot be sent between threads safely
    |     |
    |     required by a bound introduced by this call
    |
-note: required because it appears within the type `oer_mmio::Block<P, oer_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagPadsWords>`
+note: required because it appears within the type `oer_portable_mmio::Block<P, oer_chips_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagPadsWords>`
       --> $WORKSPACE/portable/mmio/src/lib.rs
        |
        | pub struct Block<P: Placement, R: Registers> {
        |            ^^^^^
-note: required because it appears within the type `oer_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagPads<P>`
+note: required because it appears within the type `oer_chips_esp32s31_pac::generated::usb_serial_jtag::UsbSerialJtagPads<P>`
       --> $WORKSPACE/chips/esp32s31/pac/src/generated.rs
        |
-       |     pub struct UsbSerialJtagPads<P: oer_mmio::Placement = oer_mmio::Fixed<0x20391000>>(
+       |     pub struct UsbSerialJtagPads<P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<0x20391000>>(
        |                ^^^^^^^^^^^^^^^^^
 note: required because it appears within the type `UsbPads<P>`
       --> src/peripherals/usb_serial_jtag.rs

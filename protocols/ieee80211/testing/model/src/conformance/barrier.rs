@@ -1,6 +1,8 @@
 use super::*;
-use oer_ieee80211_testing_conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_testing_conformance::{
+    BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot,
+};
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 type Terminal = BarrierEvent<ModelAck, ModelAirDenied>;
 pub type Trace = BarrierTrace<Vec<Terminal>, Vec<u8>, Vec<Vec<u8>>, Terminal>;
 pub async fn barrier(
@@ -144,7 +146,7 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     let mut access = resources.terminal_access;
     let association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
         resources.station_association,
-        oer_ieee80211_wire::security::Spp::NotNegotiated,
+        oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
     );
     let mut slots = resources.station_pairwise.into_iter();
     let mut key = Some(
@@ -189,7 +191,7 @@ async fn exercise<'p, 'id: 'p, Id: SlotIdentity + 'id>(
             body: None,
             protection: TxProtection::Ccmp(NumberedKey {
                 key: key.as_ref().ok_or("model key")?,
-                packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(
+                packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(
                     u64::try_from(ordinal)
                         .map_err(|_| "PN ordinal")?
                         .checked_add(1)
@@ -393,7 +395,7 @@ mod tests {
                 BarrierCase::GateRetry,
                 Channel::ghz2_4(6, ChannelWidth::Mhz20).expect("channel"),
                 LegacyRate::Ofdm6M,
-                Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+                Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
                 core::num::NonZeroU8::new(budget).expect("nonzero retry budget"),
             ))
             .expect("actual model trace");
@@ -410,7 +412,10 @@ mod tests {
             assert_eq!(air.transmissions.get(), u16::from(budget));
             assert_eq!(air.rate, PhyRate::Legacy(LegacyRate::Ofdm6M));
             assert_eq!(
-                oer_ieee80211_testing_conformance::verify_barrier(BarrierCase::GateRetry, trace),
+                oer_protocols_ieee80211_testing_conformance::verify_barrier(
+                    BarrierCase::GateRetry,
+                    trace
+                ),
                 Ok(())
             );
         }

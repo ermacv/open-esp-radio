@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-image-linker"
+name = "oer-tools-image-linker"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ name = "oer-image-linker"
 path = "src/main.rs"
 
 [dependencies]
-oer-image-checks = { path = "../checks" }
+oer-tools-image-checks = { path = "../checks" }
 
 [lints]
 workspace = true

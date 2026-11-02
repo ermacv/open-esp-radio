@@ -7,14 +7,14 @@
 //! interrupt part holds no register: the handler lowers the line through
 //! the line's owner, which the executor or the doorbell publishes.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     hp_system, instances,
     ownership::{
         SoftwareInterrupt0Peripherals, SoftwareInterrupt1Peripherals,
         SoftwareInterrupt2Peripherals, SoftwareInterrupt3Peripherals,
     },
 };
-use oer_mmio::{Fixed, InterruptSource, Placement};
+use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -70,7 +70,7 @@ macro_rules! software_interrupt {
             }
         }
 
-        impl<P: Placement> oer_espressif_platform_port::SoftwareLine for $line<P> {
+        impl<P: Placement> oer_chips_family_platform_port::SoftwareLine for $line<P> {
             #[inline(always)]
             fn raise(&self) {
                 Self::raise(self);
@@ -83,9 +83,9 @@ macro_rules! software_interrupt {
         }
 
         #[cfg(any(test, feature = "test-support"))]
-        impl<'a> $line<oer_mmio::Host<'a>> {
+        impl<'a> $line<oer_portable_mmio::Host<'a>> {
             /// The line over host memory from the instance's base.
-            pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+            pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
                 hp_system::$part::host(words).map(Self)
             }
         }

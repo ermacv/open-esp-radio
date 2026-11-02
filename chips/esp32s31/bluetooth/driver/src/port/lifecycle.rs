@@ -50,7 +50,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
     fn split<'s>(
         q: &'s mut Self::Queues,
         wakes: SlotWakes<'s, Id>,
-    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -66,21 +66,20 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 failed_terminal: &q.failed_terminal,
                 resources: &mut q.resources,
                 credits: q.credits.as_mut().ok_or(
-                    oer_radio_port::SlotInitError::MissingResource("BLE command credit"),
+                    oer_protocols_radio_port::SlotInitError::MissingResource("BLE command credit"),
                 )?,
                 outstanding: &mut q.outstanding,
                 wakes,
                 timer: q
                     .timer
                     .as_ref()
-                    .ok_or(oer_radio_port::SlotInitError::MissingResource("BLE timer"))?
+                    .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
+                        "BLE timer",
+                    ))?
                     .clone(),
-                clock: q
-                    .clock
-                    .as_mut()
-                    .ok_or(oer_radio_port::SlotInitError::MissingResource(
-                        "BLE clock endpoint",
-                    ))?,
+                clock: q.clock.as_mut().ok_or(
+                    oer_protocols_radio_port::SlotInitError::MissingResource("BLE clock endpoint"),
+                )?,
                 epoch: q.epoch,
                 bound: q.bound,
             },
@@ -108,7 +107,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 // A fault closes publication immediately, but does not cancel
                 // its body before that terminal or the stream end is observed.
                 retire.wait().await;
-                retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                 core::future::pending::<()>().await;
             }
             if q.shared.enabled.load(Ordering::Acquire) && !q.shared.ready.load(Ordering::Acquire) {
@@ -222,7 +221,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotBodyOwner<Id> for Backend<Id, D, X> {
     fn lend<'p, 's>(
         f: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+    ) -> Result<Self::Body<'p>, oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -231,7 +230,7 @@ impl<Id: SlotIdentity, D: Device, X> SlotBodyOwner<Id> for Backend<Id, D, X> {
         let (seats, session) =
             f.resources
                 .take()
-                .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
                     "BLE resources",
                 ))?;
         let resources = Resources {
@@ -434,7 +433,7 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
     async fn now<'a, 'p>(
         _: Call,
         v: &'a Self::View<'p>,
-    ) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault>
+    ) -> PortResult<oer_portable_time::RadioInstant<LeRadio>, ClockError, Fault>
     where
         Self: 'p,
         Id: 'p,
@@ -488,7 +487,7 @@ impl<Id: SlotIdentity, D: Device, X> PortBackend<Id> for Backend<Id, D, X> {
             let Some(own) = timer.now().checked_add(bound) else {
                 return;
             };
-            let deadline = oer_radio_port::earliest(Some(own), stop).unwrap_or(own);
+            let deadline = oer_protocols_radio_port::earliest(Some(own), stop).unwrap_or(own);
             timer.wait_until(deadline).await;
         }
     }

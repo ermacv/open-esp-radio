@@ -4,7 +4,7 @@
 use super::{CompileInput, Compiled};
 use crate::encode::stage_two::pack_runtime;
 use crate::{Result, strict};
-use oer_image_bundle::{ImageBundle, files};
+use oer_tools_image_bundle::{ImageBundle, files};
 
 pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Result<Compiled> {
     let CompileInput {
@@ -39,12 +39,12 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         runtime.env("CARGO_TARGET_DIR", &cache);
         sizes.flags("runtime", &runtime, root)?;
         let strict = profile.facts.memory.is_some() && profile.facts.interrupts.is_some();
-        let analysis = oer_image_checks::linker::strict::Spec {
+        let analysis = oer_tools_image_checks::linker::strict::Spec {
             root: spec.root.clone(),
             chip: spec.chip.clone(),
             stack_policy: spec.stack_policy.clone(),
             diagnostic: spec.checks.as_ref().and_then(|checks| checks.interrupts)
-                != Some(oer_image_checks::interrupts::Required::Product),
+                != Some(oer_tools_image_checks::interrupts::Required::Product),
             task_stack_proven,
             harts: harts.to_vec(),
             hot_code: crate::hot_code::declared(root, &spec.application.package)?,
@@ -104,10 +104,10 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
             files::RUNTIME_ELF,
         )?;
         {
-            use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, SPEC_FILE};
+            use oer_tools_image_checks::linker::strict::{FRAGMENT, PLACEMENT, SPEC_FILE};
             for file in [
                 FRAGMENT,
-                oer_image_checks::linker::hot::FRAGMENT,
+                oer_tools_image_checks::linker::hot::FRAGMENT,
                 PLACEMENT,
                 SPEC_FILE,
             ] {
@@ -120,7 +120,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         elf
     };
     let runtime_bin = output.join(files::RUNTIME_BIN);
-    let mut objcopy = oer_os_toolchain::command(oer_os_toolchain::Tool::LlvmObjcopy)?;
+    let mut objcopy = oer_tools_os_toolchain::command(oer_tools_os_toolchain::Tool::LlvmObjcopy)?;
     objcopy
         .args(["-O", "binary"])
         .arg(&runtime_elf)

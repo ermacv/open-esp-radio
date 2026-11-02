@@ -9,7 +9,7 @@ const FROM_DS: u16 = 0x0200;
 const MORE_FRAGMENTS: u16 = 0x0400;
 const RETRY: u16 = 0x0800;
 const QOS_AMSDU_PRESENT: u8 = 0x80;
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 fn at(micros: u64) -> Instant {
     Instant::from_micros(micros)
@@ -383,7 +383,7 @@ fn clock_wrap_expires_retained_bytes_before_sequence_reuse() {
 }
 
 fn ccmp_parsed<'a>(frame: &'a [u8; 64], payload: &'a [u8], pn: u64) -> OpenDataFragment<'a> {
-    use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId};
+    use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId};
     parse_ccmp_data_fragment(
         DataInterfaceRole::Station,
         frame,

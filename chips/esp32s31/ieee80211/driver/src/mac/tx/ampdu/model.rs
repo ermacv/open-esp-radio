@@ -86,7 +86,7 @@ pub const fn basic_ht_ampdu_completion(
         BasicHtAmpduCompletionOutput {
             descriptor_flags: input.descriptor_flags,
             descriptor_queue_word: input.descriptor_queue_word,
-            frame_control: oer_ieee80211_wire::frame::FrameControlFields::from_raw(
+            frame_control: oer_protocols_ieee80211_wire::frame::FrameControlFields::from_raw(
                 input.frame_control,
             )
             .with_retry(true)

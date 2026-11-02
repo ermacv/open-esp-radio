@@ -11,16 +11,16 @@ fn every_constructor_rejects_zero_capacity_during_codegen() {
     fs::create_dir_all(&scratch_root).unwrap();
     let scratch = tempfile::tempdir_in(scratch_root).unwrap();
     fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"clock-capacity\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-time-virtual = {{ path = {manifest:?} }}\n"
+        "[package]\nname = \"clock-capacity\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-portable-time-virtual = {{ path = {manifest:?} }}\n"
     )).unwrap();
     for constructor in [
         "VirtualClock::new()",
-        "VirtualClock::starting_at(oer_time_virtual::START)",
+        "VirtualClock::starting_at(oer_portable_time_virtual::START)",
         "VirtualClock::default()",
     ] {
         for capacity in [1, 0] {
             fs::write(scratch.path().join("case.rs"), format!(
-                "use oer_time_virtual::VirtualClock;\npub fn make() -> VirtualClock<{capacity}> {{ {constructor} }}\n"
+                "use oer_portable_time_virtual::VirtualClock;\npub fn make() -> VirtualClock<{capacity}> {{ {constructor} }}\n"
             )).unwrap();
             let output = Command::new("cargo")
                 .args(["build", "--offline", "--lib", "--manifest-path"])

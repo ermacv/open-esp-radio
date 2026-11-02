@@ -16,7 +16,7 @@
 /// use core::mem::MaybeUninit;
 /// struct Pair { first: u32, second: u32 }
 /// let mut storage = MaybeUninit::uninit();
-/// let pair = oer_memory::init_in_place!(&mut storage, Pair {
+/// let pair = oer_portable_memory::init_in_place!(&mut storage, Pair {
 ///     first: 12,
 ///     second: 34,
 /// });

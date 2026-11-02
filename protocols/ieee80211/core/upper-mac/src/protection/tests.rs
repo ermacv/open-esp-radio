@@ -1,8 +1,8 @@
-use oer_ieee80211_wire::phy::{FecCoding, HeGiLtf, HeMcs, HtMcs, HtRate, SpatialStreams};
+use oer_protocols_ieee80211_wire::phy::{FecCoding, HeGiLtf, HeMcs, HtMcs, HtRate, SpatialStreams};
 
 use super::*;
-use oer_ieee80211_contracts_port::Protection;
-use oer_ieee80211_wire::protection::ErpProtection;
+use oer_protocols_ieee80211_contracts_port::Protection;
+use oer_protocols_ieee80211_wire::protection::ErpProtection;
 
 /// Basic {1, 2, 5.5, 11} with all ERP-OFDM rates supported but not basic,
 /// the hostapd 802.11g default.
@@ -213,9 +213,9 @@ fn control_rate_is_the_fastest_basic_rate_not_faster_than_the_data_rate() {
 
 #[test]
 fn every_basic_set_selects_the_required_control_rate() {
-    for mask in 0..1 << oer_ieee80211_wire::rates::LEGACY_RATES.len() {
+    for mask in 0..1 << oer_protocols_ieee80211_wire::rates::LEGACY_RATES.len() {
         for dsss_only in [false, true] {
-            let encoded: std::vec::Vec<_> = oer_ieee80211_wire::rates::LEGACY_RATES
+            let encoded: std::vec::Vec<_> = oer_protocols_ieee80211_wire::rates::LEGACY_RATES
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| mask & (1 << i) != 0)
@@ -233,7 +233,7 @@ fn every_basic_set_selects_the_required_control_rate() {
                 HtProtectionMode::None,
                 selected,
             );
-            for (_, data) in oer_ieee80211_wire::rates::LEGACY_RATES {
+            for (_, data) in oer_protocols_ieee80211_wire::rates::LEGACY_RATES {
                 let expected = candidates
                     .rates()
                     .filter(eligible)

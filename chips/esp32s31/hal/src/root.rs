@@ -1,5 +1,5 @@
 //! The reset root: [`Root::take`] claims the chip once
-//! ([`oer_esp32s31_pac::take`]) and splits its partitions by domain, for
+//! ([`oer_chips_esp32s31_pac::take`]) and splits its partitions by domain, for
 //! the bootstrap image ([`Root::into_bootstrap`]) or for stage two
 //! ([`Root::into_runtime`]). Each image has its own root; stage two adopts
 //! the platform the bootstrap initialized without repeating cold boot.
@@ -13,7 +13,7 @@
 //! Only one root exists per image:
 //!
 //! ```
-//! use oer_esp32s31_hal::root::Root;
+//! use oer_chips_esp32s31_hal::root::Root;
 //! # fn image() {
 //! let first = Root::take();
 //! assert!(Root::take().is_none(), "the chip is claimed once");
@@ -21,7 +21,7 @@
 //! # }
 //! ```
 
-use oer_esp32s31_pac::ownership::{
+use oer_chips_esp32s31_pac::ownership::{
     BootPeripherals, InterruptMatrixPeripherals, MacLocalTimePeripherals, ModemEtmPeripherals,
     Partitions, SocPeripherals,
 };
@@ -72,7 +72,7 @@ pub use adoption::{Hardware, PlatformParts, RuntimePort, RuntimeResources};
 impl Root {
     /// The root, the first time it is called in an image; `None` after.
     pub fn take() -> Option<Self> {
-        oer_esp32s31_pac::take().map(|partitions| Self { partitions })
+        oer_chips_esp32s31_pac::take().map(|partitions| Self { partitions })
     }
 
     /// Split the reset claim into bootstrap owners without installing the
@@ -154,7 +154,7 @@ impl Root {
     /// global installation, clock adoption or watchdog arming occurs here.
     /// The family adoption driver consumes these owners; staged images use
     /// it through the staged-runtime runner. Cold boot is never repeated.
-    pub fn into_runtime(self) -> oer_espressif_boot::adoption::Owners<RuntimePort> {
+    pub fn into_runtime(self) -> oer_chips_family_boot::adoption::Owners<RuntimePort> {
         let Partitions {
             usb_serial_jtag,
             core_control,
@@ -221,7 +221,7 @@ impl Root {
             interrupt_core0_status,
             interrupt_core1_status,
         };
-        oer_espressif_boot::adoption::Owners {
+        oer_chips_family_boot::adoption::Owners {
             cpu_clock: crate::boot::RuntimeCpuClock::new(ClockRegisters::new(
                 boot.hp_sys_clkrst_boot_clock,
                 boot.lp_aon_clkrst_cpll,
@@ -235,7 +235,7 @@ impl Root {
                 uart0: Uart0ClockRegisters::new(uart0_clock),
             },
             debug: adoption::DebugParts(debug),
-            watchdogs: oer_espressif_boot::adoption::WatchdogParts {
+            watchdogs: oer_chips_family_boot::adoption::WatchdogParts {
                 main0,
                 main1,
                 rtc,
@@ -317,19 +317,19 @@ pub struct Bootstrap {
 
 /// The radio's partitions of the root, as `take()` hands them out.
 struct RadioParts {
-    wifi_mac: oer_esp32s31_pac::ownership::WifiMacPeripherals,
-    wifi_mac_interface: oer_esp32s31_pac::ownership::WifiMacInterfacePeripherals,
-    wifi_rx_dma: oer_esp32s31_pac::ownership::WifiRxDmaPeripherals,
+    wifi_mac: oer_chips_esp32s31_pac::ownership::WifiMacPeripherals,
+    wifi_mac_interface: oer_chips_esp32s31_pac::ownership::WifiMacInterfacePeripherals,
+    wifi_rx_dma: oer_chips_esp32s31_pac::ownership::WifiRxDmaPeripherals,
     mac_local_time: MacLocalTimePeripherals,
-    radio_phy: oer_esp32s31_pac::ownership::RadioPhyPeripherals,
-    coexistence: oer_esp32s31_pac::ownership::CoexistencePeripherals,
-    bluetooth: oer_esp32s31_pac::ownership::BluetoothControllerPeripherals,
-    bluetooth_modem_lp_timer: oer_esp32s31_pac::ownership::BluetoothModemLpTimerPeripherals,
-    bluetooth_interrupts: oer_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
-    shared_radio: oer_esp32s31_pac::ownership::SharedRadioPeripherals,
+    radio_phy: oer_chips_esp32s31_pac::ownership::RadioPhyPeripherals,
+    coexistence: oer_chips_esp32s31_pac::ownership::CoexistencePeripherals,
+    bluetooth: oer_chips_esp32s31_pac::ownership::BluetoothControllerPeripherals,
+    bluetooth_modem_lp_timer: oer_chips_esp32s31_pac::ownership::BluetoothModemLpTimerPeripherals,
+    bluetooth_interrupts: oer_chips_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
+    shared_radio: oer_chips_esp32s31_pac::ownership::SharedRadioPeripherals,
     modem_etm: ModemEtmPeripherals,
-    ieee802154: oer_esp32s31_pac::ownership::Ieee802154Peripherals,
-    analog_bus: oer_esp32s31_pac::ownership::AnalogBusPeripherals,
+    ieee802154: oer_chips_esp32s31_pac::ownership::Ieee802154Peripherals,
+    analog_bus: oer_chips_esp32s31_pac::ownership::AnalogBusPeripherals,
 }
 
 /// The radio's owners: the shared radio owner and the protocol partitions.
@@ -415,9 +415,9 @@ impl RadioPartitions {
 /// cached state is deliberately not retained in this neutral owner.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::root::RadioHardware;
+/// use oer_chips_esp32s31_hal::root::RadioHardware;
 ///
-/// # fn split_twice<B: oer_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware, identity: oer_esp32s31_hal::domain::transaction::PhyIdentity) {
+/// # fn split_twice<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware, identity: oer_chips_esp32s31_hal::domain::transaction::PhyIdentity) {
 /// let _first = hardware.split::<B, _>((), identity);
 /// let _second = hardware.split::<B, _>((), identity);
 /// # }
@@ -450,8 +450,10 @@ impl RadioHardware {
         // device registers exist behind the claimed addresses on the host
         // and no test accesses one through it, so the claim need not be
         // unique.
-        let claims = unsafe { oer_mmio::assume_owned::<oer_esp32s31_pac::ownership::Claims>() };
-        Self::of_partitions(oer_esp32s31_pac::ownership::partition(claims))
+        let claims = unsafe {
+            oer_portable_mmio::assume_owned::<oer_chips_esp32s31_pac::ownership::Claims>()
+        };
+        Self::of_partitions(oer_chips_esp32s31_pac::ownership::partition(claims))
     }
 
     /// The radio root of `partitions`, the rest dropped.
@@ -587,7 +589,7 @@ pub struct RadioSplitFailure<T> {
     hardware: RadioHardware,
     attachment: T,
     identity: crate::domain::transaction::PhyIdentity,
-    error: oer_espressif_modem_clock::IdentityExhausted,
+    error: oer_chips_family_modem_clock::IdentityExhausted,
 }
 
 impl<T> core::fmt::Debug for RadioSplitFailure<T> {
@@ -599,7 +601,7 @@ impl<T> core::fmt::Debug for RadioSplitFailure<T> {
 }
 
 impl<T> RadioSplitFailure<T> {
-    pub const fn error(&self) -> oer_espressif_modem_clock::IdentityExhausted {
+    pub const fn error(&self) -> oer_chips_family_modem_clock::IdentityExhausted {
         self.error
     }
 
@@ -652,7 +654,7 @@ impl RadioHardware {
         identity: crate::domain::transaction::PhyIdentity,
         clock_identity: Result<
             crate::power::clock::ModemClockPlannerIdentity,
-            oer_espressif_modem_clock::IdentityExhausted,
+            oer_chips_family_modem_clock::IdentityExhausted,
         >,
     ) -> Result<(RadioDomain<B, T>, ProtocolPartitions), RadioSplitFailure<T>> {
         let clock_identity = match clock_identity {

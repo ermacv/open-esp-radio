@@ -1,9 +1,9 @@
 # HIL agent
 
-`oer-hil-agent` holds the HIL target logic that does not
+`oer-protocols-hil-agent` holds the HIL target logic that does not
 depend on the chip: the request intake (`base`), console serialization and
 the lifecycle acknowledgement barrier and the reset-retained post-mortem codec. The
-[HIL agent on the application entry](../../../hil-scenarios/hil-agent/espressif/README.md)
+[HIL agent on the application entry](../../../hil/agent/README.md)
 composes these modules with the library's executor and console. Host tests exercise the same compiled code the
 firmware links.
 
@@ -63,7 +63,7 @@ No retained capacity or allocation changes.
 Run the tests:
 
 ```console
-cargo test -p oer-hil-agent
+cargo test -p oer-protocols-hil-agent
 ```
 
 ## Capture service
@@ -76,7 +76,7 @@ arming, freezing, release, identity allocation, clock and storage. A page
 can only read an immutable cut. Boot correlation comes from the HIL envelope;
 capture identity, epoch and the full record schema key identify that cut.
 
-`capture::collector::Collector` is caller-owned and implements `oer-trace`'s
+`capture::collector::Collector` is caller-owned and implements `oer-portable-trace`'s
 `Observer`. It is not `Sync` and belongs to one image-selected context.
 Observation points remain `observe!`, so a plain image evaluates no event
 arguments. The collector counts each event kind, even with its history
@@ -91,7 +91,7 @@ Pages hold two opaque postcard records of at most 128 bytes, or sixteen
 aggregate counters. Their maximum encodings fit the existing 560-byte
 payload bound. Dictionaries own record schemas and interpretation. The
 ESP32-S31 radio-health binding implements `Reader` over its native storage;
-its RF lifecycle stays in the image. `oer-hil-link::instrumentation` drains
+its RF lifecycle stays in the image. `oer-tools-hil-link::instrumentation` drains
 and validates the generic pages before domain decoding.
 
 The trace-only `capture::atomic::AtomicCollector` collects counter-only events

@@ -2,24 +2,24 @@
 //! The chip facts that two sources state: each pair is held equal by value,
 //! so the one that changes alone fails here.
 //!
-//! The sources are a chip's resolved facts (`oer-espressif-facts`: its
+//! The sources are a chip's resolved facts (`oer-chips-family-facts`: its
 //! layers from the ISA to the board), its `LAYOUT` (generated from those
 //! facts and the chip's stack policy; the linker scripts and the bootstrap
 //! read it), the stage-two header and the zeroed sections of
-//! `oer-espressif-staged-layout` and the S31 reset-cause table of
-//! `oer-esp32s31-knowledge`.
+//! `oer-chips-family-staged-layout` and the S31 reset-cause table of
+//! `oer-chips-esp32s31-knowledge`.
 
 use std::{collections::BTreeSet, mem::offset_of};
 
-use oer_chip_profile::Profile;
-use oer_espressif_facts::{Facts, Region};
-use oer_espressif_staged_layout::{
+use oer_chips_family_facts::{Facts, Region};
+use oer_chips_family_staged_layout::{
     Layout, Region as LayoutRegion,
     stage_two::{self, Header},
     zeroed::RUNTIME_ZEROED_REGIONS,
 };
+use oer_tools_chip_profile::Profile;
 
-const CHIPS: [(&str, Layout); 1] = [("esp32s31", oer_esp32s31_layout::LAYOUT)];
+const CHIPS: [(&str, Layout); 1] = [("esp32s31", oer_chips_esp32s31_layout::LAYOUT)];
 
 fn profile(id: &str) -> Facts {
     Profile::tracked(id).unwrap().facts
@@ -351,7 +351,7 @@ fn a_changed_core_fact_on_any_side_is_reported() {
 
 #[test]
 fn s31_power_on_code_is_the_reset_cause_table() {
-    use oer_esp32s31_knowledge::reset_cause::ResetCause;
+    use oer_chips_esp32s31_knowledge::reset_cause::ResetCause;
     let reset_cause = profile("esp32s31")
         .reset_cause
         .expect("the S31 stand reads the reset cause");

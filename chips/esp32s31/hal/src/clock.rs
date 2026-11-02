@@ -15,7 +15,7 @@ use crate::power::{
     PlatformClockHolds, PlatformClockProvider,
 };
 use crate::root::WifiPowerRestoreCheckpoint;
-use oer_espressif_radio::baseline::PowerRestoreCheckpoint;
+use oer_chips_family_radio::baseline::PowerRestoreCheckpoint;
 
 /// Register transactions consumed by route clock policy.
 pub(crate) trait ClockPort {
@@ -31,12 +31,12 @@ pub(crate) trait ClockPort {
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(), oer_espressif_radio::power::PowerError>;
+    ) -> Result<(), oer_chips_family_radio::power::PowerError>;
 }
 
 impl ClockPort for RadioPhyRegisters {
     fn select_wifi_low_power_clock(&mut self) {
-        oer_espressif_radio::clocks::select_wifi_low_power_clock(self);
+        oer_chips_family_radio::clocks::select_wifi_low_power_clock(self);
     }
     fn capture_power_baseline(&self) -> WifiPowerBaseline {
         self.capture_wifi_power_baseline()
@@ -45,14 +45,14 @@ impl ClockPort for RadioPhyRegisters {
         &mut self,
         baseline: WifiPowerBaseline,
     ) -> Result<(), PowerRestoreCheckpoint> {
-        oer_espressif_radio::baseline::restore(self, baseline)
+        oer_chips_family_radio::baseline::restore(self, baseline)
     }
     fn run_common_power_sequence<B: PlatformClockBackend>(
         &mut self,
         refs: &mut PlatformClockRefs<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(), oer_espressif_radio::power::PowerError> {
-        oer_espressif_radio::power::execute_owned(&mut crate::power::RoutePower {
+    ) -> Result<(), oer_chips_family_radio::power::PowerError> {
+        oer_chips_family_radio::power::execute_owned(&mut crate::power::RoutePower {
             phy: self,
             refs,
             platform,
@@ -145,7 +145,7 @@ impl<B: PlatformClockBackend> PlatformClockRefs<B> {
 }
 
 /// Protocol clients that can share the powered radio.
-pub use oer_radio_coex::RadioClient;
+pub use oer_protocols_radio_coex::RadioClient;
 
 mod sealed {
     pub trait RadioClientKind {}
@@ -189,10 +189,10 @@ impl RadioClientKind for Ieee802154Client {
 /// A client leaves with its own proof:
 ///
 /// ```
-/// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
-/// use oer_esp32s31_hal::ieee80211::registers::WifiRadioRegisters;
+/// use oer_chips_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
+/// use oer_chips_esp32s31_hal::ieee80211::registers::WifiRadioRegisters;
 ///
-/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
 ///     wifi: &WifiRadioRegisters,
 ///     power: CommonPower<WifiClient>,
@@ -205,10 +205,10 @@ impl RadioClientKind for Ieee802154Client {
 /// Not with another client's:
 ///
 /// ```compile_fail,E0308
-/// use oer_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
-/// use oer_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
+/// use oer_chips_esp32s31_hal::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
+/// use oer_chips_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
 ///
-/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
 ///     ieee802154: &Ieee802154TaskOwner,
 ///     power: CommonPower<WifiClient>,
@@ -221,7 +221,7 @@ impl RadioClientKind for Ieee802154Client {
 /// And a proof cannot be made without entering power:
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_hal::domain::{CommonPower, WifiClient};
+/// use oer_chips_esp32s31_hal::domain::{CommonPower, WifiClient};
 ///
 /// let _power: CommonPower<WifiClient> = CommonPower { _client: core::marker::PhantomData };
 /// ```
@@ -267,7 +267,7 @@ pub enum CommonRadioPowerError {
     /// The client already holds common power.
     AlreadyEntered,
     /// The first client's power sequence failed a read-back checkpoint.
-    Power(oer_espressif_radio::power::PowerError),
+    Power(oer_chips_family_radio::power::PowerError),
     /// The last client's cold-power baseline did not read back.
     Restore(WifiPowerRestoreCheckpoint),
     /// The platform refused to take back the last client's reference to
@@ -285,7 +285,7 @@ pub enum CommonRadioPowerError {
 /// clock dependencies such as coexistence belong to the shared modem clock
 /// planner, not to this membership.
 pub(crate) struct CommonRadioPower<B: PlatformClockBackend> {
-    membership: oer_espressif_radio::membership::PowerMembership<WifiPowerBaseline>,
+    membership: oer_chips_family_radio::membership::PowerMembership<WifiPowerBaseline>,
     refs: PlatformClockRefs<B>,
 }
 impl<B: PlatformClockBackend> Default for CommonRadioPower<B> {
@@ -397,7 +397,7 @@ struct PowerBinding<'a, H, B: PlatformClockBackend> {
     port: &'a mut H,
     refs: &'a mut PlatformClockRefs<B>,
 }
-impl<H: ClockPort, B: PlatformClockBackend> oer_espressif_radio::membership::PowerPort
+impl<H: ClockPort, B: PlatformClockBackend> oer_chips_family_radio::membership::PowerPort
     for PowerBinding<'_, H, B>
 {
     type Baseline = WifiPowerBaseline;
@@ -413,18 +413,18 @@ impl<H: ClockPort, B: PlatformClockBackend> oer_espressif_radio::membership::Pow
     }
     fn release(
         &mut self,
-        clock: oer_espressif_radio::membership::Clock,
-    ) -> Result<(), oer_espressif_radio::membership::ReleaseRefused> {
+        clock: oer_chips_family_radio::membership::Clock,
+    ) -> Result<(), oer_chips_family_radio::membership::ReleaseRefused> {
         self.refs
             .release(platform_clock(clock))
-            .map_err(|_| oer_espressif_radio::membership::ReleaseRefused)
+            .map_err(|_| oer_chips_family_radio::membership::ReleaseRefused)
     }
 }
 struct PowerEntryBinding<'a, H, B: PlatformClockBackend, P> {
     binding: PowerBinding<'a, H, B>,
     platform: &'a P,
 }
-impl<H: ClockPort, B: PlatformClockBackend, P> oer_espressif_radio::membership::PowerPort
+impl<H: ClockPort, B: PlatformClockBackend, P> oer_chips_family_radio::membership::PowerPort
     for PowerEntryBinding<'_, H, B, P>
 {
     type Baseline = WifiPowerBaseline;
@@ -440,15 +440,15 @@ impl<H: ClockPort, B: PlatformClockBackend, P> oer_espressif_radio::membership::
     }
     fn release(
         &mut self,
-        clock: oer_espressif_radio::membership::Clock,
-    ) -> Result<(), oer_espressif_radio::membership::ReleaseRefused> {
+        clock: oer_chips_family_radio::membership::Clock,
+    ) -> Result<(), oer_chips_family_radio::membership::ReleaseRefused> {
         self.binding.release(clock)
     }
 }
 impl<H: ClockPort, B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
-    oer_espressif_radio::membership::PowerEntryPort for PowerEntryBinding<'_, H, B, P>
+    oer_chips_family_radio::membership::PowerEntryPort for PowerEntryBinding<'_, H, B, P>
 {
-    fn power_up(&mut self) -> Result<(), oer_espressif_radio::power::PowerError> {
+    fn power_up(&mut self) -> Result<(), oer_chips_family_radio::power::PowerError> {
         self.binding
             .port
             .run_common_power_sequence(self.binding.refs, self.platform)
@@ -458,14 +458,14 @@ impl<
     H: crate::ieee80211::client::WifiPowerPort,
     B: PlatformClockBackend,
     P: PlatformClockProvider<Backend = B>,
-> oer_espressif_radio::membership::WifiPowerPort for PowerEntryBinding<'_, H, B, P>
+> oer_chips_family_radio::membership::WifiPowerPort for PowerEntryBinding<'_, H, B, P>
 {
     fn reset_wifi(&mut self) {
         self.binding.port.pulse_wifi_baseband_and_mac_reset();
     }
 }
-fn platform_clock(clock: oer_espressif_radio::membership::Clock) -> PlatformClock {
-    use oer_espressif_radio::membership::Clock;
+fn platform_clock(clock: oer_chips_family_radio::membership::Clock) -> PlatformClock {
+    use oer_chips_family_radio::membership::Clock;
     match clock {
         Clock::AnalogI2c => PlatformClock::AnalogI2cMaster,
         Clock::Pll160m => PlatformClock::Pll160m,
@@ -473,9 +473,9 @@ fn platform_clock(clock: oer_espressif_radio::membership::Clock) -> PlatformCloc
     }
 }
 fn power_error(
-    error: oer_espressif_radio::membership::PowerError<PowerRestoreCheckpoint>,
+    error: oer_chips_family_radio::membership::PowerError<PowerRestoreCheckpoint>,
 ) -> CommonRadioPowerError {
-    use oer_espressif_radio::membership::PowerError;
+    use oer_chips_family_radio::membership::PowerError;
     match error {
         PowerError::AlreadyEntered => CommonRadioPowerError::AlreadyEntered,
         PowerError::Power(error) => CommonRadioPowerError::Power(error),

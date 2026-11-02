@@ -11,8 +11,8 @@ use crate::{
     phy::restore::{RxDcoControlPrepareError, RxDcoControlRestoreError},
 };
 
-use oer_esp32s31_pac::fe::PhyRxDcoOracle;
-use oer_mmio::{Bits, Placement};
+use oer_chips_esp32s31_pac::fe::PhyRxDcoOracle;
+use oer_portable_mmio::{Bits, Placement};
 
 /// Opaque capture of the two-bit RX-DCO calibration control field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

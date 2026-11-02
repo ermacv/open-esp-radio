@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_contracts_port::{ChannelContextId, MacRxMetadata, MonitorTapPoint};
+use oer_protocols_ieee80211_contracts_port::{ChannelContextId, MacRxMetadata, MonitorTapPoint};
 
 #[test]
 fn bounded_filter_combines_type_rssi_and_address_without_payload_matching() {

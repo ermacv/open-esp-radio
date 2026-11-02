@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::layouts::DmaWindowAddress;
-use oer_esp32s31_pac::ieee802154::Ieee802154MacTask;
+use oer_chips_esp32s31_hal::layouts::DmaWindowAddress;
+use oer_chips_esp32s31_pac::ieee802154::Ieee802154MacTask;
 
 pub fn publish(mac: &mut Ieee802154MacTask, address: DmaWindowAddress, raw: u32) {
     mac.write_tx_dma_address(address, |_| {});

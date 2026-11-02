@@ -1,4 +1,4 @@
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     cores::{Cores, LaunchPermit, SecondaryEntry, SecondaryHart},
     peripherals::reset_cause::ResetCauses,
     platform::core_control::CoreControlRegisters,
@@ -12,9 +12,9 @@ pub fn start(cores: &mut Cores, permit: LaunchPermit, causes: ResetCauses, entry
 
 #[cfg(ui_reject)]
 pub fn forge(
-    peripherals: oer_esp32s31_pac::ownership::SecondaryLaunchPeripherals,
-    clic: oer_esp32s31_pac::clic::Clic,
-    observer: oer_esp32s31_pac::clic::ClicObserver,
+    peripherals: oer_chips_esp32s31_pac::ownership::SecondaryLaunchPeripherals,
+    clic: oer_chips_esp32s31_pac::clic::Clic,
+    observer: oer_chips_esp32s31_pac::clic::ClicObserver,
 ) -> LaunchPermit {
     LaunchPermit::new(peripherals, clic, observer) // ui-error: E0624
 }

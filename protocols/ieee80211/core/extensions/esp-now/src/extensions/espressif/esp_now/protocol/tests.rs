@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
-use oer_ieee80211_wire::channel::ChannelWidth;
+use oer_protocols_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
+use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 
 fn channel(number: u8) -> WifiChannel {
     WifiChannel::new_2_4_ghz(number, ChannelWidth::Mhz20).unwrap()

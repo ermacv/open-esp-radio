@@ -1,7 +1,7 @@
 //! Direct I²C completion within the existing observation settle.
 
 use crate::calibration::cold::PhyColdI2cAction;
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 /// Accept the terminal state in the same attempt that consumes its hardware
 /// edge. A software-only terminal dispatch must not lose an already observed

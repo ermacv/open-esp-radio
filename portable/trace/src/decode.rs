@@ -55,7 +55,7 @@ impl fmt::Display for Kind {
 /// implement [`Event`](crate::Event) and `Display`:
 ///
 /// ```ignore
-/// oer_trace::event_set!(pub StationTrace: BeaconDispatch, ControlMailbox);
+/// oer_portable_trace::event_set!(pub StationTrace: BeaconDispatch, ControlMailbox);
 /// ```
 #[macro_export]
 macro_rules! event_set {

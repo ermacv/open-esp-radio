@@ -37,10 +37,10 @@ pub fn build_plan(root: &Path, provider: Provider, adapters: &[String]) -> Resul
         Provider::LinuxNet => vec![
             "cargo stand fixture build-hostapd".to_owned(),
             "cargo stand fixture build-udhcpc".to_owned(),
-            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-lab-fixture-helpers --bin open-radio-net-launcher --bin open-radio-net-client --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tools-lab-fixture-install -p oer-tools-lab-fixture-helpers --bin open-radio-net-launcher --bin open-radio-net-client --bin open-radio-probe-launcher --bin open-radio-probe --bin open-radio-fixture-install".to_owned(),
         ],
         Provider::LinuxBluetooth => vec![
-            "cargo build --locked -p oer-tool-lab-fixture-install -p oer-tool-lab-fixture-helpers --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
+            "cargo build --locked -p oer-tools-lab-fixture-install -p oer-tools-lab-fixture-helpers --bin open-radio-bluetooth-launcher --bin open-radio-bluetooth --bin open-radio-fixture-install".to_owned(),
         ],
     };
     Ok(InstallPlan {
@@ -71,9 +71,9 @@ pub fn prepare(
     let adapters = validate_adapters(provider, adapters)?;
     let output = root.join("target/lab/fixture-install");
     fs::create_dir_all(&output)?;
-    let _lock = oer_os_process::lock::FileLock::acquire(
+    let _lock = oer_tools_os_process::lock::FileLock::acquire(
         &output.join("prepare.lock"),
-        oer_os_process::lock::Mode::Exclusive,
+        oer_tools_os_process::lock::Mode::Exclusive,
     )?;
 
     let source = source_identity(root)?;
@@ -107,7 +107,7 @@ pub fn prepare(
             file_name: spec.name.to_owned(),
             target: spec.target.into(),
             size_bytes: bytes.len() as u64,
-            sha256: oer_os_durable::sha256_bytes(&bytes),
+            sha256: oer_tools_os_durable::sha256_bytes(&bytes),
             mode: spec.mode,
         });
     }
@@ -196,8 +196,8 @@ fn require_capabilities_with_timeout(
     expected: &str,
     timeout: std::time::Duration,
 ) -> Result<()> {
-    let output = oer_os_process::output(
-        oer_os_process::command(helper).arg("capabilities"),
+    let output = oer_tools_os_process::output(
+        oer_tools_os_process::command(helper).arg("capabilities"),
         Some(timeout),
     )?;
     if !output.status.success() || String::from_utf8(output.stdout)?.trim() != expected {
@@ -221,7 +221,7 @@ fn validate_existing_bundle(directory: &Path, expected: &Bundle) -> Result<()> {
         if !metadata.file_type().is_file()
             || metadata.len() != artifact.size_bytes
             || metadata.permissions().mode() & 0o777 != artifact.mode
-            || oer_os_durable::sha256_file(&path)? != artifact.sha256
+            || oer_tools_os_durable::sha256_file(&path)? != artifact.sha256
         {
             return Err(format!("existing bundle artifact mismatch: {}", path.display()).into());
         }
@@ -235,17 +235,19 @@ fn validate_existing_bundle(directory: &Path, expected: &Bundle) -> Result<()> {
 }
 
 fn source_identity(root: &Path) -> Result<SourceIdentity> {
-    let commit = oer_os_process::git::text(root, ["rev-parse", "HEAD"])?;
-    let state = oer_os_process::git::output(
+    let commit = oer_tools_os_process::git::text(root, ["rev-parse", "HEAD"])?;
+    let state = oer_tools_os_process::git::output(
         root,
         ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )
     .map_err(|error| format!("cannot capture repository state for fixture bundle: {error}"))?;
-    let diff =
-        oer_os_process::git::output(root, ["diff", "--binary", "--no-ext-diff", "HEAD", "--"])
-            .map_err(|error| {
-                format!("cannot capture repository content identity for fixture bundle: {error}")
-            })?;
+    let diff = oer_tools_os_process::git::output(
+        root,
+        ["diff", "--binary", "--no-ext-diff", "HEAD", "--"],
+    )
+    .map_err(|error| {
+        format!("cannot capture repository content identity for fixture bundle: {error}")
+    })?;
     let mut workspace = Sha256::new();
     workspace.update(&state);
     workspace.update(&diff);
@@ -259,7 +261,7 @@ fn source_identity(root: &Path) -> Result<SourceIdentity> {
 fn bundle_identity(bundle: &Bundle) -> Result<String> {
     let mut identity = bundle.clone();
     identity.generation.clear();
-    Ok(oer_os_durable::sha256_bytes(&serde_json::to_vec(
+    Ok(oer_tools_os_durable::sha256_bytes(&serde_json::to_vec(
         &identity,
     )?))
 }
@@ -319,7 +321,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            error.is::<oer_os_process::owned::DeadlineExceeded>(),
+            error.is::<oer_tools_os_process::owned::DeadlineExceeded>(),
             "{error}"
         );
     }

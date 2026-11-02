@@ -31,7 +31,7 @@ fn run_duplicate(count: usize) {
     let seed = [
         0, 0x30, 0x12, 0, 1, 0x30, 0x12, 0, 1, 0x30, 0x12, 0x80, 0, 0x40, 0x12, 17,
     ];
-    oer_ieee80211_wire::fuzz::inputs(&[&seed], count, 128, |bytes| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&[&seed], count, 128, |bytes| {
         let mut filter = RxDuplicateFilter::new();
         for &[retry, low, high, tid] in bytes.as_chunks::<4>().0 {
             let retry = retry & 1 != 0;
@@ -47,11 +47,11 @@ fn run_duplicate(count: usize) {
 
 #[test]
 fn duplicate_filter_never_panics() {
-    run_duplicate(oer_ieee80211_wire::fuzz::QUICK);
+    run_duplicate(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn duplicate_filter_never_panics_full() {
-    run_duplicate(oer_ieee80211_wire::fuzz::FULL);
+    run_duplicate(oer_protocols_ieee80211_wire::fuzz::FULL);
 }

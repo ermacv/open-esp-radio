@@ -198,18 +198,18 @@ fn run(count: usize) {
     )
     .encode();
     let sequence = [1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 7, 3, 0xff, 4, 16, 5, 15, 6];
-    oer_ieee80211_wire::fuzz::inputs(&[&header, &sequence], count, 64, parse_and_check);
+    oer_protocols_ieee80211_wire::fuzz::inputs(&[&header, &sequence], count, 64, parse_and_check);
 }
 
 #[test]
 fn header_parse_and_replay_lanes_never_panic() {
-    run(oer_ieee80211_wire::fuzz::QUICK);
+    run(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn header_parse_and_replay_lanes_never_panic_full() {
-    run(oer_ieee80211_wire::fuzz::FULL);
+    run(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]

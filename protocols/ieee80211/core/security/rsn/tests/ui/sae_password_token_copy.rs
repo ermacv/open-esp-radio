@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_security_rsn::sae::SaePasswordToken;
+use oer_protocols_ieee80211_core_security_rsn::sae::SaePasswordToken;
 pub fn transfer(key: SaePasswordToken) {
     let installed = key;
     #[cfg(ui_reject)]

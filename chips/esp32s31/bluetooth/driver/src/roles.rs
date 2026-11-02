@@ -8,8 +8,8 @@ pub use dtm_event_image::{
 };
 pub use legacy_advertising_event_image::LegacyAdvertisingPrimaryChannelPlan;
 
-use oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow;
-use oer_esp32s31_hal::bluetooth::{BluetoothSchedulerHardwareListIndex, engine::*};
+use oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerRawWindow;
+use oer_chips_esp32s31_hal::bluetooth::{BluetoothSchedulerHardwareListIndex, engine::*};
 
 /// The current hardware engine joins all supported roles on list zero.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

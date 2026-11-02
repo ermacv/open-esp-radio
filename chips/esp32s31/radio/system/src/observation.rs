@@ -1,8 +1,8 @@
 //! The radio system's own trace event: each periodic tracking tick, reported
-//! through `oer_trace::observe!` to the observer the image gives the backend.
+//! through `oer_portable_trace::observe!` to the observer the image gives the backend.
 //! Without `cfg(oer_trace)` no tick builds one.
 
-use oer_esp32s31_phy::tracking::PhyParamTrackingOutcome;
+use oer_chips_esp32s31_phy::tracking::PhyParamTrackingOutcome;
 
 /// What one periodic tracking tick did.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -95,10 +95,11 @@ const TRACKED: u32 = 1;
 const NOT_DUE: u32 = 2;
 const UNAVAILABLE: u32 = 3;
 
-impl oer_trace::Event for TrackingTick {
-    const KIND: oer_trace::Kind = oer_trace::Kind::new(oer_trace::Domain::Phy, 1);
-    const CHANNEL: oer_trace::Channel = const {
-        match oer_trace::Channel::new(oer_trace::Domain::Phy, 0) {
+impl oer_portable_trace::Event for TrackingTick {
+    const KIND: oer_portable_trace::Kind =
+        oer_portable_trace::Kind::new(oer_portable_trace::Domain::Phy, 1);
+    const CHANNEL: oer_portable_trace::Channel = const {
+        match oer_portable_trace::Channel::new(oer_portable_trace::Domain::Phy, 0) {
             Ok(channel) => channel,
             Err(_) => panic!("the tracking channel is in the PHY range"),
         }
@@ -143,7 +144,7 @@ impl oer_trace::Event for TrackingTick {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_trace::Event as _;
+    use oer_portable_trace::Event as _;
 
     #[test]
     fn every_tick_round_trips_and_unknown_words_are_refused() {
@@ -191,7 +192,7 @@ mod tests {
 
     #[test]
     fn the_branches_are_the_outcome_s_committed_children() {
-        use oer_esp32s31_phy::tracking::{
+        use oer_chips_esp32s31_phy::tracking::{
             CalibrationProgress, PhyParamTrackRequest, TxPowerProgress,
         };
         let outcome = PhyParamTrackingOutcome {

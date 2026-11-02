@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::PhaseTypes;
-use oer_ieee80211_runtime::station::StationPort;
+use oer_protocols_ieee80211_contracts_port::PhaseTypes;
+use oer_protocols_ieee80211_runtime::station::StationPort;
 
 pub fn body_is_impossible<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     body: <B::Types<'id> as PhaseTypes<'id>>::TxBody,

@@ -2,16 +2,20 @@
 //! the service carries them into the port's attempt unchanged.
 
 use super::*;
-use oer_ieee80211_contracts_port::{PhyRate, Protection, RetryPlan, RetryStage, TxOperation};
-use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_contracts_port::{
+    PhyRate, Protection, RetryPlan, RetryStage, TxOperation,
+};
+use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 /// A selection whose every record is two stages: 6 Mb/s ×15, then 1 Mb/s ×15.
 struct TwoStages(core::cell::RefCell<Vec<FrameRates>>);
 
 impl RateSelection<RxMeta, ()> for TwoStages {
-    fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
-        oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE
+    fn packet_number_step(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+        oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE
     }
 
     fn plan<R>(
@@ -32,7 +36,11 @@ impl RateSelection<RxMeta, ()> for TwoStages {
             .ok()
     }
 
-    fn associated(&mut self, _: &oer_ieee80211_core_upper_mac::rate_control::RatePeer, _: &RxMeta) {
+    fn associated(
+        &mut self,
+        _: &oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer,
+        _: &RxMeta,
+    ) {
     }
 
     fn disconnected(&mut self) {}
@@ -42,8 +50,8 @@ impl RateSelection<RxMeta, ()> for TwoStages {
     fn completed_aggregate<D>(
         &mut self,
         _: Instant,
-        _: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
-        _: &oer_ieee80211_contracts_port::AggregateOutcome<(), D>,
+        _: oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        _: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<(), D>,
     ) {
     }
 }

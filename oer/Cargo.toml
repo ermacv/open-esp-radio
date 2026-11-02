@@ -1,0 +1,38 @@
+[package]
+name = "oer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "The Espressif family's application entry: peripherals, drivers and services with their tasks, interrupts and defaults, for one chip selected by feature"
+
+[features]
+## The ESP32-S31 implementation. Exactly one chip feature is selected; the
+## image pipeline selects it from the board, never the image's manifest.
+esp32s31 = ["dep:oer-chips-esp32s31-app"]
+## The Wi-Fi station and its IP service.
+wifi = ["oer-chips-esp32s31-app?/wifi"]
+## The USB Serial/JTAG console as the application's byte stream.
+console = ["oer-chips-esp32s31-app?/console"]
+## A task group beside the application (`entry!(main, group = setup)`):
+## on a chip with a second core it runs there on its own executor,
+## otherwise on the application's executor.
+group = ["oer-chips-esp32s31-app?/group"]
+## What the library observes of its own work (`observe`): the executors'
+## CPU, named parts' polls, the station's, the bridge's and the PHY
+## tracking's counts, and on the boot hart its counters and a PC sampler on
+## TIMG1. The image declares `instrumentation = ["trace"]`.
+observe = ["oer-chips-family-app/observe", "oer-chips-esp32s31-app?/observe"]
+## UDP sockets on the IP stack (`wifi::embassy_net::udp`), each queueing
+## up to 16 received datagrams.
+udp = ["oer-chips-esp32s31-app?/udp"]
+
+[dependencies]
+oer-chips-family-app = { path = "../chips/family/app" }
+oer-portable-diagnostics = { path = "../portable/diagnostics" }
+oer-chips-esp32s31-app = { path = "../chips/esp32s31/app", optional = true }
+
+[lints]
+workspace = true

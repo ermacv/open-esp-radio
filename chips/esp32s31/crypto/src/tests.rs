@@ -8,7 +8,7 @@
 extern crate std;
 use super::*;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
-use oer_crypto::{
+use oer_portable_crypto::{
     KeyData, KeyUnwrapError, KeyUnwrapRequest,
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
 };
@@ -115,10 +115,10 @@ impl Registers for Fake {
 #[derive(Default)]
 struct Ticking(core::cell::Cell<u64>);
 impl Clock for Ticking {
-    fn now(&self) -> oer_time::Instant {
+    fn now(&self) -> oer_portable_time::Instant {
         let now = self.0.get() + 1;
         self.0.set(now);
-        oer_time::Instant::from_micros(now)
+        oer_portable_time::Instant::from_micros(now)
     }
 }
 
@@ -157,7 +157,7 @@ fn a_block_waits_on_its_state_flag_and_the_key_is_erased_after_the_run() {
         ..Port::default()
     }));
     let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
-    let response = oer_crypto::block::unwrap_now(&mut engine, request());
+    let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
     assert_eq!(response.plaintext(), Ok(&RFC3394_4_1_KEY_DATA[..]));
     let p = port.borrow();
     assert_eq!(p.starts, 12);
@@ -198,7 +198,7 @@ fn timeout_and_invalid_state_are_typed_and_poison_the_owned_engine() {
             ..Port::default()
         }));
         let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
-        let response = oer_crypto::block::unwrap_now(&mut engine, request());
+        let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
         assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
         assert_eq!(port.borrow().starts, 1, "no block after the refused one");
         if stuck {
@@ -214,7 +214,7 @@ fn timeout_and_invalid_state_are_typed_and_poison_the_owned_engine() {
         assert_erased(&port);
         let starts = port.borrow().starts;
         let reads = port.borrow().reads;
-        let response = oer_crypto::block::unwrap_now(&mut engine, request());
+        let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
         assert_eq!(
             response.plaintext(),
             Err(KeyUnwrapError::Engine(BlockError::Unavailable))
@@ -228,7 +228,7 @@ fn timeout_and_invalid_state_are_typed_and_poison_the_owned_engine() {
 fn a_not_idle_accelerator_refuses_the_key_and_is_erased() {
     let port = Rc::new(RefCell::new(Port::default()));
     let mut engine = AesBlocks::new(StuckSetup(Fake(Rc::clone(&port))), Ticking::default());
-    let response = oer_crypto::block::unwrap_now(&mut engine, request());
+    let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
     assert_eq!(
         response.plaintext(),
         Err(KeyUnwrapError::Engine(BlockError::InvalidState {

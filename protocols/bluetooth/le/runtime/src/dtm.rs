@@ -1,10 +1,10 @@
 //! Capacity and terminal waits around the durable synchronous controller.
 
-use oer_bluetooth_le_controller::dtm::{
+use oer_protocols_bluetooth_le_controller::dtm::{
     Admission, Fault, RequestRefusal, Service, Submission, SubmitError, Submitted,
 };
-use oer_bluetooth_le_port::{LeCapabilities, LePhase};
-use oer_radio_port::PoolPath;
+use oer_protocols_bluetooth_le_port::{LeCapabilities, LePhase};
+use oer_protocols_radio_port::PoolPath;
 
 /// Wait for capacity, then perform one uninterrupted synchronous admission.
 /// Cancellation while waiting retains the command, seat and lease in `service`.

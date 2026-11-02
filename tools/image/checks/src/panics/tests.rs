@@ -48,7 +48,7 @@ fn program_with_panic(entry: &'static str, protocol_target: u32) -> Image {
                 ],
                 frame: Some(16),
             },
-            caller("oer_esp32s31_hal::register::write", HAL, PANIC),
+            caller("oer_chips_esp32s31_hal::register::write", HAL, PANIC),
             caller("oer_ieee80211_mac::receive", PROTOCOL, protocol_target),
             caller(entry, PANIC, PANIC_FMT),
             Code {
@@ -87,7 +87,7 @@ fn contract(runtime: &[(Layer, usize)]) -> Contract {
 fn contract_with(runtime: &[(Layer, usize)], hardware: usize) -> Contract {
     Contract {
         layers: Layers::of_packages([
-            ("oer-esp32s31-hal", Path::new("chips/esp32s31/hal")),
+            ("oer-chips-esp32s31-hal", Path::new("chips/esp32s31/hal")),
             ("oer-ieee80211-mac", Path::new("protocols/ieee80211/mac")),
         ]),
         budget: Budget {
@@ -127,7 +127,7 @@ fn a_reachable_panic_counts_once_in_the_layer_of_its_caller() {
     assert!(text.contains("protocols\t1\t1"), "{text}");
     assert!(text.contains("CPU0: 2 (hal 1, protocols 1)"), "{text}");
     assert!(
-        text.contains("oer_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic\t[CPU0, T0]"),
+        text.contains("oer_chips_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic\t[CPU0, T0]"),
         "{text}"
     );
 }
@@ -159,7 +159,7 @@ fn compiler_resumed_checks_have_a_separate_row_and_keep_their_locations() {
             "compiler-async-fn-resumed\t1\texcluded",
             "CPU0 (hardware): 1 (protocols 1); compiler-async-fn-resumed 1",
             "T0: 1 (protocols 1); compiler-async-fn-resumed 1",
-            "compiler-async-fn-resumed\toer_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic_const::panic_const_async_fn_resumed\t[CPU0, T0]",
+            "compiler-async-fn-resumed\toer_chips_esp32s31_hal::register::write at 0x00001024 calls core::panicking::panic_const::panic_const_async_fn_resumed\t[CPU0, T0]",
             "protocols\toer_ieee80211_mac::receive at 0x0000103c calls core::panicking::panic_fmt\t[CPU0, T0]",
         ] {
             assert!(text.contains(expected), "missing {expected:?}: {text}");
@@ -199,9 +199,10 @@ fn ordinary_panics_are_not_classified_by_a_similar_callee_or_the_caller_name() {
         "core::panicking::panic_const::panic_const_async_gen_fn_resumed",
     ] {
         let mut image = program_with_panic(entry, PANIC);
-        image
-            .names
-            .insert(HAL, "oer_esp32s31_hal::panic_const_async_fn_resumed".into());
+        image.names.insert(
+            HAL,
+            "oer_chips_esp32s31_hal::panic_const_async_fn_resumed".into(),
+        );
         let report = Report {
             elf: CheckedElf::Runtime,
             roots: vec![root(&image, "CPU0", true)],
@@ -216,7 +217,7 @@ fn ordinary_panics_are_not_classified_by_a_similar_callee_or_the_caller_name() {
             "{text}"
         );
         assert!(
-            text.contains("hal\toer_esp32s31_hal::panic_const_async_fn_resumed"),
+            text.contains("hal\toer_chips_esp32s31_hal::panic_const_async_fn_resumed"),
             "{text}"
         );
         assert!(text.contains("hardware\t2\t2"), "{text}");
@@ -302,7 +303,7 @@ fn the_pac_layer_is_budgeted_like_the_others() {
     };
     let pac = |declared: serde_json::Value| Contract {
         layers: Layers::of_packages([
-            ("oer-esp32s31-hal", Path::new("chips/esp32s31/pac")),
+            ("oer-chips-esp32s31-hal", Path::new("chips/esp32s31/pac")),
             ("oer-ieee80211-mac", Path::new("protocols/ieee80211/mac")),
         ]),
         budget: Budget::parse(Some(&declared)).unwrap(),
@@ -330,12 +331,12 @@ fn the_pac_layer_is_budgeted_like_the_others() {
 fn every_category_and_hardware_excess_is_reported_without_a_failed_check() {
     let (directory, policy) =
         crate::stack::tests::policy_with("schema = 6\nmax_move_bytes = 4096\n", "");
-    for (path, text) in oer_espressif_facts::tracked::FILES {
+    for (path, text) in oer_chips_family_facts::tracked::FILES {
         let path = directory.path().join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
     }
-    let profile = oer_chip_profile::Profile::load(directory.path(), "esp32s31").unwrap();
+    let profile = oer_tools_chip_profile::Profile::load(directory.path(), "esp32s31").unwrap();
     let mut image = program();
     image.stack_sizes.insert(UNREACHED, 4097);
     let mut contract = Contract::default();
@@ -401,63 +402,60 @@ fn every_category_and_hardware_excess_is_reported_without_a_failed_check() {
 #[test]
 fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
     let layers = Layers::of_packages([
-        ("oer-esp32s31-pac", Path::new("chips/esp32s31/pac")),
+        ("oer-chips-esp32s31-pac", Path::new("chips/esp32s31/pac")),
         ("oer-esp32s31-pac-raw", Path::new("chips/esp32s31/pac-raw")),
         (
             "oer-espressif-ieee80211-pac",
-            Path::new("chips/espressif/ieee80211-pac"),
+            Path::new("chips/family/ieee80211-pac"),
         ),
-        ("oer-esp32s31-hal", Path::new("chips/esp32s31/hal")),
+        ("oer-chips-esp32s31-hal", Path::new("chips/esp32s31/hal")),
         (
-            "oer-espressif-executor",
-            Path::new("chips/espressif/executor"),
+            "oer-chips-family-executor",
+            Path::new("chips/family/executor"),
         ),
-        ("oer-time", Path::new("portable/time")),
+        ("oer-portable-time", Path::new("portable/time")),
         (
-            "oer-ieee80211-core-roles-sta",
+            "oer-protocols-ieee80211-core-roles-sta",
             Path::new("protocols/ieee80211/core/roles/sta"),
         ),
         (
-            "oer-firmware-apps-boot-smoke",
-            Path::new("firmware/apps/boot-smoke"),
+            "oer-hil-probes-esp32s31-boot-smoke",
+            Path::new("hil/probes/esp32s31-boot-smoke"),
         ),
-        (
-            "oer-hil-scenarios-images-esp32s31-sdk-rpc",
-            Path::new("hil-scenarios/images/esp32s31-sdk-rpc"),
-        ),
-        ("oer-services-aes", Path::new("hil-scenarios/services/aes")),
-        ("oer-image-checks", Path::new("tools/image/checks")),
+        ("oer-hil-images-aes", Path::new("hil/images/aes")),
+        ("oer-hil-services-aes", Path::new("hil/services/aes")),
+        ("oer-tools-image-checks", Path::new("tools/image/checks")),
     ]);
     for (name, layer) in [
-        ("oer_esp32s31_pac::Block::read", Layer::Pac),
+        ("oer_chips_esp32s31_pac::Block::read", Layer::Pac),
         ("oer_esp32s31_pac_raw::x", Layer::Pac),
         ("oer_espressif_ieee80211_pac::x", Layer::Pac),
         (
-            "<oer_esp32s31_hal::Uart as core::fmt::Write>::write_str",
+            "<oer_chips_esp32s31_hal::Uart as core::fmt::Write>::write_str",
             Layer::Hal,
         ),
-        ("oer_espressif_executor::poll", Layer::Chips),
+        ("oer_chips_family_executor::poll", Layer::Chips),
         (
-            "<&oer_time::Instant as core::fmt::Debug>::fmt",
+            "<&oer_portable_time::Instant as core::fmt::Debug>::fmt",
             Layer::Portable,
         ),
         (
-            "oer_ieee80211_core_roles_sta::Station::step",
+            "oer_protocols_ieee80211_core_roles_sta::Station::step",
             Layer::Protocols,
         ),
-        ("oer_firmware_apps_boot_smoke::main", Layer::Firmware),
+        ("oer_hil_probes_esp32s31_boot_smoke::main", Layer::Firmware),
+        ("oer_hil_images_aes::main", Layer::Firmware),
+        ("oer_hil_services_aes::Engine::unwrap_key", Layer::Protocols),
         (
-            "oer_hil_scenarios_images_esp32s31_sdk_rpc::main",
-            Layer::Firmware,
+            "core::ptr::drop_in_place<oer_portable_time::Instant>",
+            Layer::Core,
         ),
-        ("oer_services_aes::Engine::unwrap_key", Layer::Protocols),
-        ("core::ptr::drop_in_place<oer_time::Instant>", Layer::Core),
         ("compiler_builtins::mem::memcpy", Layer::Core),
         ("embassy_sync::signal::Signal<M,T>::wait", Layer::Embassy),
         ("esp_radio::wifi::start", Layer::ThirdParty),
         ("esp32p4::Peripherals::steal", Layer::ThirdParty),
         ("heapless::vec::Vec<T,_>::push", Layer::ThirdParty),
-        ("oer_image_checks::x", Layer::ThirdParty),
+        ("oer_tools_image_checks::x", Layer::ThirdParty),
         ("memcpy", Layer::Unnamed),
         ("FROM_CPU_INTR3", Layer::Unnamed),
     ] {

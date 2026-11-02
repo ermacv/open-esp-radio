@@ -1,4 +1,4 @@
-use oer_vendor_ieee802154_esp32s31::{
+use oer_tools_vendor_ieee802154_esp32s31::{
     Inputs, Record, Scenario, Step, Verdict, claim, compare_scenario, port,
 };
 

@@ -4,15 +4,15 @@
 mod lp_fast;
 pub use lp_fast::{LpFastClock, LpFastSource};
 
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     Access, Busy,
     clock::{ClockUpdate, CpuClockRegisters, PllPower, PllRegisters},
     flash::FlashClockRegisters,
     psram::MemoryClockRegisters,
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     hp_alive_sys::HpAliveSysPllClock,
     hp_sys_clkrst::{HpSysClkrstBootClock, flash_ctrl0},
     instances,
@@ -70,8 +70,8 @@ pub enum CpuRoot {
 }
 
 impl CpuRoot {
-    const fn code(self) -> oer_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel {
-        use oer_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
+    const fn code(self) -> oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel {
+        use oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
         match self {
             Self::Xtal => RegSocClkSel::Xtal,
             Self::Cpll => RegSocClkSel::Cpll,
@@ -80,7 +80,7 @@ impl CpuRoot {
         }
     }
     const fn from_code(code: Bits<2>) -> Self {
-        use oer_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
+        use oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
         match RegSocClkSel::from_field(code.get()) {
             RegSocClkSel::Xtal => Self::Xtal,
             RegSocClkSel::Cpll => Self::Cpll,
@@ -152,15 +152,15 @@ impl RuntimeCpuClock {
     }
 }
 
-impl oer_espressif_boot::adoption::CpuClock for RuntimeCpuClock {
-    fn sample(&self) -> oer_espressif_boot::adoption::CpuRate {
+impl oer_chips_family_boot::adoption::CpuClock for RuntimeCpuClock {
+    fn sample(&self) -> oer_chips_family_boot::adoption::CpuRate {
         #[cfg(target_arch = "riscv32")]
         {
             let cpu = self.0.hp_sys_clkrst.read_cpu_freq_ctrl0();
             let root =
                 CpuRoot::from_code(self.0.hp_sys_clkrst.read_soc_clk_sel().reg_soc_clk_sel());
             let pll = self.0.lp_aon_clkrst.read_cpll_div();
-            oer_espressif_boot::adoption::CpuRate {
+            oer_chips_family_boot::adoption::CpuRate {
                 fractional: cpu.reg_cpu_clk_div_numerator().get() != 0,
                 integer_hz: CpuFrequency::from_dividers(
                     root,
@@ -174,7 +174,7 @@ impl oer_espressif_boot::adoption::CpuClock for RuntimeCpuClock {
             }
         }
         #[cfg(not(target_arch = "riscv32"))]
-        oer_espressif_boot::adoption::CpuRate {
+        oer_chips_family_boot::adoption::CpuRate {
             fractional: false,
             integer_hz: None,
         }
@@ -528,7 +528,12 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement> MemoryClockRegister
 
 #[cfg(any(test, feature = "test-support"))]
 impl<'a, 'b, 'c, 'd>
-    ClockRegisters<oer_mmio::Host<'a>, oer_mmio::Host<'b>, oer_mmio::Host<'c>, oer_mmio::Host<'d>>
+    ClockRegisters<
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'b>,
+        oer_portable_mmio::Host<'c>,
+        oer_portable_mmio::Host<'d>,
+    >
 {
     /// The clock owner over host memory from each instance's base.
     pub fn host(
@@ -536,7 +541,7 @@ impl<'a, 'b, 'c, 'd>
         lp_aon_clkrst: &'b mut [u32],
         pmu: &'c mut [u32],
         hp_alive_sys: &'d mut [u32],
-    ) -> Result<Self, oer_mmio::HostTooSmall> {
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             hp_sys_clkrst: HpSysClkrstBootClock::host(hp_sys_clkrst)?,
             lp_aon_clkrst: LpAonClkrstCpll::host(lp_aon_clkrst)?,

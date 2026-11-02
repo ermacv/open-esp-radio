@@ -1325,445 +1325,203 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-analysis-blobray-analysis"
+name = "oer"
 version = "0.1.0"
 dependencies = [
- "oer-analysis-blobray-domain",
- "oer-analysis-riscv-analysis",
- "oer-analysis-riscv-decode",
- "oer-analysis-riscv-model",
+ "oer-chips-esp32s31-app",
+ "oer-chips-family-app",
+ "oer-portable-diagnostics",
 ]
 
 [[package]]
-name = "oer-analysis-blobray-application"
+name = "oer-chips-esp32s31-app"
 version = "0.1.0"
 dependencies = [
- "object",
- "oer-analysis-blobray-analysis",
- "oer-analysis-blobray-artifacts",
- "oer-analysis-blobray-domain",
- "oer-analysis-blobray-verification",
- "oer-analysis-elf",
- "oer-analysis-riscv-analysis",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-analysis-riscv-program",
- "rustc-demangle",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-analysis-blobray-artifacts"
-version = "0.1.0"
-dependencies = [
- "object",
- "oer-analysis-blobray-domain",
- "oer-analysis-elf",
- "oer-analysis-riscv-model",
- "oer-analysis-riscv-program",
-]
-
-[[package]]
-name = "oer-analysis-blobray-domain"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-riscv-model",
- "serde",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "oer-analysis-blobray-linker"
-version = "0.1.0"
-dependencies = [
- "object",
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-riscv-model",
- "oer-os-process",
- "rustix",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
-name = "oer-analysis-blobray-riscv"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-blobray-domain",
- "oer-analysis-riscv-decode",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
-]
-
-[[package]]
-name = "oer-analysis-blobray-verification"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-blobray-domain",
- "oer-analysis-riscv-model",
-]
-
-[[package]]
-name = "oer-analysis-elf"
-version = "0.1.0"
-dependencies = [
- "addr2line",
- "gimli 0.34.0",
- "object",
-]
-
-[[package]]
-name = "oer-analysis-riscv-analysis"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-riscv-model",
-]
-
-[[package]]
-name = "oer-analysis-riscv-decode"
-version = "0.1.0"
-dependencies = [
- "oer-os-toolchain",
- "rv-asm",
- "tempfile",
-]
-
-[[package]]
-name = "oer-analysis-riscv-lift"
-version = "0.1.0"
-dependencies = [
- "oer-analysis-elf",
- "oer-analysis-riscv-decode",
- "oer-analysis-riscv-model",
-]
-
-[[package]]
-name = "oer-analysis-riscv-model"
-version = "0.1.0"
-dependencies = [
- "hex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
-]
-
-[[package]]
-name = "oer-analysis-riscv-program"
-version = "0.1.0"
-dependencies = [
- "object",
- "oer-analysis-elf",
- "oer-analysis-riscv-model",
-]
-
-[[package]]
-name = "oer-bluetooth-hci"
-version = "0.1.0"
-dependencies = [
- "bt-hci",
- "oer-wire",
-]
-
-[[package]]
-name = "oer-bluetooth-le-cipher"
-version = "0.1.0"
-dependencies = [
- "aes",
- "ccm",
- "oer-bluetooth-le-wire",
- "zeroize",
-]
-
-[[package]]
-name = "oer-bluetooth-le-controller"
-version = "0.1.0"
-dependencies = [
- "oer-bluetooth-hci",
- "oer-bluetooth-le-model",
- "oer-bluetooth-le-port",
- "oer-bluetooth-le-wire",
- "oer-radio-port",
- "oer-test-ui-cases",
-]
-
-[[package]]
-name = "oer-bluetooth-le-ll"
-version = "0.1.0"
-dependencies = [
- "oer-bluetooth-le-cipher",
- "oer-bluetooth-le-port",
- "oer-bluetooth-le-wire",
-]
-
-[[package]]
-name = "oer-bluetooth-le-model"
-version = "0.1.0"
-dependencies = [
- "oer-bluetooth-le-port",
- "oer-bluetooth-le-wire",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
-]
-
-[[package]]
-name = "oer-bluetooth-le-port"
-version = "0.1.0"
-dependencies = [
- "oer-bluetooth-le-wire",
- "oer-radio-coex",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
-]
-
-[[package]]
-name = "oer-bluetooth-le-runtime"
-version = "0.1.0"
-dependencies = [
- "oer-bluetooth-hci",
- "oer-bluetooth-le-controller",
- "oer-bluetooth-le-model",
- "oer-bluetooth-le-port",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-time",
-]
-
-[[package]]
-name = "oer-bluetooth-le-wire"
-version = "0.1.0"
-dependencies = [
- "oer-wire",
-]
-
-[[package]]
-name = "oer-bridges-ieee80211-ethernet"
-version = "0.1.0"
-dependencies = [
- "oer-ieee80211-wire",
- "oer-network-wire",
-]
-
-[[package]]
-name = "oer-chip-profile"
-version = "0.1.0"
-dependencies = [
- "oer-esp32s31-knowledge",
- "oer-esp32s31-layout",
- "oer-espressif-facts",
- "oer-espressif-staged-layout",
- "oer-os-durable",
- "serde",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-cooperate"
-version = "0.1.0"
-dependencies = [
- "oer-time",
-]
-
-[[package]]
-name = "oer-crypto"
-version = "0.1.0"
-dependencies = [
- "aes",
- "ccm",
- "cmac",
- "zeroize",
-]
-
-[[package]]
-name = "oer-diagnostics"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oer-test-ui-cases",
- "oer-trace",
-]
-
-[[package]]
-name = "oer-embassy-net"
-version = "0.1.0"
-dependencies = [
- "critical-section",
+ "atomic-waker",
  "embassy-futures",
  "embassy-net",
  "embassy-time",
- "oer-memory",
- "oer-network-port",
- "oer-network-wire",
- "oer-sync",
- "oer-time",
- "oer-time-virtual",
- "xarxa-driver",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-wifi",
+ "oer-chips-family-app",
+ "oer-chips-family-boot",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-net",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-trace",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-runtime",
+ "oer-protocols-network-port",
+ "static_cell",
+ "xarxa",
 ]
 
 [[package]]
-name = "oer-embassy-time"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-time",
- "oer-time",
-]
-
-[[package]]
-name = "oer-esp32s31-bluetooth-driver"
+name = "oer-chips-esp32s31-bluetooth-driver"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "bytemuck",
  "critical-section",
  "embassy-futures",
- "oer-bluetooth-le-port",
- "oer-bluetooth-le-wire",
- "oer-esp32s31-hal",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-espressif-bluetooth-engine",
- "oer-espressif-interrupt-table",
- "oer-memory",
- "oer-radio-port",
- "oer-sync",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-family-bluetooth-engine",
+ "oer-chips-family-interrupt-table",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-bluetooth-le-wire",
+ "oer-protocols-radio-port",
+ "oer-tools-test-ui-cases",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-esp32s31-board"
+name = "oer-chips-esp32s31-board"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-layout",
- "oer-espressif-staged-layout",
- "oer-radio-regulatory",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-staged-layout",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
-name = "oer-esp32s31-boot"
+name = "oer-chips-esp32s31-boot"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-hal",
- "oer-espressif-boot",
- "oer-espressif-facts",
- "oer-espressif-staged-bootstrap",
- "oer-time",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-family-boot",
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-bootstrap",
+ "oer-portable-time",
 ]
 
 [[package]]
-name = "oer-esp32s31-compose"
+name = "oer-chips-esp32s31-bootstrap"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
- "embedded-io-async",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-crypto",
- "oer-esp32s31-hal",
- "oer-esp32s31-phy",
- "oer-espressif-boot",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-platform-port",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-memory",
- "oer-riscv",
- "oer-time",
- "oer-trace",
+ "oer-chips-esp32s31-boot",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-boot",
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-bootstrap",
  "static_cell",
 ]
 
 [[package]]
-name = "oer-esp32s31-crypto"
+name = "oer-chips-esp32s31-compose"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "embedded-io-async",
+ "oer-chips-esp32s31-crypto",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-family-boot",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-staged-runtime",
+ "oer-chips-family-usb-serial-jtag",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-trace",
+ "static_cell",
+]
+
+[[package]]
+name = "oer-chips-esp32s31-crypto"
 version = "0.1.0"
 dependencies = [
  "aes",
- "oer-crypto",
- "oer-esp32s31-hal",
- "oer-time",
+ "oer-chips-esp32s31-hal",
+ "oer-portable-crypto",
+ "oer-portable-time",
  "zeroize",
 ]
 
 [[package]]
-name = "oer-esp32s31-hal"
+name = "oer-chips-esp32s31-hal"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "critical-section",
- "oer-diagnostics",
- "oer-esp32s31-knowledge",
- "oer-esp32s31-pac",
- "oer-espressif-analog",
- "oer-espressif-bluetooth-engine",
- "oer-espressif-boot",
- "oer-espressif-coex",
- "oer-espressif-efuse",
- "oer-espressif-facts",
- "oer-espressif-ieee802154-mac-values",
- "oer-espressif-interrupt-table",
- "oer-espressif-modem-clock",
- "oer-espressif-phy",
- "oer-espressif-platform-port",
- "oer-espressif-radio",
- "oer-espressif-usb-serial-jtag",
- "oer-espressif-watchdog",
- "oer-memory",
- "oer-mmio",
- "oer-radio-coex",
- "oer-radio-regulatory",
- "oer-riscv",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-esp32s31-knowledge",
+ "oer-chips-esp32s31-pac",
+ "oer-chips-family-analog",
+ "oer-chips-family-bluetooth-engine",
+ "oer-chips-family-boot",
+ "oer-chips-family-coex",
+ "oer-chips-family-efuse",
+ "oer-chips-family-facts",
+ "oer-chips-family-ieee802154-mac-values",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-modem-clock",
+ "oer-chips-family-phy",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-radio",
+ "oer-chips-family-usb-serial-jtag",
+ "oer-chips-family-watchdog",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-mmio",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-radio-coex",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
  "pin-project",
  "serde_json",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-esp32s31-ieee80211-driver"
+name = "oer-chips-esp32s31-ieee80211-driver"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "bytemuck",
  "heapless",
- "oer-embassy-net",
- "oer-esp32s31-hal",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-espressif-coex",
- "oer-espressif-ieee80211-policy",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-events",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-testing-conformance",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-sync",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
- "oer-wire",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-family-coex",
+ "oer-chips-family-ieee80211-policy",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-embassy-net",
+ "oer-portable-events",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-trace",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-testing-conformance",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
  "pin-project",
  "subtle",
  "tempfile",
@@ -1771,24 +1529,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-esp32s31-ieee802154-driver"
+name = "oer-chips-esp32s31-ieee802154-driver"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-hal",
- "oer-esp32s31-knowledge",
- "oer-espressif-coex",
- "oer-espressif-ieee802154-engine",
- "oer-espressif-ieee802154-mac-values",
- "oer-espressif-interrupt-table",
- "oer-ieee802154-port",
- "oer-mmio",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-knowledge",
+ "oer-chips-family-coex",
+ "oer-chips-family-ieee802154-engine",
+ "oer-chips-family-ieee802154-mac-values",
+ "oer-chips-family-interrupt-table",
+ "oer-portable-mmio",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-esp32s31-instrumentation"
+name = "oer-chips-esp32s31-instrumentation"
 version = "0.1.0"
 dependencies = [
  "postcard-schema",
@@ -1796,213 +1554,194 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-esp32s31-knowledge"
+name = "oer-chips-esp32s31-knowledge"
 version = "0.1.0"
 
 [[package]]
-name = "oer-esp32s31-layout"
+name = "oer-chips-esp32s31-layout"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-facts",
- "oer-espressif-staged-layout",
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-layout",
 ]
 
 [[package]]
-name = "oer-esp32s31-pac"
+name = "oer-chips-esp32s31-pac"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-espressif-analog",
- "oer-memory",
- "oer-mmio",
+ "oer-chips-family-analog",
+ "oer-portable-memory",
+ "oer-portable-mmio",
 ]
 
 [[package]]
-name = "oer-esp32s31-phy"
+name = "oer-chips-esp32s31-phy"
 version = "0.1.0"
 dependencies = [
- "oer-cooperate",
- "oer-diagnostics",
- "oer-esp32s31-hal",
- "oer-espressif-analog",
- "oer-espressif-ieee802154-engine",
- "oer-espressif-interrupt-table",
- "oer-espressif-phy",
- "oer-memory",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-family-analog",
+ "oer-chips-family-ieee802154-engine",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-phy",
+ "oer-portable-cooperate",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
  "pin-project-lite",
 ]
 
 [[package]]
-name = "oer-esp32s31-radio-client"
+name = "oer-chips-esp32s31-radio-client"
 version = "0.1.0"
 dependencies = [
- "oer-bluetooth-le-port",
- "oer-diagnostics",
- "oer-esp32s31-hal",
- "oer-esp32s31-phy",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-regulatory",
- "oer-time",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-phy",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
-name = "oer-esp32s31-radio-system"
+name = "oer-chips-esp32s31-radio-system"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "oer-bluetooth-le-port",
- "oer-cooperate",
- "oer-diagnostics",
- "oer-esp32s31-hal",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-espressif-coex",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-regulatory",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-family-coex",
+ "oer-portable-cooperate",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-trace",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-regulatory",
  "pin-project-lite",
 ]
 
 [[package]]
-name = "oer-esp32s31-wifi"
+name = "oer-chips-esp32s31-wifi"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embassy-futures",
  "heapless",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-esp32s31-radio-system",
- "oer-espressif-coex",
- "oer-espressif-executor",
- "oer-espressif-ieee80211-policy",
- "oer-espressif-interrupt-table",
- "oer-espressif-radio",
- "oer-events",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-core-arbiter",
- "oer-ieee80211-core-roles-sta",
- "oer-ieee80211-core-security-rsn",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-runtime",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-network-port",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-sync",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-ieee80211-driver",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-system",
+ "oer-chips-family-coex",
+ "oer-chips-family-executor",
+ "oer-chips-family-ieee80211-policy",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-radio",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-events",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-trace",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-roles-sta",
+ "oer-protocols-ieee80211-core-security-rsn",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-runtime",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-network-port",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
  "static_cell",
  "zeroize",
 ]
 
 [[package]]
-name = "oer-espressif"
+name = "oer-chips-family-analog"
+version = "0.1.0"
+
+[[package]]
+name = "oer-chips-family-app"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
- "embassy-futures",
- "embassy-net",
- "embassy-time",
- "oer-diagnostics",
- "oer-embassy-net",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-wifi",
- "oer-espressif-boot",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-ieee80211-core-security-cipher",
- "oer-ieee80211-runtime",
- "oer-memory",
- "oer-network-port",
- "oer-riscv",
- "oer-time",
- "oer-trace",
+ "oer-portable-embassy-net",
+ "oer-portable-memory",
+ "oer-protocols-network-port",
  "static_cell",
- "xarxa",
 ]
 
 [[package]]
-name = "oer-espressif-analog"
-version = "0.1.0"
-
-[[package]]
-name = "oer-espressif-bluetooth-engine"
+name = "oer-chips-family-bluetooth-engine"
 version = "0.1.0"
 dependencies = [
- "oer-time",
+ "oer-portable-time",
 ]
 
 [[package]]
-name = "oer-espressif-boot"
+name = "oer-chips-family-boot"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-analog",
- "oer-espressif-staged-layout",
- "oer-espressif-watchdog",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-family-analog",
+ "oer-chips-family-staged-layout",
+ "oer-chips-family-watchdog",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
 ]
 
 [[package]]
-name = "oer-espressif-coex"
+name = "oer-chips-family-coex"
 version = "0.1.0"
 dependencies = [
- "oer-ieee80211-contracts-port",
- "oer-ieee802154-port",
- "oer-radio-coex",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-radio-coex",
 ]
 
 [[package]]
-name = "oer-espressif-efuse"
+name = "oer-chips-family-efuse"
 version = "0.1.0"
 
 [[package]]
-name = "oer-espressif-executor"
+name = "oer-chips-family-executor"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embassy-time-driver",
- "oer-cooperate",
- "oer-espressif-boot",
- "oer-espressif-interrupt-table",
- "oer-espressif-platform-port",
- "oer-espressif-staged-runtime",
- "oer-memory",
- "oer-mmio",
- "oer-radio-port",
- "oer-riscv",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
+ "oer-chips-family-boot",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-cooperate",
+ "oer-portable-memory",
+ "oer-portable-mmio",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-trace",
+ "oer-protocols-radio-port",
+ "oer-tools-test-ui-cases",
  "portable-atomic",
  "static_cell",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-espressif-facts"
+name = "oer-chips-family-facts"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
@@ -2013,349 +1752,710 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-espressif-ieee80211-policy"
+name = "oer-chips-family-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-ieee80211-driver",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
- "oer-network-wire",
- "oer-test-ui-cases",
- "oer-time",
- "oer-wire",
+ "oer-chips-esp32s31-ieee80211-driver",
+ "oer-portable-time",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-network-wire",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-espressif-ieee802154-engine"
+name = "oer-chips-family-ieee802154-engine"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-coex",
- "oer-espressif-ieee802154-mac-values",
- "oer-ieee802154-port",
- "oer-ieee802154-wire",
- "oer-memory",
- "oer-radio-regulatory",
+ "oer-chips-family-coex",
+ "oer-chips-family-ieee802154-mac-values",
+ "oer-portable-memory",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-ieee802154-wire",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
-name = "oer-espressif-ieee802154-mac-values"
+name = "oer-chips-family-ieee802154-mac-values"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-memory",
- "oer-radio-regulatory",
+ "oer-portable-memory",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
-name = "oer-espressif-interrupt-table"
+name = "oer-chips-family-interrupt-table"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-interrupt-table",
- "oer-memory",
- "oer-mmio",
- "oer-riscv",
- "oer-test-ui-cases",
+ "oer-chips-family-interrupt-table",
+ "oer-portable-memory",
+ "oer-portable-mmio",
+ "oer-portable-riscv",
+ "oer-tools-test-ui-cases",
  "static_cell",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-espressif-modem-clock"
+name = "oer-chips-family-modem-clock"
 version = "0.1.0"
 dependencies = [
- "oer-time",
- "oer-time-virtual",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
 ]
 
 [[package]]
-name = "oer-espressif-phy"
+name = "oer-chips-family-phy"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-analog",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-family-analog",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
 ]
 
 [[package]]
-name = "oer-espressif-platform-port"
+name = "oer-chips-family-platform-port"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-facts",
- "oer-espressif-staged-layout",
- "oer-mmio",
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-layout",
+ "oer-portable-mmio",
 ]
 
 [[package]]
-name = "oer-espressif-radio"
+name = "oer-chips-family-radio"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-modem-clock",
- "oer-radio-coex",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-family-modem-clock",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-radio-coex",
 ]
 
 [[package]]
-name = "oer-espressif-staged-bootstrap"
+name = "oer-chips-family-staged-bootstrap"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-espressif-boot",
- "oer-espressif-platform-port",
- "oer-espressif-staged-layout",
- "oer-memory",
- "oer-riscv",
- "oer-time",
+ "oer-chips-family-boot",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-staged-layout",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
 ]
 
 [[package]]
-name = "oer-espressif-staged-layout"
+name = "oer-chips-family-staged-layout"
 version = "0.1.0"
 
 [[package]]
-name = "oer-espressif-staged-runtime"
+name = "oer-chips-family-staged-runtime"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "critical-section",
- "oer-diagnostics",
- "oer-espressif-boot",
- "oer-espressif-facts",
- "oer-espressif-interrupt-table",
- "oer-espressif-platform-port",
- "oer-espressif-staged-layout",
- "oer-espressif-watchdog",
- "oer-memory",
- "oer-riscv",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "oer-trace",
+ "oer-chips-family-boot",
+ "oer-chips-family-facts",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-staged-layout",
+ "oer-chips-family-watchdog",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-trace",
+ "oer-tools-test-ui-cases",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-espressif-usb-serial-jtag"
+name = "oer-chips-family-usb-serial-jtag"
 version = "0.1.0"
 dependencies = [
  "embedded-io-async",
- "oer-diagnostics",
- "oer-espressif-interrupt-table",
- "oer-memory",
+ "oer-chips-family-interrupt-table",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
 ]
 
 [[package]]
-name = "oer-espressif-watchdog"
+name = "oer-chips-family-watchdog"
 version = "0.1.0"
 dependencies = [
- "oer-time",
- "oer-time-virtual",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
 ]
 
 [[package]]
-name = "oer-events"
-version = "0.1.0"
-
-[[package]]
-name = "oer-firmware-apps-boot-smoke"
+name = "oer-examples-wifi-station"
 version = "0.1.0"
 dependencies = [
- "oer-crypto",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-memory",
- "oer-time",
-]
-
-[[package]]
-name = "oer-firmware-apps-radio-root"
-version = "0.1.0"
-dependencies = [
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-executor",
- "oer-espressif-staged-runtime",
- "oer-time",
-]
-
-[[package]]
-name = "oer-firmware-apps-wifi-station"
-version = "0.1.0"
-dependencies = [
- "oer-esp32s31-layout",
- "oer-espressif",
- "oer-ieee80211-contracts-port",
- "oer-radio-regulatory",
+ "oer",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-radio-regulatory",
  "toml",
 ]
 
 [[package]]
-name = "oer-firmware-bootstrap-esp32s31"
+name = "oer-hil-agent"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-boot",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-boot",
- "oer-espressif-facts",
- "oer-espressif-staged-bootstrap",
+ "embassy-futures",
+ "oer",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+]
+
+[[package]]
+name = "oer-hil-images-aes"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer",
+ "oer-hil-agent",
+ "oer-hil-services-aes",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard",
  "static_cell",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-aes-timing"
+name = "oer-hil-images-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "heapless",
+ "oer",
+ "oer-hil-agent",
+ "oer-hil-services-fault",
+ "oer-hil-services-load",
+ "oer-hil-services-sdk-station",
+ "oer-hil-services-wifi-station",
+ "oer-portable-trace",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard",
+ "static_cell",
+]
+
+[[package]]
+name = "oer-hil-probes-esp32s31-aes-timing"
 version = "0.1.0"
 dependencies = [
  "aes",
  "ccm",
  "cmac",
- "oer-crypto",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-crypto",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-ieee80211-core-security-cipher",
- "oer-riscv",
- "oer-time",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-crypto",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-crypto",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-protocols-ieee80211-core-security-cipher",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-facts"
+name = "oer-hil-probes-esp32s31-boot-smoke"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-pac",
- "oer-mmio",
- "oer-riscv",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-crypto",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-time",
+]
+
+[[package]]
+name = "oer-hil-probes-esp32s31-facts"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-pac",
+ "oer-portable-mmio",
+ "oer-portable-riscv",
  "toml",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-mcycle"
+name = "oer-hil-probes-esp32s31-mcycle"
 version = "0.1.0"
 dependencies = [
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-platform-port",
- "oer-espressif-staged-runtime",
- "oer-riscv",
- "oer-time",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-riscv",
+ "oer-portable-time",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-peer-overdue"
+name = "oer-hil-probes-esp32s31-peer-overdue"
 version = "0.1.0"
 dependencies = [
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-layout",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-memory",
- "oer-time",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-time",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-radio"
+name = "oer-hil-probes-esp32s31-radio"
 version = "0.1.0"
 dependencies = [
- "oer-cooperate",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-espressif-boot",
- "oer-espressif-coex",
- "oer-espressif-executor",
- "oer-espressif-ieee80211-policy",
- "oer-espressif-phy",
- "oer-espressif-staged-runtime",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-probe-codegen",
- "oer-probe-macros",
- "oer-riscv",
- "oer-time",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-ieee80211-driver",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-family-boot",
+ "oer-chips-family-coex",
+ "oer-chips-family-executor",
+ "oer-chips-family-ieee80211-policy",
+ "oer-chips-family-phy",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-cooperate",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
+ "oer-tools-probe-codegen",
+ "oer-tools-probe-macros",
  "static_cell",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-register"
+name = "oer-hil-probes-esp32s31-radio-root"
 version = "0.1.0"
 dependencies = [
- "oer-esp32s31-hal",
- "oer-espressif-boot",
- "oer-memory",
- "oer-probe-codegen",
- "oer-probe-macros",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-time",
 ]
 
 [[package]]
-name = "oer-firmware-probes-esp32s31-rx-chain"
+name = "oer-hil-probes-esp32s31-register"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-hal",
+ "oer-chips-family-boot",
+ "oer-portable-memory",
+ "oer-tools-probe-codegen",
+ "oer-tools-probe-macros",
+]
+
+[[package]]
+name = "oer-hil-probes-esp32s31-rx-chain"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embedded-io-async",
  "heapless",
- "oer-diagnostics",
- "oer-embassy-time",
- "oer-esp32s31-board",
- "oer-esp32s31-compose",
- "oer-esp32s31-hal",
- "oer-esp32s31-ieee80211-driver",
- "oer-esp32s31-layout",
- "oer-esp32s31-phy",
- "oer-esp32s31-radio-client",
- "oer-esp32s31-radio-system",
- "oer-espressif-executor",
- "oer-espressif-interrupt-table",
- "oer-espressif-staged-runtime",
- "oer-espressif-usb-serial-jtag",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-radio-regulatory",
- "oer-riscv",
- "oer-time",
- "oer-trace",
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-ieee80211-driver",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-esp32s31-phy",
+ "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-system",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-chips-family-usb-serial-jtag",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "oer-portable-trace",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-regulatory",
  "static_cell",
 ]
 
 [[package]]
-name = "oer-hil-agent"
+name = "oer-hil-scenarios-aes"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "heapless",
+ "oer-hil-services-aes",
+ "oer-protocols-hil-agent",
+ "oer-tools-hil-harness",
+]
+
+[[package]]
+name = "oer-hil-scenarios-sdk-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-services-fault",
+ "oer-hil-services-sdk-station",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "oer-tools-hil-harness",
+ "oer-tools-lab-model",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-hil-scenarios-wifi-load"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-services-load",
+ "oer-hil-services-wifi-station",
+ "oer-protocols-hil-agent",
+ "oer-tools-analysis-elf",
+ "oer-tools-hil-harness",
+ "oer-tools-image-build",
+ "oer-tools-image-checks",
+ "oer-tools-lab-model",
+ "oer-tools-os-process",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-hil-scenarios-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-services-wifi-station",
+ "oer-protocols-hil-agent",
+ "oer-tools-hil-harness",
+ "oer-tools-lab-model",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-hil-services-aes"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "embassy-futures",
+ "heapless",
+ "oer-portable-crypto",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-hil-services-fault"
+version = "0.1.0"
+dependencies = [
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-hil-services-load"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-hil-services-sdk-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-hil-services-wifi-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "oer-protocols-ieee80211-runtime",
+ "oer-protocols-network-port",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-portable-cooperate"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+]
+
+[[package]]
+name = "oer-portable-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "ccm",
+ "cmac",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-portable-diagnostics"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "oer-portable-trace",
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
+name = "oer-portable-embassy-net"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-time",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-network-port",
+ "oer-protocols-network-wire",
+ "xarxa-driver",
+]
+
+[[package]]
+name = "oer-portable-embassy-time"
+version = "0.1.0"
+dependencies = [
+ "critical-section",
+ "embassy-time",
+ "oer-portable-time",
+]
+
+[[package]]
+name = "oer-portable-events"
+version = "0.1.0"
+
+[[package]]
+name = "oer-portable-memory"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "bytemuck",
+ "oer-portable-sync",
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
+name = "oer-portable-mmio"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
+name = "oer-portable-riscv"
+version = "0.1.0"
+
+[[package]]
+name = "oer-portable-sort"
+version = "0.1.0"
+
+[[package]]
+name = "oer-portable-sync"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+]
+
+[[package]]
+name = "oer-portable-time"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time-virtual",
+ "postcard",
+ "postcard-schema",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "oer-portable-time-virtual"
+version = "0.1.0"
+dependencies = [
+ "embassy-futures",
+ "oer-portable-time",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-portable-trace"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
+name = "oer-portable-wire"
+version = "0.1.0"
+
+[[package]]
+name = "oer-protocols-bluetooth-hci"
+version = "0.1.0"
+dependencies = [
+ "bt-hci",
+ "oer-portable-wire",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-cipher"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "ccm",
+ "oer-protocols-bluetooth-le-wire",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-controller"
+version = "0.1.0"
+dependencies = [
+ "oer-protocols-bluetooth-hci",
+ "oer-protocols-bluetooth-le-model",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-bluetooth-le-wire",
+ "oer-protocols-radio-port",
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-ll"
+version = "0.1.0"
+dependencies = [
+ "oer-protocols-bluetooth-le-cipher",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-bluetooth-le-wire",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-model"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-bluetooth-le-wire",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-port"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-protocols-bluetooth-le-wire",
+ "oer-protocols-radio-coex",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-runtime"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-protocols-bluetooth-hci",
+ "oer-protocols-bluetooth-le-controller",
+ "oer-protocols-bluetooth-le-model",
+ "oer-protocols-bluetooth-le-port",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+]
+
+[[package]]
+name = "oer-protocols-bluetooth-le-wire"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-wire",
+]
+
+[[package]]
+name = "oer-protocols-bridges-ieee80211-ethernet"
+version = "0.1.0"
+dependencies = [
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-network-wire",
+]
+
+[[package]]
+name = "oer-protocols-hil-agent"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
@@ -2365,67 +2465,17 @@ dependencies = [
  "embassy-sync",
  "embedded-io-async",
  "heapless",
- "oer-diagnostics",
- "oer-hil-protocol",
- "oer-memory",
- "oer-trace",
+ "oer-portable-diagnostics",
+ "oer-portable-memory",
+ "oer-portable-trace",
+ "oer-protocols-hil-protocol",
  "postcard",
  "postcard-schema",
  "serde",
 ]
 
 [[package]]
-name = "oer-hil-agent-espressif"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-diagnostics",
- "oer-esp32s31-compose",
- "oer-espressif",
- "oer-espressif-staged-runtime",
- "oer-hil-agent",
- "oer-hil-protocol",
- "oer-memory",
- "oer-riscv",
-]
-
-[[package]]
-name = "oer-hil-harness"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-hil-link",
- "oer-hil-protocol",
- "oer-image-build",
- "oer-image-bundle",
- "oer-image-checks",
- "oer-lab-arbiter",
- "oer-lab-client",
- "oer-lab-model",
- "oer-os-process",
- "postcard-schema",
- "serde",
- "serde_json",
- "toml",
-]
-
-[[package]]
-name = "oer-hil-link"
-version = "0.1.0"
-dependencies = [
- "mio",
- "oer-diagnostics",
- "oer-hil-protocol",
- "oer-os-process",
- "postcard",
- "postcard-schema",
- "rustix",
- "serde",
- "zeroize",
-]
-
-[[package]]
-name = "oer-hil-protocol"
+name = "oer-protocols-hil-protocol"
 version = "0.1.0"
 dependencies = [
  "cobs",
@@ -2439,209 +2489,119 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-scenarios-aes"
-version = "0.1.0"
-dependencies = [
- "aes",
- "heapless",
- "oer-hil-agent",
- "oer-hil-harness",
- "oer-services-aes",
-]
-
-[[package]]
-name = "oer-hil-scenarios-images-esp32s31-sdk-rpc"
+name = "oer-protocols-ieee80211-contracts-port"
 version = "0.1.0"
 dependencies = [
  "heapless",
- "oer-esp32s31-layout",
- "oer-espressif",
- "oer-hil-agent",
- "oer-hil-agent-espressif",
- "oer-hil-protocol",
- "oer-services-aes",
- "postcard",
- "static_cell",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-coex",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-hil-scenarios-images-esp32s31-sdk-station"
+name = "oer-protocols-ieee80211-contracts-security"
 version = "0.1.0"
 dependencies = [
- "embassy-futures",
- "heapless",
- "oer-esp32s31-layout",
- "oer-espressif",
- "oer-hil-agent",
- "oer-hil-agent-espressif",
- "oer-hil-protocol",
- "oer-services-fault",
- "oer-services-load",
- "oer-services-sdk-station",
- "oer-services-wifi-station",
- "oer-trace",
- "postcard",
- "static_cell",
-]
-
-[[package]]
-name = "oer-hil-scenarios-sdk-station"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-hil-agent",
- "oer-hil-harness",
- "oer-hil-protocol",
- "oer-lab-model",
- "oer-services-fault",
- "oer-services-sdk-station",
- "serde_json",
-]
-
-[[package]]
-name = "oer-hil-scenarios-wifi-load"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-analysis-elf",
- "oer-hil-agent",
- "oer-hil-harness",
- "oer-image-build",
- "oer-image-checks",
- "oer-lab-model",
- "oer-os-process",
- "oer-services-load",
- "oer-services-wifi-station",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-hil-scenarios-wifi-station"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-hil-agent",
- "oer-hil-harness",
- "oer-lab-model",
- "oer-services-wifi-station",
- "serde_json",
-]
-
-[[package]]
-name = "oer-ieee80211-contracts-port"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-wire",
- "oer-radio-coex",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "oer-wire",
-]
-
-[[package]]
-name = "oer-ieee80211-contracts-security"
-version = "0.1.0"
-dependencies = [
- "oer-test-ui-cases",
+ "oer-tools-test-ui-cases",
  "tempfile",
  "zeroize",
 ]
 
 [[package]]
-name = "oer-ieee80211-core-arbiter"
+name = "oer-protocols-ieee80211-core-arbiter"
 version = "0.1.0"
 dependencies = [
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
+ "oer-portable-time",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-ieee80211-core-extensions-esp-now"
+name = "oer-protocols-ieee80211-core-extensions-esp-now"
 version = "0.1.0"
 dependencies = [
- "oer-events",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-core-arbiter",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
+ "oer-portable-events",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
  "zeroize",
 ]
 
 [[package]]
-name = "oer-ieee80211-core-roles-ap"
+name = "oer-protocols-ieee80211-core-roles-ap"
 version = "0.1.0"
 dependencies = [
- "oer-crypto",
- "oer-ieee80211-core-security-cipher",
- "oer-ieee80211-core-security-rsn",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
- "oer-time",
- "oer-wire",
+ "oer-portable-crypto",
+ "oer-portable-time",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-core-security-rsn",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
 ]
 
 [[package]]
-name = "oer-ieee80211-core-roles-sta"
+name = "oer-protocols-ieee80211-core-roles-sta"
 version = "0.1.0"
 dependencies = [
  "heapless",
- "oer-crypto",
- "oer-events",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-core-arbiter",
- "oer-ieee80211-core-security-cipher",
- "oer-ieee80211-core-security-rsn",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-network-port",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
+ "oer-portable-crypto",
+ "oer-portable-events",
+ "oer-portable-memory",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-core-security-rsn",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-network-port",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-ieee80211-core-security-cipher"
+name = "oer-protocols-ieee80211-core-security-cipher"
 version = "0.1.0"
 dependencies = [
  "aes",
- "oer-crypto",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-wire",
- "oer-test-ui-cases",
+ "oer-portable-crypto",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-wire",
+ "oer-tools-test-ui-cases",
  "zeroize",
 ]
 
 [[package]]
-name = "oer-ieee80211-core-security-rsn"
+name = "oer-protocols-ieee80211-core-security-rsn"
 version = "0.1.0"
 dependencies = [
  "chacha20",
  "cipher 0.5.2",
  "heapless",
  "hmac",
- "oer-crypto",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-core-security-cipher",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-wire",
- "oer-test-ui-cases",
- "oer-time",
- "oer-wire",
+ "oer-portable-crypto",
+ "oer-portable-time",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-wire",
+ "oer-tools-test-ui-cases",
  "p256",
  "pbkdf2",
  "sha1",
@@ -2651,185 +2611,190 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-ieee80211-core-upper-mac"
+name = "oer-protocols-ieee80211-core-upper-mac"
 version = "0.1.0"
 dependencies = [
  "heapless",
- "oer-events",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-wire",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
+ "oer-portable-events",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-wire",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-ieee80211-runtime"
+name = "oer-protocols-ieee80211-runtime"
 version = "0.1.0"
 dependencies = [
  "critical-section",
  "embassy-futures",
  "embassy-sync",
  "heapless",
- "oer-bridges-ieee80211-ethernet",
- "oer-crypto",
- "oer-diagnostics",
- "oer-espressif-ieee80211-policy",
- "oer-events",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-core-arbiter",
- "oer-ieee80211-core-roles-sta",
- "oer-ieee80211-core-security-cipher",
- "oer-ieee80211-core-security-rsn",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-testing-model",
- "oer-ieee80211-wire",
- "oer-memory",
- "oer-network-port",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-sync",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
+ "oer-chips-family-ieee80211-policy",
+ "oer-portable-crypto",
+ "oer-portable-diagnostics",
+ "oer-portable-events",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-bridges-ieee80211-ethernet",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-roles-sta",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-core-security-rsn",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-testing-model",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-network-port",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-ieee80211-testing-conformance"
+name = "oer-protocols-ieee80211-testing-conformance"
 version = "0.1.0"
 dependencies = [
  "heapless",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-wire",
- "oer-time",
- "oer-time-virtual",
- "oer-wire",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-wire",
 ]
 
 [[package]]
-name = "oer-ieee80211-testing-model"
+name = "oer-protocols-ieee80211-testing-model"
 version = "0.1.0"
 dependencies = [
  "atomic-waker",
  "embassy-futures",
  "heapless",
- "oer-ieee80211-contracts-port",
- "oer-ieee80211-contracts-security",
- "oer-ieee80211-core-security-cipher",
- "oer-ieee80211-core-upper-mac",
- "oer-ieee80211-testing-conformance",
- "oer-ieee80211-wire",
- "oer-radio-port",
- "oer-radio-regulatory",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "oer-wire",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-contracts-security",
+ "oer-protocols-ieee80211-core-security-cipher",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-testing-conformance",
+ "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-ieee80211-wire"
+name = "oer-protocols-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
- "oer-wire",
+ "oer-portable-wire",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-ieee802154-mac"
+name = "oer-protocols-ieee802154-mac"
 version = "0.1.0"
 dependencies = [
- "oer-ieee802154-port",
- "oer-ieee802154-wire",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-ieee802154-wire",
 ]
 
 [[package]]
-name = "oer-ieee802154-model"
+name = "oer-protocols-ieee802154-model"
 version = "0.1.0"
 dependencies = [
- "oer-ieee802154-port",
- "oer-ieee802154-wire",
- "oer-radio-port",
- "oer-test-ui-cases",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-ieee802154-wire",
+ "oer-protocols-radio-port",
+ "oer-tools-test-ui-cases",
 ]
 
 [[package]]
-name = "oer-ieee802154-port"
+name = "oer-protocols-ieee802154-port"
 version = "0.1.0"
 dependencies = [
- "oer-ieee802154-wire",
- "oer-radio-coex",
- "oer-radio-port",
- "oer-test-ui-cases",
- "oer-time",
+ "oer-portable-time",
+ "oer-protocols-ieee802154-wire",
+ "oer-protocols-radio-coex",
+ "oer-protocols-radio-port",
+ "oer-tools-test-ui-cases",
  "scopeguard",
 ]
 
 [[package]]
-name = "oer-ieee802154-wire"
+name = "oer-protocols-ieee802154-wire"
 version = "0.1.0"
 dependencies = [
- "oer-radio-regulatory",
- "oer-wire",
+ "oer-portable-wire",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
-name = "oer-image-build"
+name = "oer-protocols-network-port"
 version = "0.1.0"
 dependencies = [
- "espflash",
- "md-5 0.11.0",
+ "oer-protocols-network-wire",
+]
+
+[[package]]
+name = "oer-protocols-network-wire"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-wire",
+]
+
+[[package]]
+name = "oer-protocols-radio-coex"
+version = "0.1.0"
+
+[[package]]
+name = "oer-protocols-radio-port"
+version = "0.1.0"
+dependencies = [
+ "atomic-waker",
+ "oer-portable-memory",
+ "oer-portable-sync",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-tools-test-ui-cases",
+ "pin-project-lite",
+ "scopeguard",
+]
+
+[[package]]
+name = "oer-protocols-radio-regulatory"
+version = "0.1.0"
+
+[[package]]
+name = "oer-tools-analysis-blobray-analysis"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-riscv-analysis",
+ "oer-tools-analysis-riscv-decode",
+ "oer-tools-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tools-analysis-blobray-application"
+version = "0.1.0"
+dependencies = [
  "object",
- "oer-analysis-elf",
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-image-bundle",
- "oer-image-checks",
- "oer-image-esp-idf",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "oer-wire",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-image-bundle"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-os-durable",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-image-checks"
-version = "0.1.0"
-dependencies = [
- "object",
- "oer-analysis-elf",
- "oer-analysis-riscv-decode",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-analysis-riscv-program",
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-espressif-staged-runtime",
- "oer-image-bundle",
- "oer-image-stack",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "oer-pins-artifacts",
+ "oer-tools-analysis-blobray-analysis",
+ "oer-tools-analysis-blobray-artifacts",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-blobray-verification",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-analysis",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-analysis-riscv-program",
  "rustc-demangle",
  "serde",
  "serde_json",
@@ -2838,21 +2803,293 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-image-compare"
+name = "oer-tools-analysis-blobray-artifacts"
 version = "0.1.0"
 dependencies = [
- "oer-analysis-elf",
- "oer-analysis-riscv-lift",
+ "object",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-analysis-riscv-program",
 ]
 
 [[package]]
-name = "oer-image-esp-idf"
+name = "oer-tools-analysis-blobray-domain"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-riscv-model",
+ "serde",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "oer-tools-analysis-blobray-linker"
+version = "0.1.0"
+dependencies = [
+ "object",
+ "oer-tools-analysis-blobray-application",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-os-process",
+ "rustix",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-analysis-blobray-riscv"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-riscv-decode",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tools-analysis-blobray-verification"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tools-analysis-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "object",
+ "oer-chips-family-facts",
+ "oer-tools-analysis-blobray-application",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-blobray-riscv",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-pins-artifacts",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tools-analysis-elf"
+version = "0.1.0"
+dependencies = [
+ "addr2line",
+ "gimli 0.34.0",
+ "object",
+]
+
+[[package]]
+name = "oer-tools-analysis-riscv-analysis"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tools-analysis-riscv-decode"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-os-toolchain",
+ "rv-asm",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-analysis-riscv-lift"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-decode",
+ "oer-tools-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tools-analysis-riscv-model"
 version = "0.1.0"
 dependencies = [
  "hex",
- "oer-os-durable",
- "oer-os-process",
- "oer-pins-artifacts",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+]
+
+[[package]]
+name = "oer-tools-analysis-riscv-program"
+version = "0.1.0"
+dependencies = [
+ "object",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-model",
+]
+
+[[package]]
+name = "oer-tools-chip-profile"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-knowledge",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-layout",
+ "oer-tools-os-durable",
+ "serde",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tools-hil-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tools-os-process",
+ "rustix",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-hil-harness"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-protocols-hil-protocol",
+ "oer-tools-hil-link",
+ "oer-tools-image-build",
+ "oer-tools-image-bundle",
+ "oer-tools-image-checks",
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-client",
+ "oer-tools-lab-model",
+ "oer-tools-os-process",
+ "postcard-schema",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "oer-tools-hil-link"
+version = "0.1.0"
+dependencies = [
+ "mio",
+ "oer-portable-diagnostics",
+ "oer-protocols-hil-protocol",
+ "oer-tools-os-process",
+ "postcard",
+ "postcard-schema",
+ "rustix",
+ "serde",
+ "zeroize",
+]
+
+[[package]]
+name = "oer-tools-image-build"
+version = "0.1.0"
+dependencies = [
+ "espflash",
+ "md-5 0.11.0",
+ "object",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-facts",
+ "oer-portable-wire",
+ "oer-tools-analysis-elf",
+ "oer-tools-chip-profile",
+ "oer-tools-image-bundle",
+ "oer-tools-image-checks",
+ "oer-tools-image-esp-idf",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-os-toolchain",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tools-image-bundle"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-family-facts",
+ "oer-tools-chip-profile",
+ "oer-tools-os-durable",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-image-checks"
+version = "0.1.0"
+dependencies = [
+ "object",
+ "oer-chips-family-facts",
+ "oer-chips-family-staged-runtime",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-decode",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-analysis-riscv-program",
+ "oer-tools-chip-profile",
+ "oer-tools-image-bundle",
+ "oer-tools-image-stack",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-os-toolchain",
+ "oer-tools-pins-artifacts",
+ "rustc-demangle",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "oer-tools-image-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "jiff",
+ "oer-chips-family-facts",
+ "oer-portable-diagnostics",
+ "oer-portable-trace",
+ "oer-tools-analysis-elf",
+ "oer-tools-chip-profile",
+ "oer-tools-image-build",
+ "oer-tools-image-bundle",
+ "oer-tools-image-checks",
+ "oer-tools-image-esp-idf",
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-client",
+ "oer-tools-lab-model",
+ "oer-tools-os-command-tree",
+ "oer-tools-os-process",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-image-compare"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-lift",
+]
+
+[[package]]
+name = "oer-tools-image-esp-idf"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-pins-artifacts",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2860,52 +3097,69 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-image-stack"
+name = "oer-tools-image-large-values"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-image-linker"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-image-checks",
+]
+
+[[package]]
+name = "oer-tools-image-stack"
 version = "0.1.0"
 dependencies = [
  "clap",
  "object",
- "oer-analysis-elf",
- "oer-analysis-riscv-analysis",
- "oer-analysis-riscv-decode",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-analysis-riscv-program",
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-riscv",
+ "oer-chips-family-facts",
+ "oer-portable-riscv",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-analysis",
+ "oer-tools-analysis-riscv-decode",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-analysis-riscv-program",
+ "oer-tools-chip-profile",
  "serde",
  "tempfile",
  "toml",
 ]
 
 [[package]]
-name = "oer-lab-arbiter"
+name = "oer-tools-lab-arbiter"
 version = "0.1.0"
 dependencies = [
- "oer-lab-model",
- "oer-os-durable",
- "oer-os-process",
+ "oer-tools-lab-model",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
  "serde",
  "serde_json",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-lab-board"
+name = "oer-tools-lab-board"
 version = "0.1.0"
 dependencies = [
  "espflash",
  "hex",
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-image-bundle",
- "oer-lab-model",
- "oer-lab-router",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-serial",
- "oer-registers-model",
+ "oer-chips-family-facts",
+ "oer-tools-chip-profile",
+ "oer-tools-image-bundle",
+ "oer-tools-lab-model",
+ "oer-tools-lab-router",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-os-serial",
+ "oer-tools-registers-model",
  "serde",
  "serde_json",
  "serialport",
@@ -2913,27 +3167,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-client"
+name = "oer-tools-lab-cli"
 version = "0.1.0"
 dependencies = [
- "oer-lab-arbiter",
- "oer-lab-model",
- "oer-os-process",
+ "clap",
+ "oer-chips-family-facts",
+ "oer-tools-chip-profile",
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-client",
+ "oer-tools-lab-fixture",
+ "oer-tools-lab-model",
+ "oer-tools-os-command-tree",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-os-toolchain",
+ "rustix",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-lab-client"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-model",
+ "oer-tools-os-process",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "oer-lab-fixture"
+name = "oer-tools-lab-fixture"
 version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
- "oer-ieee80211-wire",
- "oer-os-durable",
- "oer-os-process",
- "oer-time",
- "oer-time-virtual",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+ "oer-protocols-ieee80211-wire",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
  "rustix",
  "serde",
  "serde_json",
@@ -2942,13 +3216,44 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-model"
+name = "oer-tools-lab-fixture-helpers"
+version = "0.1.0"
+dependencies = [
+ "bt-hci",
+ "bt-hci-transport",
+ "clap",
+ "embedded-io 0.7.1",
+ "embedded-io-async",
+ "libc",
+ "oer-protocols-bluetooth-hci",
+ "oer-tools-lab-fixture",
+ "oer-tools-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oer-tools-lab-fixture-install"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tools-lab-fixture",
+ "oer-tools-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "oer-tools-lab-model"
 version = "0.1.0"
 dependencies = [
  "hex",
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-os-durable",
+ "oer-chips-family-facts",
+ "oer-tools-chip-profile",
+ "oer-tools-os-durable",
  "serde",
  "serde_json",
  "tempfile",
@@ -2957,13 +3262,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-lab-router"
+name = "oer-tools-lab-router"
 version = "0.1.0"
 dependencies = [
  "hex",
- "oer-lab-model",
- "oer-os-durable",
- "oer-os-process",
+ "oer-tools-lab-model",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
  "serde",
  "serde_json",
  "shlex",
@@ -2973,38 +3278,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-memory"
+name = "oer-tools-lab-service"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
- "bytemuck",
- "oer-sync",
- "oer-test-ui-cases",
+ "oer-tools-chip-profile",
+ "oer-tools-image-bundle",
+ "oer-tools-lab-arbiter",
+ "oer-tools-lab-board",
+ "oer-tools-lab-client",
+ "oer-tools-lab-model",
+ "oer-tools-lab-router",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
-name = "oer-mmio"
-version = "0.1.0"
-dependencies = [
- "oer-test-ui-cases",
-]
-
-[[package]]
-name = "oer-network-port"
-version = "0.1.0"
-dependencies = [
- "oer-network-wire",
-]
-
-[[package]]
-name = "oer-network-wire"
-version = "0.1.0"
-dependencies = [
- "oer-wire",
-]
-
-[[package]]
-name = "oer-os-command-tree"
+name = "oer-tools-os-command-tree"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -3013,7 +3306,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-os-durable"
+name = "oer-tools-os-durable"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -3023,7 +3316,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-os-process"
+name = "oer-tools-os-process"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -3035,41 +3328,50 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-os-serial"
+name = "oer-tools-os-serial"
 version = "0.1.0"
 dependencies = [
  "serialport",
 ]
 
 [[package]]
-name = "oer-os-toolchain"
+name = "oer-tools-os-toolchain"
 version = "0.1.0"
 dependencies = [
- "oer-os-durable",
- "oer-os-process",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-pins-artifacts"
+name = "oer-tools-pins-artifacts"
 version = "0.1.0"
 dependencies = [
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-os-durable",
- "oer-os-process",
+ "oer-chips-family-facts",
+ "oer-tools-chip-profile",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
  "serde",
  "tempfile",
  "toml",
 ]
 
 [[package]]
-name = "oer-probe-codegen"
+name = "oer-tools-pins-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tools-os-command-tree",
+ "oer-tools-pins-artifacts",
+]
+
+[[package]]
+name = "oer-tools-probe-codegen"
 version = "0.1.0"
 dependencies = [
  "object",
- "oer-analysis-elf",
- "oer-os-toolchain",
+ "oer-tools-analysis-elf",
+ "oer-tools-os-toolchain",
  "proc-macro2",
  "quote",
  "serde",
@@ -3079,37 +3381,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-probe-macros"
+name = "oer-tools-probe-macros"
 version = "0.1.0"
 dependencies = [
- "oer-probe-codegen",
+ "oer-tools-probe-codegen",
  "syn 2.0.119",
 ]
 
 [[package]]
-name = "oer-radio-coex"
-version = "0.1.0"
-
-[[package]]
-name = "oer-radio-port"
+name = "oer-tools-registers-cli"
 version = "0.1.0"
 dependencies = [
- "atomic-waker",
- "oer-memory",
- "oer-sync",
- "oer-test-ui-cases",
- "oer-time",
- "oer-time-virtual",
- "pin-project-lite",
- "scopeguard",
+ "clap",
+ "oer-tools-os-command-tree",
+ "oer-tools-os-process",
+ "oer-tools-registers-generate",
 ]
 
 [[package]]
-name = "oer-radio-regulatory"
-version = "0.1.0"
-
-[[package]]
-name = "oer-registers-contracts"
+name = "oer-tools-registers-contracts"
 version = "0.1.0"
 dependencies = [
  "hex",
@@ -3119,20 +3409,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-registers-generate"
+name = "oer-tools-registers-generate"
 version = "0.1.0"
 dependencies = [
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-elf",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "oer-pins-artifacts",
- "oer-registers-contracts",
- "oer-registers-model",
+ "oer-tools-analysis-blobray-application",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-os-toolchain",
+ "oer-tools-pins-artifacts",
+ "oer-tools-registers-contracts",
+ "oer-tools-registers-model",
  "serde",
  "serde_json",
  "tempfile",
@@ -3140,11 +3430,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-registers-model"
+name = "oer-tools-registers-model"
 version = "0.1.0"
 dependencies = [
- "oer-espressif-facts",
- "oer-registers-contracts",
+ "oer-chips-family-facts",
+ "oer-tools-registers-contracts",
  "serde",
  "syn 2.0.119",
  "tempfile",
@@ -3153,84 +3443,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-riscv"
-version = "0.1.0"
-
-[[package]]
-name = "oer-services-aes"
+name = "oer-tools-regulatory-generate"
 version = "0.1.0"
 dependencies = [
- "aes",
- "embassy-futures",
- "heapless",
- "oer-crypto",
- "oer-hil-agent",
- "oer-hil-protocol",
- "postcard-schema",
- "serde",
+ "clap",
+ "tempfile",
 ]
 
 [[package]]
-name = "oer-services-fault"
-version = "0.1.0"
-dependencies = [
- "oer-hil-agent",
- "oer-hil-protocol",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-services-load"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-hil-agent",
- "oer-hil-protocol",
- "postcard",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-services-sdk-station"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-hil-agent",
- "oer-hil-protocol",
- "postcard",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-services-wifi-station"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-hil-agent",
- "oer-hil-protocol",
- "oer-ieee80211-runtime",
- "oer-network-port",
- "postcard",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-sort"
-version = "0.1.0"
-
-[[package]]
-name = "oer-sync"
-version = "0.1.0"
-dependencies = [
- "atomic-waker",
-]
-
-[[package]]
-name = "oer-test-layers"
+name = "oer-tools-test-layers"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
@@ -3240,7 +3461,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-test-ui-cases"
+name = "oer-tools-test-ui-cases"
 version = "0.1.0"
 dependencies = [
  "serde_json",
@@ -3249,311 +3470,106 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-time"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-memory",
- "oer-sync",
- "oer-time-virtual",
- "postcard",
- "postcard-schema",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "oer-time-virtual"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-time",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-analysis-cli"
+name = "oer-tools-vendor-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "object",
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-blobray-riscv",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-espressif-facts",
- "oer-pins-artifacts",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "oer-tool-hil-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-os-process",
- "rustix",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-image-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "jiff",
- "oer-analysis-elf",
- "oer-chip-profile",
- "oer-diagnostics",
- "oer-espressif-facts",
- "oer-image-build",
- "oer-image-bundle",
- "oer-image-checks",
- "oer-image-esp-idf",
- "oer-lab-arbiter",
- "oer-lab-client",
- "oer-lab-model",
- "oer-os-command-tree",
- "oer-os-process",
- "oer-trace",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-image-large-values"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-image-linker"
-version = "0.1.0"
-dependencies = [
- "oer-image-checks",
-]
-
-[[package]]
-name = "oer-tool-lab-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-chip-profile",
- "oer-espressif-facts",
- "oer-lab-arbiter",
- "oer-lab-client",
- "oer-lab-fixture",
- "oer-lab-model",
- "oer-os-command-tree",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "rustix",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-lab-fixture-helpers"
-version = "0.1.0"
-dependencies = [
- "bt-hci",
- "bt-hci-transport",
- "clap",
- "embedded-io 0.7.1",
- "embedded-io-async",
- "libc",
- "oer-bluetooth-hci",
- "oer-lab-fixture",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "oer-tool-lab-fixture-install"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-lab-fixture",
- "oer-os-process",
- "rustix",
+ "oer-tools-analysis-blobray-application",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-chip-profile",
+ "oer-tools-image-build",
+ "oer-tools-os-command-tree",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-os-toolchain",
+ "oer-tools-pins-artifacts",
+ "oer-tools-probe-codegen",
+ "oer-tools-registers-model",
+ "oer-tools-vendor-lineage",
+ "oer-tools-vendor-provenance",
  "serde",
  "serde_json",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-tool-lab-service"
-version = "0.1.0"
-dependencies = [
- "oer-chip-profile",
- "oer-image-bundle",
- "oer-lab-arbiter",
- "oer-lab-board",
- "oer-lab-client",
- "oer-lab-model",
- "oer-lab-router",
- "oer-os-durable",
- "oer-os-process",
- "rustix",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-pins-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-os-command-tree",
- "oer-pins-artifacts",
-]
-
-[[package]]
-name = "oer-tool-registers-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-os-command-tree",
- "oer-os-process",
- "oer-registers-generate",
-]
-
-[[package]]
-name = "oer-tool-regulatory-generate"
-version = "0.1.0"
-dependencies = [
- "clap",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-vendor-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "object",
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-elf",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-chip-profile",
- "oer-image-build",
- "oer-os-command-tree",
- "oer-os-durable",
- "oer-os-process",
- "oer-os-toolchain",
- "oer-pins-artifacts",
- "oer-probe-codegen",
- "oer-registers-model",
- "oer-vendor-lineage",
- "oer-vendor-provenance",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tool-vendor-ieee802154-esp32s31-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-os-process",
- "oer-vendor-ieee802154-esp32s31",
-]
-
-[[package]]
-name = "oer-tool-vendor-scenario-cli"
-version = "0.1.0"
-dependencies = [
- "oer-vendor-scenario",
-]
-
-[[package]]
-name = "oer-trace"
-version = "0.1.0"
-dependencies = [
- "tempfile",
-]
-
-[[package]]
-name = "oer-vendor-ieee802154-esp32s31"
+name = "oer-tools-vendor-ieee802154-esp32s31"
 version = "0.1.0"
 dependencies = [
  "cc",
  "hex",
- "oer-esp32s31-knowledge",
- "oer-espressif-coex",
- "oer-espressif-ieee802154-engine",
- "oer-espressif-ieee802154-mac-values",
- "oer-ieee802154-port",
- "oer-ieee802154-wire",
- "oer-pins-artifacts",
- "oer-radio-regulatory",
+ "oer-chips-esp32s31-knowledge",
+ "oer-chips-family-coex",
+ "oer-chips-family-ieee802154-engine",
+ "oer-chips-family-ieee802154-mac-values",
+ "oer-protocols-ieee802154-port",
+ "oer-protocols-ieee802154-wire",
+ "oer-protocols-radio-regulatory",
+ "oer-tools-pins-artifacts",
  "tempfile",
 ]
 
 [[package]]
-name = "oer-vendor-lineage"
+name = "oer-tools-vendor-ieee802154-esp32s31-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oer-tools-os-process",
+ "oer-tools-vendor-ieee802154-esp32s31",
+]
+
+[[package]]
+name = "oer-tools-vendor-lineage"
 version = "0.1.0"
 dependencies = [
  "hex",
  "object",
- "oer-analysis-elf",
- "oer-vendor-provenance",
+ "oer-tools-analysis-elf",
+ "oer-tools-vendor-provenance",
  "serde",
  "sha2 0.10.9",
 ]
 
 [[package]]
-name = "oer-vendor-provenance"
+name = "oer-tools-vendor-provenance"
 version = "0.1.0"
 dependencies = [
  "hex",
- "oer-analysis-elf",
- "oer-os-process",
- "oer-pins-artifacts",
- "oer-registers-model",
+ "oer-tools-analysis-elf",
+ "oer-tools-os-process",
+ "oer-tools-pins-artifacts",
+ "oer-tools-registers-model",
  "sha2 0.10.9",
  "tempfile",
  "toml",
 ]
 
 [[package]]
-name = "oer-vendor-scenario"
+name = "oer-tools-vendor-scenario"
 version = "0.1.0"
 dependencies = [
  "clap",
  "object",
- "oer-analysis-blobray-application",
- "oer-analysis-blobray-domain",
- "oer-analysis-blobray-linker",
- "oer-analysis-blobray-riscv",
- "oer-analysis-blobray-verification",
- "oer-analysis-elf",
- "oer-analysis-riscv-lift",
- "oer-analysis-riscv-model",
- "oer-esp32s31-knowledge",
- "oer-image-build",
- "oer-image-esp-idf",
- "oer-os-durable",
- "oer-os-process",
- "oer-pins-artifacts",
- "oer-probe-codegen",
- "oer-registers-model",
+ "oer-chips-esp32s31-knowledge",
+ "oer-tools-analysis-blobray-application",
+ "oer-tools-analysis-blobray-domain",
+ "oer-tools-analysis-blobray-linker",
+ "oer-tools-analysis-blobray-riscv",
+ "oer-tools-analysis-blobray-verification",
+ "oer-tools-analysis-elf",
+ "oer-tools-analysis-riscv-lift",
+ "oer-tools-analysis-riscv-model",
+ "oer-tools-image-build",
+ "oer-tools-image-esp-idf",
+ "oer-tools-os-durable",
+ "oer-tools-os-process",
+ "oer-tools-pins-artifacts",
+ "oer-tools-probe-codegen",
+ "oer-tools-registers-model",
  "serde",
  "serde_json",
  "tempfile",
@@ -3561,8 +3577,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-wire"
+name = "oer-tools-vendor-scenario-cli"
 version = "0.1.0"
+dependencies = [
+ "oer-tools-vendor-scenario",
+]
 
 [[package]]
 name = "once_cell"

@@ -1,5 +1,5 @@
 [package]
-name = "oer-time-virtual"
+name = "oer-portable-time-virtual"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Deterministic per-instance virtual time for tests and simulations of the open ESP radio time contract"
 
 [dependencies]
-oer-time = { path = "../time" }
+oer-portable-time = { path = "../time" }
 
 [dev-dependencies]
 embassy-futures = "0.1.2"

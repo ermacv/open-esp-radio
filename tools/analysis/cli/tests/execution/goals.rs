@@ -355,7 +355,7 @@ fn in_process_symbol_goals_resolve_in_the_executables_and_compare_vendor_prefixe
                 dependence: None,
                 patches: &[],
             },
-            &oer_analysis_blobray_riscv::RiscvExecutor,
+            &oer_tools_analysis_blobray_riscv::RiscvExecutor,
             &memory,
             &mut || Ok(()),
         )

@@ -2,9 +2,9 @@
 
 //! Admission follows the software owner, including time retained by the radio.
 
-use oer_embassy_net::datapath::DestinationTxQueues;
-use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
-use oer_memory::HostContext;
+use oer_portable_embassy_net::datapath::DestinationTxQueues;
+use oer_portable_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_portable_memory::HostContext;
 use std::{
     sync::{
         Arc,

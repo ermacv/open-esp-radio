@@ -1,12 +1,12 @@
 //! The Wi-Fi MAC register owners and their operations.
 //!
 //! The owners hold the PAC's generated Wi-Fi MAC parts, taken from the
-//! partitions of `oer_esp32s31_pac::take()`; every operation is a sequence of
+//! partitions of `oer_chips_esp32s31_pac::take()`; every operation is a sequence of
 //! the parts' field accessors, each vendor step with its `SOURCE:`. The
 //! owners are generic over where the parts live ([`MacPlacement`]): the chip
 //! by default, or host memory in a test, which runs the same operations.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances,
     modem_pwr::{
         WifiMacAuxTsfControl, WifiMacCoexRuntime, WifiMacLocalTime, WifiMacRegdmaControl,
@@ -35,7 +35,7 @@ use oer_esp32s31_pac::{
         WifiMacTxrxPrefix, WifiMacTxrxSuffix,
     },
 };
-use oer_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_mmio::{Bits, Fixed, Index, Placement};
 
 pub use values::*;
 
@@ -77,10 +77,10 @@ impl MacPlacement for Chip {
 
 #[cfg(test)]
 impl<'a> MacPlacement for HostMemory<'a> {
-    type Mac = oer_mmio::Host<'a>;
-    type Power = oer_mmio::Host<'a>;
-    type Baseband = oer_mmio::Host<'a>;
-    type BasebandRx = oer_mmio::Host<'a>;
+    type Mac = oer_portable_mmio::Host<'a>;
+    type Power = oer_portable_mmio::Host<'a>;
+    type Baseband = oer_portable_mmio::Host<'a>;
+    type BasebandRx = oer_portable_mmio::Host<'a>;
 }
 
 /// The words of one instance in host memory, each `fill`.
@@ -169,11 +169,11 @@ macro_rules! mac_blocks {
                             .expect("the part's host words"),
                     },
                     mac_interrupt: MacInterruptRegisters::new(
-                        oer_esp32s31_pac::wifi_mac::WifiMacInterrupt::host(&mut self.interrupt)
+                        oer_chips_esp32s31_pac::wifi_mac::WifiMacInterrupt::host(&mut self.interrupt)
                             .expect("the part's host words"),
                     ),
                     power_interrupt: MacPowerInterruptRegisters::new(
-                        oer_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt::host(
+                        oer_chips_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt::host(
                             &mut self.power_interrupt,
                         )
                             .expect("the part's host words"),
@@ -292,8 +292,8 @@ impl MacLocalTime {
 }
 
 #[cfg(test)]
-impl<'a> MacLocalTime<oer_mmio::Host<'a>> {
-    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+impl<'a> MacLocalTime<oer_portable_mmio::Host<'a>> {
+    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         WifiMacLocalTime::host(words).map(Self)
     }
 }
@@ -337,7 +337,7 @@ pub struct WifiMacPartition {
 }
 
 impl WifiMacPartition {
-    /// Take the partitions of `oer_esp32s31_pac::take()`. This performs no
+    /// Take the partitions of `oer_chips_esp32s31_pac::take()`. This performs no
     /// MMIO.
     pub fn new(
         mac: WifiMacPeripherals,
@@ -400,7 +400,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Order descriptor memory and MMIO at a hardware ownership boundary.
     pub fn order_device_accesses(&mut self) {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 
@@ -434,7 +434,7 @@ impl WifiRxDmaRegisters {
 impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// Order descriptor memory and MMIO at a hardware ownership boundary.
     pub fn order_device_accesses(&mut self) {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 
@@ -457,7 +457,8 @@ pub(crate) fn interrupt_banks(
 
 /// The four ordinary EDCA transmit queues: logical queue `q` lives in the
 /// physical bank `3 - q` of the queue-control and queue-vector arrays.
-pub(crate) const ORDINARY_QUEUE_COUNT: u8 = oer_esp32s31_pac::wifi_mac::control_n::COUNT as u8;
+pub(crate) const ORDINARY_QUEUE_COUNT: u8 =
+    oer_chips_esp32s31_pac::wifi_mac::control_n::COUNT as u8;
 
 /// The physical bank of ordinary logical queue `queue`, if it is one.
 pub(crate) const fn ordinary_bank(queue: u8) -> Option<Index<4>> {

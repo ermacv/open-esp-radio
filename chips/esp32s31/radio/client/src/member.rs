@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 /// permits RF use.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_radio_client::{Member, Untracked, wifi::Wifi};
+/// use oer_chips_esp32s31_radio_client::{Member, Untracked, wifi::Wifi};
 /// fn forge() -> Member<Wifi, Untracked> {
 ///     Member { client: core::marker::PhantomData }
 /// }

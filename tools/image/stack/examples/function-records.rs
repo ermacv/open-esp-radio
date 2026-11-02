@@ -13,10 +13,10 @@ mod observation;
 #[path = "../src/sweep.rs"]
 mod sweep;
 use clap::Parser;
-use oer_analysis_riscv_analysis::writes::function_writes;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_image_stack::{DebugMetadata, Field, TableLayout, interrupt_table, read_debug};
+use oer_tools_analysis_riscv_analysis::writes::function_writes;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_image_stack::{DebugMetadata, Field, TableLayout, interrupt_table, read_debug};
 use serde::Deserialize;
 use std::rc::Rc;
 use sweep::TransferKind;
@@ -101,7 +101,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 symbol.address,
                 symbol.size,
                 symbol.kind,
-                oer_analysis_elf::demangle(symbol.name)
+                oer_tools_analysis_elf::demangle(symbol.name)
             );
         }
         for (index, use_) in image.address_uses().iter().enumerate() {
@@ -133,7 +133,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let address = function.address;
     println!(
         "function\t{address:#010x}\t{}",
-        oer_analysis_elf::demangle(&function.label())
+        oer_tools_analysis_elf::demangle(&function.label())
     );
     let call_behavior = debug
         .as_ref()
@@ -264,7 +264,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         index
             .records()
             .iter()
-            .all(oer_analysis_riscv_analysis::writes::closes_local_graph)
+            .all(oer_tools_analysis_riscv_analysis::writes::closes_local_graph)
     );
     index.accesses(&mut control, &mut |access, _| {
         println!(

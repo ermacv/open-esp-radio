@@ -783,9 +783,9 @@ fn modem_lp_compare_accounts_for_unacknowledged_rollover_locally() {
 #[test]
 fn a_delayed_plan_retains_arrivals_and_only_the_handler_requests_immediate_work() {
     use super::super::host::HostMemory;
-    use oer_esp32s31_pac::modem_pwr::{word_0024_opaque, word_0048_opaque};
-    use oer_time::{Clock, Duration, Instant};
-    use oer_time_virtual::VirtualClock;
+    use oer_chips_esp32s31_pac::modem_pwr::{word_0024_opaque, word_0048_opaque};
+    use oer_portable_time::{Clock, Duration, Instant};
+    use oer_portable_time_virtual::VirtualClock;
 
     for delay in [8, 9, 10, 11] {
         let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(10));
@@ -817,7 +817,7 @@ fn a_delayed_plan_retains_arrivals_and_only_the_handler_requests_immediate_work(
 #[test]
 fn a_rollover_between_plan_and_apply_advances_the_handler_epoch_once() {
     use super::super::host::HostMemory;
-    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque, word_0048_opaque};
+    use oer_chips_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque, word_0048_opaque};
 
     let mut memory = HostMemory::filled(0);
     memory.timer[word_0048_opaque::OFFSET / 4] = 0x00ff_fffe;
@@ -883,7 +883,7 @@ fn past_and_close_plans_follow_vendor_disable_sample_pending_command_order() {
 #[test]
 fn entries_during_p2_work_retain_dispatch_and_epoch_until_the_plan_returns() {
     use super::super::host::HostMemory;
-    use oer_esp32s31_pac::modem_pwr::{
+    use oer_chips_esp32s31_pac::modem_pwr::{
         word_002c_opaque, word_0024_opaque, word_0038_opaque, word_0048_opaque,
     };
 
@@ -921,7 +921,7 @@ fn entries_during_p2_work_retain_dispatch_and_epoch_until_the_plan_returns() {
 #[test]
 fn prepare_exposes_each_inherited_pending_lane_through_the_pac() {
     use super::super::host::HostMemory;
-    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+    use oer_chips_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
     for (software, rollover) in [(0, 0), (7, 0), (0, 3), (7, 3)] {
         let mut memory = HostMemory::filled(0);
         memory.timer[word_0024_opaque::OFFSET / 4] = 0xaabb_cc00 | software;
@@ -948,7 +948,7 @@ enum StopOp {
     ClearPending,
 }
 struct StopRecorder {
-    clock: oer_time_virtual::VirtualClock,
+    clock: oer_portable_time_virtual::VirtualClock,
     counter_running: bool,
     stopped_counter: u64,
     delivery_enabled: bool,
@@ -960,7 +960,7 @@ struct StopRecorder {
 impl StopRecorder {
     fn new(pending: super::BluetoothModemLpTimerPendingObservation, status: u32) -> Self {
         Self {
-            clock: oer_time_virtual::VirtualClock::new(),
+            clock: oer_portable_time_virtual::VirtualClock::new(),
             counter_running: true,
             stopped_counter: 0,
             delivery_enabled: true,
@@ -972,7 +972,7 @@ impl StopRecorder {
     }
 
     fn counter(&self) -> u64 {
-        use oer_time::Clock;
+        use oer_portable_time::Clock;
         if self.counter_running {
             self.clock.now().as_micros()
         } else {
@@ -1026,7 +1026,7 @@ impl super::ModemLpTimerStopTransaction for StopRecorder {
 
 #[test]
 fn shutdown_returns_pending_then_leaves_the_counter_bytes_status_and_output_quiet() {
-    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::{
+    use oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::{
         COMPARE_SOFTWARE_STATUS_MASK, ROLLOVER_STATUS_MASK,
     };
     // SOURCE: HW6_S31_LP_QUIET_20261026, hw6-20261026-reset-02.
@@ -1042,7 +1042,7 @@ fn shutdown_returns_pending_then_leaves_the_counter_bytes_status_and_output_quie
         let mut recorder = StopRecorder::new(pending, status);
         recorder
             .clock
-            .advance(oer_time::Duration::from_micros(3000))
+            .advance(oer_portable_time::Duration::from_micros(3000))
             .unwrap();
         let counter_before_stop = recorder.counter();
         assert!(!recorder.is_quiet());
@@ -1050,7 +1050,7 @@ fn shutdown_returns_pending_then_leaves_the_counter_bytes_status_and_output_quie
         assert!(recorder.is_quiet());
         recorder
             .clock
-            .advance(oer_time::Duration::from_micros(4096))
+            .advance(oer_portable_time::Duration::from_micros(4096))
             .unwrap();
         assert_eq!(recorder.counter(), counter_before_stop);
         assert_eq!(
@@ -1070,7 +1070,7 @@ fn shutdown_returns_pending_then_leaves_the_counter_bytes_status_and_output_quie
 #[test]
 fn shutdown_samples_both_bytes_before_clearing_both_whole_words() {
     use super::super::host::HostMemory;
-    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+    use oer_chips_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
     let mut memory = HostMemory::filled(0);
     memory.timer[word_0024_opaque::OFFSET / 4] = 0xaabb_cc07;
     memory.timer[word_002c_opaque::OFFSET / 4] = 0xddee_ff03;
@@ -1086,7 +1086,7 @@ fn shutdown_samples_both_bytes_before_clearing_both_whole_words() {
 
 #[test]
 fn stopped_rollover_is_acknowledged_once_without_arming_or_dispatch() {
-    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
+    use oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
     for status in [0, ROLLOVER_STATUS_MASK] {
         let pending = super::BluetoothModemLpTimerPendingObservation {
             state_0024: 0,

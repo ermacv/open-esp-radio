@@ -1,5 +1,5 @@
 [package]
-name = "oer-riscv"
+name = "oer-portable-riscv"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

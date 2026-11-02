@@ -57,7 +57,7 @@ pub enum ArenaError {
     Placement(crate::memory::dma_address::ProjectionError),
 }
 
-use oer_espressif_bluetooth_engine::phase::EngineEpoch;
+use oer_chips_family_bluetooth_engine::phase::EngineEpoch;
 
 /// Hardware reachability became uncertain; the arena remains quarantined.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -172,7 +172,7 @@ impl<
     /// or the other controller objects:
     ///
     /// ```compile_fail,E0308
-    /// use oer_esp32s31_hal::bluetooth::{ClockedOwner, engine::{
+    /// use oer_chips_esp32s31_hal::bluetooth::{ClockedOwner, engine::{
     ///     ArenaMemory, BluetoothArena, ControllerDmaSpace, Engine,
     ///     EpochScope, PoolScope, SchedulerAllocationConfig,
     /// }};

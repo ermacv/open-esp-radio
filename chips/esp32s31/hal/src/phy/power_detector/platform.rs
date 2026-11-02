@@ -3,8 +3,8 @@
 //! `LP_AON_CLKRST` belongs to the shared route-owned PHY PAC partition. This
 //! module exposes only the two encodings evidenced by complete ROM code.
 
-use oer_esp32s31_pac::lp_aonclkrst::LpAonClkrst;
-use oer_mmio::{Bits, Placement};
+use oer_chips_esp32s31_pac::lp_aonclkrst::LpAonClkrst;
+use oer_portable_mmio::{Bits, Placement};
 
 /// Complete power-detector initialization and enable bodies select circuit
 /// mode four.

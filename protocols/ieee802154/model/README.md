@@ -1,7 +1,7 @@
 # IEEE 802.15.4 reference model
 
-`oer-ieee802154-model` is an in-memory host backend for the
-`oer-ieee802154-port` owner contracts. It uses `no_std` with `alloc`, has
+`oer-protocols-ieee802154-model` is an in-memory host backend for the
+`oer-protocols-ieee802154-port` owner contracts. It uses `no_std` with `alloc`, has
 Apache-2.0 licensing and depends on wire/port vocabulary rather than MAC policy.
 Its world handle injects received frames, operation completions, receive-window
 boundaries, clock observations and faults. These are model observations, not
@@ -28,4 +28,4 @@ to the internal queue; public events always have a total portable view.
 The explicit `test-support` feature enables the radio port's test support and
 the model's `MockCleanup` implementation. Unit tests enable the same dependency
 through a dev-dependency. Normal consumers do not receive conformance cleanup
-authority. Port-owned UI fixtures remain with `oer-ieee802154-port`.
+authority. Port-owned UI fixtures remain with `oer-protocols-ieee802154-port`.

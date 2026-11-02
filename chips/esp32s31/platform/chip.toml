@@ -5,7 +5,7 @@
 # convention, such as registers/<id>.
 schema = 2
 id = "esp32s31"
-extends = ["../../espressif/platform/isa/rv32imafc.toml", "../../espressif/platform/family.toml"]
+extends = ["../../family/platform/isa/rv32imafc.toml", "../../family/platform/family.toml"]
 espflash-chip = "esp32s31"
 revisions = ["rev0"]
 
@@ -175,16 +175,16 @@ pma = [
     { name = "psram", region = "psram" },
 ]
 
-# The Rust probe images of the vendor comparison (firmware/probes),
+# The Rust probe images of the vendor comparison (hil/probes),
 # in build order: the artifact role each serves. The Bluetooth probe returns
 # with its hooks.
 [[probe]]
 role = "rust-artifact"
-package = "oer-firmware-probes-esp32s31-radio"
+package = "oer-hil-probes-esp32s31-radio"
 
 [[probe]]
 role = "rust-artifact:wifi-registers"
-package = "oer-firmware-probes-esp32s31-register"
+package = "oer-hil-probes-esp32s31-register"
 
 # Why the core last reset, which the host reads through JTAG after a power
 # cycle: the board lost power only if it reads a power-on reset. The field is

@@ -5,7 +5,7 @@ use crate::tracking::{
     observation::EngineTiming,
     parameters::{PhyParamTrackingCompletion, PhyParamTrackingWifiI2cTransition},
 };
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 pub(crate) async fn run_param_wifi_i2c<
     D: crate::executor::wait::PhyShortDelay,

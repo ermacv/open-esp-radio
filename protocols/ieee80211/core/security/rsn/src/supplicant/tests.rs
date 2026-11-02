@@ -12,7 +12,7 @@ use crate::{
     frames::{RsnGtk, RsnPlainKeyData},
     keys::RsnKeyKind,
 };
-use oer_ieee80211_core_security_cipher::aes::{
+use oer_protocols_ieee80211_core_security_cipher::aes::{
     RSN_KEY_DATA_CAPACITY, SoftwareAes128, software_aes128_key_wrap,
 };
 
@@ -33,8 +33,9 @@ fn process(
     supplicant.on_frame(frame, pmk, &mut SoftwareAes128)
 }
 
-const REFUSED: oer_crypto::KeyUnwrapError =
-    oer_crypto::KeyUnwrapError::Engine(oer_crypto::block::BlockError::Unavailable);
+const REFUSED: oer_portable_crypto::KeyUnwrapError = oer_portable_crypto::KeyUnwrapError::Engine(
+    oer_portable_crypto::block::BlockError::Unavailable,
+);
 
 fn owned(frame: &RsnTxFrame<512>) -> crate::OwnedEapolFrame<512> {
     crate::OwnedEapolFrame::try_copy(RsnInterface::Station, AP, frame.as_bytes()).unwrap()
@@ -71,7 +72,7 @@ fn encrypted_message3(
 
 /// The key data of the tests' Group Message 1: one GTK KDE (key 1, bytes
 /// 0x6a) wrapped under `ptk`'s KEK.
-fn group_key_data(ptk: &Ptk) -> oer_ieee80211_core_security_cipher::aes::RsnKeyData {
+fn group_key_data(ptk: &Ptk) -> oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData {
     software_aes128_key_wrap(ptk.kek(), &group_kde(1, 0x6a)).unwrap()
 }
 
@@ -154,7 +155,7 @@ fn completed_connected() -> (RsnConnectedSupplicant, crate::OwnedEapolFrame<512>
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -214,7 +215,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
 
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -236,7 +237,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     assert_eq!(
         request.group().kind(),
         RsnKeyKind::Group {
-            key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+            key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
             transmit: false,
         }
     );
@@ -279,7 +280,7 @@ fn invalid_message3_mic_is_ignored_and_valid_retry_can_install() {
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
         false,
         &[9; 16],
     );
@@ -501,7 +502,7 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
     assert_eq!(
         request.group().kind(),
         RsnKeyKind::Group {
-            key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+            key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             transmit: false,
         }
     );
@@ -723,7 +724,7 @@ fn connected_group_rekey_rejects_bad_mic_and_stale_replay() {
 
 #[test]
 fn response_deadlines_expire_exactly_at_their_total_wait() {
-    use oer_time::{Duration, Instant};
+    use oer_portable_time::{Duration, Instant};
 
     let started = Instant::from_micros(500);
     for (wait, timeout) in [
@@ -751,7 +752,7 @@ fn response_deadlines_expire_exactly_at_their_total_wait() {
 
 #[test]
 fn a_response_deadline_past_the_time_range_is_refused() {
-    let late = oer_time::Instant::from_micros(u64::MAX);
+    let late = oer_portable_time::Instant::from_micros(u64::MAX);
     assert_eq!(
         RsnStaResponseDeadline::start(RsnStaResponseWait::Message1, late),
         None
@@ -777,7 +778,7 @@ fn awaiting_encrypted_message3() -> (RsnStaSupplicant, crate::OwnedEapolFrame<51
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );
@@ -1008,7 +1009,7 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
     assert!(matches!(
         connected.prepare_group_key_install(waiting, &mut SoftwareAes128),
         Err(RsnConnectedProcessError::KeyUnwrap(
-            oer_crypto::KeyUnwrapError::IntegrityCheckFailed
+            oer_portable_crypto::KeyUnwrapError::IntegrityCheckFailed
         ))
     ));
 
@@ -1070,7 +1071,7 @@ fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
     let mut connected = supplicant.into_connected().unwrap();
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
-        oer_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
         false,
         &[0x5a; 16],
     );

@@ -2,17 +2,17 @@ extern crate std;
 use super::*;
 use crate::{NetworkInterfaceId, OwnedEndpointResources};
 use core::task::{Context, Poll};
-use oer_memory::HostContext;
-use oer_network_port::{LinkSnapshot, LinkState, TransmitError};
+use oer_portable_memory::HostContext;
+use oer_protocols_network_port::{LinkSnapshot, LinkState, TransmitError};
 use std::{boxed::Box, vec::Vec};
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
 struct Port(LinkSnapshot, bool);
 struct Frame;
-impl oer_network_port::ReceivedFrame for Frame {
+impl oer_protocols_network_port::ReceivedFrame for Frame {
     type Storage = core::convert::Infallible;
     type Copied = Self;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
+    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Self::Storage>, Self> {
         Err(self)
     }
 }
@@ -193,17 +193,20 @@ struct Lent {
     start: usize,
     dropped: std::sync::Arc<core::sync::atomic::AtomicUsize>,
 }
-impl oer_network_port::FrameStorage for Lent {
+impl oer_protocols_network_port::FrameStorage for Lent {
     fn bytes(&self) -> &[u8] {
         &self.bytes[self.start..]
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.bytes[self.start..]
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
         let length = self.bytes.len() - self.start;
         if by > length {
-            return Err(oer_network_port::StorageAdvanceRefused { by, length });
+            return Err(oer_protocols_network_port::StorageAdvanceRefused { by, length });
         }
         self.start += by;
         Ok(())
@@ -221,7 +224,7 @@ fn lent(
     start: usize,
     payload: &[u8],
 ) -> (
-    oer_network_port::LentFrame<Lent>,
+    oer_protocols_network_port::LentFrame<Lent>,
     std::sync::Arc<core::sync::atomic::AtomicUsize>,
 ) {
     let dropped = std::sync::Arc::new(core::sync::atomic::AtomicUsize::new(0));
@@ -233,7 +236,9 @@ fn lent(
         start: 0,
         dropped: dropped.clone(),
     };
-    let Ok(frame) = oer_network_port::LentFrame::new(storage, [2; 6], [4; 6], 0x0800, range) else {
+    let Ok(frame) =
+        oer_protocols_network_port::LentFrame::new(storage, [2; 6], [4; 6], 0x0800, range)
+    else {
         panic!("the payload lies in the buffer");
     };
     (frame, dropped)

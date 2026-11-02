@@ -1,7 +1,7 @@
 //! Private queue payloads selected before the public body loan.
 
 use super::*;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     Configured, InstalledGroup, InstalledPairwise, LowerMacEvent, LowerMacTerminal, Removed,
     RemovedKey, TxCompleted,
 };
@@ -11,7 +11,7 @@ pub(super) enum OwnedConfigured<'o, B: ModelComposition> {
         ConfigurePermission<
             'o,
             Station,
-            oer_radio_port::Child<ModelPool<B::Identity, 9>, 1>,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 1>,
             ModelStationContextOf<B>,
         >,
     ),
@@ -19,7 +19,7 @@ pub(super) enum OwnedConfigured<'o, B: ModelComposition> {
         ConfigurePermission<
             'o,
             AccessPoint,
-            oer_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
             ModelAccessPointContextOf<B>,
         >,
     ),
@@ -87,18 +87,18 @@ pub(super) enum OwnedInstalledGroup<'o, B: ModelComposition> {
         permission: Slot<
             'o,
             ModelGroupPermission<AccessPoint>,
-            oer_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
         >,
     },
 }
 
-type SingleTerminal<'o, B> = oer_ieee80211_contracts_port::Completed<
+type SingleTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
     ModelContextOf<B>,
     Slot<'o, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
     ModelMpdu<'o, B>,
     ModelSingleOutcome,
 >;
-type AggregateTerminal<'o, B> = oer_ieee80211_contracts_port::Completed<
+type AggregateTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
     ModelContextOf<B>,
     Slot<'o, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
     ModelSubframes<'o, B>,
@@ -111,24 +111,24 @@ pub(super) enum OwnedTxCompleted<'o, B: ModelComposition> {
 
 pub(super) enum OwnedSampledTsfPermission<'o, B: ModelComposition> {
     Station(
-        oer_ieee80211_contracts_port::TsfPermission<
+        oer_protocols_ieee80211_contracts_port::TsfPermission<
             'o,
             Station,
-            oer_radio_port::Child<ModelPool<B::Identity, 9>, 1>,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 1>,
         >,
     ),
     AccessPoint(
-        oer_ieee80211_contracts_port::TsfPermission<
+        oer_protocols_ieee80211_contracts_port::TsfPermission<
             'o,
             AccessPoint,
-            oer_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 2>,
         >,
     ),
 }
 
 pub(super) enum OwnedLowerMacTerminal<'o, B: ModelComposition> {
     TsfSampled {
-        sample: oer_ieee80211_contracts_port::TsfSample,
+        sample: oer_protocols_ieee80211_contracts_port::TsfSample,
         permission: OwnedSampledTsfPermission<'o, B>,
     },
     TxCompleted(OwnedTxCompleted<'o, B>),
@@ -306,12 +306,12 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
                 sample,
                 permission: match permission {
                     OwnedSampledTsfPermission::Station(permission) => {
-                        oer_ieee80211_contracts_port::SampledTsfPermission::Station(
+                        oer_protocols_ieee80211_contracts_port::SampledTsfPermission::Station(
                             permission.lend(loan),
                         )
                     }
                     OwnedSampledTsfPermission::AccessPoint(permission) => {
-                        oer_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(
+                        oer_protocols_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(
                             permission.lend(loan),
                         )
                     }
@@ -376,12 +376,12 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             LowerMacTerminal::TsfSampled { sample, permission } => Self::TsfSampled {
                 sample,
                 permission: match permission {
-                    oer_ieee80211_contracts_port::SampledTsfPermission::Station(permission) => {
-                        OwnedSampledTsfPermission::Station(permission.into_owned(loan))
-                    }
-                    oer_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(permission) => {
-                        OwnedSampledTsfPermission::AccessPoint(permission.into_owned(loan))
-                    }
+                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::Station(
+                        permission,
+                    ) => OwnedSampledTsfPermission::Station(permission.into_owned(loan)),
+                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(
+                        permission,
+                    ) => OwnedSampledTsfPermission::AccessPoint(permission.into_owned(loan)),
                 },
             },
         }

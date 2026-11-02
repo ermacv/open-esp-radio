@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     ClassFrame, ClassSizedFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, LowerMacPhase,
     PhyRate,
 };

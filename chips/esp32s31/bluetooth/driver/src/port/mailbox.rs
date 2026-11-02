@@ -6,11 +6,11 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
-use oer_bluetooth_le_port::LeInstant;
-use oer_memory::{Awaiting, HandlerCell, Poster, RequestSlot};
-use oer_radio_port::{ClockError, Poisoned, PortResult};
-use oer_sync::PriorityWaker;
-use oer_time::{Duration, Timer};
+use oer_portable_memory::{Awaiting, HandlerCell, Poster, RequestSlot};
+use oer_portable_sync::PriorityWaker;
+use oer_portable_time::{Duration, Timer};
+use oer_protocols_bluetooth_le_port::LeInstant;
+use oer_protocols_radio_port::{ClockError, Poisoned, PortResult};
 
 /// One operation on the retained physical installation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -101,7 +101,7 @@ impl ClockState {
         let request = pending.request;
         let (poster, answer) = match core::task::ready!(pending.awaiting.poll_answer(cx)) {
             Ok(answer) => answer,
-            Err(oer_memory::RequestError::Unanswered { .. }) => {
+            Err(oer_portable_memory::RequestError::Unanswered { .. }) => {
                 self.pending = None;
                 let fault = self.fail(Fault::Accounting);
                 return Poll::Ready(ClockAnswer {
@@ -381,7 +381,7 @@ impl<T> MailboxDevice<T> {
         .await;
         let answer = match answer {
             Ok(answer) => answer,
-            Err(oer_memory::RequestError::Unanswered { .. }) => {
+            Err(oer_portable_memory::RequestError::Unanswered { .. }) => {
                 self.pending = None;
                 return Err(self.fail(Fault::Accounting));
             }

@@ -1,6 +1,6 @@
 use super::*;
-use oer_bluetooth_le_port::LeTxCeiling;
-use oer_radio_regulatory::{Country, FrequencySpan, RegulatoryDomain, Rule, RuleFlags};
+use oer_protocols_bluetooth_le_port::LeTxCeiling;
+use oer_protocols_radio_regulatory::{Country, FrequencySpan, RegulatoryDomain, Rule, RuleFlags};
 
 fn band(passive: bool) -> Permitted<LeBand> {
     extern crate std;

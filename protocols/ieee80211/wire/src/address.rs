@@ -82,7 +82,7 @@ impl Bssid {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.3 (Address fields).
     pub struct AddressFlags[1] (little) {
         pub group, with_group: bool = 0..1;

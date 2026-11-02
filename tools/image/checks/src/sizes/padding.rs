@@ -1,7 +1,7 @@
 //! Input-free linker ranges, identified by existing boundary contracts, never
 //! by output section names: the runtime minimum payload tail and bootstrap
 //! alignment between its embedded payload and cold-reference pages.
-use oer_analysis_elf::{Elf, Section};
+use oer_tools_analysis_elf::{Elf, Section};
 
 pub(super) fn ranges(file: &Elf<'_>, section: &Section<'_>) -> Vec<super::Filler> {
     let mut ranges = Vec::new();

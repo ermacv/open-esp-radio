@@ -8,7 +8,7 @@ use crate::{
     TestPhy,
 };
 use core::num::NonZeroU64;
-use oer_bluetooth_le_wire::{TestChannel, dtm::DtmPayloadPattern};
+use oer_protocols_bluetooth_le_wire::{TestChannel, dtm::DtmPayloadPattern};
 
 /// Length of one receiver listening window.
 pub const DTM_RECEIVE_WINDOW: NonZeroRadioDuration<LeRadio> =

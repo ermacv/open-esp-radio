@@ -1,7 +1,7 @@
 //! `cargo pins`: fetch and verify a chip's pinned vendor artifacts
 //! (`chips/<chip>/vendor/artifacts.toml`) into the host-wide store that
 //! every checkout's `target/vendor` links to. This program parses the command
-//! line and calls `oer-pins-artifacts`.
+//! line and calls `oer-tools-pins-artifacts`.
 
 #![forbid(unsafe_code)]
 
@@ -11,7 +11,7 @@ use std::{
 };
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use oer_pins_artifacts::artifacts;
+use oer_tools_pins_artifacts::artifacts;
 
 #[derive(Parser)]
 #[command(about = "Fetch and verify pinned vendor artifacts")]
@@ -47,9 +47,10 @@ fn root() -> artifacts::Result<PathBuf> {
 }
 
 fn main() -> ExitCode {
-    if oer_os_command_tree::requested() {
-        let tree = oer_os_command_tree::command_tree(&Cli::command(), &[String::from("pins")]);
-        println!("{}", oer_os_command_tree::json(&tree));
+    if oer_tools_os_command_tree::requested() {
+        let tree =
+            oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("pins")]);
+        println!("{}", oer_tools_os_command_tree::json(&tree));
         return ExitCode::SUCCESS;
     }
     let cli = Cli::parse();

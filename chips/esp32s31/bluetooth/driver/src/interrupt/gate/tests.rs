@@ -4,8 +4,8 @@ use core::{
     sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Waker},
 };
-use oer_espressif_interrupt_table::signal::host::{self, Deferred};
-use oer_time_virtual::VirtualClock;
+use oer_chips_family_interrupt_table::signal::host::{self, Deferred};
+use oer_portable_time_virtual::VirtualClock;
 use std::{
     boxed::Box,
     collections::VecDeque,
@@ -124,7 +124,7 @@ impl GateHardware for Fake {
         Timer(timer.0)
     }
 
-    fn serve_request<C: oer_time::Clock>(
+    fn serve_request<C: oer_portable_time::Clock>(
         _: &mut Scheduler,
         bank: &mut FakeBank,
         _: &C,
@@ -137,7 +137,10 @@ impl GateHardware for Fake {
         Ok(model.channel.pop_front().unwrap_or(false))
     }
 
-    fn capture_primary<C: oer_time::Clock>(bank: &mut FakeBank, _: &C) -> PrimaryInterruptCapture {
+    fn capture_primary<C: oer_portable_time::Clock>(
+        bank: &mut FakeBank,
+        _: &C,
+    ) -> PrimaryInterruptCapture {
         let mut model = bank.model.lock().expect("one test thread");
         model.ops.push(Op::Primary);
         PrimaryInterruptCapture(model.primary.pop_front().unwrap_or(0))
@@ -246,10 +249,10 @@ impl DoorbellLine for Line {
 struct Ring(Arc<AtomicUsize>);
 
 impl RadioDoorbell for Ring {
-    const HANDLER: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
@@ -365,7 +368,7 @@ fn is_pending<X: SignalExecutor>(cells: &ControllerEventCells<X>) -> (bool, bool
 
 #[test]
 fn the_composite_serves_the_bank_timer_and_doorbell_sources() {
-    use oer_espressif_interrupt_table::InterruptSources;
+    use oer_chips_family_interrupt_table::InterruptSources;
     assert_eq!(
         <BluetoothInterrupts<Deferred, Line> as InterruptSources>::SOURCES,
         [124, 133, 127, 68]
@@ -640,7 +643,7 @@ fn an_event_between_plan_and_application_waits_for_the_retained_owner() {
     // The handler acknowledges an arrival after the snapshot and retains its work.
     harness
         .clock
-        .advance(oer_time::Duration::from_micros(10))
+        .advance(oer_portable_time::Duration::from_micros(10))
         .unwrap();
     harness.script(|model| model.timer.push_back(Step::Pending));
     harness.enter();
@@ -667,7 +670,7 @@ fn stopped_rollover_is_acknowledged_and_the_owner_can_reunite() {
     ));
     harness
         .clock
-        .advance(oer_time::Duration::from_micros(10))
+        .advance(oer_portable_time::Duration::from_micros(10))
         .unwrap();
     harness.script(|m| m.timer.push_back(Step::Rollover));
     harness.enter();
@@ -685,7 +688,7 @@ fn stop_accepts_rollover_only_planning_after_the_task_drained() {
     harness.open();
     harness
         .clock
-        .advance(oer_time::Duration::from_micros(10))
+        .advance(oer_portable_time::Duration::from_micros(10))
         .unwrap();
     harness.script(|m| m.timer.push_back(Step::Rollover));
     harness.enter();
@@ -772,7 +775,7 @@ fn retirement_discards_a_same_entry_rollover_snapshot_only_after_stop() {
     harness.open();
     harness
         .clock
-        .advance(oer_time::Duration::from_micros(10))
+        .advance(oer_portable_time::Duration::from_micros(10))
         .unwrap();
     harness.script(|m| m.timer.push_back(Step::Rollover));
     let mut cx = Context::from_waker(Waker::noop());

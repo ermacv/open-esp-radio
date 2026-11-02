@@ -20,7 +20,7 @@
 //! the latter function requires Extended IV at offsets `0x58..0x60`, then
 //! rejects a nonzero reserved CCMP octet (`ccmp[2]`) or any reserved Key ID
 //! bits (`ccmp[3] & 0x1f`) at `0x98..0xc6`. Either violation returns `-1`
-//! before replay checking or decryption. [`oer_ieee80211_wire::ccmp::CcmpHeader::parse`] enforces the
+//! before replay checking or decryption. [`oer_protocols_ieee80211_wire::ccmp::CcmpHeader::parse`] enforces the
 //! same header requirements for protected management reception.
 //!
 //! Received frames reach this module; nothing here panics on them.
@@ -33,12 +33,12 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_crypto::block::Aes128Engine;
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_core_security_cipher::management_ccmp::{
+use oer_portable_crypto::block::Aes128Engine;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_core_security_cipher::management_ccmp::{
     ManagementCcmpError, ManagementCcmpFrame,
 };
-use oer_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The receive state of protected management frames under one pairwise key.
@@ -80,7 +80,7 @@ impl ManagementCcmpReceiver {
     /// its plaintext body. A frame that does not verify leaves the replay
     /// frontier unchanged. The frame is opened on `engine`. MIC failure and an
     /// engine refusal erase tentative plaintext through the
-    /// shared `oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation` transform; this wrapper only owns replay.
+    /// shared `oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation` transform; this wrapper only owns replay.
     pub fn open<'a, E: Aes128Engine>(
         &mut self,
         engine: &mut E,

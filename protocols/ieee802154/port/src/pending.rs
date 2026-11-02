@@ -7,7 +7,7 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-use oer_ieee802154_wire::{FrameAddress, FrameVersion, PhrFrame};
+use oer_protocols_ieee802154_wire::{FrameAddress, FrameVersion, PhrFrame};
 
 /// Automatic frame-pending policy (`ieee802154_ll_pending_mode_t`).
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]

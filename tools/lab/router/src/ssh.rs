@@ -79,7 +79,7 @@ impl Ssh {
 
     /// The command; the script is not in it.
     fn command(&self) -> std::process::Command {
-        let mut ssh = oer_os_process::command("ssh");
+        let mut ssh = oer_tools_os_process::command("ssh");
         ssh.args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"])
             .arg(&self.target)
             .args(["sh", "-s"])
@@ -138,9 +138,9 @@ impl Ssh {
 
     /// Start a script with piped output, owned by the caller until stopped.
     /// Streaming observers consume and filter both streams in memory.
-    pub fn start(&self, script: &str) -> Result<oer_os_process::owned::Child> {
+    pub fn start(&self, script: &str) -> Result<oer_tools_os_process::owned::Child> {
         let mut child =
-            oer_os_process::owned::Child::spawn(&mut self.command()).map_err(|error| {
+            oer_tools_os_process::owned::Child::spawn(&mut self.command()).map_err(|error| {
                 let error = format!("cannot run ssh: {error}");
                 self.observe(script).finish(None, "", Some(&error));
                 error

@@ -42,10 +42,10 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome, WithdrawCause,
 };
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 /// Where a fixture obtains the requested outcomes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -338,9 +338,9 @@ pub fn verify_barrier<A, D, E: AsRef<[BarrierEvent<A, D>]>, F: AsRef<[u8]>, R: A
         // Everything after Frame Control includes the original SN, CCMP PN
         // and payload. Attempt policy may change; MPDU contents may not.
         let first_control =
-            oer_ieee80211_wire::frame::FrameControlFields::from_bytes(*first_control);
+            oer_protocols_ieee80211_wire::frame::FrameControlFields::from_bytes(*first_control);
         let retry_control =
-            oer_ieee80211_wire::frame::FrameControlFields::from_bytes(*retry_control);
+            oer_protocols_ieee80211_wire::frame::FrameControlFields::from_bytes(*retry_control);
         if first_control.retry()
             || !retry_control.retry()
             || first_control.to_bytes() != retry_control.with_retry(false).to_bytes()
@@ -497,9 +497,9 @@ impl ReturnEvidence {
     /// count for a terminal whose outcome carries no air evidence.
     pub fn terminal<A, D>(
         pointer_matches: bool,
-        outcome: &oer_ieee80211_contracts_port::SingleOutcome<A, D>,
+        outcome: &oer_protocols_ieee80211_contracts_port::SingleOutcome<A, D>,
     ) -> Option<Self> {
-        use oer_ieee80211_contracts_port::{SingleEnd, TxOutcome};
+        use oer_protocols_ieee80211_contracts_port::{SingleEnd, TxOutcome};
         let (kind, air) = match outcome {
             TxOutcome::Ended(SingleEnd::Delivered { air, .. }) => (1, Some(air)),
             TxOutcome::Ended(SingleEnd::AckTimeout(air)) => (2, Some(air)),

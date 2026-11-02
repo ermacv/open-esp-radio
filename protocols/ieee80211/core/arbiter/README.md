@@ -1,6 +1,6 @@
 # IEEE 802.11 topology and channel arbiter
 
-`oer-ieee80211-core-arbiter` owns one radio's virtual-interface topology and
+`oer-protocols-ieee80211-core-arbiter` owns one radio's virtual-interface topology and
 arbitrates the channel its station and access point share. It is sans-IO,
 forbids unsafe code and neither waits nor performs I/O.
 
@@ -16,7 +16,7 @@ channel context. `WifiPlan` retains the checked station, AP and monitor
 configuration; `standalone_monitor` narrows it to an exclusive monitor plan.
 Credentials, scan policy, DMA storage and executor resources belong to the
 service or composition. Monitor filters remain upper-MAC policy. ESP-NOW's
-exclusive station-address plan belongs to `oer-ieee80211-core-extensions-esp-now`, which
+exclusive station-address plan belongs to `oer-protocols-ieee80211-core-extensions-esp-now`, which
 consumes the arbiter's checked topology.
 
 The arbiter carries the lower-MAC `GateOpen<'id>` and `GateClosed<'id>`
@@ -78,7 +78,7 @@ the AP lets the join proceed alone at its original earliest start.
 (`ChannelCoordinator`, `ApFollowPolicy`, `ApSearchPolicy`,
 `UpstreamLossPolicy`), and `channel` the channels an access point may not
 serve without radar detection: those whose 20 MHz primary channel overlaps a
-span `oer-radio-regulatory` names as shared with radar. Coordinator facts, schedules and actions
+span `oer-protocols-radio-regulatory` names as shared with radar. Coordinator facts, schedules and actions
 carry `SupportedChannel<K>` from the backend's capability check. Applying
 a start or move therefore needs no second channel conversion that could
 discard the command after its state transition. The follow policy's

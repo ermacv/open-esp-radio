@@ -515,7 +515,7 @@ pub const HE20_MU_SIG_B_USER_PAIR_BITS: u16 = 52;
 /// complete HE-SIG-B bit stream, least significant bit first; `None` when
 /// the stream ends before the field does.
 pub fn read_sig_b_user_field(complete_bytes: &[u8], bit_offset: u16) -> Option<u32> {
-    oer_wire::Reader::new(complete_bytes)
+    oer_portable_wire::Reader::new(complete_bytes)
         .bits::<21>(usize::from(bit_offset))
         .ok()
         .map(|word| word as u32)
@@ -768,7 +768,7 @@ fn validate_extension<const MINIMUM_LEN: usize>(
     if usize::from(declared_len).checked_add(2) != Some(element.len()) {
         return Err(HeElementError::LengthMismatch);
     }
-    let mut reader = oer_wire::Reader::new(element);
+    let mut reader = oer_portable_wire::Reader::new(element);
     let prefix = reader
         .array::<MINIMUM_LEN>()
         .map_err(|_| HeElementError::TooShort)?;
@@ -790,7 +790,7 @@ fn validate_extension<const MINIMUM_LEN: usize>(
 pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeElementError> {
     let (element, _) =
         validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(element, HE_CAPABILITIES_EXTENSION_ID)?;
-    let mut reader = oer_wire::Reader::new(element);
+    let mut reader = oer_portable_wire::Reader::new(element);
     reader.take(9).map_err(|_| HeElementError::TooShort)?;
     let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     let receive_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
@@ -825,7 +825,7 @@ pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeEle
 pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementError> {
     let (element, _) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, HE_OPERATION_EXTENSION_ID)?;
-    let mut reader = oer_wire::Reader::new(element);
+    let mut reader = oer_portable_wire::Reader::new(element);
     reader.take(3).map_err(|_| HeElementError::TooShort)?;
     let fields =
         HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
@@ -862,10 +862,10 @@ pub fn parse_he20_peer_state(
     let (operation, _) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(operation, HE_OPERATION_EXTENSION_ID)?;
 
-    let mut reader = oer_wire::Reader::new(capability);
+    let mut reader = oer_portable_wire::Reader::new(capability);
     reader.take(9).map_err(|_| HeElementError::TooShort)?;
     let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
-    let mut reader = oer_wire::Reader::new(operation);
+    let mut reader = oer_portable_wire::Reader::new(operation);
     reader.take(3).map_err(|_| HeElementError::TooShort)?;
     let fields =
         HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
@@ -903,7 +903,7 @@ pub fn parse_he20_peer_state(
     })
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities Information field).
     pub struct HePhyCapabilities[11] (little) {
         pub one_ltf_800ns_gi, with_one_ltf_800ns_gi: bool = 14..15;
@@ -920,7 +920,7 @@ oer_wire::bitfield! {
         pub nominal_padding, with_nominal_padding: u8 = 78..80;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
     pub struct HeOperationFields[6] (little) {
         pub default_pe, with_default_pe: u8 = 0..3;
@@ -932,7 +932,7 @@ oer_wire::bitfield! {
         pub basic_mcs_nss, with_basic_mcs_nss: u16 = 32..48;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Non-MU-MIMO HE-SIG-B User field.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
     pub struct SigBNonMimoUserFields[4] (little) {
@@ -944,7 +944,7 @@ oer_wire::bitfield! {
         pub ldpc, with_ldpc: bool = 20..21;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// MU-MIMO HE-SIG-B User field; bit 19 is reserved.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field).
     pub struct SigBMimoUserFields[4] (little) {
@@ -954,13 +954,13 @@ oer_wire::bitfield! {
         pub ldpc, with_ldpc: bool = 20..21;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).
     pub struct HeMcsMap[2] (little) {
         pub nss1, with_nss1: u8 = 0..2;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.5 (PPE Thresholds field).
     pub struct PpeFields[2] (little) {
         pub ru0, with_ru0: bool = 3..4;
@@ -969,14 +969,14 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// RU Allocation encoding with one MU-MIMO group count.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
     pub struct SingleGroupRuAllocationCode[1] (little) {
         pub low3, with_low3: u8 = 0..3;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// RU Allocation encoding with two MU-MIMO group counts.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B RU Allocation subfield).
     pub struct TwoGroupRuAllocationCode[1] (little) {

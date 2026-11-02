@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_testing_conformance::{
+use oer_protocols_ieee80211_testing_conformance::{
     self as conformance, Class, End, Harness, Held, Operation, PublicationEvent, Resources,
     Scenario, Trace,
 };
@@ -103,7 +103,7 @@ fn observe<'id, Id: SlotIdentity + 'id>(
 fn returned<'id, Id: SlotIdentity + 'id>(
     event: LowerMacEvent<'id, ModelTypes<Backend<Id>>>,
     seen: &RefCell<Vec<conformance::Returned>>,
-    terminal_access: &mut oer_ieee80211_contracts_port::TerminalAccess<
+    terminal_access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
         ModelTickets,
         ModelPool<Id, 1>,
@@ -114,7 +114,7 @@ fn returned<'id, Id: SlotIdentity + 'id>(
 ) {
     match event {
         LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal))) => {
-            let oer_ieee80211_contracts_port::TerminalParts {
+            let oer_protocols_ieee80211_contracts_port::TerminalParts {
                 context,
                 ticket,
                 outcome: completion,
@@ -265,14 +265,15 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                         phase
                             .station()
                             .submit(
-                                (oer_ieee80211_contracts_port::Attempt {
+                                (oer_protocols_ieee80211_contracts_port::Attempt {
                                     context,
                                     ticket,
                                     source,
                                     access_category: operation.category,
                                     protection: Protection::None,
                                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                    coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                                    coex_operation:
+                                        oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                                 })
                                 .admit(),
                             )
@@ -402,7 +403,7 @@ impl Harness for ModelHarness {
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
-            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
         let dropped = Rc::new(Cell::new(0));
         let before_teardown = Rc::new(Cell::new(usize::MAX));
@@ -502,7 +503,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
         'id: 'a,
     {
         let mut terminal_access = resources.terminal_access;
-        use oer_ieee80211_contracts_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
+        use oer_protocols_ieee80211_contracts_port::{
+            AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid,
+        };
         let Ok(mut owner) = owner.enable().await else {
             panic!("the model enables")
         };
@@ -515,16 +518,16 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
         } = resources;
         {
             let mut phase = owner.phase();
-            let ht = oer_ieee80211_wire::phy::HtRate::new(
+            let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
                 HtMcs::new(7).unwrap(),
-                oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                 false,
             )
             .unwrap();
             let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
             let association = ModelKeys::<ModelBackend<Id, ModelCaps, AggregateContext>, Station>::begin_association(
                 resources.station_association,
-                oer_ieee80211_wire::security::Spp::NotNegotiated,
+                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
             let key = installed_station_pairwise(
                 &mut phase,
@@ -613,7 +616,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
             else {
                 unreachable!()
             };
-            let oer_ieee80211_contracts_port::TerminalParts {
+            let oer_protocols_ieee80211_contracts_port::TerminalParts {
                 context,
                 ticket,
                 payload,
@@ -678,7 +681,10 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
     for (withdraw, initial_pn) in [
         (false, 0),
         (true, 0),
-        (false, oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3),
+        (
+            false,
+            oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3,
+        ),
     ] {
         let (backend, air) = Fixture::<ModelCaps, AggregateContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
@@ -686,7 +692,7 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
-            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
         let dropped = Rc::new(Cell::new(0));
         let _port_end = block_on(run_model(
@@ -738,10 +744,10 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
         let station_association =
             ModelKeys::<ModelBackend<Id, ModelCaps, FaultContext>, Station>::begin_association(
                 resources.station_association,
-                oer_ieee80211_wire::security::Spp::NotNegotiated,
+                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
 
-        use oer_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
+        use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
         let mut owner = owner.enable().await.ok().unwrap();
         let ModelResources {
             mut tickets,
@@ -761,7 +767,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
             .await
             .expect("the PTK installation terminal")
             .into_core_key();
-            let last = oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 10;
+            let last = oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 10;
             key.set_last(last);
             let ticket = tickets.remove(0);
             let ticket_index = ticket.index();
@@ -771,9 +777,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
             let body = ModelBody(alloc::vec![0x7a; 4]);
             let first_body = body.0.as_ptr();
             if self.aggregate {
-                let ht = oer_ieee80211_wire::phy::HtRate::new(
+                let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
                     HtMcs::new(7).unwrap(),
-                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .unwrap();
@@ -830,14 +836,14 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
                     .unwrap();
                 phase.held.poison();
                 let submitted = phase.station().submit(
-                    (oer_ieee80211_contracts_port::Attempt {
+                    (oer_protocols_ieee80211_contracts_port::Attempt {
                         context,
                         ticket,
                         source,
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                        coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                     })
                     .admit(),
                 );
@@ -907,7 +913,7 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
                 IndividualAddress::new(STATION).unwrap(),
                 IndividualAddress::new(ACCESS_POINT).unwrap(),
             ],
-            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
             block_on(fixture::inspect_model(
@@ -938,7 +944,7 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
 plain_context!(AggregateContext);
 plain_context!(FaultContext);
 
-impl<Id: SlotIdentity> oer_radio_port::ContextProjection<Id> for Context<Id> {
+impl<Id: SlotIdentity> oer_protocols_radio_port::ContextProjection<Id> for Context<Id> {
     type View<'a, 'p>
         = &'a Self
     where
@@ -950,7 +956,10 @@ impl<Id: SlotIdentity> oer_radio_port::ContextProjection<Id> for Context<Id> {
     where
         Self: 'p,
         Id: 'p;
-    fn view<'a, 'p>(&'a self, _: oer_radio_port::ContextLoan<'p, Id>) -> Self::View<'a, 'p>
+    fn view<'a, 'p>(
+        &'a self,
+        _: oer_protocols_radio_port::ContextLoan<'p, Id>,
+    ) -> Self::View<'a, 'p>
     where
         Self: 'p,
         Id: 'p,
@@ -958,7 +967,7 @@ impl<Id: SlotIdentity> oer_radio_port::ContextProjection<Id> for Context<Id> {
     {
         self
     }
-    fn into_parts<'p>(self, _: oer_radio_port::ContextLoan<'p, Id>) -> Self::Parts<'p>
+    fn into_parts<'p>(self, _: oer_protocols_radio_port::ContextLoan<'p, Id>) -> Self::Parts<'p>
     where
         Self: 'p,
         Id: 'p,
@@ -968,10 +977,10 @@ impl<Id: SlotIdentity> oer_radio_port::ContextProjection<Id> for Context<Id> {
 }
 impl<'p, Id: SlotIdentity + 'p> LoanedContext<'p, Id> for Context<Id> {
     type Owned = Self;
-    fn enclose(self) -> oer_radio_port::PortContext<'p, Id, Self> {
-        oer_radio_port::PortContext::new(self)
+    fn enclose(self) -> oer_protocols_radio_port::PortContext<'p, Id, Self> {
+        oer_protocols_radio_port::PortContext::new(self)
     }
-    fn restore(context: oer_radio_port::PortContext<'p, Id, Self>) -> Self {
+    fn restore(context: oer_protocols_radio_port::PortContext<'p, Id, Self>) -> Self {
         context.into_parts()
     }
 }

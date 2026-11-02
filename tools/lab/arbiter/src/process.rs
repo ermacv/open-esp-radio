@@ -15,7 +15,7 @@ impl ProcessIdentity {
     pub fn of(pid: u32) -> Option<Self> {
         Some(Self {
             pid,
-            start_ticks: oer_os_process::proc::start_ticks(pid)?,
+            start_ticks: oer_tools_os_process::proc::start_ticks(pid)?,
         })
     }
 }

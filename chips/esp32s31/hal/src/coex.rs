@@ -11,7 +11,7 @@
 //! Timer 5 is not lent: the domain programs it for the PHY grant-protect
 //! request (`RadioDomain::acquire_phy_grant_protect`).
 //!
-//! [`CoexDomainPorts`] binds the family policy of `oer-espressif-coex` to
+//! [`CoexDomainPorts`] binds the family policy of `oer-chips-family-coex` to
 //! one radio domain: it lends the timer bank and the clock port to
 //! `CoexCore` as its `CoexTimerHardware` and `CoexClockHardware` ports.
 
@@ -22,7 +22,7 @@ use crate::modem::{
 
 /// The event priority table every Espressif chip
 /// shares; the domain keeps one table as shared state.
-pub use oer_espressif_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
+pub use oer_chips_family_coex::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};
 
 mod clock;
 mod ports;
@@ -88,7 +88,7 @@ impl<'owner> PhyGrantProtect<'owner> {
         }
         let (Some(client), Some(pti)) = (
             CoexTimerClientValue::new(
-                oer_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect.bits(),
+                oer_chips_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect.bits(),
             ),
             CoexTimerPtiValue::new(u32::from(self.pti.value())),
         ) else {
@@ -180,13 +180,15 @@ impl CoexPolicyTimer {
 /// RF admission or grant revocation.
 pub struct CoexPolicyTimerBank<
     'registers,
-    P: oer_mmio::Placement = oer_mmio::Fixed<{ oer_esp32s31_pac::instances::coex::BASE }>,
+    P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<
+        { oer_chips_esp32s31_pac::instances::coex::BASE },
+    >,
 > {
     registers: CoexTimerBankRegisters<'registers, P>,
     pti: &'registers CoexPtiTable,
 }
 
-impl<'registers, P: oer_mmio::Placement> CoexPolicyTimerBank<'registers, P> {
+impl<'registers, P: oer_portable_mmio::Placement> CoexPolicyTimerBank<'registers, P> {
     pub(crate) fn new(
         registers: CoexTimerBankRegisters<'registers, P>,
         pti: &'registers CoexPtiTable,

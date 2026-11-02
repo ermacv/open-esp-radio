@@ -10,25 +10,25 @@
 //! frontier; startup therefore cannot accidentally lock the radio into the
 //! first role an application happens to use.
 
-use oer_esp32s31_hal::ieee80211::init::{
+use oer_chips_esp32s31_hal::ieee80211::init::{
     MacColdStartConfig, MacDelayEntropy, MacSlowClockCalibrationSource,
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold},
     root::WifiPartition,
 };
-use oer_esp32s31_phy::PhyTxTargetPowerProfile;
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_phy::PhyTxTargetPowerProfile;
+use oer_chips_esp32s31_radio_client::{
     Failed, Failure, Joined, Member, MembershipCell, PhyPreparation, RfEpoch, TrackedMember,
     Untracked,
     wifi::{TrackReport, Wifi, WifiJoin, WifiJoined, WifiReturned, WifiTrack, WifiTracked},
 };
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::channel::WifiChannel;
-use oer_time::Duration;
+use oer_portable_time::Duration;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::channel::WifiChannel;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
-use oer_radio_regulatory::{Permitted, TxCeiling};
+use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 
 /// The values Wi-Fi's own platform gives the MAC bring-up, and where it keeps
 /// the calibrated TX power profile for its TX vectors.
@@ -43,7 +43,8 @@ pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiColdStartConfig {
     /// The channel the regulatory domain permits.
-    pub initial_channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+    pub initial_channel:
+        Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     /// The most any transmission radiates: the domain's, the board's and the
     /// chip's limits together.
     pub tx_ceiling: TxCeiling,
@@ -51,7 +52,9 @@ pub struct WifiColdStartConfig {
 
 impl WifiColdStartConfig {
     pub const fn new(
-        initial_channel: Permitted<oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+        initial_channel: Permitted<
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        >,
         tx_ceiling: TxCeiling,
     ) -> Self {
         Self {
@@ -75,11 +78,11 @@ impl WifiMacStartConfig {
         handshake_deadline: Duration,
         station_address: IndividualAddress,
         access_point_address: IndividualAddress,
-    ) -> Result<Self, oer_ieee80211_wire::address::IndividualAddressError> {
+    ) -> Result<Self, oer_protocols_ieee80211_wire::address::IndividualAddressError> {
         if matches!(station_address.get(), [0, 0, 0, 0, 0, 0])
             || matches!(access_point_address.get(), [0, 0, 0, 0, 0, 0])
         {
-            return Err(oer_ieee80211_wire::address::IndividualAddressError::Unspecified);
+            return Err(oer_protocols_ieee80211_wire::address::IndividualAddressError::Unspecified);
         }
         Ok(Self {
             handshake_deadline,
@@ -176,7 +179,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         MembershipCell<Wifi>,
         Result<WifiStopped<W>, RadioStartFailure<W>>,
     ),
-    oer_memory::RequestQuarantine<Option<W>>,
+    oer_portable_memory::RequestQuarantine<Option<W>>,
 > {
     let (cell, joined) = match cell
         .join(WifiJoin {
@@ -185,7 +188,12 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         .await
     {
         Ok(answer) => answer,
-        Err(reason) => return Err(oer_memory::RequestQuarantine::new(reason, Some(platform))),
+        Err(reason) => {
+            return Err(oer_portable_memory::RequestQuarantine::new(
+                reason,
+                Some(platform),
+            ));
+        }
     };
     let Joined {
         member,
@@ -209,7 +217,12 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     };
     let (cell, tracked) = match cell.track(member, request).await {
         Ok(answer) => answer,
-        Err(reason) => return Err(oer_memory::RequestQuarantine::new(reason, Some(platform))),
+        Err(reason) => {
+            return Err(oer_portable_memory::RequestQuarantine::new(
+                reason,
+                Some(platform),
+            ));
+        }
     };
     let TrackedMember {
         member,

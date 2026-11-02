@@ -1,8 +1,8 @@
 use super::*;
 use crate::bluetooth::interrupt_policy::{CLEANUP_0, CLEANUP_1, FAULTS_0, FAULTS_1};
 use crate::bluetooth::{BluetoothInterruptPolicyFault, BluetoothInterruptPolicyObservation};
-use oer_time::{Clock, Duration};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Duration};
+use oer_portable_time_virtual::VirtualClock;
 use std::{cell::RefCell, vec::Vec};
 
 const NRT_OUTSIDE_CLEANUP: [u32; 2] = [
@@ -550,7 +550,7 @@ fn typed_register_masks_remove_the_cleanup_features_and_task17() {
         w.set_source_15(true);
         w.set_source_16(true);
         w.set_source_21(true);
-        w.set_sources_27_28(oer_mmio::Bits::constant::<3>());
+        w.set_sources_27_28(oer_portable_mmio::Bits::constant::<3>());
     });
     bank.modify_irq_enable_1(|w| {
         w.set_controller_time_overflow(true);

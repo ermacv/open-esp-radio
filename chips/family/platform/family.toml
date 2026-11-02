@@ -1,0 +1,198 @@
+# The Espressif family layer of the chip facts: what every chip of the family
+# shares, its staged boot's contracts with the host tools included. Each
+# chip's `chips/<id>/platform/chip.toml` extends this file and the ISA of its
+# harts (`isa/`); chips/family/facts/README.md describes the layers.
+schema = 2
+# The family whose shared code the chips use (`platform = "family"` packages).
+family = "espressif"
+# The ROM loads the ESP-IDF bootloader, which loads the chip's bootstrap
+# (chips/<id>/bootstrap); the bootstrap stages the runtime into PSRAM.
+boot = "staged"
+
+# Formatting entry points watched by the host reachability report of every
+# image of the family.
+observed-functions = [
+    "core::fmt::write",
+    "<core::fmt::Formatter>::*",
+    "<core::fmt::rt::Argument>::fmt*",
+    "<core::fmt::builders::*",
+    "* as core::fmt::Debug>::fmt*",
+    "* as core::fmt::Display>::fmt*",
+    "* as core::fmt::Binary>::fmt*",
+    "* as core::fmt::Octal>::fmt*",
+    "* as core::fmt::LowerHex>::fmt*",
+    "* as core::fmt::UpperHex>::fmt*",
+    "* as core::fmt::Pointer>::fmt*",
+    "* as core::fmt::LowerExp>::fmt*",
+    "* as core::fmt::UpperExp>::fmt*",
+    "* as core::fmt::Write>::write_fmt*",
+]
+
+# The interrupt contract the interrupt-stack check reads: the staged runtime
+# (chips/family/staged-runtime) installs these vectors and stacks; the
+# symbols are the interrupt table's (chips/family/interrupt-table) and the staged
+# runtime's (chips/family/staged-runtime stacks.rs). A chip adds its harts
+# and their guards.
+[interrupts]
+table-symbol = "__OER_INTERRUPT_TABLE"
+# `oer_chips_family_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
+# u8 at 3, class u8 at 4 (`oer_chips_family_interrupt_table::Class`), hart u8 at 5,
+# handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
+# the bytes of the symbol named by the prefix and the entry's handler symbol.
+table-entry-bytes = 12
+table-source = [0, 2]
+table-line = [2, 1]
+table-level = [3, 1]
+table-class = [4, 1]
+table-core = [5, 1]
+table-handler = 8
+table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
+# Each hart's table of 64 words, the word of line n at 4n; each line's
+# entry calls the line's handler directly and returns through the checked
+# exit. The staged runtime's build generates the entries, the tables and the
+# default handler of every line from these facts; `vectors.s` holds the
+# common entry and exit.
+vector-table-symbol = "_runtime_mtvt"
+vector-table-hart-slots = 64
+exception-entry-symbol = "_start_trap"
+# SOURCE: ESP-IDF 4d80c1b2 `soc/esp32s31/include/soc/clic_reg.h`
+# (`INT_INFO.NUM_INT` default 48, `CLIC_EXT_INTR_NUM_OFFSET` 16).
+lines = 48
+# All lines below this boundary are reserved for core-local use, including
+# conventional CLINT inputs 3/7 (SOURCE: C5 TRM v1.1, Table 2.8-1).
+# Their assignment is not established on S31;
+# no image allocates any of 0..16. Matrix sources use 16..48.
+first-source-line = 16
+# SOURCE: the same S31 header, `INT_INFO.CTLBITS` default 3 (CLICINTCTLBITS).
+control-bits = 3
+# SOURCE: the same S31 header, `NLBITS` 3: HAL writes MNLBITS explicitly,
+# without assuming the ROM left reset configuration (SOURCE:
+# HW1_S31_CLIC_20261026 in esp32s31/registers/evidence/hw-interrupts.toml).
+# SOURCE: hw1-20261026-boot-07 (research/hw-interrupt-facts.md):
+# S31 rev0 ROM leaves MNLBITS = 1; this is not its reset value.
+# Levels derive as 1 << level-bits;
+# all implemented control bits are levels, leaving no priority bits.
+level-bits = 3
+# SOURCE: RISC-V CLIC specification 3f8ee744, "Specifying Interrupt Priority":
+# highest level, then priority, then highest interrupt ID. With no priority
+# bits, equal-level lines arbitrate by descending ID, without peer preemption.
+tie-break = "highest-line"
+# Maximum allocation of each hart's dedicated SRAM interrupt stack.
+irq-stack-bytes = 0x8000
+irq-stack-margin-percent = 10
+# Routes and line levels are written through the interrupt table's router
+# (chips/family/interrupt-table) by the chip's controller, whose writer
+# functions this list names with the contexts they may run in.
+level-writers = []
+
+# The staged runtime's placement contract (chips/family/staged-layout/linker/runtime):
+# code, data and the per-hart task stacks in PSRAM; interrupt entries, vector
+# tables, interrupt stacks, critical code and data, DMA data and the panic
+# entry and hook in SRAM; the interrupt table's handlers in SRAM or ROM.
+# A rule with `per-hart = true` stands once for each of the chip's harts,
+# `{hart}` replaced by its number; `bytes-per-hart` sizes a rule by the
+# number of harts; `per-line = true` numbers `{n}` by every vector-entry
+# line (1 to `[interrupts] lines` less one).
+[placement]
+name = "psram-code-psram-data-psram-stack"
+image = { start = "__runtime_image_start", end = "__runtime_payload_end", origin = "runtime-psram" }
+entry = { symbol = "_runtime_start", text = ["__runtime_text_start", "__runtime_text_end"] }
+range = [
+    { range = ["__runtime_data_start", "__runtime_data_bss_end"], region = "psram" },
+    { range = ["__runtime_isr_start", "__runtime_isr_end"], region = "sram" },
+    { range = ["__runtime_critical_data_start", "__runtime_critical_bss_end"], region = "sram" },
+    { range = ["__runtime_dma_data_start", "__runtime_dma_bss_end"], region = "sram" },
+    # Sized by the image's policy, else by the chip's stack policy
+    # (`default_task_stack_bytes` of chips/<id>/platform/stack.toml).
+    { range = ["__runtime_cpu{hart}_task_stack_bottom", "__runtime_cpu{hart}_task_stack_top"], region = "psram", per-hart = true },
+    { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", maximum-bytes = 0x8000, per-hart = true },
+]
+symbol = [
+    { name = "_start_trap", bytes = 4, region = "sram" },
+    { name = "_runtime_irq_h{hart}_l{n}", per-line = true, bytes = 4, region = "sram", per-hart = true },
+    { name = "_runtime_irq_exit", bytes = 4, region = "sram" },
+    # Each hart's 64-word vector table (`vector-table-hart-slots`).
+    { name = "_runtime_mtvt", bytes-per-hart = 256, region = "sram" },
+    { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
+    { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
+]
+# Code reachable from an interrupt runs from SRAM or the mask ROM.
+interrupt-handlers = ["sram", "rom"]
+section = [{ prefix = ".critical", region = "sram" }]
+stack-swap = [
+    { name = "_start_trap" },
+    { name = "_runtime_irq_h{hart}_l{n}", per-line = true, per-hart = true },
+]
+
+# The staged boot's host contract: the stage-two header the image pipeline
+# packs (chips/family/staged-layout stage_two.rs) and the input sections
+# the runtime linker script zeroes (zeroed.rs), which the image linker refuses
+# initialized bytes in.
+[staged]
+zeroed-inputs = [
+    ".dram2_uninit.bss", ".dram2_uninit.bss.*", ".dram2_uninit", ".dram2_uninit.*",
+    ".rtc_fast.bss", ".rtc_fast.bss.*",
+    ".critical.bss", ".critical.bss.*", ".flash.critical.bss", ".flash.critical.bss.*",
+    ".dma.bss", ".dma.bss.*",
+    ".psram.bss", ".psram.bss.*", ".sbss", ".sbss.*", ".bss", ".bss.*", "COMMON",
+]
+# The PSRAM page the bootstrap probes before it copies stage two: stage two
+# lies after it.
+bootstrap-psram-bytes = 0x1_0000
+# The MMU page that maps flash and PSRAM: stage two's payload fills at least
+# one, and the bootstrap's flash text starts on one, after the image headers.
+#
+# SOURCE(esp32s31): ESP-IDF 4d80c1b2
+# `components/soc/esp32s31/include/soc/ext_mem_defs.h:14-19`
+# (`SOC_MMU_PAGE_SIZE`, default 0x10000).
+# SOURCE(esp32c5): esp-hal 1f646c5
+# `esp-metadata/devices/esp32c5/soc.toml` (`[device.mmu] page_size = 0x10000`).
+mmu-page-bytes = 0x1_0000
+# The ESP image's 0x18-byte file header and 0x08-byte segment header before
+# the bootstrap's text, so that its flash and virtual addresses agree modulo
+# the MMU page.
+#
+# SOURCE: ESP-IDF 4d80c1b2
+# `components/esp_system/ld/esp32s31/memory.ld.in:37-45`
+# (irom origin 0x40000020; 0x20 accounts for image and segment headers).
+image-segment-header-bytes = 0x20
+# SRAM at the top the runtime's SRAM sections leave free while the boot hart still
+# runs on the bootstrap's stack, until `_runtime_stack_bootstrap` switches to
+# the PSRAM task stack; the bootstrap's largest frame is below 0.5 KiB.
+handoff-sram-margin-bytes = 0x2000
+
+# The stage-two header: little-endian words; "STG2" magic, the handoff ABI
+# version, the header's own size and the payload CRC-32 (computed with its
+# field read as zero) at these byte offsets.
+[staged.stage-two]
+magic = 0x32475453
+abi-version = 2
+header-bytes = 48
+magic-offset = 0
+abi-version-offset = 4
+header-size-offset = 28
+crc-offset = 44
+
+# The Espressif physical memory attribute (PMA) CSRs a secondary hart's
+# generated entry programs from the chip's `[hart-entry] pma` chain: entry n's
+# configuration at `cfg-csr + n`, its address (the byte address >> 2) at
+# `addr-csr + n`, and the configuration encodings.
+# SOURCE: ESP-IDF fff9895c `components/riscv/include/riscv/csr.h:52-72`
+# (`CSR_PMACFG0 0xBC0`, `CSR_PMAADDR0 0xBD0`, `PMA_EN` BIT(0), `PMA_X` BIT(2),
+# `PMA_W` BIT(3), `PMA_R` BIT(4), `PMA_SHIFT` 2, `PMA_TOR 0x40000000`,
+# `PMA_NAPOT 0xC0000000`, `PMA_NONCACHEABLE` BIT(27), `PMA_L` BIT(29)); the
+# entry count is the sixteen `pmacfg0..15`/`pmaaddr0..15` the S31 rev0 hart 1
+# reads (HW E1 of 2026-10-31, oer-notes research/hw-hart1-entry-e1.md), whose
+# disabled entries read `0x08000000` (NONCACHEABLE alone).
+[pma]
+cfg-csr = 0xbc0
+addr-csr = 0xbd0
+entries = 16
+address-shift = 2
+enable = 0x00000001
+execute = 0x00000004
+write = 0x00000008
+read = 0x00000010
+top-of-range = 0x40000000
+noncacheable = 0x08000000
+disabled = 0x08000000

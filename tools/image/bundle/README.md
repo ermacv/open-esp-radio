@@ -1,10 +1,10 @@
 # Image bundle
 
-`oer-image-bundle` is the format of what one image build makes: a directory
+`oer-tools-image-bundle` is the format of what one image build makes: a directory
 with a `bundle.json` manifest, the runtime ELF, the encoded flash contents and
-the gate reports. The crate holds the format only. `oer-image-build` fills and
-publishes a bundle, `oer-image-checks` examines the ELF files of one, and a
-flash writer (`oer-lab-board`) reads one; none of the readers needs the build
+the gate reports. The crate holds the format only. `oer-tools-image-build` fills and
+publishes a bundle, `oer-tools-image-checks` examines the ELF files of one, and a
+flash writer (`oer-tools-lab-board`) reads one; none of the readers needs the build
 pipeline or its analysis layers.
 
 An `ImageBundle` is one directory with a `bundle.json` and these files:
@@ -51,4 +51,4 @@ A bundle is published whole. A builder fills the staging directory
 `bundle.json` and renames the staging directory into place. A build that fails
 never publishes, so the bundle published before stays as it was.
 
-Run host regressions with `cargo test -p oer-image-bundle`.
+Run host regressions with `cargo test -p oer-tools-image-bundle`.

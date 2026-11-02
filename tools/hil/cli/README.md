@@ -1,4 +1,4 @@
-# oer-tool-hil-cli
+# oer-tools-hil-cli
 
 `cargo hil`. A HIL scenario is a workspace package with
 `[package.metadata.open-radio] hil-scenario = true`; its name drops the
@@ -18,5 +18,5 @@ its session before it is killed, and a tool that dies any other way takes
 the group with it.
 
 ```console
-cargo test -p oer-tool-hil-cli
+cargo test -p oer-tools-hil-cli
 ```

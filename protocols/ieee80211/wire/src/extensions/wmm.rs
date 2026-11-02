@@ -28,9 +28,9 @@ const ALL_ACCESS_CATEGORIES: u8 = 0b1111;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WmmAcParameters {
     pub admission_control_mandatory: bool,
-    pub aifsn: oer_wire::U8<4>,
-    pub ecw_min: oer_wire::U8<4>,
-    pub ecw_max: oer_wire::U8<4>,
+    pub aifsn: oer_portable_wire::U8<4>,
+    pub ecw_min: oer_portable_wire::U8<4>,
+    pub ecw_max: oer_portable_wire::U8<4>,
     /// TXOP limit in the element's native 32-us units.
     pub txop_limit_units_32_us: u16,
 }
@@ -72,30 +72,30 @@ impl WmmParameterSet {
         [
             // AC_BE: aCWmin, aCWmax, AIFSN 3.
             WmmAcParameters::contention(
-                oer_wire::U8::constant::<3>(),
-                oer_wire::U8::constant::<4>(),
-                oer_wire::U8::constant::<10>(),
+                oer_portable_wire::U8::constant::<3>(),
+                oer_portable_wire::U8::constant::<4>(),
+                oer_portable_wire::U8::constant::<10>(),
                 0,
             ),
             // AC_BK: aCWmin, aCWmax, AIFSN 7.
             WmmAcParameters::contention(
-                oer_wire::U8::constant::<7>(),
-                oer_wire::U8::constant::<4>(),
-                oer_wire::U8::constant::<10>(),
+                oer_portable_wire::U8::constant::<7>(),
+                oer_portable_wire::U8::constant::<4>(),
+                oer_portable_wire::U8::constant::<10>(),
                 0,
             ),
             // AC_VI: (aCWmin+1)/2-1, aCWmin, AIFSN 2, TXOP 3.008 ms.
             WmmAcParameters::contention(
-                oer_wire::U8::constant::<2>(),
-                oer_wire::U8::constant::<3>(),
-                oer_wire::U8::constant::<4>(),
+                oer_portable_wire::U8::constant::<2>(),
+                oer_portable_wire::U8::constant::<3>(),
+                oer_portable_wire::U8::constant::<4>(),
                 94,
             ),
             // AC_VO: (aCWmin+1)/4-1, (aCWmin+1)/2-1, AIFSN 2, TXOP 1.504 ms.
             WmmAcParameters::contention(
-                oer_wire::U8::constant::<2>(),
-                oer_wire::U8::constant::<2>(),
-                oer_wire::U8::constant::<3>(),
+                oer_portable_wire::U8::constant::<2>(),
+                oer_portable_wire::U8::constant::<2>(),
+                oer_portable_wire::U8::constant::<3>(),
                 47,
             ),
         ],
@@ -108,9 +108,9 @@ impl WmmParameterSet {
         0,
         false,
         [WmmAcParameters::contention(
-            oer_wire::U8::constant::<2>(),
-            oer_wire::U8::constant::<4>(),
-            oer_wire::U8::constant::<10>(),
+            oer_portable_wire::U8::constant::<2>(),
+            oer_portable_wire::U8::constant::<4>(),
+            oer_portable_wire::U8::constant::<10>(),
             0,
         ); 4],
     );
@@ -119,9 +119,9 @@ impl WmmParameterSet {
 impl WmmAcParameters {
     /// A record without admission control.
     const fn contention(
-        aifsn: oer_wire::U8<4>,
-        ecw_min: oer_wire::U8<4>,
-        ecw_max: oer_wire::U8<4>,
+        aifsn: oer_portable_wire::U8<4>,
+        ecw_min: oer_portable_wire::U8<4>,
+        ecw_max: oer_portable_wire::U8<4>,
         txop_limit_units_32_us: u16,
     ) -> Self {
         Self {
@@ -149,14 +149,14 @@ pub(crate) const fn encode_wmm_parameter_element(
         fields
             .with_aifsn(parameters.aifsn)
             .with_aci(match category {
-                WmmAccessCategory::BestEffort => oer_wire::U8::constant::<0>(),
-                WmmAccessCategory::Background => oer_wire::U8::constant::<1>(),
-                WmmAccessCategory::Video => oer_wire::U8::constant::<2>(),
-                WmmAccessCategory::Voice => oer_wire::U8::constant::<3>(),
+                WmmAccessCategory::BestEffort => oer_portable_wire::U8::constant::<0>(),
+                WmmAccessCategory::Background => oer_portable_wire::U8::constant::<1>(),
+                WmmAccessCategory::Video => oer_portable_wire::U8::constant::<2>(),
+                WmmAccessCategory::Voice => oer_portable_wire::U8::constant::<3>(),
             })
             .with_ecw_min(parameters.ecw_min)
             .with_ecw_max(parameters.ecw_max)
-            .with_txop(oer_wire::U16::from_low_bits(
+            .with_txop(oer_portable_wire::U16::from_low_bits(
                 parameters.txop_limit_units_32_us,
             ))
             .to_bytes()
@@ -215,7 +215,7 @@ pub(crate) const fn encode_wmm_parameter_element(
 /// blob's discarded high byte is an implementation limitation, not a
 /// different on-air field.
 pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
-    let mut reader = oer_wire::Reader::new(element);
+    let mut reader = oer_portable_wire::Reader::new(element);
     let fixed = reader.array::<WMM_PARAMETER_ELEMENT_LEN>().ok()?;
     let &[
         id,
@@ -242,7 +242,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
 
     let mut access_categories = [WmmAcParameters::default(); 4];
     let mut seen = 0_u8;
-    let mut records = oer_wire::Reader::new(&records);
+    let mut records = oer_portable_wire::Reader::new(&records);
     while !records.is_empty() {
         let [aci_aifsn, ecw, txop_low, txop_high] = records.read::<4>().ok()?;
         let fields = AcRecord::from_bytes([aci_aifsn, ecw, txop_low, txop_high]);
@@ -272,7 +272,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
     })
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element).
     pub struct AcRecord[4] (little) {
         pub aifsn, with_aifsn: (u8) = 0..4;
@@ -283,7 +283,7 @@ oer_wire::bitfield! {
         pub txop, with_txop: (u16) = 16..32;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1 (QoS Info field).
     pub struct QosInfo[1] (little) {
         pub count, with_count: u8 = 0..4;

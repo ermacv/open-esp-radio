@@ -1,9 +1,11 @@
 //! Interrupt classes: where each entry's class may sit, and what code of the
 //! `Hardware` class does that the class forbids. The class is the image's
-//! declaration in its table (`oer_espressif_interrupt_table::Class`), never a level
+//! declaration in its table (`oer_chips_family_interrupt_table::Class`), never a level
 //! number or a handler's name.
 
-use oer_image_stack::{Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites};
+use oer_tools_image_stack::{
+    Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites,
+};
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -177,7 +179,7 @@ pub(super) fn waive(
 /// data symbol covering it, else by its address.
 pub(super) fn cached_data(
     subject: String,
-    elf: &oer_analysis_elf::Elf<'_>,
+    elf: &oer_tools_analysis_elf::Elf<'_>,
     references: &[(u32, u32, u64)],
 ) -> CachedData {
     let mut data = CachedData {
@@ -191,7 +193,7 @@ pub(super) fn cached_data(
             .filter(|symbol| {
                 symbol.defined
                     && symbol.size > 0
-                    && symbol.kind == oer_analysis_elf::SymbolKind::Data
+                    && symbol.kind == oer_tools_analysis_elf::SymbolKind::Data
                     && target
                         .checked_sub(symbol.address)
                         .is_some_and(|offset| offset < symbol.size)

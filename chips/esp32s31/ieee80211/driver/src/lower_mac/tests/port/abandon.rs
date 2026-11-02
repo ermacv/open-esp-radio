@@ -1,7 +1,7 @@
 //! The real S31 port adapter with model hardware and owner-driven virtual time.
 use super::*;
 use core::pin::Pin;
-use oer_time::Duration;
+use oer_portable_time::Duration;
 
 fn poll_p1<F: Future>(future: Pin<&mut F>, observed: &RefCell<Observed>) -> Poll<F::Output> {
     observed.borrow_mut().context = 1;

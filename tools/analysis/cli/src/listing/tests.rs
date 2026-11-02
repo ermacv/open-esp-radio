@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AbstractValue, ArtifactId, DecodedOp, EdgeKind, FunctionRecord, FunctionRelocation,
     InstructionFlow, MemoryKind, ObjectId, ObjectLocation, ReferenceKind, ReferenceTarget,
     SymbolDefinition, SymbolId, SymbolTableKind, ValueAlternative, ValueAlternatives,

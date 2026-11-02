@@ -4,11 +4,11 @@ use core::{
     mem::ManuallyDrop,
     sync::atomic::{AtomicBool, Ordering},
 };
-use oer_memory::OnceValue;
+use oer_portable_memory::OnceValue;
 mod record;
 pub use record::{encode_fault, report_fault};
 #[cfg(target_arch = "riscv32")]
-oer_memory::link_fn! { declare PhyFaultSlot => fn __oer_phy_transaction_fault(fault: Fault) -> !; }
+oer_portable_memory::link_fn! { declare PhyFaultSlot => fn __oer_phy_transaction_fault(fault: Fault) -> !; }
 
 /// The HAL-owned PHY fault reporter's exact foreign ABI contract.
 #[doc(hidden)]
@@ -17,11 +17,13 @@ pub enum PhyFaultSlot {}
 // SAFETY: this HAL reserves the sole Rust function symbol for `fn(Fault) -> !`.
 // Its foreign declaration and exported reporter both check this exact slot;
 // callers have no precondition, and the linker rejects duplicate definitions.
-unsafe impl oer_memory::LinkSlot for PhyFaultSlot {
+unsafe impl oer_portable_memory::LinkSlot for PhyFaultSlot {
     type Value = fn(Fault) -> !;
-    const NAME: oer_memory::SlotName =
-        oer_memory::SlotName(&[oer_memory::NamePart::Text("__oer_phy_transaction_fault")]);
-    const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Function;
+    const NAME: oer_portable_memory::SlotName =
+        oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text(
+            "__oer_phy_transaction_fault",
+        )]);
+    const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Function;
 }
 
 /// The admitted operation whose owners must remain quarantined on cancellation.
@@ -45,7 +47,7 @@ macro_rules! phy_fault_reporter {
     };
 }
 #[doc(hidden)]
-pub use oer_memory::link_fn as __link_fn;
+pub use oer_portable_memory::link_fn as __link_fn;
 
 /// Why an owned PHY transaction was quarantined.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -70,7 +72,7 @@ pub enum SarTransferFault {
     },
     ProgramUnavailable,
     InvalidDelay {
-        requested: oer_time::Duration,
+        requested: oer_portable_time::Duration,
     },
     ReplyOccupied {
         queued: usize,
@@ -242,7 +244,7 @@ pub struct PhyHardware {
 
 struct Payload {
     hardware: PhyHardware,
-    coexistence: oer_esp32s31_pac::ownership::CoexistencePeripherals,
+    coexistence: oer_chips_esp32s31_pac::ownership::CoexistencePeripherals,
     shared_radio: crate::modem::ownership::SharedBasebandParts,
     pti: CoexPtiTable,
     grant_protected: bool,
@@ -318,7 +320,7 @@ impl PhyTransaction {
 
 struct ReturnPayload<B: PlatformClockBackend, T> {
     power: CommonRadioPower<B>,
-    btbb: oer_espressif_radio::domain::BtbbMembership,
+    btbb: oer_chips_family_radio::domain::BtbbMembership,
     clocks: ModemClocks,
     modem_platform_clocks: ModemPlatformClocks<B>,
     bluetooth_low_power_clock: Option<PlatformClockGuard<B>>,

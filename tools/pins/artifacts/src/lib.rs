@@ -1,7 +1,7 @@
 //! The pins of a chip's vendor artifacts: the one reader of its tracked
 //! `chips/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
-//! Fetching and the host-wide store are `oer-pins-artifacts`.
+//! Fetching and the host-wide store are `oer-tools-pins-artifacts`.
 
 #![forbid(unsafe_code)]
 pub mod artifacts;
@@ -145,14 +145,18 @@ impl Manifest {
 
     /// The tracked manifest of `chip` in the repository at `root`.
     pub fn load(root: &Path, chip: &str) -> Result<Self> {
-        Self::load_with_inputs(root, chip, &mut oer_os_durable::inputs::Inputs::default())
+        Self::load_with_inputs(
+            root,
+            chip,
+            &mut oer_tools_os_durable::inputs::Inputs::default(),
+        )
     }
 
     /// Include the artifact pins in the computation that consumes an artifact.
     pub fn load_with_inputs(
         root: &Path,
         chip: &str,
-        inputs: &mut oer_os_durable::inputs::Inputs,
+        inputs: &mut oer_tools_os_durable::inputs::Inputs,
     ) -> Result<Self> {
         let manifest = manifest_path(root, chip)?;
         Self::parse(&inputs.read_to_string(&root.join(&manifest))?)

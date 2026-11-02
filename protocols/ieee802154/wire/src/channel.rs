@@ -12,7 +12,7 @@ pub struct ChannelError {
 /// Direct tuple construction is intentionally unavailable:
 ///
 /// ```compile_fail
-/// use oer_ieee802154_wire::Channel;
+/// use oer_protocols_ieee802154_wire::Channel;
 /// let invalid = Channel(10);
 /// ```
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -142,9 +142,9 @@ impl Channel {
     }
 }
 
-impl oer_radio_regulatory::RadioChannel for Channel {
+impl oer_protocols_radio_regulatory::RadioChannel for Channel {
     /// The 2 MHz the channel occupies around its center.
-    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+    fn span(&self) -> oer_protocols_radio_regulatory::FrequencySpan {
         match self.0 {
             ChannelNumber::C11 => span::<2405000>(),
             ChannelNumber::C12 => span::<2410000>(),
@@ -166,9 +166,12 @@ impl oer_radio_regulatory::RadioChannel for Channel {
     }
 }
 
-fn span<const CENTER_KHZ: u32>() -> oer_radio_regulatory::FrequencySpan {
+fn span<const CENTER_KHZ: u32>() -> oer_protocols_radio_regulatory::FrequencySpan {
     const {
-        match oer_radio_regulatory::FrequencySpan::new(CENTER_KHZ - 1000, CENTER_KHZ + 1000) {
+        match oer_protocols_radio_regulatory::FrequencySpan::new(
+            CENTER_KHZ - 1000,
+            CENTER_KHZ + 1000,
+        ) {
             Some(span) => span,
             None => panic!("a channel has a width"),
         }

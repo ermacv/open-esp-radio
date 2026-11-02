@@ -8,16 +8,17 @@
 //! receive owners; their payloads are never copied. A receive credit stays
 //! free to close a reorder hole.
 
-use oer_events::{EventSink, report};
+use oer_portable_events::{EventSink, report};
 
 use super::{
     AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckNegotiation, RxBlockAckSession,
     RxReorderMpdu, RxReorderRelease,
 };
-use oer_ieee80211_contracts_port::{
+use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_contracts_port::{
     Ieee80211Capabilities, RxBuffer, RxCryptoStatus, RxEvidence, RxMetadata, SupportedBlockAck, Tid,
 };
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     address::Bssid,
     block_ack::frame::{
         ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_delba, parse_compressed_block_ack_request,
@@ -26,7 +27,6 @@ use oer_ieee80211_wire::{
     sequence::{SequenceControl, SequenceNumber},
     status::reason_code,
 };
-use oer_time::{Duration, Instant};
 
 /// What the receive agreements decided, reported to the sink the caller lends
 /// a call. The owner keeps no count of these.

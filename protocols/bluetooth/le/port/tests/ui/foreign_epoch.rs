@@ -1,7 +1,7 @@
 #![no_std]
 #![allow(unused_variables)]
-use oer_bluetooth_le_port::{Idle, Session};
-use oer_radio_port::PoolPath;
+use oer_protocols_bluetooth_le_port::{Idle, Session};
+use oer_protocols_radio_port::PoolPath;
 pub fn exchange<'a, 'b: 'a, P: PoolPath>(
     own: Session<'a, P, Idle>, foreign: Session<'b, P, Idle>,
 ) -> Session<'a, P, Idle> {

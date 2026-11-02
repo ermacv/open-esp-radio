@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::machine::{StaRequest, StaTokens};
+use oer_protocols_ieee80211_core_roles_sta::machine::{StaRequest, StaTokens};
 
 pub fn request_for_station<'id, A: StaTokens, B: StaTokens>(
     local: StaRequest<'id, A::ConfigurationPath>,

@@ -5,10 +5,12 @@
 //! semantic name. Recording the observed transformation is safer than
 //! inventing one for a fixed C node layout that is not fully decoded.
 
-use oer_ieee80211_wire::data::DataInterfaceRole;
+use oer_protocols_ieee80211_wire::data::DataInterfaceRole;
 
 use crate::mac::tx::metadata::descriptor_priority_byte;
-use oer_esp32s31_hal::layouts::{WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixSecurity};
+use oer_chips_esp32s31_hal::layouts::{
+    WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixSecurity,
+};
 
 const DESCRIPTOR_NODE_NIBBLE_SHIFT: u32 = 12;
 // This node-derived nibble's meaning remains unassigned.

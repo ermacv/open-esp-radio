@@ -71,33 +71,33 @@ pub enum PhyDcIqEnablePhase {
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_target(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     control: u16,
 ) {
-    oer_esp32s31_hal::phy::iq_estimator::configure(registers, control);
+    oer_chips_esp32s31_hal::phy::iq_estimator::configure(registers, control);
 }
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn set_enable_target(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     phase: PhyDcIqEnablePhase,
     enabled: bool,
 ) {
     match phase {
         PhyDcIqEnablePhase::Start => {
-            oer_esp32s31_hal::phy::iq_estimator::set_start_enabled(registers, enabled);
+            oer_chips_esp32s31_hal::phy::iq_estimator::set_start_enabled(registers, enabled);
         }
         PhyDcIqEnablePhase::Measurement => {
-            oer_esp32s31_hal::phy::iq_estimator::set_measurement_enabled(registers, enabled);
+            oer_chips_esp32s31_hal::phy::iq_estimator::set_measurement_enabled(registers, enabled);
         }
     }
 }
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn sample_readiness_target(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
 ) -> PhyDcIqReadinessSnapshot {
-    let snapshot = oer_esp32s31_hal::phy::iq_estimator::sample_readiness(registers);
+    let snapshot = oer_chips_esp32s31_hal::phy::iq_estimator::sample_readiness(registers);
     PhyDcIqReadinessSnapshot {
         ready: snapshot.ready,
         activity: snapshot.activity,
@@ -106,9 +106,9 @@ pub(crate) fn sample_readiness_target(
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn read_accumulators_target(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
 ) -> PhyDcIqAccumulatorSnapshot {
-    let snapshot = oer_esp32s31_hal::phy::iq_estimator::read_dc_iq_accumulators(registers);
+    let snapshot = oer_chips_esp32s31_hal::phy::iq_estimator::read_dc_iq_accumulators(registers);
     PhyDcIqAccumulatorSnapshot {
         i: snapshot.i,
         q: snapshot.q,
@@ -666,7 +666,7 @@ impl PhyDcIqMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn capture_target<D: crate::executor::wait::PhyShortDelay>(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
         if !matches!(self.action, PhyDcIqAction::Configure(_)) {
             return Ok(self.execute_target(registers));
@@ -688,7 +688,7 @@ impl PhyDcIqMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyDcIqCompletion {
         match self.action {
             PhyDcIqAction::Configure(request) => {
@@ -726,7 +726,7 @@ impl PhyDcIqReadinessBinding {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn capture_target<D: crate::executor::wait::PhyShortDelay>(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
         self.capture_with(
             crate::HARDWARE_EDGE_LIMIT,
@@ -815,7 +815,7 @@ impl PhyDcIqReadinessBinding {
     #[cfg(test)]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyDcIqCompletion {
         let PhyDcIqAction::AwaitReadinessEdge { request, .. } = self.action else {
             unreachable!();

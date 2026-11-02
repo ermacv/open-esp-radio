@@ -8,7 +8,7 @@
 //! A placed static is claimed once as a [`Placed`]: the proof a storage needs
 //! before it publishes its own addresses to DMA hardware.
 
-use oer_memory::{
+use oer_portable_memory::{
     Coherent, DmaIndexReturn, DmaReadPrepare, IndexedStableDmaLease, PinnedDmaTxNetworkLease,
     PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
     StableDmaBacking, StableDmaRegion, TaggedStableDmaBacking,
@@ -87,7 +87,7 @@ impl<T: 'static> Placed<T> {
         self,
     ) -> Option<(
         &'static mut T,
-        oer_memory::StableDmaRange<'static>,
+        oer_portable_memory::StableDmaRange<'static>,
         crate::memory::dma_address::PlacementProjection,
     )> {
         let (storage, projection) =
@@ -96,7 +96,7 @@ impl<T: 'static> Placed<T> {
         // SAFETY: Placed owns this unique static allocation in the DMA window.
         // The returned storage owner must synchronize access for its complete
         // DMA lifecycle; the proof contains no reference aliasing that owner.
-        unsafe { oer_memory::StableDmaRange::from_owner(storage, start) }
+        unsafe { oer_portable_memory::StableDmaRange::from_owner(storage, start) }
             .map(|(storage, range)| (storage, range, projection))
     }
 
@@ -177,7 +177,7 @@ impl<
         index: u8,
     ) -> Result<
         PinnedDmaTxNetworkLease<'static, FRAME_CAPACITY, HEADROOM, TRAILER>,
-        oer_memory::PoolError,
+        oer_portable_memory::PoolError,
     > {
         self.handle.claim_network(index)
     }
@@ -216,7 +216,7 @@ impl<
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxClaimError {
     Projection(crate::memory::dma_address::ProjectionError),
-    Pool(oer_memory::PoolError),
+    Pool(oer_portable_memory::PoolError),
 }
 
 /// A buffer lease of a pool placed in the DMA window: only
@@ -336,7 +336,7 @@ impl<B: IndexedStableDmaLease + PlacedBacking, R: DmaIndexReturn> PlacedBacking
 /// section named.
 ///
 /// ```ignore
-/// oer_esp32s31_hal::dma_static! {
+/// oer_chips_esp32s31_hal::dma_static! {
 ///     /// The receive epoch's arena.
 ///     static RX_ARENA: Arena = zeroed in ".dma.bss.wifi_rx";
 /// }
@@ -430,7 +430,7 @@ mod lease_region_tests {
         assert!(pool.claim_network(2).is_err());
         assert!(matches!(
             pool.claim_radio(0),
-            Err(TxClaimError::Pool(oer_memory::PoolError::State {
+            Err(TxClaimError::Pool(oer_portable_memory::PoolError::State {
                 observed: 0,
                 ..
             }))
@@ -440,7 +440,7 @@ mod lease_region_tests {
         for index in 0..2 {
             pool.claim_network(index)
                 .unwrap()
-                .publish(oer_memory::FrameLen::constant::<0>(), |_| {});
+                .publish(oer_portable_memory::FrameLen::constant::<0>(), |_| {});
             let mut lease = pool.claim_radio(index).unwrap();
             let region = lease.dma_region().unwrap();
             assert_eq!(region.len() as usize, lease.stable_dma_region().len());

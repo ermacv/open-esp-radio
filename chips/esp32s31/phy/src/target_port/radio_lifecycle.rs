@@ -23,7 +23,7 @@ const fn preclose_i2c_failure(error: PhyTargetPortError) -> PhyRfCloseTemperatur
 }
 
 pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     platform: &mut P,
     registers: &mut impl SharedPhyAccess,
     state: &mut PhyState,
@@ -68,7 +68,7 @@ pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
 ///
 /// The first operation crosses the point of no recovery. Any returned error
 /// means the powered hardware epoch is ambiguous and must remain poisoned.
-pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
@@ -79,7 +79,7 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?
             // inventing a CPU interrupt lock as an RF ownership proof.
             PhyRfCloseOperation::EnterCritical | PhyRfCloseOperation::ExitCritical => {}
             PhyRfCloseOperation::DisableHardwareFrequencyControl => {
-                oer_esp32s31_hal::phy::frequency::set_hardware_control(registers, false);
+                oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(registers, false);
             }
             PhyRfCloseOperation::SettleOneMicrosecond => {
                 if !D::settle_micros(1) {
@@ -87,16 +87,16 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?
                 }
             }
             PhyRfCloseOperation::DisableAgc => {
-                oer_esp32s31_hal::phy::agc::set_enabled(registers, false);
+                oer_chips_esp32s31_hal::phy::agc::set_enabled(registers, false);
             }
             PhyRfCloseOperation::ClearBasebandControl => {
-                oer_esp32s31_hal::phy::clock::clear_rf_baseband_control(registers);
+                oer_chips_esp32s31_hal::phy::clock::clear_rf_baseband_control(registers);
             }
             PhyRfCloseOperation::WriteI2c { address, value } => {
                 write_i2c_direct(clock, registers, address, value)?;
             }
             PhyRfCloseOperation::PowerOffRfCircuits => {
-                oer_esp32s31_hal::phy::analog_i2c::power_off_rf_circuits(registers);
+                oer_chips_esp32s31_hal::phy::analog_i2c::power_off_rf_circuits(registers);
             }
             PhyRfCloseOperation::ClearImmediateClockPower => {
                 // The vendor writes 0 to `PMU.IMM_HP_CK_POWER_0` here
@@ -106,10 +106,10 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?
                 // the step writes nothing.
             }
             PhyRfCloseOperation::CloseFrontendBasebandClocks => {
-                oer_esp32s31_hal::phy::clock::close_frontend_baseband(registers);
+                oer_chips_esp32s31_hal::phy::clock::close_frontend_baseband(registers);
             }
             PhyRfCloseOperation::EnableBbpllCalibration => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, true);
+                oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, true);
             }
         }
         Ok(())
@@ -118,11 +118,11 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_time::Clock + ?
 
 #[cfg(target_arch = "riscv32")]
 async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
-    timer: &impl oer_cooperate::CooperativeTimer,
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
-    operation: oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
+    operation: oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::i2c::{
+    use oer_chips_esp32s31_hal::phy::i2c::{
         PhyI2cConfigurationAction, PhyI2cConfigurationError, PhyI2cConfigurationObservation,
         PhyI2cConfigurationTransaction,
     };
@@ -131,7 +131,10 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
     for _ in 0..RF_OPERATION_LIMIT {
         match transaction.action() {
             PhyI2cConfigurationAction::StartCommand => {
-                match oer_esp32s31_hal::phy::i2c::start_configuration(&mut transaction, registers) {
+                match oer_chips_esp32s31_hal::phy::i2c::start_configuration(
+                    &mut transaction,
+                    registers,
+                ) {
                     Ok(()) => {}
                     Err(PhyI2cConfigurationError::BusyAtStart) => {
                         delay::<D, _>(timer, Kind::BusBusy, 1).await;
@@ -141,8 +144,10 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
             }
             PhyI2cConfigurationAction::AwaitCompletionEdge => {
                 delay::<D, _>(timer, Kind::Completion, 1).await;
-                match oer_esp32s31_hal::phy::i2c::observe_configuration(&mut transaction, registers)
-                {
+                match oer_chips_esp32s31_hal::phy::i2c::observe_configuration(
+                    &mut transaction,
+                    registers,
+                ) {
                     Ok(PhyI2cConfigurationObservation::StillPending)
                     | Ok(PhyI2cConfigurationObservation::EdgeConsumed) => {}
                     Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
@@ -155,11 +160,11 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
 }
 
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn reset_wake_i2c_master<C: oer_time::Clock + ?Sized>(
+pub(crate) fn reset_wake_i2c_master<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::i2c::{Host, pulse_master_reset, sample_master_reset_busy};
+    use oer_chips_esp32s31_hal::phy::i2c::{Host, pulse_master_reset, sample_master_reset_busy};
 
     for host in [Host::Host0, Host::Host1] {
         if !sample_master_reset_busy(registers, host) {
@@ -180,11 +185,11 @@ pub(crate) fn reset_wake_i2c_master<C: oer_time::Clock + ?Sized>(
 
 #[cfg(target_arch = "riscv32")]
 fn force_wake_txrx<D: PhyShortDelay>(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     enabled: bool,
 ) -> Result<(), PhyTargetPortError> {
     for phase in 0..2 {
-        oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
+        oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
         if !D::settle_micros(1) {
             return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
         }
@@ -193,9 +198,9 @@ fn force_wake_txrx<D: PhyShortDelay>(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn open_wake_i2c_power<C: oer_time::Clock + ?Sized>(
+fn open_wake_i2c_power<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     use crate::analog::i2c::{
         OpenI2cXpdAction, OpenI2cXpdCompletion, OpenI2cXpdOutcome, OpenI2cXpdTransition,
@@ -206,9 +211,8 @@ fn open_wake_i2c_power<C: oer_time::Clock + ?Sized>(
             OpenI2cXpdAction::ConfigurePowerAndPulse => {
                 crate::analog::i2c::configure_open_i2c_power_and_pulse(registers);
                 OpenI2cXpdCompletion::PowerAndPulseConfigured {
-                    started_at_cycle: oer_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(
-                        registers,
-                    ),
+                    started_at_cycle:
+                        oer_chips_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers),
                 }
             }
             OpenI2cXpdAction::CheckSdmDeadline {
@@ -216,7 +220,7 @@ fn open_wake_i2c_power<C: oer_time::Clock + ?Sized>(
                 maximum_cycles,
             } => {
                 let current =
-                    oer_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers);
+                    oer_chips_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers);
                 OpenI2cXpdCompletion::DeadlineObserved {
                     expired: current.wrapping_sub(started_at_cycle) > maximum_cycles,
                 }
@@ -240,9 +244,9 @@ fn open_wake_i2c_power<C: oer_time::Clock + ?Sized>(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
+fn clear_wake_pbus<D: PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
 ) -> Result<(), PhyTargetPortError> {
     use crate::analog::pbus::{
         PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusClearOutcome, PhyPbusClearTransition,
@@ -251,8 +255,8 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
     for _ in 0..RF_OPERATION_LIMIT {
         let completion = match transition.action() {
             PhyPbusClearAction::ConfigureDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyPbusClearCompletion::DebugModeConfigured
             }
@@ -264,8 +268,8 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
                 }
             }
             PhyPbusClearAction::ConfigureWorkMode => {
-                let settle_required = oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                let settle_required = oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyPbusClearCompletion::WorkModeConfigured { settle_required }
             }
@@ -276,11 +280,11 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
                 PhyPbusClearCompletion::DelayElapsed
             }
             PhyPbusClearAction::ConfigureWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyPbusClearCompletion::WorkModePulseConfigured
             }
             PhyPbusClearAction::ClearWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyPbusClearCompletion::WorkModePulseCleared
             }
             PhyPbusClearAction::Complete(PhyPbusClearOutcome::Cleared) => return Ok(()),
@@ -296,9 +300,9 @@ fn clear_wake_pbus<D: PhyShortDelay, C: oer_time::Clock + ?Sized>(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn publish_wake_frequency_i2c<C: oer_time::Clock + ?Sized>(
+fn publish_wake_frequency_i2c<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     front_end_parameter_bit: bool,
 ) -> Result<(), PhyTargetPortError> {
     use crate::analog::frequency::{
@@ -319,7 +323,7 @@ fn publish_wake_frequency_i2c<C: oer_time::Clock + ?Sized>(
                 PhyFrequencyI2cCompletion::ByteRead { address, value }
             }
             PhyFrequencyI2cAction::ConfigureNumberAddresses(addresses) => {
-                oer_esp32s31_hal::phy::frequency::configure_i2c_number_addresses(
+                oer_chips_esp32s31_hal::phy::frequency::configure_i2c_number_addresses(
                     registers, addresses,
                 );
                 PhyFrequencyI2cCompletion::NumberAddressesConfigured(addresses)
@@ -338,7 +342,7 @@ fn publish_wake_frequency_i2c<C: oer_time::Clock + ?Sized>(
 
 #[cfg(target_arch = "riscv32")]
 fn restore_wake_pbus_boundaries(
-    registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
     use crate::analog::pbus::memory::{
         PhyPbusBoundaryRestoreAction, PhyPbusBoundaryRestoreMmioBinding,
@@ -369,12 +373,12 @@ fn restore_wake_pbus_boundaries(
 /// and baseband mode have all returned to their operational values.
 #[cfg(target_arch = "riscv32")]
 pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     registers: &mut impl PhyInitializationAccess,
     state: &PhyState,
 ) -> Result<(), PhyTargetPortError> {
     use crate::lifecycle::{PhyRfWakeAction, PhyRfWakeCompletion, PhyRfWakeOperation};
-    use oer_esp32s31_hal::phy::i2c::{PhyAdcRate, PhyI2cConfigurationOperation};
+    use oer_chips_esp32s31_hal::phy::i2c::{PhyAdcRate, PhyI2cConfigurationOperation};
 
     let init_parameters = state.rf_init_parameter_snapshot();
     let channel_parameters = state.channel_parameters();
@@ -394,21 +398,27 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
         {
             match operation {
                 PhyRfWakeOperation::SetBasebandMode { mode } => {
-                    oer_esp32s31_hal::phy::frequency::set_baseband_mode(registers, mode);
+                    oer_chips_esp32s31_hal::phy::frequency::set_baseband_mode(registers, mode);
                 }
                 PhyRfWakeOperation::ForceTxRxOff { enabled } => {
                     force_wake_txrx::<D>(registers, enabled)?;
                 }
                 PhyRfWakeOperation::SetHardwareFrequencyControl { enabled } => {
-                    oer_esp32s31_hal::phy::frequency::set_hardware_control(registers, enabled);
+                    oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(
+                        registers, enabled,
+                    );
                 }
                 PhyRfWakeOperation::ResetI2cMaster => reset_wake_i2c_master(timer, registers)?,
                 PhyRfWakeOperation::OpenFrontendBasebandClocks => {
                     registers.open_frontend_baseband_internal_clocks();
-                    oer_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(registers);
+                    oer_chips_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(
+                        registers,
+                    );
                 }
                 PhyRfWakeOperation::SetBbpllCalibration { enabled } => {
-                    oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                    oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(
+                        registers, enabled,
+                    );
                 }
                 PhyRfWakeOperation::ConfigureBiasRegisters => {
                     drive_wake_i2c_configuration::<D>(
@@ -419,25 +429,25 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     .await?;
                 }
                 PhyRfWakeOperation::PowerTemperatureSensor => {
-                    oer_esp32s31_hal::phy::temperature::acquire(registers, || {
+                    oer_chips_esp32s31_hal::phy::temperature::acquire(registers, || {
                         D::settle_micros(
-                            oer_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
+                            oer_chips_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
                         )
                     })
                     .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
                 }
                 PhyRfWakeOperation::ReadXtalFrequency => {
-                    oer_esp32s31_hal::phy::prelude::configure_fixed_xtal_40mhz(registers);
+                    oer_chips_esp32s31_hal::phy::prelude::configure_fixed_xtal_40mhz(registers);
                 }
                 PhyRfWakeOperation::OpenI2cPower => open_wake_i2c_power(timer, registers)?,
                 PhyRfWakeOperation::ClearPbusRegisters => {
                     clear_wake_pbus::<D, _>(timer, registers)?
                 }
                 PhyRfWakeOperation::ConfigureI2cClock => {
-                    oer_esp32s31_hal::phy::i2c::configure_clock_selection(registers);
+                    oer_chips_esp32s31_hal::phy::i2c::configure_clock_selection(registers);
                 }
                 PhyRfWakeOperation::ResetFrontendTxRx => {
-                    oer_esp32s31_hal::phy::baseband::reset_frontend_txrx(registers);
+                    oer_chips_esp32s31_hal::phy::baseband::reset_frontend_txrx(registers);
                 }
                 PhyRfWakeOperation::ConfigureAdcRate => {
                     drive_wake_i2c_configuration::<D>(
@@ -449,10 +459,10 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     crate::hardware::configure_phy_adc_rate(registers, PhyAdcRate::High);
                 }
                 PhyRfWakeOperation::ConfigureI2cMasterRegisters => {
-                    oer_esp32s31_hal::phy::i2c::configure_master_registers(registers);
+                    oer_chips_esp32s31_hal::phy::i2c::configure_master_registers(registers);
                 }
                 PhyRfWakeOperation::ConfigureFrequencyRegisters => {
-                    oer_esp32s31_hal::phy::frequency::initialize_registers(
+                    oer_chips_esp32s31_hal::phy::frequency::initialize_registers(
                         registers,
                         frequency_control.frequency_register_parameter_override,
                     );
@@ -464,7 +474,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     crate::hardware::configure_phy_front_end_update(registers);
                 }
                 PhyRfWakeOperation::ConfigurePowerDetectorRegisters => {
-                    oer_esp32s31_hal::phy::power_detector::initialize_registers(registers)
+                    oer_chips_esp32s31_hal::phy::power_detector::initialize_registers(registers)
                         .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
                 }
                 PhyRfWakeOperation::ConfigureI2cStageTwo => {
@@ -485,14 +495,14 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     )?;
                 }
                 PhyRfWakeOperation::RestoreChannelFrequency => {
-                    oer_esp32s31_hal::phy::frequency::start_channel_switch(
+                    oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(
                         registers,
                         frequency_index,
                     );
                     if !D::settle_micros(1) {
                         return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
                     }
-                    oer_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
+                    oer_chips_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
                 }
                 PhyRfWakeOperation::RestorePbusBoundaries => {
                     restore_wake_pbus_boundaries(registers)?;
@@ -501,21 +511,21 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     crate::hardware::configure_phy_registers(registers, register_parameters);
                 }
                 PhyRfWakeOperation::UpdatePhyRegisters => {
-                    oer_esp32s31_hal::phy::agc::update_post_initialization(registers);
+                    oer_chips_esp32s31_hal::phy::agc::update_post_initialization(registers);
                 }
                 PhyRfWakeOperation::UpdateAgcRegisters => {
-                    oer_esp32s31_hal::phy::agc::update_baseband_registers(registers);
+                    oer_chips_esp32s31_hal::phy::agc::update_baseband_registers(registers);
                 }
                 PhyRfWakeOperation::RestoreChannelRegisters => {
-                    oer_esp32s31_hal::phy::frequency::configure_bss_cbw(registers, cbw);
-                    oer_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
+                    oer_chips_esp32s31_hal::phy::frequency::configure_bss_cbw(registers, cbw);
+                    oer_chips_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
                     write_i2c_direct(
                         timer,
                         registers,
                         crate::analog::i2c::analog_i2c::txrf::tx_capacitor_low::ADDRESS,
                         tx_cap,
                     )?;
-                    oer_esp32s31_hal::phy::frequency::configure_nrx_frequency(
+                    oer_chips_esp32s31_hal::phy::frequency::configure_nrx_frequency(
                         registers,
                         u32::from(frequency_mhz),
                     );
@@ -529,23 +539,24 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     )?;
                 }
                 PhyRfWakeOperation::RestoreBasebandChannelWidth => {
-                    oer_esp32s31_hal::phy::frequency::configure_channel_cbw(
+                    oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(
                         registers,
                         u32::from(cbw),
                     );
                 }
                 PhyRfWakeOperation::EnableAgc => {
-                    oer_esp32s31_hal::phy::agc::set_enabled(registers, true);
+                    oer_chips_esp32s31_hal::phy::agc::set_enabled(registers, true);
                 }
                 PhyRfWakeOperation::WaitFrequencyReady => {
                     // This site already lives in the asynchronous wake transaction.
                     // It shares the measured direct tier's 20 µs edge deadline,
                     // but retries yield to the timer at the specified 10 µs cadence.
                     let deadline = timer
-                        .deadline_after(oer_time::Duration::from_micros(20))
+                        .deadline_after(oer_portable_time::Duration::from_micros(20))
                         .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
                     loop {
-                        if oer_esp32s31_hal::phy::frequency::sample_frequency_ready(registers) {
+                        if oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(registers)
+                        {
                             break;
                         }
                         if timer.now() >= deadline {

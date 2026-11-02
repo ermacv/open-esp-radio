@@ -31,7 +31,7 @@ const CLASSES: &[&str] = &[
 // terminal decision; the registry names the image/platform owner of each reason.
 const REASON_ENUMS: &[(&str, &str)] = &[
     (
-        "chips/espressif/staged-runtime/src/panic/fault.rs",
+        "chips/family/staged-runtime/src/panic/fault.rs",
         "FaultReason",
     ),
     (
@@ -136,8 +136,8 @@ impl Scanner<'_> {
 
     fn image_panic_scope(&self) -> bool {
         image_file(self.file)
-            || self.file.starts_with("chips/espressif/staged-runtime/")
-            || self.file.starts_with("chips/espressif/staged-bootstrap/")
+            || self.file.starts_with("chips/family/staged-runtime/")
+            || self.file.starts_with("chips/family/staged-bootstrap/")
     }
 
     // Macro bodies are token trees: inspect definitions as well as invocations,
@@ -246,7 +246,13 @@ fn terminal_path(path: &syn::Path, aliases: &BTreeMap<String, String>) -> bool {
 }
 
 fn reset_module(name: &str) -> bool {
-    ["fatal", "runtime", "staged", "oer_espressif_staged_runtime"].contains(&name)
+    [
+        "fatal",
+        "runtime",
+        "staged",
+        "oer_chips_family_staged_runtime",
+    ]
+    .contains(&name)
         || name.ends_with("_fault")
 }
 
@@ -285,7 +291,7 @@ fn aliases(tree: &syn::UseTree, prefix: Vec<String>, found: &mut BTreeMap<String
             } else {
                 &name
             };
-            if ["fatal", "oer_espressif_staged_runtime"].contains(&module) {
+            if ["fatal", "oer_chips_family_staged_runtime"].contains(&module) {
                 found.insert(rename.rename.to_string(), module.into());
             }
             if terminal_api(&name)
@@ -365,10 +371,10 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
         }
         match item {
             syn::Item::Const(item) => {
-                if (self.file == "chips/espressif/staged-runtime/src/panic.rs"
+                if (self.file == "chips/family/staged-runtime/src/panic.rs"
                     && item.ident == "INVALID_HART")
-                    || (self.file == "chips/espressif/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
-                    || (self.file == "chips/espressif/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
+                    || (self.file == "chips/family/staged-runtime/src/trap.rs" && item.ident == "CPU_EXCEPTION")
+                    || (self.file == "chips/family/staged-runtime/src/fatal.rs" && item.ident == "BOOT_FAILURE")
                 {
                     self.add(item.ident.span(), "retained-reason", &item.ident);
                 }
@@ -495,7 +501,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
     }
 
     fn visit_expr_call(&mut self, expr: &'ast syn::ExprCall) {
-        if self.file == "firmware/probes/esp32s31-rx-chain/src/diagnostic.rs"
+        if self.file == "hil/probes/esp32s31-rx-chain/src/diagnostic.rs"
             && matches!(&*expr.func, syn::Expr::Path(path) if path.path.is_ident("record"))
             && let Some(syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Int(code),
@@ -640,20 +646,17 @@ fn modules(
 
 /// Whether `path` is in an image: its decisions are the image owner's.
 fn image_file(path: &str) -> bool {
-    path.starts_with("firmware/") || path.starts_with("hil-scenarios/images/")
+    ["examples/", "hil/images/", "hil/probes/"]
+        .iter()
+        .any(|root| path.starts_with(root))
+        || (path.starts_with("chips/") && path.ends_with("/bootstrap"))
+        || path.starts_with("chips/esp32s31/bootstrap/")
 }
 
 fn scan(root: &Path) -> ScannedSites {
     let root = root.canonicalize().expect("source root");
     let mut files = Vec::new();
-    for directory in [
-        "chips",
-        "firmware",
-        "hil-scenarios",
-        "portable",
-        "protocols",
-        "sdk",
-    ] {
+    for directory in ["chips", "examples", "hil", "oer", "portable", "protocols"] {
         sources(&root.join(directory), &mut files);
     }
     let packages: BTreeSet<_> = files
@@ -815,10 +818,10 @@ fn admitted_owner(id: &str) -> Option<&str> {
     if [
         "chips/esp32s31/hal",
         "chips/esp32s31/compose",
-        "chips/espressif/staged-runtime",
-        "chips/espressif/staged-bootstrap",
-        "chips/espressif/executor",
-        "sdk/espressif",
+        "chips/family/staged-runtime",
+        "chips/family/staged-bootstrap",
+        "chips/family/executor",
+        "chips/esp32s31/app",
     ]
     .contains(&home)
         || image_file(home)
@@ -864,8 +867,8 @@ fn terminal_registry_matches_source() {
 
 #[test]
 fn missing_and_extra_sites_are_both_rejected() {
-    let one = "firmware/fixture/src/main.rs:crate::one:panic-macro:panic:1";
-    let two = "firmware/fixture/src/main.rs:crate::two:panic-macro:panic:1";
+    let one = "examples/fixture/src/main.rs:crate::one:panic-macro:panic:1";
+    let two = "examples/fixture/src/main.rs:crate::two:panic-macro:panic:1";
     let actual = ScannedSites::from([
         (
             one.into(),
@@ -885,7 +888,7 @@ fn missing_and_extra_sites_are_both_rejected() {
     assert_eq!(
         differences(&actual, &Sites::from([one.into()])),
         [format!(
-            "unregistered: {two} (firmware/fixture/src/main.rs:3:12)"
+            "unregistered: {two} (examples/fixture/src/main.rs:3:12)"
         )]
     );
     assert_eq!(
@@ -913,7 +916,7 @@ fn scanner_finds_macros_callbacks_and_reasons_but_skips_tests_and_const_blocks()
     "#;
     let parsed = syn::parse_file(source).expect("fixture parses");
     let mut scanner = Scanner {
-        file: "firmware/fixture/src/lib.rs",
+        file: "examples/fixture/src/lib.rs",
         source,
         item: vec!["crate".into()],
         ordinals: BTreeMap::new(),
@@ -929,20 +932,20 @@ fn scanner_finds_macros_callbacks_and_reasons_but_skips_tests_and_const_blocks()
 fn metadata_requires_an_admitted_owner_and_fault_class() {
     for metadata in [
         "{ owner = 'protocols/wire', classes = ['rust-panic'] }",
-        "{ owner = 'firmware/apps/boot-smoke', classes = [] }",
-        "{ owner = 'firmware/apps/boot-smoke', classes = ['impossible-because-named-fault'] }",
-        "{ owner = 'firmware/apps/boot-smoke', classes = ['hardware-impossible'] }",
-        "{ owner = 'firmware/apps/radio-root', classes = ['rust-panic'] }",
+        "{ owner = 'hil/probes/esp32s31-boot-smoke', classes = [] }",
+        "{ owner = 'hil/probes/esp32s31-boot-smoke', classes = ['impossible-because-named-fault'] }",
+        "{ owner = 'hil/probes/esp32s31-boot-smoke', classes = ['hardware-impossible'] }",
+        "{ owner = 'hil/probes/esp32s31-radio-root', classes = ['rust-panic'] }",
     ] {
-        assert!(registry(&format!("version = 1\n[sites]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
+        assert!(registry(&format!("version = 1\n[sites]\n'hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = {metadata}\n")).is_err());
     }
-    assert!(registry("version = 1\n[sites]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'firmware/apps/boot-smoke', classes = ['rust-panic'] }\n").is_ok());
+    assert!(registry("version = 1\n[sites]\n'hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = { owner = 'hil/probes/esp32s31-boot-smoke', classes = ['rust-panic'] }\n").is_ok());
 }
 
 #[test]
 fn source_addition_deletion_and_file_removal_require_registry_changes() {
     let root = tempfile::tempdir().expect("source fixture");
-    let package = root.path().join("firmware/apps/fixture");
+    let package = root.path().join("examples/fixture");
     std::fs::create_dir_all(package.join("src")).expect("fixture source directory");
     std::fs::write(package.join("Cargo.toml"), "[package]\nname = 'fixture'\n")
         .expect("fixture manifest");
@@ -999,15 +1002,15 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
     let source = r#"
         use runtime::fatal::{reset_recording as reboot, reset as restart};
         use core::panic as fail;
-        use oer_espressif_staged_runtime::{self as rt};
-        use oer_espressif_staged_runtime as platform;
+        use oer_chips_family_staged_runtime::{self as rt};
+        use oer_chips_family_staged_runtime as platform;
         fn run() { reboot::<Port>(|_| ()); restart::<Port>(); fail!("image"); rt::reset::<Port>(); platform::reset::<Port>(); }
         macro_rules! emitted { () => { runtime::fatal::reset::<Port>(); rt::reset::<Port>(); } }
         enum FaultReason { One = 1, Two = 2 }
     "#;
     let parsed = syn::parse_file(source).expect("fixture parses");
     let mut scanner = Scanner {
-        file: "chips/espressif/staged-runtime/src/panic/fault.rs",
+        file: "chips/family/staged-runtime/src/panic/fault.rs",
         source,
         item: vec!["crate".into()],
         ordinals: BTreeMap::new(),
@@ -1037,7 +1040,7 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
 
 #[test]
 fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
-    let id = "firmware/apps/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
+    let id = "hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
     let recorded = registry(&format!(
         "version = 1\n[sites]\n[nonterminal]\n'{id}' = 'parser clears its frame and returns'\n"
     ))
@@ -1046,14 +1049,14 @@ fn nonterminal_reviews_cannot_hide_panic_sites_or_survive_removed_calls() {
         differences(&ScannedSites::new(), &recorded),
         [format!("stale: {id}")]
     );
-    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
+    assert!(registry("version = 1\n[sites]\n[nonterminal]\n'hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:panic-macro:panic:1' = 'hide panic'\n").is_err());
 }
 
 #[test]
 fn duplicate_registry_keys_and_overlapping_nonterminal_reviews_are_rejected() {
-    let id = "firmware/apps/boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
+    let id = "hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:reset-method:reset:1";
     let entry = format!(
-        "'{id}' = {{ owner = 'firmware/apps/boot-smoke', classes = ['requested-reset'] }}\n"
+        "'{id}' = {{ owner = 'hil/probes/esp32s31-boot-smoke', classes = ['requested-reset'] }}\n"
     );
     assert!(registry(&format!("version = 1\n[sites]\n{entry}{entry}")).is_err());
     assert!(
@@ -1086,7 +1089,7 @@ fn enclosing_items_distinguish_methods_and_number_only_identical_sites() {
         }
     "#;
     let mut scanner = Scanner {
-        file: "firmware/fixture/src/lib.rs",
+        file: "examples/fixture/src/lib.rs",
         source,
         item: vec!["crate".into()],
         ordinals: BTreeMap::new(),
@@ -1096,7 +1099,7 @@ fn enclosing_items_distinguish_methods_and_number_only_identical_sites() {
     };
     scanner.visit_file(&syn::parse_file(source).expect("fixture parses"));
     let names: Sites = scanner.sites.into_keys().collect();
-    let file = "firmware/fixture/src/lib.rs";
+    let file = "examples/fixture/src/lib.rs";
     assert_eq!(
         names,
         Sites::from([
@@ -1118,7 +1121,7 @@ fn enclosing_items_distinguish_methods_and_number_only_identical_sites() {
 #[test]
 fn module_paths_follow_inline_modules_path_attributes_and_includes() {
     let root = tempfile::tempdir().expect("source fixture");
-    let package = root.path().join("firmware/apps/fixture");
+    let package = root.path().join("examples/fixture");
     let src = package.join("src");
     std::fs::create_dir_all(src.join("outer")).expect("module directory");
     std::fs::write(package.join("Cargo.toml"), "[package]\nname = 'fixture'\n")
@@ -1140,9 +1143,8 @@ fn module_paths_follow_inline_modules_path_attributes_and_includes() {
     assert_eq!(
         actual.into_keys().collect::<Sites>(),
         Sites::from([
-            "firmware/apps/fixture/src/main.rs:crate::inline::run:panic-macro:panic:1".into(),
-            "firmware/apps/fixture/src/included.rs:crate::outer::named::run:panic-macro:panic:1"
-                .into(),
+            "examples/fixture/src/main.rs:crate::inline::run:panic-macro:panic:1".into(),
+            "examples/fixture/src/included.rs:crate::outer::named::run:panic-macro:panic:1".into(),
         ])
     );
 }
@@ -1218,7 +1220,7 @@ fn common_exception_binding_and_boot_callbacks_are_inventoried() {
         } }
     "#;
     let mut scanner = Scanner {
-        file: "firmware/fixture/src/lib.rs",
+        file: "examples/fixture/src/lib.rs",
         source,
         item: vec!["crate".into()],
         ordinals: BTreeMap::new(),

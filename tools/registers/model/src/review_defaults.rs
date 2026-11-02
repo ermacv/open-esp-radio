@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use oer_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
+use oer_tools_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
 use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, ReviewAnnotation};

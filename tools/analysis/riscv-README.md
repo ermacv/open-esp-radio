@@ -2,8 +2,8 @@
 
 The `oer-analysis-riscv-*` packages are the RV32 analysis layer that two tools share:
 [Blobray](cli/README.md), which researches and compares vendor code,
-and the stack analyzer [`oer-image-stack`](../image/stack/README.md), which bounds the
-stacks of our firmware images. Both read ELF through [`oer-analysis-elf`](elf/README.md),
+and the stack analyzer [`oer-tools-image-stack`](../image/stack/README.md), which bounds the
+stacks of our firmware images. Both read ELF through [`oer-tools-analysis-elf`](elf/README.md),
 whose `rv32` table is the one classification of RV32 relocations.
 
 The [question-owner map](blobray-docs/design/architecture.md#question-owners)
@@ -23,16 +23,16 @@ unavailable ROM summaries and incomplete signature audits. See the
 
 | Package | Owns |
 | --- | --- |
-| [`oer-analysis-riscv-model`](riscv-model/README.md) | Identities, errors, run control, working memory and the function-record vocabulary every layer shares |
-| [`oer-analysis-riscv-decode`](riscv-decode/README.md) | Instruction bytes to typed instructions for a selected extension set |
-| [`oer-analysis-riscv-lift`](riscv-lift/README.md) | Function decoding, relocation interpretation, instruction semantics and placement-independent listings |
-| [`oer-analysis-riscv-analysis`](riscv-analysis/README.md) | The bounded control-flow and value analysis of one function |
-| [`oer-analysis-riscv-program`](riscv-program/README.md) | The view of one static RV32 image: segments, image memory, code symbols and executable sections |
-| [`oer-image-stack`](../image/stack/README.md) | Worst-case stack bounds of a static image; a consumer of the layer, not part of Blobray |
+| [`oer-tools-analysis-riscv-model`](riscv-model/README.md) | Identities, errors, run control, working memory and the function-record vocabulary every layer shares |
+| [`oer-tools-analysis-riscv-decode`](riscv-decode/README.md) | Instruction bytes to typed instructions for a selected extension set |
+| [`oer-tools-analysis-riscv-lift`](riscv-lift/README.md) | Function decoding, relocation interpretation, instruction semantics and placement-independent listings |
+| [`oer-tools-analysis-riscv-analysis`](riscv-analysis/README.md) | The bounded control-flow and value analysis of one function |
+| [`oer-tools-analysis-riscv-program`](riscv-program/README.md) | The view of one static RV32 image: segments, image memory, code symbols and executable sections |
+| [`oer-tools-image-stack`](../image/stack/README.md) | Worst-case stack bounds of a static image; a consumer of the layer, not part of Blobray |
 
 The layer is Blobray's ISA layer: Blobray's application depends on the
 ISA-neutral model, the function analysis and the static image view, and its
-command line selects the concrete decoder from `oer-analysis-riscv-lift`. RV32 facts,
+command line selects the concrete decoder from `oer-tools-analysis-riscv-lift`. RV32 facts,
 such as relocation types and register numbers, belong to this layer, never to
 Blobray's application.
 
@@ -45,11 +45,11 @@ Its linker adapters also use the host process library.
 
 | Package | May depend on |
 | --- | --- |
-| `oer-analysis-elf`, `oer-analysis-riscv-model`, `oer-analysis-riscv-decode` | none |
-| `oer-analysis-riscv-lift` | `oer-analysis-elf`, `oer-analysis-riscv-decode`, `oer-analysis-riscv-model` |
-| `oer-analysis-riscv-analysis` | `oer-analysis-riscv-model` |
-| `oer-analysis-riscv-program` | `oer-analysis-elf`, `oer-analysis-riscv-model` |
-| `oer-image-stack` | `oer-analysis-elf`, `oer-analysis-riscv-analysis`, `oer-analysis-riscv-decode`, `oer-analysis-riscv-lift`, `oer-analysis-riscv-model`, `oer-analysis-riscv-program` |
+| `oer-tools-analysis-elf`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-decode` | none |
+| `oer-tools-analysis-riscv-lift` | `oer-tools-analysis-elf`, `oer-tools-analysis-riscv-decode`, `oer-tools-analysis-riscv-model` |
+| `oer-tools-analysis-riscv-analysis` | `oer-tools-analysis-riscv-model` |
+| `oer-tools-analysis-riscv-program` | `oer-tools-analysis-elf`, `oer-tools-analysis-riscv-model` |
+| `oer-tools-image-stack` | `oer-tools-analysis-elf`, `oer-tools-analysis-riscv-analysis`, `oer-tools-analysis-riscv-decode`, `oer-tools-analysis-riscv-lift`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-program` |
 
 The rows of the `blobray-*` crates are in
 [Blobray's architecture](blobray-docs/design/architecture.md#crates-and-modules).
@@ -60,10 +60,10 @@ The table describes repository dependencies, excluding test-only fixtures.
 
 A third-party library that reads a format has one owner, and no other
 package takes it as a normal or build dependency in this layer: `object`,
-`gimli` and `addr2line` belong to `oer-analysis-elf`, `rv-asm` to `oer-analysis-riscv-decode`.
-`object` has one more owner, `oer-analysis-blobray-artifacts`, Blobray's streaming
+`gimli` and `addr2line` belong to `oer-tools-analysis-elf`, `rv-asm` to `oer-tools-analysis-riscv-decode`.
+`object` has one more owner, `oer-tools-analysis-blobray-artifacts`, Blobray's streaming
 reader: it reads archive members and sections metered under Blobray's work
 budget, keeps the artifact identities its evidence names, and writes ELF
-objects, none of which the whole-file view of `oer-analysis-elf` does.
+objects, none of which the whole-file view of `oer-tools-analysis-elf` does.
 An owner exposes only its own types, so the library's types cannot leak
 through another package's interface. Tests may use them for fixtures.

@@ -45,9 +45,9 @@ impl QueueNotify for AtomicWaker {
     }
 }
 
-impl QueueNotify for oer_sync::PriorityWaker {
+impl QueueNotify for oer_portable_sync::PriorityWaker {
     fn register(&self, cx: &mut Context<'_>) {
-        oer_sync::PriorityWaker::register(self, cx.waker());
+        oer_portable_sync::PriorityWaker::register(self, cx.waker());
     }
     fn notify(&self) {
         self.wake();
@@ -149,7 +149,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
     /// cancelling the wait or dropping a permit consumes no credit.
     ///
     /// ```compile_fail,E0499
-    /// use oer_memory::WakingSpscQueue;
+    /// use oer_portable_memory::WakingSpscQueue;
     /// let mut queue = WakingSpscQueue::<u8, 1>::new();
     /// let (mut sender, receiver) = queue.split();
     /// let first = sender.ready();
@@ -158,7 +158,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
     /// ```
     ///
     /// ```
-    /// use oer_memory::WakingSpscQueue;
+    /// use oer_portable_memory::WakingSpscQueue;
     /// async fn sequential() {
     ///     let mut queue = WakingSpscQueue::<u8, 1>::new();
     ///     let (mut sender, receiver) = queue.split();
@@ -180,7 +180,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
 /// Exclusive capacity obtained by [`WakingSpscSender::ready`].
 ///
 /// ```compile_fail,E0502
-/// use oer_memory::WakingSpscQueue;
+/// use oer_portable_memory::WakingSpscQueue;
 /// async fn cannot_publish_twice() {
 ///     let mut queue = WakingSpscQueue::<u8, 1>::new();
 ///     let (mut sender, receiver) = queue.split();
@@ -264,7 +264,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
     /// by another outstanding wait. Cancellation leaves the value in the queue.
     ///
     /// ```compile_fail,E0499
-    /// use oer_memory::WakingSpscQueue;
+    /// use oer_portable_memory::WakingSpscQueue;
     /// let mut queue = WakingSpscQueue::<u8, 1>::new();
     /// let (sender, mut receiver) = queue.split();
     /// let first = receiver.ready();
@@ -273,7 +273,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
     /// ```
     ///
     /// ```
-    /// use oer_memory::WakingSpscQueue;
+    /// use oer_portable_memory::WakingSpscQueue;
     /// async fn sequential() {
     ///     let mut queue = WakingSpscQueue::<u8, 1>::new();
     ///     let (sender, mut receiver) = queue.split();

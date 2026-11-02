@@ -1,6 +1,6 @@
 //! Instruction listings annotated with the symbols, values and transfers
 //! already present in one function's records.
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AbstractValue, EdgeKind, FunctionRecord, MemoryKind, SymbolId, ValueAlternative,
 };
 use std::collections::BTreeMap;
@@ -69,7 +69,7 @@ pub fn listing(
                 if let Some(value) = render(value, &names) {
                     notes.entry(*offset).or_default().push(format!(
                         "{}={value}",
-                        oer_analysis_riscv_lift::register_name(*register)
+                        oer_tools_analysis_riscv_lift::register_name(*register)
                     ));
                 }
             }

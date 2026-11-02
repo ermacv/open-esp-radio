@@ -20,9 +20,9 @@ use core::{
     future::poll_fn,
     task::{Context, Poll},
 };
-use oer_esp32s31_hal::types::MacPowerInterruptObservation;
-pub use oer_espressif_interrupt_table::signal::ForeignContext;
-use oer_espressif_interrupt_table::signal::{IrqSignal, SignalExecutor, SignalPend};
+use oer_chips_esp32s31_hal::types::MacPowerInterruptObservation;
+pub use oer_chips_family_interrupt_table::signal::ForeignContext;
+use oer_chips_family_interrupt_table::signal::{IrqSignal, SignalExecutor, SignalPend};
 
 use super::{EVENT_KNOWN_MASK, EVENT_RX_SUCCESS, IrqSnapshot, IrqWork, next_irq_work};
 
@@ -126,8 +126,8 @@ impl<E: SignalExecutor> IrqStorage<E> {
     /// # fn panic(_: &core::panic::PanicInfo) -> ! {
     /// #     loop {}
     /// # }
-    /// use oer_esp32s31_ieee80211_driver::mac::irq::consumer::IrqStorage;
-    /// async fn sequential<E: oer_espressif_interrupt_table::signal::SignalExecutor>(storage: &mut IrqStorage<E>) {
+    /// use oer_chips_esp32s31_ieee80211_driver::mac::irq::consumer::IrqStorage;
+    /// async fn sequential<E: oer_chips_family_interrupt_table::signal::SignalExecutor>(storage: &mut IrqStorage<E>) {
     ///     let (_publisher, mut consumer) = storage.split();
     ///     let first = consumer.wait();
     ///     drop(first);
@@ -143,8 +143,8 @@ impl<E: SignalExecutor> IrqStorage<E> {
     /// # fn panic(_: &core::panic::PanicInfo) -> ! {
     /// #     loop {}
     /// # }
-    /// use oer_esp32s31_ieee80211_driver::mac::irq::consumer::IrqStorage;
-    /// async fn overlapping<E: oer_espressif_interrupt_table::signal::SignalExecutor>(storage: &mut IrqStorage<E>) {
+    /// use oer_chips_esp32s31_ieee80211_driver::mac::irq::consumer::IrqStorage;
+    /// async fn overlapping<E: oer_chips_family_interrupt_table::signal::SignalExecutor>(storage: &mut IrqStorage<E>) {
     ///     let (_publisher, mut consumer) = storage.split();
     ///     let first = consumer.wait();
     ///     let second = consumer.wait();

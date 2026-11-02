@@ -14,7 +14,7 @@ use crate::esp32s31::gain::{
 use crate::esp32s31::harness::{Result, case, filled, known, region, selection, words};
 use crate::esp32s31::layout::*;
 use crate::esp32s31::phy::Right;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallCapture, CallWordCount, ComparisonVerdict, DeviceBehavior, DeviceDeclaration, ExecutionGap,
     ExecutionRequest, ExecutionStop, RegionLifetime, RegisterCell, SessionReset,
 };
@@ -78,7 +78,7 @@ struct Baseline {
     request: ExecutionRequest,
 }
 
-fn state_selection(g: &Gain) -> Vec<oer_analysis_blobray_domain::MemorySelection> {
+fn state_selection(g: &Gain) -> Vec<oer_tools_analysis_blobray_domain::MemorySelection> {
     vec![selection(g.parameter, PHY_PARAM_BYTES)]
 }
 
@@ -334,7 +334,7 @@ fn storage_negative(g: &mut Gain, baseline: &Baseline) -> Result<()> {
     // comparison cannot prove.
     assert!(records.iter().any(|r| matches!(
         r,
-        oer_analysis_blobray_domain::ExecutionEvidence::FinalMemory { case: 1, replacement: false, chunk }
+        oer_tools_analysis_blobray_domain::ExecutionEvidence::FinalMemory { case: 1, replacement: false, chunk }
             if chunk.mask().is_some_and(|mask| chunk.known & mask != mask)
     )));
     assert!(!has_events(&records));

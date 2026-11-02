@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-le-ll"
+name = "oer-protocols-bluetooth-le-ll"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,9 @@ repository.workspace = true
 description = "Allocation-free Bluetooth LE Link Layer protocol, role state, event geometry and receive authentication"
 
 [dependencies]
-oer-bluetooth-le-wire = { path = "../wire" }
-oer-bluetooth-le-cipher = { path = "../cipher" }
-oer-bluetooth-le-port = { path = "../port" }
+oer-protocols-bluetooth-le-wire = { path = "../wire" }
+oer-protocols-bluetooth-le-cipher = { path = "../cipher" }
+oer-protocols-bluetooth-le-port = { path = "../port" }
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{Station, association::{AssociationStart, VacantKeyBank, end_association}};
-use oer_ieee80211_wire::security::Spp;
+use oer_protocols_ieee80211_contracts_port::{Station, association::{AssociationStart, VacantKeyBank, end_association}};
+use oer_protocols_ieee80211_wire::security::Spp;
 pub fn next<'id>(start: AssociationStart<'id, Station, 1, 1>, bank: VacantKeyBank<'id, Station, 1, 1>) {
     let first = start.begin(Spp::Negotiated);
     #[cfg(ui_reject)]

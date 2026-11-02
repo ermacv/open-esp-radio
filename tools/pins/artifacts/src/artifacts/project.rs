@@ -1,7 +1,7 @@
 //! The chips with a vendor verification project and its fixed layout.
 //!
 //! The supported chips are those with a profile
-//! ([`oer_chip_profile::Profile`]); a chip has a vendor verification project
+//! ([`oer_tools_chip_profile::Profile`]); a chip has a vendor verification project
 //! when its pins `chips/<chip>/vendor/artifacts.toml` also exist. Its verification
 //! files live at fixed paths below that directory, so no task keeps its own
 //! list of chips.
@@ -15,7 +15,7 @@ const VENDOR: &str = "tools/vendor";
 
 /// Every supported chip, sorted: the chips with a profile.
 pub fn supported(root: &Path) -> Result<Vec<String>> {
-    oer_chip_profile::supported(root)
+    oer_tools_chip_profile::supported(root)
 }
 
 /// Every supported chip with a vendor verification project, sorted: those
@@ -45,7 +45,7 @@ impl Project {
     /// otherwise an error that lists the supported chips or names the
     /// missing project.
     pub fn new(root: &Path, name: &str) -> Result<Self> {
-        let id = oer_chip_profile::Profile::load(root, name)?.facts.id;
+        let id = oer_tools_chip_profile::Profile::load(root, name)?.facts.id;
         crate::manifest_path(root, &id)?;
         Ok(Self(id))
     }
@@ -62,8 +62,10 @@ impl Project {
     /// The chip's ROM as its profile's `[rom]` names it: the pinned ROM
     /// ELF's artifact id and the reviewed summaries of the ROM functions its
     /// images call, relative to the root; `None` for a chip without one.
-    pub fn rom(&self, root: &Path) -> Result<Option<oer_espressif_facts::Rom>> {
-        Ok(oer_chip_profile::Profile::load(root, &self.0)?.facts.rom)
+    pub fn rom(&self, root: &Path) -> Result<Option<oer_chips_family_facts::Rom>> {
+        Ok(oer_tools_chip_profile::Profile::load(root, &self.0)?
+            .facts
+            .rom)
     }
 
     /// Directory of the chip's module in the typed vendor scenario library;
@@ -85,8 +87,8 @@ impl Project {
     /// The package of the chip's typed vendor scenarios.
     pub fn scenarios(&self) -> Scenarios {
         Scenarios {
-            entry: "oer-tool-vendor-scenario-cli".to_owned(),
-            binary: "oer-tool-vendor-scenario".to_owned(),
+            entry: "oer-tools-vendor-scenario-cli".to_owned(),
+            binary: "oer-tools-vendor-scenario".to_owned(),
         }
     }
 }
@@ -104,7 +106,7 @@ mod tests {
         let repository = root();
         let root = repository.path();
         let supported = supported(root).unwrap();
-        assert_eq!(supported, oer_chip_profile::supported(root).unwrap());
+        assert_eq!(supported, oer_tools_chip_profile::supported(root).unwrap());
         let error = Project::new(root, "chip-x").unwrap_err().to_string();
         assert!(error.contains("unsupported chip `chip-x`"), "{error}");
         assert!(error.contains(&supported.join(", ")), "{error}");

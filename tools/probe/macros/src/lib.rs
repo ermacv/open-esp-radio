@@ -9,7 +9,7 @@
 /// production call must be driven by an explicit synchronous adapter.
 #[proc_macro]
 pub fn probe(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    match syn::parse::<oer_probe_codegen::Declaration>(input) {
+    match syn::parse::<oer_tools_probe_codegen::Declaration>(input) {
         Ok(declaration) => declaration.expand().into(),
         Err(error) => error.into_compile_error().into(),
     }

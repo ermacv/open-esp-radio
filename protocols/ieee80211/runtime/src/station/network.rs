@@ -6,10 +6,10 @@
 //! when its MPDU delivered several (an A-MSDU) or the backend kept the
 //! buffer; [`RxMsdusCopied`] counts both.
 //!
-//! [`LowerMacPhase::lend`]: oer_ieee80211_contracts_port::LowerMacPhase::lend
+//! [`LowerMacPhase::lend`]: oer_protocols_ieee80211_contracts_port::LowerMacPhase::lend
 
-use oer_ieee80211_contracts_port::LentRxBuffer;
-use oer_network_port::{FrameStorage, LentFrame, ReceivedFrame};
+use oer_protocols_ieee80211_contracts_port::LentRxBuffer;
+use oer_protocols_network_port::{FrameStorage, LentFrame, ReceivedFrame};
 
 /// A lent receive buffer as network storage: the MPDU, then the rest of its
 /// allocation.
@@ -22,13 +22,16 @@ impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0.storage_mut()
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
-        self.0
-            .advance(by)
-            .map_err(|refused| oer_network_port::StorageAdvanceRefused {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
+        self.0.advance(by).map_err(
+            |refused| oer_protocols_network_port::StorageAdvanceRefused {
                 by: refused.by,
                 length: refused.mpdu_len,
-            })
+            },
+        )
     }
 }
 
@@ -48,7 +51,7 @@ pub enum Received<L> {
 /// What stands for one of the service's copies in the network queue; the
 /// device reads the copy in place ([`NetDevice::read_copied`]).
 ///
-/// [`NetDevice::read_copied`]: oer_network_port::NetDevice::read_copied
+/// [`NetDevice::read_copied`]: oer_protocols_network_port::NetDevice::read_copied
 #[derive(Debug)]
 pub struct CopiedMark(());
 
@@ -76,7 +79,7 @@ pub struct RxMsdusCopied {
     /// MSDUs of a frame that delivered more than one.
     pub aggregated: u16,
     /// MSDUs whose buffer the backend kept
-    /// ([`LendRefusal`](oer_ieee80211_contracts_port::LendRefusal)).
+    /// ([`LendRefusal`](oer_protocols_ieee80211_contracts_port::LendRefusal)).
     pub kept: u16,
 }
 
@@ -123,7 +126,7 @@ impl NetworkStop for NoNetwork {
 /// request that named none. The composition chooses it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StopPolicy {
-    pub drain: oer_time::Duration,
+    pub drain: oer_portable_time::Duration,
 }
 
 /// Why the network did not return the station's lent buffers before the
@@ -145,11 +148,15 @@ pub struct NetworkDrainFailure {
 
 /// Stop the network and wait, until `deadline`, for it to stop and return
 /// every lent buffer.
-pub(super) async fn drain<'p, 'id: 'p, P: oer_ieee80211_contracts_port::LowerMacPhase<'p, 'id>>(
+pub(super) async fn drain<
+    'p,
+    'id: 'p,
+    P: oer_protocols_ieee80211_contracts_port::LowerMacPhase<'p, 'id>,
+>(
     phase: &mut P,
     network: &impl NetworkStop,
-    timer: &impl oer_time::Timer,
-    deadline: oer_time::Instant,
+    timer: &impl oer_portable_time::Timer,
+    deadline: oer_portable_time::Instant,
 ) -> Result<(), NetworkDrainFailure> {
     use core::{future::Future, task::Poll};
     network.request_stop();

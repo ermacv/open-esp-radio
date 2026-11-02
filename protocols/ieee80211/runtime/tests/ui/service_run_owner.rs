@@ -1,14 +1,14 @@
 #![no_std]
-use oer_ieee80211_runtime::station::{PortAck, PortBlockAck, PortRxMeta, Runner, ServiceIo, StationPort};
-use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
-use oer_radio_port::{Disabled, Owner};
-use oer_time::Timer;
+use oer_protocols_ieee80211_runtime::station::{PortAck, PortBlockAck, PortRxMeta, Runner, ServiceIo, StationPort};
+use oer_protocols_ieee80211_core_upper_mac::rate_selection::RateSelection;
+use oer_protocols_radio_port::{Disabled, Owner};
+use oer_portable_time::Timer;
 
 pub fn run_once<
     'p,
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
-    C: oer_ieee80211_core_roles_sta::machine::StaCallbacks,
+    C: oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
 >(
     service: Runner<'id, B, C, S>,
@@ -16,9 +16,9 @@ pub fn run_once<
     io: &mut ServiceIo<
         '_,
         B::Caps,
-        impl oer_ieee80211_runtime::station::ServiceOutputSink<B::Caps>,
+        impl oer_protocols_ieee80211_runtime::station::ServiceOutputSink<B::Caps>,
         B::LentRx,
-        impl oer_ieee80211_runtime::station::NetworkStop,
+        impl oer_protocols_ieee80211_runtime::station::NetworkStop,
         1,
         1,
         1,

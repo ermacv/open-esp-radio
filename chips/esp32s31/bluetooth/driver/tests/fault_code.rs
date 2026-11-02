@@ -1,6 +1,6 @@
-use oer_esp32s31_bluetooth_driver::controller_time::ControllerTimeRangeFault;
-use oer_esp32s31_bluetooth_driver::port::Fault;
-use oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
+use oer_chips_esp32s31_bluetooth_driver::controller_time::ControllerTimeRangeFault;
+use oer_chips_esp32s31_bluetooth_driver::port::Fault;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
 
 #[test]
 fn hardware_error_reasons_preserve_existing_codes() {

@@ -1,6 +1,6 @@
 //! Production interrupt admission and terminal readback policy.
 use super::{BluetoothInterruptObservation, InterruptSetupOwner, TaskOwner};
-use oer_esp32s31_pac::bt_mac;
+use oer_chips_esp32s31_pac::bt_mac;
 
 // These are policy sets, with geometry supplied by the PAC. Baseline faults
 // are serviced by fail-closed capture; dynamic lanes feed the scheduler.

@@ -7,10 +7,10 @@
 //! fails it: the review is stale, or no case exercises the path it reviews,
 //! so the contract claims more than the evidence shows.
 use crate::harness::{Result, invalid};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     EffectContract, EffectSelection, ExecutionEvent, ExecutionEvidence, ExecutionRequest,
 };
-use oer_analysis_riscv_model::{ArtifactId, Result as DomainResult, RunControl};
+use oer_tools_analysis_riscv_model::{ArtifactId, Result as DomainResult, RunControl};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -91,7 +91,7 @@ pub fn count(
             let Some(events) = events.get(&(index as u32, side)) else {
                 continue;
             };
-            let selections = oer_analysis_blobray_verification::classify_effects(
+            let selections = oer_tools_analysis_blobray_verification::classify_effects(
                 &contract.contract,
                 events,
                 side,
@@ -170,7 +170,8 @@ mod tests {
     fn a_rule_without_a_selection_is_dead_only_in_a_used_contract() {
         let contract = crate::failure::tests::contract();
         let reference =
-            oer_analysis_blobray_application::in_process::effect_contract_id(&contract).unwrap();
+            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract)
+                .unwrap();
         let mut reviewed = [Reviewed::new("fixture", reference, contract)];
         assert!(dead(&reviewed).is_empty());
         reviewed[0].used = true;
@@ -187,7 +188,8 @@ mod tests {
         port.name = "settled-check-other-port".into();
         contract.rules.push(port);
         let reference =
-            oer_analysis_blobray_application::in_process::effect_contract_id(&contract).unwrap();
+            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract)
+                .unwrap();
         let mut reviewed = [Reviewed::new("fixture", reference, contract)];
         reviewed[0].used = true;
         assert_eq!(

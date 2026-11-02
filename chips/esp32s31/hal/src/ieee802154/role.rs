@@ -32,7 +32,7 @@ use crate::{
     root::Ieee802154RadioPartition,
 };
 use core::fmt;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154FoundationSnapshot,
     Ieee802154LifecycleBackend, Ieee802154MacControl, Ieee802154MacPolicyBackend,
     Ieee802154MacPolicyReadback, Ieee802154MacPolicyWrites, Ieee802154PanIdentity,
@@ -289,7 +289,7 @@ pub struct Ieee802154Clocked {
     mac: Ieee802154Mac,
 }
 impl Ieee802154MacPolicyWrites for Ieee802154Clocked {
-    fn set_channel(&mut self, channel: oer_espressif_ieee802154_mac_values::Ieee802154Channel) {
+    fn set_channel(&mut self, channel: oer_chips_family_ieee802154_mac_values::Ieee802154Channel) {
         self.mac.mac_hal().set_channel(channel);
     }
 

@@ -8,8 +8,8 @@
 
 use core::cell::Cell;
 
-use oer_time::settle::{Settle, SettleLimit, Unsettled, settle};
-use oer_time::{Clock, Duration, Instant};
+use oer_portable_time::settle::{Settle, SettleLimit, Unsettled, settle};
+use oer_portable_time::{Clock, Duration, Instant};
 
 /// A clock that advances one microsecond at every read.
 struct Stepping(Cell<u64>);
@@ -61,7 +61,7 @@ fn a_pair_that_never_agrees_stops_when_the_limit_has_passed() {
 
 #[test]
 fn concrete_and_erased_clocks_keep_the_same_result_and_attempt_count() {
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time_virtual::VirtualClock;
 
     fn run<C: Clock + ?Sized>(
         wait: Settle<'_, C>,
@@ -104,7 +104,7 @@ fn concrete_and_erased_clocks_keep_the_same_result_and_attempt_count() {
 
 #[test]
 fn an_interrupt_after_a_failed_attempt_still_gets_a_final_attempt() {
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time_virtual::VirtualClock;
 
     // The first attempt finds the hardware busy; an interrupt then holds the
     // CPU beyond the limit while the hardware completes. The settle samples

@@ -6,11 +6,11 @@
 //! from the cases' verdicts: it keeps a pass from passing and never turns a
 //! failed case into a pass.
 
-use oer_lab_client::protocol::RouterOperation;
+use oer_tools_lab_client::protocol::RouterOperation;
 use std::time::Duration;
 
-use oer_hil_link::{CallError, Link};
-use oer_hil_protocol::base::GetHello;
+use oer_protocols_hil_protocol::base::GetHello;
+use oer_tools_hil_link::{CallError, Link};
 
 /// What a case needs from the stand's board: a reset into its image and its
 /// console.
@@ -97,7 +97,7 @@ pub(crate) fn finish(
     ending: Ending,
     waits: Waits,
 ) -> Cleanup {
-    if oer_os_process::cancellation_requested() {
+    if oer_tools_os_process::cancellation_requested() {
         return Cleanup::Cancelled;
     }
     let Some(link) = link else {

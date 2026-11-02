@@ -1,13 +1,13 @@
 //! The boot owners over host memory from each instance's base: each test
 //! fills the words with a pattern, runs one sequence of
-//! `oer-espressif-boot` on an owner and reads the fields back through a
+//! `oer-chips-family-boot` on an owner and reads the fields back through a
 //! typed view of the same words. Host memory never clears a command the owner starts,
 //! so a sequence that starts one ends with that command's named timeout,
 //! after every word it set up.
 
 use std::{vec, vec::Vec};
 
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     Access, BootFailure, FlashFailure, MmuFailure, WaitFailure,
     cache::{CacheGeometry, SuspendWaits, publish_code, with_fetch_suspended},
     clock::{ActivePllPower, ClockRates, ClockWaits, CpuClockProfile, bring_up},
@@ -16,15 +16,15 @@ use oer_espressif_boot::{
     psram::{self, CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramOwners, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
 };
-use oer_mmio::Bits;
-use oer_time::{Clock, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_portable_mmio::Bits;
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::{
     ActivePower, BusDividers, CacheMap, CacheRegisters, ClockRegisters, CpllDividers, CpuRoot,
     FlashRegisters, MemDivider, PsramRegisters, PsramSupplyLevel,
 };
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     cache::CacheBoot as Cache, cache::cache_host, hp_alive_sys::HpAliveSysPllClock as HpAliveSys,
     hp_sys_clkrst::HpSysClkrstBootClock as HpSysClkrst, instances,
     iomux_mspi_pin::IomuxMspiPsramPins as IomuxMspiPin,
@@ -90,10 +90,10 @@ impl ClockMemory {
     fn owner(
         &mut self,
     ) -> ClockRegisters<
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
     > {
         ClockRegisters::host(
             &mut self.clkrst,
@@ -330,8 +330,9 @@ fn a_flash_read_waits_for_every_command_of_the_word_before_writing_its_phases() 
     // Every command of SPI1's command word but the user one reads running.
     let mut spi0 = memory(instances::spi0::SIZE, 0);
     let mut spi1 = qio_spi1();
-    spi1[oer_esp32s31_pac::spi1_mem_c::cmd::OFFSET / 4] =
-        oer_esp32s31_pac::spi1_mem_c::cmd::BUSY & !oer_esp32s31_pac::spi1_mem_c::cmd::COMMANDS;
+    spi1[oer_chips_esp32s31_pac::spi1_mem_c::cmd::OFFSET / 4] =
+        oer_chips_esp32s31_pac::spi1_mem_c::cmd::BUSY
+            & !oer_chips_esp32s31_pac::spi1_mem_c::cmd::COMMANDS;
     let before = spi1.clone();
     let virtual_clock = VirtualClock::new();
     let ticking = Ticking(&virtual_clock);
@@ -458,7 +459,11 @@ impl PsramMemory {
 
     fn owner(
         &mut self,
-    ) -> PsramRegisters<oer_mmio::Host<'_>, oer_mmio::Host<'_>, oer_mmio::Host<'_>> {
+    ) -> PsramRegisters<
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+    > {
         PsramRegisters::host(&mut self.memspi2, &mut self.memspi3, &mut self.pins)
             .expect("host memory holds them")
     }
@@ -819,7 +824,7 @@ fn a_thaw_that_never_reports_restores_fetch_autoload_and_freeze() {
 
 #[test]
 fn a_mask_without_hart_1_leaves_every_cache_word_alone() {
-    use oer_espressif_boot::cache::open_secondary_fetch;
+    use oer_chips_family_boot::cache::open_secondary_fetch;
     let mut words = memory(instances::cache::SIZE, 0);
     let before = words.clone();
     let virtual_clock = VirtualClock::new();
@@ -836,7 +841,7 @@ fn a_mask_without_hart_1_leaves_every_cache_word_alone() {
 
 #[test]
 fn hart_1_s_suspension_shuts_only_its_bus_and_keeps_it_shut_on_a_failed_wait() {
-    use oer_espressif_boot::cache::open_secondary_fetch;
+    use oer_chips_family_boot::cache::open_secondary_fetch;
     // All zeros: hart 1's autoload is off and never reports done.
     let mut words = memory(instances::cache::SIZE, 0);
     let virtual_clock = VirtualClock::new();
@@ -863,7 +868,7 @@ fn hart_1_s_suspension_shuts_only_its_bus_and_keeps_it_shut_on_a_failed_wait() {
 
 #[test]
 fn hart_1_s_thaw_that_never_reports_restores_its_cache_and_keeps_its_bus_shut() {
-    use oer_espressif_boot::cache::open_secondary_fetch;
+    use oer_chips_family_boot::cache::open_secondary_fetch;
     // All ones but hart 1's open bus: its autoload runs, every idle flag
     // and the freeze's done flag read set, so its thaw never reports.
     let mut words = memory(instances::cache::SIZE, u32::MAX);
@@ -906,7 +911,7 @@ fn hart_1_s_thaw_that_never_reports_restores_its_cache_and_keeps_its_bus_shut() 
 /// The boot sequence keeps its PLL powered without changing the radio's other fields.
 fn assert_active_power(words: &mut [u32], before: &[u32], cpu: bool) {
     let mut expected = before.to_vec();
-    let mut view = oer_esp32s31_pac::pmu::PmuRadio::host(&mut expected).expect("host PMU");
+    let mut view = oer_chips_esp32s31_pac::pmu::PmuRadio::host(&mut expected).expect("host PMU");
     view.modify_hp_active_hp_ck_power(|w| {
         if cpu {
             w.set_hp_active_xpd_cpll(true)

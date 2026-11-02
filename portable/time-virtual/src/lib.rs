@@ -23,7 +23,7 @@
 
 //! Deterministic virtual time for tests and simulations.
 //!
-//! [`VirtualClock`] implements [`oer_time::Clock`] and [`oer_time::Timer`]
+//! [`VirtualClock`] implements [`oer_portable_time::Clock`] and [`oer_portable_time::Timer`]
 //! for one instance: time stands still until its owner advances it, so a
 //! test or a simulation decides exactly when every wait ends, and several
 //! clocks in one process keep independent times. Advancing wakes every
@@ -42,7 +42,7 @@ use core::{
     task::{Poll, Waker},
 };
 
-use oer_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
+use oer_portable_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
 
 /// Where [`VirtualClock::new`] and [`SkipClock::new`] start:
 /// [`CLOCK_EPOCH_OFFSET`] past [`Instant::EPOCH`], as the image's clock

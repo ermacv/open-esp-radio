@@ -1,15 +1,15 @@
 # Verification harness
 
-`oer-vendor-scenario` holds the vendor verification: the chip-neutral engine,
+`oer-tools-vendor-scenario` holds the vendor verification: the chip-neutral engine,
 the ESP32-S31 scenarios on it and the reviewer reports:
 
 | Package | Path | Owns |
 | --- | --- | --- |
-| `oer-probe-codegen` | `tools/probe/codegen/` | Rust declaration grammar, image catalog, linker roots and post-link validation |
-| `oer-probe-macros` | `tools/probe/macros/` | Procedural-macro frontend of the declarations |
-| `oer-vendor-scenario` | `tools/vendor/scenario/` | The engine at the crate root: authenticated artifacts, Blobray sessions, comparison harness, observation and state analysis; `esp32s31`: the chip's scenarios, addresses, pins and reviewed decisions; `report`: unclaimed compared pairs, the shared scenario command line and the `xref`, `show`, `fields` and `prints` inspection commands |
+| `oer-tools-probe-codegen` | `tools/probe/codegen/` | Rust declaration grammar, image catalog, linker roots and post-link validation |
+| `oer-tools-probe-macros` | `tools/probe/macros/` | Procedural-macro frontend of the declarations |
+| `oer-tools-vendor-scenario` | `tools/vendor/scenario/` | The engine at the crate root: authenticated artifacts, Blobray sessions, comparison harness, observation and state analysis; `esp32s31`: the chip's scenarios, addresses, pins and reviewed decisions; `report`: unclaimed compared pairs, the shared scenario command line and the `xref`, `show`, `fields` and `prints` inspection commands |
 
-The entry package `oer-tool-vendor-scenario-cli` (`tools/vendor/scenario-cli`)
+The entry package `oer-tools-vendor-scenario-cli` (`tools/vendor/scenario-cli`)
 installs the ESP32-S31 scenarios and runs one scenario or inspection command.
 `cargo vendor-check scenario --chip esp32s31` builds and runs it; a chip
 without a module below `tools/vendor/scenario/src/` has no scenarios.
@@ -22,10 +22,10 @@ identical statement in another context remains unobserved.
 
 The probe compiler is a host build tool; it owns no production behavior and
 does not depend on Blobray's executor. The
-[ESP32-S31](../../../firmware/probes/esp32s31.md) probe packages consume it. A chip's
+[ESP32-S31](../../../hil/probes/esp32s31.md) probe packages consume it. A chip's
 scenario module installs its `Chip` description into the engine and keeps its
 addresses, pins and reviewed decisions; the
-[ESP32-S31 probes](../../../firmware/probes/esp32s31.md) describe the inputs.
+[ESP32-S31 probes](../../../hil/probes/esp32s31.md) describe the inputs.
 
 The engine decides every verdict and hands each claimed suite's `Findings`
 to a `RunReport` supplied by the scenario binary. The report crate depends
@@ -49,14 +49,14 @@ inventory, keeping repeated ROM comparisons separate. Defaults are 8192 MiB,
 Typed counts come directly from each `mmio_diff` result; operation exhaustion
 fails without writing a report for that run.
 
-Pins come from `oer-pins-artifacts`, the reader of `artifacts.toml`.
+Pins come from `oer-tools-pins-artifacts`, the reader of `artifacts.toml`.
 
 ## Declare an entry
 
 Place a declaration in an ordinary Rust module of the probe library:
 
 ```rust,ignore
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Run the shipping operation under the selected isolated owner.
     pub fn open_example(value: u32) -> u32 =>
         with_owner(|owner| shipping_operation(owner, value).map_or(0, project));
@@ -109,9 +109,9 @@ or sidecar file.
 ## Validation
 
 ```console
-cargo test -p oer-probe-codegen -p oer-probe-macros
-cargo test -p oer-probe-codegen --test linking -- --ignored
-cargo test -p oer-vendor-scenario
+cargo test -p oer-tools-probe-codegen -p oer-tools-probe-macros
+cargo test -p oer-tools-probe-codegen --test linking -- --ignored
+cargo test -p oer-tools-vendor-scenario
 ```
 
 The second command requires the repository's RV32 target. It tests archive

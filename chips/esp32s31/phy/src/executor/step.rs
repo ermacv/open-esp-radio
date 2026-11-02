@@ -7,7 +7,7 @@ pub(crate) mod rfpll;
 pub(crate) mod temperature;
 pub(crate) mod wifi_i2c;
 pub(crate) use io::Registers;
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 use crate::{
     analog::pbus::{
@@ -26,13 +26,13 @@ use core::{
     task::{Context, Poll},
 };
 use io::Io;
-use oer_time::{Clock, Duration, Instant};
+use oer_portable_time::{Clock, Duration, Instant};
 
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
 
 // Leave 100 us for admission, one <=50-us atom and the return path.
-const POLL_ADMISSION_MICROS: u64 = oer_cooperate::POLL_ADMISSION_MICROS as u64;
+const POLL_ADMISSION_MICROS: u64 = oer_portable_cooperate::POLL_ADMISSION_MICROS as u64;
 
 // T7's answer window: the hardware boundary is 20 us. It starts when command
 // publication returns, yields the CPU, and does not delay a ready result. A
@@ -253,7 +253,7 @@ impl<'a> Job<'a> {
     /// and keeps complete memory entries inside a checkpoint;
     /// temperature conversion, state publication and observers are outside it.
     #[inline(never)]
-    fn advance_one<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance_one<D: super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         io: Io<'_>,
         clock: &C,
@@ -272,7 +272,7 @@ impl<'a> Job<'a> {
             Err(error) => Step::Failure(error),
         }
     }
-    fn advance<D: super::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance<D: super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         mut io: Io<'_>,
         clock: &C,
@@ -694,7 +694,7 @@ impl<
 > Future for Driver<'a, '_, R, T, F, M, D>
 {
     type Output = Result<(), Failure>;
-    oer_esp32s31_hal::place_phy_engine_hot_path! {
+    oer_chips_esp32s31_hal::place_phy_engine_hot_path! {
         /// One engine poll per timer/register type, shared by all families.
         #[inline(never)]
         fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {

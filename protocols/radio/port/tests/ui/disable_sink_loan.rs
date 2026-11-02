@@ -1,6 +1,6 @@
 #![no_std]
 use core::ops::ControlFlow;
-use oer_radio_port::{Enabled, Owner, PortBackend, SlotIdentity};
+use oer_protocols_radio_port::{Enabled, Owner, PortBackend, SlotIdentity};
 
 pub fn disable<'p, 'id, Id: SlotIdentity, B: PortBackend<Id>, S>(
     owner: Owner<'p, 'id, Id, B, Enabled>,

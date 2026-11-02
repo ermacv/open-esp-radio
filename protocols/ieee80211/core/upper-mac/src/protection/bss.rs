@@ -1,7 +1,7 @@
 //! Protection inputs and decisions shared by upper-MAC and the family policy.
 use core::num::NonZeroU16;
-use oer_ieee80211_contracts_port::Protection;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_contracts_port::Protection;
+use oer_protocols_ieee80211_wire::{
     phy::{LegacyRate, PhyRate},
     protection::{ErpProtection, HtProtectionMode},
     rates::{LEGACY_RATES, LegacyRateSet, RateSelection},

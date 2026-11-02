@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{BodyLoan, SlotIdentity, SlotOwner};
+use oer_protocols_radio_port::{BodyLoan, SlotIdentity, SlotOwner};
 
 pub fn loan<'p, Id: SlotIdentity, S: SlotOwner<Id>, Other: SlotOwner<Id>>(
     own: BodyLoan<'p, Id, S>, foreign: BodyLoan<'p, Id, Other>,

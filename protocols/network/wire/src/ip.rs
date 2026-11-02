@@ -4,7 +4,7 @@
 //! Format); RFC 2474, 3 (Differentiated Services Field). Options and
 //! extension headers are not interpreted; checksums are not checked.
 
-use oer_wire::Reader;
+use oer_portable_wire::Reader;
 
 const IPV4_MIN_LEN: usize = 20;
 const IPV6_LEN: usize = 40;
@@ -25,11 +25,11 @@ pub enum IpError {
 
 /// Valid six-bit IPv4/IPv6 Differentiated Services Code Point.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Dscp(oer_wire::U8<6>);
+pub struct Dscp(oer_portable_wire::U8<6>);
 
 impl Dscp {
     pub const fn new(value: u8) -> Option<Self> {
-        match oer_wire::U8::new(value) {
+        match oer_portable_wire::U8::new(value) {
             Some(value) => Some(Self(value)),
             None => None,
         }
@@ -40,7 +40,7 @@ impl Dscp {
     }
 
     /// The codepoint a Differentiated Services field carries.
-    pub const fn from_field(value: oer_wire::U8<6>) -> Self {
+    pub const fn from_field(value: oer_portable_wire::U8<6>) -> Self {
         Self(value)
     }
 
@@ -52,7 +52,7 @@ impl Dscp {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// IPv4's first octet: version and Internet Header Length.
     /// SOURCE: RFC 791, 3.1 (Internet Header Format).
     pub struct Ipv4VersionIhl[1] (little) {
@@ -61,7 +61,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Differentiated Services field, also carried by IPv6 Traffic Class.
     /// SOURCE: RFC 2474, 3 (Differentiated Services Field).
     pub struct DsField[1] (little) {
@@ -74,7 +74,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// IPv4 Flags and Fragment Offset.
     /// SOURCE: RFC 791, 3.1 (Internet Header Format).
     pub struct Ipv4Fragment[2] (big) {
@@ -85,7 +85,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// First two IPv6 header octets, including the complete Traffic Class.
     /// SOURCE: RFC 8200, 3 (IPv6 Header Format).
     pub struct Ipv6HeaderPrefix[2] (big) {

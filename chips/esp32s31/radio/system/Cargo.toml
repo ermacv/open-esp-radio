@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-radio-system"
+name = "oer-chips-esp32s31-radio-system"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,30 +8,30 @@ repository.workspace = true
 description = "The ESP32-S31 radio system: one actor that owns the shared RF front-end"
 
 [features]
-bluetooth = ["oer-esp32s31-radio-client/bluetooth"]
+bluetooth = ["oer-chips-esp32s31-radio-client/bluetooth"]
 
 [dependencies]
-oer-espressif-coex = { path = "../../../espressif/coex" }
+oer-chips-family-coex = { path = "../../../family/coex" }
 embassy-futures = "0.1.2"
 pin-project-lite = "0.2.16"
-oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
-oer-cooperate = { path = "../../../../portable/cooperate" }
-oer-memory = { path = "../../../../portable/memory" }
-oer-time = { path = "../../../../portable/time" }
-oer-trace = { path = "../../../../portable/trace" }
-oer-diagnostics = { path = "../../../../portable/diagnostics" }
-oer-esp32s31-hal = { path = "../../hal" }
-oer-esp32s31-phy = { path = "../../phy" }
-oer-esp32s31-radio-client = { path = "../client" }
-oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
-oer-ieee80211-contracts-port = { path = "../../../../protocols/ieee80211/contracts/port" }
+oer-protocols-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
+oer-portable-cooperate = { path = "../../../../portable/cooperate" }
+oer-portable-memory = { path = "../../../../portable/memory" }
+oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-trace = { path = "../../../../portable/trace" }
+oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
+oer-chips-esp32s31-hal = { path = "../../hal" }
+oer-chips-esp32s31-phy = { path = "../../phy" }
+oer-chips-esp32s31-radio-client = { path = "../client" }
+oer-protocols-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../../protocols/ieee80211/contracts/port" }
 
 [dev-dependencies]
-oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
-oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
-oer-esp32s31-radio-client = { path = "../client", features = ["test-support"] }
-oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
-oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-protocols-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
+oer-protocols-radio-regulatory = { path = "../../../../protocols/radio/regulatory", features = ["test-support"] }
+oer-chips-esp32s31-radio-client = { path = "../client", features = ["test-support"] }
+oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 
 [lints]
 workspace = true

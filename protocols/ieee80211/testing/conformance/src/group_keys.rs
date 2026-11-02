@@ -7,7 +7,7 @@
 //! admission and completion instants, not the time the entire fixture ends.
 
 use super::{Environment, Execution, ModelOnlyReason, Report};
-use oer_time::{Duration, Timer};
+use oer_portable_time::{Duration, Timer};
 
 /// The mutation whose terminal establishes the cut.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,9 +82,9 @@ pub struct Trace<E> {
 #[derive(Clone, Copy, Debug)]
 pub struct Timing {
     /// Monotonic instant recorded at command admission.
-    pub admitted_at: oer_time::Instant,
+    pub admitted_at: oer_portable_time::Instant,
     /// Monotonic instant recorded at command completion.
-    pub completed_at: oer_time::Instant,
+    pub completed_at: oer_portable_time::Instant,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -488,8 +488,9 @@ pub fn verify_progress<E: AsRef<[Completion]>, R: AsRef<[Owners]>>(
 mod tests {
     use super::*;
     use alloc::vec::Vec;
-    fn at(elapsed: u64) -> oer_time::Instant {
-        let clock: oer_time_virtual::VirtualClock = oer_time_virtual::VirtualClock::new();
+    fn at(elapsed: u64) -> oer_portable_time::Instant {
+        let clock: oer_portable_time_virtual::VirtualClock =
+            oer_portable_time_virtual::VirtualClock::new();
         clock
             .advance(Duration::from_micros(elapsed))
             .expect("fixture elapsed time fits its virtual clock")
@@ -598,7 +599,7 @@ mod tests {
                 core::future::pending().await
             }
         }
-        let timer = oer_time_virtual::SkipClock::new();
+        let timer = oer_portable_time_virtual::SkipClock::new();
         let mut harness = Never;
         let mut check = core::pin::pin!(check(&mut harness, &timer, Environment::Model));
         assert_eq!(

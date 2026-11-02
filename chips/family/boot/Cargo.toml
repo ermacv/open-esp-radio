@@ -1,0 +1,21 @@
+[package]
+name = "oer-chips-family-boot"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Espressif bootstrap sequences over a chip's typed register traits: named boot waits under one deadline below the armed RTC watchdog, the CPU clock profile, cache publication and fetch suspension, the MMU and the boot's watchdogs, each failure a typed boot failure"
+
+[dependencies]
+oer-chips-family-analog = { path = "../analog" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-chips-family-watchdog = { path = "../watchdog" }
+oer-chips-family-staged-layout.workspace = true
+
+[dev-dependencies]
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true

@@ -7,7 +7,7 @@ use core::{
     task::Poll,
 };
 use embassy_futures::select::{Either, select};
-use oer_time::{Instant, Timer};
+use oer_portable_time::{Instant, Timer};
 
 pub(super) async fn guard<T: Timer, F: Future>(
     cancel: &AtomicBool,
@@ -55,8 +55,8 @@ mod tests {
         cell::Cell,
         task::{Context, Waker},
     };
-    use oer_time::{Clock, Duration};
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time::{Clock, Duration};
+    use oer_portable_time_virtual::VirtualClock;
 
     #[test]
     fn cancellation_never_polls_the_hardware_future_again() {

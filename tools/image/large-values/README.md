@@ -1,8 +1,8 @@
 # Large MIR values
 
-`oer-tool-image-large-values` is the pinned compiler's host wrapper, using
+`oer-tools-image-large-values` is the pinned compiler's host wrapper, using
 `rustc-dev` from `rust-toolchain.toml`. `cargo fw` and HIL builds install it
-through `RUSTC_WRAPPER` in `oer-image-build::compiler::configure`.
+through `RUSTC_WRAPPER` in `oer-tools-image-build::compiler::configure`.
 
 The filter is the exact list of workspace package manifests from
 `cargo metadata`, matched against Cargo's `CARGO_MANIFEST_DIR`. It also
@@ -63,6 +63,6 @@ from the image cache at `target/fw/large-values-driver/`.
 Compiler fixtures run the pinned toolchain in temporary directories:
 
 ```console
-cargo test -p oer-tool-image-large-values -p oer-image-build -p oer-test-layers
-cargo clippy -p oer-tool-image-large-values -p oer-image-build --all-targets
+cargo test -p oer-tools-image-large-values -p oer-tools-image-build -p oer-tools-test-layers
+cargo clippy -p oer-tools-image-large-values -p oer-tools-image-build --all-targets
 ```

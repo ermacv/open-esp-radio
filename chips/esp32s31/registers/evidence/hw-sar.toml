@@ -11,7 +11,7 @@ description = "SOURCE: s31-a rev0, hw17-20261027-sar-isolated-03 selections140/1
 
 [[sources]]
 id = "HW17_S31_SAR_PREPARATION_20261027"
-description = "SOURCE: Corrected hw17 probe finite-prefix ledger D1..D7, firmware/probes/esp32s31-facts and oer-notes/research/hw-sar-hold.md: follows common-power, PLL, clocks, bias/RF, SDM, PBus/I2C, PWDET/FE and TSENS order. ROM/SRAM40MHz execution, local bounds, disabled background conversion, omitted calibrated suffix/reference commands and reset-only cleanup differ from staged production. No production or PR707 equivalence is established. Details: oer-notes/evidence/chips-notes/chips/esp32s31/registers/evidence/hw-sar.toml (source HW17_S31_SAR_PREPARATION_20261027)."
+description = "SOURCE: Corrected hw17 probe finite-prefix ledger D1..D7, hil/probes/esp32s31-facts and oer-notes/research/hw-sar-hold.md: follows common-power, PLL, clocks, bias/RF, SDM, PBus/I2C, PWDET/FE and TSENS order. ROM/SRAM40MHz execution, local bounds, disabled background conversion, omitted calibrated suffix/reference commands and reset-only cleanup differ from staged production. No production or PR707 equivalence is established. Details: oer-notes/evidence/chips-notes/chips/esp32s31/registers/evidence/hw-sar.toml (source HW17_S31_SAR_PREPARATION_20261027)."
 
 [[sources]]
 id = "HW17_S31_SAR_REVIEW_20261027"

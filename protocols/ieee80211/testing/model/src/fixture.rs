@@ -1,6 +1,6 @@
 //! Initial reference-fixture worlds and their generative local slots.
 use super::*;
-use oer_radio_port::{LocalId, PortBody, PortEnd, PortSlot, with_local_slot};
+use oer_protocols_radio_port::{LocalId, PortBody, PortEnd, PortSlot, with_local_slot};
 
 struct World<'scope, S: ModelSlotOwner<LocalId<'scope>>> {
     slot: Option<PortSlot<LocalId<'scope>, S>>,
@@ -79,12 +79,12 @@ where
             clippy::expect_used,
             reason = "a fresh generative slot is unregistered"
         )]
-        let end = oer_radio_port::LocalExecution
+        let end = oer_protocols_radio_port::LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (slot).register(backend).ok().expect("fresh fixture slot"),
                 ),
-                async |frontend| oer_radio_port::run_port(frontend, body).await,
+                async |frontend| oer_protocols_radio_port::run_port(frontend, body).await,
             )
             .await;
         let report = match end {
@@ -93,7 +93,10 @@ where
                 Report::Joined(output)
             }
             PortEnd::FailStopped { outcome, output } => {
-                let stopped = matches!(outcome.outcome(), oer_radio_port::Abandon::Stopped(_));
+                let stopped = matches!(
+                    outcome.outcome(),
+                    oer_protocols_radio_port::Abandon::Stopped(_)
+                );
                 drop(outcome);
                 if stopped {
                     Report::Stopped(output)
@@ -115,7 +118,7 @@ where
 
 macro_rules! plain_context {
     ($ty:ty) => {
-        impl<Id: SlotIdentity> oer_radio_port::ContextProjection<Id> for $ty {
+        impl<Id: SlotIdentity> oer_protocols_radio_port::ContextProjection<Id> for $ty {
             type View<'a, 'p>
                 = &'a Self
             where
@@ -127,7 +130,10 @@ macro_rules! plain_context {
             where
                 Self: 'p,
                 Id: 'p;
-            fn view<'a, 'p>(&'a self, _: oer_radio_port::ContextLoan<'p, Id>) -> Self::View<'a, 'p>
+            fn view<'a, 'p>(
+                &'a self,
+                _: oer_protocols_radio_port::ContextLoan<'p, Id>,
+            ) -> Self::View<'a, 'p>
             where
                 Self: 'p,
                 Id: 'p,
@@ -135,7 +141,10 @@ macro_rules! plain_context {
             {
                 self
             }
-            fn into_parts<'p>(self, _: oer_radio_port::ContextLoan<'p, Id>) -> Self::Parts<'p>
+            fn into_parts<'p>(
+                self,
+                _: oer_protocols_radio_port::ContextLoan<'p, Id>,
+            ) -> Self::Parts<'p>
             where
                 Self: 'p,
                 Id: 'p,
@@ -145,10 +154,10 @@ macro_rules! plain_context {
         }
         impl<'p, Id: SlotIdentity + 'p> LoanedContext<'p, Id> for $ty {
             type Owned = Self;
-            fn enclose(self) -> oer_radio_port::PortContext<'p, Id, Self> {
-                oer_radio_port::PortContext::new(self)
+            fn enclose(self) -> oer_protocols_radio_port::PortContext<'p, Id, Self> {
+                oer_protocols_radio_port::PortContext::new(self)
             }
-            fn restore(context: oer_radio_port::PortContext<'p, Id, Self>) -> Self {
+            fn restore(context: oer_protocols_radio_port::PortContext<'p, Id, Self>) -> Self {
                 context.into_parts()
             }
         }

@@ -1,6 +1,6 @@
 # Embassy network adapter (owned packets)
 
-`oer-embassy-net` is the owned-packet boundary between the Wi-Fi
+`oer-portable-embassy-net` is the owned-packet boundary between the Wi-Fi
 datapath and the Embassy/Xarxa network stack (`docs/network.md`). Its
 `datapath` module holds the software/physical TX ownership contracts, the
 destination/flow queue arena `TxQueues` and, under the `model` feature, the
@@ -51,7 +51,7 @@ policy and serves one TX per turn. Frame observations go to the image's
 collector and do not become product status counters.
 
 Host service tests inject lease/configuration events at the private stack
-boundary and drive protocol deadlines with per-test `oer-time-virtual`
+boundary and drive protocol deadlines with per-test `oer-portable-time-virtual`
 clocks. They also construct the real pinned stack, retain a socket and
 configuration across reconnects, and exercise its public terminal paths.
 The development-only Embassy mock driver supplies link symbols; these tests
@@ -87,7 +87,7 @@ original packet. Queue queries and waits propagate that typed refusal.
 The unique network device and radio runner are neither `Clone`, `Copy`,
 `Send` nor `Sync`. The runner stores one RX publisher and one link controller
 and lends each through `&mut`; no accessor can mint a second capability. RX
-uses `oer-memory::WakingSpscQueue` with its affine producer/consumer ends. A
+uses `oer-portable-memory::WakingSpscQueue` with its affine producer/consumer ends. A
 publisher loan is also local and cannot be cloned. Publication waits retain
 an exclusive runner borrow, so a second outstanding wait cannot replace them.
 Compile-fail examples check these ownership restrictions.
@@ -96,13 +96,13 @@ Admission is an atomic count independent of the metadata borrow. Each dequeued
 frame retains its unique credit through radio retention; destruction returns
 the packet pool slot before releasing the credit and waking the producer.
 Thus dropping a retained packet does not require entering the metadata context.
-Link and capacity notification use `oer_sync::PriorityWaker`; no blocking mutex
+Link and capacity notification use `oer_portable_sync::PriorityWaker`; no blocking mutex
 or critical section is introduced. Queue Waker clone, wake and drop callbacks
 run only outside the ContextCell borrow, including displaced registrations.
 
-HIL `wifi-station` selects `oer_espressif_executor::ThreadContext<0>`:
+HIL `wifi-station` selects `oer_chips_family_executor::ThreadContext<0>`:
 its network and station sides remain on the existing P1 executor. Host tests
-use `oer_memory::HostContext`. RX ordinary atomic wakers and the packet-pool
+use `oer_portable_memory::HostContext`. RX ordinary atomic wakers and the packet-pool
 waiter are still confined to that composition. These types do not admit new
 cross-priority wiring.
 

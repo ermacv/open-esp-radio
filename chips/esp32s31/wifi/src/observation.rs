@@ -6,7 +6,7 @@
 //! Each kind keeps its id in the IEEE 802.11 trace domain (the S31 driver's
 //! lower-MAC trace uses ids from 100) and its channel.
 
-use oer_trace::{Channel, Domain, Event, Kind};
+use oer_portable_trace::{Channel, Domain, Event, Kind};
 
 /// The station activity channel.
 const SERVICE: Channel = const {
@@ -159,8 +159,8 @@ pub enum RateClass {
 
 impl RateClass {
     /// The class of `rate`, `Unknown` without one.
-    pub const fn of(rate: Option<oer_ieee80211_wire::phy::PhyRate>) -> Self {
-        use oer_ieee80211_wire::phy::{PhyRate, PpduBandwidth};
+    pub const fn of(rate: Option<oer_protocols_ieee80211_wire::phy::PhyRate>) -> Self {
+        use oer_protocols_ieee80211_wire::phy::{PhyRate, PpduBandwidth};
         match rate {
             Some(PhyRate::Legacy(_)) => Self::NonHt,
             Some(PhyRate::Ht(rate)) => Self::Ht {
@@ -217,8 +217,8 @@ pub enum Containment {
 impl Containment {
     /// The containment `evidence` establishes, hardware-observed or
     /// protocol-validated alike.
-    pub const fn of(evidence: oer_ieee80211_contracts_port::RxEvidence<bool>) -> Self {
-        use oer_ieee80211_contracts_port::RxEvidence;
+    pub const fn of(evidence: oer_protocols_ieee80211_contracts_port::RxEvidence<bool>) -> Self {
+        use oer_protocols_ieee80211_contracts_port::RxEvidence;
         match evidence {
             RxEvidence::HardwareObserved(true) | RxEvidence::ProtocolValidated(true) => {
                 Self::InAmpdu
@@ -302,8 +302,8 @@ pub struct TxData {
 
 impl TxData {
     /// The end of a data MPDU's single-TX `outcome`.
-    pub fn of<A, D>(outcome: &oer_ieee80211_contracts_port::SingleOutcome<A, D>) -> Self {
-        use oer_ieee80211_contracts_port::{SingleEnd, TxOutcome};
+    pub fn of<A, D>(outcome: &oer_protocols_ieee80211_contracts_port::SingleOutcome<A, D>) -> Self {
+        use oer_protocols_ieee80211_contracts_port::{SingleEnd, TxOutcome};
         let (air, end) = match outcome {
             TxOutcome::Ended(SingleEnd::Delivered { air, .. }) => (Some(*air), TxEnd::Delivered),
             TxOutcome::Ended(SingleEnd::AckTimeout(air)) => (Some(*air), TxEnd::AckTimeout),
@@ -355,12 +355,12 @@ impl core::fmt::Display for TxData {
 }
 
 /// The station service's spans, which [`ServiceSpan`] reports.
-pub use oer_ieee80211_runtime::station::ServiceSpan as Span;
+pub use oer_protocols_ieee80211_runtime::station::ServiceSpan as Span;
 
 /// The start or end of a stretch of the station service's work.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ServiceSpan {
-    pub span: oer_ieee80211_runtime::station::ServiceSpan,
+    pub span: oer_protocols_ieee80211_runtime::station::ServiceSpan,
     pub end: bool,
 }
 
@@ -374,7 +374,7 @@ impl Event for ServiceSpan {
 
     fn decode([span, end]: [u32; 2]) -> Option<Self> {
         Some(Self {
-            span: oer_ieee80211_runtime::station::ServiceSpan::from_number(
+            span: oer_protocols_ieee80211_runtime::station::ServiceSpan::from_number(
                 u8::try_from(span).ok()?,
             )?,
             end: match end {
@@ -603,14 +603,14 @@ impl core::fmt::Display for StationTxAmpdu {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TracedStationEvents<O>(pub O);
 
-impl<O: oer_trace::Observer> TracedStationEvents<O> {
+impl<O: oer_portable_trace::Observer> TracedStationEvents<O> {
     #[cfg_attr(
         not(oer_trace),
         allow(unused_variables, reason = "only a trace build reports")
     )]
     fn report(&self, kind: StationRxKind, count: u32) {
         if count != 0 {
-            oer_trace::observe!(self.0, StationRx { kind, count });
+            oer_portable_trace::observe!(self.0, StationRx { kind, count });
         }
     }
 
@@ -619,16 +619,16 @@ impl<O: oer_trace::Observer> TracedStationEvents<O> {
         allow(unused_variables, reason = "only a trace build reports")
     )]
     fn report_tx(&self, settled: StationTxAmpdu) {
-        oer_trace::observe!(self.0, settled);
+        oer_portable_trace::observe!(self.0, settled);
     }
 }
 
 /// The receive decisions of one service event, each to `emit`.
 fn service_rx(
-    event: oer_ieee80211_runtime::station::ServiceEvent,
+    event: oer_protocols_ieee80211_runtime::station::ServiceEvent,
     emit: &mut impl FnMut(StationRxKind, u32),
 ) {
-    use oer_ieee80211_runtime::station::ServiceEvent;
+    use oer_protocols_ieee80211_runtime::station::ServiceEvent;
     match event {
         ServiceEvent::PortEventsLost => emit(StationRxKind::PortEventsLost, 1),
         ServiceEvent::RxFrameDropped(drop) => emit(dropped(drop), 1),
@@ -647,11 +647,11 @@ fn service_rx(
 
 /// The receive decisions of one receive agreement event, each to `emit`.
 fn block_ack_rx(
-    event: oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent,
+    event: oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent,
     emit: &mut impl FnMut(StationRxKind, u32),
 ) {
-    use oer_ieee80211_contracts_port::RxEvidence;
-    use oer_ieee80211_core_upper_mac::block_ack::{ReorderCause, RxBlockAckEvent};
+    use oer_protocols_ieee80211_contracts_port::RxEvidence;
+    use oer_protocols_ieee80211_core_upper_mac::block_ack::{ReorderCause, RxBlockAckEvent};
     match event {
         RxBlockAckEvent::Contained { ampdu, .. } => emit(
             match ampdu {
@@ -708,10 +708,10 @@ fn block_ack_rx(
 }
 
 /// The kind a station receive drop counts as.
-const fn dropped(drop: oer_ieee80211_runtime::station::RxDrop) -> StationRxKind {
-    use oer_ieee80211_core_roles_sta::machine::StaRxError;
-    use oer_ieee80211_core_upper_mac::receive::RxDropReason;
-    use oer_ieee80211_runtime::station::RxDrop;
+const fn dropped(drop: oer_protocols_ieee80211_runtime::station::RxDrop) -> StationRxKind {
+    use oer_protocols_ieee80211_core_roles_sta::machine::StaRxError;
+    use oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason;
+    use oer_protocols_ieee80211_runtime::station::RxDrop;
     match drop {
         RxDrop::Station(StaRxError::Frame(reason)) => match reason {
             RxDropReason::Header => StationRxKind::DroppedHeader,
@@ -729,34 +729,37 @@ const fn dropped(drop: oer_ieee80211_runtime::station::RxDrop) -> StationRxKind 
     }
 }
 
-impl<O: oer_trace::Observer> oer_events::EventSink<oer_ieee80211_runtime::station::ServiceEvent>
+impl<O: oer_portable_trace::Observer>
+    oer_portable_events::EventSink<oer_protocols_ieee80211_runtime::station::ServiceEvent>
     for TracedStationEvents<O>
 {
     const ENABLED: bool = cfg!(oer_trace);
 
-    fn event(&mut self, event: oer_ieee80211_runtime::station::ServiceEvent) {
+    fn event(&mut self, event: oer_protocols_ieee80211_runtime::station::ServiceEvent) {
         service_rx(event, &mut |kind, count| self.report(kind, count));
     }
 }
 
-impl<O: oer_trace::Observer>
-    oer_events::EventSink<oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent>
-    for TracedStationEvents<O>
+impl<O: oer_portable_trace::Observer>
+    oer_portable_events::EventSink<
+        oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent,
+    > for TracedStationEvents<O>
 {
     const ENABLED: bool = cfg!(oer_trace);
 
-    fn event(&mut self, event: oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent) {
+    fn event(&mut self, event: oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent) {
         block_ack_rx(event, &mut |kind, count| self.report(kind, count));
     }
 }
 
-impl<O: oer_trace::Observer> oer_events::EventSink<oer_ieee80211_core_roles_sta::events::StaEvent>
+impl<O: oer_portable_trace::Observer>
+    oer_portable_events::EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>
     for TracedStationEvents<O>
 {
     const ENABLED: bool = cfg!(oer_trace);
 
-    fn event(&mut self, event: oer_ieee80211_core_roles_sta::events::StaEvent) {
-        use oer_ieee80211_core_roles_sta::events::StaEvent;
+    fn event(&mut self, event: oer_protocols_ieee80211_core_roles_sta::events::StaEvent) {
+        use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
         match event {
             StaEvent::RsnInputDropped(_) => self.report(StationRxKind::RsnInputDropped, 1),
             StaEvent::AggregateSettled(settled) => self.report_tx(StationTxAmpdu {
@@ -831,12 +834,14 @@ mod tests {
 
     #[test]
     fn receive_events_map_to_their_decisions_and_counts() {
-        use oer_ieee80211_contracts_port::RxEvidence;
-        use oer_ieee80211_core_upper_mac::block_ack::{
+        use oer_protocols_ieee80211_contracts_port::RxEvidence;
+        use oer_protocols_ieee80211_core_upper_mac::block_ack::{
             AgreementStop, ReorderCause, RxBlockAckEvent,
         };
-        use oer_ieee80211_core_upper_mac::receive::RxDropReason;
-        use oer_ieee80211_runtime::station::{RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent};
+        use oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason;
+        use oer_protocols_ieee80211_runtime::station::{
+            RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent,
+        };
         let mut seen = heapless::Vec::<(StationRxKind, u32), 16>::new();
         let mut emit = |kind, count| seen.push((kind, count)).unwrap();
         service_rx(
@@ -916,10 +921,12 @@ mod tests {
 
     #[test]
     fn a_rate_and_a_transmission_end_class_as_the_histograms_count_them() {
-        use oer_ieee80211_contracts_port::{
+        use oer_protocols_ieee80211_contracts_port::{
             Air, IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome,
         };
-        use oer_ieee80211_wire::phy::{HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth};
+        use oer_protocols_ieee80211_wire::phy::{
+            HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
+        };
         let ht40 =
             PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true).unwrap());
         assert_eq!(
@@ -964,9 +971,9 @@ mod tests {
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout);
         assert_eq!(TxData::of(&unknown).end, TxEnd::Unsent);
         assert_eq!(
-            Containment::of(oer_ieee80211_contracts_port::RxEvidence::ProtocolValidated(
-                true
-            )),
+            Containment::of(
+                oer_protocols_ieee80211_contracts_port::RxEvidence::ProtocolValidated(true)
+            ),
             Containment::InAmpdu
         );
     }
@@ -986,7 +993,7 @@ mod tests {
         round_trip(ControlDelivered);
         round_trip(TxRateSelected { kbps: None });
         round_trip(TxRateSelected { kbps: Some(65_000) });
-        for span in oer_ieee80211_runtime::station::ServiceSpan::ALL {
+        for span in oer_protocols_ieee80211_runtime::station::ServiceSpan::ALL {
             round_trip(ServiceSpan { span, end: false });
             round_trip(ServiceSpan { span, end: true });
         }
@@ -1043,4 +1050,4 @@ mod tests {
 /// The shared RF actor's periodic tracking ticks: the observer the image
 /// gives [`crate::RadioResources::start`] receives them.
 #[cfg(target_arch = "riscv32")]
-pub use oer_esp32s31_radio_system::observation::{TickRan, TrackingBranches, TrackingTick};
+pub use oer_chips_esp32s31_radio_system::observation::{TickRan, TrackingBranches, TrackingTick};

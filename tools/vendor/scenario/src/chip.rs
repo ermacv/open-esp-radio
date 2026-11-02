@@ -51,10 +51,10 @@ pub enum Isa {
 
 impl Isa {
     /// The executor that admits exactly this instruction set.
-    pub fn executor(self) -> &'static dyn oer_analysis_blobray_domain::Executor {
+    pub fn executor(self) -> &'static dyn oer_tools_analysis_blobray_domain::Executor {
         match self {
-            Self::Rv32imafcZbaZbbZbsZcbZcmp => &oer_analysis_blobray_riscv::RiscvExecutor,
-            Self::Rv32imac => &oer_analysis_blobray_riscv::Rv32imacExecutor,
+            Self::Rv32imafcZbaZbbZbsZcbZcmp => &oer_tools_analysis_blobray_riscv::RiscvExecutor,
+            Self::Rv32imac => &oer_tools_analysis_blobray_riscv::Rv32imacExecutor,
         }
     }
 }

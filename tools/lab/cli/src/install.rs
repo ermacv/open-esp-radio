@@ -1,5 +1,5 @@
 //! Install `cargo stand` as a prebuilt tool from `main`, and the LAB
-//! service (`oer-tool-lab-service`) as two systemd user units: `oer-lab.socket`
+//! service (`oer-tools-lab-service`) as two systemd user units: `oer-lab.socket`
 //! holds the service's socket and hands it over, `oer-lab.service` runs the
 //! service.
 //!
@@ -12,16 +12,16 @@
 //! reads move to the new commit, the staged binaries replace the installed
 //! ones and the unit restart. Before the service first
 //! starts, the restrictions and balances the file-locked arbiter kept are
-//! imported (`oer_lab_arbiter::import`) and a schema 1 stand file is
+//! imported (`oer_tools_lab_arbiter::import`) and a schema 1 stand file is
 //! rewritten to schema 2, the schema 1 file kept beside it. A checkout never
 //! replaces the service by itself.
 //!
-//! `cargo stand` otherwise builds `oer-tool-lab-cli` from the caller's working tree
+//! `cargo stand` otherwise builds `oer-tools-lab-cli` from the caller's working tree
 //! first: a rebuild after every edit of a stand package, unavailable while
 //! that code does not compile, and six checkouts on six commits writing the
 //! one shared arbiter state with six different binaries. `cargo stand
-//! install` builds the `oer-tool-lab-cli` of `origin/main` once, beside its
-//! own clone, and installs `oer-tool-lab-cli` on the user's PATH: a wrapper that runs
+//! install` builds the `oer-tools-lab-cli` of `origin/main` once, beside its
+//! own clone, and installs `oer-tools-lab-cli` on the user's PATH: a wrapper that runs
 //! that binary against the caller's checkout (`--root` is the caller's Git
 //! top level, so owners and local paths stay the caller's).
 use std::{
@@ -30,15 +30,15 @@ use std::{
 };
 
 use crate::Result;
-use oer_os_process as process;
-use oer_os_process::Checkout;
+use oer_tools_os_process as process;
+use oer_tools_os_process::Checkout;
 
 /// The package the tool installs, `cargo stand`, and the binary it builds.
-const PACKAGE: &str = "oer-tool-lab-cli";
+const PACKAGE: &str = "oer-tools-lab-cli";
 const BINARY: &str = "stand";
 /// The LAB service's package and binary.
-const SERVICE_PACKAGE: &str = "oer-tool-lab-service";
-const SERVICE_BINARY: &str = "oer-tool-lab-service";
+const SERVICE_PACKAGE: &str = "oer-tools-lab-service";
+const SERVICE_BINARY: &str = "oer-tools-lab-service";
 
 fn home() -> Result<PathBuf> {
     std::env::var_os("HOME")
@@ -49,7 +49,7 @@ fn home() -> Result<PathBuf> {
 
 /// Where the tool's clone, build and binary live.
 pub fn tool_directory() -> Result<PathBuf> {
-    oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Data, "stand-tool")
+    oer_tools_os_durable::xdg::path(oer_tools_os_durable::xdg::Base::Data, "stand-tool")
 }
 
 /// The systemd user units of the LAB service.
@@ -99,7 +99,7 @@ pub fn unit(binary: &Path, root: &Path, path: &str) -> String {
 /// Run `systemctl --user` with `arguments`.
 fn systemctl(arguments: &[&str]) -> Result<()> {
     process::run(
-        oer_os_process::command("systemctl")
+        oer_tools_os_process::command("systemctl")
             .arg("--user")
             .args(arguments),
     )
@@ -109,7 +109,7 @@ fn systemctl(arguments: &[&str]) -> Result<()> {
 /// ask when no service listens; a service of another protocol cannot be
 /// asked, and the update stops.
 fn drain() -> Result<()> {
-    let socket = oer_lab_model::paths::socket()?;
+    let socket = oer_tools_lab_model::paths::socket()?;
     let stream = match std::os::unix::net::UnixStream::connect(&socket) {
         Ok(stream) => stream,
         Err(error)
@@ -122,17 +122,17 @@ fn drain() -> Result<()> {
         }
         Err(error) => return Err(format!("cannot reach {}: {error}", socket.display()).into()),
     };
-    let mut client = oer_lab_client::client::Client::connect(stream, "cargo stand install")
+    let mut client = oer_tools_lab_client::client::Client::connect(stream, "cargo stand install")
         .map_err(|refused| {
-            format!(
-                "the running LAB service cannot be asked to drain: {refused}. Wait until \
+        format!(
+            "the running LAB service cannot be asked to drain: {refused}. Wait until \
                  `cargo stand queue` from a checkout of its version shows no lease, stop it \
                  with its socket, `systemctl --user stop {SOCKET_UNIT} {UNIT}` (the socket \
                  alone would start it again for this installer), and install again"
-            )
-        })?;
+        )
+    })?;
     println!("waiting for the running LAB service to finish its leases");
-    client.administer(oer_lab_client::protocol::Request::Drain)?;
+    client.administer(oer_tools_lab_client::protocol::Request::Drain)?;
     Ok(())
 }
 
@@ -140,11 +140,13 @@ fn drain() -> Result<()> {
 /// service drained its leases: the stand's earlier records are imported and
 /// a schema 1 stand file rewritten first.
 fn install_service(binary: &Path, root: &Path) -> Result<()> {
-    if std::env::var_os(oer_lab_model::paths::ARBITER_ENV).is_none() {
-        let previous = oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Cache, "arbiter")?;
-        if let Some(imported) =
-            oer_lab_arbiter::import::previous(&previous, &oer_lab_arbiter::Arbiter::open()?)?
-        {
+    if std::env::var_os(oer_tools_lab_model::paths::ARBITER_ENV).is_none() {
+        let previous =
+            oer_tools_os_durable::xdg::path(oer_tools_os_durable::xdg::Base::Cache, "arbiter")?;
+        if let Some(imported) = oer_tools_lab_arbiter::import::previous(
+            &previous,
+            &oer_tools_lab_arbiter::Arbiter::open()?,
+        )? {
             println!(
                 "imported the stand's earlier records: {} balance(s), {} board(s) under \
                  maintenance, {} quarantined, {}",
@@ -156,8 +158,9 @@ fn install_service(binary: &Path, root: &Path) -> Result<()> {
         }
     }
     // Every client switches to this service now: its stand file too.
-    let stand_file = oer_lab_model::paths::stand_file()?;
-    if fs::read_to_string(&stand_file).is_ok_and(|text| oer_lab_model::convert::is_schema_1(&text))
+    let stand_file = oer_tools_lab_model::paths::stand_file()?;
+    if fs::read_to_string(&stand_file)
+        .is_ok_and(|text| oer_tools_lab_model::convert::is_schema_1(&text))
     {
         crate::stand_file::convert(&stand_file, &stand_file)?;
     }
@@ -196,7 +199,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     let stage = tool.join("stage");
     let remote = String::from_utf8(
         process::capture(
-            oer_os_process::git::command(&ctx.root).args(["remote", "get-url", "origin"]),
+            oer_tools_os_process::git::command(&ctx.root).args(["remote", "get-url", "origin"]),
         )?
         .stdout,
     )?;
@@ -204,27 +207,30 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     if !source.join(".git").exists() {
         fs::create_dir_all(&tool)?;
         process::run(
-            oer_os_process::git::command(&ctx.root)
+            oer_tools_os_process::git::command(&ctx.root)
                 .args(["clone", "--quiet", "--no-checkout", remote])
                 .arg(&source),
         )?;
     }
     process::run(
-        oer_os_process::git::command(&source).args(["fetch", "--quiet", "origin", "main"]),
+        oer_tools_os_process::git::command(&source).args(["fetch", "--quiet", "origin", "main"]),
     )?;
     let commit = String::from_utf8(
-        process::capture(oer_os_process::git::command(&source).args(["rev-parse", "FETCH_HEAD"]))?
-            .stdout,
+        process::capture(
+            oer_tools_os_process::git::command(&source).args(["rev-parse", "FETCH_HEAD"]),
+        )?
+        .stdout,
     )?
     .trim()
     .to_owned();
     if stage.join(".git").exists() {
         process::run(
-            oer_os_process::git::command(&stage).args(["checkout", "--quiet", "--detach", &commit]),
+            oer_tools_os_process::git::command(&stage)
+                .args(["checkout", "--quiet", "--detach", &commit]),
         )?;
     } else {
         process::run(
-            oer_os_process::git::command(&source)
+            oer_tools_os_process::git::command(&source)
                 .args(["worktree", "add", "--quiet", "--detach"])
                 .arg(&stage)
                 .arg(&commit),
@@ -235,7 +241,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     // rebuilds in seconds where the release profile took minutes.
     let target = tool.join("target");
     process::run(
-        oer_os_toolchain::cargo_in(&ctx.root)
+        oer_tools_os_toolchain::cargo_in(&ctx.root)
             .current_dir(&stage)
             .env("CARGO_TARGET_DIR", &target)
             .args(["build", "--locked", "-p", PACKAGE, "-p", SERVICE_PACKAGE]),
@@ -258,14 +264,15 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     // the update here.
     drain()?;
     process::run(
-        oer_os_process::git::command(&source).args(["checkout", "--quiet", "--detach", &commit]),
+        oer_tools_os_process::git::command(&source)
+            .args(["checkout", "--quiet", "--detach", &commit]),
     )?;
     for (_, staged, live) in &staged {
         fs::rename(staged, live)?;
     }
     let script_directory = home()?.join(".local/bin");
     fs::create_dir_all(&script_directory)?;
-    let script = script_directory.join("oer-tool-lab-cli");
+    let script = script_directory.join("oer-tools-lab-cli");
     fs::write(&script, wrapper(&installed, &source))?;
     #[cfg(unix)]
     {
@@ -274,7 +281,7 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     }
     fs::write(tool.join("installed-commit"), &commit)?;
     println!(
-        "installed oer-tool-lab-cli from main {short} ({})",
+        "installed oer-tools-lab-cli from main {short} ({})",
         script.display()
     );
     install_service(&service, &source)
@@ -297,11 +304,11 @@ mod tests {
     #[test]
     fn the_unit_serves_from_the_installed_binary_and_owns_every_descendant() {
         let text = unit(
-            Path::new("/tool/bin/oer-tool-lab-service"),
+            Path::new("/tool/bin/oer-tools-lab-service"),
             Path::new("/tool/src"),
             "/usr/bin:/bin",
         );
-        assert!(text.contains("ExecStart='/tool/bin/oer-tool-lab-service' --root '/tool/src'"));
+        assert!(text.contains("ExecStart='/tool/bin/oer-tools-lab-service' --root '/tool/src'"));
         assert!(text.contains("Requires=oer-lab.socket"));
         assert!(text.contains("KillMode=control-group"));
         assert!(text.contains("Environment=\"PATH=/usr/bin:/bin\""));

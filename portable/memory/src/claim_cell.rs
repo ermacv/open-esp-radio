@@ -76,7 +76,7 @@ pub struct Held<R> {
 ///
 /// ```compile_fail,E0277
 /// extern crate std;
-/// use oer_memory::ClaimCell;
+/// use oer_portable_memory::ClaimCell;
 /// // `Rc` cannot leave the context that made it.
 /// static CELL: ClaimCell<std::rc::Rc<()>> = ClaimCell::new();
 /// ```

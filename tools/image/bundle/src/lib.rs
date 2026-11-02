@@ -19,9 +19,9 @@
 //! [`Purpose::Analysis`] bundles remain readable for inspection, but cannot
 //! supply a flash snapshot.
 //!
-//! The crate holds only the format: building a bundle is `oer-image-build`,
-//! checking its ELF files is `oer-image-checks`, and a flash writer
-//! (`oer-lab-board`) reads a bundle without either.
+//! The crate holds only the format: building a bundle is `oer-tools-image-build`,
+//! checking its ELF files is `oer-tools-image-checks`, and a flash writer
+//! (`oer-tools-lab-board`) reads a bundle without either.
 
 use std::{
     collections::BTreeSet,
@@ -31,7 +31,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-pub use oer_espressif_facts::{Boot, FlashMap};
+pub use oer_chips_family_facts::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -184,7 +184,7 @@ pub struct Snapshot {
     /// The chip the bundle is for.
     pub chip: String,
     /// How a written image starts.
-    pub start: oer_espressif_facts::Start,
+    pub start: oer_chips_family_facts::Start,
     /// Every segment in write order.
     pub segments: Vec<SnapshotSegment>,
 }
@@ -247,7 +247,11 @@ pub struct Segment {
 impl ImageBundle {
     /// An empty bundle of `profile`'s chip in `directory`, which a pipeline
     /// fills: no files yet, no gate run.
-    pub fn new(directory: &Path, profile: &oer_chip_profile::Profile, flash: FlashMap) -> Self {
+    pub fn new(
+        directory: &Path,
+        profile: &oer_tools_chip_profile::Profile,
+        flash: FlashMap,
+    ) -> Self {
         Self::from_parts(
             directory,
             &profile.facts.id,
@@ -315,7 +319,7 @@ impl ImageBundle {
                 .into());
             }
             let recorded = bundle.recorded(&segment)?;
-            if oer_os_durable::sha256_file(&segment.file)? != recorded.sha256 {
+            if oer_tools_os_durable::sha256_file(&segment.file)? != recorded.sha256 {
                 return Err(bundle.changed(&segment).into());
             }
         }
@@ -368,7 +372,7 @@ impl ImageBundle {
             .map(|segment| {
                 let data = std::fs::read(&segment.file)
                     .map_err(|error| format!("{}: {error}", segment.file.display()))?;
-                let sha256 = oer_os_durable::sha256_bytes(&data);
+                let sha256 = oer_tools_os_durable::sha256_bytes(&data);
                 let recorded = self.recorded(&segment)?;
                 if sha256 != recorded.sha256 || data.len() as u64 != recorded.bytes {
                     return Err(self.changed(&segment).into());
@@ -414,12 +418,12 @@ impl ImageBundle {
                         .ok_or("a flash file has no name")?
                         .to_string_lossy()
                         .into_owned(),
-                    sha256: oer_os_durable::sha256_file(&segment.file)?,
+                    sha256: oer_tools_os_durable::sha256_file(&segment.file)?,
                     bytes: std::fs::metadata(&segment.file)?.len(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        oer_os_durable::atomic_json(&self.directory.join(MANIFEST), &self)?;
+        oer_tools_os_durable::atomic_json(&self.directory.join(MANIFEST), &self)?;
         // The replaced bundle moves aside first: a rename does not replace a
         // non-empty directory.
         let replaced = sibling(output, "replaced")?;

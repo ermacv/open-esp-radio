@@ -6,8 +6,8 @@
 //! access lands 148 bytes after the loaded pointer. Additions of constants
 //! fold into the current displacement; every load starts the next one.
 
-use oer_analysis_blobray_domain::LibraryFunction;
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_domain::LibraryFunction;
+use oer_tools_analysis_riscv_model::{
     AbstractValue, Expression, FunctionIndex, FunctionRecord, IntegerOp, MemoryKind, Result,
     RunControl, SymbolId,
 };

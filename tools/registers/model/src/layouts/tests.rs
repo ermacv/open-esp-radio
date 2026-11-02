@@ -254,11 +254,11 @@ fn a_positional_review_keeps_a_field_opaque_without_claiming_its_meaning() {
         .expect("opaque field review retained");
     assert_eq!(
         review.accuracy,
-        Some(oer_registers_contracts::FactAccuracy::Positional)
+        Some(oer_tools_registers_contracts::FactAccuracy::Positional)
     );
     assert_eq!(
         review.completeness,
-        Some(oer_registers_contracts::FactCompleteness::Unknown)
+        Some(oer_tools_registers_contracts::FactCompleteness::Unknown)
     );
     let rust = super::render(model.layouts(), &regions()).expect("render positional review");
     assert!(rust.contains("Opaque: meaning not established."));
@@ -468,7 +468,7 @@ fn a_word_layout_renders_cells_values_and_its_placement() {
         "pub const DMA_WINDOW: core::ops::Range<u32> = 0x30000000..0x30080000;",
         "#[repr(C, align(4))]\n#[derive(bytemuck::Zeroable)]\npub struct Node {",
         "control: NodeControlCell,",
-        "pub struct NodeControlCell(oer_memory::VolatileCell<u32>);",
+        "pub struct NodeControlCell(oer_portable_memory::VolatileCell<u32>);",
         "pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[DMA_WINDOW];",
         "pub const fn zeroed() -> Self {",
         "pub const fn control(&self) -> &NodeControlCell {",
@@ -481,10 +481,10 @@ fn a_word_layout_renders_cells_values_and_its_placement() {
         "pub const fn with_length(self, value: u16) -> Option<Self>",
         "pub const fn address(self) -> u32 { self.0 }",
         "pub const fn with_address(self, value: Option<DmaRef<Node>>) -> Self { Self(match value { Some(reference) => reference.bits(), None => 0 }) }",
-        "impl oer_memory::DmaWindow for DmaWindow {",
-        "pub type DmaWindowAddress = oer_memory::DmaWindowAddress<DmaWindow>;",
-        "pub use oer_memory::DmaRef;",
-        "impl oer_memory::DmaLayout for Node {\ntype Window = DmaWindow;\n}",
+        "impl oer_portable_memory::DmaWindow for DmaWindow {",
+        "pub type DmaWindowAddress = oer_portable_memory::DmaWindowAddress<DmaWindow>;",
+        "pub use oer_portable_memory::DmaRef;",
+        "impl oer_portable_memory::DmaLayout for Node {\ntype Window = DmaWindow;\n}",
         "/// Opaque: meaning not established.",
         "/// Project-assigned name. 1: the walker may fill this node.",
         "/// SOURCE: fixture, stand.",
@@ -694,7 +694,7 @@ fn local_defaults_cover_layout_words_and_fields() {
         assert_eq!(review.sources, ["fixture"]);
         assert_eq!(
             review.naming,
-            Some(oer_registers_contracts::NameOrigin::Descriptive)
+            Some(oer_tools_registers_contracts::NameOrigin::Descriptive)
         );
     }
     let opaque = reviews
@@ -704,7 +704,7 @@ fn local_defaults_cover_layout_words_and_fields() {
     assert_eq!(opaque.sources, ["stand"]);
     assert_eq!(
         opaque.completeness,
-        Some(oer_registers_contracts::FactCompleteness::Unknown)
+        Some(oer_tools_registers_contracts::FactCompleteness::Unknown)
     );
 }
 
@@ -723,7 +723,7 @@ fn an_explicit_review_replaces_every_default_key() {
     assert_eq!(review.sources, ["override"]);
     assert_eq!(
         review.provenance,
-        Some(oer_registers_contracts::FactProvenance::Observed)
+        Some(oer_tools_registers_contracts::FactProvenance::Observed)
     );
     let omitted = text.replace("sources = [\"override\"]\n", "");
     assert!(

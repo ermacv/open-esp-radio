@@ -71,7 +71,7 @@ fn closed_graph_keeps_the_shared_contract_for_every_edge_and_gap() {
                 let record = edge(0x1000, target, relation, external);
                 assert_eq!(
                     observation(std::slice::from_ref(&record)).closed_graph(),
-                    oer_analysis_riscv_analysis::writes::closes_local_graph(&record),
+                    oer_tools_analysis_riscv_analysis::writes::closes_local_graph(&record),
                     "{record:?}",
                 );
             }
@@ -90,7 +90,7 @@ fn closed_graph_keeps_the_shared_contract_for_every_edge_and_gap() {
         };
         assert_eq!(
             observation(std::slice::from_ref(&record)).closed_graph(),
-            oer_analysis_riscv_analysis::writes::closes_local_graph(&record),
+            oer_tools_analysis_riscv_analysis::writes::closes_local_graph(&record),
         );
     }
     assert!(observation(&[]).closed_graph());

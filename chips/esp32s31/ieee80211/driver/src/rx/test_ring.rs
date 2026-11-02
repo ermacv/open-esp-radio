@@ -9,11 +9,11 @@ use crate::mac::rx::{
     PUBLIC_HEADER_SIZE, RxBufferFullCounter, RxRingLive,
     pool::{NetworkRxFrame, RxStagePool},
 };
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_landed_word, rx_dma::model::RxWalkerModel, rx_storage::RxDmaStorage,
     space::HostDma,
 };
-use oer_esp32s31_hal::memory::dma_static::Placed;
+use oer_chips_esp32s31_hal::memory::dma_static::Placed;
 
 use super::{
     counters::WifiRxCounters,
@@ -21,7 +21,7 @@ use super::{
     transaction::{CompletedUnit, Counters, Preview, Publisher, service},
 };
 use crate::{datapath::DatapathRxProgress, rx::receive::RELOAD_SETTLE_LIMIT};
-use oer_time::settle::Settle;
+use oer_portable_time::settle::Settle;
 
 /// A MAC without the receive-buffer starvation counter.
 pub(crate) struct NoBufferFullCounter;
@@ -59,7 +59,7 @@ impl Ring {
         // These ring-only fixtures resume at a retained ring NEXT. R is not
         // a skipped, unterminated first segment of their first frame.
         walker.next_descriptor_low =
-            base & oer_esp32s31_hal::ieee80211::registers::WifiDescriptorAddressLow::MAX;
+            base & oer_chips_esp32s31_hal::ieee80211::registers::WifiDescriptorAddressLow::MAX;
         let live = placed
             .prepare_ring(&mut walker)
             .and_then(|ring| ring.core_ready_for_test().publish(&mut walker))
@@ -119,7 +119,7 @@ impl Ring {
         E: Publisher<'static, BUFFER, SLOTS>,
     {
         let (mut descriptors, mut units, mut bytes) = (0, 0, 0);
-        let clock = oer_time_virtual::VirtualClock::<1>::default();
+        let clock = oer_portable_time_virtual::VirtualClock::<1>::default();
         for _ in 0..4 {
             let progress = service(
                 &mut self.live,

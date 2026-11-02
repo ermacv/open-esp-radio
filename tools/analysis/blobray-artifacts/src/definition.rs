@@ -1,6 +1,6 @@
 //! Physical external definitions do not acquire a runnable image or its memory view.
 use object::{Object, ObjectSection, ObjectSegment, ObjectSymbol, read::elf::SectionHeader};
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 
 fn invalid(message: &str) -> Error {
     Error::new(ErrorCode::InvalidRequest, message)
@@ -53,8 +53,8 @@ pub fn inspect_link_definition(
             "definition carrier must be little-endian RV32 ET_EXEC",
         ));
     }
-    oer_analysis_riscv_program::abi(
-        &oer_analysis_elf::Elf::parse(&bytes).map_err(|e| invalid(&e.to_string()))?,
+    oer_tools_analysis_riscv_program::abi(
+        &oer_tools_analysis_elf::Elf::parse(&bytes).map_err(|e| invalid(&e.to_string()))?,
     )?;
     let object::File::Elf32(elf) = &file else {
         unreachable!()
@@ -334,8 +334,8 @@ mod tests {
         );
         // The image's memory is its sections: the thread-local segment and
         // the section-less mappings at 0x3000 are no memory to read.
-        let file = oer_analysis_elf::Elf::parse(source.0.as_slice()).unwrap();
-        let view = oer_analysis_riscv_program::ProgramView::new(
+        let file = oer_tools_analysis_elf::Elf::parse(source.0.as_slice()).unwrap();
+        let view = oer_tools_analysis_riscv_program::ProgramView::new(
             &source.0,
             &file,
             &[],
@@ -364,8 +364,8 @@ mod tests {
             inspect_link_definition(&source, &id, &memory, &mut || Ok(())).unwrap(),
             0x1000
         );
-        let file = oer_analysis_elf::Elf::parse(source.0.as_slice()).unwrap();
-        let view = oer_analysis_riscv_program::ProgramView::new(
+        let file = oer_tools_analysis_elf::Elf::parse(source.0.as_slice()).unwrap();
+        let view = oer_tools_analysis_riscv_program::ProgramView::new(
             &source.0,
             &file,
             &[],

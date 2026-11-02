@@ -35,7 +35,7 @@ pub use registers::{BluetoothControllerParts, BluetoothModemLpTimerParts};
 mod controller_time;
 mod ports;
 pub(crate) mod registers;
-use oer_espressif_bluetooth_engine::port::SchedulerInterruptPort;
+use oer_chips_family_bluetooth_engine::port::SchedulerInterruptPort;
 mod scheduler_execution_lock;
 mod scheduler_execution_modify;
 mod scheduler_stop;
@@ -46,7 +46,7 @@ pub use controller_time::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchRequest,
     BluetoothControllerTimeLatchStep, BluetoothControllerTimeLatchStepError,
 };
-use oer_time::settle::{self, Settle, Unsettled};
+use oer_portable_time::settle::{self, Settle, Unsettled};
 pub use scheduler_execution_lock::BluetoothSchedulerExecutionLock;
 pub use scheduler_execution_modify::BluetoothSchedulerExecutionModify;
 pub use scheduler_stop::BluetoothSchedulerStop;
@@ -108,7 +108,7 @@ pub struct BluetoothPartition {
     /// The modem low-power timer and modem ETM channels four through seven.
     pub modem_lp_timer: BluetoothModemLpTimerParts,
     /// The interrupt bank and the scheduler's diagnostic pair.
-    pub interrupts: oer_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
+    pub interrupts: oer_chips_esp32s31_pac::ownership::BluetoothInterruptPeripherals,
 }
 
 /// The Bluetooth partition split into its task registers, modem low-power
@@ -122,11 +122,11 @@ struct Partition {
 /// The type naming the interrupt sources of the controller's bank: the
 /// primary source 124 and the NRT source 133, which one handler samples and
 /// acknowledges through the bank (`InterruptSources`).
-pub type BluetoothInterruptBankSources = oer_esp32s31_pac::bt_mac::BluetoothInterruptBank;
+pub type BluetoothInterruptBankSources = oer_chips_esp32s31_pac::bt_mac::BluetoothInterruptBank;
 
 /// The type naming the modem low-power timer's interrupt source 127
 /// (`InterruptSource`).
-pub type ModemLpTimerSource = oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl;
+pub type ModemLpTimerSource = oer_chips_esp32s31_pac::modem_pwr::BtdmRuntimeControl;
 
 /// Unpowered Bluetooth client holding its partition.
 ///
@@ -140,7 +140,7 @@ pub struct ColdOwner {
 /// Read-only LP cause capability held permanently by the interrupt handler.
 /// Copies read the side-effect-free status; none can acknowledge or arm it.
 #[derive(Clone, Copy)]
-pub struct ModemLpTimerStatus(oer_esp32s31_pac::modem_pwr::BtdmLpTimerStatus);
+pub struct ModemLpTimerStatus(oer_chips_esp32s31_pac::modem_pwr::BtdmLpTimerStatus);
 
 impl ModemLpTimerStatus {
     /// The complete LP cause word, without acknowledgement or timer mutation.
@@ -745,7 +745,7 @@ pub enum BluetoothModemLpTimerOwnerError {
 /// It deliberately exposes no task/cold escape or rollback:
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::bluetooth::ModemLpTimerRegistersPreparedOwner;
+/// use oer_chips_esp32s31_hal::bluetooth::ModemLpTimerRegistersPreparedOwner;
 ///
 /// fn bypass_remaining_init(prepared: ModemLpTimerRegistersPreparedOwner) {
 ///     let _task = prepared.into_task();
@@ -905,7 +905,7 @@ pub enum ModemLpTimerHandlerRegisterStep {
 /// Value-only source-127 work. It grants no register access.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::bluetooth::{ModemLpTimerWork, BluetoothModemLpTimerEpoch};
+/// use oer_chips_esp32s31_hal::bluetooth::{ModemLpTimerWork, BluetoothModemLpTimerEpoch};
 /// fn task(mut work: ModemLpTimerWork, epoch: &mut BluetoothModemLpTimerEpoch) {
 ///     work.sample_counter(epoch);
 /// }
@@ -1064,7 +1064,7 @@ impl ModemLpTimerStopped {
 ///
 /// A stopped owner cannot resume the running interrupt path:
 /// ```compile_fail
-/// use oer_esp32s31_hal::bluetooth::ModemLpTimerStoppedOwner;
+/// use oer_chips_esp32s31_hal::bluetooth::ModemLpTimerStoppedOwner;
 /// fn rearm(timer: ModemLpTimerStoppedOwner) { let _ = timer.step(); }
 /// ```
 #[must_use = "the stopped owner stays with the handler until reset"]
@@ -1288,7 +1288,7 @@ impl InterruptRegistersOwner {
 
     /// Sample scheduler BUSY through the diagnostic pair for the bank-one
     /// source-3 reference gate, within `settle`.
-    pub fn capture_scheduler_reference_gate<C: oer_time::Clock + ?Sized>(
+    pub fn capture_scheduler_reference_gate<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerReferenceGateObservation, Unsettled> {
@@ -1315,7 +1315,7 @@ impl InterruptRegistersOwner {
 
     /// Sample scheduler BUSY through the diagnostic pair for one task-side
     /// scheduler decision, within `settle`.
-    pub fn capture_scheduler_busy<C: oer_time::Clock + ?Sized>(
+    pub fn capture_scheduler_busy<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerBusyObservation, Unsettled> {
@@ -1338,7 +1338,7 @@ impl InterruptRegistersOwner {
     /// Sample scheduler BUSY through the interrupt-owned diagnostic pair for
     /// one lock/modify decision without borrowing task-side controller
     /// registers, within `settle`.
-    pub fn capture_scheduler_lock_modify_interrupt<C: oer_time::Clock + ?Sized>(
+    pub fn capture_scheduler_lock_modify_interrupt<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerLockModifyInterruptObservation, Unsettled> {
@@ -1372,7 +1372,7 @@ impl InterruptRegistersOwner {
         self.restore_diagnostic_selection();
     }
     #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn scheduler_execution_modify_repeats<C: oer_time::Clock + ?Sized>(
+    pub(crate) fn scheduler_execution_modify_repeats<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         budget: Settle<'_, C>,
     ) -> Result<bool, Unsettled> {
@@ -1381,7 +1381,7 @@ impl InterruptRegistersOwner {
         result
     }
     #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn scheduler_execution_modify_settled<C: oer_time::Clock + ?Sized>(
+    pub(crate) fn scheduler_execution_modify_settled<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         budget: Settle<'_, C>,
     ) -> Result<bool, Unsettled> {
@@ -1398,7 +1398,7 @@ impl InterruptRegistersOwner {
     ///
     /// The sample did not settle, the scheduler is busy, or a fault is
     /// pending or was acknowledged.
-    pub fn sample_idle_output<C: oer_time::Clock + ?Sized>(
+    pub fn sample_idle_output<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         _admitted: &BluetoothOutputReleaseAdmitted,
         settle: Settle<'_, C>,
@@ -1436,7 +1436,7 @@ impl InterruptRegistersOwner {
     /// `ReleaseNotQuiet` from the final NRT transaction or residual visible
     /// status follows CONTROL1/2. The owners remain quarantined without a
     /// released-output proof.
-    pub fn release_idle_output<C: oer_time::Clock + ?Sized>(
+    pub fn release_idle_output<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         _run: &BluetoothSchedulerRunDisabled,
         settle: Settle<'_, C>,
@@ -1470,7 +1470,7 @@ impl InterruptRegistersOwner {
         })
     }
 
-    fn release_busy_sample<C: oer_time::Clock + ?Sized>(
+    fn release_busy_sample<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         settle: Settle<'_, C>,
     ) -> Result<BluetoothSchedulerBusyObservation, BluetoothControllerOutputReleaseError> {
@@ -1711,7 +1711,7 @@ impl DeviceTablePublication {
     /// count includes zero and the table's full capacity.
     pub(crate) const fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-        count: oer_mmio::Index<{ Self::CAPACITY + 1 }>,
+        count: oer_portable_mmio::Index<{ Self::CAPACITY + 1 }>,
     ) -> Self {
         const { assert!(DeviceTablePublication::CAPACITY <= u8::MAX as usize) };
         let count = count.get() as u8;
@@ -2395,7 +2395,7 @@ mod sealed {
 /// controller borrows cannot be created:
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::bluetooth::ControllerHalBorrow;
+/// use oer_chips_esp32s31_hal::bluetooth::ControllerHalBorrow;
 ///
 /// fn duplicate(owner: &mut impl ControllerHalBorrow) {
 ///     let first = owner.borrow_bluetooth_controller();

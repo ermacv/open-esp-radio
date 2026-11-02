@@ -2,10 +2,10 @@ extern crate std;
 
 use super::*;
 use core::{cell::RefCell, pin::Pin, task::Waker};
-use oer_memory::HostContext;
-use oer_network_port::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
-use oer_time::{Clock, Duration, Instant, Timer};
-use oer_time_virtual::VirtualClock;
+use oer_portable_memory::HostContext;
+use oer_portable_time::{Clock, Duration, Instant, Timer};
+use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_network_port::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
 use std::{
     boxed::Box,
     collections::VecDeque,
@@ -56,12 +56,12 @@ fn settle<F: Future>(
 /// DMA-like storage.
 enum Frame {
     Plain,
-    Lent(oer_network_port::LentFrame<Lent>),
+    Lent(oer_protocols_network_port::LentFrame<Lent>),
 }
-impl oer_network_port::ReceivedFrame for Frame {
+impl oer_protocols_network_port::ReceivedFrame for Frame {
     type Storage = Lent;
     type Copied = Self;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<Lent>, Self> {
+    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Lent>, Self> {
         match self {
             Self::Lent(frame) => Ok(frame),
             plain @ Self::Plain => Err(plain),
@@ -87,17 +87,20 @@ struct Lent {
     start: usize,
     returned: Arc<std::sync::atomic::AtomicUsize>,
 }
-impl oer_network_port::FrameStorage for Lent {
+impl oer_protocols_network_port::FrameStorage for Lent {
     fn bytes(&self) -> &[u8] {
         &self.bytes[self.start..]
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.bytes[self.start..]
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_network_port::StorageAdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
         let length = self.bytes.len() - self.start;
         if by > length {
-            return Err(oer_network_port::StorageAdvanceRefused { by, length });
+            return Err(oer_protocols_network_port::StorageAdvanceRefused { by, length });
         }
         self.start += by;
         Ok(())
@@ -118,7 +121,7 @@ fn lent(ether_type: u16, payload: &[u8], returned: &Arc<std::sync::atomic::Atomi
         start: 0,
         returned: returned.clone(),
     };
-    let Ok(frame) = oer_network_port::LentFrame::new(
+    let Ok(frame) = oer_protocols_network_port::LentFrame::new(
         storage,
         [2; 6],
         [4; 6],
@@ -574,7 +577,7 @@ fn public_stop_reclaims_retained_and_queued_tx_and_clears_static_configuration()
 
 #[test]
 fn context_refusal_is_a_typed_terminal_and_does_not_poll_the_stack() {
-    let (control, mut service, _) = start::<oer_memory::Never>(Configuration::Dhcpv4);
+    let (control, mut service, _) = start::<oer_portable_memory::Never>(Configuration::Dhcpv4);
     let mut task = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}, |_| {}));
     assert_eq!(
         task.as_mut()

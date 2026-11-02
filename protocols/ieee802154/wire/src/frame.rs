@@ -29,7 +29,7 @@ pub enum FrameError {
 /// The borrow also prevents a view from escaping its packet storage:
 ///
 /// ```compile_fail
-/// use oer_ieee802154_wire::FrameView;
+/// use oer_protocols_ieee802154_wire::FrameView;
 ///
 /// let escaped = {
 ///     let bytes = [0x41, 0x88, 0x00];

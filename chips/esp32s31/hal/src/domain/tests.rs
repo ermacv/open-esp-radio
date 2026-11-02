@@ -49,7 +49,7 @@ fn poisoned_acquire_keeps_its_failed_edge_through_refused_changes_and_release() 
         ))
         .unwrap();
     let mut edges = 0;
-    let poisoned = oer_espressif_modem_clock::execute_acquire(prepared, |_| {
+    let poisoned = oer_chips_family_modem_clock::execute_acquire(prepared, |_| {
         edges += 1;
         if edges == 2 { Err(()) } else { Ok(()) }
     })
@@ -78,10 +78,10 @@ fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() 
         ))
         .unwrap();
     let (planner, lease) =
-        oer_espressif_modem_clock::execute_acquire(prepared, |_| Ok::<(), ()>(())).unwrap();
+        oer_chips_family_modem_clock::execute_acquire(prepared, |_| Ok::<(), ()>(())).unwrap();
     let prepared = planner.prepare_release(lease).unwrap();
     let mut edges = 0;
-    let poisoned = oer_espressif_modem_clock::execute_release(prepared, |_| {
+    let poisoned = oer_chips_family_modem_clock::execute_release(prepared, |_| {
         edges += 1;
         if edges == 2 { Err(()) } else { Ok(()) }
     })

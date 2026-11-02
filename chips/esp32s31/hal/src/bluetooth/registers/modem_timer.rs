@@ -13,7 +13,7 @@
 
 #![deny(unsafe_code)]
 
-use oer_mmio::Bits;
+use oer_portable_mmio::Bits;
 
 use crate::bluetooth::registers::{
     BluetoothModemLpTimerRegisters, BluetoothPlacements, device_fence,
@@ -254,7 +254,7 @@ fn execute_modem_lp_timer_stopped_interrupt(
     BluetoothModemLpTimerStoppedInterruptObservation,
     BluetoothModemLpTimerStoppedInterruptFault,
 > {
-    use oer_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
+    use oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
     let status = transaction.read_status();
     let pending = transaction.sample_pending();
     if pending.state_0024() != 0 {
@@ -321,14 +321,14 @@ trait ModemLpTimerRuntimeTransaction {
 }
 
 type ModemLpCompareTarget =
-    Bits<{ oer_esp32s31_pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH }>;
+    Bits<{ oer_chips_esp32s31_pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH }>;
 const _: () = assert!(
-    oer_esp32s31_pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH
-        == oer_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH
+    oer_chips_esp32s31_pac::modem_pwr::word_006c_opaque::COMPARE_TARGET_WIDTH
+        == oer_chips_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH
 );
 
 const MODEM_LP_TIMER_LOW_SPAN: u32 =
-    1 << oer_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH;
+    1 << oer_chips_esp32s31_pac::modem_pwr::word_0048_opaque::COUNTER_LOW_WIDTH;
 const MODEM_LP_TIMER_HALF_RANGE: u32 = MODEM_LP_TIMER_LOW_SPAN / 2;
 const MODEM_LP_TIMER_IMMEDIATE_TOLERANCE: i32 = 2;
 
@@ -503,55 +503,55 @@ fn execute_modem_lp_timer_start(transaction: &mut impl ModemLpTimerStartTransact
     transaction.fence();
 }
 
-struct HardwareModemLpTimerTransaction<'registers, B: oer_mmio::Placement> {
-    registers: &'registers mut oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl<B>,
-    status: oer_esp32s31_pac::modem_pwr::BtdmLpTimerStatus<B>,
+struct HardwareModemLpTimerTransaction<'registers, B: oer_portable_mmio::Placement> {
+    registers: &'registers mut oer_chips_esp32s31_pac::modem_pwr::BtdmRuntimeControl<B>,
+    status: oer_chips_esp32s31_pac::modem_pwr::BtdmLpTimerStatus<B>,
 }
 
 struct HardwareModemLpTimerLowPowerInitTransaction<'registers, E, T>
 where
-    E: oer_mmio::Placement,
-    T: oer_mmio::Placement,
+    E: oer_portable_mmio::Placement,
+    T: oer_portable_mmio::Placement,
 {
-    config: &'registers mut oer_esp32s31_pac::modem_etm::ModemEtmBluetooth<E>,
-    runtime_control: &'registers mut oer_esp32s31_pac::modem_pwr::BtdmRuntimeControl<T>,
+    config: &'registers mut oer_chips_esp32s31_pac::modem_etm::ModemEtmBluetooth<E>,
+    runtime_control: &'registers mut oer_chips_esp32s31_pac::modem_pwr::BtdmRuntimeControl<T>,
 }
 
 impl<E, T> ModemLpTimerLowPowerInitTransaction
     for HardwareModemLpTimerLowPowerInitTransaction<'_, E, T>
 where
-    E: oer_mmio::Placement,
-    T: oer_mmio::Placement,
+    E: oer_portable_mmio::Placement,
+    T: oer_portable_mmio::Placement,
 {
     fn initialize_config(&mut self) {
         let etm = &mut *self.config;
         etm.trigger_channel_enable_clear_ch5();
         etm.modify_ch5_event(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent43.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent43.bits());
         });
         etm.modify_ch5_task(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask12.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask12.bits());
         });
         etm.trigger_channel_enable_clear_ch4();
         etm.modify_ch4_event(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent45.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent45.bits());
         });
         etm.modify_ch4_task(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask11.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask11.bits());
         });
         etm.trigger_channel_enable_clear_ch6();
         etm.modify_ch6_event(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent46.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent46.bits());
         });
         etm.modify_ch6_task(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask11.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask11.bits());
         });
         etm.trigger_channel_enable_clear_ch7();
         etm.modify_ch7_event(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent46.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_event::Id::BtdmLowPowerEvent46.bits());
         });
         etm.modify_ch7_task(|w| {
-            w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask0f.bits());
+            w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_task::Id::BtdmLowPowerTask0f.bits());
         });
     }
 
@@ -575,12 +575,12 @@ where
     }
 }
 
-impl<B: oer_mmio::Placement> ModemLpTimerStartTransaction
+impl<B: oer_portable_mmio::Placement> ModemLpTimerStartTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn start_counter(&mut self) {
         self.registers.write_runtime_timer_start_command(
-            oer_esp32s31_pac::modem_pwr::runtime_timer_start_command::Command::Start,
+            oer_chips_esp32s31_pac::modem_pwr::runtime_timer_start_command::Command::Start,
             |_| {},
         );
     }
@@ -590,7 +590,9 @@ impl<B: oer_mmio::Placement> ModemLpTimerStartTransaction
     }
 }
 
-impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTransaction<'_, B> {
+impl<B: oer_portable_mmio::Placement> ModemLpTimerTransaction
+    for HardwareModemLpTimerTransaction<'_, B>
+{
     fn prepare_controls(&mut self) {
         self.registers.write_word_004c_opaque(|w| {
             w.set_bits_0_31_opaque(0);
@@ -629,7 +631,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTra
     }
 }
 
-impl<B: oer_mmio::Placement> ModemLpTimerStopTransaction
+impl<B: oer_portable_mmio::Placement> ModemLpTimerStopTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn disable_delivery(&mut self) {
@@ -658,7 +660,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerStopTransaction
     }
 }
 
-impl<B: oer_mmio::Placement> ModemLpTimerInterruptTransaction
+impl<B: oer_portable_mmio::Placement> ModemLpTimerInterruptTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn read_status_0038(&mut self) -> u32 {
@@ -685,7 +687,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerInterruptTransaction
     }
 }
 
-impl<B: oer_mmio::Placement> ModemLpTimerHandlerRegisterTransaction
+impl<B: oer_portable_mmio::Placement> ModemLpTimerHandlerRegisterTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn sample_state_0024_low_byte_nonzero(&mut self) -> bool {
@@ -713,7 +715,7 @@ impl<B: oer_mmio::Placement> ModemLpTimerHandlerRegisterTransaction
     }
 }
 
-impl<B: oer_mmio::Placement> ModemLpTimerRuntimeTransaction
+impl<B: oer_portable_mmio::Placement> ModemLpTimerRuntimeTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
     fn read_counter(&mut self) -> u32 {

@@ -1,6 +1,6 @@
 //! Candidate memory addresses one analyzed function accesses.
 use crate::*;
-use oer_analysis_blobray_analysis::navigation::Facts;
+use oer_tools_analysis_blobray_analysis::navigation::Facts;
 mod arguments;
 mod callees;
 pub(crate) use arguments::{CallKey, CallLinks, Calls};
@@ -23,8 +23,9 @@ pub(crate) struct Candidate<'a> {
 /// Two lazy domains of one CFG engine supply selected read uses and stored
 /// provenance, with independent function budgets.
 pub(crate) struct ReadObservations<'f, 'a, 'm> {
-    evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
-    provenance: oer_analysis_blobray_analysis::registers::StoredProvenanceEvaluator<'f, 'a, 'm>,
+    evaluator: oer_tools_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
+    provenance:
+        oer_tools_analysis_blobray_analysis::registers::StoredProvenanceEvaluator<'f, 'a, 'm>,
     facts: &'f Facts<'a, 'm>,
     memory: &'m WorkingMemory,
     decoder: &'f dyn FunctionSemantics,
@@ -55,12 +56,13 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
         symbolic_stores: bool,
     ) -> Self {
         Self {
-            evaluator: oer_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
+            evaluator: oer_tools_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
                 facts, memory,
             ),
-            provenance: oer_analysis_blobray_analysis::registers::StoredProvenanceEvaluator::new(
-                facts, memory,
-            ),
+            provenance:
+                oer_tools_analysis_blobray_analysis::registers::StoredProvenanceEvaluator::new(
+                    facts, memory,
+                ),
             facts,
             memory,
             decoder,
@@ -299,7 +301,7 @@ pub(crate) fn observe<'a, 'm>(
     emit: &mut Observer<'_>,
 ) -> Result<()> {
     let mut indexed_addresses =
-        oer_analysis_blobray_analysis::registers::IndexedAddresses::new(facts, memory);
+        oer_tools_analysis_blobray_analysis::registers::IndexedAddresses::new(facts, memory);
     let mut observe = |record: u64,
                        width: u8,
                        address: &'a AbstractValue,
@@ -412,12 +414,12 @@ struct SelectedCalls<'s, 'm> {
     calls: Calls<'s, 'm>,
     sources: &'s [(u64, u8)],
 }
-impl<'s> oer_analysis_blobray_analysis::registers::CallAt<'s> for SelectedCalls<'s, '_> {
+impl<'s> oer_tools_analysis_blobray_analysis::registers::CallAt<'s> for SelectedCalls<'s, '_> {
     fn summary(&self, site: u64) -> Option<&'s CallSummary> {
-        oer_analysis_blobray_analysis::registers::CallAt::summary(&self.calls, site)
+        oer_tools_analysis_blobray_analysis::registers::CallAt::summary(&self.calls, site)
     }
     fn current(&self) -> Option<&'s CallSummary> {
-        oer_analysis_blobray_analysis::registers::CallAt::current(&self.calls)
+        oer_tools_analysis_blobray_analysis::registers::CallAt::current(&self.calls)
     }
     fn result_sources(&self) -> &[(u64, u8)] {
         self.sources

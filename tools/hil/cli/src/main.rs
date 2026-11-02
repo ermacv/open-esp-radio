@@ -54,8 +54,8 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> scenarios::Result<ExitCode> {
-    let _signals = oer_os_process::install_signal_handlers()?;
-    let root = oer_os_process::Checkout::discover("cargo hil")?.root;
+    let _signals = oer_tools_os_process::install_signal_handlers()?;
+    let root = oer_tools_os_process::Checkout::discover("cargo hil")?.root;
     let found = scenarios::discover(&scenarios::metadata(&root)?)?;
     match cli.command {
         Command::List => {
@@ -91,8 +91,9 @@ fn run(cli: Cli) -> scenarios::Result<ExitCode> {
 /// Run `command` in an owned process group; its exit code. A cancelled
 /// tool gives the group `shutdown` before it kills it.
 fn owned(command: &mut Process, shutdown: Duration) -> scenarios::Result<ExitCode> {
-    let mut child = oer_os_process::owned::Child::spawn_with_shutdown_grace(command, shutdown)?;
-    Ok(oer_os_process::exit_code(
+    let mut child =
+        oer_tools_os_process::owned::Child::spawn_with_shutdown_grace(command, shutdown)?;
+    Ok(oer_tools_os_process::exit_code(
         child.wait_forwarding_cancellation()?,
     ))
 }

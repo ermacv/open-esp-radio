@@ -1,0 +1,24 @@
+[package]
+name = "oer-chips-family-ieee80211-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Espressif IEEE 802.11 transmit policy data recovered from the vendor stack: rate schedules, retry ladder, limits and estimates"
+readme = "README.md"
+
+[dependencies]
+oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
+oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-protocols-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }
+oer-protocols-network-wire = { path = "../../../protocols/network/wire" }
+oer-portable-time = { path = "../../../portable/time" }
+
+[dev-dependencies]
+oer-portable-wire = { path = "../../../portable/wire" }
+oer-chips-esp32s31-ieee80211-driver = { path = "../../esp32s31/ieee80211/driver", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+
+[lints]
+workspace = true

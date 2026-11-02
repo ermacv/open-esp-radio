@@ -1,6 +1,6 @@
 # Layer tests
 
-`oer-test-layers` checks the structure rules of
+`oer-tools-test-layers` checks the structure rules of
 [architecture](../../../docs/architecture.md) and
 [repository layout](../../../docs/repository-layout.md) from the workspace
 manifests and sources: package names, the unsafe boundary, the sans-IO lint
@@ -13,7 +13,7 @@ dependencies count only where a rule says so.
 ## Roles
 
 `tests/layers.rs` lists the role of every package under `chips/`,
-`protocols/hil/` and `hil-scenarios/` and of any `hil` leaf (`ROLES`); a
+`protocols/hil/` and `hil/` (but `hil/probes/`) and of any `hil` leaf (`ROLES`); a
 listed role whose package does not exist yet waits in `AWAITED_ROLES`. Other
 packages follow their root: protocol leaves (`wire`, `cipher`, `port`,
 `model`, `runtime`, otherwise a core; `instrumentation` is an
@@ -39,7 +39,7 @@ other `portable/` support, firmware images and tools.
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
 | `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
-| `HilImage` | `hil-scenarios/images/*` | the application entry (each depends on it), the HIL agent on the entry, HIL bindings, agent and protocol, portable, Embassy adapters |
+| `HilImage` | `hil/images/*` | the application entry (each depends on it), the HIL agent on the entry, HIL bindings, agent and protocol, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for
 facts, PAC, HAL, drivers, adapters, service and client, platform, platform
@@ -69,10 +69,10 @@ is gone both fail, so every list only shrinks:
 
 `ieee80211_protocol_packages_take_no_trace_serialization_or_hil` rejects a
 direct normal edge from any package under `protocols/ieee80211/` to
-`oer-trace`, `serde`, `postcard`, `postcard-schema` or an `oer-hil-*`
+`oer-portable-trace`, `serde`, `postcard`, `postcard-schema` or an `oer-hil-*`
 package, resolving `package =` and including optional and target-specific
 entries. Development and build edges are outside the rule. Protocol owners
-report to a caller-lent `oer-events` sink instead.
+report to a caller-lent `oer-portable-events` sink instead.
 
 ## External async crates
 
@@ -85,8 +85,8 @@ are outside this rule; it does not inspect third-party dependency closures.
 | --- | --- |
 | `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
 | `embassy-sync` | Development only, with the exact normal-edge deviations above |
-| `embassy-time` | `portable/embassy/time`, `sdk/espressif` (the executors' clock) |
-| `embassy-time-driver` | `chips/espressif/executor` |
+| `embassy-time` | `portable/embassy/time`, `oer` (the executors' clock) |
+| `embassy-time-driver` | `chips/family/executor` |
 | `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |
 | `bt-hci` | `protocols/bluetooth/hci`, `portable/embassy/trouble`, `tools/*` |
@@ -118,7 +118,7 @@ name, in AST/token visitation order. Every key includes it, including unique
 sites, so appending a repeat preserves existing keys. Inserting or reordering
 identical sites requires reviewing their classifications.
 
-For example, `firmware/apps/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
+For example, `hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
 names the first `panic!` in `run`. Unregistered-site diagnostics show the
 current `path:line:column` (1-based) for navigation. Stale keys identify sites
 which no longer exist and have no current coordinates.
@@ -132,7 +132,7 @@ InvalidHart proof is conditional on the stated rev0 model, correct CSR
 observation and intact code/data. It proves no radio event ordering.
 
 Reset owners are admitted explicitly: HAL, chip composition, staged runtime,
-staged bootstrap, executor, the application entry (`sdk/espressif`, on the
+staged bootstrap, executor, the application entry (`oer`, on the
 image's behalf) and the image containing the site. The family
 IEEE 802.15.4 engine's typed reasons belong to PHY HIL's terminal policy;
 their declaration grants the engine no reset dependency. An ordinary driver
@@ -181,7 +181,7 @@ regenerate classifications without checking their cause and owner.
 ## HAL atoms
 
 `hal_production_code_gains_no_waits_or_sequences` scans the production
-modules of `oer-esp32s31-hal` from its crate root and counts, per file, the
+modules of `oer-chips-esp32s31-hal` from its crate root and counts, per file, the
 identifiers `async`, `await`, `Poll`, `Waker`, `poll_fn`, `loop`,
 `spin_loop`, `Instant`, `BootWait` and any identifier containing
 `deadline`. Each file with markers is listed with its exact count:

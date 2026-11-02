@@ -11,7 +11,7 @@
 //! ([`Released::take_interrupts`]): the staged runtime hands it to the hart,
 //! which alone makes its controller from it.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     cache::CacheBusObserver,
     clic::{Clic, ClicObserver},
     instances,
@@ -19,12 +19,12 @@ use oer_esp32s31_pac::{
     lp_system_reg::LpWakeStub,
     ownership::SecondaryLaunchPeripherals,
 };
-use oer_espressif_boot::drivers::cores::{
+use oer_chips_family_boot::drivers::cores::{
     self as driver, BootWordKept, CoreState, STALL_POLLS, Unconfirmed,
 };
-use oer_espressif_platform_port::SecondaryEntry;
-use oer_memory::ClaimCell;
-use oer_mmio::{Bits, Fixed, Index, Placement};
+use oer_chips_family_platform_port::SecondaryEntry;
+use oer_portable_memory::ClaimCell;
+use oer_portable_mmio::{Bits, Fixed, Index, Placement};
 
 use super::{CoresError, Hart, SecondaryHart, operate};
 use crate::{
@@ -228,7 +228,7 @@ pub(super) fn start_with<
             });
         }
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     // (5) The ROM's secondary path prints through neither of its slots.
     clear_printf_slots();
     // (6) Release, the boot word last.
@@ -267,7 +267,12 @@ pub(super) fn retire_with<
 
 #[cfg(test)]
 impl<'a>
-    LaunchPermit<oer_mmio::Host<'a>, oer_mmio::Host<'a>, oer_mmio::Host<'a>, oer_mmio::Host<'a>>
+    LaunchPermit<
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+    >
 {
     /// The permit over host memory: hart 1's route bank, LP_SYS, the cache
     /// and hart 1's CLIC.
@@ -276,9 +281,9 @@ impl<'a>
         lp_sys: &'a mut [u32],
         cache: &'a mut [u32],
         clic: &'a mut [u32],
-    ) -> Result<Self, oer_mmio::HostTooSmall> {
-        let (buses, _cache_boot) = oer_esp32s31_pac::cache::cache_host(cache)?;
-        let (lines, config) = oer_esp32s31_pac::clic::clic_host(clic)?;
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+        let (buses, _cache_boot) = oer_chips_esp32s31_pac::cache::cache_host(cache)?;
+        let (lines, config) = oer_chips_esp32s31_pac::clic::clic_host(clic)?;
         Ok(Self {
             interrupts: InterruptGrant::new(InterruptCore1::host(routes)?, lines, Some(config)),
             wake_stub: LpWakeStub::host(lp_sys)?,

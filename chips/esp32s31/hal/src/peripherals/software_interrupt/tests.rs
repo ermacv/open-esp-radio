@@ -6,8 +6,8 @@
 
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_pac::{hp_system, instances};
-use oer_mmio::InterruptSource;
+use oer_chips_esp32s31_pac::{hp_system, instances};
+use oer_portable_mmio::InterruptSource;
 
 use super::{FromCpu0, FromCpu0Irq, FromCpu1Irq, FromCpu2Irq, FromCpu3, FromCpu3Irq};
 

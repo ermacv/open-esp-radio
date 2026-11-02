@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-bluetooth-driver"
+name = "oer-chips-esp32s31-bluetooth-driver"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,31 +8,31 @@ repository.workspace = true
 description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE PHY, interrupts and scheduler primitives"
 
 [dependencies]
-oer-espressif-bluetooth-engine = { path = "../../../espressif/bluetooth-engine" }
-oer-bluetooth-le-wire = { path = "../../../../protocols/bluetooth/le/wire" }
-oer-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
-oer-radio-port = { path = "../../../../protocols/radio/port" }
-oer-memory = { path = "../../../../portable/memory" }
-oer-sync = { path = "../../../../portable/sync" }
-oer-esp32s31-radio-client = { path = "../../radio/client", features = ["bluetooth"] }
+oer-chips-family-bluetooth-engine = { path = "../../../family/bluetooth-engine" }
+oer-protocols-bluetooth-le-wire = { path = "../../../../protocols/bluetooth/le/wire" }
+oer-protocols-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port" }
+oer-protocols-radio-port = { path = "../../../../protocols/radio/port" }
+oer-portable-memory = { path = "../../../../portable/memory" }
+oer-portable-sync = { path = "../../../../portable/sync" }
+oer-chips-esp32s31-radio-client = { path = "../../radio/client", features = ["bluetooth"] }
 embassy-futures = "0.1.2"
-oer-esp32s31-hal = { path = "../../hal", features = ["bluetooth-engine"] }
-oer-esp32s31-phy = { path = "../../phy" }
-oer-time = { path = "../../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table" }
+oer-chips-esp32s31-hal = { path = "../../hal", features = ["bluetooth-engine"] }
+oer-chips-esp32s31-phy = { path = "../../phy" }
+oer-portable-time = { path = "../../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table" }
 
 [dev-dependencies]
-oer-radio-port = { path = "../../../../protocols/radio/port", features = ["test-support"] }
-oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-protocols-radio-port = { path = "../../../../protocols/radio/port", features = ["test-support"] }
+oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 atomic-waker = "1.1.2"
 bytemuck = { version = "1.25.2", default-features = false }
-oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
-oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
 
 # Host tests need the std implementation; chip doctests build without it.
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"
-oer-espressif-interrupt-table = { path = "../../../espressif/interrupt-table", features = ["host-signal"] }
+oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table", features = ["host-signal"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 
 [lints]

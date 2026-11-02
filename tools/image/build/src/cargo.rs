@@ -17,14 +17,14 @@ pub const LAYOUT_SEED_ENV: &str = "OER_LAYOUT_SEED";
 /// image without appearing in the checkout are removed, and so is any
 /// layout seed (a seed reaches a build only as its recorded seed).
 pub fn command() -> Command {
-    let mut command = oer_os_process::command(oer_os_toolchain::cargo_program());
+    let mut command = oer_tools_os_process::command(oer_tools_os_toolchain::cargo_program());
     for variable in inherited_build_overrides(env::vars_os().map(|(name, _)| name)) {
         command.env_remove(variable);
     }
     command.env_remove(LAYOUT_SEED_ENV);
     // Runtime and probe builds explicitly select an interrupt-analysis spec;
     // no build may inherit one from its caller.
-    command.env_remove(oer_image_checks::linker::strict::SPEC_ENV);
+    command.env_remove(oer_tools_image_checks::linker::strict::SPEC_ENV);
     command
 }
 
@@ -108,7 +108,7 @@ mod tests {
             "the image's Cargo command must remove {LAYOUT_SEED_ENV}"
         );
         assert!(command.get_envs().any(|(name, value)| name
-            == oer_image_checks::linker::strict::SPEC_ENV
+            == oer_tools_image_checks::linker::strict::SPEC_ENV
             && value.is_none()));
     }
 }

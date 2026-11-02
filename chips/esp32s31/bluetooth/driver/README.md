@@ -194,7 +194,7 @@ A composition runs the typed primitives of this crate in the vendor order of
 and
 [`Kconfig.mac`](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/esp_hw_support/port/esp32s31/Kconfig.mac).
 
-The `bluetooth` feature of `oer-esp32s31-radio-system` composes this
+The `bluetooth` feature of `oer-chips-esp32s31-radio-system` composes this
 lifecycle into its single P2 actor. `BluetoothAttachment` holds Bluetooth power,
 coexistence and `BluetoothPhyMembership`; `ControllerLifecycle` holds the
 branded Engine and its initialization states. The membership cell carries
@@ -221,7 +221,7 @@ epoch; its storage stays reserved for every later epoch.
 
 Role builders accept caller-selected PTI values. The driver does not map
 active roles to coexistence schedule status or select shared-antenna priority
-policy; the chip-family coexistence vocabulary lives in `oer-espressif-coex`.
+policy; the chip-family coexistence vocabulary lives in `oer-chips-family-coex`.
 
 Stop:
 

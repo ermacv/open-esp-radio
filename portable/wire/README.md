@@ -1,4 +1,4 @@
-# oer-wire
+# oer-portable-wire
 
 Allocation-free fixed-width bitfield declarations and bounded byte cursors for
 radio formats. `bitfield!` declares field names, half-open bit ranges, value types

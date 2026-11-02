@@ -5,12 +5,12 @@
 //! source presence and its own later deferred-work sample travel as one key;
 //! OR-ing the two inputs independently could invent a marked event.
 
-use oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptClock;
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerInterruptClock;
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothPrimaryInterruptEpoch, BluetoothSchedulerReferenceGateObservation,
     BluetoothSchedulerWorkObservation, InterruptRegistersOwner,
 };
-use oer_time::settle::Unsettled;
+use oer_portable_time::settle::Unsettled;
 
 /// Captured primary inputs, before P2 classification.
 /// Empty epochs carry no work. Fault-source presence and a failed diagnostic
@@ -52,12 +52,12 @@ trait PrimaryInterruptBackend {
     fn capture_scheduler_work(&mut self) -> BluetoothSchedulerWorkObservation;
 }
 
-struct PrimaryHardware<'a, C: oer_time::Clock> {
+struct PrimaryHardware<'a, C: oer_portable_time::Clock> {
     interrupts: &'a mut InterruptRegistersOwner,
     clock: SchedulerInterruptClock<'a, C>,
 }
 
-impl<C: oer_time::Clock> PrimaryInterruptBackend for PrimaryHardware<'_, C> {
+impl<C: oer_portable_time::Clock> PrimaryInterruptBackend for PrimaryHardware<'_, C> {
     fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch> {
         self.interrupts.capture_primary_and_acknowledge()
     }
@@ -126,7 +126,7 @@ fn execute_primary_interrupt_capture(
 /// the existing bounded reference-gate protocol, in its original order.
 pub(crate) fn step_primary_interrupt(
     interrupts: &mut InterruptRegistersOwner,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> PrimaryInterruptCapture {
     execute_primary_interrupt_capture(&mut PrimaryHardware {
         interrupts,

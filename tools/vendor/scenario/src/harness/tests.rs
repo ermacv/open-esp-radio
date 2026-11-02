@@ -1,6 +1,6 @@
 //! Host regressions for request preparation; no hardware or private inputs.
 use super::*;
-use oer_probe_codegen::{Argument, Entry};
+use oer_tools_probe_codegen::{Argument, Entry};
 
 #[test]
 fn signed_words_and_explicit_padding() {
@@ -220,7 +220,7 @@ struct BudgetCli {
 #[test]
 fn operator_flags_and_usage_reach_the_scenario_report() {
     use clap::Parser;
-    use oer_analysis_riscv_model::{RunControl, RunPosition};
+    use oer_tools_analysis_riscv_model::{RunControl, RunPosition};
     let budget = BudgetCli::parse_from([
         "scenario",
         "--timeout-secs",
@@ -232,11 +232,13 @@ fn operator_flags_and_usage_reach_the_scenario_report() {
     ])
     .budget;
     let (value, report) = budget
-        .run(|memory, control| -> oer_analysis_riscv_model::Result<_> {
-            control.checkpoint(23)?;
-            let _reservation = memory.reserve(41, RunPosition::default())?;
-            Ok(17)
-        })
+        .run(
+            |memory, control| -> oer_tools_analysis_riscv_model::Result<_> {
+                control.checkpoint(23)?;
+                let _reservation = memory.reserve(41, RunPosition::default())?;
+                Ok(17)
+            },
+        )
         .unwrap();
     assert_eq!(value, 17);
     assert_eq!(report.profile, AnalysisProfile::VendorScenario);
@@ -255,7 +257,7 @@ fn operator_flags_and_usage_reach_the_scenario_report() {
     assert_eq!(*report.limited, AnalysisLimited::default());
     let defaults = BudgetCli::parse_from(["scenario"]).budget;
     let (_, report) = defaults
-        .run(|_, _| Ok::<_, oer_analysis_riscv_model::Error>(()))
+        .run(|_, _| Ok::<_, oer_tools_analysis_riscv_model::Error>(()))
         .unwrap();
     assert_eq!(
         report.limits.operation,
@@ -265,7 +267,7 @@ fn operator_flags_and_usage_reach_the_scenario_report() {
 
 #[test]
 fn operation_work_exhaustion_returns_an_error_without_resources() {
-    use oer_analysis_riscv_model::{ErrorCode, RunControl};
+    use oer_tools_analysis_riscv_model::{ErrorCode, RunControl};
     let budget = Budget {
         timeout_secs: 600,
         working_memory_mib: 256,

@@ -2,7 +2,7 @@
 //! the first ELF's bound and verified on the final ELF without retries.
 
 use crate::{Result, stack::StackAudit};
-use oer_chip_profile::policy::{StackPolicy, TaskStack};
+use oer_tools_chip_profile::policy::{StackPolicy, TaskStack};
 use serde::{Deserialize, Serialize};
 
 /// The largest change of the bound the relink may bring, as for the IRQ stacks.

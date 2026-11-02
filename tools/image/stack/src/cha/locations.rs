@@ -1,10 +1,10 @@
 //! PC-specific storage fields and register aliases, prepared once per audit.
 use super::{Field, TypeFacts};
 use crate::dwarf::locations::Place;
-use oer_analysis_elf::dwarf::gimli;
-use oer_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_elf::dwarf::gimli;
+use oer_tools_analysis_riscv_lift::{RiscvDecoder, is_base_instruction};
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]

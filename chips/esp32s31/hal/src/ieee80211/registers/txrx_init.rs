@@ -1,7 +1,7 @@
 //! The direct `mac_txrx_init` transactions.
 
-use oer_esp32s31_pac::wifi_mac::SharedRadioInitControl;
-use oer_mmio::Bits;
+use oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl;
+use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters, WifiRxDmaRegisters, bits, element};
 
@@ -130,37 +130,37 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         callbacks.modify_ack_rate_table(|w| {
             w.set_bpsk_rate(
-                oer_esp32s31_pac::wifi_mac::ack_rate_table::BpskRate::Ofdm6m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::ack_rate_table::BpskRate::Ofdm6m.bits() as u8,
             )
             .set_qpsk_rate(
-                oer_esp32s31_pac::wifi_mac::ack_rate_table::QpskRate::Ofdm12m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::ack_rate_table::QpskRate::Ofdm12m.bits() as u8,
             )
             .set_qam16_rate(
-                oer_esp32s31_pac::wifi_mac::ack_rate_table::Qam16Rate::Ofdm24m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::ack_rate_table::Qam16Rate::Ofdm24m.bits() as u8,
             )
             .set_bits_24_31_opaque(0);
         });
         callbacks.modify_cts_rate_table(|w| {
             w.set_bpsk_rate(
-                oer_esp32s31_pac::wifi_mac::cts_rate_table::BpskRate::Ofdm6m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::cts_rate_table::BpskRate::Ofdm6m.bits() as u8,
             )
             .set_qpsk_rate(
-                oer_esp32s31_pac::wifi_mac::cts_rate_table::QpskRate::Ofdm12m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::cts_rate_table::QpskRate::Ofdm12m.bits() as u8,
             )
             .set_qam16_rate(
-                oer_esp32s31_pac::wifi_mac::cts_rate_table::Qam16Rate::Ofdm24m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::cts_rate_table::Qam16Rate::Ofdm24m.bits() as u8,
             )
             .set_bits_24_31_opaque(0);
         });
         callbacks.modify_ack_cck_rate_table(|w| {
             w.set_rate_1m(
-                oer_esp32s31_pac::wifi_mac::ack_cck_rate_table::Rate1m::Dsss1m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::ack_cck_rate_table::Rate1m::Dsss1m.bits() as u8,
             )
             .set_rate_2m(
-                oer_esp32s31_pac::wifi_mac::ack_cck_rate_table::Rate2m::Dsss2m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::ack_cck_rate_table::Rate2m::Dsss2m.bits() as u8,
             )
             .set_rate_2m_short_preamble(
-                oer_esp32s31_pac::wifi_mac::ack_cck_rate_table::Rate2mShortPreamble::Dsss2mShort
+                oer_chips_esp32s31_pac::wifi_mac::ack_cck_rate_table::Rate2mShortPreamble::Dsss2mShort
                     .bits() as u8,
             )
             .set_bits_24_27_opaque(Bits::constant::<0>())
@@ -168,13 +168,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
         callbacks.modify_cts_cck_rate_table(|w| {
             w.set_rate_1m(
-                oer_esp32s31_pac::wifi_mac::cts_cck_rate_table::Rate1m::Dsss1m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::cts_cck_rate_table::Rate1m::Dsss1m.bits() as u8,
             )
             .set_rate_2m(
-                oer_esp32s31_pac::wifi_mac::cts_cck_rate_table::Rate2m::Dsss2m.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::cts_cck_rate_table::Rate2m::Dsss2m.bits() as u8,
             )
             .set_rate_2m_short_preamble(
-                oer_esp32s31_pac::wifi_mac::cts_cck_rate_table::Rate2mShortPreamble::Dsss2mShort
+                oer_chips_esp32s31_pac::wifi_mac::cts_cck_rate_table::Rate2mShortPreamble::Dsss2mShort
                     .bits() as u8,
             );
         });

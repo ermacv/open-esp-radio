@@ -13,12 +13,12 @@
 //! is tied to no executor. The actor owns
 //! the shared radio registers, common radio power, the modem clocks and
 //! coexistence, through its [`ClientBackend`], and serves its clients'
-//! cells (`oer-esp32s31-radio-client`) one request at a time. It takes no lock
+//! cells (`oer-chips-esp32s31-radio-client`) one request at a time. It takes no lock
 //! and refuses nothing as busy: a request waits in its cell until the actor
 //! takes it.
 //!
 //! - `join`: prepare the PHY domain (register it, or wake closed RF), mint a
-//!   new [`RfEpoch`](oer_esp32s31_radio_client::RfEpoch) when RF opened,
+//!   new [`RfEpoch`](oer_chips_esp32s31_radio_client::RfEpoch) when RF opened,
 //!   then let the backend enter the client, coexistence included in the
 //!   order its hardware requires. A first client that fails without poisoning
 //!   leaves RF closed again.
@@ -45,8 +45,8 @@
 use core::future::poll_fn;
 
 use embassy_futures::select::{Either, select};
-use oer_esp32s31_phy::executor::boundary::Boundary;
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_phy::executor::boundary::Boundary;
+use oer_chips_esp32s31_radio_client::{
     ActorEnd, Client, ClientInbox, DomainHealth, Doorbell, Failed, Failure, Joined, Leaving, Left,
     LpClock, LpSource, MemberMint, PhyPreparation, Poison, PoisonCause, PoisonOrigin, Request,
     RfEpoch, TrackedMember, wifi::Wifi,
@@ -83,10 +83,12 @@ impl TrackingFault {
     /// it; a refusal the actor's own state should have prevented breaks a
     /// software invariant; every other failed or timed-out PHY step is an
     /// unexpected hardware observation without an impossibility proof.
-    pub const fn class(&self) -> oer_diagnostics::fault::Class {
-        use oer_diagnostics::fault::Class;
-        use oer_esp32s31_phy::{concurrent::ConcurrentPhyError, state::client::PhyTrackTimeError};
-        use oer_esp32s31_radio_client::{CalibrationTrackingFault, PhyFault};
+    pub const fn class(&self) -> oer_portable_diagnostics::fault::Class {
+        use oer_chips_esp32s31_phy::{
+            concurrent::ConcurrentPhyError, state::client::PhyTrackTimeError,
+        };
+        use oer_chips_esp32s31_radio_client::{CalibrationTrackingFault, PhyFault};
+        use oer_portable_diagnostics::fault::Class;
         const fn step(fault: PhyFault) -> Class {
             match fault {
                 PhyFault::DeadlineOverflow => Class::Exhaustion,
@@ -126,8 +128,8 @@ impl TrackingFault {
 }
 
 /// The stage's name, then the cause's variant path.
-impl oer_diagnostics::DiagnosticPath for TrackingFault {
-    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+impl oer_portable_diagnostics::DiagnosticPath for TrackingFault {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
         path.name(match self.stage {
             TrackingStage::Deadline => "Deadline",
             TrackingStage::Tick => "Tick",
@@ -176,7 +178,7 @@ pub trait PhyDomain {
     /// # Errors
     ///
     /// The deadline does not fit the tracking clock.
-    fn tracking_deadline(&self) -> Result<Option<oer_time::Instant>, Fault>;
+    fn tracking_deadline(&self) -> Result<Option<oer_portable_time::Instant>, Fault>;
     /// One periodic tracking tick.
     async fn track_tick(&mut self) -> Result<(), Fault>;
 }
@@ -223,7 +225,9 @@ pub struct RadioSystem<K: Client, S: LpSource, B, T> {
     core: ActorCore,
 }
 
-impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wifi, S, B, T> {
+impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_portable_time::Timer>
+    RadioSystem<Wifi, S, B, T>
+{
     /// The Wi-Fi radio system over `backend`, with the claimed actor end.
     pub fn new(end: ActorEnd, backend: B, timer: T, lp: LpClock<S>) -> Self {
         let ActorEnd {
@@ -242,7 +246,9 @@ impl<S: LpSource, B: ClientBackend<Wifi, S>, T: oer_time::Timer> RadioSystem<Wif
     }
 }
 
-impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSystem<K, S, B, T> {
+impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_portable_time::Timer>
+    RadioSystem<K, S, B, T>
+{
     /// Serve the cells, borrowing the actor's storage, until the periodic
     /// tracking fails.
     pub async fn run(&mut self) -> TrackingFault {
@@ -272,7 +278,7 @@ impl<K: Client, S: LpSource, B: ClientBackend<K, S>, T: oer_time::Timer> RadioSy
     }
 }
 
-impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S, B, T> {
+impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSystem<K, S, B, T> {
     /// Access backend-local runtime ownership between separate borrows of run.
     /// The mutable borrow prevents the actor from running concurrently.
     pub fn backend_mut(&mut self) -> &mut B {
@@ -282,7 +288,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
     #[cfg(any(feature = "bluetooth", test))]
     // Independent of the next composition future and attached controller.
     #[inline(always)]
-    async fn wait(&self, deadline: Option<oer_time::Instant>) -> bool {
+    async fn wait(&self, deadline: Option<oer_portable_time::Instant>) -> bool {
         let rung = poll_fn(|cx| self.doorbell.poll_rung(cx));
         let timer = deadline::Deadline::new(deadline.map(|at| self.timer.wait_until(at)));
         matches!(select(rung, timer).await, Either::Second(()))
@@ -290,7 +296,7 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
 
     /// The next tracking deadline while a member is tracked and the domain
     /// is healthy.
-    fn tracking_deadline(&mut self) -> Result<Option<oer_time::Instant>, TrackingFault> {
+    fn tracking_deadline(&mut self) -> Result<Option<oer_portable_time::Instant>, TrackingFault> {
         if !self.core.tracking_active() {
             return Ok(None);
         }
@@ -403,7 +409,9 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<K, S,
                     }));
                 }
                 responder.answer(match Boundary::new(self.backend.retune(retune)).await {
-                    Ok(payload) => Ok(oer_esp32s31_radio_client::RetunedMember { member, payload }),
+                    Ok(payload) => {
+                        Ok(oer_chips_esp32s31_radio_client::RetunedMember { member, payload })
+                    }
                     Err(Failed { returned, cause }) => {
                         self.core.failed(cause);
                         Err(Failed {

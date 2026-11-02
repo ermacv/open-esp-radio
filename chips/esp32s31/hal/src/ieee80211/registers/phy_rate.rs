@@ -4,7 +4,7 @@
 //! Only Wi-Fi touches these words, so they belong to the Wi-Fi register set
 //! and need no shared radio lease.
 
-use oer_esp32s31_pac::wifi_bb_brx::{
+use oer_chips_esp32s31_pac::wifi_bb_brx::{
     low_rate_primary_control::{LowRateEnableFirst, LowRateEnableSecond},
     low_rate_secondary_control::LowRateEnable,
 };

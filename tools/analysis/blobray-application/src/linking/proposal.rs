@@ -1,6 +1,6 @@
 //! Trial links propose companions; they never select or keep an image.
 use super::*;
-use oer_analysis_elf::{SymbolKind, classify as elf};
+use oer_tools_analysis_elf::{SymbolKind, classify as elf};
 
 /// Defined functions and data objects of one candidate executable, by name:
 /// (name index, local binding, symbol).
@@ -82,8 +82,11 @@ pub fn propose_companions(
     );
     let mut outputs = Outputs::default();
     run(host, &invocation, &mut outputs, control)?;
-    let names =
-        oer_analysis_blobray_artifacts::undefined_names(&outputs.elf.as_slice(), memory, control)?;
+    let names = oer_tools_analysis_blobray_artifacts::undefined_names(
+        &outputs.elf.as_slice(),
+        memory,
+        control,
+    )?;
     // (candidate position, name index, local binding, symbol)
     let mut found = Vec::new();
     for (position, candidate) in candidates.iter().enumerate() {

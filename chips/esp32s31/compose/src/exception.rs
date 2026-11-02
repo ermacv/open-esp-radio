@@ -1,6 +1,6 @@
 //! A CPU exception's interrupt observations, retained for the next boot.
 //!
-//! The runtime's exception path (`oer_espressif_staged_runtime::trap::handle`)
+//! The runtime's exception path (`oer_chips_family_staged_runtime::trap::handle`)
 //! retains the trap frame first, before it stops the other hart: `mcause`,
 //! `mepc`, `mtval`, `ra`, `sp` and `mscratch` as the trap left them, which
 //! the next boot reports as `fatal_exception`. [`capture`], the image's
@@ -28,14 +28,14 @@
 //! short leaf of the fatal path. The next boot's [`report_previous`] prints
 //! the record and clears it only after every note was written whole.
 
-#[cfg(any(test, target_arch = "riscv32"))]
-use oer_diagnostics::Note;
-use oer_diagnostics::fault::Record;
-#[cfg(any(test, target_arch = "riscv32"))]
-use oer_diagnostics::fault::{Class, Domain};
 #[cfg(target_arch = "riscv32")]
-use oer_espressif_staged_runtime::retained_fault;
-pub use oer_espressif_staged_runtime::retained_fault::Terminal;
+use oer_chips_family_staged_runtime::retained_fault;
+pub use oer_chips_family_staged_runtime::retained_fault::Terminal;
+#[cfg(any(test, target_arch = "riscv32"))]
+use oer_portable_diagnostics::Note;
+use oer_portable_diagnostics::fault::Record;
+#[cfg(any(test, target_arch = "riscv32"))]
+use oer_portable_diagnostics::fault::{Class, Domain};
 
 /// The interrupt matrix's sources, in 32-bit words.
 pub const SOURCE_WORDS: usize = 6;
@@ -50,7 +50,7 @@ const STOPPED: u32 = 1 << 0;
 /// [`Payload::flags`]: the trap is an interrupt and `vector` is its line.
 const INTERRUPT: u32 = 1 << 1;
 
-oer_espressif_staged_runtime::retained_static! {
+oer_chips_family_staged_runtime::retained_static! {
     /// The exception's observations. The fatal path takes it without
     /// waiting: while the other hart records its own failure, this one's is
     /// skipped.
@@ -135,7 +135,7 @@ impl Observed {
     /// can outlive it; it carries the earlier terminal's number and follows
     /// no later trap, even one with the same registers. Without a number on
     /// either side nothing follows.
-    pub fn follows(&self, trap: &oer_espressif_staged_runtime::trap::PreviousException) -> bool {
+    pub fn follows(&self, trap: &oer_chips_family_staged_runtime::trap::PreviousException) -> bool {
         self.terminal.is_some()
             && self.terminal == trap.terminal
             && self.hart == trap.hart
@@ -175,7 +175,7 @@ impl Observed {
 
     /// The observations a record holds; `None` for a record of another
     /// domain or shape, or with unknown flags.
-    fn from_record(view: &oer_diagnostics::fault::View<'_>) -> Option<Self> {
+    fn from_record(view: &oer_portable_diagnostics::fault::View<'_>) -> Option<Self> {
         if view.class != Class::CpuException || view.reason != OBSERVED {
             return None;
         }
@@ -211,7 +211,7 @@ impl Observed {
         })
     }
 
-    fn record(&self) -> Result<Record, oer_diagnostics::fault::Error> {
+    fn record(&self) -> Result<Record, oer_portable_diagnostics::fault::Error> {
         Record::encode(
             Class::CpuException,
             Domain::ExceptionObservation,
@@ -227,9 +227,12 @@ impl Observed {
 /// `claim`; the runtime's fatal reset follows.
 #[cfg(target_arch = "riscv32")]
 pub fn capture(
-    claim: &oer_espressif_staged_runtime::retained_fault::Claim<'_>,
-    frame: &oer_espressif_staged_runtime::trap::TrapFrame,
-    stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
+    claim: &oer_chips_family_staged_runtime::retained_fault::Claim<'_>,
+    frame: &oer_chips_family_staged_runtime::trap::TrapFrame,
+    stop: Result<
+        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::cores::StopError,
+    >,
 ) {
     if let Ok(record) = observe(claim.terminal(), frame, stop).record() {
         let _committed = claim.commit(&SLOT, record);
@@ -239,17 +242,20 @@ pub fn capture(
 #[cfg(target_arch = "riscv32")]
 fn observe(
     terminal: Option<Terminal>,
-    frame: &oer_espressif_staged_runtime::trap::TrapFrame,
-    stop: Result<&oer_esp32s31_hal::cores::StopTheWorld<'_>, oer_esp32s31_hal::cores::StopError>,
+    frame: &oer_chips_family_staged_runtime::trap::TrapFrame,
+    stop: Result<
+        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::cores::StopError,
+    >,
 ) -> Observed {
-    use oer_esp32s31_hal::platform::interrupt_controller;
-    use oer_espressif_staged_runtime::trap::{self, TrapRegisters};
+    use oer_chips_esp32s31_hal::platform::interrupt_controller;
+    use oer_chips_family_staged_runtime::trap::{self, TrapRegisters};
 
     let registers = TrapRegisters::read();
     let mut pending = [0; SOURCE_WORDS];
     // An invalid raw ID is retained by the runtime's fatal path; it grants
     // no other hart's bank for this diagnostic sample.
-    let hart = oer_esp32s31_hal::platform::Hart::new(registers.hart as u32);
+    let hart = oer_chips_esp32s31_hal::platform::Hart::new(registers.hart as u32);
     for source in 0..SOURCE_WORDS * 32 {
         // At most 192 sources: the count fits a source number.
         if hart.is_ok_and(|hart| interrupt_controller::is_pending(hart, source as u16)) {
@@ -306,9 +312,11 @@ fn observe(
 /// The record's word of an observed line: bit 0 pending, 1 enabled, 2
 /// edge-triggered, bits 8.. its level byte.
 #[cfg(target_arch = "riscv32")]
-fn line_word(observed: oer_esp32s31_hal::platform::interrupt_controller::LineObservation) -> u32 {
-    use oer_riscv::clic::Trigger;
-    let oer_esp32s31_hal::platform::interrupt_controller::LineObservation { pending, state } =
+fn line_word(
+    observed: oer_chips_esp32s31_hal::platform::interrupt_controller::LineObservation,
+) -> u32 {
+    use oer_portable_riscv::clic::Trigger;
+    let oer_chips_esp32s31_hal::platform::interrupt_controller::LineObservation { pending, state } =
         observed;
     u32::from(pending)
         | u32::from(state.enabled) << 1
@@ -356,8 +364,8 @@ pub fn report_previous() {
 /// monitoring and respects a debugger's ownership.
 #[cfg(target_arch = "riscv32")]
 pub fn report_stack_guard() {
-    let (control, address) = oer_riscv::selected_trigger_data();
-    let hart = oer_espressif_staged_runtime::trap::TrapRegisters::read().hart;
+    let (control, address) = oer_portable_riscv::selected_trigger_data();
+    let hart = oer_chips_family_staged_runtime::trap::TrapRegisters::read().hart;
     let _written = crate::console::early(&Note::stack_guard(
         hart as u32,
         control as u32,

@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_core_arbiter::{ArbiterEnd, ArbiterNotice, RetiredArbiter};
+use oer_protocols_ieee80211_core_arbiter::{ArbiterEnd, ArbiterNotice, RetiredArbiter};
 
 #[test]
 fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
@@ -70,7 +70,7 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         world.answer_authentication(at(83), 0);
         world.receive(at(84), &association_response(0));
         let m1 = RsnTxFrame::<512>::message1(
-            oer_ieee80211_wire::security::rsn::Akm::Psk,
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             LOCAL,
             1,
             ANONCE,
@@ -79,8 +79,8 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         world.receive(at(85), &eapol_frame(m1.as_bytes()));
         assert_eq!(world.station.config.callbacks.nonce_calls, nonce_calls + 1);
         let ptk = Pmk::from_bytes(PMK).derive_ptk(
-            oer_ieee80211_wire::security::rsn::Akm::Psk,
-            oer_ieee80211_core_security_rsn::PtkContext {
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            oer_protocols_ieee80211_core_security_rsn::PtkContext {
                 authenticator_address: BSSID,
                 supplicant_address: LOCAL,
                 authenticator_nonce: ANONCE,
@@ -111,7 +111,7 @@ fn a_missing_place_is_retained_by_the_arbiter_and_cannot_form_a_restart_bank() {
         let incomplete = stopped.restart(channel(6), places).err().unwrap();
         assert_eq!(
             incomplete.missing,
-            oer_ieee80211_core_arbiter::MissingArbiterReturn::StationPlaces
+            oer_protocols_ieee80211_core_arbiter::MissingArbiterReturn::StationPlaces
         );
         assert_eq!(bank.frame_credits(), (2, 2));
         assert_eq!(bank.key_owners(), (1, 2, true));

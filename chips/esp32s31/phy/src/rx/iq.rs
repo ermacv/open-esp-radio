@@ -2131,7 +2131,7 @@ impl PhyRxIqEstimatorMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxIqEstimatorCompletion {
         match self.action {
             PhyRxIqEstimatorAction::Configure(request) => {
@@ -2153,11 +2153,12 @@ impl PhyRxIqEstimatorMmioBinding {
             PhyRxIqEstimatorAction::ReadTotalPower(request) => {
                 PhyRxIqEstimatorCompletion::TotalPowerRead {
                     request,
-                    value: oer_esp32s31_hal::phy::iq_estimator::read_total_power(registers),
+                    value: oer_chips_esp32s31_hal::phy::iq_estimator::read_total_power(registers),
                 }
             }
             PhyRxIqEstimatorAction::ReadMismatch(request) => {
-                let snapshot = oer_esp32s31_hal::phy::iq_estimator::read_rxiq_mismatch(registers);
+                let snapshot =
+                    oer_chips_esp32s31_hal::phy::iq_estimator::read_rxiq_mismatch(registers);
                 PhyRxIqEstimatorCompletion::MismatchRead {
                     request,
                     snapshot: PhyRxIqMismatchSnapshot {
@@ -2199,7 +2200,7 @@ impl PhyRxIqEstimatorReadinessBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqEstimatorCompletion {
         let PhyRxIqEstimatorAction::AwaitReadinessEdge { request, .. } = self.action else {
             unreachable!();
@@ -2294,7 +2295,7 @@ impl PhyRxIqCalibrationMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqRfCalibrationCompletion {
         match self.action {
             PhyRxIqRfCalibrationAction::ConfigureCalibrationMode => {
@@ -2340,7 +2341,7 @@ impl PhyRxIqCoverMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqCoverCompletion {
         match self.action {
             PhyRxIqCoverAction::ConfigureCoefficient {
@@ -2384,7 +2385,7 @@ impl PhyRxIqGainMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyRxIqGainCompletion {
         match self.action {
             PhyRxIqGainAction::ConfigureTxIq { kind, value } => {
@@ -2435,36 +2436,38 @@ impl PhyRxIqInitMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxIqInitCompletion {
         match self.action {
             PhyRxIqInitAction::ConfigureRootStatus => {
-                oer_esp32s31_hal::phy::baseband::configure_rxiq_root_status(registers);
+                oer_chips_esp32s31_hal::phy::baseband::configure_rxiq_root_status(registers);
                 PhyRxIqInitCompletion::RootStatusConfigured
             }
             PhyRxIqInitAction::ConfigurePbusDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyRxIqInitCompletion::PbusDebugModeConfigured
             }
             PhyRxIqInitAction::ConfigureCorrection { begin } => {
-                oer_esp32s31_hal::phy::baseband::configure_rxiq_root_correction(registers, begin);
+                oer_chips_esp32s31_hal::phy::baseband::configure_rxiq_root_correction(
+                    registers, begin,
+                );
                 PhyRxIqInitCompletion::CorrectionConfigured { begin }
             }
             PhyRxIqInitAction::ConfigurePbusWorkMode => {
                 PhyRxIqInitCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_espressif_phy::pbus::configure_work_mode(
-                        &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                    settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                        &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                     ),
                 }
             }
             PhyRxIqInitAction::ConfigurePbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyRxIqInitCompletion::PbusWorkModePulseConfigured
             }
             PhyRxIqInitAction::ClearPbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyRxIqInitCompletion::PbusWorkModePulseCleared
             }
             _ => unreachable!(),
@@ -2519,7 +2522,7 @@ impl PhyRxIqAdjustedTxI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -2527,7 +2530,7 @@ impl PhyRxIqAdjustedTxI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<
@@ -2665,7 +2668,7 @@ impl PhyRxIqGainPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -2673,7 +2676,7 @@ impl PhyRxIqGainPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,
@@ -2741,7 +2744,7 @@ impl PhyRxIqGainI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -2749,7 +2752,7 @@ impl PhyRxIqGainI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<
@@ -2859,7 +2862,7 @@ impl PhyRxIqInitPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -2867,7 +2870,7 @@ impl PhyRxIqInitPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,
@@ -2929,7 +2932,7 @@ impl PhyRxIqInitI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -2937,7 +2940,7 @@ impl PhyRxIqInitI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<

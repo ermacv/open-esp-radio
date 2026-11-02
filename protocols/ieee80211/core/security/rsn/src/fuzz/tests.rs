@@ -10,12 +10,12 @@
 //! mutated real frames) and, `#[ignore]`d, with [`FULL`]. The SAE exchange,
 //! a scalar multiplication per accepted commit, runs a tenth as many.
 
-use oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
-use oer_ieee80211_wire::management_ccmp_vector::management_wire;
+use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
+use oer_protocols_ieee80211_wire::management_ccmp_vector::management_wire;
 
 use std::vec::Vec;
 
-use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
+use oer_protocols_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
 
 use super::*;
 use crate::{
@@ -30,8 +30,8 @@ use crate::{
     management_ccmp::ManagementCcmpReceiver,
     sae::{SaeComebackTokens, SaeCommit, SaePasswordElement, valid_peer_commit},
 };
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_ieee80211_wire::sae::{SaeCommitValues, SaeReceivedCommit, anti_clogging_token};
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_wire::sae::{SaeCommitValues, SaeReceivedCommit, anti_clogging_token};
 
 /// The captured Message 3's PTK and its decrypted key data.
 fn message3() -> (crate::Ptk, Vec<u8>) {
@@ -202,9 +202,9 @@ fn bip_never_panics_full() {
 
 fn ccmp(count: usize) {
     let wire = management_wire();
-    let key = oer_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|index| {
-        index as u8
-    }));
+    let key = oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(
+        |index| index as u8,
+    ));
     let mut copy = Vec::new();
     inputs(&[&wire], count, 120, |bytes| {
         for spp in [Spp::NotNegotiated, Spp::Negotiated] {
@@ -214,9 +214,9 @@ fn ccmp(count: usize) {
         }
         copy.clear();
         copy.extend_from_slice(bytes);
-        let _ = ManagementCcmpReceiver::new(oer_ieee80211_contracts_security::Ccmp128Key::new(
-            key.as_bytes(),
-        ))
+        let _ = ManagementCcmpReceiver::new(
+            oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(key.as_bytes()),
+        )
         .open(&mut SoftwareAes128, &mut copy);
     });
 }
@@ -255,7 +255,7 @@ fn sae_parsers(count: usize) {
     let mut tokens = SaeComebackTokens::new();
     let issued = tokens.issue(
         [2, 0, 0, 0, 0, 3],
-        oer_time::Instant::from_micros(0),
+        oer_portable_time::Instant::from_micros(0),
         || [9; 32],
     );
     inputs(

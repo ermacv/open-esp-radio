@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::AffineSpscQueue;
+use oer_portable_memory::AffineSpscQueue;
 
 pub fn endpoint() {
     let mut queue = AffineSpscQueue::<u8, 2>::new();

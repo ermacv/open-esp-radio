@@ -1,13 +1,13 @@
 # Event sinks
 
-`oer-events` is a portable `no_std` crate without `unsafe` code or
+`oer-portable-events` is a portable `no_std` crate without `unsafe` code or
 dependencies. It holds the contract through which an owner reports what it
 decided to the caller that lent it a sink for one call.
 
 ```rust
 pub fn receive(&mut self, frame: Frame, events: &mut impl EventSink<Event>) -> Disposition {
     // ...
-    oer_events::report(events, || Event::Dropped { reason });
+    oer_portable_events::report(events, || Event::Dropped { reason });
 }
 ```
 

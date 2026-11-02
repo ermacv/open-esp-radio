@@ -1,10 +1,10 @@
 //! Pinned-toolchain RV32 fixtures through the public register-access API.
-use oer_analysis_blobray_application::{
+use oer_tools_analysis_blobray_application::{
     in_process::Executable,
     library::{Assumptions, register_accesses},
 };
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 use std::{collections::BTreeMap, path::Path, process::Command};
 #[path = "support/stored_property.rs"]
 mod stored_property;
@@ -77,7 +77,7 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             start: 0x2010_7000,
             length: 0x100,
         }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |observation, _| {
@@ -499,12 +499,12 @@ fn loads_report_their_sinks_limits_preservation_and_unused_bits() {
             .all(|usage| !matches!(usage.sink, ReadSink::Return { .. })),
         "call results carry no dependency on the previous argument"
     );
-    assert_eq!(oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 13);
+    assert_eq!(oer_tools_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA, 13);
     assert!(
-        oer_tool_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
+        oer_tools_analysis_cli::mmio::reads(read("call_named_argument")).contains("named_callee")
     );
     assert!(
-        oer_tool_analysis_cli::mmio::reads(read("call_rom_argument"))
+        oer_tools_analysis_cli::mmio::reads(read("call_rom_argument"))
             .contains("rom_print@0x40012340")
     );
 }
@@ -520,9 +520,12 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
 "#,
         )),
     ];
-    let inventory =
-        oer_analysis_blobray_application::captured::inventory(&inputs[1], &memory, &mut || Ok(()))
-            .expect("callee inventory");
+    let inventory = oer_tools_analysis_blobray_application::captured::inventory(
+        &inputs[1],
+        &memory,
+        &mut || Ok(()),
+    )
+    .expect("callee inventory");
     let symbol = inventory
         .objects
         .iter()
@@ -540,7 +543,7 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
         name: Some("external".to_owned()),
     };
     let mut found = false;
-    register_accesses(&inputs, Assumptions { abi: Some(CallAbi::RiscvInteger), ..Assumptions::default() }, &[ImageRegion { start: 0x2010_7000, length: 0x100 }], &oer_analysis_riscv_lift::RiscvDecoder, &memory, &mut || Ok(()), &mut |observation, _| {
+    register_accesses(&inputs, Assumptions { abi: Some(CallAbi::RiscvInteger), ..Assumptions::default() }, &[ImageRegion { start: 0x2010_7000, length: 0x100 }], &oer_tools_analysis_riscv_lift::RiscvDecoder, &memory, &mut || Ok(()), &mut |observation, _| {
         if let RegisterAccess::Observation { function, reads: Some(reads), .. } = observation
             && function.name.as_deref() == Some(b"call_argument") {
             found = true;
@@ -571,7 +574,7 @@ fn argument_summaries_propagate_consumption_and_return_positions() {
                 start: 0x2010_7000,
                 length: 4,
             }],
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |observation, _| {
@@ -772,7 +775,7 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
             start: 0x2010_7000,
             length: 4,
         }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |observation, _| {
@@ -854,7 +857,7 @@ fn finite_rmw_fields_agree_with_read_flow_for_every_byte_and_clearing_form() {
 
 #[test]
 fn shared_port_propagates_constants_through_calls_and_rejects_conflicts() {
-    use oer_analysis_blobray_application::library::{LibraryOutcome, analyze_library};
+    use oer_tools_analysis_blobray_application::library::{LibraryOutcome, analyze_library};
     let mut asm =
         String::from("#![no_std]\ncore::arch::global_asm!(r#\"\n.option norvc\n.option norelax\n");
     let function = |name: &str, body: &str| {
@@ -909,7 +912,7 @@ fn shared_port_propagates_constants_through_calls_and_rejects_conflicts() {
                 call_summaries,
                 ..Assumptions::default()
             },
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |outcome, _| {
@@ -992,7 +995,7 @@ fn shared_port_propagates_constants_through_calls_and_rejects_conflicts() {
             call_summaries: true,
             ..Assumptions::default()
         },
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |outcome, _| {
@@ -1053,7 +1056,7 @@ fn stored_provenance_follows_joins_stack_arguments_returns_and_unselected_loads(
             start: 0x2010_7000,
             length: 4,
         }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |o, _| {
@@ -1138,7 +1141,7 @@ fn a_stack_reload_does_not_invent_an_origin_for_forwarded_unknown() {
             start: 0x2010_7000,
             length: 4,
         }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |o, _| {
@@ -1215,7 +1218,7 @@ ret
             start: 0x2010_7000,
             length: 4,
         }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |o, _| {
@@ -1330,7 +1333,7 @@ ret
             start: 0x2010_7000,
             length: 16,
         }],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |o, _| {
@@ -1387,7 +1390,7 @@ ret
 
 #[test]
 fn idf_contracts_narrow_external_arguments_returns_and_reject_conflicts() {
-    use oer_analysis_blobray_application::{
+    use oer_tools_analysis_blobray_application::{
         library::{LibraryOutcome, analyze_library},
         signatures::Signatures,
     };
@@ -1431,7 +1434,7 @@ caller:
                     ..Default::default()
                 },
                 &[],
-                &oer_analysis_riscv_lift::RiscvDecoder,
+                &oer_tools_analysis_riscv_lift::RiscvDecoder,
                 &memory,
                 &mut || Ok(()),
                 &mut |record, _| {
@@ -1469,7 +1472,7 @@ caller:
                 signatures: Some(&signatures),
                 ..Default::default()
             },
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |outcome, _| {
@@ -1501,7 +1504,7 @@ caller:
             ..Default::default()
         },
         &[],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |record, _| {
@@ -1539,7 +1542,7 @@ caller:
                 signatures: Some(&signatures),
                 ..Default::default()
             },
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |_, _| Ok(()),
@@ -1555,7 +1558,7 @@ caller:
             signatures: Some(&signatures),
             ..Default::default()
         },
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |_, _| Ok(()),
@@ -1566,7 +1569,9 @@ caller:
 
 #[test]
 fn contracts_distinguish_exact_sinks_from_may_dead_values_and_spills() {
-    use oer_analysis_blobray_application::{library::analyze_library, signatures::Signatures};
+    use oer_tools_analysis_blobray_application::{
+        library::analyze_library, signatures::Signatures,
+    };
     let code = |body: &str| {
         fixture(&format!(
             r##"#![no_std]
@@ -1619,7 +1624,7 @@ caller:
                 signatures: Some(&signatures),
                 ..Default::default()
             },
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |_, _| Ok(()),
@@ -1643,7 +1648,7 @@ caller:
             signatures: Some(&signature),
             ..Default::default()
         },
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |_, _| Ok(()),
@@ -1688,7 +1693,7 @@ ret
             ..Default::default()
         },
         &[],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |record, _| {
@@ -1710,7 +1715,7 @@ ret
 
 #[test]
 fn all_contract_conflicts_are_retained_before_the_cli_reports_failure() {
-    use oer_analysis_blobray_application::signatures::Signatures;
+    use oer_tools_analysis_blobray_application::signatures::Signatures;
     let object = fixture(
         r##"#![no_std]
 core::arch::global_asm!(r#"
@@ -1758,7 +1763,7 @@ ret
             ..Default::default()
         },
         &[],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut || Ok(()),
         &mut |record, _| {
@@ -1808,7 +1813,7 @@ ret
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let document: oer_tool_analysis_cli::wire::RegisterAccessDocument =
+    let document: oer_tools_analysis_cli::wire::RegisterAccessDocument =
         serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(document.summary.functions, 3);
     assert_eq!(
@@ -1821,7 +1826,7 @@ ret
 
 #[test]
 fn linked_bodies_keep_computed_summaries_and_report_header_diagnostics() {
-    use oer_analysis_blobray_application::{
+    use oer_tools_analysis_blobray_application::{
         library::{LibraryOutcome, analyze_library},
         signatures::Signatures,
     };
@@ -1996,7 +2001,7 @@ bnez a0, 1f
             &inputs,
             assumptions,
             &[],
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |r, _| {
@@ -2041,7 +2046,7 @@ bnez a0, 1f
         analyze_library(
             &inputs,
             assumptions,
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |outcome, _| {
@@ -2074,7 +2079,7 @@ bnez a0, 1f
 
 #[test]
 fn refused_audit_memory_fails_the_operation_and_releases_state() {
-    use oer_analysis_blobray_application::signatures::Signatures;
+    use oer_tools_analysis_blobray_application::signatures::Signatures;
     let calls = (0..100)
         .map(|i| format!("call external\nsw a0, {}(sp)\n", i * 4))
         .collect::<String>();
@@ -2139,7 +2144,7 @@ identity: ret
                 ..Default::default()
             },
             &[],
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |r, _| {
@@ -2187,7 +2192,7 @@ identity: ret
 
 #[test]
 fn selected_call_results_share_read_flow_and_report_argument_wiring() {
-    use oer_analysis_blobray_application::signatures::Signatures;
+    use oer_tools_analysis_blobray_application::signatures::Signatures;
     let signatures = Signatures::parse(
         r#"
 [[function]]
@@ -2232,7 +2237,7 @@ source = "synthetic"
                 start: 0x2010_7000,
                 length: 4,
             }],
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |record, _| {

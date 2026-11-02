@@ -1,0 +1,58 @@
+[package]
+name = "oer-hil-probes-esp32s31-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish.workspace = true
+build = "build.rs"
+description = "Retained ESP32-S31 Rust entry points for compiled vendor verification, and the linked probe image"
+
+[dependencies]
+oer-chips-family-phy = { path = "../../../chips/family/phy" }
+oer-chips-family-boot = { path = "../../../chips/family/boot" }
+oer-protocols-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }
+oer-chips-family-ieee80211-policy = { path = "../../../chips/family/ieee80211-policy" }
+oer-tools-probe-macros = { path = "../../../tools/probe/macros" }
+oer-chips-family-coex = { path = "../../../chips/family/coex" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-esp32s31-ieee80211-driver = { path = "../../../chips/esp32s31/ieee80211/driver" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
+oer-chips-esp32s31-phy = { path = "../../../chips/esp32s31/phy" }
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-cooperate = { path = "../../../portable/cooperate" }
+static_cell.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[[bin]]
+name = "oer-hil-probes-esp32s31-radio"
+path = "src/main.rs"
+
+[[bin]]
+name = "oer-hil-probes-esp32s31-radio-hardware"
+path = "src/hardware.rs"
+
+[build-dependencies]
+oer-tools-probe-codegen = { path = "../../../tools/probe/codegen" }
+oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+
+[package.metadata.open-radio]
+critical-section-hart = "boot"

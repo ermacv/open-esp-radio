@@ -1,7 +1,7 @@
 //! The thin PAC renderer over a chip root and its ownership policy.
 //!
 //! [`render`] turns a loaded [`ChipModel`] and [`ChipPolicy`] into the Rust
-//! of the exact hardware model, over `oer-mmio` and without `unsafe`:
+//! of the exact hardware model, over `oer-portable-mmio` and without `unsafe`:
 //!
 //! - one module per MMIO block type: a register module per template with
 //!   its masks, offsets, value types and `R`/`W`/`Snapshot` images, and
@@ -110,11 +110,11 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
     let ownership = owners::plan(model, policy)?;
     let mut output = String::from(
         "// The thin PAC of the chip root and its ownership policy, rendered by\n\
-         // `cargo registers` over `oer-mmio`; no `unsafe`, no raw write.\n\n",
+         // `cargo registers` over `oer-portable-mmio`; no `unsafe`, no raw write.\n\n",
     );
     if let Some(geometry) = model.hart_geometry {
         output.push_str(
-            &oer_espressif_facts::generate::hart_geometry(geometry.harts, geometry.boot_hart)
+            &oer_chips_family_facts::generate::hart_geometry(geometry.harts, geometry.boot_hart)
                 .map_err(|e| Error::new("hart-facts", e.to_string()))?,
         );
     }

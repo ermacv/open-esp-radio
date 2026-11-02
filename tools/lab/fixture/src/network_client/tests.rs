@@ -1,5 +1,5 @@
 use super::*;
-use oer_time::Clock as _;
+use oer_portable_time::Clock as _;
 
 const OPEN: &str = r#"{"ssid_hex":"4c6162","security":"open","frequency_mhz":2437,"phy":"ht","ipv4":{"mode":"dhcp"}}"#;
 
@@ -184,7 +184,7 @@ fn a_renewal_requires_every_mandatory_dhcp_option() {
 }
 #[test]
 fn lease_expiry_and_renewal_use_an_instance_virtual_clock() {
-    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let start = clock.now().as_micros() / 1_000_000;
     let first = Lease::from_options(
         "192.0.2.8",
@@ -198,7 +198,7 @@ fn lease_expiry_and_renewal_use_an_instance_virtual_clock() {
     assert!(first.active(start));
     assert!(!first.active(start - 1));
     clock
-        .advance(oer_time::Duration::from_secs(9))
+        .advance(oer_portable_time::Duration::from_secs(9))
         .expect("valid test fixture");
     assert!(first.active(clock.now().as_micros() / 1_000_000));
     let renewed = Lease::from_options(
@@ -211,7 +211,7 @@ fn lease_expiry_and_renewal_use_an_instance_virtual_clock() {
     )
     .expect("valid test fixture");
     clock
-        .advance(oer_time::Duration::from_secs(1))
+        .advance(oer_portable_time::Duration::from_secs(1))
         .expect("valid test fixture");
     assert!(!first.active(clock.now().as_micros() / 1_000_000));
     assert!(renewed.active(clock.now().as_micros() / 1_000_000));
@@ -278,7 +278,7 @@ fn ping_counts_losses_and_refuses_garbage_or_contradictory_status() {
 
 #[test]
 fn session_has_one_ping_a_finite_lifetime_and_a_terminal_disconnect() {
-    let clock = oer_time_virtual::VirtualClock::<1>::new();
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let now = || clock.now().as_micros();
     let mut state = SessionState::new(now()).expect("valid test fixture");
     assert_eq!(
@@ -290,14 +290,14 @@ fn session_has_one_ping_a_finite_lifetime_and_a_terminal_disconnect() {
     assert!(state.command(SessionCommand::Ping, now()).is_ok());
     assert!(state.command(SessionCommand::Ping, now()).is_err());
     clock
-        .advance(oer_time::Duration::from_secs(239))
+        .advance(oer_portable_time::Duration::from_secs(239))
         .expect("valid test fixture");
     assert_eq!(
         state.remaining(now()).expect("valid test fixture"),
         1_000_000
     );
     clock
-        .advance(oer_time::Duration::from_secs(1))
+        .advance(oer_portable_time::Duration::from_secs(1))
         .expect("valid test fixture");
     assert!(state.remaining(now()).is_err());
     assert!(state.command(SessionCommand::Status, now()).is_err());

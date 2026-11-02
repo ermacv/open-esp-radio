@@ -1,12 +1,12 @@
 use super::*;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
     MacServiceCapabilities,
 };
-use oer_ieee80211_core_arbiter::configuration::{
+use oer_protocols_ieee80211_core_arbiter::configuration::{
     WifiAccessPointConfig, WifiConfig, WifiMonitorConfig, WifiStationConfig,
 };
-use oer_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
 
 const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabilities {
     MacServiceCapabilities {

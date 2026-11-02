@@ -3,8 +3,8 @@ use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, RxSegment, view_ccmp_data,
     view_ccmp_data_fragment, view_normalized_rx_frame,
 };
-use oer_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence};
+use oer_protocols_ieee80211_wire::{
     frame::{FrameControlFields, FrameType},
     sequence::SequenceControl,
 };
@@ -46,8 +46,8 @@ pub(super) fn normalize(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word;
-    use oer_ieee80211_wire::{
+    use oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word;
+    use oer_protocols_ieee80211_wire::{
         ap::ApProtectedDataFrame,
         ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
         data::MsduParts,

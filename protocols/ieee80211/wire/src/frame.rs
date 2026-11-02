@@ -151,7 +151,7 @@ pub enum AddressFieldsError {
 impl AddressFields {
     /// The address fields of `frame`.
     pub fn parse(frame: &[u8]) -> Result<Self, AddressFieldsError> {
-        let mut reader = oer_wire::Reader::new(frame);
+        let mut reader = oer_portable_wire::Reader::new(frame);
         let truncated = |_| AddressFieldsError::Truncated;
         let control = FrameControlFields::from_bytes(reader.read().map_err(truncated)?);
         if control.version() != 0 {
@@ -314,7 +314,7 @@ impl<'a> DecodedHeader<'a> {
     /// Decode the complete MAC/QoS/HT-Control header.
     pub fn decode(frame: &'a [u8]) -> Option<Self> {
         let original = frame;
-        let mut reader = oer_wire::Reader::new(frame);
+        let mut reader = oer_portable_wire::Reader::new(frame);
         let control = FrameControl::new(u16::from_le_bytes(reader.read().ok()?))?;
         let duration = u16::from_le_bytes(reader.read().ok()?);
         let receiver = reader.read().ok()?;
@@ -409,10 +409,10 @@ pub enum QosAckPolicy {
 
 impl QosAckPolicy {
     /// The two-bit subfield.
-    pub const fn field(self) -> oer_wire::U8<2> {
+    pub const fn field(self) -> oer_portable_wire::U8<2> {
         match self {
-            Self::Normal => oer_wire::U8::constant::<0>(),
-            Self::NoAck => oer_wire::U8::constant::<1>(),
+            Self::Normal => oer_portable_wire::U8::constant::<0>(),
+            Self::NoAck => oer_portable_wire::U8::constant::<1>(),
         }
     }
 }
@@ -420,7 +420,7 @@ impl QosAckPolicy {
 impl QosControl {
     /// The QoS Control field of a QoS data frame.
     pub const fn new(
-        tid: oer_wire::U8<4>,
+        tid: oer_portable_wire::U8<4>,
         end_of_service_period: bool,
         ack_policy: QosAckPolicy,
         amsdu_present: bool,
@@ -585,15 +585,15 @@ impl MacHeader {
 
     /// Write the header at the start of `out` and return its length. A
     /// shorter `out` is refused before any octet is written.
-    pub fn encode(&self, out: &mut [u8]) -> Result<usize, oer_wire::Error> {
+    pub fn encode(&self, out: &mut [u8]) -> Result<usize, oer_portable_wire::Error> {
         let len = self.header_len();
         if out.len() < len {
-            return Err(oer_wire::Error::Truncated {
+            return Err(oer_portable_wire::Error::Truncated {
                 required: len,
                 remaining: out.len(),
             });
         }
-        let mut writer = oer_wire::Writer::new(out);
+        let mut writer = oer_portable_wire::Writer::new(out);
         writer.u16_le(self.control.get())?;
         writer.u16_le(self.duration)?;
         writer.write(&self.address1)?;
@@ -613,7 +613,7 @@ impl MacHeader {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
     pub struct FrameControlFields[2] (little) {
         pub version, with_version: u8 = 0..2;
@@ -642,7 +642,7 @@ oer_wire::bitfield! {
         pub order, with_order: bool = 15..16;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
     pub struct QosControl[2] (little) {
         pub tid, with_tid: (u8) = 0..4;
@@ -652,7 +652,7 @@ oer_wire::bitfield! {
         pub upper, with_upper: u8 = 8..16;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HT Control field).
     pub struct HtControl[4] (little) {
         pub vht, with_vht: bool = 0..1;
@@ -661,12 +661,12 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype subfields).
     pub enum FrameType: u8 { Management = 0, Control = 1, Data = 2, Extension = 3 }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// The subtype of a management frame.
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Valid type and
     /// subtype combinations, type 00).
@@ -688,7 +688,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// The subtype of a control frame.
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Valid type and
     /// subtype combinations, type 01); IEEE Std 802.11ax-2021 Table 9-1
@@ -711,7 +711,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS fields).
     pub struct DsDirection[1] (little) {
         pub to_ds, with_to_ds: bool = 0..1;

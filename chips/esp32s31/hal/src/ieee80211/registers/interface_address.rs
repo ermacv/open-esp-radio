@@ -1,7 +1,7 @@
 //! The MAC receive-interface address pairs.
 
-use oer_esp32s31_pac::wifi_mac::WifiMacInterfaceAddress;
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::wifi_mac::WifiMacInterfaceAddress;
+use oer_portable_mmio::Placement;
 
 use super::{MacInterface, MacPlacement, WifiRadioRegisters, bits};
 

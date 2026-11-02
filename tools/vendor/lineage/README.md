@@ -1,6 +1,6 @@
 # Symbol lineage
 
-`oer-vendor-lineage` carries source function names from an early vendor
+`oer-tools-vendor-lineage` carries source function names from an early vendor
 archive to a later one whose functions carry generated names. It reads static
 archives of RISC-V relocatable objects, pairs the functions of every adjacent
 revision and composes those pairs from the oldest revision to the newest.
@@ -53,7 +53,7 @@ rival has since been paired elsewhere, and a call-graph or neighbourhood vote
 can use pairs found by similarity.
 
 Bodies are compared by the vendor fingerprint of
-[`oer-vendor-provenance`](../provenance/README.md), the one that
+[`oer-tools-vendor-provenance`](../provenance/README.md), the one that
 registers cited vendor functions: it masks exactly the bits that each RISC-V
 relocation resolves at link time. Opcodes, registers, relocation types and
 branch targets inside the function stay significant; target symbol names do

@@ -23,11 +23,11 @@ struct Package {
 
 pub fn host_stands(root: &Path, chip: &str) -> Result<Vec<HostStand>> {
     let mut command =
-        oer_os_process::command(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+        oer_tools_os_process::command(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     command
         .current_dir(root)
         .args(["metadata", "--format-version", "1", "--locked", "--no-deps"]);
-    let output = oer_os_process::capture(&mut command)?;
+    let output = oer_tools_os_process::capture(&mut command)?;
     let metadata: Metadata = serde_json::from_slice(&output.stdout)?;
     let root = root.canonicalize()?;
     let manifests = metadata

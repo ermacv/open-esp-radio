@@ -1,6 +1,6 @@
 //! Ownership boundary for role-neutral to active-AP receive policy.
 
-use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
+use oer_chips_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
 pub trait ApRxPolicyHardware {
     fn apply_ap_link_policy(&mut self, access_point: [u8; 6]);

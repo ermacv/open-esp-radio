@@ -8,9 +8,9 @@
 use core::{fmt, num::NonZeroU16};
 
 use crate::association::Preference;
-use oer_ieee80211_wire::channel::WifiChannel;
-pub use oer_ieee80211_wire::ssid::{WifiSsid, WifiSsidError};
-use oer_radio_regulatory::{Initiate, RegulatoryDomain};
+use oer_protocols_ieee80211_wire::channel::WifiChannel;
+pub use oer_protocols_ieee80211_wire::ssid::{WifiSsid, WifiSsidError};
+use oer_protocols_radio_regulatory::{Initiate, RegulatoryDomain};
 
 const CHANNEL_ONE_BIT: u16 = 1;
 
@@ -100,7 +100,7 @@ impl StationScanChannels {
             }
             let permitted = WifiChannel::mhz20(channel).ok().and_then(|wifi| {
                 domain
-                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(wifi))
+                    .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(wifi))
                     .ok()
             });
             let Some(permitted) = permitted else {
@@ -120,7 +120,7 @@ impl StationScanChannels {
         for channel in 1..=14_u8 {
             if let Some(permitted) = WifiChannel::mhz20(channel).ok().and_then(|wifi| {
                 domain
-                    .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(wifi))
+                    .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(wifi))
                     .ok()
             }) {
                 set.insert(channel, permitted.initiate());

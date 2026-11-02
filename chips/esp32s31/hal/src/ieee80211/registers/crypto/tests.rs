@@ -1,11 +1,11 @@
 //! The CCMP key-table transactions over host memory.
 
-use oer_esp32s31_pac::wifi_mac::{
+use oer_chips_esp32s31_pac::wifi_mac::{
     entry_key_word_0, entry_key_word_1, entry_key_word_2, entry_key_word_3, entry_peer_control,
     entry_peer_low, entry_tail_word_0, entry_tail_word_1, entry_tail_word_2, entry_tail_word_3,
     interface_control, key_valid_bitmap, policy_control, word_080c_opaque,
 };
-use oer_mmio::Index;
+use oer_portable_mmio::Index;
 
 use super::{MacCcmpKeyIdentity, MacKeyInstallOutcome, MacSppMode};
 use crate::ieee80211::registers::{HostWords, MacInterface, MacKeyEntryIndex};

@@ -2,12 +2,12 @@
 //! through a descriptor chain, ended by their one terminal with every
 //! subframe back in order, as the reference model ends them.
 use super::*;
-use oer_ieee80211_wire::phy::{HtMcs, HtRate, PpduBandwidth};
+use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, PpduBandwidth};
 
 /// A QoS data subframe of TID 0 to the BSS: `length` octets at `sequence`.
 pub(super) fn subframe(sequence: u16, length: usize) -> ClassSubframe<BufferClass<512>, Caps> {
     let header = HeaderSpec::new(
-        FrameControl::new(oer_ieee80211_wire::frame::QOS_DATA_TO_DS).expect("control"),
+        FrameControl::new(oer_protocols_ieee80211_wire::frame::QOS_DATA_TO_DS).expect("control"),
         0,
         IndividualAddress::new(BSSID).expect("receiver"),
         STATION,
@@ -109,7 +109,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for AggregateBody {
             if self.scenario == Scenario::Expired {
                 let table = EdcaParameterSet::new(
                     EdcaParameterSet::STANDARD_DEFAULT.wmm(),
-                    [oer_time::Duration::from_micros(100); 4],
+                    [oer_portable_time::Duration::from_micros(100); 4],
                 );
                 let _applied = phase
                     .station()
@@ -160,7 +160,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for AggregateBody {
                     // Before P2 runs: every queued MSDU ages.
                     self.timer
                         .0
-                        .advance(oer_time::Duration::from_micros(100))
+                        .advance(oer_portable_time::Duration::from_micros(100))
                         .expect("virtual time");
                 }
                 _ => {}
@@ -337,7 +337,7 @@ fn a_block_ack_ends_the_aggregate_and_returns_every_subframe_sent_in_order() {
     assert_eq!(
         seen.report,
         Some(BlockAckReport::new(
-            oer_ieee80211_wire::sequence::SequenceNumber::from_low_bits(100),
+            oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(100),
             0b011
         ))
     );

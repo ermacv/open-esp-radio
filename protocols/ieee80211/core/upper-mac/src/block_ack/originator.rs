@@ -16,14 +16,14 @@
 //! and queue the next after the interval; the peer's answer, an agreement or
 //! a refusal, ends them.
 
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 use super::{
     AddbaRequest, BlockAckAction, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig,
     TxBlockAckDialogToken, TxBlockAckError, TxBlockAckResponse, TxBlockAckSession,
     parse_block_ack_action,
 };
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The QoS TIDs: the most agreements one originator owns.
 pub const TX_BLOCK_ACK_MAX_TIDS: usize = 8;
@@ -456,17 +456,19 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         bitmap: u64,
         receiver: [u8; 6],
         transmitter: [u8; 6],
-    ) -> Option<[u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
+    ) -> Option<[u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
         let next = self
             .agreement_mut(tid)?
             .session
             .on_delivered(starting_sequence, bitmap)?;
-        Some(oer_ieee80211_wire::block_ack::encode_block_ack_request(
-            receiver,
-            transmitter,
-            tid,
-            next,
-        ))
+        Some(
+            oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
+                receiver,
+                transmitter,
+                tid,
+                next,
+            ),
+        )
     }
 
     /// Consume expiry marks, one bit per sequence from `starting_sequence`.
@@ -482,17 +484,19 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         bitmap: u64,
         receiver: [u8; 6],
         transmitter: [u8; 6],
-    ) -> Option<[u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
+    ) -> Option<[u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
         let next = self
             .agreement_mut(tid)?
             .session
             .on_expired(starting_sequence, bitmap)?;
-        Some(oer_ieee80211_wire::block_ack::encode_block_ack_request(
-            receiver,
-            transmitter,
-            tid,
-            next,
-        ))
+        Some(
+            oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
+                receiver,
+                transmitter,
+                tid,
+                next,
+            ),
+        )
     }
 
     pub fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {

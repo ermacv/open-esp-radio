@@ -7,7 +7,7 @@
 //! entries, the publication deadlines, the software queue of each access
 //! category ahead of the core and the asynchronous PHY retune an `Enable`
 //! needs, and serves the phase contract
-//! (`oer_ieee80211_contracts_port::phase`) over this core.
+//! (`oer_protocols_ieee80211_contracts_port::phase`) over this core.
 //!
 //! # Checked operations
 //!
@@ -129,14 +129,14 @@
 //! core's MPDUs; its timeout abort takes its turn among theirs. Access-point
 //! TBTT schedules are not implemented yet.
 
-use oer_ieee80211_wire::address::AddressFlags;
-use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
+use oer_protocols_ieee80211_wire::address::AddressFlags;
+use oer_protocols_ieee80211_wire::frame::{FrameControlFields, FrameType};
 
 use core::pin::Pin;
-use oer_radio_port::{PoolPath, Root};
+use oer_protocols_radio_port::{PoolPath, Root};
 
-use oer_events::{EventSink, report};
-use oer_time::Clock;
+use oer_portable_events::{EventSink, report};
+use oer_portable_time::Clock;
 
 /// The contention a publication selected: the head's VIF and access
 /// category, the complete record it drew from, the current window including
@@ -145,7 +145,7 @@ use oer_time::Clock;
 pub struct ContentionDraw {
     pub role: VifRole,
     pub category: WmmAccessCategory,
-    pub parameters: oer_ieee80211_contracts_port::EdcaAcParameters,
+    pub parameters: oer_protocols_ieee80211_contracts_port::EdcaAcParameters,
     pub window_slots: u16,
     pub backoff_slots: u16,
 }
@@ -156,9 +156,9 @@ pub trait Observations: EventSink<ContentionDraw> + 'static {}
 impl<O: EventSink<ContentionDraw> + 'static> Observations for O {}
 
 use crate::mac::tsf_relation::TsfTimingError;
-use oer_esp32s31_hal::types::{MacPti, StaTbttSchedule};
-use oer_ieee80211_contracts_port::TsfGeneration;
-use oer_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_chips_esp32s31_hal::types::{MacPti, StaTbttSchedule};
+use oer_protocols_ieee80211_contracts_port::TsfGeneration;
+use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 
 use crate::mac::{
     ap_policy::ApRxPolicyHardware,
@@ -183,15 +183,15 @@ use crate::mac::{
 };
 use crate::ordinary_tx::MacTxPlan;
 use crate::station_tsf::{StationTsf, StationTsfHardware};
-use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
-use oer_esp32s31_hal::types::MacInterface;
-use oer_ieee80211_contracts_port::{
+use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
+use oer_chips_esp32s31_hal::types::MacInterface;
+use oer_protocols_ieee80211_contracts_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
     LowerMacCapabilities, PhyFormatSet, PhyRate, Protection, RateSupport, ReceiveFilter,
     RxEvidence, RxMeta, RxMetadata, SignalMetadata, TbttEvent, TxOperation, TxStatus, VifRole,
     VifRoleSet, VifTsf, WidthSet,
 };
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     ccmp::CCMP_HEADER_LEN,
     channel::WifiChannel,
     management::BROADCAST_ADDRESS,
@@ -245,7 +245,7 @@ pub const LOWER_MAC_TX_QUEUES: usize = 4;
 /// interface zero) and the access-point context (interface one).
 pub const LOWER_MAC_VIFS: u8 = 2;
 
-const RESOURCES: oer_ieee80211_contracts_port::MacResourceLimits =
+const RESOURCES: oer_protocols_ieee80211_contracts_port::MacResourceLimits =
     ESP32S31_MAC_SERVICE_CAPABILITIES.resources;
 
 /// Keys installed at once: the station's pairwise and group slots and the
@@ -297,7 +297,7 @@ impl Esp32s31RxMeta {
     /// converts from the MAC local time.
     pub const fn with_timestamp(
         mut self,
-        timestamp: RxEvidence<oer_ieee80211_contracts_port::Ieee80211Stamp>,
+        timestamp: RxEvidence<oer_protocols_ieee80211_contracts_port::Ieee80211Stamp>,
     ) -> Self {
         self.common.timestamp = timestamp;
         self
@@ -521,7 +521,7 @@ pub trait LowerMacSink<
     'core,
     'slot,
     const BUFFER_SIZE: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 >
 {
     /// The attempt of `queue`, submitted at `rate`, ended as `end`: its
@@ -729,7 +729,7 @@ pub struct LowerMacConfig {
     /// The channel the radio is tuned to.
     pub channel: WifiChannel,
     /// Executor watchdog of one publication.
-    pub publication_timeout: oer_time::Duration,
+    pub publication_timeout: oer_portable_time::Duration,
     /// The epoch of the core's TSF relations, a number no other owner of a
     /// TSF relation took.
     pub tsf_epoch: u32,
@@ -745,7 +745,7 @@ pub struct LowerMacCoreParts<
     T,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
@@ -835,7 +835,7 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
 
     /// The pending deadline of a published attempt, and whether it is the
     /// end of a timeout abort's settle.
-    const fn deadline(&self) -> Option<(oer_time::Instant, bool)> {
+    const fn deadline(&self) -> Option<(oer_portable_time::Instant, bool)> {
         match self {
             Self::Published(queued) => Some((queued.deadline(), queued.abort_settling())),
             Self::Held { .. } | Self::Quarantined { .. } => None,
@@ -850,7 +850,7 @@ struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
     admission: TxAdmission<'core, Path>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
-    admitted_at: oer_time::Instant,
+    admitted_at: oer_portable_time::Instant,
     work: Work<'slot, BUFFER_SIZE>,
 }
 
@@ -885,9 +885,9 @@ impl StationTbtt {
 /// # #[cfg(target_arch = "riscv32")]
 /// # #[panic_handler]
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
-/// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
-/// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
+/// use oer_chips_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
+/// use oer_chips_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
+/// fn borrow_tx<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_portable_time::Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
 ///     core: &LowerMacCore<'_, '_, P, E, T, C, N>,
 /// ) {
 ///     core.tx();
@@ -900,11 +900,11 @@ impl StationTbtt {
 /// # #[cfg(target_arch = "riscv32")]
 /// # #[panic_handler]
 /// # fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
-/// use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
-/// use oer_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
-/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_time::Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
+/// use oer_chips_esp32s31_ieee80211_driver::lower_mac::LowerMacCore;
+/// use oer_chips_esp32s31_ieee80211_driver::ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile};
+/// fn deadline<P: WifiTxPowerProfile, E: WifiTxEntropy, T: oer_portable_time::Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities, const N: usize>(
 ///     core: &LowerMacCore<'_, '_, P, E, T, C, N>,
-/// ) -> Option<oer_time::Instant> {
+/// ) -> Option<oer_portable_time::Instant> {
 ///     core.next_deadline()
 /// }
 /// ```
@@ -916,7 +916,7 @@ pub struct LowerMacCore<
     T,
     C: RadioCoexPriorities,
     const BUFFER_SIZE: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
     const TICKETS: usize = 4,
 > {
     authority: CoreAuthority<'core, Path, TICKETS>,
@@ -963,7 +963,7 @@ impl<
 where
     P: WifiTxPowerProfile,
     E: WifiTxEntropy,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
 {
     /// A disabled core over an idle ordinary TX owner. `coex` is the shared
     /// radio the core shares its RF with: beacon reception and connection
@@ -1035,7 +1035,7 @@ where
     }
 
     /// The image clock used by the core's internal deadlines.
-    fn now(&self) -> oer_time::Instant {
+    fn now(&self) -> oer_portable_time::Instant {
         self.tx.now()
     }
 
@@ -1043,7 +1043,7 @@ where
     /// abort settle, which the runtime turns into [`WifiTxWake::Deadline`].
     /// While an abort settles, no other queue's deadline comes before its
     /// end: that queue's abort waits for it.
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_portable_time::Instant> {
         let deadlines = || {
             self.queues.iter().flatten().filter_map(|attempt| {
                 attempt.work.deadline().or_else(|| {
@@ -1078,7 +1078,7 @@ where
         &self,
         role: VifRole,
         category: WmmAccessCategory,
-        admitted_at: oer_time::Instant,
+        admitted_at: oer_portable_time::Instant,
     ) -> bool {
         let lifetime = self
             .tx
@@ -1164,7 +1164,7 @@ where
         key: &KeyHandle<'core, Path>,
         buffer: &mut [u8],
         header_len: usize,
-        packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
+        packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber,
     ) -> Result<(), CcmpHeaderWriteError> {
         const {
             if TX_METADATA_SIZE != crate::mac::tx::ampdu::TX_AMPDU_METADATA_SIZE {
@@ -1181,11 +1181,12 @@ where
         let key_id = match key.scope {
             TransmitKeyScope::StationPairwise { .. }
             | TransmitKeyScope::AccessPointPairwise { .. } => {
-                oer_ieee80211_wire::ccmp::CcmpKeyId::PAIRWISE
+                oer_protocols_ieee80211_wire::ccmp::CcmpKeyId::PAIRWISE
             }
             TransmitKeyScope::AccessPointGroup { key_id } => key_id.group_key_id().key_id(),
         };
-        let header = oer_ieee80211_wire::ccmp::CcmpHeader::new(packet_number, key_id).encode();
+        let header =
+            oer_protocols_ieee80211_wire::ccmp::CcmpHeader::new(packet_number, key_id).encode();
         place.copy_from_slice(&header);
         Ok(())
     }
@@ -1443,7 +1444,7 @@ where
     ) -> Result<
         (
             ampdu::Esp32s31AmpduOwner<'slot, B, SLOTS>,
-            [oer_time::Instant; SLOTS],
+            [oer_portable_time::Instant; SLOTS],
         ),
         ampdu::AmpduFault<'core, 'slot, B, SLOTS, Path>,
     > {
@@ -1937,7 +1938,10 @@ where
     }
 
     /// Retain the phase's six-bit color proof through the core boundary.
-    pub fn set_checked_he_bss_color(&mut self, color: oer_ieee80211_contracts_port::BssColor) {
+    pub fn set_checked_he_bss_color(
+        &mut self,
+        color: oer_protocols_ieee80211_contracts_port::BssColor,
+    ) {
         self.tx.policy_mut().install_he_bss_color(color.get());
     }
 
@@ -1969,12 +1973,14 @@ where
     /// # Errors
     ///
     /// The record the policy refused.
-    pub fn set_checked_edca<K: oer_ieee80211_contracts_port::Ieee80211Capabilities>(
+    pub fn set_checked_edca<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities>(
         &mut self,
         role: VifRole,
-        parameters: oer_ieee80211_contracts_port::SupportedEdca<K>,
-    ) -> Result<oer_ieee80211_contracts_port::SupportedEdca<K>, crate::mac::edca::EdcaParametersError>
-    {
+        parameters: oer_protocols_ieee80211_contracts_port::SupportedEdca<K>,
+    ) -> Result<
+        oer_protocols_ieee80211_contracts_port::SupportedEdca<K>,
+        crate::mac::edca::EdcaParametersError,
+    > {
         self.tx.policy_mut().install_edca(role, parameters.get())?;
         Ok(parameters)
     }
@@ -2035,7 +2041,7 @@ where
     pub(crate) fn install_key_parts<H: LowerMacHardware>(
         &mut self,
         hardware: &mut H,
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
         scope: TransmitKeyScope,
         slot: association::VacantKeySlot<'core, Path>,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
@@ -2047,9 +2053,9 @@ where
         hardware.configure_ccmp_association(
             match scope {
                 TransmitKeyScope::StationPairwise { .. } => {
-                    oer_esp32s31_hal::types::MacInterface::Station
+                    oer_chips_esp32s31_hal::types::MacInterface::Station
                 }
-                _ => oer_esp32s31_hal::types::MacInterface::AccessPoint,
+                _ => oer_chips_esp32s31_hal::types::MacInterface::AccessPoint,
             },
             spp_mode(spp),
         );
@@ -2093,7 +2099,7 @@ where
         hardware: &mut H,
         association: &association::StationAssociation<'core, Path>,
         slot: association::StationGroupSlot<'core, Path>,
-        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         self.install_station_group_parts(hardware, association.spp(), slot, key_id, temporal_key)
@@ -2102,9 +2108,9 @@ where
     pub(crate) fn install_station_group_parts<H: LowerMacHardware>(
         &mut self,
         hardware: &mut H,
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
         slot: association::StationGroupSlot<'core, Path>,
-        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         let scope = CheckedKeyScope::StationGroup { key_id };
@@ -2114,7 +2120,7 @@ where
             Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
         };
         hardware.configure_ccmp_association(
-            oer_esp32s31_hal::types::MacInterface::Station,
+            oer_chips_esp32s31_hal::types::MacInterface::Station,
             spp_mode(spp),
         );
         let token = match install_sta_group_ccmp(hardware, key_id, temporal_key) {
@@ -2145,7 +2151,7 @@ where
         &mut self,
         hardware: &mut H,
         installed: &mut ReceiveKeyHandle<'core, Path>,
-        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<(), crate::mac::crypto::StaGroupCcmpReplaceError> {
         use crate::mac::crypto::{
@@ -2390,7 +2396,7 @@ where
     }
 
     /// The station's TSF and the generation of its relation, for a
-    /// [`TsfSample`](oer_ieee80211_contracts_port::TsfSample) the backend pairs
+    /// [`TsfSample`](oer_protocols_ieee80211_contracts_port::TsfSample) the backend pairs
     /// with its radio clock: the access-point timer has no read seam.
     pub fn station_tsf_reading<H: StationTsfHardware>(
         &self,
@@ -2536,7 +2542,7 @@ pub struct SubmitFault<
     'core,
     'slot,
     const BUFFER_SIZE: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     pub queue: FreeQueue<'core, Path>,
     pub fault: LowerMacFault,
@@ -2570,7 +2576,7 @@ pub enum CheckedKeyScope {
         peer: [u8; 6],
     },
     StationGroup {
-        key_id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
     },
     AccessPointPairwise {
         peer: [u8; 6],
@@ -2617,7 +2623,7 @@ impl CheckedKeyScope {
 /// that sends one without an ACK ([`EnabledView::submit_checked`]).
 pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
     role: VifRole,
-    admitted_at: oer_time::Instant,
+    admitted_at: oer_portable_time::Instant,
     /// The slot holding the MPDU after the TX metadata word.
     slot: crate::mac::tx::TxSlotFree<'slot, BUFFER_SIZE>,
     /// The MPDU's length, without its MIC and FCS.
@@ -2641,7 +2647,7 @@ pub struct MpduValues<'slot, const BUFFER_SIZE: usize> {
 pub struct MpduParameters {
     pub role: VifRole,
     /// The backend admission sample, retained unchanged on retransmission.
-    pub admitted_at: oer_time::Instant,
+    pub admitted_at: oer_portable_time::Instant,
     pub len: usize,
     pub no_ack: bool,
     pub rate: PhyRate,
@@ -2737,7 +2743,10 @@ pub struct AmpduValues {
 
 /// A refused aggregate plan returns its admission without publishing.
 #[must_use = "retain both admission owners and handle the reason"]
-pub struct AmpduPlanningRefused<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
+pub struct AmpduPlanningRefused<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+> {
     pub queue: FreeQueue<'core, Path>,
     pub admission: TxAdmission<'core, Path>,
     pub reason: AmpduRefusal,
@@ -2878,13 +2887,15 @@ fn block_ack(report: crate::ordinary_tx::OrdinaryTxReport) -> Option<BlockAckRep
 #[cfg(test)]
 mod tests;
 
-fn spp_mode(spp: oer_ieee80211_wire::security::Spp) -> oer_esp32s31_hal::types::MacSppMode {
+fn spp_mode(
+    spp: oer_protocols_ieee80211_wire::security::Spp,
+) -> oer_chips_esp32s31_hal::types::MacSppMode {
     match spp {
-        oer_ieee80211_wire::security::Spp::Negotiated => {
-            oer_esp32s31_hal::types::MacSppMode::Authenticated
+        oer_protocols_ieee80211_wire::security::Spp::Negotiated => {
+            oer_chips_esp32s31_hal::types::MacSppMode::Authenticated
         }
-        oer_ieee80211_wire::security::Spp::NotNegotiated => {
-            oer_esp32s31_hal::types::MacSppMode::Unauthenticated
+        oer_protocols_ieee80211_wire::security::Spp::NotNegotiated => {
+            oer_chips_esp32s31_hal::types::MacSppMode::Unauthenticated
         }
     }
 }

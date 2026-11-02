@@ -1,7 +1,7 @@
 //! Admission age through queued publication, retry and A-MPDU re-formation.
 use super::{Environment, Execution, ModelOnlyReason, Report};
-use oer_ieee80211_contracts_port::Ieee80211Instant;
-use oer_time::Duration;
+use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::Ieee80211Instant;
 
 /// Deterministically controlled age boundary exercised by a fixture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,13 +65,13 @@ pub struct Trace<E> {
 /// The core's response to an expired active BA-window head.
 pub struct CoreBar {
     /// The expired head's original sequence number, read from its owner.
-    pub head: oer_ieee80211_wire::sequence::SequenceNumber,
+    pub head: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     /// Agreement TID.
     pub tid: u8,
     /// Peer and local addresses given to the originator.
     pub addresses: [[u8; 6]; 2],
     /// Actual BAR frame returned by the originator.
-    pub frame: [u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN],
+    pub frame: [u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN],
 }
 /// Backend-specific admission and explicit owner-controlled virtual time.
 pub trait Harness {
@@ -127,11 +127,11 @@ pub fn verify<E: AsRef<[End]>>(case: Case, trace: Trace<E>) -> Result<(), Violat
     match (case, trace.core_bar) {
         (Case::Reformation | Case::DeliveryBeforeExpiry, Some(bar))
             if bar.frame
-                == oer_ieee80211_wire::block_ack::encode_block_ack_request(
+                == oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
                     bar.addresses[0],
                     bar.addresses[1],
                     bar.tid,
-                    oer_ieee80211_wire::sequence::SequenceNumber::from_low_bits(
+                    oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(
                         bar.head.get().wrapping_add(1),
                     ),
                 ) => {}

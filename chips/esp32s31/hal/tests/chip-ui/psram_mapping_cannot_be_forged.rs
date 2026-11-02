@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::boot::PsramRegisters;
-use oer_espressif_boot::{mmu::MappedRange, psram::MappedPsram};
+use oer_chips_esp32s31_hal::boot::PsramRegisters;
+use oer_chips_family_boot::{mmu::MappedRange, psram::MappedPsram};
 
 pub fn loan(owner: PsramRegisters, observed: MappedRange) {
     #[cfg(ui_reject)]

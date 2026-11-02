@@ -6,7 +6,7 @@ the memory layouts and the ownership policy, each fact with its sources
 generate --chip esp32s31` renders the [PAC](../pac/README.md)
 (`pac/src/generated.rs`) and the images' DMA-window linker fragment
 (`layout/linker/dma-window.x`) from it; host tools read it through
-`oer_registers_model::Chip::load`.
+`oer_tools_registers_model::Chip::load`.
 
 | Path | What it holds |
 | --- | --- |

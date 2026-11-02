@@ -2,7 +2,7 @@
 
 use std::vec;
 
-use oer_esp32s31_pac::{instances, wifi_bb::PhyAgcOracleWifiBb};
+use oer_chips_esp32s31_pac::{instances, wifi_bb::PhyAgcOracleWifiBb};
 
 use crate::ieee80211::registers::HostWords;
 

@@ -25,15 +25,15 @@ use crate::mac::{
     },
     rx::{RxBufferFullCounter, RxRingError, pool::NetworkRxFrame, pool::RxStageTransactionError},
 };
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     descriptor::{DESCRIPTOR_BYTES, rx_landed_word},
     rx_dma::model::{RxWalkerJournal, RxWalkerModel, RxWalkerOperation, SharedRxWalker},
     rx_ring::RxDmaArenaState,
     rx_storage::RxDmaStorage,
     space::HostDma,
 };
-use oer_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
-use oer_time_virtual::VirtualClock;
+use oer_chips_esp32s31_hal::types::{MacInterruptEvents, MacInterruptObservation};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{
@@ -56,14 +56,14 @@ const BUFFER: usize = 1_664;
 const STORAGE: usize = BUFFER;
 const SLOTS: usize = 32;
 
-type HostLine<X = oer_espressif_interrupt_table::signal::host::Host> = WifiIrqLine<X>;
+type HostLine<X = oer_chips_family_interrupt_table::signal::host::Host> = WifiIrqLine<X>;
 type HostPart = WifiIrqPart<HostLower, (), MacInterruptModel, PowerInterruptModel>;
 type HostStatic = WifiRxStatic<
     COUNT,
     BUFFER,
     STORAGE,
     SLOTS,
-    oer_espressif_interrupt_table::signal::host::Host,
+    oer_chips_family_interrupt_table::signal::host::Host,
     HostDma,
 >;
 
@@ -98,7 +98,7 @@ enum Event {
 }
 
 /// The hardware every host owner shares.
-struct Host<X: SignalExecutor = oer_espressif_interrupt_table::signal::host::Host> {
+struct Host<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
     walker: RefCell<RxWalkerModel>,
     log: RefCell<Vec<Event>>,
     /// The radio handler's part: both bank models, closed until a request
@@ -194,7 +194,7 @@ impl<X: SignalExecutor> Host<X> {
     }
 }
 
-struct HostRadio<X: SignalExecutor = oer_espressif_interrupt_table::signal::host::Host> {
+struct HostRadio<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
     host: &'static Host<X>,
 }
 
@@ -251,8 +251,8 @@ impl<X: SignalExecutor> MacRuntimeStopHardware for HostRadio<X> {
 impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
     fn prepare_mac_runtime<'a, const N: usize>(
         &mut self,
-        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, N>,
-    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, N> {
+        ring: oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, N>,
+    ) -> oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, N> {
         assert!(!self.host.walker.borrow().walker_enabled);
         assert!(ring.topology_snapshot().valid);
         self.host.core_prepared.set(true);
@@ -261,7 +261,7 @@ impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
 
     fn start_mac_runtime<const N: usize>(
         &mut self,
-        _ring: &oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingLive<'_, N>,
+        _ring: &oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingLive<'_, N>,
     ) {
         assert!(self.host.walker.borrow().walker_enabled);
         assert!(self.host.core_prepared.get());
@@ -269,16 +269,16 @@ impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
     }
 }
 
-struct HostDoorbell<X: SignalExecutor = oer_espressif_interrupt_table::signal::host::Host> {
+struct HostDoorbell<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
     host: &'static Host<X>,
     rx: &'static HostStorage,
 }
 
 impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
-    const HANDLER: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
         self.host.record(Event::Ring {
             released: self.rx.released_buffer_count(),
@@ -297,10 +297,10 @@ impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
 struct Silent;
 
 impl RadioDoorbell for Silent {
-    const HANDLER: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 3, hart: 0 };
-    const EXECUTOR: oer_espressif_interrupt_table::Context =
-        oer_espressif_interrupt_table::Context { level: 2, hart: 0 };
+    const HANDLER: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 3, hart: 0 };
+    const EXECUTOR: oer_chips_family_interrupt_table::Context =
+        oer_chips_family_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {}
 }
 
@@ -350,7 +350,7 @@ impl Admission for OverReserved {
     }
 }
 
-struct Harness<X: SignalExecutor = oer_espressif_interrupt_table::signal::host::Host> {
+struct Harness<X: SignalExecutor = oer_chips_family_interrupt_table::signal::host::Host> {
     host: &'static Host<X>,
     rx: &'static HostStorage,
     base: u32,
@@ -381,11 +381,11 @@ where
 
 /// The host executor's signals, each serviced at its raise.
 fn host_signals()
--> crate::rx::arena::WifiIrqSignals<oer_espressif_interrupt_table::signal::host::Host> {
+-> crate::rx::arena::WifiIrqSignals<oer_chips_family_interrupt_table::signal::host::Host> {
     crate::rx::arena::WifiIrqSignals {
-        mac: oer_espressif_interrupt_table::signal::host::signal().0,
-        receive: oer_espressif_interrupt_table::signal::host::signal().0,
-        power: oer_espressif_interrupt_table::signal::host::signal().0,
+        mac: oer_chips_family_interrupt_table::signal::host::signal().0,
+        receive: oer_chips_family_interrupt_table::signal::host::signal().0,
+        power: oer_chips_family_interrupt_table::signal::host::signal().0,
     }
 }
 
@@ -395,8 +395,8 @@ fn host_signals()
 fn harness_staged<const STAGE: usize, E, M>(
     owners: impl FnOnce(
         &'static WifiRxCounters,
-        RxReturnNotifier<'static, oer_espressif_interrupt_table::signal::host::Host>,
-        RxFrameEnds<'static, STAGE, BUFFER, oer_espressif_interrupt_table::signal::host::Host>,
+        RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
+        RxFrameEnds<'static, STAGE, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
         &'static VirtualClock,
     ) -> (E, M),
 ) -> Harness
@@ -424,7 +424,7 @@ where
     let arena: &'static mut WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE, X, HostDma> =
         leak(bytemuck::Zeroable::zeroed());
     let (parts, stop, frames) = WifiRxArena::bind(
-        oer_esp32s31_hal::memory::dma_static::Placed::host(arena),
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(arena),
         signals,
     )
     .expect("a zeroed arena binds");
@@ -610,7 +610,7 @@ fn the_handler_activates_the_epoch_after_the_install() {
         MacInterruptOperation::MaskAll,
         MacInterruptOperation::Raw,
         MacInterruptOperation::AcknowledgeRaw,
-        MacInterruptOperation::Publish(oer_esp32s31_hal::types::MacInterruptMask::STATION),
+        MacInterruptOperation::Publish(oer_chips_esp32s31_hal::types::MacInterruptMask::STATION),
     ]));
     assert!(harness.host.mac().rx_delivery_enabled());
     assert!(!harness.requests.is_pending());
@@ -658,7 +658,7 @@ fn p2_drains_then_unmasks_only_through_the_doorbell() {
     assert_eq!(harness.rx.released_buffer_count(), 1);
     assert_eq!(
         harness.rx.descriptors()[0].word0(),
-        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap()
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap()
     );
 }
 
@@ -714,7 +714,8 @@ fn released_frames_are_rearmed_before_unmask() {
     harness.rx_event();
     harness.settle();
     assert_eq!(rings(&harness), [Event::Ring { released: 15 }]);
-    let armed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed =
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..16] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -759,7 +760,7 @@ fn probe_pending_keeps_rx_masked() {
         (report.continuations.immediate, report.continuations.timed),
         (IMMEDIATE_CONTINUATIONS, 1)
     );
-    let now = oer_time::Clock::now(harness.clock);
+    let now = oer_portable_time::Clock::now(harness.clock);
     assert_eq!(
         harness.clock.next_deadline(),
         now.checked_add(CONTINUATION_WAIT)
@@ -935,7 +936,8 @@ fn service_fault_masks_and_quarantines() {
 impl<X: SignalExecutor> Harness<X> {
     /// The reserved descriptor's low address, as the walker reports it.
     fn reserved_low(&self) -> u32 {
-        (self.base + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
+        (self.base
+            + COUNT as u32 * oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
             & 0x000f_ffff
     }
 
@@ -944,7 +946,7 @@ impl<X: SignalExecutor> Harness<X> {
     fn land_in_reserved(&self, length: u32) {
         let reserved = self.rx.reserved_descriptor();
         reserved.write_word0(
-            oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
                 BUFFER as u32,
                 length,
                 true,
@@ -1048,11 +1050,11 @@ fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
     let host: &Host = Host::leaked();
     let arena: &'static mut HostStatic = leak(bytemuck::Zeroable::zeroed());
     let (parts, mut stop, _frames) = WifiRxArena::bind(
-        oer_esp32s31_hal::memory::dma_static::Placed::host(arena),
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(arena),
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_espressif_interrupt_table::signal::host::signal().0,
-            receive: oer_espressif_interrupt_table::signal::host::signal().0,
-            power: oer_espressif_interrupt_table::signal::host::signal().0,
+            mac: oer_chips_family_interrupt_table::signal::host::signal().0,
+            receive: oer_chips_family_interrupt_table::signal::host::signal().0,
+            power: oer_chips_family_interrupt_table::signal::host::signal().0,
         },
     )
     .unwrap();
@@ -1127,7 +1129,13 @@ const STAGE: usize = 8;
 
 type Returned<const N: usize = STAGE> = RefCell<
     Vec<
-        HeldRxFrame<'static, 'static, N, BUFFER, oer_espressif_interrupt_table::signal::host::Host>,
+        HeldRxFrame<
+            'static,
+            'static,
+            N,
+            BUFFER,
+            oer_chips_family_interrupt_table::signal::host::Host,
+        >,
     >,
 >;
 
@@ -1136,7 +1144,7 @@ type Returned<const N: usize = STAGE> = RefCell<
 struct ReturningSink<const N: usize = STAGE> {
     held: &'static Returned<N>,
     holding: &'static Cell<bool>,
-    returns: RxReturnNotifier<'static, oer_espressif_interrupt_table::signal::host::Host>,
+    returns: RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
     counters: &'static WifiRxCounters,
 }
 
@@ -1175,7 +1183,7 @@ fn returning_harness() -> (
     Harness,
     &'static Returned,
     &'static Cell<bool>,
-    RxReturnNotifier<'static, oer_espressif_interrupt_table::signal::host::Host>,
+    RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
 ) {
     returning_harness_with::<STAGE>()
 }
@@ -1185,7 +1193,7 @@ fn returning_harness_with<const N: usize>() -> (
     Harness,
     &'static Returned<N>,
     &'static Cell<bool>,
-    RxReturnNotifier<'static, oer_espressif_interrupt_table::signal::host::Host>,
+    RxReturnNotifier<'static, oer_chips_family_interrupt_table::signal::host::Host>,
 ) {
     let held: &'static Returned<N> = leak(RefCell::new(Vec::new()));
     let holding: &'static Cell<bool> = leak(Cell::new(true));
@@ -1271,7 +1279,8 @@ fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
     // BASE write, no manual cursor.
     let report = harness.report();
     assert_eq!(report.units, COUNT as u32);
-    let armed = oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed =
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..STAGE] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -1343,7 +1352,7 @@ fn a_return_while_rx_is_live_is_harmless() {
 /// of the queue is returned beside it.
 fn queue_harness() -> (
     Harness,
-    FrameReceiver<'static, STAGE, BUFFER, oer_espressif_interrupt_table::signal::host::Host>,
+    FrameReceiver<'static, STAGE, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
 ) {
     let mut receiver = None;
     let harness = harness_staged::<STAGE, _, _>(|counters, _, frames, clock| {
@@ -1367,10 +1376,16 @@ fn poll_next(
         'static,
         STAGE,
         BUFFER,
-        oer_espressif_interrupt_table::signal::host::Host,
+        oer_chips_family_interrupt_table::signal::host::Host,
     >,
 ) -> Option<
-    HeldRxFrame<'static, 'static, STAGE, BUFFER, oer_espressif_interrupt_table::signal::host::Host>,
+    HeldRxFrame<
+        'static,
+        'static,
+        STAGE,
+        BUFFER,
+        oer_chips_family_interrupt_table::signal::host::Host,
+    >,
 > {
     let mut next = core::pin::pin!(receiver.next());
     match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
@@ -1506,8 +1521,8 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
     };
 
     // A second of hold, then one lease comes back.
-    let release_at =
-        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(1_000));
+    let release_at = oer_portable_time::Clock::now(harness.clock)
+        .saturating_add(oer_portable_time::Duration::from_millis(1_000));
     harness.clock.advance_to(release_at);
     harness.host.walker.borrow_mut().clear_operations();
     held.borrow_mut().pop();
@@ -1525,7 +1540,8 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
         snapshot.base,
         Some(
             harness.base
-                + COUNT as u32 * oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
+                + COUNT as u32
+                    * oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
         )
     );
     assert!(snapshot.walker_enabled);
@@ -1563,8 +1579,8 @@ fn hold_full_pool(harness: &mut Harness, held: &Returned, hold_ms: u32) {
     harness.rx_event();
     harness.settle();
     assert_eq!(held.borrow().len(), STAGE);
-    let release_at = oer_time::Clock::now(harness.clock)
-        .saturating_add(oer_time::Duration::from_millis(hold_ms));
+    let release_at = oer_portable_time::Clock::now(harness.clock)
+        .saturating_add(oer_portable_time::Duration::from_millis(hold_ms));
     harness.clock.advance_to(release_at);
 }
 
@@ -1694,7 +1710,11 @@ fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
     hold_full_pool(&mut harness, held, 1_000);
     // A word of a held lease's descriptor changes during the hold.
     harness.rx.descriptors()[3].write_word0(
-        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            BUFFER as u32,
+            100,
+            true,
+        ),
     );
     held.borrow_mut().pop();
     harness.settle();
@@ -1718,8 +1738,8 @@ fn the_latest_snapshot_follows_every_return_and_the_longest_keeps_the_longest() 
     harness.frame(80);
     harness.settle();
     assert_eq!(held.borrow().len(), STAGE);
-    let release_at =
-        oer_time::Clock::now(harness.clock).saturating_add(oer_time::Duration::from_millis(500));
+    let release_at = oer_portable_time::Clock::now(harness.clock)
+        .saturating_add(oer_portable_time::Duration::from_millis(500));
     harness.clock.advance_to(release_at);
     held.borrow_mut().pop();
     harness.settle();
@@ -2012,7 +2032,7 @@ fn teardown_measures_the_drain_of_a_late_p1_drop() {
     // Masked at once; the first drain check finds the queued frames and
     // waits one poll.
     harness.poll_once();
-    let start = oer_time::Clock::now(harness.clock);
+    let start = oer_portable_time::Clock::now(harness.clock);
     for _ in 0..5 {
         harness.clock.advance_to_next_deadline();
         harness.poll_once();
@@ -2028,7 +2048,7 @@ fn teardown_measures_the_drain_of_a_late_p1_drop() {
         harness.stop.try_exit().map(|exit| exit.end),
         Some(WifiRxEnd::Halted)
     );
-    let waited = oer_time::Clock::now(harness.clock).saturating_duration_since(start);
+    let waited = oer_portable_time::Clock::now(harness.clock).saturating_duration_since(start);
     assert_eq!(waited, Duration::from_micros(6 * DRAIN_POLL.as_micros()));
     assert_eq!(
         harness.report().teardown,
@@ -2071,9 +2091,9 @@ fn a_walker_reported_on_a_held_lease_descriptor_quarantines_the_epoch() {
 fn a_runner_outside_its_signals_executor_ends_instead_of_waiting_forever() {
     let mut harness = harness_staged_with::<SLOTS, _, _, _>(
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_espressif_interrupt_table::signal::host::foreign_signal(),
-            receive: oer_espressif_interrupt_table::signal::host::foreign_signal(),
-            power: oer_espressif_interrupt_table::signal::host::foreign_signal(),
+            mac: oer_chips_family_interrupt_table::signal::host::foreign_signal(),
+            receive: oer_chips_family_interrupt_table::signal::host::foreign_signal(),
+            power: oer_chips_family_interrupt_table::signal::host::foreign_signal(),
         },
         |counters, _, _, _| {
             (

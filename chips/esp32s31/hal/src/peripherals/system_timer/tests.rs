@@ -7,8 +7,8 @@
 
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_pac::instances;
-use oer_mmio::InterruptSource;
+use oer_chips_esp32s31_pac::instances;
+use oer_portable_mmio::InterruptSource;
 
 use super::{
     AlarmPart, Comparator, Comparators, SystimerAlarm0, SystimerAlarm1, SystimerAlarm2,
@@ -89,9 +89,9 @@ fn each_alarm_part_strobes_its_own_bit_and_names_its_comparator() {
     assert_eq!(word(&words, 0x6c), 1 << 2);
     assert_eq!(
         [
-            SystimerAlarm0::<oer_mmio::Host<'_>>::COMPARATOR,
-            SystimerAlarm1::<oer_mmio::Host<'_>>::COMPARATOR,
-            SystimerAlarm2::<oer_mmio::Host<'_>>::COMPARATOR,
+            SystimerAlarm0::<oer_portable_mmio::Host<'_>>::COMPARATOR,
+            SystimerAlarm1::<oer_portable_mmio::Host<'_>>::COMPARATOR,
+            SystimerAlarm2::<oer_portable_mmio::Host<'_>>::COMPARATOR,
         ],
         [Comparator::Zero, Comparator::One, Comparator::Two]
     );
@@ -102,9 +102,9 @@ fn each_alarm_part_strobes_its_own_bit_and_names_its_comparator() {
             <SystimerAlarm2 as InterruptSource>::SOURCE,
         ],
         [
-            oer_esp32s31_pac::Interrupt::SYSTIMER_TARGET0.source(),
-            oer_esp32s31_pac::Interrupt::SYSTIMER_TARGET1.source(),
-            oer_esp32s31_pac::Interrupt::SYSTIMER_TARGET2.source(),
+            oer_chips_esp32s31_pac::Interrupt::SYSTIMER_TARGET0.source(),
+            oer_chips_esp32s31_pac::Interrupt::SYSTIMER_TARGET1.source(),
+            oer_chips_esp32s31_pac::Interrupt::SYSTIMER_TARGET2.source(),
         ]
     );
 }

@@ -49,7 +49,7 @@ labelled table; ambiguity proves nothing. The second candidate uses the whole
 labelled chain and adds the skipped indices to a known `first_case`, leaving
 an unknown case value unknown. Objects and bounds cannot justify this second
 candidate. Every entry must land inside the function.
-`oer-analysis-riscv-program` implements the port for
+`oer-tools-analysis-riscv-program` implements the port for
 relocatable objects (`ObjectTables`, which needs a bound) and static images
 (`ImageTables`: an `--emit-relocs` image's labelled `.LJTI*` table needs
 none); Blobray uses both. The stack analyzer's source reads an

@@ -6,8 +6,8 @@ fn repository() -> tempfile::TempDir {
 }
 
 /// Every chip whose profile names a flash map for its images.
-fn chips(root: &Path) -> Vec<oer_chip_profile::Profile> {
-    let chips = oer_chip_profile::Profile::all(root)
+fn chips(root: &Path) -> Vec<oer_tools_chip_profile::Profile> {
+    let chips = oer_tools_chip_profile::Profile::all(root)
         .unwrap()
         .into_iter()
         .filter(|profile| profile.facts.flash.is_some())
@@ -17,12 +17,12 @@ fn chips(root: &Path) -> Vec<oer_chip_profile::Profile> {
 }
 
 /// Byte 2 of an ESP image header: its flash mode.
-fn mode_byte(mode: oer_espressif_facts::FlashMode) -> u8 {
+fn mode_byte(mode: oer_chips_family_facts::FlashMode) -> u8 {
     match mode {
-        oer_espressif_facts::FlashMode::Qio => 0,
-        oer_espressif_facts::FlashMode::Qout => 1,
-        oer_espressif_facts::FlashMode::Dio => 2,
-        oer_espressif_facts::FlashMode::Dout => 3,
+        oer_chips_family_facts::FlashMode::Qio => 0,
+        oer_chips_family_facts::FlashMode::Qout => 1,
+        oer_chips_family_facts::FlashMode::Dio => 2,
+        oer_chips_family_facts::FlashMode::Dout => 3,
     }
 }
 
@@ -135,7 +135,7 @@ fn the_boot_files_are_encoded_into_the_bundle() {
             ]
         );
         assert_eq!(
-            oer_image_bundle::ImageBundle::load(&output).unwrap(),
+            oer_tools_image_bundle::ImageBundle::load(&output).unwrap(),
             bundle
         );
         // Boot files that are not the chip's are refused.
@@ -232,14 +232,14 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
         None,
         Some(crate::Gates {
             enforced: crate::Enforced::Reported,
-            ..crate::Gates::all(oer_image_checks::interrupts::Required::Diagnostic)
+            ..crate::Gates::all(oer_tools_image_checks::interrupts::Required::Diagnostic)
         }),
     ] {
         let repository = repository();
         let root = repository.path();
-        let profile = oer_chip_profile::Profile::load(root, "esp32s31").unwrap();
+        let profile = oer_tools_chip_profile::Profile::load(root, "esp32s31").unwrap();
         let spec = ImageSpec {
-            purpose: oer_image_bundle::Purpose::Analysis,
+            purpose: oer_tools_image_bundle::Purpose::Analysis,
             root: root.into(),
             chip: profile.facts.id.clone(),
             application: crate::Application {
@@ -269,7 +269,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
             false,
             profile.facts.interrupts.as_ref().unwrap().boot_hart,
             &[profile.facts.interrupts.as_ref().unwrap().boot_hart],
-            &oer_image_checks::panics::Contract::default(),
+            &oer_tools_image_checks::panics::Contract::default(),
             |input, _bundle| {
                 let bootstrap_elf = input.output.join(files::BOOTSTRAP_ELF);
                 std::fs::write(&bootstrap_elf, &cached)?;
@@ -318,19 +318,23 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
             !spec.output.exists(),
             "an invalid bundle must not be published"
         );
-        let staging = oer_image_bundle::staging_directory(&spec.output).unwrap();
+        let staging = oer_tools_image_bundle::staging_directory(&spec.output).unwrap();
         assert!(
             !staging.join(files::APPLICATION).exists(),
             "audit precedes encoding"
         );
-        assert!(!staging.join(oer_image_bundle::MANIFEST).exists());
+        assert!(!staging.join(oer_tools_image_bundle::MANIFEST).exists());
     }
 }
 
 /// Link real read-only payload/reference inputs through the shared script,
 /// or an old contiguous-data layout. The real espflash encoder then decides
 /// how many mapped ESP records the loader sees; ELF section count is not it.
-fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: bool) -> Vec<u8> {
+fn loader_fixture(
+    directory: &Path,
+    profile: &oer_tools_chip_profile::Profile,
+    split: bool,
+) -> Vec<u8> {
     use object::write::{Object, Symbol, SymbolSection};
     use object::{
         Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
@@ -385,8 +389,8 @@ fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: 
     )).unwrap();
     let output = directory.join("loader.elf");
     let scripts =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/espressif/staged-layout/linker");
-    let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/family/staged-layout/linker");
+    let result = std::process::Command::new(oer_tools_os_toolchain::lld().unwrap())
         .arg("-L")
         .arg(scripts)
         .arg("-T")
@@ -418,7 +422,7 @@ fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: 
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    oer_image_checks::placement::bootstrap(memory.sram, memory.flash_xip, &output).unwrap();
+    oer_tools_image_checks::placement::bootstrap(memory.sram, memory.flash_xip, &output).unwrap();
     std::fs::read(output).unwrap()
 }
 
@@ -426,7 +430,7 @@ fn loader_fixture(directory: &Path, profile: &oer_chip_profile::Profile, split: 
 fn the_shared_script_encodes_two_read_only_mappings_and_the_loader_rejects_one() {
     let repository = repository();
     let root = repository.path();
-    let profile = oer_chip_profile::Profile::load(root, "esp32s31").unwrap();
+    let profile = oer_tools_chip_profile::Profile::load(root, "esp32s31").unwrap();
     for split in [false, true] {
         let directory = tempfile::tempdir().unwrap();
         let bytes = loader_fixture(directory.path(), &profile, split);
@@ -451,7 +455,7 @@ fn the_shared_script_encodes_two_read_only_mappings_and_the_loader_rejects_one()
 
 #[test]
 fn the_loader_count_gate_rejects_one_and_three_mappings_without_executable_code() {
-    let profile = oer_chip_profile::Profile::tracked("esp32s31").unwrap();
+    let profile = oer_tools_chip_profile::Profile::tracked("esp32s31").unwrap();
     let flash = profile.facts.memory.as_ref().unwrap().flash_xip;
     assert!(audit_loader_mappings(&profile, &[]).is_err());
     assert!(audit_loader_mappings(&profile, &[0; 24]).is_err());

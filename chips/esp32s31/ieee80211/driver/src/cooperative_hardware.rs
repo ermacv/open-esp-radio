@@ -8,7 +8,7 @@
 //! bit `0x4000` before TX-complete bit `0x80`.
 
 use crate::station_tsf::{StationTsfHardware, StationTsfWrite};
-use oer_esp32s31_hal::owner::RadioAccess;
+use oer_chips_esp32s31_hal::owner::RadioAccess;
 
 impl StationTsfHardware for RadioAccess {
     fn station_tsf(&mut self) -> u64 {
@@ -21,7 +21,7 @@ impl StationTsfHardware for RadioAccess {
 }
 
 impl crate::lower_mac::StationTbttHardware for RadioAccess {
-    fn start_station_tbtt(&mut self, schedule: oer_esp32s31_hal::types::StaTbttSchedule) {
+    fn start_station_tbtt(&mut self, schedule: oer_chips_esp32s31_hal::types::StaTbttSchedule) {
         self.station_wake_hal().start_station_tbtt(schedule);
     }
 
@@ -31,7 +31,7 @@ impl crate::lower_mac::StationTbttHardware for RadioAccess {
 }
 
 impl crate::lower_mac::RxBeaconPriorityHardware for RadioAccess {
-    fn set_rx_beacon_pti(&mut self, pti: oer_esp32s31_hal::types::MacPti) {
+    fn set_rx_beacon_pti(&mut self, pti: oer_chips_esp32s31_hal::types::MacPti) {
         self.wifi_mac_hal().set_rx_beacon_pti(pti, pti);
     }
 

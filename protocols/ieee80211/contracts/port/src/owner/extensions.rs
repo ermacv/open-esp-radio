@@ -20,7 +20,7 @@
 //! - [`MonitorPhase`]: monitor reception, a radio-wide setting.
 
 use crate::tsf::{TsfDuration, TsfInstant};
-use oer_radio_port::{Poisoned, PoolPath, Root, Slot};
+use oer_protocols_radio_port::{Poisoned, PoolPath, Root, Slot};
 
 use super::{Ieee80211Capabilities, PhaseRate, SupportedPower, Tid};
 use crate::{
@@ -76,18 +76,18 @@ impl NonEmptyState for NonEmptyAggregate {
 /// and the MPDU length remain this subframe's own.
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_contracts_port::{ClassSubframe, Ieee80211Capabilities, Tid, TxBufferClass};
-/// use oer_ieee80211_wire::address::IndividualAddress;
+/// use oer_protocols_ieee80211_contracts_port::{ClassSubframe, Ieee80211Capabilities, Tid, TxBufferClass};
+/// use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// fn flag<C: TxBufferClass, K: Ieee80211Capabilities>(
 ///     frame: &ClassSubframe<C, K>, receiver: IndividualAddress, tid: Tid,
 /// ) { let _header = frame.header(receiver, tid, true); }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{
+/// use oer_protocols_ieee80211_contracts_port::{
 ///     AckHeader, ClassSubframe, Ieee80211Capabilities, MpduProtection, Tid, TxBufferClass,
 /// };
-/// use oer_ieee80211_wire::address::IndividualAddress;
+/// use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// fn typed<C: TxBufferClass, K: Ieee80211Capabilities>(
 ///     frame: &ClassSubframe<C, K>, receiver: IndividualAddress, tid: Tid,
 /// ) -> AckHeader { frame.header(receiver, tid, MpduProtection::Open) }
@@ -210,7 +210,7 @@ impl<'p, 'id, K> AmpduRate<'p, 'id, K> {
 /// A fresh source with its own protection cannot enter the builder:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_contracts_port::*;
+/// use oer_protocols_ieee80211_contracts_port::*;
 /// fn independent<'k, 'p, 'id: 'k + 'p, T, C, R, K, S>(
 ///     builder: T::Aggregate<'k, 'p, R, K, S>,
 ///     source: PoolSource<'k, 'p, 'id, T, C, K, R>,
@@ -224,7 +224,7 @@ impl<'p, 'id, K> AmpduRate<'p, 'id, K> {
 /// Its compiling twin has no independent protection in the source:
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::*;
+/// use oer_protocols_ieee80211_contracts_port::*;
 /// fn through_builder<'k, 'p, 'id: 'k + 'p, T, C, R, K, S>(
 ///     builder: T::Aggregate<'k, 'p, R, K, S>,
 ///     source: PoolSubframe<'id, T, C, K>,
@@ -237,7 +237,7 @@ pub trait PhaseAggregate<'id>: Sized {
     /// The backend resource family.
     type Types: PhaseTypes<'id>;
     /// Concrete owner whose private frontend loan consumes this admission.
-    type Backend: oer_radio_port::SlotOwner<
+    type Backend: oer_protocols_radio_port::SlotOwner<
             <<Self::Types as PhaseTypes<'id>>::TicketPath as PoolPath>::Identity,
         >;
     /// Opaque context selected independently of the body's loan.
@@ -309,7 +309,14 @@ impl MpduStartSpacing {
 }
 
 /// One A-MPDU attempt: its ticket, its aggregate and how it goes.
-pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct AggregateAttempt<
+    'id,
+    T,
+    A,
+    K,
+    X,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     /// The caller's context for all subframes, returned with their terminal.
     pub context: X,
     /// The attempt's place in flight.
@@ -332,7 +339,7 @@ pub struct AdmittedAggregate<
     A: PhaseAggregate<'id>,
     K,
     X,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     parts: AdmittedAggregateParts<
         A::OwnedContext,
@@ -371,7 +378,7 @@ impl<'id, T, A: PhaseAggregate<'id>, K, X, Path: PoolPath>
     /// Transfer the whole aggregate through its backend's private frontend.
     pub fn into_parts(
         self,
-        _: &oer_radio_port::BodyLoan<'id, Path::Identity, A::Backend>,
+        _: &oer_protocols_radio_port::BodyLoan<'id, Path::Identity, A::Backend>,
     ) -> AdmittedAggregateParts<
         A::OwnedContext,
         Slot<'static, T, Path>,
@@ -380,7 +387,7 @@ impl<'id, T, A: PhaseAggregate<'id>, K, X, Path: PoolPath>
         K,
     >
     where
-        A::Backend: oer_radio_port::SlotOwner<Path::Identity>,
+        A::Backend: oer_protocols_radio_port::SlotOwner<Path::Identity>,
     {
         self.parts
     }
@@ -457,7 +464,7 @@ pub type InterfaceProtection<'k, 'p, 'id, I> = TxProtection<
 /// An empty builder cannot be submitted:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_contracts_port::*;
+/// use oer_protocols_ieee80211_contracts_port::*;
 /// fn empty<'k, 'p, 'id: 'k + 'p, I: AmpduPhase<'p, 'id>>(
 ///     port: &mut I,
 ///     attempt: AggregateAttempt<'id, <I::Types as PhaseTypes<'id>>::TicketKind,

@@ -1,11 +1,11 @@
 use core::task::{Context, Poll, Waker};
 
-use oer_espressif_interrupt_table::signal::{ForeignContext, host};
+use oer_chips_family_interrupt_table::signal::{ForeignContext, host};
 
 use super::{SchedulerWakeCell, SchedulerWakePublication};
 use crate::interrupt::SchedulerWorkerWakeClass;
 
-fn cell() -> SchedulerWakeCell<oer_espressif_interrupt_table::signal::host::Deferred> {
+fn cell() -> SchedulerWakeCell<oer_chips_family_interrupt_table::signal::host::Deferred> {
     SchedulerWakeCell::new(host::deferred_signal().0)
 }
 

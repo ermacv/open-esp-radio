@@ -41,7 +41,7 @@ fn split_returns_the_kind_and_the_rest() {
     assert_eq!(split(&[1]), Ok((PacketKind::Cmd, &[][..])));
     assert!(matches!(
         split(&[]),
-        Err(Error::Wire(oer_wire::Error::Truncated { .. }))
+        Err(Error::Wire(oer_portable_wire::Error::Truncated { .. }))
     ));
 }
 
@@ -63,7 +63,7 @@ fn write_refuses_a_destination_that_is_too_short() {
     let mut out = [0; 3];
     assert!(matches!(
         write(PacketKind::Event, &[1, 2, 3], &mut out),
-        Err(Error::Wire(oer_wire::Error::Truncated { .. }))
+        Err(Error::Wire(oer_portable_wire::Error::Truncated { .. }))
     ));
 }
 

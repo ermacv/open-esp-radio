@@ -2,8 +2,8 @@
 //! Attribute inheritance and piece acceptance retain the typed consumer's
 //! rules; machine-register aliases are prepared separately from instructions.
 use super::{Entry, Reader, Unit, dwarf_error, next_operation, origin_reference, reference};
-use oer_analysis_elf::dwarf::gimli;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_elf::dwarf::gimli;
+use oer_tools_analysis_riscv_model::*;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

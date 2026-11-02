@@ -25,8 +25,8 @@ pub trait Publisher<'pool, const CAPACITY: usize, const SLOTS: usize> {
     /// # fn panic(_: &core::panic::PanicInfo) -> ! {
     /// #     loop {}
     /// # }
-    /// use oer_esp32s31_ieee80211_driver::rx::transaction::Publisher;
-    /// use oer_esp32s31_ieee80211_driver::mac::rx::pool::NetworkRxFrame;
+    /// use oer_chips_esp32s31_ieee80211_driver::rx::transaction::Publisher;
+    /// use oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::NetworkRxFrame;
     ///
     /// fn publish<'pool, P: Publisher<'pool, 64, 1>>(
     ///     publisher: &P,
@@ -46,8 +46,8 @@ pub trait Publisher<'pool, const CAPACITY: usize, const SLOTS: usize> {
     /// # fn panic(_: &core::panic::PanicInfo) -> ! {
     /// #     loop {}
     /// # }
-    /// use oer_esp32s31_ieee80211_driver::rx::transaction::Publisher;
-    /// use oer_esp32s31_ieee80211_driver::mac::rx::pool::NetworkRxFrame;
+    /// use oer_chips_esp32s31_ieee80211_driver::rx::transaction::Publisher;
+    /// use oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::NetworkRxFrame;
     ///
     /// fn publish<'pool, P: Publisher<'pool, 64, 1>>(
     ///     publisher: &P,

@@ -2,14 +2,14 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApAssociationSecurityError {
     InvalidElements,
-    RetainedElement(oer_ieee80211_wire::security::rsn::RsnSyntaxError),
+    RetainedElement(oer_protocols_ieee80211_wire::security::rsn::RsnSyntaxError),
     Spp(SppError),
 }
 
@@ -173,7 +173,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         context: ApEapolTxContext,
         acknowledged: bool,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<ApEapolTxCompletion, ApWpa2Error> {
         let inactive_timeout = self.inactive_timeout.duration();
         let ApEapolTxContext {
@@ -208,7 +208,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             // retains the short first timeout, then uses the subsequent one.
             if acknowledged
                 && transmit.message
-                    == oer_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1
+                    == oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1
             {
                 alarm = existing
                     .wpa2_retry
@@ -226,7 +226,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         })
     }
 
-    pub fn next_wpa2_retry_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_wpa2_retry_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.storage()
             .peers
             .iter()
@@ -238,7 +238,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Consume at most one due authenticator retry edge.
     pub fn take_due_wpa2_retry<const N: usize>(
         &mut self,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<ApWpa2RetryProgress<N>, ApWpa2Error> {
         let Some(peer) = self.storage_mut().peers.iter_mut().flatten().find(|peer| {
             peer.wpa2_retry_alarm
@@ -259,12 +259,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             RsnRetryAction::Transmit { frame, next_alarm } => {
                 self.checked_peer_mut(peer_address)?.wpa2_retry_alarm = Some(next_alarm);
                 let frame = match frame.message {
-                    oer_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1 => self
+                    oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1 => self
                         .bind_eapol(
                             self.authenticator(peer_address)?.message1_frame(frame)?,
                             frame,
                         )?,
-                    oer_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage3 => {
+                    oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage3 => {
                         self.message3_transmit(peer_address, frame)?
                     }
                     _ => return Err(ApWpa2Error::UnexpectedAction),
@@ -289,7 +289,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Advance the bounded authenticator through Message 2 or Message 4.
     ///
     /// PTK derivation, MIC verification and GTK wrapping are pure bounded
-    /// operations of `oer-ieee80211-core-security-rsn`. Hardware key installation remains an
+    /// operations of `oer-protocols-ieee80211-core-security-rsn`. Hardware key installation remains an
     /// explicit later edge in the chip AP engine.
     pub fn on_eapol<const N: usize>(
         &mut self,
@@ -349,7 +349,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     fn message3_transmit<const N: usize>(
         &self,
         peer: [u8; 6],
-        transmit: oer_ieee80211_core_security_rsn::state::RsnTransmit,
+        transmit: oer_protocols_ieee80211_core_security_rsn::state::RsnTransmit,
     ) -> Result<ApEapolTransmit<N>, ApWpa2Error> {
         if self.authenticator(peer)?.pending_ptk().is_none() {
             return Err(ApWpa2Error::MissingPairwiseKey);
@@ -471,7 +471,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn authorize(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<(), ApServiceError> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch);
@@ -565,7 +565,7 @@ fn announces_sae_h2e(rsnxe: &[u8]) -> bool {
 mod invariant_tests {
     #![allow(clippy::disallowed_macros)]
     use super::*;
-    use oer_ieee80211_wire::security::rsn::RsnSyntaxError;
+    use oer_protocols_ieee80211_wire::security::rsn::RsnSyntaxError;
 
     #[test]
     fn retained_syntax_failures_cannot_become_peer_responses() {

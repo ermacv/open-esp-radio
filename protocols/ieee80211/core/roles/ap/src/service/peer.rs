@@ -2,9 +2,9 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
-use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::status::status_code;
 
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn next_management_sequence(&mut self) -> SequenceNumber {
@@ -44,7 +44,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn authenticate_open(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<ApMlmeAction, ApServiceError> {
         let status = self.authenticate(peer, now)?;
         Ok(ApMlmeAction::AuthenticationResponse { peer, status })
@@ -58,7 +58,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         peer: [u8; 6],
         pmk: Pmk,
         pmkid: [u8; RSN_PMKID_LEN],
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<u16, ApServiceError> {
         if self.security_policy() != ApSecurityPolicy::Wpa3Personal {
             return Err(ApServiceError::SecurityModeMismatch);
@@ -80,7 +80,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     fn authenticate(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<u16, ApServiceError> {
         let existing = self.peer_index(peer).is_some();
         if !existing && self.occupied_count() >= self.client_limit.get() {
@@ -129,7 +129,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         capabilities: ApAssociationCapabilities,
         authenticator_nonce: [u8; 32],
         initial_replay_counter: u64,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<ApMlmeAction, ApServiceError> {
         if self.link_protection() != LinkProtection::Ccmp {
             return Err(ApServiceError::SecurityModeMismatch);
@@ -265,7 +265,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         peer: [u8; 6],
         security: ApAssociationSecurityObservation<'_>,
         capabilities: ApAssociationCapabilities,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<ApMlmeAction, ApServiceError> {
         if self.link_protection() != LinkProtection::Open {
             return Err(ApServiceError::SecurityModeMismatch);
@@ -314,7 +314,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn observe_activity(
         &mut self,
         peer: [u8; 6],
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<(), ApServiceError> {
         let binding = self.bind_peer(peer).ok_or(ApServiceError::UnknownPeer)?;
         self.observe_bound_activity(binding, now)
@@ -328,7 +328,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn observe_bound_activity(
         &mut self,
         binding: ApPeerBinding,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<(), ApServiceError> {
         let inactive_timeout = self.inactive_timeout.duration();
         let existing = self
@@ -350,10 +350,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn observe_bound_data_activity(
         &mut self,
         binding: ApPeerBinding,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<(), ApServiceError> {
         let inactive_timeout = self.inactive_timeout.duration();
-        let refresh_margin = oer_time::Duration::from_micros(inactive_timeout.as_micros() / 2);
+        let refresh_margin =
+            oer_portable_time::Duration::from_micros(inactive_timeout.as_micros() / 2);
         let existing = self
             .bound_peer_mut(binding)
             .ok_or(ApServiceError::UnknownPeer)?;
@@ -370,7 +371,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         Ok(())
     }
 
-    pub fn next_peer_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_peer_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.storage()
             .peers
             .iter()
@@ -380,7 +381,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .min()
     }
 
-    pub fn begin_due_peer_close(&mut self, now: oer_time::Instant) -> Option<ApPeerClose> {
+    pub fn begin_due_peer_close(&mut self, now: oer_portable_time::Instant) -> Option<ApPeerClose> {
         let peer = self
             .storage_mut()
             .peers

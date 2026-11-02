@@ -3,7 +3,7 @@
 
 use crate::note::{MAX_NAME, MAX_NAME_BYTES, MAX_NAMES, MAX_WORDS, Note, Topic};
 use crate::path::{MAX_PATH_NAMES, MAX_PATH_WORDS};
-use oer_trace::{Channel, Domain, Event, Kind};
+use oer_portable_trace::{Channel, Domain, Event, Kind};
 
 /// The largest payload after the tag: a previous panic is 16 + 48 + 64, a
 /// note 4 + its words and names with their lengths.

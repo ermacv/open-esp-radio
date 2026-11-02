@@ -118,20 +118,20 @@ fn classify_sta_ap_rx_never_panics(count: usize) {
         frame(CONTROL_FRAME | 0xb0, AP, PEER, PEER),
     ];
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(<[u8; 24]>::as_slice).collect();
-    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 40, |mpdu| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 40, |mpdu| {
         let _ = classify_sta_ap_rx(mpdu, ADDRESSES);
     });
 }
 
 #[test]
 fn classify_sta_ap_rx_never_panics_on_received_bytes() {
-    classify_sta_ap_rx_never_panics(oer_ieee80211_wire::fuzz::QUICK);
+    classify_sta_ap_rx_never_panics(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn classify_sta_ap_rx_never_panics_on_received_bytes_full() {
-    classify_sta_ap_rx_never_panics(oer_ieee80211_wire::fuzz::FULL);
+    classify_sta_ap_rx_never_panics(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]

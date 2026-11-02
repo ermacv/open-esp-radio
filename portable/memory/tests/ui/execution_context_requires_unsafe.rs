@@ -1,4 +1,4 @@
-use oer_memory::ExecutionContext;
+use oer_portable_memory::ExecutionContext;
 
 #[cfg(not(ui_reject))]
 pub fn check<X: ExecutionContext>() -> bool { X::running() }

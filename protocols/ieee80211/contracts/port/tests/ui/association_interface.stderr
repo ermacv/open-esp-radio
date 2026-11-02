@@ -6,8 +6,8 @@ error[E0308]: mismatched types
   |                   |
   |                   arguments to this function are incorrect
   |
-  = note: expected struct `VacantKeyBank<'_, oer_ieee80211_contracts_port::Station, 1, 1>`
-             found struct `VacantKeyBank<'id, oer_ieee80211_contracts_port::AccessPoint, 1, 1>`
+  = note: expected struct `VacantKeyBank<'_, oer_protocols_ieee80211_contracts_port::Station, 1, 1>`
+             found struct `VacantKeyBank<'id, oer_protocols_ieee80211_contracts_port::AccessPoint, 1, 1>`
 note: function defined here
  --> src/association.rs
   |

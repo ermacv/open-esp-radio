@@ -1,7 +1,7 @@
 //! Backend-private loans of complete capacity owners; no capacity is minted.
 
 use super::*;
-use oer_radio_port::{BodyLoan, SlotOwner};
+use oer_protocols_radio_port::{BodyLoan, SlotOwner};
 
 impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     AssociationStart<'static, R, P, G, Path>

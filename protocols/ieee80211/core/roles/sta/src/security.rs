@@ -1,7 +1,7 @@
 //! The station's security policy: which advertised BSS security one request
 //! admits and the RSN selection its association request carries.
 
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     scan::ScanRecord,
     security::{
         AssociationAkm, LinkProtection, ManagementProtection, SaePwe, SppCapability, SppError,
@@ -192,13 +192,15 @@ fn select_personal_rsn(
 /// frames take BIP-CMAC-128.
 pub fn personal_rsn(
     akm: AssociationAkm,
-    spp: oer_ieee80211_wire::security::Spp,
+    spp: oer_protocols_ieee80211_wire::security::Spp,
     management_protection: bool,
 ) -> SelectedRsn {
-    use oer_ieee80211_wire::security::rsn::{
+    use oer_protocols_ieee80211_wire::security::rsn::{
         RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RsnExtendedCapabilities,
     };
-    use oer_ieee80211_wire::security::{GroupManagementCipher, RsnAssociation, SppCapability};
+    use oer_protocols_ieee80211_wire::security::{
+        GroupManagementCipher, RsnAssociation, SppCapability,
+    };
     let sae = matches!(akm, AssociationAkm::Sae(_));
     let mut capabilities = SppCapability::Capable.rsn_bits();
     if management_protection {

@@ -5,7 +5,7 @@
 //! access point and station, the Bluetooth adapter, the legacy BSS country)
 //! and the air observer.
 //! Which hub port powers a board is found on the host
-//! (`oer_lab_router::hub`), not written here.
+//! (`oer_tools_lab_router::hub`), not written here.
 //!
 //! The file holds no credentials: every access point and station of the
 //! stand is managed, and a run generates the SSID and passphrase it sets on
@@ -144,8 +144,8 @@ impl Radio {
     }
 
     /// Whether a chip with `properties` has this radio.
-    fn on(self, properties: &oer_espressif_facts::Properties) -> bool {
-        use oer_espressif_facts::{BluetoothMode, WifiBand};
+    fn on(self, properties: &oer_chips_family_facts::Properties) -> bool {
+        use oer_chips_family_facts::{BluetoothMode, WifiBand};
         match self {
             Self::Wifi2g4 => properties.wifi_bands.contains(&WifiBand::Band2g4),
             Self::Wifi5g => properties.wifi_bands.contains(&WifiBand::Band5g),
@@ -266,7 +266,7 @@ impl Board {
     }
 
     /// Check the board's chip and radios against the chip profiles `chips`.
-    pub fn validate_chip(&self, chips: &[oer_chip_profile::Profile]) -> Result<()> {
+    pub fn validate_chip(&self, chips: &[oer_tools_chip_profile::Profile]) -> Result<()> {
         let name = &self.id;
         let profile = chips
             .iter()
@@ -603,7 +603,7 @@ impl Stand {
 
     /// Check every board's chip and radios against the chip profiles
     /// `chips`, as the stand's doctor does.
-    pub fn validate_chips(&self, chips: &[oer_chip_profile::Profile]) -> Result<()> {
+    pub fn validate_chips(&self, chips: &[oer_tools_chip_profile::Profile]) -> Result<()> {
         self.boards
             .iter()
             .try_for_each(|board| board.validate_chip(chips))
@@ -801,7 +801,7 @@ fn ids_of(boards: &[&Board]) -> String {
 }
 
 fn identifier(field: &str, value: &str) -> Result<()> {
-    if oer_espressif_facts::valid_identifier(value) {
+    if oer_chips_family_facts::valid_identifier(value) {
         Ok(())
     } else {
         Err(format!(

@@ -1,18 +1,18 @@
 # IEEE 802.11 lower-MAC port
 
-`oer-ieee80211-contracts-port` declares the radio port between portable Wi-Fi MAC
+`oer-protocols-ieee80211-contracts-port` declares the radio port between portable Wi-Fi MAC
 logic and the backend that puts frames on the air, on the owner shape of
 [the architecture](../../../../docs/architecture.md#radio-port). It holds only
 the interaction with the peripheral and the representation of the data that
 crosses it: typestate wrappers, outcomes and facts. Wire codecs live in
-`oer-ieee80211-wire`, policy in the cores above the port, vendor records in
-`oer-espressif-ieee80211-policy` and chip models in the chip's MAC; no normal
-dependency of the port reaches an ieee80211 core (`oer-test-layers`). It is
+`oer-protocols-ieee80211-wire`, policy in the cores above the port, vendor records in
+`oer-chips-family-ieee80211-policy` and chip models in the chip's MAC; no normal
+dependency of the port reaches an ieee80211 core (`oer-tools-test-layers`). It is
 sans-IO: it declares the port and its values and never waits on it.
 
 ## The phase
 
-The port's lifecycle is `oer-radio-port`'s: a backend implements
+The port's lifecycle is `oer-protocols-radio-port`'s: a backend implements
 `LowerMacBackend`, a `PortBackend` whose disabled-only settings are
 `LowerMacSetup` (the channel, as a `SupportedChannel`; a backend whose
 addresses change also implements `AddressSetup`). An enabled port lends one
@@ -127,7 +127,7 @@ back; its operations are synchronous and never wait:
   and body explicitly.
 - **Management plans.** `ManagementTxPlan` carries a legacy rate derived
   above the driver and a nonzero attempt budget; every attempt keeps the
-  selected rate. `oer-ieee80211-core-upper-mac` `management` chooses the budget:
+  selected rate. `oer-protocols-ieee80211-core-upper-mac` `management` chooses the budget:
   seven attempts (dot11ShortRetryLimit) for a unicast frame, one for a
   broadcast.
 - **Retry plans.** An individual frame carries its `RetryPlan`, a sequence
@@ -172,7 +172,7 @@ back; its operations are synchronous and never wait:
   `Withdrawn(cause)` with Sent, retaining SN/PN. An unpublished attempt
   returns Fresh. Unknown timeout remains Indeterminate. Per-AC terminals
   precede the barrier confirmation in their original order.
-- **MSDU age.** Each VIF's EDCA table stores a typed `oer_time::Duration`
+- **MSDU age.** Each VIF's EDCA table stores a typed `oer_portable_time::Duration`
   per AC (default 500 TU); `EdcaParameterSet::from_tu` converts MIB units
   at the record boundary. Admission samples backend `now()` at `submit`,
   once per MSDU and per aggregate member. Every publication and retry
@@ -246,7 +246,7 @@ back; its operations are synchronous and never wait:
 - **Reception.** A received frame's buffer goes back through `recycle`; a
   lagging body loses unsolicited frames as `EventsLost`, never a terminal.
 
-`oer_ieee80211_contracts_security::Ccmp128Key` is the shared affine, zeroizing owner
+`oer_protocols_ieee80211_contracts_security::Ccmp128Key` is the shared affine, zeroizing owner
 of installation material. RSN moves this owner into installation. Its
 bytes are private; hardware programming and software CCMP borrow them.
 It has no `Clone`, `Copy`, equality or owned byte extraction, and Debug is
@@ -343,7 +343,7 @@ vendor knowledge not recovered, policy decision pending) is recorded in its
 documentation, not in code.
 
 The PHY and channel values come from
-[`oer-ieee80211-wire`](../../wire/src/phy.rs): `Channel` (2.4 GHz and 5 GHz with
+[`oer-protocols-ieee80211-wire`](../../wire/src/phy.rs): `Channel` (2.4 GHz and 5 GHz with
 20 MHz and 40 MHz geometry) and `PhyRate` (non-HT, HT and HE SU).
 `RxEvidence` and `RxCryptoStatus` describe receive provenance. The values a
 backend and the layers above it share live here (`contract`): the service a
@@ -368,29 +368,29 @@ PN with the installed key ID.
 
 | Work | Owner |
 | --- | --- |
-| The retry plan of an MPDU and the rate control that chooses it | `oer-ieee80211-core-upper-mac` |
-| What a `BlockAckReport` acknowledges | `oer-ieee80211-core-upper-mac` `block_ack::acknowledges` |
-| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport`, the BlockAckReq, aging | the station's data machine and transmit agreements (`oer-ieee80211-core-roles-sta`); `oer-ieee80211-core-upper-mac` `ampdu` holds the vendor's per-aggregate machine |
-| RTS/CTS or CTS-to-self, the control-frame rate and the BSS basic rates | `oer-ieee80211-core-upper-mac` `protection` |
-| The retry counter a frame's class advances and the ladder step of its failures | `oer-ieee80211-core-upper-mac` `retry` |
-| The attempt budget of a management frame | `oer-ieee80211-core-upper-mac` `management` |
-| The PHY mode of an association | `oer-ieee80211-core-upper-mac` `phy_mode`, chosen by `oer-ieee80211-core-roles-sta` `association` |
-| Transmit packet-number allocation and receive replay | `oer-ieee80211-core-upper-mac` `ccmp` |
-| Receive Block Ack agreements and reordering | `oer-ieee80211-core-upper-mac` `block_ack::banks`, `block_ack::recipient`, `block_ack::reorder` |
-| The station's lifecycle, from its scan to its disconnect | `oer-ieee80211-core-roles-sta` `machine` |
-| The Wi-Fi owner topology checked against a backend's service | `oer-ieee80211-core-extensions-esp-now` `configuration` |
-| Which frames a monitor keeps and the channels it visits | `oer-ieee80211-core-upper-mac` `monitor` |
-| Virtual-interface identities and ESP-NOW PHY requests | `oer-ieee80211-core-extensions-esp-now` `interface`, `extensions::espressif::phy` |
+| The retry plan of an MPDU and the rate control that chooses it | `oer-protocols-ieee80211-core-upper-mac` |
+| What a `BlockAckReport` acknowledges | `oer-protocols-ieee80211-core-upper-mac` `block_ack::acknowledges` |
+| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport`, the BlockAckReq, aging | the station's data machine and transmit agreements (`oer-protocols-ieee80211-core-roles-sta`); `oer-protocols-ieee80211-core-upper-mac` `ampdu` holds the vendor's per-aggregate machine |
+| RTS/CTS or CTS-to-self, the control-frame rate and the BSS basic rates | `oer-protocols-ieee80211-core-upper-mac` `protection` |
+| The retry counter a frame's class advances and the ladder step of its failures | `oer-protocols-ieee80211-core-upper-mac` `retry` |
+| The attempt budget of a management frame | `oer-protocols-ieee80211-core-upper-mac` `management` |
+| The PHY mode of an association | `oer-protocols-ieee80211-core-upper-mac` `phy_mode`, chosen by `oer-protocols-ieee80211-core-roles-sta` `association` |
+| Transmit packet-number allocation and receive replay | `oer-protocols-ieee80211-core-upper-mac` `ccmp` |
+| Receive Block Ack agreements and reordering | `oer-protocols-ieee80211-core-upper-mac` `block_ack::banks`, `block_ack::recipient`, `block_ack::reorder` |
+| The station's lifecycle, from its scan to its disconnect | `oer-protocols-ieee80211-core-roles-sta` `machine` |
+| The Wi-Fi owner topology checked against a backend's service | `oer-protocols-ieee80211-core-extensions-esp-now` `configuration` |
+| Which frames a monitor keeps and the channels it visits | `oer-protocols-ieee80211-core-upper-mac` `monitor` |
+| Virtual-interface identities and ESP-NOW PHY requests | `oer-protocols-ieee80211-core-extensions-esp-now` `interface`, `extensions::espressif::phy` |
 
 Limits, rate ladders and duration estimates in which implementations differ
 are parameters of those algorithms; the Espressif values recovered from the
 vendor stack, including the opaque rate-schedule records and the default
 contention of each access category, are the family package
-`oer-espressif-ieee80211-policy`.
+`oer-chips-family-ieee80211-policy`.
 
 ## Implementers
 
-The host model in `oer-ieee80211-testing-model` implements the phase with
+The host model in `oer-protocols-ieee80211-testing-model` implements the phase with
 composition-selected context types. It returns queued operations on gate
 close and normal disable, including queues held by the model air. On
 an ordinary fault it returns admitted terminals before `EventEnd::Drained`;
@@ -439,5 +439,5 @@ path takes a `MacTxPlan` from the S31 driver's `ordinary_tx`.
 ## Shared backend conformance
 
 The backend conformance suite is
-[`oer-ieee80211-testing-conformance`](../../testing/conformance/README.md);
+[`oer-protocols-ieee80211-testing-conformance`](../../testing/conformance/README.md);
 the port carries no test code of its own.

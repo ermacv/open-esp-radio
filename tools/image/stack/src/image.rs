@@ -1,14 +1,14 @@
 //! Functions, compiler frame records and value-analysis observations of one
 //! static RV32 image.
 use crate::TransferKind;
-use oer_analysis_riscv_analysis::{
+use oer_tools_analysis_riscv_analysis::{
     FunctionInput, JumpTableSource, KnownJump, PreparedReferences, research_following_tables,
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::Ledger;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::ProgramView;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::Ledger;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::ProgramView;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeMap;
 
 const SP: u8 = 2;
@@ -18,7 +18,7 @@ const SP: u8 = 2;
 mod tests;
 
 /// A defined code symbol and every alias at its address.
-pub use oer_analysis_elf::Function;
+pub use oer_tools_analysis_elf::Function;
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::new(ErrorCode::Integrity, message)
@@ -100,8 +100,9 @@ impl TableEntries for ReadOnlyTables<'_, '_> {
         memory: &'m WorkingMemory,
         control: &mut dyn RunControl,
     ) -> Result<Option<TableWords<'m>>> {
-        let Some(words) = oer_analysis_riscv_program::tables::ImageTables { image: self.image }
-            .entries(base, count, section, memory, control)?
+        let Some(words) =
+            oer_tools_analysis_riscv_program::tables::ImageTables { image: self.image }
+                .entries(base, count, section, memory, control)?
         else {
             return Ok(None);
         };
@@ -180,7 +181,7 @@ pub fn stack_sizes(
 
 /// The bytes of `function` in its section.
 pub(crate) fn function_bytes<'a>(
-    file: &oer_analysis_elf::Elf<'a>,
+    file: &oer_tools_analysis_elf::Elf<'a>,
     function: &Function,
 ) -> Result<&'a [u8]> {
     let section = file
@@ -273,7 +274,7 @@ impl OpenGraph {
         ledger: &mut Ledger<'_>,
         control: &mut dyn RunControl,
     ) -> Result<()> {
-        if oer_analysis_riscv_analysis::writes::closes_local_graph(record) {
+        if oer_tools_analysis_riscv_analysis::writes::closes_local_graph(record) {
             return Ok(());
         }
         let (site, eligible) = match record {
@@ -445,7 +446,7 @@ pub(crate) type Observe<'a> = dyn FnMut(
 pub(crate) fn observing<R>(
     image: &ImageFacts<'_>,
     call_behavior: &dyn CallBehavior,
-    traps: oer_analysis_riscv_analysis::TrapSemantics,
+    traps: oer_tools_analysis_riscv_analysis::TrapSemantics,
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
     body: impl FnOnce(&mut Observe<'_>, &mut dyn RunControl) -> Result<R>,

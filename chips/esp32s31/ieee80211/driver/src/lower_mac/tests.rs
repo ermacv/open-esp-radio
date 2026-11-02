@@ -1,4 +1,4 @@
-use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use core::{cell::RefCell, pin::Pin};
 use std::{boxed::Box, vec::Vec};
@@ -12,17 +12,17 @@ use crate::mac::{
         runtime::WifiTxRuntimePolicy,
     },
 };
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
     MacKeyInstallOutcome, MacLegacyTxProgram, MacLegacyTxResponse, MacStaApReceivePlan,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxProtection,
     MacTxQueueDetached,
 };
-use oer_ieee80211_contracts_port::MacRxMetadata;
-use oer_ieee80211_contracts_port::tsf::TsfInstant;
-use oer_ieee80211_contracts_port::{HardwareServices, PhyRate, RxEvidence};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_contracts_port::MacRxMetadata;
+use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_protocols_ieee80211_contracts_port::{HardwareServices, PhyRate, RxEvidence};
+use oer_protocols_ieee80211_wire::{
     channel::ChannelWidth,
     phy,
     phy::{FecCoding, HeGiLtf, LegacyRate, PpduBandwidth, SpatialStreams},
@@ -30,8 +30,8 @@ use oer_ieee80211_wire::{
     sequence::SequenceNumber,
 };
 
-use oer_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
-use oer_memory::{
+use oer_chips_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
+use oer_portable_memory::{
     DmaIndexReturn, PinnedDmaTxPool, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
 };
 
@@ -39,7 +39,7 @@ use super::*;
 use crate::ordinary_tx::{WifiTxPowerPair, WifiTxResources};
 use crate::station_tsf::StationTsfWrite;
 use crate::tx::WifiTxProgress;
-use oer_ieee80211_contracts_port::TSF_DRIFT_PPM;
+use oer_protocols_ieee80211_contracts_port::TSF_DRIFT_PPM;
 
 mod msdu_age;
 mod port;
@@ -66,8 +66,8 @@ const BE: usize = 2;
 #[derive(Debug, PartialEq)]
 enum CryptoOperation {
     Association(
-        oer_esp32s31_hal::types::MacInterface,
-        oer_esp32s31_hal::types::MacSppMode,
+        oer_chips_esp32s31_hal::types::MacInterface,
+        oer_chips_esp32s31_hal::types::MacSppMode,
     ),
     Install(u8),
     Remove(u8),
@@ -117,7 +117,7 @@ impl TxHardware for Hardware {
     fn prepare_bound_legacy_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
         let queue = queue.get() as u8;
@@ -129,14 +129,14 @@ impl TxHardware for Hardware {
     fn start_bound_legacy_tx(
         &mut self,
         _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         let queue = queue.get() as u8;
@@ -147,14 +147,14 @@ impl TxHardware for Hardware {
     fn start_bound_ht_tx(
         &mut self,
         _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHeTxProgram,
     ) -> bool {
         let queue = queue.get() as u8;
@@ -165,13 +165,13 @@ impl TxHardware for Hardware {
     fn start_bound_he_tx(
         &mut self,
         _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn take_tx_completion(
         &mut self,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacTxCompletionObservation> {
         let queue = queue.get() as u8;
         self.completion[usize::from(queue)].take()
@@ -179,13 +179,16 @@ impl TxHardware for Hardware {
 
     fn take_block_ack_completion(
         &mut self,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacHtAmpduCompletionObservation> {
         let queue = queue.get() as u8;
         self.block_ack_completion[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(
+        &mut self,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> bool {
         let queue = queue.get() as u8;
         if !self.timeout_pending[usize::from(queue)] {
             return false;
@@ -197,7 +200,7 @@ impl TxHardware for Hardware {
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         expected_descriptor_head: u32,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -245,8 +248,8 @@ impl HtAmpduHardware for Hardware {
 impl CcmpKeyHardware for Hardware {
     fn configure_ccmp_association(
         &mut self,
-        interface: oer_esp32s31_hal::types::MacInterface,
-        mode: oer_esp32s31_hal::types::MacSppMode,
+        interface: oer_chips_esp32s31_hal::types::MacInterface,
+        mode: oer_chips_esp32s31_hal::types::MacSppMode,
     ) {
         self.crypto_order
             .push(CryptoOperation::Association(interface, mode));
@@ -472,12 +475,12 @@ impl WifiTxPowerProfile for Power {
     }
 }
 
-type Timer = oer_time_virtual::SkipClock;
+type Timer = oer_portable_time_virtual::SkipClock;
 
 /// The instant `micros` past the test clock's start.
-fn at(micros: u64) -> oer_time::Instant {
-    oer_time_virtual::START
-        .checked_add(oer_time::Duration::from_micros(micros))
+fn at(micros: u64) -> oer_portable_time::Instant {
+    oer_portable_time_virtual::START
+        .checked_add(oer_portable_time::Duration::from_micros(micros))
         .unwrap()
 }
 
@@ -508,8 +511,9 @@ impl<'id> TestAssociations<'id> {
         let (ap_start, ap_bank) = access_point.into_parts();
         let (ap_pairwise, ap_group) = ap_bank.into_parts();
         Self {
-            station: start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated),
-            access_point: ap_start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated),
+            station: start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated),
+            access_point: ap_start
+                .begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated),
             sta_pairwise: Some(pairwise),
             sta_group: Some(group),
             ap_pairwise: ap_pairwise.map(Some),
@@ -606,7 +610,7 @@ impl<'core> Core<'core> {
     fn install_receive_key(
         &mut self,
         hardware: &mut Hardware,
-        id: oer_ieee80211_wire::ccmp::GroupKeyId,
+        id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
         material: &[u8; 16],
     ) -> Result<ReceiveKeyHandle<'core>, LowerMacFault> {
         let slot = self.associations.sta_group.take().unwrap();
@@ -666,9 +670,10 @@ impl<'core> Core<'core> {
         let ticket = self.take_ticket();
         let key_use = self.inner.admit_key(key, ticket).ok().expect("TX key");
         let frame = &mut request.slot.buffer_mut().unwrap()[TX_METADATA_SIZE..];
-        let control =
-            oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
-                .unwrap();
+        let control = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+            frame[0], frame[1],
+        ]))
+        .unwrap();
         frame[..2].copy_from_slice(&control.with_protected(true).get().to_le_bytes());
         self.inner.submit_checked(
             hardware,
@@ -768,9 +773,9 @@ fn installed<R>(body: impl for<'core> FnOnce(CoreResources<'core>) -> R) -> R {
         future::Future,
         task::{Context, Poll, Waker},
     };
-    let mut future = core::pin::pin!(oer_radio_port::branded::<CorePools, _>(async |mint| {
-        body(mint.into_pools())
-    }));
+    let mut future = core::pin::pin!(oer_protocols_radio_port::branded::<CorePools, _>(
+        async |mint| { body(mint.into_pools()) }
+    ));
     match future
         .as_mut()
         .poll(&mut Context::from_waker(Waker::noop()))
@@ -890,7 +895,7 @@ fn core(resources: CoreResources<'_>) -> Core<'_> {
             LowerMacConfig {
                 station_address: STATION,
                 channel: channel(6),
-                publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+                publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
                 tsf_epoch: 1,
             },
             &RadioNine,
@@ -956,7 +961,7 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
             access_category: WmmAccessCategory::BestEffort,
             initial_rate: TxPhyRate::try_from(OFDM24).unwrap(),
             publication_limit: 1,
-            publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+            publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
         },
         hardware_mic_length: 0,
         hardware_key_selector: 0,
@@ -989,7 +994,7 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
         panic!("a published transaction lends only its active phase");
     };
     let color = crate::mac::irq::event_mask(
-        oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
+        oer_chips_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
     );
     assert_eq!(
         active.service(&mut hardware, interrupt(color)).unwrap(),
@@ -1050,14 +1055,14 @@ enum ManagementObservation {
 /// inspecting semantic HAL publications rather than register images.
 fn check_management_transmissions(
     receiver: [u8; 6],
-    management: oer_ieee80211_contracts_port::ManagementTxPlan,
+    management: oer_protocols_ieee80211_contracts_port::ManagementTxPlan,
     completions: &[ManagementObservation],
 ) {
     use crate::ordinary_tx::{OrdinaryTxAccess, OrdinaryTxInterface, OrdinaryTxRetryReport};
     use ManagementObservation::*;
-    use oer_esp32s31_hal::types::MacLegacyRate as ChipLegacyRate;
-    use oer_ieee80211_contracts_port::backend::RetryCounters;
-    use oer_ieee80211_wire::frame::FrameControl;
+    use oer_chips_esp32s31_hal::types::MacLegacyRate as ChipLegacyRate;
+    use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
+    use oer_protocols_ieee80211_wire::frame::FrameControl;
 
     let mut owner = OrdinaryTxOwner::new(WifiTxResources {
         slot: slot(),
@@ -1079,7 +1084,7 @@ fn check_management_transmissions(
             // The management plan must replace both caller values.
             initial_rate: TxPhyRate::Legacy(ChipLegacyRate::Ofdm54M),
             publication_limit: 32,
-            publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+            publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
         },
         hardware_mic_length: 0,
         hardware_key_selector: 0,
@@ -1241,13 +1246,13 @@ fn management_unicast_keeps_its_rate_for_seven_attempts() {
         ] {
             check_management_transmissions(
                 PEER,
-                oer_ieee80211_core_upper_mac::management::unicast(rate),
+                oer_protocols_ieee80211_core_upper_mac::management::unicast(rate),
                 &failures,
             );
         }
         check_management_transmissions(
             PEER,
-            oer_ieee80211_core_upper_mac::management::unicast(rate),
+            oer_protocols_ieee80211_core_upper_mac::management::unicast(rate),
             &[Delivered],
         );
     }
@@ -1268,7 +1273,7 @@ fn management_retries_preserve_retry_bit_counters_and_reset_edca_at_success_or_t
     ] {
         check_management_transmissions(
             PEER,
-            oer_ieee80211_core_upper_mac::management::unicast(LegacyRate::Ofdm12M),
+            oer_protocols_ieee80211_core_upper_mac::management::unicast(LegacyRate::Ofdm12M),
             observations,
         );
     }
@@ -1288,7 +1293,7 @@ fn management_broadcast_never_retries() {
         ] {
             check_management_transmissions(
                 [0xff; 6],
-                oer_ieee80211_core_upper_mac::management::broadcast(rate),
+                oer_protocols_ieee80211_core_upper_mac::management::broadcast(rate),
                 &[completion],
             );
         }
@@ -1642,7 +1647,7 @@ fn completion_faults_return_the_existing_backend_fault_without_a_tx_terminal() {
 #[test]
 fn a_transmission_the_plan_sends_again_carries_the_retry_bit() {
     installed(|pools| {
-        use oer_ieee80211_wire::frame::FrameControl;
+        use oer_protocols_ieee80211_wire::frame::FrameControl;
 
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -1708,7 +1713,7 @@ fn bss_color_only_interrupt_never_detaches_a_published_queue() {
     installed(|pools| {
         use crate::mac::irq::event_mask;
         use WmmAccessCategory::{Background, BestEffort, Video, Voice};
-        use oer_esp32s31_hal::types::MacInterruptEvents;
+        use oer_chips_esp32s31_hal::types::MacInterruptEvents;
 
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -1771,7 +1776,7 @@ fn a_hardware_timeout_ends_the_publication_with_an_unknown_result() {
         let settle = core.next_deadline().unwrap();
         core.tx
             .timer
-            .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
+            .advance_to(oer_portable_time::Instant::from_micros(settle.as_micros()));
         core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
             .unwrap();
         assert_eq!(events.completions.len(), 1);
@@ -2336,7 +2341,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
         let group = core
             .install_receive_key(
                 &mut hardware,
-                oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+                oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
                 &KEY,
             )
             .unwrap();
@@ -2348,18 +2353,19 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
                     &pairwise,
                     queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                     26,
-                    oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(expected).unwrap()
+                    oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(expected).unwrap()
                 ),
                 Ok(())
             );
             let header = &queued_free_slot(slot.as_mut()).into_buffer().unwrap()
                 [TX_METADATA_SIZE + 26..][..8];
             let header =
-                oer_ieee80211_wire::ccmp::CcmpHeader::parse(header.try_into().unwrap()).unwrap();
+                oer_protocols_ieee80211_wire::ccmp::CcmpHeader::parse(header.try_into().unwrap())
+                    .unwrap();
             assert_eq!(header.packet_number().value(), expected);
             assert_eq!(
                 header.key_id(),
-                oer_ieee80211_wire::ccmp::CcmpKeyId::PAIRWISE
+                oer_protocols_ieee80211_wire::ccmp::CcmpKeyId::PAIRWISE
             );
         }
         // A receive-only key has no admitted TX rights to delay its removal.
@@ -2407,7 +2413,7 @@ fn reserved_slot_carries_no_numbering_authority_and_retains_the_packet_number() 
                 &key,
                 queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                 26,
-                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
+                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
             ),
             Ok(())
         );
@@ -2449,7 +2455,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
                     &key,
                     queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                     header_len,
-                    oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
+                    oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap()
                 ),
                 Err(CcmpHeaderWriteError::InsufficientSpace)
             );
@@ -2463,7 +2469,7 @@ fn supplied_packet_number_is_written_only_when_the_complete_header_fits() {
                 &key,
                 queued_free_slot(slot.as_mut()).into_buffer().unwrap(),
                 last_header_len,
-                oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap(),
+                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(3).unwrap(),
             ),
             Ok(())
         );
@@ -2638,7 +2644,8 @@ fn a_closed_gate_blocks_the_queues_and_holds_the_attempt_until_it_opens() {
         assert_eq!(
             core.next_deadline(),
             Some(at(
-                oer_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME
+                    .as_micros()
             ))
         );
         let mut core = core.open_gate(&mut hardware).unwrap();
@@ -2759,7 +2766,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
 
         core.tx
             .timer
-            .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
+            .advance_to(oer_portable_time::Instant::from_micros(settle.as_micros()));
         assert_eq!(
             service(&mut core, &mut hardware, WifiTxWake::Deadline),
             [Voice]
@@ -2770,7 +2777,7 @@ fn a_collision_or_timeout_on_one_queue_leaves_the_others_published() {
         assert_eq!(settle, at(32));
         core.tx
             .timer
-            .advance_to(oer_time::Instant::from_micros(settle.as_micros()));
+            .advance_to(oer_portable_time::Instant::from_micros(settle.as_micros()));
         assert_eq!(
             service(&mut core, &mut hardware, WifiTxWake::Deadline),
             [Video]
@@ -2795,7 +2802,8 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
         assert_eq!(
             core.next_deadline(),
             Some(at(
-                oer_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME
+                    .as_micros()
             ))
         );
 
@@ -2811,9 +2819,9 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
 /// carry: what the core's own policy then refuses.
 enum WideEdca {}
 
-impl oer_ieee80211_contracts_port::Ieee80211Capabilities for WideEdca {
-    type SppScope = oer_ieee80211_wire::security::spp::Association;
-    const CAPS: oer_ieee80211_contracts_port::LowerMacCapabilities = {
+impl oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities for WideEdca {
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
+    const CAPS: oer_protocols_ieee80211_contracts_port::LowerMacCapabilities = {
         let mut caps = esp32s31_lower_mac_capabilities(BACKING);
         caps.edca_max_cw_exponent = 15;
         caps
@@ -2821,32 +2829,32 @@ impl oer_ieee80211_contracts_port::Ieee80211Capabilities for WideEdca {
 }
 
 fn edca(
-    parameters: oer_ieee80211_wire::extensions::wmm::WmmParameterSet,
-) -> oer_ieee80211_contracts_port::SupportedEdca<WideEdca> {
-    oer_ieee80211_contracts_port::SupportedEdca::new(
-        oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(parameters),
+    parameters: oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet,
+) -> oer_protocols_ieee80211_contracts_port::SupportedEdca<WideEdca> {
+    oer_protocols_ieee80211_contracts_port::SupportedEdca::new(
+        oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(parameters),
     )
     .unwrap()
 }
 
 fn wmm_with_best_effort_txop(
     txop_units_32_us: u16,
-) -> oer_ieee80211_contracts_port::SupportedEdca<WideEdca> {
+) -> oer_protocols_ieee80211_contracts_port::SupportedEdca<WideEdca> {
     edca(wmm_set_with_best_effort_txop(txop_units_32_us))
 }
 
 fn wmm_set_with_best_effort_txop(
     txop_units_32_us: u16,
-) -> oer_ieee80211_wire::extensions::wmm::WmmParameterSet {
-    use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
+) -> oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet {
+    use oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters;
     let category = |aifsn, txop| WmmAcParameters {
         admission_control_mandatory: false,
-        aifsn: oer_wire::U8::new(aifsn).unwrap(),
-        ecw_min: oer_wire::U8::constant::<4>(),
-        ecw_max: oer_wire::U8::constant::<10>(),
+        aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
+        ecw_min: oer_portable_wire::U8::constant::<4>(),
+        ecw_max: oer_portable_wire::U8::constant::<10>(),
         txop_limit_units_32_us: txop,
     };
-    oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
+    oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
         0,
         false,
         [
@@ -2898,7 +2906,9 @@ fn the_station_s_he_bss_color_is_installed() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        core.set_checked_he_bss_color(oer_ieee80211_contracts_port::BssColor::new(63).unwrap());
+        core.set_checked_he_bss_color(
+            oer_protocols_ieee80211_contracts_port::BssColor::new(63).unwrap(),
+        );
         assert_eq!(core.tx.policy().he_bss_color(), 63);
     });
 }
@@ -3038,14 +3048,15 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
         core.set_checked_edca(VifRole::Station, wmm_with_best_effort_txop(94))
             .unwrap();
         // A best-effort ECWmax of 11 lies outside the hardware's exponents.
-        let record = |aifsn, ecw_max| oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
-            admission_control_mandatory: false,
-            aifsn: oer_wire::U8::new(aifsn).unwrap(),
-            ecw_min: oer_wire::U8::constant::<4>(),
-            ecw_max: oer_wire::U8::new(ecw_max).unwrap(),
-            txop_limit_units_32_us: 47,
-        };
-        let outside = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
+        let record =
+            |aifsn, ecw_max| oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters {
+                admission_control_mandatory: false,
+                aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
+                ecw_min: oer_portable_wire::U8::constant::<4>(),
+                ecw_max: oer_portable_wire::U8::new(ecw_max).unwrap(),
+                txop_limit_units_32_us: 47,
+            };
+        let outside = oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
             false,
             [record(3, 11), record(7, 10), record(2, 10), record(2, 10)],
@@ -3089,12 +3100,12 @@ fn each_interface_contends_with_its_own_edca_set() {
         assert_eq!(txop(core.tx.policy(), VifRole::AccessPoint), 47);
         // A refused set of one interface leaves the other's.
         let mut refused = wmm_set_with_best_effort_txop(0);
-        refused = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
+        refused = oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
             false,
             [
-                oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
-                    ecw_max: oer_wire::U8::constant::<11>(),
+                oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters {
+                    ecw_max: oer_portable_wire::U8::constant::<11>(),
                     ..refused.access_category(WmmAccessCategory::BestEffort)
                 },
                 refused.access_category(WmmAccessCategory::Background),
@@ -3148,7 +3159,7 @@ impl Backings {
     fn backing(&self) -> Option<Backing> {
         let index = self.free.0.borrow_mut().pop()?;
         self.pool.claim_network(index).unwrap().publish(
-            oer_memory::FrameLen::new(BACKING).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(BACKING).expect("test frame length"),
             |_| (),
         );
         Some(ReturningStableDmaBacking::new(
@@ -3185,7 +3196,7 @@ trait PushFrom {
         &mut self,
         source: &Backings,
         len: usize,
-        admitted_at: oer_time::Instant,
+        admitted_at: oer_portable_time::Instant,
     ) -> Option<&mut [u8]>;
 }
 
@@ -3194,7 +3205,7 @@ impl PushFrom for Aggregate {
         &mut self,
         source: &Backings,
         len: usize,
-        admitted_at: oer_time::Instant,
+        admitted_at: oer_portable_time::Instant,
     ) -> Option<&mut [u8]> {
         // A refused backing drops and returns to its source.
         self.push_backing(source.backing()?, len, admitted_at).ok()
@@ -3271,7 +3282,7 @@ fn publish_ampdu<'core>(
         buffer,
         plan,
         core.now(),
-        oer_time::Duration::from_micros(TIMEOUT),
+        oer_portable_time::Duration::from_micros(TIMEOUT),
     )
     .unwrap())
 }
@@ -3287,7 +3298,7 @@ fn serve_ampdu<'core, 'slot, B: PlacedBacking, const SLOTS: usize>(
     mut published: PublishedAmpdu<'core, 'slot, B, SLOTS>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
-    now: oer_time::Instant,
+    now: oer_portable_time::Instant,
     returned: impl FnMut(B),
 ) -> Result<AmpduProgress<'core, 'slot, B, SLOTS>, ampdu::AmpduFault<'core, 'slot, B, SLOTS>> {
     let served = ampdu::service(
@@ -3525,7 +3536,7 @@ fn aggregate_collision_comes_from_its_queue_and_never_from_bss_color() {
         let published =
             publish_ampdu(&mut core, &mut hardware, buffer, ampdu_values(ht_rate(7))).unwrap();
         let color = crate::mac::irq::event_mask(
-            oer_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
+            oer_chips_esp32s31_hal::types::MacInterruptEvents::BSS_COLOR_COLLISION,
         );
         let published = match serve_ampdu(
             &mut hardware,
@@ -3578,7 +3589,9 @@ fn he_aggregates_publish_an_he_program_with_the_station_bss_color() {
                 .formats
                 .contains_rate(he_rate())
         );
-        core.set_checked_he_bss_color(oer_ieee80211_contracts_port::BssColor::new(0x2a).unwrap());
+        core.set_checked_he_bss_color(
+            oer_protocols_ieee80211_contracts_port::BssColor::new(0x2a).unwrap(),
+        );
 
         let mut buffer = aggregate_of(source, 3, 26);
         let plan = core
@@ -3596,7 +3609,7 @@ fn he_aggregates_publish_an_he_program_with_the_station_bss_color() {
             buffer,
             plan,
             core.now(),
-            oer_time::Duration::from_micros(TIMEOUT),
+            oer_portable_time::Duration::from_micros(TIMEOUT),
         )
         .unwrap();
         assert_eq!(hardware.he.len(), 1);
@@ -4080,10 +4093,11 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             for _ in 0..2 {
                 let frame = buffer.push_from(source, 26, at(0)).unwrap();
                 frame.copy_from_slice(&data_frame(BSSID));
-                let fc = oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
-                    frame[0], frame[1],
-                ]))
-                .unwrap();
+                let fc =
+                    oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+                        frame[0], frame[1],
+                    ]))
+                    .unwrap();
                 frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
             }
             let plan = core
@@ -4095,7 +4109,7 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
                 buffer,
                 plan,
                 core.now(),
-                oer_time::Duration::from_micros(TIMEOUT),
+                oer_portable_time::Duration::from_micros(TIMEOUT),
             )
             .unwrap();
             let mut events = Events::default();
@@ -4308,9 +4322,10 @@ fn a_protected_wire_frame_cannot_publish_with_an_open_ticket() {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         let mut frame = data_frame(BSSID);
-        let fc =
-            oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
-                .unwrap();
+        let fc = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+            frame[0], frame[1],
+        ]))
+        .unwrap();
         frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
         let refused = core
             .submit_checked(&mut hardware, values(&frame, false))
@@ -4333,66 +4348,69 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
         future::Future,
         task::{Context, Poll, Waker},
     };
-    let mut future = core::pin::pin!(oer_radio_port::branded::<CorePools<256>, _>(async |mint| {
-        let resources = mint.into_pools();
-        let mut owner = LowerMacCore::new(
-            resources.authority,
-            OrdinaryTxOwner::new(WifiTxResources {
-                slot: slot(),
-                policy: WifiTxRuntimePolicy::vendor_defaults(),
-                power: Power,
-                entropy: entropy as fn() -> u32,
-                timer: Timer::default(),
-            })
-            .into_idle()
-            .ok()
-            .expect("fresh core transmitter is idle"),
-            LowerMacConfig {
-                station_address: STATION,
-                channel: channel(6),
-                publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
-                tsf_epoch: 1,
-            },
-            &RadioNine,
-        );
-        let CoreView::Disabled(mut core) = owner.view() else {
-            panic!("fresh owner is disabled")
-        };
-        let (start, bank) = resources.station_association.into_parts();
-        let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
-        let ([slot], [_group]) = bank.into_parts();
-        let mut hardware = Hardware::default();
-        let key = core
-            .install_checked_key(
-                &mut hardware,
-                association::TransmitKeyInstallation::StationPairwise {
-                    association: &association,
-                    slot,
-                    peer: BSSID,
-                },
-                &[0x6b; 16],
-            )
-            .unwrap();
-        let index = key.index;
-        let mut rights = resources
-            .tickets
-            .map(|ticket| core.admit_key(&key, ticket).ok().unwrap());
-        assert_eq!(core.keys.uses[index].get(), 256);
-        let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
-        assert!(hardware.cleared_keys.is_empty());
-        rights.reverse();
-        for (ordinal, right) in rights.into_iter().enumerate() {
-            let ticket = core
-                .return_admission(&mut hardware, TxAdmission::Protected(right), &mut events)
+    let mut future = core::pin::pin!(oer_protocols_radio_port::branded::<CorePools<256>, _>(
+        async |mint| {
+            let resources = mint.into_pools();
+            let mut owner = LowerMacCore::new(
+                resources.authority,
+                OrdinaryTxOwner::new(WifiTxResources {
+                    slot: slot(),
+                    policy: WifiTxRuntimePolicy::vendor_defaults(),
+                    power: Power,
+                    entropy: entropy as fn() -> u32,
+                    timer: Timer::default(),
+                })
+                .into_idle()
                 .ok()
+                .expect("fresh core transmitter is idle"),
+                LowerMacConfig {
+                    station_address: STATION,
+                    channel: channel(6),
+                    publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
+                    tsf_epoch: 1,
+                },
+                &RadioNine,
+            );
+            let CoreView::Disabled(mut core) = owner.view() else {
+                panic!("fresh owner is disabled")
+            };
+            let (start, bank) = resources.station_association.into_parts();
+            let association =
+                start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+            let ([slot], [_group]) = bank.into_parts();
+            let mut hardware = Hardware::default();
+            let key = core
+                .install_checked_key(
+                    &mut hardware,
+                    association::TransmitKeyInstallation::StationPairwise {
+                        association: &association,
+                        slot,
+                        peer: BSSID,
+                    },
+                    &[0x6b; 16],
+                )
                 .unwrap();
-            assert_eq!(ticket.index(), 255 - ordinal);
-            assert_eq!(core.keys.uses[index].get() as usize, 255 - ordinal);
-            assert_eq!(events.removed.len(), usize::from(ordinal == 255));
+            let index = key.index;
+            let mut rights = resources
+                .tickets
+                .map(|ticket| core.admit_key(&key, ticket).ok().unwrap());
+            assert_eq!(core.keys.uses[index].get(), 256);
+            let mut events = Events::default();
+            core.remove_checked_key(&mut hardware, key, &mut events);
+            assert!(hardware.cleared_keys.is_empty());
+            rights.reverse();
+            for (ordinal, right) in rights.into_iter().enumerate() {
+                let ticket = core
+                    .return_admission(&mut hardware, TxAdmission::Protected(right), &mut events)
+                    .ok()
+                    .unwrap();
+                assert_eq!(ticket.index(), 255 - ordinal);
+                assert_eq!(core.keys.uses[index].get() as usize, 255 - ordinal);
+                assert_eq!(events.removed.len(), usize::from(ordinal == 255));
+            }
+            assert_eq!(hardware.cleared_keys, [4]);
         }
-        assert_eq!(hardware.cleared_keys, [4]);
-    }));
+    ));
     assert!(matches!(
         future
             .as_mut()
@@ -4503,9 +4521,9 @@ fn closed_gate_survives_disable_retune_and_enable_without_publishing() {
 #[test]
 fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
     use association::{TransmitKeyInstallation, VacantKeySlot};
-    use oer_esp32s31_hal::types::{MacInterface, MacSppMode};
-    use oer_ieee80211_contracts_port::association::{VacantKeyBank, end_association};
-    use oer_ieee80211_wire::security::Spp;
+    use oer_chips_esp32s31_hal::types::{MacInterface, MacSppMode};
+    use oer_protocols_ieee80211_contracts_port::association::{VacantKeyBank, end_association};
+    use oer_protocols_ieee80211_wire::security::Spp;
     installed(|resources| {
         let Core {
             mut inner,
@@ -4540,7 +4558,7 @@ fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
                 &mut hardware,
                 &association,
                 group,
-                oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+                oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
                 &[2; 16],
             )
             .unwrap();
@@ -4633,7 +4651,7 @@ fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
                 HtChannelWidth::Mhz20,
             )),
             publication_limit: 1,
-            publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+            publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
         },
         hardware_mic_length: 0,
         hardware_key_selector: 0,
@@ -4660,8 +4678,8 @@ fn an_irq_legacy_transmitter_refuses_ht_before_reserving_or_publishing_dma() {
 
 #[test]
 fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
-    use oer_ieee80211_contracts_port::EdcaParameterSet;
-    use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+    use oer_protocols_ieee80211_contracts_port::EdcaParameterSet;
+    use oer_protocols_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -4674,21 +4692,23 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
                     false,
                     [WmmAcParameters {
                         admission_control_mandatory: false,
-                        aifsn: oer_wire::U8::new(aifsn).unwrap(),
-                        ecw_min: oer_wire::U8::new(min).unwrap(),
-                        ecw_max: oer_wire::U8::new(max).unwrap(),
+                        aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
+                        ecw_min: oer_portable_wire::U8::new(min).unwrap(),
+                        ecw_max: oer_portable_wire::U8::new(max).unwrap(),
                         txop_limit_units_32_us: txop,
                     }; 4],
                 ),
                 [lifetime; 4],
             )
         };
-        let station =
-            oer_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(3, 4, 6, 94, 500))
-                .unwrap();
-        let ap =
-            oer_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(7, 2, 3, 350, 100))
-                .unwrap();
+        let station = oer_protocols_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(
+            table(3, 4, 6, 94, 500),
+        )
+        .unwrap();
+        let ap = oer_protocols_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(
+            7, 2, 3, 350, 100,
+        ))
+        .unwrap();
         core.set_checked_edca(VifRole::Station, station).unwrap();
         core.set_checked_edca(VifRole::AccessPoint, ap).unwrap();
         for role in [VifRole::Station, VifRole::AccessPoint, VifRole::Station] {
@@ -4728,7 +4748,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
 #[test]
 fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_rollback() {
     use crate::mac::crypto::StaGroupCcmpReplaceError;
-    use oer_ieee80211_wire::ccmp::GroupKeyId;
+    use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
     for rejected in 0..=2 {
         installed(|resources| {
             let mut core = core(resources);

@@ -88,20 +88,20 @@
 //! the install's resources.
 //!
 //! ```compile_fail,E0432
-//! use oer_ieee80211_contracts_port::GatePlace;
+//! use oer_protocols_ieee80211_contracts_port::GatePlace;
 //! ```
 //!
 //! Nor copies one:
 //!
 //! ```compile_fail,E0382
-//! # use oer_ieee80211_contracts_port::GateOpen;
+//! # use oer_protocols_ieee80211_contracts_port::GateOpen;
 //! fn twice<'id>(gate: GateOpen<'id>) -> (GateOpen<'id>, GateOpen<'id>) {
 //!     (gate, gate)
 //! }
 //! ```
 //!
 //! ```compile_fail,E0599
-//! # use oer_radio_port::Slot;
+//! # use oer_protocols_radio_port::Slot;
 //! fn copy<'id, K>(ticket: &Slot<'id, K>) -> Slot<'id, K> {
 //!     ticket.clone()
 //! }
@@ -110,7 +110,7 @@
 //! Its compiling twin moves the token on, as an operation takes it:
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::{GateClosed, GateOpen, LowerMacPhase, PhaseTypes};
+//! # use oer_protocols_ieee80211_contracts_port::{GateClosed, GateOpen, LowerMacPhase, PhaseTypes};
 //! fn close<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
 //!     phase.close_gate(gate);
 //! }
@@ -122,7 +122,7 @@
 //! The open gate does not open a gate, nor the closed one close it:
 //!
 //! ```compile_fail,E0308
-//! # use oer_ieee80211_contracts_port::{GateOpen, LowerMacPhase, PhaseTypes};
+//! # use oer_protocols_ieee80211_contracts_port::{GateOpen, LowerMacPhase, PhaseTypes};
 //! fn reopen<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
 //!     let _ = phase.open_gate(gate);
 //! }
@@ -132,7 +132,7 @@
 //! fields no caller sets:
 //!
 //! ```compile_fail,E0451
-//! # use oer_ieee80211_contracts_port::{ClassFrame, TxFrame};
+//! # use oer_protocols_ieee80211_contracts_port::{ClassFrame, TxFrame};
 //! fn forge<'p, 'id, C, K>(frame: TxFrame<'p, 'id, K>) -> ClassFrame<'p, 'id, C, K> {
 //!     ClassFrame { frame, class: core::marker::PhantomData }
 //! }
@@ -141,7 +141,7 @@
 //! Its compiling twin checks the frame against the class:
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::{ClassFrame, Ieee80211Capabilities, TxBufferClass, TxFrame};
+//! # use oer_protocols_ieee80211_contracts_port::{ClassFrame, Ieee80211Capabilities, TxBufferClass, TxFrame};
 //! fn fit<'p, 'id, C: TxBufferClass, K: Ieee80211Capabilities>(
 //!     frame: TxFrame<'p, 'id, K>,
 //! ) -> Result<ClassFrame<'p, 'id, C, K>, TxFrame<'p, 'id, K>> {
@@ -152,7 +152,7 @@
 //! An attempt moves its context, ticket and buffer once:
 //!
 //! ```compile_fail,E0382
-//! # use oer_ieee80211_contracts_port::*;
+//! # use oer_protocols_ieee80211_contracts_port::*;
 //! fn twice<'p, 'id: 'p, I>(interface: &mut I, attempt: InterfaceAttempt<'_, 'p, 'id, I>)
 //! where I: InterfacePhase<'p, 'id> {
 //!     let _ = interface.submit(attempt.admit());
@@ -163,7 +163,7 @@
 //! Its compiling twin moves each operation once, with no `Clone` bound:
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::*;
+//! # use oer_protocols_ieee80211_contracts_port::*;
 //! fn one<'p, 'id: 'p, I>(interface: &mut I, attempt: InterfaceAttempt<'_, 'p, 'id, I>)
 //! where I: InterfacePhase<'p, 'id> {
 //!     let _ = interface.submit(attempt.admit());
@@ -173,7 +173,7 @@
 //! A frame checked on one phase cannot be submitted on an unrelated one:
 //!
 //! ```compile_fail
-//! # use oer_ieee80211_contracts_port::*;
+//! # use oer_protocols_ieee80211_contracts_port::*;
 //! fn another_phase<'p, 'q, 'id: 'p + 'q, I, J>(
 //!     interface: &mut J, attempt: InterfaceAttempt<'_, 'p, 'id, I>,
 //! ) where
@@ -187,7 +187,7 @@
 //! # Event stream end
 //!
 //! A command's [`Poisoned`] result closes admission; earlier terminals may
-//! still be waiting. `next_event` ends with [`oer_radio_port::EventEnd`]:
+//! still be waiting. `next_event` ends with [`oer_protocols_radio_port::EventEnd`]:
 //! `Drained` promises every admitted terminal was returned, while `Quarantined`
 //! retains undelivered owners in the common lifecycle's permanent quarantine.
 //! The body checks its outstanding identities before accepting `Drained`.
@@ -195,10 +195,10 @@
 //! drain. Subsequent event calls, including through a new phase loan, return
 //! the same end and cause. Dropping a quarantine receipt releases no owners.
 
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_wire::ccmp::GroupKeyId;
-use oer_radio_port::PortPhase;
-use oer_radio_port::{Poisoned, PoolPath, Root, Slot};
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
+use oer_protocols_radio_port::PortPhase;
+use oer_protocols_radio_port::{Poisoned, PoolPath, Root, Slot};
 
 use crate::{
     Channel, PhyRate, Protection, TbttEvent, TxOperation,
@@ -208,41 +208,41 @@ use crate::{
         SupportedPower, TxFrame,
     },
 };
-use oer_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
 
 enum GateKind {}
 
 /// The gate component of a lower-MAC backend's pool set.
 ///
 /// The backend receives its open gate and issuer together when its one
-/// [`oer_radio_port::Mint`] is consumed. The unique place remains private.
+/// [`oer_protocols_radio_port::Mint`] is consumed. The unique place remains private.
 ///
 /// ```compile_fail,E0432
-/// use oer_ieee80211_contracts_port::GatePlace;
+/// use oer_protocols_ieee80211_contracts_port::GatePlace;
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{GateIssuer, GateOpen, GatePool};
-/// use oer_radio_port::Mint;
+/// use oer_protocols_ieee80211_contracts_port::{GateIssuer, GateOpen, GatePool};
+/// use oer_protocols_radio_port::Mint;
 /// fn gate<'id>(mint: Mint<'id, GatePool>) -> (GateOpen<'id>, GateIssuer<'id>) {
 ///     mint.into_pools()
 /// }
 /// ```
 pub struct GatePool;
 
-impl oer_radio_port::PoolSet for GatePool {
+impl oer_protocols_radio_port::PoolSet for GatePool {
     type Pools<'id, Path: PoolPath> = (GateOpen<'id, Path>, GateIssuer<'id, Path>);
 
     fn build<'id, Path: PoolPath>(
-        builder: oer_radio_port::PoolBuilder<'id, Path>,
+        builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
-        GatePlace::mint(builder.into_pools::<oer_radio_port::Slots<GateKind, 1>>())
+        GatePlace::mint(builder.into_pools::<oer_protocols_radio_port::Slots<GateKind, 1>>())
     }
 }
 
 /// The install's unique gate place, held inside exactly one gate state.
 #[must_use = "the unique gate place stays in one gate state"]
-struct GatePlace<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+struct GatePlace<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     slot: Slot<'id, GateKind, Path>,
 }
 
@@ -272,7 +272,7 @@ impl<Path: PoolPath> core::fmt::Debug for GatePlace<'_, Path> {
 /// The open transmit gate. Closing transfers its unique place to the backend.
 #[derive(Debug)]
 #[must_use = "close_gate consumes the open gate and returns its closed evidence"]
-pub struct GateOpen<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct GateOpen<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     place: GatePlace<'id, Path>,
 }
 
@@ -280,14 +280,14 @@ pub struct GateOpen<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
 /// Only the retained backend issuer constructs this state after its barrier.
 ///
 /// ```compile_fail,E0616
-/// # use oer_ieee80211_contracts_port::{GateClosed, GateOpen};
+/// # use oer_protocols_ieee80211_contracts_port::{GateClosed, GateOpen};
 /// fn forge<'id>(gate: GateOpen<'id>) -> GateClosed<'id> {
 ///     GateClosed { place: gate.place }
 /// }
 /// ```
 #[derive(Debug)]
 #[must_use = "open_gate consumes the closed evidence and returns the open gate"]
-pub struct GateClosed<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct GateClosed<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     place: GatePlace<'id, Path>,
 }
 
@@ -300,7 +300,7 @@ pub struct GateClosed<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> 
 /// transition still consumes the installation's one affine gate place.
 ///
 /// ```compile_fail,E0382
-/// # use oer_ieee80211_contracts_port::{GateClosed, GateIssuer, GateOpen};
+/// # use oer_protocols_ieee80211_contracts_port::{GateClosed, GateIssuer, GateOpen};
 /// fn both<'id>(issuer: &mut GateIssuer<'id>, gate: GateOpen<'id>)
 ///     -> (GateOpen<'id>, GateClosed<'id>)
 /// {
@@ -309,7 +309,7 @@ pub struct GateClosed<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> 
 /// }
 /// ```
 #[must_use = "the backend retains the issuer for the whole install"]
-pub struct GateIssuer<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct GateIssuer<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     brand: core::marker::PhantomData<fn(&'id (), Path) -> &'id ()>,
 }
 
@@ -327,9 +327,9 @@ impl<'id, Path: PoolPath> GateIssuer<'id, Path> {
 
 impl<Path: PoolPath> GateOpen<'static, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
         self,
-        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateOpen<'p, Path> {
         GateOpen {
             place: GatePlace {
@@ -341,9 +341,9 @@ impl<Path: PoolPath> GateOpen<'static, Path> {
 
 impl<'p, Path: PoolPath> GateOpen<'p, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn into_owned<S: oer_radio_port::SlotOwner<Path::Identity>>(
+    pub fn into_owned<S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
         self,
-        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateOpen<'static, Path> {
         GateOpen {
             place: GatePlace {
@@ -355,9 +355,9 @@ impl<'p, Path: PoolPath> GateOpen<'p, Path> {
 
 impl<Path: PoolPath> GateClosed<'static, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
         self,
-        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateClosed<'p, Path> {
         GateClosed {
             place: GatePlace {
@@ -369,9 +369,9 @@ impl<Path: PoolPath> GateClosed<'static, Path> {
 
 impl<'p, Path: PoolPath> GateClosed<'p, Path> {
     /// Move the same gate state across its backend's private body boundary.
-    pub fn into_owned<S: oer_radio_port::SlotOwner<Path::Identity>>(
+    pub fn into_owned<S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
         self,
-        loan: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> GateClosed<'static, Path> {
         GateClosed {
             place: GatePlace {
@@ -503,7 +503,7 @@ pub trait KeyTypes<'id> {
     /// Pure selection; the backend applies it before publishing key material.
     fn begin_association(
         start: Self::AssociationStart,
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
     ) -> Self::Association;
     /// A partial collection cannot cross the association-end boundary.
     fn collect_key_bank<const N: usize>(
@@ -931,7 +931,7 @@ pub trait LowerMacPhase<'p, 'id: 'p>:
 /// The frame's kind sets its response and
 /// its retry plan ([`RetryPlan`]) or one rate; its access category picks
 /// its queue, whose contention the backend draws.
-pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     /// The original operation's context, returned with its terminal.
     pub context: X,
     /// The attempt's place in flight.
@@ -940,7 +940,7 @@ pub struct Attempt<'id, T, M, K, X, Path: PoolPath = Root<oer_radio_port::LocalI
     /// returned MPDU together with this attempt's phase-bound rates.
     pub source: M,
     /// The access category the attempt contends as.
-    pub access_category: oer_ieee80211_wire::qos::WmmAccessCategory,
+    pub access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
     /// The control exchange that protects its first transmission; a
     /// retry plan's stages name their own.
     pub protection: Protection,
@@ -958,7 +958,7 @@ pub struct AdmittedAttempt<
     M: PreparedTx<'id>,
     K,
     X,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     parts:
         AdmittedTxParts<M::OwnedContext, Slot<'static, T, Path>, M::OwnedPayload, M::Execution, K>,
@@ -972,7 +972,7 @@ pub struct AdmittedTxParts<C, T, M, E, K> {
     /// Metadata containing no independently replaceable MPDU.
     pub execution: E,
     /// Selected access category.
-    pub access_category: oer_ieee80211_wire::qos::WmmAccessCategory,
+    pub access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
     /// Selected protection.
     pub protection: Protection,
     /// Selected transmit power.
@@ -992,10 +992,10 @@ impl<'id, T, M: PreparedTx<'id>, K, X, Path: PoolPath> AdmittedAttempt<'id, T, M
     /// Transfer the whole accepted owner through the backend's private frontend.
     pub fn into_parts(
         self,
-        _: &oer_radio_port::BodyLoan<'id, Path::Identity, M::Backend>,
+        _: &oer_protocols_radio_port::BodyLoan<'id, Path::Identity, M::Backend>,
     ) -> AdmittedTxParts<M::OwnedContext, Slot<'static, T, Path>, M::OwnedPayload, M::Execution, K>
     where
-        M::Backend: oer_radio_port::SlotOwner<Path::Identity>,
+        M::Backend: oer_protocols_radio_port::SlotOwner<Path::Identity>,
     {
         self.parts
     }
@@ -1044,7 +1044,7 @@ pub enum AttemptKey<'k, P, G> {
 /// A station's receive group key is not a transmit key:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_contracts_port::*;
+/// use oer_protocols_ieee80211_contracts_port::*;
 /// fn group<'k, 'id: 'k, T: PhaseTypes<'id>>(
 ///     key: &'k <T::StationKeys as KeyTypes<'id>>::GroupKey,
 /// ) -> TxProtection<<Station as RoleKeys<'id, T>>::TxKey<'k>> {
@@ -1104,7 +1104,7 @@ pub trait PreparedTx<'id>: Sized {
     /// The backend's resource family.
     type Types: PhaseTypes<'id>;
     /// Concrete owner whose frontend alone can consume this sealed admission.
-    type Backend: oer_radio_port::SlotOwner<
+    type Backend: oer_protocols_radio_port::SlotOwner<
             <<Self::Types as PhaseTypes<'id>>::TicketPath as PoolPath>::Identity,
         >;
     /// Opaque context selected independently of the body's loan.
@@ -1181,7 +1181,7 @@ pub struct NumberedKey<Key> {
     /// The phase's borrowed hardware key authority.
     pub key: Key,
     /// Caller-allocated, checked 48-bit packet number.
-    pub packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber,
+    pub packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber,
 }
 
 /// Caller-owned numbering of an aggregate member; its encryption key comes
@@ -1191,11 +1191,13 @@ pub enum TxNumbering {
     /// This subframe is unprotected.
     Open,
     /// The core allocated this PN under the builder's installed key.
-    Ccmp(oer_ieee80211_wire::ccmp::CcmpPacketNumber),
+    Ccmp(oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber),
 }
 impl TxNumbering {
     /// The supplied PN, absent for an open MPDU.
-    pub const fn packet_number(self) -> Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber> {
+    pub const fn packet_number(
+        self,
+    ) -> Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber> {
         match self {
             Self::Open => None,
             Self::Ccmp(pn) => Some(pn),
@@ -1278,17 +1280,17 @@ pub enum PreparationError {
 /// independent interface-level declarations:
 ///
 /// ```compile_fail,E0220
-/// use oer_ieee80211_contracts_port::InterfacePhase;
+/// use oer_protocols_ieee80211_contracts_port::InterfacePhase;
 /// fn body<'p, 'id: 'p, I: InterfacePhase<'p, 'id>>() -> Option<I::TxBody> { None }
 /// ```
 ///
 /// ```compile_fail,E0220
-/// use oer_ieee80211_contracts_port::InterfacePhase;
+/// use oer_protocols_ieee80211_contracts_port::InterfacePhase;
 /// fn fault<'p, 'id: 'p, I: InterfacePhase<'p, 'id>>() -> Option<I::Fault> { None }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{InterfaceAttempt, InterfacePhase, PhaseTypes, Poisoned};
+/// use oer_protocols_ieee80211_contracts_port::{InterfaceAttempt, InterfacePhase, PhaseTypes, Poisoned};
 /// fn body<'p, 'id: 'p, I: InterfacePhase<'p, 'id>>()
 ///     -> Option<<I::Types as PhaseTypes<'id>>::TxBody> { None }
 /// fn submit<'k, 'p, 'id: 'k + 'p, I: InterfacePhase<'p, 'id>>(
@@ -1811,7 +1813,7 @@ impl<R> RetryPlan<R> {
     ///
     /// ```
     /// # use core::num::NonZeroU8;
-    /// # use oer_ieee80211_contracts_port::{Protection, RetryPlan, RetryStage};
+    /// # use oer_protocols_ieee80211_contracts_port::{Protection, RetryPlan, RetryStage};
     /// let stage = |rate, transmissions| RetryStage {
     ///     rate,
     ///     transmissions: NonZeroU8::new(transmissions).unwrap(),
@@ -1925,7 +1927,7 @@ mod tests;
 /// after a cycle does not mint another arbiter or another pair of lease places.
 pub struct ArbiterPool;
 
-impl oer_radio_port::PoolSet for ArbiterPool {
+impl oer_protocols_radio_port::PoolSet for ArbiterPool {
     type Pools<'id, Path: PoolPath> = (
         GateOpen<'id, Path>,
         GateIssuer<'id, Path>,
@@ -1933,7 +1935,7 @@ impl oer_radio_port::PoolSet for ArbiterPool {
     );
 
     fn build<'id, Path: PoolPath>(
-        builder: oer_radio_port::PoolBuilder<'id, Path>,
+        builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
         let (open, issuer) = builder.into_pools::<GatePool>();
         (
@@ -1949,15 +1951,15 @@ impl oer_radio_port::PoolSet for ArbiterPool {
 /// The sole right to construct the arbiter of this installation's gate.
 #[derive(Debug)]
 #[must_use = "construct the arbiter exactly once with its initial gate"]
-pub struct ArbiterAuthority<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct ArbiterAuthority<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     brand: core::marker::PhantomData<fn(&'id (), Path) -> (&'id (), Path)>,
 }
 
 impl<Path: PoolPath> ArbiterAuthority<'static, Path> {
     /// Lend the one construction authority without copying or reissuing it.
-    pub fn lend<'p, S: oer_radio_port::SlotOwner<Path::Identity>>(
+    pub fn lend<'p, S: oer_protocols_radio_port::SlotOwner<Path::Identity>>(
         self,
-        _: &oer_radio_port::BodyLoan<'p, Path::Identity, S>,
+        _: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
     ) -> ArbiterAuthority<'p, Path> {
         ArbiterAuthority {
             brand: core::marker::PhantomData,

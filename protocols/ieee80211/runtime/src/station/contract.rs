@@ -1,17 +1,17 @@
 //! Product vocabulary of station Control. Core conversions are exhaustive and live here.
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     LayoutError as CoreLayoutError, PreparationError as CorePreparationError,
 };
-use oer_ieee80211_core_arbiter::{LeaveReason as CoreLeaveReason, Refusal};
-use oer_ieee80211_core_roles_sta::join::sae::{
+use oer_protocols_ieee80211_core_arbiter::{LeaveReason as CoreLeaveReason, Refusal};
+use oer_protocols_ieee80211_core_roles_sta::join::sae::{
     StaPeerDisconnectKind as CorePeerDisconnectKind, StaSaePwe as CoreSaePwe,
 };
-use oer_ieee80211_core_roles_sta::machine::EapolParseError as CoreEapolParseError;
-use oer_ieee80211_core_roles_sta::{
+use oer_protocols_ieee80211_core_roles_sta::machine::EapolParseError as CoreEapolParseError;
+use oer_protocols_ieee80211_core_roles_sta::{
     join::sae::StaSaeFailure,
     machine::{StaDisconnectReason, TxRefusal},
 };
-use oer_ieee80211_core_security_rsn::sae::SaeError as CoreSaeError;
+use oer_protocols_ieee80211_core_security_rsn::sae::SaeError as CoreSaeError;
 /// Why a connection ended, preserving every core cause.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DisconnectReason {
@@ -257,11 +257,14 @@ pub enum MsduRefusal {
 }
 /// Original refused Ethernet owner. Its private implementation is not a station-core API.
 #[derive(Debug)]
-pub struct TransmitPacket(pub(crate) oer_ieee80211_core_roles_sta::data::TxMsdu);
-impl oer_network_port::EthernetFrame for TransmitPacket {
+pub struct TransmitPacket(pub(crate) oer_protocols_ieee80211_core_roles_sta::data::TxMsdu);
+impl oer_protocols_network_port::EthernetFrame for TransmitPacket {
     fn view(
         &self,
-    ) -> Result<oer_network_port::EthernetFrameView<'_>, oer_network_port::FrameLengthError> {
+    ) -> Result<
+        oer_protocols_network_port::EthernetFrameView<'_>,
+        oer_protocols_network_port::FrameLengthError,
+    > {
         self.0.frame.view()
     }
 }
@@ -377,9 +380,9 @@ fn sae_pwe(pwe: CoreSaePwe) -> SaePwe {
 }
 
 fn retained_security_ies(
-    error: oer_ieee80211_core_security_rsn::frames::RsnFrameError,
+    error: oer_protocols_ieee80211_core_security_rsn::frames::RsnFrameError,
 ) -> RsnFrameError {
-    use oer_ieee80211_core_security_rsn::frames::RsnFrameError as R;
+    use oer_protocols_ieee80211_core_security_rsn::frames::RsnFrameError as R;
     match error {
         R::CapacityExceeded => RsnFrameError::CapacityExceeded,
         R::InvalidRsnIe => RsnFrameError::InvalidRsnIe,
@@ -410,7 +413,7 @@ impl From<StaDisconnectReason> for DisconnectReason {
         disconnect(value)
     }
 }
-use oer_ieee80211_core_roles_sta::machine as core_station;
+use oer_protocols_ieee80211_core_roles_sta::machine as core_station;
 impl From<core_station::StaCommand> for Command {
     fn from(value: core_station::StaCommand) -> Self {
         match value {
@@ -439,9 +442,9 @@ impl From<core_station::CommandRefusal> for CommandRefusal {
         }
     }
 }
-impl From<oer_ieee80211_core_arbiter::AbsenceRefusal> for AbsenceRefusal {
-    fn from(value: oer_ieee80211_core_arbiter::AbsenceRefusal) -> Self {
-        use oer_ieee80211_core_arbiter::AbsenceRefusal as C;
+impl From<oer_protocols_ieee80211_core_arbiter::AbsenceRefusal> for AbsenceRefusal {
+    fn from(value: oer_protocols_ieee80211_core_arbiter::AbsenceRefusal) -> Self {
+        use oer_protocols_ieee80211_core_arbiter::AbsenceRefusal as C;
         match value {
             C::IdentityExhausted => Self::IdentityExhausted,
             C::ScheduleExhausted => Self::ScheduleExhausted,
@@ -490,15 +493,15 @@ impl From<core_station::StaNotice> for Notice {
         }
     }
 }
-impl From<oer_ieee80211_core_roles_sta::data::DataRefusal> for MsduRefusal {
-    fn from(value: oer_ieee80211_core_roles_sta::data::DataRefusal) -> Self {
+impl From<oer_protocols_ieee80211_core_roles_sta::data::DataRefusal> for MsduRefusal {
+    fn from(value: oer_protocols_ieee80211_core_roles_sta::data::DataRefusal) -> Self {
         match value {
-            oer_ieee80211_core_roles_sta::data::DataRefusal::NoTokens => Self::NoTokens,
-            oer_ieee80211_core_roles_sta::data::DataRefusal::TooLong => Self::TooLong,
-            oer_ieee80211_core_roles_sta::data::DataRefusal::NoAdmittedAccessCategory => {
+            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::NoTokens => Self::NoTokens,
+            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::TooLong => Self::TooLong,
+            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::NoAdmittedAccessCategory => {
                 Self::NoAdmittedAccessCategory
             }
-            oer_ieee80211_core_roles_sta::data::DataRefusal::BufferUnavailable => {
+            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::BufferUnavailable => {
                 Self::BufferUnavailable
             }
         }
@@ -512,10 +515,10 @@ impl From<TxRefusal> for TransmitRefusal {
 
 /// Validated AP timing selected by an application; the coordinator representation is private.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BeaconInterval(oer_ieee80211_core_arbiter::coordinator::BeaconInterval);
+pub struct BeaconInterval(oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval);
 impl BeaconInterval {
-    pub fn new(duration: oer_time::Duration) -> Option<Self> {
-        oer_ieee80211_core_arbiter::coordinator::BeaconInterval::new(duration).map(Self)
+    pub fn new(duration: oer_portable_time::Duration) -> Option<Self> {
+        oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(duration).map(Self)
     }
     pub fn as_micros(self) -> u64 {
         self.0.as_micros()
@@ -524,16 +527,18 @@ impl BeaconInterval {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccessPointCommand<K> {
     AnnounceSwitch {
-        target: oer_ieee80211_contracts_port::SupportedChannel<K>,
+        target: oer_protocols_ieee80211_contracts_port::SupportedChannel<K>,
         mode: SwitchMode,
         count: u8,
     },
-    Start(oer_ieee80211_contracts_port::SupportedChannel<K>),
+    Start(oer_protocols_ieee80211_contracts_port::SupportedChannel<K>),
     Stop,
 }
-impl<K> From<oer_ieee80211_core_arbiter::AccessPointCommand<K>> for AccessPointCommand<K> {
-    fn from(value: oer_ieee80211_core_arbiter::AccessPointCommand<K>) -> Self {
-        use oer_ieee80211_core_arbiter::AccessPointCommand as C;
+impl<K> From<oer_protocols_ieee80211_core_arbiter::AccessPointCommand<K>>
+    for AccessPointCommand<K>
+{
+    fn from(value: oer_protocols_ieee80211_core_arbiter::AccessPointCommand<K>) -> Self {
+        use oer_protocols_ieee80211_core_arbiter::AccessPointCommand as C;
         match value {
             C::AnnounceSwitch {
                 target,
@@ -552,14 +557,14 @@ impl<K> From<oer_ieee80211_core_arbiter::AccessPointCommand<K>> for AccessPointC
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccessPointFact<K> {
     Running {
-        channel: oer_ieee80211_contracts_port::SupportedChannel<K>,
-        next_tbtt: oer_time::Instant,
+        channel: oer_protocols_ieee80211_contracts_port::SupportedChannel<K>,
+        next_tbtt: oer_portable_time::Instant,
         beacon_interval: BeaconInterval,
     },
     Stopped,
-    SwitchDue(oer_ieee80211_contracts_port::SupportedChannel<K>),
+    SwitchDue(oer_protocols_ieee80211_contracts_port::SupportedChannel<K>),
 }
-impl<K> From<AccessPointFact<K>> for oer_ieee80211_core_arbiter::AccessPointFact<K> {
+impl<K> From<AccessPointFact<K>> for oer_protocols_ieee80211_core_arbiter::AccessPointFact<K> {
     fn from(value: AccessPointFact<K>) -> Self {
         match value {
             AccessPointFact::Running {
@@ -596,9 +601,9 @@ pub enum SwitchMode {
     Continue,
     StopTransmitting,
 }
-impl From<oer_ieee80211_core_arbiter::SwitchMode> for SwitchMode {
-    fn from(value: oer_ieee80211_core_arbiter::SwitchMode) -> Self {
-        use oer_ieee80211_core_arbiter::SwitchMode as C;
+impl From<oer_protocols_ieee80211_core_arbiter::SwitchMode> for SwitchMode {
+    fn from(value: oer_protocols_ieee80211_core_arbiter::SwitchMode) -> Self {
+        use oer_protocols_ieee80211_core_arbiter::SwitchMode as C;
         match value {
             C::Continue => Self::Continue,
             C::StopTransmitting => Self::StopTransmitting,
@@ -627,11 +632,11 @@ mod tests {
         );
         for (error, expected) in [
             (
-                oer_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe,
+                oer_protocols_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe,
                 RsnFrameError::InvalidRsnIe,
             ),
             (
-                oer_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnxe,
+                oer_protocols_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnxe,
                 RsnFrameError::InvalidRsnxe,
             ),
         ] {
@@ -640,8 +645,8 @@ mod tests {
         }
         assert_eq!(
             BackgroundScanEnd::from(core_station::BackgroundScanEnd::AbsenceRefused(
-                oer_ieee80211_core_arbiter::AbsenceRefusal::PrimaryEnds {
-                    at: oer_time::Instant::from_micros(u64::MAX)
+                oer_protocols_ieee80211_core_arbiter::AbsenceRefusal::PrimaryEnds {
+                    at: oer_portable_time::Instant::from_micros(u64::MAX)
                 }
             )),
             BackgroundScanEnd::AbsenceRefused(AbsenceRefusal::PrimaryEnds { at_us: u64::MAX })

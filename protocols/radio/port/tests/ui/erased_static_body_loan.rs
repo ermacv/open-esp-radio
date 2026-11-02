@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Root, Slot, StaticId};
+use oer_protocols_radio_port::{Root, Slot, StaticId};
 
 pub enum Declaration {}
 pub trait Erased {}

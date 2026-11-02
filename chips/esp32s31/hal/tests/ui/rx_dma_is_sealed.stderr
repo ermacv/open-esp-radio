@@ -1,10 +1,10 @@
 error[E0603]: module `sealed` is private
-  --> tests/ui/rx_dma_is_sealed.rs:22:48
+  --> tests/ui/rx_dma_is_sealed.rs:22:54
    |
-22 | impl oer_esp32s31_hal::ieee80211::dma::rx_dma::sealed::Sealed for Foreign {} // ui-error: E0603
-   |                                                ^^^^^^  ------ trait `Sealed` is not publicly re-exported
-   |                                                |
-   |                                                private module
+22 | impl oer_chips_esp32s31_hal::ieee80211::dma::rx_dma::sealed::Sealed for Foreign {} // ui-error: E0603
+   |                                                      ^^^^^^  ------ trait `Sealed` is not publicly re-exported
+   |                                                      |
+   |                                                      private module
    |
 note: the module `sealed` is defined here
   --> src/ieee80211/dma/rx_dma.rs

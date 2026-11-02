@@ -134,8 +134,8 @@ mod delays {
     };
     use std::vec::Vec;
 
-    use oer_time::{Clock, Duration, Instant};
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time::{Clock, Duration, Instant};
+    use oer_portable_time_virtual::VirtualClock;
 
     use super::super::{Event, Kind, PhyShortDelay, delay, delay_observed};
 

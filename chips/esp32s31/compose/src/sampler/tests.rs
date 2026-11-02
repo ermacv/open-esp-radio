@@ -1,6 +1,6 @@
 use super::*;
 use core::cell::RefCell;
-use oer_memory::AffineSpscQueue;
+use oer_portable_memory::AffineSpscQueue;
 use std::rc::Rc;
 
 /// What the fake timer was asked, in order.

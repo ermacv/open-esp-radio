@@ -1,6 +1,6 @@
 # HIL link
 
-`oer-hil-link` is the host end of one board's serial line: it writes the
+`oer-tools-hil-link` is the host end of one board's serial line: it writes the
 host's frames, decodes the device's, tracks the boot they belong to and
 correlates each request with its response. It knows the protocol's `base`
 module and nothing else; every other message is a header, a key and a payload
@@ -35,5 +35,5 @@ later request. Every wait ends on cancellation.
 packages' tests.
 
 ```console
-cargo test -p oer-hil-link
+cargo test -p oer-tools-hil-link
 ```

@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::domain::{BtbbError, BtbbGain, BtbbPublisher};
-use oer_esp32s31_hal::owner::PhyRegistrationGrant;
+use oer_chips_esp32s31_hal::domain::{BtbbError, BtbbGain, BtbbPublisher};
+use oer_chips_esp32s31_hal::owner::PhyRegistrationGrant;
 
 // A BTBB gain is published only with the registration's grant, which only
 // the owner that began the registration holds.
@@ -25,7 +25,7 @@ pub fn copied(grant: &PhyRegistrationGrant) -> PhyRegistrationGrant {
 // A gain is not minted outside the domain.
 #[cfg(ui_reject)]
 pub fn forged(
-    gain: oer_espressif_radio::domain::Gain<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
+    gain: oer_chips_family_radio::domain::Gain<oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch>,
 ) -> BtbbGain {
     BtbbGain(gain) // ui-error: E0423
 }

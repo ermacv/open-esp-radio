@@ -15,7 +15,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 use core::pin::Pin;
-use oer_mmio::Index;
+use oer_portable_mmio::Index;
 
 use crate::bluetooth::DeviceTablePublication;
 use crate::layouts::*;

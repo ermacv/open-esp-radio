@@ -15,7 +15,7 @@ mod lineage;
 mod phy_archive;
 mod run;
 mod workspace;
-use oer_os_process::Checkout;
+use oer_tools_os_process::Checkout;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -125,14 +125,16 @@ enum Check {
 
 /// The chips with pinned vendor artifacts.
 fn verified_chips(ctx: &Checkout) -> Result<Vec<String>> {
-    Ok(oer_pins_artifacts::artifacts::project::projects(&ctx.root)?)
+    Ok(oer_tools_pins_artifacts::artifacts::project::projects(
+        &ctx.root,
+    )?)
 }
 
 fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
-    if !oer_pins_artifacts::artifacts::unfetched(&ctx.root, chip)?.is_empty() {
-        oer_pins_artifacts::artifacts::fetch_vendor_sources(&ctx.root, chip)?;
+    if !oer_tools_pins_artifacts::artifacts::unfetched(&ctx.root, chip)?.is_empty() {
+        oer_tools_pins_artifacts::artifacts::fetch_vendor_sources(&ctx.root, chip)?;
     }
-    oer_vendor_provenance::registry::check(&ctx.root, chip)
+    oer_tools_vendor_provenance::registry::check(&ctx.root, chip)
 }
 
 /// Clippy of a host stand's manifest, at the workspace's lint levels.
@@ -143,13 +145,13 @@ fn host_stands(ctx: &Checkout) -> Result<()> {
         for stand in workspace::host_stands(&ctx.root, &chip)? {
             for manifest in [stand.library, stand.program] {
                 let manifest = ctx.root.join(manifest);
-                oer_os_process::run(
-                    oer_os_toolchain::cargo_in(&ctx.root)
+                oer_tools_os_process::run(
+                    oer_tools_os_toolchain::cargo_in(&ctx.root)
                         .args(STAND_CLIPPY)
                         .arg(&manifest),
                 )?;
-                oer_os_process::run(
-                    oer_os_toolchain::cargo_in(&ctx.root)
+                oer_tools_os_process::run(
+                    oer_tools_os_toolchain::cargo_in(&ctx.root)
                         .args(["test", "--locked", "--no-fail-fast", "--manifest-path"])
                         .arg(&manifest),
                 )?;
@@ -165,7 +167,7 @@ fn run() -> Result<ExitCode> {
         Some(root) => Checkout::new(root)?,
         None => Checkout::discover("vendor-check")?,
     };
-    let _signals = oer_os_process::install_signal_handlers()?;
+    let _signals = oer_tools_os_process::install_signal_handlers()?;
     match cli.command {
         Command::Lineage(arguments) => lineage::run(arguments)?,
         Command::PhyArchive { archive, sources } => {
@@ -181,7 +183,7 @@ fn run() -> Result<ExitCode> {
             new,
             baseline,
             all,
-        } => oer_vendor_provenance::diff::run(&ctx.root, &chip, old, new, baseline, all)?,
+        } => oer_tools_vendor_provenance::diff::run(&ctx.root, &chip, old, new, baseline, all)?,
         Command::Copies { chip, budget } => copies::run(&ctx.root, &chip, &budget)?,
         Command::Provenance {
             chip,
@@ -190,7 +192,7 @@ fn run() -> Result<ExitCode> {
             baseline,
             show,
         } => {
-            let show_code = |symbol: &str| -> oer_vendor_provenance::Result<()> {
+            let show_code = |symbol: &str| -> oer_tools_vendor_provenance::Result<()> {
                 let code = run::scenario::run(&ctx, &chip, &["show".into(), symbol.into()])?;
                 if code == ExitCode::SUCCESS {
                     Ok(())
@@ -198,13 +200,13 @@ fn run() -> Result<ExitCode> {
                     Err(format!("scenario show {symbol} failed").into())
                 }
             };
-            oer_vendor_provenance::registry::update(
+            oer_tools_vendor_provenance::registry::update(
                 &ctx.root,
                 &chip,
                 &accept,
                 rebuild,
                 baseline,
-                show.then_some(&show_code as &oer_vendor_provenance::registry::Show<'_>),
+                show.then_some(&show_code as &oer_tools_vendor_provenance::registry::Show<'_>),
             )?
         }
         Command::Scenario { chip, args } => {
@@ -230,11 +232,13 @@ fn run() -> Result<ExitCode> {
 }
 
 fn main() -> ExitCode {
-    if oer_os_command_tree::requested() {
+    if oer_tools_os_command_tree::requested() {
         use clap::CommandFactory as _;
-        let tree =
-            oer_os_command_tree::command_tree(&Cli::command(), &[String::from("vendor-check")]);
-        println!("{}", oer_os_command_tree::json(&tree));
+        let tree = oer_tools_os_command_tree::command_tree(
+            &Cli::command(),
+            &[String::from("vendor-check")],
+        );
+        println!("{}", oer_tools_os_command_tree::json(&tree));
         return ExitCode::SUCCESS;
     }
     match run() {

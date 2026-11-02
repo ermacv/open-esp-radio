@@ -6,11 +6,11 @@
 //! replaced by Rust-owned runtime resources rather than copied into this
 //! hardware typestate.
 
-use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+use oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 use crate::resources::{InterruptBankOwner, TaskResources, separate_interrupt_owner};
 
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothControllerHalInitConfig, BluetoothControllerTimeScale, InterruptSetupOwner,
 };
 
@@ -77,7 +77,7 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
     /// inactive interrupt partitions.
     #[cfg(target_arch = "riscv32")]
     pub fn initialize(
-        engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        engine: oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
     ) -> Result<Self, ControllerHalInitializationFailure<M>> {
         let admission = interrupts.admit_interrupts(engine.task_owner());
@@ -88,7 +88,7 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
 
     #[cfg(test)]
     pub fn initialize_for_validation(
-        engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        engine: oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
         initialize: impl FnOnce(&mut TaskResources<M>, BluetoothControllerHalInitConfig),
     ) -> Self {
@@ -102,14 +102,16 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
     }
 
     fn initialize_with(
-        engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+        engine: oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
         interrupts: InterruptSetupOwner,
-        admission: Result<(), oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault>,
+        admission: Result<(), oer_chips_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault>,
         initialize: impl FnOnce(
             &mut TaskResources<M>,
             BluetoothControllerHalInitConfig,
-        )
-            -> Result<(), oer_esp32s31_hal::bluetooth::engine::EngineInitError>,
+        ) -> Result<
+            (),
+            oer_chips_esp32s31_hal::bluetooth::engine::EngineInitError,
+        >,
     ) -> Result<Self, ControllerHalInitializationFailure<M>> {
         let config = BluetoothControllerHalInitConfig::reviewed_standalone();
         let standalone_dtm_profile = StandaloneAlwaysAwakeDtmProfile::mint();
@@ -149,20 +151,20 @@ pub struct ControllerHalInitializationFailure<M: ControllerMemory> {
 /// A refusal before hardware initialization; the failure retains both owners.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControllerHalInitializationError {
-    Engine(oer_esp32s31_hal::bluetooth::engine::EngineInitError),
-    InterruptPolicy(oer_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault),
+    Engine(oer_chips_esp32s31_hal::bluetooth::engine::EngineInitError),
+    InterruptPolicy(oer_chips_esp32s31_hal::bluetooth::BluetoothInterruptPolicyFault),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_hal::{bluetooth::*, root::RadioHardware};
+    use oer_chips_esp32s31_hal::{bluetooth::*, root::RadioHardware};
     #[test]
     fn foreign_enable_retains_the_original_owners_without_running_hal_initialization() {
         let (_, partitions) = RadioHardware::for_host_test()
             .split::<crate::test_clocks::TestClockBackend, _>(
                 (),
-                oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+                oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
             )
             .ok()
             .expect("host radio split");

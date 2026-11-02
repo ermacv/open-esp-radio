@@ -2,7 +2,7 @@
 use super::{HtChannelWidth, HtGuardInterval, HtRate, TxPhyRate};
 use crate::mac::tx_cost::{PpduTiming, TxCost, TxProtectionTiming, TxResponse};
 use core::num::{NonZeroU16, NonZeroU32};
-use oer_esp32s31_hal::types::MacLegacyRate;
+use oer_chips_esp32s31_hal::types::MacLegacyRate;
 
 impl HtRate {
     /// Byte ceiling for one unprotected HT aggregate plus compressed BlockAck.

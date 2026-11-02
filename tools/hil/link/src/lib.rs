@@ -31,7 +31,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_protocol::{
+use oer_protocols_hil_protocol::{
     DecodeCounters, Endpoint, Envelope, Frame, FrameEncoder, Key, Message,
     base::{GetHello, Hello, Rejected},
 };
@@ -416,7 +416,7 @@ impl Link {
         state: std::sync::MutexGuard<'a, State>,
         deadline: Instant,
     ) -> Result<std::sync::MutexGuard<'a, State>, LinkError> {
-        if oer_os_process::cancellation_requested() {
+        if oer_tools_os_process::cancellation_requested() {
             return Err(LinkError::Cancelled);
         }
         let timeout = deadline

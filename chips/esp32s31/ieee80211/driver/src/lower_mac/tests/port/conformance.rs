@@ -4,7 +4,7 @@
 //! completion. Air denial has no S31 device model and stays excluded by
 //! name.
 use super::*;
-use oer_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
+use oer_protocols_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
 
 mod barrier;
 mod edca;
@@ -87,9 +87,9 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
             };
             let aggregate = self.case.form() == outcomes::Form::Aggregate;
             let ht = PhyRate::Ht(
-                oer_ieee80211_wire::phy::HtRate::new(
-                    oer_ieee80211_wire::phy::HtMcs::new(7).expect("MCS"),
-                    oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtRate::new(
+                    oer_protocols_ieee80211_wire::phy::HtMcs::new(7).expect("MCS"),
+                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                     false,
                 )
                 .expect("HT rate"),
@@ -160,10 +160,11 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
             };
             let returned_buffer = sent.index();
             let (mut renewed, _) = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
-            let sequence = oer_ieee80211_wire::sequence::SequenceNumber::from_sequence_control({
-                let bytes = renewed.bytes_mut().expect("returned memory");
-                u16::from_le_bytes([bytes[22], bytes[23]])
-            });
+            let sequence =
+                oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_sequence_control({
+                    let bytes = renewed.bytes_mut().expect("returned memory");
+                    u16::from_le_bytes([bytes[22], bytes[23]])
+                });
             *self.seen.borrow_mut() = Some(outcomes::Trace {
                 admitted,
                 returned: outcomes::Identity {

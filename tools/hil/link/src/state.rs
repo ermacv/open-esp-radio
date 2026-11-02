@@ -11,7 +11,7 @@
 
 use std::collections::VecDeque;
 
-use oer_hil_protocol::{Key, Message, base::Hello};
+use oer_protocols_hil_protocol::{Key, Message, base::Hello};
 
 use crate::{Boot, BootStats, Health, LinkError, Received};
 
@@ -76,7 +76,7 @@ pub(crate) struct State {
     past: VecDeque<BootStats>,
     pending: Vec<Slot>,
     boots: u32,
-    pub(crate) counters: oer_hil_protocol::DecodeCounters,
+    pub(crate) counters: oer_protocols_hil_protocol::DecodeCounters,
     notes: VecDeque<String>,
     notes_lost: u64,
     /// Lines lost since the last [`Self::take_notes`].
@@ -185,7 +185,7 @@ impl State {
                 && slot.request_id == message.request_id
                 && message.session_id == 0
                 && (message.key == slot.response
-                    || message.key == <oer_hil_protocol::base::Rejected as Message>::KEY)
+                    || message.key == <oer_protocols_hil_protocol::base::Rejected as Message>::KEY)
         }) {
             slot.message = Some(message);
             return;

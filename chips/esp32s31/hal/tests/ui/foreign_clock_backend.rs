@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::{PhyClockModule, RadioDomain},
     power::{PlatformClockBackend, PlatformClockProvider},
 };

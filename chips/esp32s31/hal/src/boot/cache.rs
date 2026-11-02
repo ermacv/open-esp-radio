@@ -1,14 +1,14 @@
 //! The L1 cache owner: core 0's fetch suspension and the sync engine.
 
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     Access, Busy,
     cache::{
         CacheSyncRegisters, FetchSuspendRegisters, LineRange, SecondaryFetchRegisters, SyncCommand,
     },
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
-use oer_esp32s31_pac::{cache::CacheBoot, instances};
+use oer_chips_esp32s31_pac::{cache::CacheBoot, instances};
 
 /// The caches a sync command acts on (`SYNC_MAP`).
 ///
@@ -52,7 +52,7 @@ impl CacheRegisters {
 /// `:1672-1684` (`L1_ICACHE0_PRELOAD_DONE`), `:2049-2061`
 /// (`L1_ICACHE0_AUTOLOAD_ENA`, `_DONE`); the pinned rev0 ROM's
 /// `Cache_Suspend_L1_CORE0_ICache` uses exactly these fields
-/// (`oer_espressif_boot::cache`).
+/// (`oer_chips_family_boot::cache`).
 impl<P: Placement> FetchSuspendRegisters for CacheRegisters<P> {
     fn shut_fetch(&mut self, _: Access<'_>, shut: bool) {
         self.0.modify_l1_icache_ctrl(|w| {
@@ -113,7 +113,7 @@ impl<P: Placement> FetchSuspendRegisters for CacheRegisters<P> {
 /// 1's are `L1_ICACHE_SHUT_IBUS1` and the `L1_ICACHE1` autoload, preload
 /// and freeze fields. The bootstrap opens it for a hart the image declares,
 /// after it published the runtime's code, with the ROM's suspend and resume
-/// pair for that cache (`oer_espressif_boot::cache`).
+/// pair for that cache (`oer_chips_family_boot::cache`).
 ///
 /// SOURCE: ESP_IDF_FFF9895C_S31_CACHE_LL_BUSES in
 /// `chips/esp32s31/registers/evidence/memory.toml` (`cache_ll_l1_enable_bus`);
@@ -235,9 +235,9 @@ impl<P: Placement> CacheSyncRegisters for CacheRegisters<P> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> CacheRegisters<oer_mmio::Host<'a>> {
+impl<'a> CacheRegisters<oer_portable_mmio::Host<'a>> {
     /// The cache owner over host memory from the instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
-        oer_esp32s31_pac::cache::cache_host(words).map(|(_buses, cache)| Self(cache))
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+        oer_chips_esp32s31_pac::cache::cache_host(words).map(|(_buses, cache)| Self(cache))
     }
 }

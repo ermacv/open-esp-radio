@@ -835,7 +835,7 @@ fn i2c_configuration_binding_requires_the_complete_pac_transaction() {
     .unwrap();
     assert_eq!(
         binding.action(),
-        oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::StartCommand
+        oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::StartCommand
     );
     assert_eq!(
         binding.into_completion(),

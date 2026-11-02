@@ -17,10 +17,10 @@ use super::timg0_alarm::{
     InterruptRegisters, InvalidDelay, MAX_DELAY_MICROS, Observation, ProgramRegisters, acknowledge,
     arm_after, disarm,
 };
-use oer_esp32s31_pac::{instances, ownership::TimerGroup1Peripherals, timg};
-use oer_espressif_interrupt_table::EventAuthority;
-use oer_mmio::{Bits, Fixed, InterruptSource, Placement};
-use oer_time::Duration;
+use oer_chips_esp32s31_pac::{instances, ownership::TimerGroup1Peripherals, timg};
+use oer_chips_family_interrupt_table::EventAuthority;
+use oer_portable_mmio::{Bits, Fixed, InterruptSource, Placement};
+use oer_portable_time::Duration;
 
 /// Where timer group one lies.
 pub type TimerPlacement = Fixed<{ instances::timg1::BASE }>;
@@ -129,7 +129,7 @@ fn alarm_at<P: Placement>(
     }
     program.set_alarm(micros);
     program.0.configure_timg1_timer0_alarm_running();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     Ok(())
 }
 
@@ -198,7 +198,7 @@ impl<P: Placement> InterruptRegisters for Timg1AlarmInterrupt<P> {
 mod tests {
     use super::*;
 
-    fn program(words: &mut [u32]) -> Timg1AlarmProgram<oer_mmio::Host<'_>> {
+    fn program(words: &mut [u32]) -> Timg1AlarmProgram<oer_portable_mmio::Host<'_>> {
         Timg1AlarmProgram(timg::Timg1Timer0::host(words).expect("host memory holds the block"))
     }
 

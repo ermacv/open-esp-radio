@@ -37,7 +37,7 @@ the task stack's watchpoint.
 on the time driver's clock: it takes the installed time driver's
 `TimeDriverReady` as the proof that the counter latch is checked and
 published, so an image initializes its timers, and may grant hart 1's
-executor its comparator (`oer_espressif_executor::grant`), before the
+executor its comparator (`oer_chips_family_executor::grant`), before the
 launch hands hart 1 its parts. The image's composition places hardware on
 hart 1 by moving it into those parts: boot-smoke moves `AesParts` and builds
 `crypto::aes_engine` there over hart 1's router's `Silent` proof, which
@@ -59,14 +59,14 @@ reset policy apply to setup failure and an orphan alarm.
 
 `sampler::Storage<I, O>` is a program-counter sampler on TIMG1 T0 for an
 image that binds its entry `I` above the levels it wants to see and names
-the observer `O` of its `oer_trace::profile::PcSample`s. Between `start`
+the observer `O` of its `oer_portable_trace::profile::PcSample`s. Between `start`
 and `stop` the timer runs an absolute schedule: tick `k` is due
 `(k + 1) * period` after the start on the timer's own counter, and each
 tick moves the alarm one period on without a reload, so handler latency
 shifts no later tick; a tick due under masked interrupts fires where they
 open. Each scheduled tick reports one sample of the interrupted `mepc` and
 `mcause.mpil` and, in an `oer_trace` build, right after it an
-`oer_trace::profile::ReturnSample` of the interrupted `ra` that the staged
+`oer_portable_trace::profile::ReturnSample` of the interrupted `ra` that the staged
 runtime's interrupt entry recorded (`stacks::interrupted_ra`; the sampler's
 level is the hart's highest, so no entry runs between); in a leaf function
 such as a memory copy it names the caller. A tick that finds a stop request

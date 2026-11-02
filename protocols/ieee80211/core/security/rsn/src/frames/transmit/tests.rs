@@ -22,7 +22,7 @@ fn a_transmit_frame_parses_and_its_damaged_copy_returns_the_parse_error() {
     damaged[2] = 1;
     assert_eq!(
         crate::EapolKeyFrame::parse(&damaged),
-        Err(oer_ieee80211_wire::eapol::EapolParseError::LengthMismatch)
+        Err(oer_protocols_ieee80211_wire::eapol::EapolParseError::LengthMismatch)
     );
 }
 

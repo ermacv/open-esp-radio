@@ -158,15 +158,15 @@ fn stale_reply_cannot_free_the_request_seat() {
 
 #[test]
 fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
-    use oer_time::{Clock, Duration};
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time::{Clock, Duration};
+    use oer_portable_time_virtual::VirtualClock;
     for ready_on in [None, Some(1), Some(2), Some(3), Some(4)] {
         let clock: VirtualClock = VirtualClock::default();
         let outlined = SchedulerInterruptClock::new(&clock);
         assert_eq!(outlined.now(), clock.now());
         let mut attempts = 0;
-        let result = oer_time::settle::settle(
-            oer_time::settle::Settle::new(super::super::DIAGNOSTIC_SETTLE, &outlined),
+        let result = oer_portable_time::settle::settle(
+            oer_portable_time::settle::Settle::new(super::super::DIAGNOSTIC_SETTLE, &outlined),
             || {
                 attempts += 1;
                 clock
@@ -180,7 +180,7 @@ fn outlined_interrupt_clock_preserves_settle_results_and_deadline() {
             Some(2) => (Ok(2), 2),
             // The third attempt follows the read that saw the limit pass.
             Some(3) => (Ok(3), 3),
-            _ => (Err(oer_time::settle::Unsettled), 3),
+            _ => (Err(oer_portable_time::settle::Unsettled), 3),
         };
         assert_eq!((result, attempts), expected);
         assert_eq!(outlined.now(), clock.now());

@@ -21,28 +21,34 @@ impl MacInterface {
     /// Numeric image for diagnostics.
     pub const fn bits(self) -> u32 {
         match self {
-            Self::Station => oer_esp32s31_pac::wifi_mac::config::Interface::Station.bits(),
-            Self::AccessPoint => oer_esp32s31_pac::wifi_mac::config::Interface::AccessPoint.bits(),
-            Self::Context2 => oer_esp32s31_pac::wifi_mac::config::Interface::Context2.bits(),
-            Self::Context3 => oer_esp32s31_pac::wifi_mac::config::Interface::Context3.bits(),
+            Self::Station => oer_chips_esp32s31_pac::wifi_mac::config::Interface::Station.bits(),
+            Self::AccessPoint => {
+                oer_chips_esp32s31_pac::wifi_mac::config::Interface::AccessPoint.bits()
+            }
+            Self::Context2 => oer_chips_esp32s31_pac::wifi_mac::config::Interface::Context2.bits(),
+            Self::Context3 => oer_chips_esp32s31_pac::wifi_mac::config::Interface::Context3.bits(),
         }
     }
 
     /// The interface's element of the four-entry interface register arrays.
-    pub const fn index(self) -> oer_mmio::Index<{ oer_esp32s31_pac::wifi_mac::config::COUNT }> {
+    pub const fn index(
+        self,
+    ) -> oer_portable_mmio::Index<{ oer_chips_esp32s31_pac::wifi_mac::config::COUNT }> {
         match self {
-            Self::Station => oer_mmio::Index::constant::<0>(),
-            Self::AccessPoint => oer_mmio::Index::constant::<1>(),
-            Self::Context2 => oer_mmio::Index::constant::<2>(),
-            Self::Context3 => oer_mmio::Index::constant::<3>(),
+            Self::Station => oer_portable_mmio::Index::constant::<0>(),
+            Self::AccessPoint => oer_portable_mmio::Index::constant::<1>(),
+            Self::Context2 => oer_portable_mmio::Index::constant::<2>(),
+            Self::Context3 => oer_portable_mmio::Index::constant::<3>(),
         }
     }
 
     /// The interface a two-bit interface field holds: every value is one.
     pub const fn from_field(
-        value: oer_mmio::Bits<{ oer_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH }>,
+        value: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH },
+        >,
     ) -> Self {
-        use oer_esp32s31_pac::wifi_mac::config::Interface;
+        use oer_chips_esp32s31_pac::wifi_mac::config::Interface;
         match Interface::from_field(value.get()) {
             Interface::Station => Self::Station,
             Interface::AccessPoint => Self::AccessPoint,
@@ -54,8 +60,9 @@ impl MacInterface {
     /// The two-bit field value of the interface.
     pub const fn field(
         self,
-    ) -> oer_mmio::Bits<{ oer_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH }> {
-        oer_mmio::Bits::truncate(self.bits())
+    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH }>
+    {
+        oer_portable_mmio::Bits::truncate(self.bits())
     }
 }
 
@@ -100,8 +107,9 @@ pub struct WifiRxCsiControlMask(u32);
 
 impl WifiRxCsiControlMask {
     /// CSI appending enabled by hal_mac_set_csi.
-    pub const APPEND: Self =
-        Self(oer_esp32s31_pac::wifi_mac::rx_csi_control::CsiAppendEnable::Enabled.register_bits());
+    pub const APPEND: Self = Self(
+        oer_chips_esp32s31_pac::wifi_mac::rx_csi_control::CsiAppendEnable::Enabled.register_bits(),
+    );
 
     /// Combine reviewed writable values.
     pub const fn union(self, other: Self) -> Self {
@@ -138,7 +146,7 @@ pub enum MacRxBeaconClearRequest {
 impl MacRxBeaconClearRequest {
     /// Numeric image for diagnostics.
     pub const fn bits(self) -> u32 {
-        oer_esp32s31_pac::modem_pwr::clear_request::Bits0_31Opaque::RxBeacon.bits()
+        oer_chips_esp32s31_pac::modem_pwr::clear_request::Bits0_31Opaque::RxBeacon.bits()
     }
 }
 
@@ -148,7 +156,7 @@ pub struct MacSlowClockCalibrationValue(u32);
 
 impl MacSlowClockCalibrationValue {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -161,7 +169,9 @@ impl MacSlowClockCalibrationValue {
 
     /// The value of a 18-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<{ oer_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH }>,
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
+        >,
     ) -> Self {
         Self(bits.get())
     }
@@ -178,7 +188,7 @@ pub struct WifiDescriptorAddressLow(u32);
 
 impl WifiDescriptorAddressLow {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::control_n::DESCRIPTOR_ADDRESS_LOW_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::control_n::DESCRIPTOR_ADDRESS_LOW_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -191,8 +201,8 @@ impl WifiDescriptorAddressLow {
 
     /// The value of a 20-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<
-            { oer_esp32s31_pac::wifi_mac::control_n::DESCRIPTOR_ADDRESS_LOW_WIDTH },
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::control_n::DESCRIPTOR_ADDRESS_LOW_WIDTH },
         >,
     ) -> Self {
         Self(bits.get())
@@ -210,13 +220,13 @@ pub struct MacPti(u32);
 
 impl MacPti {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_MAX;
 
     /// Preserve a shared coexistence priority in the MAC field. The entire
     /// source domain must fit the generated field geometry at compile time.
-    pub const fn from_coex(pti: oer_espressif_coex::CoexPti) -> Self {
+    pub const fn from_coex(pti: oer_chips_family_coex::CoexPti) -> Self {
         const {
-            if oer_espressif_coex::CoexPti::MAX as u32 > Self::MAX {
+            if oer_chips_family_coex::CoexPti::MAX as u32 > Self::MAX {
                 panic!("the coexistence priority domain must fit the MAC PTI field");
             }
         };
@@ -234,8 +244,8 @@ impl MacPti {
 
     /// The value of a 4-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<
-            { oer_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_WIDTH },
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_WIDTH },
         >,
     ) -> Self {
         Self(bits.get())
@@ -253,7 +263,7 @@ pub struct MacAssociationId(u32);
 
 impl MacAssociationId {
     pub const MIN: u32 = 0x00000001;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::bssid_high::ASSOCIATION_ID_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::bssid_high::ASSOCIATION_ID_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -276,7 +286,8 @@ pub struct MacMinimumMpduStartSpacing(u32);
 
 impl MacMinimumMpduStartSpacing {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_MAX;
+    pub const MAX: u32 =
+        oer_chips_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -289,8 +300,8 @@ impl MacMinimumMpduStartSpacing {
 
     /// The value of a 3-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<
-            { oer_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_WIDTH },
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_WIDTH },
         >,
     ) -> Self {
         Self(bits.get())
@@ -308,7 +319,7 @@ pub struct MacHeBssColor(u32);
 
 impl MacHeBssColor {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -321,7 +332,9 @@ impl MacHeBssColor {
 
     /// The value of a 6-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<{ oer_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_WIDTH }>,
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_WIDTH },
+        >,
     ) -> Self {
         Self(bits.get())
     }
@@ -338,7 +351,8 @@ pub struct MacHeDefaultPacketExtensionDuration(u32);
 
 impl MacHeDefaultPacketExtensionDuration {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_MAX;
+    pub const MAX: u32 =
+        oer_chips_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -351,8 +365,8 @@ impl MacHeDefaultPacketExtensionDuration {
 
     /// The value of a 3-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<
-            { oer_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_WIDTH },
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_WIDTH },
         >,
     ) -> Self {
         Self(bits.get())
@@ -370,7 +384,7 @@ pub struct MacHePacketPaddingDuration(u32);
 
 impl MacHePacketPaddingDuration {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -383,8 +397,8 @@ impl MacHePacketPaddingDuration {
 
     /// The value of a 5-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<
-            { oer_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_WIDTH },
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_WIDTH },
         >,
     ) -> Self {
         Self(bits.get())
@@ -402,7 +416,8 @@ pub struct MacItwtClearIndex(u32);
 
 impl MacItwtClearIndex {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::modem_pwr::clear_request::BITS_0_31_OPAQUE_WIDTH - 1;
+    pub const MAX: u32 =
+        oer_chips_esp32s31_pac::modem_pwr::clear_request::BITS_0_31_OPAQUE_WIDTH - 1;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -414,7 +429,7 @@ impl MacItwtClearIndex {
     }
 
     /// The value of a 5-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<5>) -> Self {
+    pub const fn from_bits(bits: oer_portable_mmio::Bits<5>) -> Self {
         Self(bits.get())
     }
 
@@ -436,7 +451,7 @@ pub enum MacTxQueueIndex {
 
 impl MacTxQueueIndex {
     pub const MIN: u32 = 0;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::control_n::COUNT as u32 - 1;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::control_n::COUNT as u32 - 1;
     pub const ALL: [Self; 4] = [Self::Zero, Self::One, Self::Two, Self::Three];
 
     pub const fn new(value: u32) -> Option<Self> {
@@ -452,7 +467,7 @@ impl MacTxQueueIndex {
     /// Fixed queue identities are checked during monomorphization.
     ///
     /// ```compile_fail
-    /// use oer_esp32s31_hal::types::MacTxQueueIndex;
+    /// use oer_chips_esp32s31_hal::types::MacTxQueueIndex;
     /// const INVALID: MacTxQueueIndex = MacTxQueueIndex::constant::<4>();
     /// ```
     pub const fn constant<const QUEUE: u8>() -> Self {
@@ -464,7 +479,7 @@ impl MacTxQueueIndex {
         }
     }
 
-    pub const fn from_bits(bits: oer_mmio::Bits<2>) -> Self {
+    pub const fn from_bits(bits: oer_portable_mmio::Bits<2>) -> Self {
         match bits.get() {
             0 => Self::Zero,
             1 => Self::One,
@@ -483,7 +498,7 @@ impl From<MacTxQueueIndex> for usize {
     }
 }
 const _: () = {
-    if oer_esp32s31_pac::wifi_mac::control_n::COUNT != MacTxQueueIndex::ALL.len() {
+    if oer_chips_esp32s31_pac::wifi_mac::control_n::COUNT != MacTxQueueIndex::ALL.len() {
         panic!("ordinary queue identities must cover the generated geometry");
     }
 };
@@ -494,7 +509,7 @@ pub struct MacTxPtiCount(u32);
 
 impl MacTxPtiCount {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::pti::COUNT_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -507,7 +522,7 @@ impl MacTxPtiCount {
 
     /// The value of a 12-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<{ oer_esp32s31_pac::wifi_mac::pti::COUNT_WIDTH }>,
+        bits: oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_WIDTH }>,
     ) -> Self {
         Self(bits.get())
     }
@@ -524,7 +539,7 @@ pub struct MacKeyEntryIndex(u32);
 
 impl MacKeyEntryIndex {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::entry_peer_control::COUNT as u32 - 1;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::COUNT as u32 - 1;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -547,7 +562,8 @@ pub struct MacRxBlockAckEntryIndex(u32);
 
 impl MacRxBlockAckEntryIndex {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::COUNT as u32 - 1;
+    pub const MAX: u32 =
+        oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::COUNT as u32 - 1;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -559,7 +575,7 @@ impl MacRxBlockAckEntryIndex {
     }
 
     /// The value of a 3-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+    pub const fn from_bits(bits: oer_portable_mmio::Bits<3>) -> Self {
         Self(bits.get())
     }
 
@@ -575,7 +591,8 @@ pub struct MacExtraSoftApRxBlockAckEntryIndex(u32);
 
 impl MacExtraSoftApRxBlockAckEntryIndex {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::COUNT as u32 - 1;
+    pub const MAX: u32 =
+        oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::COUNT as u32 - 1;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -587,7 +604,7 @@ impl MacExtraSoftApRxBlockAckEntryIndex {
     }
 
     /// The value of a 3-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<3>) -> Self {
+    pub const fn from_bits(bits: oer_portable_mmio::Bits<3>) -> Self {
         Self(bits.get())
     }
 
@@ -603,7 +620,7 @@ pub struct MacRxBlockAckTid(u32);
 
 impl MacRxBlockAckTid {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -616,7 +633,9 @@ impl MacRxBlockAckTid {
 
     /// The value of a 4-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<{ oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_WIDTH }>,
+        bits: oer_portable_mmio::Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_WIDTH },
+        >,
     ) -> Self {
         Self(bits.get())
     }
@@ -634,7 +653,7 @@ pub struct MacRxBlockAckStartingSequence(u32);
 impl MacRxBlockAckStartingSequence {
     pub const MIN: u32 = 0x00000000;
     pub const MAX: u32 =
-        oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_current_sequence::SEQUENCE_MAX;
+        oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_current_sequence::SEQUENCE_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -647,8 +666,10 @@ impl MacRxBlockAckStartingSequence {
 
     /// The value of a 12-bit field, which the range holds whole.
     pub const fn from_bits(
-        bits: oer_mmio::Bits<
-            { oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_current_sequence::SEQUENCE_WIDTH },
+        bits: oer_portable_mmio::Bits<
+            {
+                oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_current_sequence::SEQUENCE_WIDTH
+            },
         >,
     ) -> Self {
         Self(bits.get())
@@ -667,7 +688,7 @@ pub struct MacRxBlockAckWindow(u32);
 impl MacRxBlockAckWindow {
     pub const MIN: u32 = 0x00000001;
     pub const MAX: u32 =
-        oer_esp32s31_pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::WINDOW_MAX;
+        oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::WINDOW_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -690,7 +711,7 @@ pub struct StationTbttTargetBits35To10(u32);
 
 impl StationTbttTargetBits35To10 {
     pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_MAX;
+    pub const MAX: u32 = oer_chips_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
@@ -702,7 +723,7 @@ impl StationTbttTargetBits35To10 {
     }
 
     /// The value of a 26-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_mmio::Bits<26>) -> Self {
+    pub const fn from_bits(bits: oer_portable_mmio::Bits<26>) -> Self {
         Self(bits.get())
     }
 
@@ -788,6 +809,6 @@ pub enum PhyLowRateState {
 impl PhyLowRateState {
     /// Numeric image for diagnostics.
     pub const fn bits(self) -> u32 {
-        match self { Self::Disabled => oer_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Disabled.bits(), Self::Enabled => oer_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled.bits() }
+        match self { Self::Disabled => oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Disabled.bits(), Self::Enabled => oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled.bits() }
     }
 }

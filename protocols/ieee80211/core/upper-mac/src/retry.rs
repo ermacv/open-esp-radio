@@ -18,9 +18,9 @@
 //! `TimedOut` leaves retry counters unchanged and never republishes the MPDU.
 //! Backend faults are carried by Poisoned and do not enter this policy.
 
-use oer_ieee80211_contracts_port::TxStatus;
-use oer_ieee80211_contracts_port::backend::RetryCounters;
-use oer_ieee80211_wire::phy::PhyRate;
+use oer_protocols_ieee80211_contracts_port::TxStatus;
+use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
+use oer_protocols_ieee80211_wire::phy::PhyRate;
 
 /// Which retry counter a collision of the frame advances: IEEE 802.11
 /// classifies a frame as long when it is longer than dot11RTSThreshold.

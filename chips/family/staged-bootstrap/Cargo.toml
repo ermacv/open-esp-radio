@@ -1,0 +1,20 @@
+[package]
+name = "oer-chips-family-staged-bootstrap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+publish = false
+description = "The Espressif family cold-start runner, staged entry, PSRAM relocation and handoff"
+
+[dependencies]
+oer-portable-time = { path = "../../../portable/time" }
+bytemuck = { version = "1.25.2", default-features = false }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-family-boot = { path = "../boot" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-chips-family-staged-layout.workspace = true
+oer-chips-family-platform-port = { path = "../platform-port" }
+
+[lints]
+workspace = true

@@ -2,7 +2,7 @@
 
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_pac::instances;
+use oer_chips_esp32s31_pac::instances;
 
 use super::{EfuseRegisters, FactoryIdentity, Interface};
 

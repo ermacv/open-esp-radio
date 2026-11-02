@@ -1,9 +1,12 @@
 # `cargo fw`
 
-Builds the staged images of `firmware/apps`, writes them into a stand board's
-flash and runs them to a verdict. `boot-smoke` and `radio-root` are the
-application images. HIL and probes are selected with paths relative to
-`firmware/apps`, such as `../hil/esp32s31` or `../probes/esp32s31-radio`.
+Builds the staged images, writes them into a stand board's flash and runs
+them to a verdict. An image is named by its directory: an example
+(`examples/wifi-station` is `wifi-station`), a probe (`hil/probes/esp32s31-radio`
+is `esp32s31-radio`) or a HIL image as `hil-<directory>` (`hil/images/aes` is
+`hil-aes`). A path is refused, so a bundle stays below `target/fw/`. An image
+on the application entry names no chip: the build selects the board's chip
+(`oer/<chip>`) and links the image for it.
 
 ```console
 cargo fw sizes <base-output-directory> <head-output-directory>
@@ -43,7 +46,7 @@ digests the manifest records.
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 implicit moves above the stack policy's `max_move_bytes` reported (`-W
 large-assignments`), and through the image linker
-(`oer-tool-image-linker` of `tools/image/linker`), which refuses bytes in an input section
+(`oer-tools-image-linker` of `tools/image/linker`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
 `chips/esp32s31/platform/stack.toml` (`runtime-stack.txt`,
@@ -54,7 +57,7 @@ the runtime to the chip's `[placement]` contract (`placement.txt`).
 | --- | --- | --- |
 | `build` | Interrupt stacks (`Enforced::Only({Interrupts})`) | Frames, panic budgets, task stacks, bootstrap stack and placement |
 | `run` | None (`Enforced::Reported`) | All requested checks |
-| `build --diagnostic` (only `firmware/probes` packages) | None (`Enforced::Reported`, as already used by `run`) | All requested checks |
+| `build --diagnostic` (only `hil/probes` packages) | None (`Enforced::Reported`, as already used by `run`) | All requested checks |
 | `flash` | Uses the existing bundle without rerunning checks | Uses its recorded results |
 
 An interrupt stack without a proven bound (`partial + ?`), above its budget,
@@ -74,7 +77,7 @@ A reported check that does not pass prints as a warning containing
 already built bundle.
 
 `build --bin BINARY` selects a companion binary in the image package.
-`--diagnostic` is an explicit build option restricted to `firmware/probes`
+`--diagnostic` is an explicit build option restricted to `hil/probes`
 packages. It uses the same `Enforced::Reported` policy as `cargo fw run`: requested
 product checks still run and retain their results, but a failed reported check
 does not reject the diagnostic bundle. It changes no panic budget or stack/frame
@@ -108,7 +111,7 @@ HIL images retain their existing envelopes and console path.
 
 Boards and hubs come from the owner's stand file,
 `~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
-which `oer-lab-router` reads ([tools/lab/router/README.md](../../lab/router/README.md): its
+which `oer-tools-lab-router` reads ([tools/lab/router/README.md](../../lab/router/README.md): its
 schema, what each command reads of it, which values are secret). Attached
 boards are found by the LAB service in sysfs as Espressif USB Serial/JTAG
 devices (`303a:1001`), whose serial number is the chip's MAC. Only ESP32-S31

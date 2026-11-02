@@ -1,6 +1,6 @@
 //! Fixed-capacity materialization of a validated ESP-NOW v2 datagram.
 
-use oer_ieee80211_wire::extensions::espressif::esp_now::{
+use oer_protocols_ieee80211_wire::extensions::espressif::esp_now::{
     ESP_NOW_V2_MAX_PAYLOAD_LEN, EspNowV2Action, EspNowV2WireError,
 };
 
@@ -72,7 +72,7 @@ impl<const N: usize> Default for EspNowV2Reassembly<N> {
 #[allow(clippy::disallowed_macros)]
 mod tests {
     use super::*;
-    use oer_ieee80211_wire::extensions::espressif::esp_now::EspNowRandomValue;
+    use oer_protocols_ieee80211_wire::extensions::espressif::esp_now::EspNowRandomValue;
 
     #[test]
     fn invalid_retained_length_returns_error_instead_of_panicking() {

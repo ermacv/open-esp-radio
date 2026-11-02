@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-vendor-scenario-cli"
+name = "oer-tools-vendor-scenario-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,11 +9,11 @@ publish = false
 description = "The vendor-scenario binary: the ESP32-S31 scenarios and the reviewer commands behind one command line"
 
 [dependencies]
-oer-vendor-scenario = { path = "../scenario" }
+oer-tools-vendor-scenario = { path = "../scenario" }
 
 [lints]
 workspace = true
 
 [[bin]]
-name = "oer-tool-vendor-scenario"
+name = "oer-tools-vendor-scenario"
 path = "src/main.rs"

@@ -1,6 +1,6 @@
 //! The interrupt gate checks code placement and each hart's worst-case stack,
 //! bounded from the image's machine code, its interrupt table and the chip's
-//! ROM ELF (`oer-image-stack`). The bound must leave the platform's
+//! ROM ELF (`oer-tools-image-stack`). The bound must leave the platform's
 //! margin below the usable interrupt stack. Diagnostic images report placement
 //! violations and unresolved bounds; handler entries and panic safety are
 //! mandatory under either policy.
@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_image_stack::{
+use oer_tools_image_stack::{
     Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, Vector, Violation,
     interrupt_entry, interrupt_table, parse_summaries, trap_entry, vector_table,
 };
@@ -18,8 +18,8 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 
 use crate::stack::budget::{Budget, LIMITS};
 use crate::stack::{ADMITTED, Image, contract::Contract};
-use oer_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_model::{Ledger, RunControl, WorkingMemory};
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 
 mod placement;
 pub use placement::{INTERRUPT_PLACEMENT_REPORT, InterruptPlacement};
@@ -38,12 +38,12 @@ pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
-    pub resources: Box<oer_analysis_riscv_model::AnalysisResources>,
+    pub resources: Box<oer_tools_analysis_riscv_model::AnalysisResources>,
     /// Each hart's actual linked storage, independently of the contract maximum.
     pub allocations: BTreeMap<u32, LinkedStack>,
     pub expression_limited_functions: usize,
     pub witness_memory_peak: u64,
-    pub traps: oer_image_stack::TrapFact,
+    pub traps: oer_tools_image_stack::TrapFact,
     pub harts: Vec<HartStack>,
     /// The ROM summaries the image's analysis applied: those of the ROM
     /// functions it reaches.
@@ -509,8 +509,8 @@ impl InterruptStacks {
         if self.expression_limited_functions != 0 {
             resources
                 .limited
-                .result(oer_analysis_riscv_model::LimitReason::LocalBudget(
-                    oer_analysis_riscv_model::LocalBudgetScope::FunctionExpressions,
+                .result(oer_tools_analysis_riscv_model::LimitReason::LocalBudget(
+                    oer_tools_analysis_riscv_model::LocalBudgetScope::FunctionExpressions,
                 ));
         }
         let mut out = crate::stack::budget::header(&resources, self.witness_memory_peak);
@@ -675,7 +675,10 @@ fn report_names(image: &Image, harts: &[HartStack]) -> BTreeMap<u32, String> {
 
 /// The names of the reviewed ROM summaries of `profile`'s chip; none for a
 /// chip that reviews none.
-pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result<Vec<String>> {
+pub fn rom_summaries(
+    root: &Path,
+    profile: &oer_tools_chip_profile::Profile,
+) -> Result<Vec<String>> {
     let Some(path) = profile
         .facts
         .rom
@@ -692,7 +695,10 @@ pub fn rom_summaries(root: &Path, profile: &oer_chip_profile::Profile) -> Result
 /// a source to it would run a handler on a stack nobody bounded. An entry the
 /// build left out (no handler) routes nothing, as the router binds only
 /// entries with a handler.
-fn reject_unstacked_cores(table: &[oer_image_stack::TableEntry], harts: &[u32]) -> Result<()> {
+fn reject_unstacked_cores(
+    table: &[oer_tools_image_stack::TableEntry],
+    harts: &[u32],
+) -> Result<()> {
     match table
         .iter()
         .find(|entry| entry.handler.is_some() && !harts.contains(&entry.core))
@@ -713,15 +719,15 @@ fn reject_unstacked_cores(table: &[oer_image_stack::TableEntry], harts: &[u32]) 
 /// gate proved at build time; it has no stack to bound.
 pub fn interrupt_stacks(
     root: &Path,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     elf: Vec<u8>,
 ) -> Result<InterruptStacks> {
     let mut profile = profile.clone();
     if let Some(contract) = profile.facts.interrupts.as_mut() {
-        let file = oer_analysis_elf::Elf::parse(&elf)?;
+        let file = oer_tools_analysis_elf::Elf::parse(&elf)?;
         let mut harts = Vec::new();
         for &hart in &contract.harts {
-            let range = oer_analysis_elf::StorageBounds::range(
+            let range = oer_tools_analysis_elf::StorageBounds::range(
                 &file,
                 &format!("__runtime_cpu{hart}_irq_stack_bottom"),
                 &format!("__runtime_cpu{hart}_irq_stack_top"),
@@ -836,10 +842,11 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         cores: &interrupts.harts,
         vectors: &vectors,
         exception,
-        exception_copies: oer_image_stack::exception_copies(facts.file())?,
+        exception_copies: oer_tools_image_stack::exception_copies(facts.file())?,
         resolutions,
     };
-    let harts = oer_image_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
+    let harts =
+        oer_tools_image_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
     let panic_code = panic_path_code(
         analysis,
         names,
@@ -859,7 +866,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         &mut control,
     )?;
     let interrupt_code = code_placement.handler_code(analysis, names, &contract.memory);
-    let parsed = oer_analysis_elf::Elf::parse(elf)?;
+    let parsed = oer_tools_analysis_elf::Elf::parse(elf)?;
     let code_sections: Vec<_> = parsed
         .sections()
         .filter(|section| section.executable)
@@ -967,7 +974,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         .find(|(_, name)| *name == "oer_platform_panic_hook");
     let panic_hook_data = match hook {
         Some((&address, _)) => cached_hook_references(
-            &oer_analysis_elf::Elf::parse(elf)?,
+            &oer_tools_analysis_elf::Elf::parse(elf)?,
             functions,
             &analysis
                 .bound_with(address, resolutions, &mut keep, &mut control)?
@@ -979,7 +986,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     Ok(InterruptStacks {
         resources: image.resources.clone(),
         allocations: allocation::read(
-            &oer_analysis_elf::Elf::parse(elf)?,
+            &oer_tools_analysis_elf::Elf::parse(elf)?,
             interrupts,
             &contract.memory,
         )?,
@@ -1013,7 +1020,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
 /// Each exempt entry's handler slot and its reason: the bytes of the symbol
 /// named by `prefix` and a name of the slot's symbol.
 fn exemption_reasons(
-    elf: &oer_analysis_elf::Elf<'_>,
+    elf: &oer_tools_analysis_elf::Elf<'_>,
     table: &[TableEntry],
     prefix: &str,
 ) -> Result<Vec<(u32, String)>> {
@@ -1052,12 +1059,12 @@ fn exemption_reasons(
 /// unlike task-only metadata extraction in the platform handler, none of its
 /// own static references may depend on the cache.
 fn cached_hook_references(
-    elf: &oer_analysis_elf::Elf<'_>,
-    functions: &[oer_image_stack::Function],
+    elf: &oer_tools_analysis_elf::Elf<'_>,
+    functions: &[oer_tools_image_stack::Function],
     reached: &BTreeSet<u32>,
-    memory: &oer_espressif_facts::Memory,
+    memory: &oer_chips_family_facts::Memory,
 ) -> Result<Vec<(u32, u32, u64)>> {
-    use oer_analysis_elf::rv32::{Role, kind};
+    use oer_tools_analysis_elf::rv32::{Role, kind};
     let mut references = BTreeSet::new();
     for section in elf.sections().filter(|section| section.executable) {
         for relocation in elf.relocations(section.index)? {
@@ -1097,8 +1104,8 @@ fn cached_hook_references(
 fn panic_path_code(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
-    resolutions: &oer_image_stack::Resolutions,
-    memory: &oer_espressif_facts::Memory,
+    resolutions: &oer_tools_image_stack::Resolutions,
+    memory: &oer_chips_family_facts::Memory,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<HandlerCode> {
@@ -1113,7 +1120,7 @@ fn panic_path_code(
 fn panic_reached(
     analysis: &Analysis,
     names: &BTreeMap<u32, String>,
-    resolutions: &oer_image_stack::Resolutions,
+    resolutions: &oer_tools_image_stack::Resolutions,
     keep: &mut Ledger<'_>,
     control: &mut dyn RunControl,
 ) -> Result<BTreeSet<u32>> {
@@ -1136,7 +1143,7 @@ fn handler_code(
     analysis: &Analysis,
     reached: &BTreeSet<u32>,
     names: &BTreeMap<u32, String>,
-    memory: &oer_espressif_facts::Memory,
+    memory: &oer_chips_family_facts::Memory,
 ) -> HandlerCode {
     let panicking = |address: u32| {
         names
@@ -1179,7 +1186,7 @@ fn handler_code(
 /// chain must hold one of the writer's contexts.
 fn level_writers(
     dwarf: &Dwarf,
-    interrupts: &oer_espressif_facts::InterruptContract,
+    interrupts: &oer_chips_family_facts::InterruptContract,
 ) -> Result<Vec<String>> {
     let writers: Vec<&str> = interrupts
         .level_writers
@@ -1237,12 +1244,12 @@ pub(crate) mod tests {
     }
 
     use super::*;
-    use oer_image_stack::Assumption;
+    use oer_tools_image_stack::Assumption;
 
     fn contract() -> Contract {
-        oer_espressif_facts::tracked::ids()
+        oer_chips_family_facts::tracked::ids()
             .into_iter()
-            .map(|id| oer_chip_profile::Profile::tracked(id).unwrap())
+            .map(|id| oer_tools_chip_profile::Profile::tracked(id).unwrap())
             .find_map(|profile| Contract::of(&profile))
             .expect("a chip names an interrupt contract")
     }
@@ -1287,7 +1294,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn partial(partial: u64) -> InterruptStacks {
-        let bound = oer_image_stack::Bound {
+        let bound = oer_tools_image_stack::Bound {
             root: 0,
             bytes: None,
             partial,
@@ -1299,7 +1306,7 @@ pub(crate) mod tests {
             reached: BTreeSet::new(),
             predecessors: Default::default(),
         };
-        let level = oer_image_stack::LevelStack {
+        let level = oer_tools_image_stack::LevelStack {
             level: 0,
             bytes: None,
             partial,
@@ -1406,7 +1413,7 @@ pub(crate) mod tests {
 
     #[test]
     fn panic_helpers_and_transitive_hook_callees_must_be_uncached() {
-        use oer_image_stack::{FrameSource, Function, FunctionFacts, Transfer, TransferKind};
+        use oer_tools_image_stack::{FrameSource, Function, FunctionFacts, Transfer, TransferKind};
         let memory = contract().memory;
         let sram = memory.sram.origin() + 0x1000;
         let cached = memory.psram.unwrap().origin() + 0x1000;
@@ -1474,7 +1481,7 @@ pub(crate) mod tests {
                     (root, entry.to_owned()),
                     (helper, "outlined_helper".to_owned()),
                 ]);
-                let resolutions = oer_image_stack::Resolutions::new();
+                let resolutions = oer_tools_image_stack::Resolutions::new();
                 let mut report = stacks(Vec::new());
                 report.names = names.clone();
                 report.panic_code = panic_path_code(
@@ -1641,7 +1648,7 @@ pub(crate) mod tests {
         // One such instruction breaks the sum over levels: no proof, and a
         // warning under the diagnostic policy.
         stacks.harts[0].exception.bound.level_drops =
-            vec![(0x2f00_1000, oer_image_stack::LevelDrop::Return)];
+            vec![(0x2f00_1000, oer_tools_image_stack::LevelDrop::Return)];
         let error = stacks.check(Required::Product).unwrap_err().to_string();
         assert!(error.contains("conditional"), "{error}");
         let warnings = stacks.check(Required::Diagnostic).unwrap();

@@ -1,0 +1,22 @@
+[package]
+name = "oer-chips-family-radio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+description = "Safe family RF domain membership, power and clock drivers over owned ports"
+
+[features]
+test-support = []
+
+[dependencies]
+oer-protocols-radio-coex = { path = "../../../protocols/radio/coex" }
+oer-chips-family-modem-clock = { path = "../modem-clock" }
+
+[dev-dependencies]
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true

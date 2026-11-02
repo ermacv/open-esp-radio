@@ -30,7 +30,7 @@ fn code(name: &'static str, words: Vec<u32>) -> Code {
 
 fn scan(code: Vec<Code>, entry: &str, top: u32) -> std::result::Result<(), String> {
     let bytes = executable(&code, &[]);
-    let elf = oer_analysis_elf::Elf::executable(&bytes).unwrap();
+    let elf = oer_tools_analysis_elf::Elf::executable(&bytes).unwrap();
     let address = elf.address(entry).unwrap() as u32;
     installs_stack_pointer(&elf, address, top, 0, &mut Default::default())
 }
@@ -104,7 +104,7 @@ fn an_entry_that_uses_the_stack_first_or_installs_another_stack_is_refused() {
 
 fn jump_target(words: Vec<u32>, site: u32) -> Option<u32> {
     let bytes = executable(&[code("jumper", words)], &[]);
-    let elf = oer_analysis_elf::Elf::executable(&bytes).unwrap();
+    let elf = oer_tools_analysis_elf::Elf::executable(&bytes).unwrap();
     let function = elf.functions().unwrap().remove(0);
     constant_jump_target(&elf, &function, site)
 }
@@ -147,7 +147,7 @@ fn bootstrap() -> Image {
     image(&[code("boot", vec![LUI_T1_0X5000, ADDI_T1_0, JR_T1])], &[])
 }
 
-fn boot_bound(image: &Image) -> oer_image_stack::Bound {
+fn boot_bound(image: &Image) -> oer_tools_image_stack::Bound {
     let boot = image.symbol("boot").unwrap();
     image
         .with_bounds(|keep, control| {
@@ -197,7 +197,7 @@ fn a_functions_bytes_come_from_its_address_whatever_section_index_it_carries() {
         )],
         &[("label", 0, 0)],
     );
-    let elf = oer_analysis_elf::Elf::executable(&bytes).unwrap();
+    let elf = oer_tools_analysis_elf::Elf::executable(&bytes).unwrap();
     let mut function = elf.functions().unwrap().remove(0);
     let above = elf
         .sections()

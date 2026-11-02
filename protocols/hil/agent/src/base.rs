@@ -5,11 +5,11 @@
 //! because it names another boot, carries a session, or has a key the image
 //! does not serve — or as one of the image's own requests to serve.
 
-use oer_hil_protocol::base::{
+use oer_protocols_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetHello, GetImageKeys, GetLinkHealth, GetPostMortemCheckpoints,
     Hello, ImageKeySet, LinkHealth, PostMortemCheckpoints, RejectReason, Rejected,
 };
-use oer_hil_protocol::{
+use oer_protocols_hil_protocol::{
     DecodeCounters, DecodeError, Endpoint, Frame, FrameDecoder, Key, Message, RequestIdentity,
     WireKind,
 };
@@ -244,7 +244,7 @@ enum Served {
 /// The base module's answer to `frame`, or `None` for another module's
 /// request.
 fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
-    if let Err(reason) = oer_hil_protocol::base::validate_target(frame, boot_id) {
+    if let Err(reason) = oer_protocols_hil_protocol::base::validate_target(frame, boot_id) {
         return Some(Served::Answer(Answer::Rejected(reason)));
     }
     let base = [
@@ -279,12 +279,12 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
 /// optional `publishes` list (unsolicited topics and properties).
 ///
 /// ```ignore
-/// oer_hil_agent::requests! {
+/// oer_protocols_hil_agent::requests! {
 ///     /// The requests this image serves.
 ///     pub enum Request (sessions = false) {
-///         Reset(oer_hil_protocol::lifecycle::RequestReset),
+///         Reset(oer_protocols_hil_protocol::lifecycle::RequestReset),
 ///     }
-///     publishes [oer_hil_protocol::base::Hello]
+///     publishes [oer_protocols_hil_protocol::base::Hello]
 /// }
 /// ```
 ///
@@ -350,7 +350,7 @@ macro_rules! requests {
 /// implements the trait; a missing or extra method does not compile.
 ///
 /// ```ignore
-/// oer_hil_agent::service! {
+/// oer_protocols_hil_agent::service! {
 ///     /// The AES service's requests.
 ///     pub enum Request (sessions = false, handler = Handler) {
 ///         UnwrapKey(UnwrapKey) => unwrap_key,
@@ -365,7 +365,7 @@ macro_rules! requests {
 ///
 /// ```compile_fail
 /// # mod wire {
-/// #     use oer_hil_protocol::{Endpoint, Message, WireKind};
+/// #     use oer_protocols_hil_protocol::{Endpoint, Message, WireKind};
 /// #     #[derive(serde::Serialize, serde::Deserialize, postcard_schema::Schema)]
 /// #     pub struct Ask;
 /// #     impl Message for Ask { const PATH: &'static str = "doc/ask"; const WIRE_KIND: WireKind = WireKind::Command; }
@@ -374,7 +374,7 @@ macro_rules! requests {
 /// #     pub struct Told;
 /// #     impl Message for Told { const PATH: &'static str = "doc/told"; }
 /// # }
-/// oer_hil_agent::service! {
+/// oer_protocols_hil_agent::service! {
 ///     pub enum Request (sessions = false, handler = Handler) {
 ///         Ask(wire::Ask) => ask,
 ///     }
@@ -387,11 +387,11 @@ macro_rules! requests {
 /// either:
 ///
 /// ```compile_fail
-/// oer_hil_agent::requests! {
-///     pub enum First (sessions = false) { Reset(oer_hil_protocol::lifecycle::RequestReset) }
+/// oer_protocols_hil_agent::requests! {
+///     pub enum First (sessions = false) { Reset(oer_protocols_hil_protocol::lifecycle::RequestReset) }
 /// }
-/// oer_hil_agent::image_keys! {
-///     KEYS = [First, oer_hil_agent::lifecycle::Request]
+/// oer_protocols_hil_agent::image_keys! {
+///     KEYS = [First, oer_protocols_hil_agent::lifecycle::Request]
 /// }
 /// ```
 #[macro_export]
@@ -457,9 +457,9 @@ macro_rules! service {
 /// time; a key two services share counts once.
 ///
 /// ```ignore
-/// oer_hil_agent::image_keys! {
+/// oer_protocols_hil_agent::image_keys! {
 ///     /// What the reset-capable image serves.
-///     pub(crate) KEYS = [oer_hil_agent::lifecycle::Request]
+///     pub(crate) KEYS = [oer_protocols_hil_agent::lifecycle::Request]
 /// }
 /// ```
 #[macro_export]

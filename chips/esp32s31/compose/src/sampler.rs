@@ -1,7 +1,7 @@
 //! A program-counter sampler on TIMG1 T0, for any image that selects it.
 //!
 //! The image binds TIMG1 T0's interrupt above every level it wants to see
-//! and names the [`oer_trace::Observer`] that receives the samples. A
+//! and names the [`oer_portable_trace::Observer`] that receives the samples. A
 //! session runs only between [`Sampler::start`] and [`Sampler::stop`];
 //! otherwise the timer is stopped and masked: no tick, no handler entry.
 //!
@@ -11,10 +11,10 @@
 //! latency never shifts later ticks, and a tick whose time passed while
 //! the hart's interrupts were masked fires as soon as they open, at the
 //! code that opened them. Every scheduled tick reports one
-//! [`oer_trace::profile::PcSample`] and, in a trace build, right after it a
-//! [`oer_trace::profile::ReturnSample`] of the interrupted `ra`, which the
+//! [`oer_portable_trace::profile::PcSample`] and, in a trace build, right after it a
+//! [`oer_portable_trace::profile::ReturnSample`] of the interrupted `ra`, which the
 //! staged runtime's interrupt entry recorded
-//! (`oer_espressif_staged_runtime::stacks::interrupted_ra`): in a leaf
+//! (`oer_chips_family_staged_runtime::stacks::interrupted_ra`): in a leaf
 //! function such as a memory copy it names the caller. Ticks requested to
 //! stop report none.
 //!
@@ -26,8 +26,8 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use oer_memory::{AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
-use oer_trace::profile::{PcSample, ReturnSample};
+use oer_portable_memory::{AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
+use oer_portable_trace::profile::{PcSample, ReturnSample};
 
 /// The schedule's program: the timer's operations a session needs.
 pub trait Alarm {
@@ -281,13 +281,13 @@ pub use chip::{Storage, Timer};
 mod chip {
     use super::{Alarm, Ended, Handler, Lost, Sampler, Session, Shared, StartError};
     use core::marker::PhantomData;
-    use oer_esp32s31_hal::peripherals::timg1_alarm::{
+    use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{
         Timg1AlarmInterrupt, Timg1AlarmParts, Timg1AlarmProgram,
     };
-    use oer_espressif_interrupt_table::{Bound, Controller, Entry, Router};
-    use oer_memory::{AffineSpscQueue, CompactSpscCursor, HandlerCell};
-    use oer_time::{Duration, Instant, Timer as _};
-    use oer_trace::Observer;
+    use oer_chips_family_interrupt_table::{Bound, Controller, Entry, Router};
+    use oer_portable_memory::{AffineSpscQueue, CompactSpscCursor, HandlerCell};
+    use oer_portable_time::{Duration, Instant, Timer as _};
+    use oer_portable_trace::Observer;
     use static_cell::StaticCell;
 
     /// TIMG1 T0's program part with the handler's binding.
@@ -371,8 +371,8 @@ mod chip {
                 return None;
             }
             let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
-                oer_espressif_staged_runtime::interrupts::reset_binding::<
-                    oer_esp32s31_hal::platform::Port,
+                oer_chips_family_staged_runtime::interrupts::reset_binding::<
+                    oer_chips_esp32s31_hal::platform::Port,
                     _,
                 >(error)
             });
@@ -394,12 +394,12 @@ mod chip {
             // in bits 23:16), and the staged entry (`vectors.s`), which
             // restores `mepc` and `mcause` only on exit: with no level
             // above this one bound, nothing traps in between.
-            let pc = oer_riscv::read_mepc() as u32;
-            let level = (oer_riscv::read_mcause() >> 16) as u8;
+            let pc = oer_portable_riscv::read_mepc() as u32;
+            let level = (oer_portable_riscv::read_mcause() >> 16) as u8;
             // The entry of this handler, at the hart's highest bound level,
             // recorded the interrupted `ra` last.
             #[cfg(oer_trace)]
-            let ra = oer_espressif_staged_runtime::stacks::interrupted_ra();
+            let ra = oer_chips_family_staged_runtime::stacks::interrupted_ra();
             #[cfg(not(oer_trace))]
             let ra = None;
             let pending = part.acknowledge().pending;
@@ -408,9 +408,9 @@ mod chip {
                 .handler
                 .with(|handler| handler.tick(&self.shared, pending, pc, level, ra))
             {
-                oer_trace::observe!(observer, tick.sample);
+                oer_portable_trace::observe!(observer, tick.sample);
                 if let Some(ret) = tick.ret {
-                    oer_trace::observe!(observer, ret);
+                    oer_portable_trace::observe!(observer, ret);
                 }
             }
         }
@@ -432,7 +432,7 @@ mod chip {
         /// # Errors
         /// [`StartError`]; the sampler stays idle.
         pub fn start_masked(&mut self, period_us: u32) -> Result<(), StartError> {
-            self.start(period_us, |body| oer_riscv::interrupt_free(body))
+            self.start(period_us, |body| oer_portable_riscv::interrupt_free(body))
         }
 
         /// Stop the running session and take it back, waiting at most four
@@ -446,7 +446,7 @@ mod chip {
             }
             self.request_stop();
             let period = u64::from(period_us);
-            let now = oer_embassy_time::now_micros;
+            let now = oer_portable_embassy_time::now_micros;
             let deadline = now().saturating_add(period.saturating_mul(4).saturating_add(10_000));
             loop {
                 if let Some(ended) = self.take_back() {
@@ -456,7 +456,7 @@ mod chip {
                 if at >= deadline {
                     return Err(Lost);
                 }
-                oer_embassy_time::EmbassyClock
+                oer_portable_embassy_time::EmbassyClock
                     .wait_until(Instant::from_micros(
                         at.saturating_add(period).min(deadline),
                     ))

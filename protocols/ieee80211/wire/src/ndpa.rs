@@ -70,7 +70,7 @@ pub struct HeNdpa<'a> {
 
 impl<'a> HeNdpa<'a> {
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeNdpaError> {
-        let mut reader = oer_wire::Reader::new(mpdu);
+        let mut reader = oer_portable_wire::Reader::new(mpdu);
         let header = reader
             .array::<NDPA_HEADER_SIZE>()
             .map_err(|_| HeNdpaError::TooShort)?;
@@ -273,7 +273,7 @@ impl HeNdpaEncoding<'_> {
         for (out, byte) in head.iter_mut().zip(header.into_iter().flatten()) {
             *out = *byte;
         }
-        let mut writer = oer_wire::Writer::new(body);
+        let mut writer = oer_portable_wire::Writer::new(body);
         for station in self.stations {
             writer
                 .write(&station.encode()?.to_le_bytes())
@@ -292,7 +292,7 @@ impl Iterator for HeNdpaStationIterator<'_> {
     type Item = HeNdpaStationInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut reader = oer_wire::Reader::new(self.remaining);
+        let mut reader = oer_portable_wire::Reader::new(self.remaining);
         let word = reader.array::<HE_STA_INFO_SIZE>().ok()?;
         let rest = reader.remaining();
         self.remaining = rest;
@@ -331,12 +331,12 @@ impl<'a> HeCompressedBeamformingReport<'a> {
     }
 
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeCompressedBeamformingReportError> {
-        let mut reader = oer_wire::Reader::new(mpdu);
+        let mut reader = oer_portable_wire::Reader::new(mpdu);
         let fixed = reader
             .array::<REPORT_FIXED_SIZE>()
             .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
         let rest = reader.remaining();
-        let mut reader = oer_wire::Reader::new(fixed);
+        let mut reader = oer_portable_wire::Reader::new(fixed);
         let header = reader
             .array::<MANAGEMENT_HEADER_SIZE>()
             .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
@@ -347,7 +347,7 @@ impl<'a> HeCompressedBeamformingReport<'a> {
         {
             return Err(HeCompressedBeamformingReportError::NotActionNoAck);
         }
-        let mut reader = oer_wire::Reader::new(action);
+        let mut reader = oer_portable_wire::Reader::new(action);
         let &[category, action] = reader
             .array::<2>()
             .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
@@ -362,7 +362,7 @@ impl<'a> HeCompressedBeamformingReport<'a> {
         let average_snr_len = (MimoControlFields::from_bytes([c0, c1, c2, c3, c4]).columns()
             as usize)
             .saturating_add(1);
-        let mut reader = oer_wire::Reader::new(rest);
+        let mut reader = oer_portable_wire::Reader::new(rest);
         let average_snr = reader
             .take(average_snr_len)
             .map_err(|_| HeCompressedBeamformingReportError::MissingAverageSnr)?;
@@ -451,7 +451,7 @@ impl<'a> HeCompressedBeamformingReport<'a> {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (NDP Announcement frame).
     pub struct NdpaStationFields[4] (little) {
         pub association_id, with_association_id: u16 = 0..11;
@@ -463,14 +463,14 @@ oer_wire::bitfield! {
         pub nc_encoding, with_nc_encoding: u8 = 29..32;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (Sounding Dialog Token field).
     pub struct NdpaToken[1] (little) {
         pub he, with_he: bool = 1..2;
         pub token, with_token: u8 = 2..8;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.1.64 (HE MIMO Control field).
     pub struct MimoControlFields[5] (little) {
         pub columns, with_columns: u8 = 0..3;

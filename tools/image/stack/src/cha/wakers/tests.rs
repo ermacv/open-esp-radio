@@ -3,7 +3,7 @@ use crate::cha::{Type, Variant};
 use crate::dwarf::locations::{LocalLocations, Location};
 use crate::tests::{Symbol, analyze, debug, executable, ledger};
 use crate::{Analysis, Dwarf, Fact, Resolutions, waker_resolutions};
-use oer_analysis_riscv_model::{Error, ErrorCode};
+use oer_tools_analysis_riscv_model::{Error, ErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
 
 const TEXT: u32 = 0x1000;
@@ -401,10 +401,10 @@ fn typed_proofs_do_not_cross_memory_writes_calls_or_cycles() {
 
 #[test]
 fn cancellation_releases_typed_address_scratch() {
-    use oer_analysis_riscv_model::{Ledger, WorkingMemory};
+    use oer_tools_analysis_riscv_model::{Ledger, WorkingMemory};
     let f = Fixture::merged();
     let source = f.types.source.as_ref().unwrap();
-    let file = oer_analysis_elf::Elf::parse(source).unwrap();
+    let file = oer_tools_analysis_elf::Elf::parse(source).unwrap();
     let facts = &f.analysis.functions[&TEXT];
     let load = &facts.target_loads[&f.site][0];
     let memory = WorkingMemory::new(1 << 20).unwrap();

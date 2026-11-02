@@ -16,7 +16,7 @@ pub use crate::leaf::{
     in_archive, leaf, objects, ordered, output, prefix, quiet, released, released_when_leased,
     replaced, rom, ruled, stated, tail_prefix, vendor_reads,
 };
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallBinding, CallDeclaration, CallRepetition, CallResponse, ExecutionTarget, RegionLifetime,
     SessionReset,
 };
@@ -551,7 +551,7 @@ fn vendor_section(session: &Session, object: &str, section: &str) -> Result<Vec<
     let record = crate::esp32s31::harness::named_section(object, section)?;
     let request = crate::esp32s31::harness::data_request(
         object,
-        oer_analysis_blobray_domain::DataSelector::Section {
+        oer_tools_analysis_blobray_domain::DataSelector::Section {
             section: record.index,
             offset: 0,
             length: record.size,

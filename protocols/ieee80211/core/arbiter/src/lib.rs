@@ -121,8 +121,8 @@
 //! arbiter:
 //!
 //! ```compile_fail,E0277
-//! # use oer_ieee80211_core_arbiter::{AirReservation, CloseGateWith};
-//! # use oer_ieee80211_contracts_port::{GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
+//! # use oer_protocols_ieee80211_core_arbiter::{AirReservation, CloseGateWith};
+//! # use oer_protocols_ieee80211_contracts_port::{GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
 //! fn close<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
 //!     CloseGateWith::<'p, 'id, AirReservation>::close_gate_with(
 //!         phase,
@@ -137,8 +137,8 @@
 //! the reservation, and a phase with it those of a reserving one.
 //!
 //! ```
-//! # use oer_ieee80211_core_arbiter::{AirReservation, CloseGateWith, NoReservation};
-//! # use oer_ieee80211_contracts_port::{AirReservationPhase, GateClosed, GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
+//! # use oer_protocols_ieee80211_core_arbiter::{AirReservation, CloseGateWith, NoReservation};
+//! # use oer_protocols_ieee80211_contracts_port::{AirReservationPhase, GateClosed, GateOpen, Ieee80211Instant, LowerMacPhase, PhaseTypes};
 //! fn plain<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P, gate: GateOpen<'id, <P::Types as PhaseTypes<'id>>::GatePath>) {
 //!     CloseGateWith::<'p, 'id, NoReservation>::close_gate_with(
 //!         phase,
@@ -160,7 +160,7 @@
 //! No caller makes a lease place, so no station holds two leases:
 //!
 //! ```compile_fail,E0451
-//! let _ = oer_ieee80211_core_arbiter::LeasePlace::<oer_radio_port::Root<oer_radio_port::LocalId<'static>>> {
+//! let _ = oer_protocols_ieee80211_core_arbiter::LeasePlace::<oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'static>>> {
 //!     private: core::marker::PhantomData,
 //! };
 //! ```
@@ -175,13 +175,13 @@ pub mod interface;
 
 use core::{fmt::Debug, marker::PhantomData};
 
-use oer_ieee80211_contracts_port::{
+use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_contracts_port::{
     AirReservationPhase, ArbiterAuthority, GateClosed, GateOpen, Ieee80211Capabilities,
     Ieee80211Instant, LowerMacPhase, PhaseTypes, SupportedChannel,
 };
-use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
-use oer_radio_port::{PoolPath, Root};
-use oer_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitchMode;
+use oer_protocols_radio_port::{PoolPath, Root};
 
 use coordinator::{
     ApFollowPolicy, ApSchedule, ApSearchPolicy, BeaconInterval, ChannelCoordinator,
@@ -191,19 +191,22 @@ use coordinator::{
 /// The longest air reservation: the Duration field's limit, in
 /// microseconds.
 pub const MAX_RESERVATION: Duration =
-    Duration::from_micros(oer_ieee80211_wire::frame::MAX_DURATION_MICROS as u64);
+    Duration::from_micros(oer_protocols_ieee80211_wire::frame::MAX_DURATION_MICROS as u64);
 
 type Brand<'id, Path> = PhantomData<fn(&'id (), Path) -> (&'id (), Path)>;
 
 /// The name of one lease.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeaseId<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>>(u64, Brand<'id, Path>);
+pub struct LeaseId<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>(
+    u64,
+    Brand<'id, Path>,
+);
 
 /// The station's right to hold one lease: a request takes it, and the
 /// lease's end or cancellation gives it back. Only the arbiter makes one.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "retain the sole place for the station's next channel request"]
-pub struct LeasePlace<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct LeasePlace<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     private: Brand<'id, Path>,
 }
 
@@ -212,14 +215,14 @@ pub struct LeasePlace<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> 
 /// cancellation gives it back. Only the arbiter makes one.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "retain the sole place for the station's next absence request"]
-pub struct AbsencePlace<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct AbsencePlace<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     private: Brand<'id, Path>,
 }
 
 /// Complete station admission bank returned by a stopped arbiter. Both places
 /// are actual returned owners; a station restart cannot accept a partial bank.
 #[must_use = "move both places into the restarted station"]
-pub struct StationPlaces<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct StationPlaces<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     lease: LeasePlace<'id, Path>,
     absence: AbsencePlace<'id, Path>,
 }
@@ -234,7 +237,7 @@ impl<'id, Path: PoolPath> StationPlaces<'id, Path> {
 /// leases cancelled by arbiter retirement. This collection has no restart
 /// authority. Only the stopped arbiter consumes it into `StationPlaces`.
 #[must_use = "return the collection to the stopped arbiter or retire it"]
-pub struct StationPlaceReturns<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct StationPlaceReturns<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     lease: Option<LeasePlace<'id, Path>>,
     absence: Option<AbsencePlace<'id, Path>>,
 }
@@ -271,7 +274,7 @@ impl<'id, Path: PoolPath> StationPlaceReturns<'id, Path> {
 /// and the station gives it back by value.
 #[derive(Debug)]
 #[must_use = "a lease goes back through `Arbiter::release`, or ends by its notice"]
-pub struct Lease<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct Lease<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     id: LeaseId<'id, Path>,
     channel: SupportedChannel<K>,
     from: Instant,
@@ -357,7 +360,7 @@ pub struct ChannelRequest<K> {
 /// The arbiter's answer to a connected station's absence.
 #[derive(Debug)]
 #[must_use = "deliver the lease or retain the returned absence place"]
-pub enum AbsenceAnswer<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub enum AbsenceAnswer<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     /// The absence, leased: it starts a preparation window later, once the
     /// station said [`Arbiter::ready`], and returns to the primary lease's
     /// channel.
@@ -382,7 +385,7 @@ pub enum AbsenceRefusal {
 /// The arbiter's answer to a request.
 #[derive(Debug)]
 #[must_use = "deliver the lease or retain the returned admission place"]
-pub enum Answer<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub enum Answer<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     /// The channel, leased; the arbiter keeps the place until the lease
     /// ends. A join away from the running access point's channel, which
     /// the access point follows, starts once the access point's announced
@@ -456,7 +459,7 @@ pub enum CancelReason {
 /// What the arbiter tells the station.
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "deliver the notice and return any admission place to the station"]
-pub enum StationNotice<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub enum StationNotice<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     /// The lease started: the port runs on its channel.
     LeaseStarted(LeaseId<'id, Path>),
     /// The lease ended: the port left its channel; the place comes back.
@@ -645,16 +648,16 @@ impl<'p, 'id: 'p, P: AirReservationPhase<'p, 'id>> CloseGateWith<'p, 'id, AirRes
 /// Discarding a produced token is diagnosed by `unused_must_use`:
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use oer_ieee80211_core_arbiter::PendingRetune;
-/// fn ignore<'id, K, Path: oer_radio_port::PoolPath>(next: impl FnOnce() -> PendingRetune<'id, K, Path>) {
+/// use oer_protocols_ieee80211_core_arbiter::PendingRetune;
+/// fn ignore<'id, K, Path: oer_protocols_radio_port::PoolPath>(next: impl FnOnce() -> PendingRetune<'id, K, Path>) {
 ///     next();
 /// }
 /// ```
 /// Its consumer retains it across the requested operation:
 /// ```
 /// #![deny(unused_must_use)]
-/// use oer_ieee80211_core_arbiter::PendingRetune;
-/// fn forward<'id, K, Path: oer_radio_port::PoolPath>(next: impl FnOnce() -> PendingRetune<'id, K, Path>) -> PendingRetune<'id, K, Path> {
+/// use oer_protocols_ieee80211_core_arbiter::PendingRetune;
+/// fn forward<'id, K, Path: oer_protocols_radio_port::PoolPath>(next: impl FnOnce() -> PendingRetune<'id, K, Path>) -> PendingRetune<'id, K, Path> {
 ///     next()
 /// }
 /// ```
@@ -666,12 +669,12 @@ impl<'p, 'id: 'p, P: AirReservationPhase<'p, 'id>> CloseGateWith<'p, 'id, AirRes
 /// unsolicited answer can be supplied.
 ///
 /// ```compile_fail
-/// use oer_ieee80211_core_arbiter::PendingRetune;
+/// use oer_protocols_ieee80211_core_arbiter::PendingRetune;
 /// let pending = PendingRetune { to: (), purpose: () };
 /// ```
 #[derive(Debug)]
 #[must_use = "finish or refuse the retune with this token"]
-pub struct PendingRetune<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct PendingRetune<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     brand: Brand<'id, Path>,
     to: SupportedChannel<K>,
     purpose: CyclePurpose<K>,
@@ -691,7 +694,7 @@ pub enum ArbiterAction<
     'id,
     K,
     R: ReservationMode,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     /// Tell the station.
     Station(StationNotice<'id, K, Path>),
@@ -1067,7 +1070,7 @@ impl<'id, K, Path: PoolPath> Outbox<'id, K, Path> {
 /// A notice deliverable without owning an enabled port phase.
 #[derive(Debug)]
 #[must_use = "deliver the notice and retain any admission place"]
-pub enum ArbiterNotice<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub enum ArbiterNotice<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     Station(StationNotice<'id, K, Path>),
     AccessPoint(AccessPointCommand<K>),
 }
@@ -1088,7 +1091,7 @@ struct ArbiterReturns<'id, K, Path: PoolPath> {
 /// Terminal failure: only owed notices and late owners can drain.
 /// There is no coordinator, admission or restart authority.
 #[must_use = "drain terminal notices and retain returned resources"]
-pub struct FailedArbiter<'id, K, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct FailedArbiter<'id, K, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     returns: ArbiterReturns<'id, K, Path>,
 }
 
@@ -1113,7 +1116,7 @@ pub struct StoppedArbiter<
     'id,
     K,
     R: ReservationMode = NoReservation,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     returns: ArbiterReturns<'id, K, Path>,
     policy: CheckedArbiterPolicy<R>,
@@ -1222,7 +1225,7 @@ pub enum RetiredArbiter<
     'id,
     K,
     R: ReservationMode = NoReservation,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     Stopped(StoppedArbiter<'id, K, R, Path>),
     PortFailed(FailedArbiter<'id, K, Path>),
@@ -1268,7 +1271,7 @@ pub enum RetuneRefused<
     'id,
     K: Ieee80211Capabilities,
     R: ReservationMode,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     Return {
         arbiter: Arbiter<'id, K, R, Path>,
@@ -1282,7 +1285,7 @@ pub struct Arbiter<
     'id,
     K: Ieee80211Capabilities,
     R: ReservationMode = NoReservation,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     policy: ArbiterPolicy,
     publication_bound: Duration,

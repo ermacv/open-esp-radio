@@ -12,7 +12,7 @@
 //!
 //! A received data MPDU of the station's BSS gives its MSDUs only once the
 //! replay check of the association's keys passed it
-//! ([`CcmpRxReplayEpoch`](oer_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch)); the reorder, when it comes, runs before it.
+//! ([`CcmpRxReplayEpoch`](oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch)); the reorder, when it comes, runs before it.
 //!
 //! The station's link ([`LinkView`]) is only there while data may go: it
 //! lends the BSS, the pairwise key (an action carries no key: the service
@@ -20,22 +20,22 @@
 //! the replay check and, on a non-QoS BSS, the station's sequence space.
 
 use crate::events::{DataLoss, StaEvent};
-use oer_events::{EventSink, report};
-use oer_ieee80211_contracts_port::{
+use oer_portable_events::{EventSink, report};
+use oer_protocols_ieee80211_contracts_port::{
     AckHeader, HeaderSpec, MpduLength, ReturnedMpdu, RxCryptoStatus, RxEvidence, RxMeta, SingleEnd,
     SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
-use oer_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// The TID of a data attempt ([`StaData::attempt_tid`]).
-pub use oer_ieee80211_wire::qos::WmmUserPriority;
-use oer_ieee80211_wire::{
+pub use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
+use oer_protocols_ieee80211_wire::{
     qos::WmmAccessCategory, sequence::SequenceNumber, station::StaProtectedDataFrame,
 };
 
 use crate::epoch::LinkEpoch;
 use crate::machine::{LinkMode, LinkProtection, LinkView, StaTokens};
 use crate::pool::{Fifo, Pool};
-use oer_radio_port::{PoolPath, Root};
+use oer_protocols_radio_port::{PoolPath, Root};
 
 /// The tokens of the data machine: the port's tickets and the buffers of
 /// the class that holds an MSDU's MPDU.
@@ -43,7 +43,7 @@ pub trait StaDataTokens {
     /// Component owning the connected station's epoch source.
     type EpochPath: PoolPath;
     /// The checked class carried by the MPDU description and context.
-    type Class: oer_ieee80211_contracts_port::TxBufferClass;
+    type Class: oer_protocols_ieee80211_contracts_port::TxBufferClass;
     /// A transmit ticket.
     type Ticket;
     /// A transmit buffer: its memory, which the machine encodes into.
@@ -71,20 +71,20 @@ pub struct Msdu<'a> {
     pub payload: &'a [u8],
     /// When the radio's software admitted it, on the monotonic clock: its
     /// age starts here and stays with each of its attempts.
-    pub admitted: oer_time::Instant,
+    pub admitted: oer_portable_time::Instant,
 }
 
 /// An MSDU and the station link on which it is submitted.
 ///
 /// ```compile_fail,E0223
-/// use oer_ieee80211_core_roles_sta::{data::DataInput, machine::StaTokens};
+/// use oer_protocols_ieee80211_core_roles_sta::{data::DataInput, machine::StaTokens};
 /// fn variant<T: StaTokens>(input: DataInput<'_, '_, '_, '_, T>) -> bool {
 ///     matches!(input, DataInput::Msdu { .. })
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_roles_sta::{data::DataInput, machine::StaTokens};
+/// use oer_protocols_ieee80211_core_roles_sta::{data::DataInput, machine::StaTokens};
 /// fn payload_length<T: StaTokens>(input: DataInput<'_, '_, '_, '_, T>) -> usize {
 ///     input.msdu.payload.len()
 /// }
@@ -133,7 +133,7 @@ pub enum DataReturn<'id, D: StaDataTokens, K> {
 /// The data machine returns this operation directly:
 ///
 /// ```compile_fail,E0432
-/// use oer_ieee80211_core_roles_sta::data::DataAction;
+/// use oer_protocols_ieee80211_core_roles_sta::data::DataAction;
 /// ```
 /// It names no key: on a protected link the service submits it under the
 /// link's pairwise key.
@@ -141,7 +141,7 @@ pub enum DataReturn<'id, D: StaDataTokens, K> {
 /// The operation cannot be changed into an open frame by changing a flag:
 ///
 /// ```compile_fail,E0609
-/// use oer_ieee80211_core_roles_sta::data::{DataTransmit, StaDataTokens};
+/// use oer_protocols_ieee80211_core_roles_sta::data::{DataTransmit, StaDataTokens};
 /// fn open<D: StaDataTokens, K>(transmit: &mut DataTransmit<'_, D, K>) {
 ///     transmit.protected = false;
 /// }
@@ -150,15 +150,15 @@ pub enum DataReturn<'id, D: StaDataTokens, K> {
 /// Its frame and access category belong only to the closed context:
 ///
 /// ```compile_fail,E0609
-/// use oer_ieee80211_core_roles_sta::data::{DataTransmit, StaDataTokens};
+/// use oer_protocols_ieee80211_core_roles_sta::data::{DataTransmit, StaDataTokens};
 /// fn replace<D: StaDataTokens, K>(
 ///     first: &mut DataTransmit<'_, D, K>, second: DataTransmit<'_, D, K>,
 /// ) { first.frame = second.frame; }
 /// ```
 ///
 /// ```compile_fail,E0609
-/// use oer_ieee80211_wire::qos::WmmAccessCategory;
-/// use oer_ieee80211_core_roles_sta::data::{DataTransmit, StaDataTokens};
+/// use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+/// use oer_protocols_ieee80211_core_roles_sta::data::{DataTransmit, StaDataTokens};
 /// fn change_category<D: StaDataTokens, K>(transmit: &mut DataTransmit<'_, D, K>) {
 ///     transmit.access_category = WmmAccessCategory::Voice;
 /// }
@@ -167,8 +167,8 @@ pub enum DataReturn<'id, D: StaDataTokens, K> {
 /// The service consumes the operation and returns every resource on refusal:
 ///
 /// ```
-/// use oer_ieee80211_core_roles_sta::data::{DataReturn, DataTransmit, DataTransmitParts, StaDataTokens};
-/// use oer_ieee80211_core_roles_sta::machine::TxRefusal;
+/// use oer_protocols_ieee80211_core_roles_sta::data::{DataReturn, DataTransmit, DataTransmitParts, StaDataTokens};
+/// use oer_protocols_ieee80211_core_roles_sta::machine::TxRefusal;
 /// fn refuse<D: StaDataTokens, K>(transmit: DataTransmit<'_, D, K>) -> DataReturn<'_, D, K> {
 ///     let DataTransmitParts { context, ticket, buffer } = transmit.into_parts();
 ///     DataReturn::Refused { context, ticket, buffer, reason: TxRefusal::NoRate }
@@ -258,16 +258,16 @@ pub struct DataTxContext<
     K,
     C,
     A = AcPermit,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     admission: A,
     link: LinkEpoch<'id, Path>,
     tid: WmmUserPriority,
-    frame: oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
+    frame: oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
     order: u32,
-    admitted: oer_time::Instant,
+    admitted: oer_portable_time::Instant,
     /// Its sequence number, which its encoding took.
     sequence: SequenceNumber,
     /// The aggregates it was published in that missed it.
@@ -279,25 +279,25 @@ pub struct DataTxContext<
 pub struct DataTxInfo<K, C, A> {
     admission: A,
     tid: WmmUserPriority,
-    frame: oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
+    frame: oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
     order: u32,
-    admitted: oer_time::Instant,
+    admitted: oer_portable_time::Instant,
     /// Its sequence number, which its encoding took.
     sequence: SequenceNumber,
     /// The aggregates it was published in that missed it.
     attempts: u8,
 }
 
-impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p> oer_radio_port::LoanedContext<'p, Path::Identity>
-    for DataTxContext<'p, K, C, A, Path>
+impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p>
+    oer_protocols_radio_port::LoanedContext<'p, Path::Identity> for DataTxContext<'p, K, C, A, Path>
 where
     Path::Identity: 'p,
 {
     type Owned = crate::epoch::EpochContext<Path, DataTxInfo<K, C, A>>;
 
-    fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
+    fn enclose(self) -> oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
         self.link.context(DataTxInfo {
             admission: self.admission,
             tid: self.tid,
@@ -311,7 +311,9 @@ where
         })
     }
 
-    fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+    fn restore(
+        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
+    ) -> Self {
         let (link, data) = context.into_parts();
         Self {
             admission: data.admission,
@@ -375,23 +377,25 @@ impl Admissions {
     }
 }
 
-impl<K: oer_ieee80211_contracts_port::Ieee80211Capabilities, C, A, Path: PoolPath>
+impl<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities, C, A, Path: PoolPath>
     DataTxContext<'_, K, C, A, Path>
 {
     /// A data MPDU goes without an RTS/CTS or CTS-to-self exchange.
-    pub const PROTECTION: oer_ieee80211_contracts_port::Protection =
-        oer_ieee80211_contracts_port::Protection::None;
+    pub const PROTECTION: oer_protocols_ieee80211_contracts_port::Protection =
+        oer_protocols_ieee80211_contracts_port::Protection::None;
     /// A data MPDU goes at the port's calibrated power.
-    pub const POWER: oer_ieee80211_contracts_port::SupportedPower<K> =
+    pub const POWER: oer_protocols_ieee80211_contracts_port::SupportedPower<K> =
         crate::machine::calibrated_power::<K>();
     /// A data MPDU takes the ordinary coexistence class of its access category.
-    pub const COEX_OPERATION: oer_ieee80211_contracts_port::TxOperation =
-        oer_ieee80211_contracts_port::TxOperation::Data;
+    pub const COEX_OPERATION: oer_protocols_ieee80211_contracts_port::TxOperation =
+        oer_protocols_ieee80211_contracts_port::TxOperation::Data;
 }
 
 impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
     /// The checked MPDU description selected when the bytes were encoded.
-    pub const fn frame(&self) -> &oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K> {
+    pub const fn frame(
+        &self,
+    ) -> &oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K> {
         &self.frame
     }
 
@@ -402,7 +406,7 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
 
     /// When the radio's software admitted the MSDU: its age starts here,
     /// through every retransmission.
-    pub const fn admitted(&self) -> oer_time::Instant {
+    pub const fn admitted(&self) -> oer_portable_time::Instant {
         self.admitted
     }
 
@@ -455,17 +459,17 @@ struct OwedMpdu<'id, D: StaDataTokens, K> {
 /// Data has no timer: its queued work advances on inputs and returned credits.
 ///
 /// ```compile_fail,E0061
-/// use oer_ieee80211_contracts_port::Ieee80211Capabilities;
-/// use oer_ieee80211_core_roles_sta::data::{StaData, StaDataTokens};
-/// use oer_time::Instant;
+/// use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+/// use oer_protocols_ieee80211_core_roles_sta::data::{StaData, StaDataTokens};
+/// use oer_portable_time::Instant;
 /// fn poll<D: StaDataTokens, K: Ieee80211Capabilities>(data: &mut StaData<'_, D, K>) {
 ///     drop(data.poll_action(Instant::from_micros(1)));
 /// }
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_contracts_port::Ieee80211Capabilities;
-/// use oer_ieee80211_core_roles_sta::data::{StaData, StaDataTokens};
+/// use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+/// use oer_protocols_ieee80211_core_roles_sta::data::{StaData, StaDataTokens};
 /// fn deadline<D: StaDataTokens, K: Ieee80211Capabilities>(data: &StaData<'_, D, K>) {
 ///     let _deadline = data.poll_deadline();
 /// }
@@ -474,8 +478,8 @@ struct OwedMpdu<'id, D: StaDataTokens, K> {
 /// The service drains ready actions after each input:
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::Ieee80211Capabilities;
-/// use oer_ieee80211_core_roles_sta::data::{DataTransmit, StaData, StaDataTokens};
+/// use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+/// use oer_protocols_ieee80211_core_roles_sta::data::{DataTransmit, StaData, StaDataTokens};
 /// fn action<'id, D: StaDataTokens, K: Ieee80211Capabilities>(
 ///     data: &mut StaData<'id, D, K>,
 /// ) -> Option<DataTransmit<'id, D, K>> {
@@ -514,7 +518,7 @@ pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
 impl<
     'id,
     D: StaDataTokens,
-    K: oer_ieee80211_contracts_port::Ieee80211Capabilities,
+    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
     const CAP: usize,
 > RetiredData<'id, D, K, CAP>
 {
@@ -549,7 +553,7 @@ impl<
 impl<
     'id,
     D: StaDataTokens,
-    K: oer_ieee80211_contracts_port::Ieee80211Capabilities,
+    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
     const CAP: usize,
 > StaData<'id, D, K, CAP>
 {
@@ -557,12 +561,12 @@ impl<
     /// queued-work banks through the CPU stack.
     #[cfg(feature = "placement")]
     pub fn finish_placed<'a, 'b>(
-        mut machine: oer_memory::Placed<'a, Self>,
+        mut machine: oer_portable_memory::Placed<'a, Self>,
         destination: &'b mut core::mem::MaybeUninit<RetiredData<'id, D, K, CAP>>,
         events: &mut impl EventSink<StaEvent>,
-    ) -> oer_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
+    ) -> oer_portable_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
         machine.leave(events);
-        let (tickets, buffers, owed, members, admission, next_order, link, waits) = oer_memory::unpack_placed!(
+        let (tickets, buffers, owed, members, admission, next_order, link, waits) = oer_portable_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
@@ -576,8 +580,8 @@ impl<
             }
         );
         drop((link, waits));
-        oer_memory::Placed::init(destination, |place| {
-            oer_memory::init_in_place!(place, RetiredData {
+        oer_portable_memory::Placed::init(destination, |place| {
+            oer_portable_memory::init_in_place!(place, RetiredData {
                 tickets: tickets.read(),
                 buffers: buffers.read(),
                 owed => |place| owed.move_to(place).into_mut(),
@@ -650,7 +654,7 @@ impl<
                 panic!("each MPDU a data queue holds takes a buffer: the queues hold every buffer");
             }
         };
-        oer_memory::init_in_place!(storage, Self {
+        oer_portable_memory::init_in_place!(storage, Self {
             tickets: Pool::new(tickets),
             buffers: Pool::new(buffers),
             owed => |place| Fifo::init_in_place(place),
@@ -747,8 +751,8 @@ impl<
                 if matches!(
                     completion,
                     TxOutcome::Withdrawn(
-                        oer_ieee80211_contracts_port::WithdrawCause::GateClosed
-                            | oer_ieee80211_contracts_port::WithdrawCause::Disabled
+                        oer_protocols_ieee80211_contracts_port::WithdrawCause::GateClosed
+                            | oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled
                     )
                 ) {
                     self.tickets.put(ticket, events);
@@ -952,8 +956,10 @@ impl<
     }
 }
 
-pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_core_upper_mac::receive::Integrity {
-    use oer_ieee80211_core_upper_mac::receive::Integrity;
+pub(crate) fn integrity(
+    meta: &RxMeta,
+) -> oer_protocols_ieee80211_core_upper_mac::receive::Integrity {
+    use oer_protocols_ieee80211_core_upper_mac::receive::Integrity;
     match meta.crypto {
         RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
         | RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified) => {
@@ -967,7 +973,7 @@ pub(crate) fn integrity(meta: &RxMeta) -> oer_ieee80211_core_upper_mac::receive:
 /// the CCMP header's room on a protected link, the LLC/SNAP header and the
 /// payload.
 const fn mpdu_len(qos: bool, protection: DataProtection<()>, payload: usize) -> Option<usize> {
-    use oer_ieee80211_wire::{
+    use oer_protocols_ieee80211_wire::{
         ccmp::CCMP_HEADER_LEN,
         data::{
             IEEE80211_LEGACY_DATA_HEADER_LEN, IEEE80211_QOS_DATA_HEADER_LEN, LLC_SNAP_HEADER_LEN,
@@ -989,8 +995,8 @@ const fn mpdu_len(qos: bool, protection: DataProtection<()>, payload: usize) -> 
 /// The MPDU of `msdu` on `link`, written into `output`.
 fn encode_frame<
     T: StaTokens,
-    K: oer_ieee80211_contracts_port::Ieee80211Capabilities,
-    C: oer_ieee80211_contracts_port::TxBufferClass,
+    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
+    C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
 >(
     link: &LinkView<'_, '_, T>,
     qos: bool,
@@ -998,11 +1004,11 @@ fn encode_frame<
     sequence_number: SequenceNumber,
     protection: DataProtection<()>,
     output: &mut [u8],
-) -> Option<oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
+) -> Option<oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
     if protection == DataProtection::Open {
         // The open encoding writes the payload once; it never needs a
         // temporary CCMP gap or a second move of the payload.
-        let len = oer_ieee80211_wire::station::StaOpenDataFrame {
+        let len = oer_protocols_ieee80211_wire::station::StaOpenDataFrame {
             source: link.address,
             bssid: link.bssid,
             destination: msdu.destination,
@@ -1033,16 +1039,16 @@ fn encode_frame<
 }
 
 fn sized<
-    K: oer_ieee80211_contracts_port::Ieee80211Capabilities,
-    C: oer_ieee80211_contracts_port::TxBufferClass,
+    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
+    C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
 >(
     frame: &[u8],
-) -> Option<oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
+) -> Option<oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
     let header = HeaderSpec::from_mac_header(
-        oer_ieee80211_wire::frame::MacHeader::decode(frame)?,
+        oer_protocols_ieee80211_wire::frame::MacHeader::decode(frame)?,
         IndividualAddress::new,
     )?;
-    oer_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
+    oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
         AckHeader::new(header)?,
         MpduLength::new(frame.len())?,
     )?)

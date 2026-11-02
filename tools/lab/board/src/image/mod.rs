@@ -2,8 +2,8 @@
 //! operation that changes it.
 //!
 //! [`write()`] is the only writer of a board's flash on the host: `cargo fw`
-//! (through `oer-lab-board`) and the stand's boards (through
-//! `oer-lab-board`, which HIL flashes with) both call it. Under the
+//! (through `oer-tools-lab-board`) and the stand's boards (through
+//! `oer-tools-lab-board`, which HIL flashes with) both call it. Under the
 //! board's [`DeviceAccess`] it
 //!
 //! 1. reads the bundle's flash contents **once** into owned bytes (its
@@ -53,9 +53,9 @@ use std::path::{Path, PathBuf};
 use crate::Result;
 
 use crate::flash::After;
-pub use oer_espressif_facts::Start;
-use oer_image_bundle::{ImageBundle, Snapshot};
-pub use oer_lab_model::device_id::DeviceId;
+pub use oer_chips_family_facts::Start;
+use oer_tools_image_bundle::{ImageBundle, Snapshot};
+pub use oer_tools_lab_model::device_id::DeviceId;
 use serde::{Deserialize, Serialize};
 
 /// Format of a receipt file.
@@ -111,7 +111,7 @@ impl Receipt {
             digest: digest_of(&snapshot.chip, &segments),
             segments,
             by: by.to_owned(),
-            unix_millis: oer_os_durable::unix_millis(),
+            unix_millis: oer_tools_os_durable::unix_millis(),
         }
     }
 
@@ -133,7 +133,7 @@ fn digest_of(chip: &str, segments: &[SegmentDigest]) -> String {
             segment.offset, segment.bytes, segment.sha256
         ));
     }
-    oer_os_durable::sha256_bytes(text.as_bytes())
+    oer_tools_os_durable::sha256_bytes(text.as_bytes())
 }
 
 /// What the devices layer knows a board's flash holds.
@@ -181,8 +181,8 @@ impl Store {
 
     /// The user's store, `devices/` in the XDG data directory.
     pub fn open() -> Result<Self> {
-        Ok(Self::at(oer_os_durable::xdg::path(
-            oer_os_durable::xdg::Base::Data,
+        Ok(Self::at(oer_tools_os_durable::xdg::path(
+            oer_tools_os_durable::xdg::Base::Data,
             "devices",
         )?))
     }
@@ -265,7 +265,7 @@ impl Store {
             generation,
             State::Writing {
                 by: by.to_owned(),
-                unix_millis: oer_os_durable::unix_millis(),
+                unix_millis: oer_tools_os_durable::unix_millis(),
             },
         )?;
         Ok(generation)
@@ -298,7 +298,7 @@ impl Store {
 
     fn replace(&self, device: &DeviceId, generation: u64, state: State) -> Result<()> {
         std::fs::create_dir_all(&self.directory)?;
-        oer_os_durable::atomic_json(
+        oer_tools_os_durable::atomic_json(
             &self.path(device),
             &File {
                 schema: SCHEMA,

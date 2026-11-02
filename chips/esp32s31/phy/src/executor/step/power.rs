@@ -9,7 +9,7 @@ use crate::{
         power::{PhyTxPowerTrackingAction as Action, PhyTxPowerTrackingTransition},
     },
 };
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 pin_project_lite::pin_project! {
     struct Power<F> { #[pin] inner: F }
@@ -90,7 +90,7 @@ enum Work {
     Control(crate::tracking::power::ControlBinding),
     Lower(u8),
     Skipped,
-    Record(oer_esp32s31_hal::types::PhyGainMemoryEntry, bool),
+    Record(oer_chips_esp32s31_hal::types::PhyGainMemoryEntry, bool),
 }
 #[inline(never)]
 fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, Failure> {
@@ -125,7 +125,7 @@ fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, 
 /// One complete gain record, BBPLL edge or full force/settle pair per poll.
 /// Dispatch and acknowledgement are shared, independent of the clock type.
 #[inline(never)]
-pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
+pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
     io: &mut Io<'_>,
     child: &mut PhyParamTrackingTxPowerTransition<'_>,
     gain: &mut Cursor,
@@ -178,7 +178,11 @@ fn acknowledge(transition: &mut PhyTxPowerTrackingTransition) -> Result<(), Fail
 }
 
 #[inline(never)]
-fn elapsed<C: oer_time::Clock>(clock: &C, started: Option<oer_time::Instant>, maximum: &mut u16) {
+fn elapsed<C: oer_portable_time::Clock>(
+    clock: &C,
+    started: Option<oer_portable_time::Instant>,
+    maximum: &mut u16,
+) {
     if let Some(started) = started {
         let micros = clock.now().saturating_duration_since(started).as_micros();
         *maximum = (*maximum).max(u16::try_from(micros).unwrap_or(u16::MAX));
@@ -190,7 +194,7 @@ fn gain_record(
     state: &PhyState,
     class: crate::tracking::parameters::PhyCalibrationTrackClass,
     gain: &mut Cursor,
-) -> Result<oer_esp32s31_hal::types::PhyGainMemoryEntry, Failure> {
+) -> Result<oer_chips_esp32s31_hal::types::PhyGainMemoryEntry, Failure> {
     let value = match class {
         crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => {
             crate::channel::next_wifi_tx_gain(&mut gain.generator)
@@ -204,7 +208,7 @@ fn gain_record(
     let (seed, config) = state
         .tracking_gain_seed(class, value.gain_64)
         .ok_or(Failure::Binding)?;
-    Ok(oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+    Ok(oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
         gain.memory_base.wrapping_add(gain.entry),
         value.gain_72,
         value.gain_64,

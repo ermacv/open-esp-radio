@@ -3,17 +3,17 @@
 //! carry and target beacon transmission times, DTIMs and TWT service periods
 //! are scheduled in.
 
-use oer_ieee80211_wire::tsf::{TsfTimestamp, time_units_micros};
+use oer_protocols_ieee80211_wire::tsf::{TsfTimestamp, time_units_micros};
 
 /// The clock domain of IEEE 802.11 Timing Synchronization Functions:
 /// microseconds of a BSS's TSF.
 pub enum Ieee80211Tsf {}
 
 /// An instant of a TSF, without the interface whose TSF it is.
-pub type TsfInstant = oer_time::RadioInstant<Ieee80211Tsf>;
+pub type TsfInstant = oer_portable_time::RadioInstant<Ieee80211Tsf>;
 
 /// A span of a TSF: beacon intervals, TBTT leads and TWT periods.
-pub type TsfDuration = oer_time::RadioDuration<Ieee80211Tsf>;
+pub type TsfDuration = oer_portable_time::RadioDuration<Ieee80211Tsf>;
 
 /// The length of `units` time units (TU) of 1024 µs of a TSF.
 pub const fn time_units(units: u16) -> TsfDuration {

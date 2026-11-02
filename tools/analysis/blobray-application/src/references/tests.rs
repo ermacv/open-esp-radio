@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 use super::{StoredScan, Targets};
 use crate::in_process::Executable;
-use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, WorkingMemory};
+use oer_tools_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, WorkingMemory};
 fn executable(code: &[u32]) -> Vec<u8> {
     let mut bytes = vec![0; 256];
     bytes[..7].copy_from_slice(b"\x7fELF\x01\x01\x01");

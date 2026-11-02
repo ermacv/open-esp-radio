@@ -5,18 +5,20 @@ use core::{
     future::Future,
     task::{Context, Poll},
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::transaction::{
         FaultHandle, PhyHardware, PhyTransaction, SarAlarmWithoutBundle, SarTransferFault,
     },
     peripherals::timg0_alarm::{InvalidDelay, Observation, Timg0AlarmInterrupt, Timg0AlarmProgram},
 };
-use oer_espressif_interrupt_table::{
+use oer_chips_family_interrupt_table::{
     Bound, Entry,
     signal::{IrqSignal, SignalExecutor},
 };
-use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor};
-use oer_time::{Clock, Duration};
+use oer_portable_memory::{
+    AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor,
+};
+use oer_portable_time::{Clock, Duration};
 
 type Queue<T> = AffineSpscQueue<T, 1, CompactSpscCursor>;
 type Sender<T> = AffineSpscSender<'static, T, 1, CompactSpscCursor>;
@@ -137,7 +139,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static, E: SignalExecutor> UnboundC
         const {
             if !matches!(
                 I::CLASS,
-                oer_espressif_interrupt_table::Class::ExemptExecutorLevel
+                oer_chips_family_interrupt_table::Class::ExemptExecutorLevel
             ) {
                 panic!("the SAR alarm must be an executor-level exempt entry");
             }

@@ -1,13 +1,13 @@
 //! Advertising physical-channel header (Bluetooth Core 6.0, Vol 6, Part B, 2.3).
 
-use oer_wire::{Reader, Writer};
+use oer_portable_wire::{Reader, Writer};
 
 use crate::{LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind};
 
 /// Two-octet advertising physical-channel PDU header (Core Vol 6, Part B, 2.3).
 pub const ADVERTISING_HEADER_LENGTH: usize = core::mem::size_of::<AdvertisingHeader>();
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Primary advertising-channel PDU types (Core Vol 6, Part B, 2.3, Table 2.3).
     pub enum AdvertisingPduType: u8 {
         /// Connectable undirected advertising, 2.3.1.1.
@@ -29,7 +29,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: Bluetooth Core 6.0, Vol 6, Part B, 2.3, Figure 2.5.
     pub struct AdvertisingHeader[2] (little) {
         /// PDU Type, Core Vol 6, Part B, 2.3, Table 2.3.
@@ -110,7 +110,7 @@ pub struct LegacyAdvertisingPduPrefix {
 
 impl LegacyAdvertisingPduPrefix {
     /// Read the complete prefix with the bounded wire cursor.
-    pub const fn decode(source: &[u8]) -> Result<Self, oer_wire::Error> {
+    pub const fn decode(source: &[u8]) -> Result<Self, oer_portable_wire::Error> {
         let mut reader = Reader::new(source);
         let header = match reader.read::<ADVERTISING_HEADER_LENGTH>() {
             Ok(bytes) => AdvertisingHeader::from_bytes(bytes),

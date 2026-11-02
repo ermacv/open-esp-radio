@@ -1,7 +1,7 @@
 use super::*;
-use oer_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
+use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
 
-use oer_ieee80211_testing_conformance::{
+use oer_protocols_ieee80211_testing_conformance::{
     self as conformance,
     outcomes::{self, Form},
 };
@@ -74,9 +74,9 @@ impl Work for Results {
                 }
                 Form::Aggregate => {
                     let rate = PhyRate::Ht(
-                        oer_ieee80211_wire::phy::HtRate::new(
+                        oer_protocols_ieee80211_wire::phy::HtRate::new(
                             HtMcs::new(7).unwrap(),
-                            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                             false,
                         )
                         .unwrap(),
@@ -92,7 +92,7 @@ impl Work for Results {
                     );
                     let aggregate = push_subframe(
                         aggregate,
-                        oer_ieee80211_contracts_port::TxNumbering::Open,
+                        oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                         buffer,
                         subframe_frame(0),
                         None,
@@ -120,7 +120,7 @@ impl Work for Results {
             };
             let (returned_ticket, returned_buffer, outcome) = match (form, completed) {
                 (Form::Single, TxCompleted::Single(terminal)) => {
-                    let oer_ieee80211_contracts_port::TerminalParts {
+                    let oer_protocols_ieee80211_contracts_port::TerminalParts {
                         ticket,
                         outcome: completion,
                         payload,
@@ -132,7 +132,7 @@ impl Work for Results {
                     (ticket, buffer, Returned::Single(completion))
                 }
                 (Form::Aggregate, TxCompleted::Aggregate(terminal)) => {
-                    let oer_ieee80211_contracts_port::TerminalParts {
+                    let oer_protocols_ieee80211_contracts_port::TerminalParts {
                         ticket,
                         payload,
                         outcome,

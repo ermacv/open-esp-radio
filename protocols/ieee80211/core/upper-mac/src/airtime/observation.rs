@@ -1,7 +1,7 @@
 //! Value-only observations, reported to the sink each transition's caller
 //! lends; that caller owns cumulative telemetry.
 use super::*;
-use oer_events::report;
+use oer_portable_events::report;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AirtimeAction {

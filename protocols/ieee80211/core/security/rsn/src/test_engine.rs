@@ -1,6 +1,6 @@
 //! A test engine that refuses every key, as a failed hardware engine would.
 
-use oer_crypto::{
+use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, Block, BlockEngine, BlockError},
 };

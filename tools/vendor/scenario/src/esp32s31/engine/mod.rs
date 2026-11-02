@@ -1,4 +1,4 @@
-//! The chip-neutral scenario engine (`oer-vendor-scenario`) under
+//! The chip-neutral scenario engine (`oer-tools-vendor-scenario`) under
 //! its crate paths, and the ESP32-S31 layout, PHY contracts and analog
 //! transport edges every scenario shares.
 pub mod contracts;

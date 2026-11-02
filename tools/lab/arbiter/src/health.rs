@@ -102,7 +102,7 @@ pub(crate) fn of(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_lab_model::rom::RecoveryStep;
+    use oer_tools_lab_model::rom::RecoveryStep;
 
     const MAC: &str = "02:00:00:00:F6:D0";
 

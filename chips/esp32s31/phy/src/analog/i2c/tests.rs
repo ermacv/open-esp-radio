@@ -32,7 +32,7 @@ use crate::rx::dc_offset::{PhyRxDcoAction, PhyRxDcoCompletion};
 use crate::rx::signal_power::{
     PhySignalPowerAccumulatorSnapshot, PhySignalPowerAction, PhySignalPowerCompletion,
 };
-use oer_esp32s31_hal::phy::i2c::PhyAdcRate;
+use oer_chips_esp32s31_hal::phy::i2c::PhyAdcRate;
 
 fn complete_dc_iq(action: PhyDcIqAction) -> PhyDcIqCompletion {
     match action {
@@ -642,31 +642,31 @@ fn masked_i2c_write_owns_read_transform_and_write_edges() {
     let mut transition = crate::analog::i2c::field_write(field, 3);
     assert_eq!(
         transition.action(),
-        oer_espressif_analog::Action::Read { address }
+        oer_chips_family_analog::Action::Read { address }
     );
     assert_eq!(
-        transition.advance(oer_espressif_analog::Completion::Written { address }),
-        Err(oer_espressif_analog::TransitionError::WrongCompletion)
+        transition.advance(oer_chips_family_analog::Completion::Written { address }),
+        Err(oer_chips_family_analog::TransitionError::WrongCompletion)
     );
     transition
-        .advance(oer_espressif_analog::Completion::Read {
+        .advance(oer_chips_family_analog::Completion::Read {
             address,
             value: 0x0f,
         })
         .unwrap();
     assert_eq!(
         transition.action(),
-        oer_espressif_analog::Action::Write {
+        oer_chips_family_analog::Action::Write {
             address,
             value: 0x03,
         }
     );
     transition
-        .advance(oer_espressif_analog::Completion::Written { address })
+        .advance(oer_chips_family_analog::Completion::Written { address })
         .unwrap();
     assert_eq!(
         transition.action(),
-        oer_espressif_analog::Action::Complete(())
+        oer_chips_family_analog::Action::Complete(())
     );
 }
 

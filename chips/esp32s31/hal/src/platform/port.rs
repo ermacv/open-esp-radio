@@ -1,4 +1,4 @@
-//! The family platform contracts on this chip (`oer-espressif-platform-port`),
+//! The family platform contracts on this chip (`oer-chips-family-platform-port`),
 //! implemented by [`Port`]: the early console writer, the fatal path
 //! ([`crate::cores`]: the mask and its proof, the stop of the other hart and
 //! the software reset), the source identities
@@ -6,10 +6,10 @@
 //! the PAC's interrupt parts, the owned executor blocks, and pending/debug
 //! reads selected by a checked hart identity.
 
-use oer_esp32s31_pac::{bus_monitor::DebugModeStatus, ownership::DebugPeripherals};
-use oer_espressif_platform_port as port;
-use oer_memory::zeroed::ZeroedOnce;
-use oer_mmio::InterruptSource;
+use oer_chips_esp32s31_pac::{bus_monitor::DebugModeStatus, ownership::DebugPeripherals};
+use oer_chips_family_platform_port as port;
+use oer_portable_memory::zeroed::ZeroedOnce;
+use oer_portable_mmio::InterruptSource;
 
 use crate::cores;
 use crate::peripherals::{
@@ -196,15 +196,18 @@ impl port::ExecutorPlatform for Port {
 }
 
 /// Whether the selected hart's debug module is active in `status`.
-fn debug_module_active<P: oer_mmio::Placement>(status: &DebugModeStatus<P>, hart: Hart) -> bool {
+fn debug_module_active<P: oer_portable_mmio::Placement>(
+    status: &DebugModeStatus<P>,
+    hart: Hart,
+) -> bool {
     status.read_debug_mode(hart.index()).debug_module_active()
 }
 
 #[cfg(test)]
 mod tests {
     use super::Port;
-    use oer_esp32s31_pac::Interrupt;
-    use oer_espressif_platform_port::ExecutorPlatform;
+    use oer_chips_esp32s31_pac::Interrupt;
+    use oer_chips_family_platform_port::ExecutorPlatform;
 
     #[test]
     fn the_sources_are_the_pac_s_interrupts() {
@@ -230,7 +233,7 @@ mod tests {
     #[test]
     fn debugger_activity_is_local_to_the_selected_hart() {
         use crate::platform::Hart;
-        use oer_esp32s31_pac::{
+        use oer_chips_esp32s31_pac::{
             bus_monitor::{DebugModeStatus, debug_mode},
             instances,
         };
@@ -256,7 +259,7 @@ mod tests {
 
     #[test]
     fn every_port_hart_is_the_pac_hart_of_its_index() {
-        for (port, pac) in oer_espressif_platform_port::Hart::ALL
+        for (port, pac) in oer_chips_family_platform_port::Hart::ALL
             .into_iter()
             .zip(crate::platform::Hart::ALL)
         {
@@ -269,7 +272,7 @@ mod tests {
     #[test]
     fn nothing_is_pending_before_the_bank_is_published() {
         // The host test binary never splits the root's interrupt matrix.
-        for hart in oer_espressif_platform_port::Hart::ALL {
+        for hart in oer_chips_family_platform_port::Hart::ALL {
             assert!(!Port::is_pending(hart, 68));
             assert!(!Port::debugger_connected(hart));
         }

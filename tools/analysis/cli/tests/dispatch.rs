@@ -4,12 +4,12 @@ use object::{
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_analysis_blobray_application::{
+use oer_tools_analysis_blobray_application::{
     in_process::Executable,
     library::{Assumptions, LibraryOutcome, analyze_library},
 };
-use oer_analysis_riscv_model::{JumpDispatch, WorkingMemory};
-use oer_tool_analysis_cli::{jump_table::human, wire::NamedFunction};
+use oer_tools_analysis_cli::{jump_table::human, wire::NamedFunction};
+use oer_tools_analysis_riscv_model::{JumpDispatch, WorkingMemory};
 
 fn object(alternative: bool, displacement: i32) -> Vec<u8> {
     let mut code: Vec<u32> = vec![
@@ -99,7 +99,7 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
         analyze_library(
             &[Executable::new(object(alternative, displacement))],
             Assumptions::default(),
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut || Ok(()),
             &mut |outcome, _| {
@@ -136,9 +136,9 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
             panic!("analyzed outcome")
         };
         assert!(records.iter().any(|record| matches!(record,
-            oer_analysis_riscv_model::FunctionRecord::Dispatch { displacement: d, .. } if *d == displacement
+            oer_tools_analysis_riscv_model::FunctionRecord::Dispatch { displacement: d, .. } if *d == displacement
         )));
-        assert_eq!(oer_tool_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA, 11);
+        assert_eq!(oer_tools_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA, 11);
         let expected = if alternative {
             JumpDispatch::TargetSet {
                 site: 0x2c,
@@ -163,7 +163,9 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
         assert_eq!(dispatch["displacement"], displacement);
         let mut old = dispatch.clone();
         old.as_object_mut().unwrap().remove("displacement");
-        assert!(serde_json::from_value::<oer_analysis_riscv_model::FunctionRecord>(old).is_err());
+        assert!(
+            serde_json::from_value::<oer_tools_analysis_riscv_model::FunctionRecord>(old).is_err()
+        );
         let mut ambiguous = json.clone();
         let extra = if alternative { "entries" } else { "targets" };
         ambiguous["jump_tables"][0][extra] = serde_json::json!([0x40, 0x50, 0x58]);

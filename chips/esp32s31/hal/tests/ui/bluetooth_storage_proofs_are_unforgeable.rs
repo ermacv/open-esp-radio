@@ -1,7 +1,7 @@
 // ui-requires: bluetooth-engine
 #![no_std]
-use oer_esp32s31_hal::bluetooth::{ControllerHal, RxMemoryListPublished};
-use oer_esp32s31_hal::bluetooth::engine::{LeDeviceTable, LeRxChain, ControllerDmaSpace, Engine, ArenaMemory};
+use oer_chips_esp32s31_hal::bluetooth::{ControllerHal, RxMemoryListPublished};
+use oer_chips_esp32s31_hal::bluetooth::engine::{LeDeviceTable, LeRxChain, ControllerDmaSpace, Engine, ArenaMemory};
 
 pub fn publish(engine: &mut Engine<ArenaMemory<'_, '_, 0, 1, 2, 1, 4, 4, 8>>) {
     let _ = engine.publish_device_table();
@@ -30,13 +30,13 @@ pub fn address(scanning: &RxMemoryListPublished) {
     let _ = scanning.head(); // ui-error: E0624
 }
 #[cfg(ui_reject)]
-use oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
+use oer_chips_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
 #[cfg(ui_reject)]
-use oer_esp32s31_hal::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
+use oer_chips_esp32s31_hal::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
 #[cfg(ui_reject)]
 pub fn raw_publish(controller: &mut ControllerHal<'_>) {
     let _ = controller.publish_scheduler_hardware_list_head( // ui-error: E0624
-        oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex::ZERO, None);
+        oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex::ZERO, None);
 }
 #[cfg(ui_reject)]
 pub fn raw_base<S: ControllerDmaSpace>() {

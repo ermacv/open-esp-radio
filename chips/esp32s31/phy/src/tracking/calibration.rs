@@ -106,7 +106,7 @@ pub enum PhyCalibrationTrackingCompletion {
 /// Opaque proof that both force-mode writes and both timer edges completed.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationForceTxRxCompletion, PhyCalibrationTrackingCompletion,
 /// };
 ///
@@ -122,10 +122,10 @@ pub struct PhyCalibrationForceTxRxCompletion {
 /// Opaque terminal result of the complete bounded PBus-clear child.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationPbusClearCompletion, PhyCalibrationTrackingCompletion,
 /// };
-/// use oer_esp32s31_phy::analog::pbus::PhyPbusClearOutcome;
+/// use oer_chips_esp32s31_phy::analog::pbus::PhyPbusClearOutcome;
 ///
 /// let forged = PhyCalibrationTrackingCompletion::PbusClearCompleted(
 ///     PhyCalibrationPbusClearCompletion {
@@ -141,13 +141,13 @@ pub struct PhyCalibrationPbusClearCompletion {
 /// Opaque terminal result of the complete DCODE child.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationDcodeCompletion, PhyCalibrationTrackingCompletion,
 /// };
 ///
 /// let forged = PhyCalibrationTrackingCompletion::DcodeCompleted(
 ///     PhyCalibrationDcodeCompletion {
-///         result: Ok(oer_esp32s31_phy::analog::dcode::PhyDcodeOutcome {
+///         result: Ok(oer_chips_esp32s31_phy::analog::dcode::PhyDcodeOutcome {
 ///             codes: [0; 8],
 ///         }),
 ///     },
@@ -171,13 +171,13 @@ impl PhyCalibrationDcodeCompletion {
 /// Opaque terminal result of complete RX-DC calibration and table generation.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationRxGainCompletion, PhyCalibrationTrackingCompletion,
 /// };
 ///
 /// let forged = PhyCalibrationTrackingCompletion::RxGainRecalibrated(
 ///     PhyCalibrationRxGainCompletion {
-///         result: Ok(oer_esp32s31_phy::rx::gain::PhyRxGainInitOutcome {
+///         result: Ok(oer_chips_esp32s31_phy::rx::gain::PhyRxGainInitOutcome {
 ///             dc: None,
 ///             generated_tables: true,
 ///             wifi_last_index: 69,
@@ -194,13 +194,13 @@ pub struct PhyCalibrationRxGainCompletion {
 /// Opaque terminal result of the complete chip-channel child.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationChannelCompletion, PhyCalibrationTrackingCompletion,
 /// };
 ///
 /// let forged = PhyCalibrationTrackingCompletion::ChipChannelRestored(
 ///     PhyCalibrationChannelCompletion {
-///         result: Err(oer_esp32s31_phy::channel::PhyChipChannelFailure::UnsupportedChannel(14)),
+///         result: Err(oer_chips_esp32s31_phy::channel::PhyChipChannelFailure::UnsupportedChannel(14)),
 ///     },
 /// );
 /// ```
@@ -212,15 +212,15 @@ pub struct PhyCalibrationChannelCompletion {
 /// Opaque terminal result of the complete class-specific TXDC/PWDET child.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationTrackingCompletion, PhyCalibrationTxDcPwdetCompletion,
 /// };
-/// use oer_esp32s31_phy::tracking::parameters::PhyCalibrationTrackClass;
+/// use oer_chips_esp32s31_phy::tracking::parameters::PhyCalibrationTrackClass;
 ///
 /// let forged = PhyCalibrationTrackingCompletion::TxDcPwdetCalibrated(
 ///     PhyCalibrationTxDcPwdetCompletion {
 ///         class: PhyCalibrationTrackClass::Wifi,
-///         result: Ok(oer_esp32s31_phy::tx::dc_power_detector::PhyTxDcPwdetOutcome {
+///         result: Ok(oer_chips_esp32s31_phy::tx::dc_power_detector::PhyTxDcPwdetOutcome {
 ///             dco: [[0; 4]; 3],
 ///             total_measurements: 0,
 ///         }),
@@ -240,10 +240,10 @@ pub struct PhyCalibrationTxDcPwdetCompletion {
 /// TXDC/PWDET result reached its PAC-backed publication edge.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::calibration::{
+/// use oer_chips_esp32s31_phy::tracking::calibration::{
 ///     PhyCalibrationTrackingCompletion, PhyCalibrationTxGainCompletion,
 /// };
-/// use oer_esp32s31_phy::tracking::parameters::PhyCalibrationTrackClass;
+/// use oer_chips_esp32s31_phy::tracking::parameters::PhyCalibrationTrackClass;
 ///
 /// let forged = PhyCalibrationTrackingCompletion::TxGainPublished(
 ///     PhyCalibrationTxGainCompletion {
@@ -976,7 +976,7 @@ impl PhyCalibrationTxGainBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyCalibrationTrackingCompletion {
         let completion = match &self.publication {
             PhyCalibrationTxGainPublication::Wifi { channel, image } => {
@@ -1399,28 +1399,31 @@ impl PhyCalibrationTrackingRegisterBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyCalibrationTrackingCompletion {
         match self.action {
             RegisterAction::SetForcedDigitalGain { enabled } => {
-                oer_esp32s31_hal::phy::baseband::configure_forced_digital_gain(
+                oer_chips_esp32s31_hal::phy::baseband::configure_forced_digital_gain(
                     registers, enabled, -120, -120,
                 );
                 PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled }
             }
             RegisterAction::SetHardwareFrequencyControl { enabled } => {
-                oer_esp32s31_hal::phy::frequency::set_baseband_mode(
+                oer_chips_esp32s31_hal::phy::frequency::set_baseband_mode(
                     registers,
                     if enabled { 0 } else { 2 },
                 );
                 PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled }
             }
             RegisterAction::ConfigureBasebandChannel { cbw } => {
-                oer_esp32s31_hal::phy::frequency::configure_channel_cbw(registers, cbw.into());
+                oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(
+                    registers,
+                    cbw.into(),
+                );
                 PhyCalibrationTrackingCompletion::BasebandChannelConfigured { cbw }
             }
             RegisterAction::RestoreTxGainCompensation => {
-                oer_esp32s31_hal::phy::baseband::restore_tx_gain_compensation(registers);
+                oer_chips_esp32s31_hal::phy::baseband::restore_tx_gain_compensation(registers);
                 PhyCalibrationTrackingCompletion::TxGainCompensationRestored
             }
         }
@@ -1455,17 +1458,17 @@ impl PhyCalibrationTrackingMacBasebandBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<R: oer_esp32s31_hal::owner::PhyInitializationAccess>(
+    pub fn execute_target<R: oer_chips_esp32s31_hal::owner::PhyInitializationAccess>(
         self,
         registers: &mut R,
     ) -> PhyCalibrationTrackingCompletion {
         if self.enabled {
-            oer_esp32s31_hal::phy::frequency::enable_mac_baseband(registers);
+            oer_chips_esp32s31_hal::phy::frequency::enable_mac_baseband(registers);
             PhyCalibrationTrackingCompletion::MacBasebandEnabled
         } else {
             // The pinned phy_cal_param_track clears Wi-Fi enable after
             // DCODE (RX) or PBus clear (TX), before the measurement children.
-            oer_esp32s31_hal::phy::frequency::set_wifi_enabled(registers, false);
+            oer_chips_esp32s31_hal::phy::frequency::set_wifi_enabled(registers, false);
             PhyCalibrationTrackingCompletion::WifiBasebandDisabled
         }
     }

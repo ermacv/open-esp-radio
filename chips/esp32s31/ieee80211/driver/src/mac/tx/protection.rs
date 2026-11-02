@@ -1,5 +1,5 @@
 //! Caller-selected protection values consumed by TX hardware.
-use oer_esp32s31_hal::types::MacLegacyRate;
+use oer_chips_esp32s31_hal::types::MacLegacyRate;
 
 /// Receiver class taken from the MPDU Address 1 field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

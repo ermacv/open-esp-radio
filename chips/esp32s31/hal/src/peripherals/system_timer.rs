@@ -7,12 +7,12 @@
 //! The executor's time driver calls these operations; the register
 //! sequences are here.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::HpSysClkrstSystimer, instances, ownership::SystemTimerPeripherals, systimer,
 };
-use oer_espressif_boot::drivers::system_timer::CounterLatch;
-use oer_espressif_platform_port::{AlarmPart, Comparator, Comparators};
-use oer_mmio::{Bits, Fixed, Index, InterruptSource, Placement};
+use oer_chips_family_boot::drivers::system_timer::CounterLatch;
+use oer_chips_family_platform_port::{AlarmPart, Comparator, Comparators};
+use oer_portable_mmio::{Bits, Fixed, Index, InterruptSource, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -268,17 +268,17 @@ impl<P: Placement> Comparators for SystimerComparators<P> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> SystimerComparators<oer_mmio::Host<'a>> {
+impl<'a> SystimerComparators<oer_portable_mmio::Host<'a>> {
     /// The comparators over host memory from the instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         systimer::Systimer::host(words).map(Self)
     }
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> SystimerCounter<oer_mmio::Host<'a>> {
+impl<'a> SystimerCounter<oer_portable_mmio::Host<'a>> {
     /// The counter latch over host memory from the instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         systimer::SystimerCounter::host(words).map(Self)
     }
 }
@@ -286,14 +286,14 @@ impl<'a> SystimerCounter<oer_mmio::Host<'a>> {
 /// The three alarm parts over one host memory.
 #[cfg(any(test, feature = "test-support"))]
 pub type HostAlarms<'a> = (
-    SystimerAlarm0<oer_mmio::Host<'a>>,
-    SystimerAlarm1<oer_mmio::Host<'a>>,
-    SystimerAlarm2<oer_mmio::Host<'a>>,
+    SystimerAlarm0<oer_portable_mmio::Host<'a>>,
+    SystimerAlarm1<oer_portable_mmio::Host<'a>>,
+    SystimerAlarm2<oer_portable_mmio::Host<'a>>,
 );
 
 /// The three alarm parts over host memory from the instance's base.
 #[cfg(any(test, feature = "test-support"))]
-pub fn alarms_host(words: &mut [u32]) -> Result<HostAlarms<'_>, oer_mmio::HostTooSmall> {
+pub fn alarms_host(words: &mut [u32]) -> Result<HostAlarms<'_>, oer_portable_mmio::HostTooSmall> {
     systimer::systimer_host(words).map(|(zero, one, two)| {
         (
             SystimerAlarm0(zero),

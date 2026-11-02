@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{AccessPoint, Station, TsfPermission};
+use oer_protocols_ieee80211_contracts_port::{AccessPoint, Station, TsfPermission};
 pub fn station<'id>(permission: TsfPermission<'id, Station>) -> TsfPermission<'id, Station> {
     permission
 }

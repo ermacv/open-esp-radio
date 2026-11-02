@@ -84,7 +84,7 @@ movable owner does not free or detach hardware-visible memory: a lease the
 hardware may still read is leaked, never returned. The lease leaves only
 while the descriptor is free again.
 External aggregate retention takes only `PlacedBacking` leases (a placed
-TX pool's, `oer_esp32s31_hal::memory::dma_static`), whose addresses it publishes
+TX pool's, `oer_chips_esp32s31_hal::memory::dma_static`), whose addresses it publishes
 without a window check, and stores them without automatic destruction.
 Only cancellation before publication or a proven detach releases them, and
 the release hands each lease back to its caller in push order. Safe

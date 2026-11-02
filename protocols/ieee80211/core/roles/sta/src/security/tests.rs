@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::security::{
+use oer_protocols_ieee80211_wire::security::{
     Pmkid,
     rsn::{
         RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_GROUP_MANAGEMENT_ELEMENT_LEN,
@@ -14,7 +14,9 @@ const SELECTED_SECURITY_IES_CAPACITY: usize = SELECTED_RSN_IE_LEN + 18 + 3;
 
 #[test]
 fn spp_negotiation_follows_both_rsn_capabilities() {
-    use oer_ieee80211_wire::security::{AssociationSecurity, Spp, SppCapability, SppError};
+    use oer_protocols_ieee80211_wire::security::{
+        AssociationSecurity, Spp, SppCapability, SppError,
+    };
     for (advertised, expected) in [
         (SppCapability::NotCapable, Spp::NotNegotiated),
         (SppCapability::Capable, Spp::Negotiated),
@@ -33,7 +35,7 @@ fn spp_negotiation_follows_both_rsn_capabilities() {
     }
     let malformed = access_point_with_rsn(
         &[[0, 0x0f, 0xac, 2]],
-        oer_ieee80211_wire::security::rsn::RSN_CAPABILITY_SPP_AMSDU_REQUIRED,
+        oer_protocols_ieee80211_wire::security::rsn::RSN_CAPABILITY_SPP_AMSDU_REQUIRED,
     );
     assert_eq!(
         select_association_rsn(&malformed, StaSecurityPolicy::Wpa2Personal),
@@ -87,10 +89,10 @@ fn a_resumed_sae_association_lists_its_pmkid_before_the_rsnxe() {
     assert_eq!(&bytes[40..], &[244, 1, 0x20]);
     assert_eq!(resumed.negotiated_akm(), selected.negotiated_akm());
     assert!(
-        oer_ieee80211_wire::security::rsn::RsnElement::parse(&bytes[..40])
+        oer_protocols_ieee80211_wire::security::rsn::RsnElement::parse(&bytes[..40])
             .unwrap()
             .akm_suites()
-            .contains(oer_ieee80211_wire::security::rsn::ieee_suite(8))
+            .contains(oer_protocols_ieee80211_wire::security::rsn::ieee_suite(8))
     );
 }
 
@@ -217,8 +219,8 @@ fn truncated_or_trailing_rsn_optional_fields_are_rejected() {
 #[test]
 fn open_ap_needs_no_security_ie() {
     let mut record = ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
     );
@@ -246,14 +248,14 @@ fn a_second_pmkid_is_rejected_without_growing_the_selected_elements() {
 
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     let mut record = ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
     );
     record.set_ssid(b"test").unwrap();
-    record.bssid = oer_ieee80211_wire::address::Bssid::new(
-        oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+    record.bssid = oer_protocols_ieee80211_wire::address::Bssid::new(
+        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
     )
     .unwrap();
     record.ds_channel = Some(6);
@@ -263,7 +265,7 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     record
         .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])
         .unwrap();
-    let mut rsn_ie = [0; oer_ieee80211_wire::scan::RSN_IE_CAPACITY];
+    let mut rsn_ie = [0; oer_protocols_ieee80211_wire::scan::RSN_IE_CAPACITY];
     let mut offset = 2;
     rsn_ie[offset..offset + 2].copy_from_slice(&1_u16.to_le_bytes());
     offset += 2;
@@ -296,14 +298,16 @@ fn append_rsn_tail(record: &mut ScanRecord, tail: &[u8]) {
 
 /// The authentication a personal selection negotiated.
 trait NegotiatedAkm {
-    fn negotiated_akm(&self) -> oer_ieee80211_wire::security::AssociationAkm;
+    fn negotiated_akm(&self) -> oer_protocols_ieee80211_wire::security::AssociationAkm;
 }
 
 impl NegotiatedAkm for SelectedRsn {
-    fn negotiated_akm(&self) -> oer_ieee80211_wire::security::AssociationAkm {
+    fn negotiated_akm(&self) -> oer_protocols_ieee80211_wire::security::AssociationAkm {
         match self.security() {
-            oer_ieee80211_wire::security::AssociationSecurity::Rsn(association) => association.akm,
-            oer_ieee80211_wire::security::AssociationSecurity::Open => {
+            oer_protocols_ieee80211_wire::security::AssociationSecurity::Rsn(association) => {
+                association.akm
+            }
+            oer_protocols_ieee80211_wire::security::AssociationSecurity::Open => {
                 panic!("an Open selection has no AKM")
             }
         }
@@ -369,7 +373,9 @@ fn a_psk_only_owner_never_selects_sae_or_an_open_network() {
 
 #[test]
 fn a_personal_selection_advertises_spp_and_the_protection_it_negotiates() {
-    use oer_ieee80211_wire::security::{AssociationAkm, AssociationSecurity, SaePwe, Spp};
+    use oer_protocols_ieee80211_wire::security::{
+        AssociationAkm, AssociationSecurity, SaePwe, Spp,
+    };
     let psk = super::personal_rsn(AssociationAkm::Psk, Spp::NotNegotiated, false);
     // SPP A-MSDU capable only, no RSNXE.
     assert_eq!(&psk.as_bytes()[20..22], &[0, 4]);

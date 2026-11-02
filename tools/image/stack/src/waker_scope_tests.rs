@@ -460,9 +460,9 @@ fn an_unknown_incoming_producer_keeps_a_tail_unresolved() {
 
 #[test]
 fn an_object_call_requires_the_same_relocated_upper_on_every_path() {
-    use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences};
-    use oer_analysis_riscv_lift::RiscvDecoder;
-    use oer_analysis_riscv_model::*;
+    use oer_tools_analysis_riscv_analysis::{FunctionInput, PreparedReferences};
+    use oer_tools_analysis_riscv_lift::RiscvDecoder;
+    use oer_tools_analysis_riscv_model::*;
     struct Behavior;
     impl CallBehavior for Behavior {
         fn noreturn(&self, callee: Callee<'_>) -> bool {
@@ -538,9 +538,9 @@ fn an_object_call_requires_the_same_relocated_upper_on_every_path() {
             .unwrap();
         let bytes: Vec<u8> = words.into_iter().flat_map(u32::to_le_bytes).collect();
         let mut saved = Saved::default();
-        let summary = oer_analysis_riscv_analysis::research(
+        let summary = oer_tools_analysis_riscv_analysis::research(
             FunctionInput {
-                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+                traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: None,
                 section: 1,
                 extent: CodeRange {

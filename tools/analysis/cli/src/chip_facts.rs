@@ -1,22 +1,22 @@
 //! Refuse pins before an older executable tries to parse newer chip facts:
 //! every layer file a chip's facts read must be the one this build compiled
-//! in (`oer_espressif_facts::tracked`).
+//! in (`oer_chips_family_facts::tracked`).
 
 use std::path::Path;
 
-use oer_analysis_riscv_model::Result;
-use oer_espressif_facts::{Source, tracked};
+use oer_chips_family_facts::{Source, tracked};
+use oer_tools_analysis_riscv_model::Result;
 
 /// The layer files below a repository root, as they are now.
 struct Tree<'a>(&'a Path);
 
 impl Source for Tree<'_> {
-    fn read(&mut self, path: &str) -> oer_espressif_facts::Result<String> {
+    fn read(&mut self, path: &str) -> oer_chips_family_facts::Result<String> {
         std::fs::read_to_string(self.0.join(path))
             .map_err(|error| format!("{path}: {error}").into())
     }
 
-    fn files(&mut self, directory: &str) -> oer_espressif_facts::Result<Vec<String>> {
+    fn files(&mut self, directory: &str) -> oer_chips_family_facts::Result<Vec<String>> {
         let Ok(entries) = std::fs::read_dir(self.0.join(directory)) else {
             return Ok(Vec::new());
         };
@@ -29,7 +29,7 @@ impl Source for Tree<'_> {
 }
 
 pub fn check(root: &Path, chip: &str) -> Result<()> {
-    let chip_file = oer_espressif_facts::chip_file(chip);
+    let chip_file = oer_chips_family_facts::chip_file(chip);
     // Let the pin loader report a chip without pins with the chips that have them.
     if !root.join(&chip_file).is_file() {
         return Ok(());
@@ -41,8 +41,8 @@ pub fn check(root: &Path, chip: &str) -> Result<()> {
         ))
     };
     let mut tree = Tree(root);
-    let files = oer_espressif_facts::top_layer(&mut tree, chip)
-        .and_then(|top| oer_espressif_facts::chain(&mut tree, &top))
+    let files = oer_chips_family_facts::top_layer(&mut tree, chip)
+        .and_then(|top| oer_chips_family_facts::chain(&mut tree, &top))
         .map_err(|_| stale(&chip_file))?;
     for file in files {
         let current = std::fs::read_to_string(root.join(&file)).map_err(super::io_error)?;
@@ -83,7 +83,7 @@ mod tests {
             check(directory.path(), chip).unwrap();
             // This is the same profile parser used by --input ROLE=pin:CHIP/ID,
             // including core-start, table-class and every other current key.
-            oer_pins_artifacts::Manifest::load(directory.path(), chip).unwrap();
+            oer_tools_pins_artifacts::Manifest::load(directory.path(), chip).unwrap();
         }
     }
 
@@ -92,8 +92,8 @@ mod tests {
         let directory = tracked_tree();
         let chip = tracked::ids()[0];
         for path in [
-            oer_espressif_facts::chip_file(chip),
-            "chips/espressif/platform/family.toml".to_owned(),
+            oer_chips_family_facts::chip_file(chip),
+            "chips/family/platform/family.toml".to_owned(),
         ] {
             let built = tracked::text(&path).unwrap();
             write(

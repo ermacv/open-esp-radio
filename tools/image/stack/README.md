@@ -5,15 +5,15 @@ connects canonical machine setup and call inputs to numerical word-proof
 premises. It is scoped to an image capture and invocation; placement or a
 partial stack budget alone never establishes a current-SP interval.
 
-`oer-image-stack` computes worst-case stack bounds of a static RV32 image from
+`oer-tools-image-stack` computes worst-case stack bounds of a static RV32 image from
 its machine code, over the program model of
-[`oer-analysis-riscv-program`](../../analysis/riscv-program/README.md),
-[`oer-analysis-riscv-analysis`](../../analysis/riscv-analysis/README.md) and
-[`oer-analysis-riscv-lift`](../../analysis/riscv-lift/README.md). It reads the image through one
-`ImageFacts` of `oer-analysis-riscv-program` (functions with their aliases,
+[`oer-tools-analysis-riscv-program`](../../analysis/riscv-program/README.md),
+[`oer-tools-analysis-riscv-analysis`](../../analysis/riscv-analysis/README.md) and
+[`oer-tools-analysis-riscv-lift`](../../analysis/riscv-lift/README.md). It reads the image through one
+`ImageFacts` of `oer-tools-analysis-riscv-program` (functions with their aliases,
 executable ranges, read-only words, sized data objects, relocation-visible
 address uses, checked address words and `.LJTI*` labels, parsed once) and its frame records, relocations
-and DWARF through [`oer-analysis-elf`](../../analysis/elf/README.md), whose RV32 relocation
+and DWARF through [`oer-tools-analysis-elf`](../../analysis/elf/README.md), whose RV32 relocation
 table decides which relocation is an address word or a control transfer.
 
 ## Code-generation preconditions
@@ -63,7 +63,7 @@ reports print the count when nonzero. The queries over an image's facts
 (`stack_sizes`, `taken_addresses`, `waker_vtable`, `interrupt_table`,
 `vector_table`, `trap_entry`) charge the same control for each relocation,
 word, entry or step they read. The caller decides both; the image
-checks' budget is `oer_image_checks::stack::budget`. Every structure that
+checks' budget is `oer_tools_image_checks::stack::budget`. Every structure that
 grows with the image is admitted in that memory before it is made: what
 the analysis keeps (each function's facts, the DWARF facts and type facts
 of `read_debug`, the vtables, taken addresses, frame records and
@@ -105,9 +105,9 @@ integrity error): a compiler jump table is the run of relocated words from its
 function become edges of the value analysis's graph, which then also reaches
 the code behind them. Any other table is located as Blobray locates it: the
 value analysis records each jump through `table[index]` as a `Dispatch`
-record, the shared recognizer (`RecognizedTables` of `oer-analysis-riscv-analysis`)
+record, the shared recognizer (`RecognizedTables` of `oer-tools-analysis-riscv-analysis`)
 proves its entries from the image's facts (`ImageTables` of
-`oer-analysis-riscv-program`: a labelled table, a sized object or a run the guarding
+`oer-tools-analysis-riscv-program`: a labelled table, a sized object or a run the guarding
 bounds check counts), and the shared driver (`research_following_tables`)
 analyzes the function again following it, while each pass proves again
 every table it followed and more; a pass that loses one reports the
@@ -359,9 +359,9 @@ tails remain unresolved. No source name, source line, nearby scope or MIR
 call list substitutes for these machine and location facts.
 
 `task_poll_resolutions` finds the executor's task polls: the executor
-(`oer-espressif-executor`) polls each declared task by a direct call of its
+(`oer-chips-family-executor`) polls each declared task by a direct call of its
 never-inlined poll boundary, whose zero-sized first parameter has the type
-`TASK_POLL_MARK` (`oer_espressif_executor::task::PollBoundary`). `read_debug`
+`TASK_POLL_MARK` (`oer_chips_family_executor::task::PollBoundary`). `read_debug`
 marks every subprogram with a formal parameter of that type, directly or
 through its origin or specification (`Dwarf::poll_boundaries`): each
 out-of-line copy is a boundary, each inlined copy a failure. Every direct
@@ -493,17 +493,17 @@ CLIC level and route writers to run inside the functions its contract
 allows (start-up, the table's routes).
 
 This is the repository's only stack analyzer. The image build pipeline
-(`oer-image-build`) invokes the gates in `oer-image-checks`:
-[`oer_image_checks::stack`](../checks/src/stack.rs) checks the runtime
+(`oer-tools-image-build`) invokes the gates in `oer-tools-image-checks`:
+[`oer_tools_image_checks::stack`](../checks/src/stack.rs) checks the runtime
 task stacks and the bootstrap stack, and
-[`oer_image_checks::interrupts`](../checks/src/interrupts.rs) checks
+[`oer_tools_image_checks::interrupts`](../checks/src/interrupts.rs) checks
 the runtime's interrupt stacks above. The runtime gates share one analysis;
 each task stack's root uses `Analysis::bound_with` with the same resolutions.
 An ELF without `.stack_sizes` analyses here with observed frames only; the
 gate refuses it, and requires a review for every function without a record.
 
 ```console
-cargo test -p oer-image-stack
+cargo test -p oer-tools-image-stack
 ```
 
 The optional stack-call research reuses

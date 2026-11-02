@@ -1,6 +1,6 @@
 use std::{thread, time::Duration};
 
-use oer_hil_protocol::{
+use oer_protocols_hil_protocol::{
     Endpoint, Message, WireKind,
     base::{GetHello, Hello, RejectReason, Rejected},
 };

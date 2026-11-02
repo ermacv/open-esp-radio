@@ -1,8 +1,8 @@
 //! Image size measurements. These observe the checks' existing analysis;
 //! they neither run an analysis nor decide a check's verdict.
 use crate::{Result, stack::Image};
-use oer_chip_profile::{Profile, policy::Storage};
-use oer_image_stack::Bound;
+use oer_tools_chip_profile::{Profile, policy::Storage};
+use oer_tools_image_stack::Bound;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -135,7 +135,7 @@ impl Measurements {
     pub fn remeasure(
         root: &std::path::Path,
         profile: &Profile,
-        policy: &oer_chip_profile::policy::StackPolicy,
+        policy: &oer_tools_chip_profile::policy::StackPolicy,
         elf: &std::path::Path,
         bootstrap: bool,
     ) -> Result<Self> {
@@ -152,7 +152,7 @@ impl Measurements {
             policy
                 .stacks()?
                 .bootstrap_stack
-                .map(|s| vec![oer_chip_profile::policy::StackRoot::bootstrap(s)])
+                .map(|s| vec![oer_tools_chip_profile::policy::StackRoot::bootstrap(s)])
                 .unwrap_or_default()
         } else {
             policy.runtime_task_stacks()
@@ -168,7 +168,7 @@ impl Measurements {
     }
 
     pub(crate) fn of(image: &Image, profile: &Profile) -> Result<Self> {
-        let file = oer_analysis_elf::Elf::parse(&image.elf)?;
+        let file = oer_tools_analysis_elf::Elf::parse(&image.elf)?;
         let memory = profile
             .facts
             .memory
@@ -245,7 +245,7 @@ impl Measurements {
                 .ok_or_else(|| format!("sizes: unnamed frame at {address:#x}"))?;
             for name in &function.names {
                 out.frames
-                    .entry(oer_analysis_elf::demangle(name))
+                    .entry(oer_tools_analysis_elf::demangle(name))
                     .or_default()
                     .push(bytes);
             }
@@ -322,7 +322,7 @@ impl Measurements {
         for &(site, reason) in &bound.unresolved {
             let (function, offset) = match image.analysis.functions.range(..=site).next_back() {
                 Some((&start, facts)) if site - start < facts.function.size => (
-                    oer_analysis_elf::demangle(&facts.function.label()),
+                    oer_tools_analysis_elf::demangle(&facts.function.label()),
                     site - start,
                 ),
                 _ => (format!("unmapped:{site:#x}"), 0),
@@ -338,7 +338,7 @@ impl Measurements {
             .analysis
             .functions
             .get(&bound.root)
-            .map(|f| oer_analysis_elf::demangle(&f.function.label()))
+            .map(|f| oer_tools_analysis_elf::demangle(&f.function.label()))
             .unwrap_or_else(|| format!("{:#x}", bound.root));
         self.insert_bound(
             name.into(),

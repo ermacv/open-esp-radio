@@ -20,12 +20,12 @@
 
 use super::*;
 use core::marker::PhantomData;
-use oer_ieee80211_contracts_port::{AggregateEnd, AggregateOutcome};
+use oer_protocols_ieee80211_contracts_port::{AggregateEnd, AggregateOutcome};
 
 /// The most subframes one data aggregate holds: the width of the port's
 /// subframe masks.
 pub const MAX_AGGREGATE: usize =
-    oer_ieee80211_contracts_port::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
+    oer_protocols_ieee80211_contracts_port::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
 
 /// Where a TID may aggregate now: its agreement's window and the port's
 /// subframe limit.
@@ -43,9 +43,9 @@ pub struct AggregateWindow {
     /// aggregate's rate, the lower.
     pub max_length: u32,
     /// The aggregate's rate, whose PPDU time limit
-    /// ([`PhyRate::max_txtime_micros`](oer_ieee80211_contracts_port::PhyRate::max_txtime_micros))
+    /// ([`PhyRate::max_txtime_micros`](oer_protocols_ieee80211_contracts_port::PhyRate::max_txtime_micros))
     /// the aggregate keeps within; `None` checks no time.
-    pub rate: Option<oer_ieee80211_contracts_port::PhyRate>,
+    pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
 }
 
 /// Why an attempt pass made no attempt, kept while only MSDUs come: an
@@ -95,8 +95,9 @@ impl AttemptWait {
                 if tid != growing {
                     return Some(self);
                 }
-                let follows =
-                    oer_ieee80211_core_upper_mac::sequence::forward_distance(last, sequence) == 1;
+                let follows = oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
+                    last, sequence,
+                ) == 1;
                 let length = subframe_octets(mpdu, protection)
                     .and_then(|octets| length.checked_add(octets))
                     .filter(|total| window.fits(*total))?;
@@ -125,7 +126,7 @@ fn subframe_octets(mpdu: usize, protection: DataProtection<()>) -> Option<u32> {
     const FCS: usize = 4;
     let mic = match protection {
         DataProtection::Open => 0,
-        DataProtection::Ccmp(()) => oer_ieee80211_wire::ccmp::CCMP_MIC_LEN,
+        DataProtection::Ccmp(()) => oer_protocols_ieee80211_wire::ccmp::CCMP_MIC_LEN,
     };
     let unpadded = mpdu.checked_add(mic)?.checked_add(FCS)?;
     let padded = unpadded.checked_add(3)? & !3;
@@ -135,7 +136,8 @@ fn subframe_octets(mpdu: usize, protection: DataProtection<()>) -> Option<u32> {
 impl AggregateWindow {
     /// Whether `sequence` lies inside the window.
     fn holds(&self, sequence: SequenceNumber) -> bool {
-        oer_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence) < self.size
+        oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence)
+            < self.size
     }
 
     /// Whether `sequence` lies beyond the window's end: after its head in
@@ -147,7 +149,7 @@ impl AggregateWindow {
     /// originator transmits within WinStartO to WinStartO + WinSizeO - 1)
     /// and 10.24.7 (the half-space horizon of sequence comparisons).
     fn ahead(&self, sequence: SequenceNumber) -> bool {
-        use oer_ieee80211_core_upper_mac::sequence::SequenceSpace;
+        use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace;
         let distance = self.start.forward_distance(sequence);
         distance >= self.size && distance < SequenceNumber::HALF_SPACE
     }
@@ -178,7 +180,7 @@ impl<T: StaTokens> LinkView<'_, '_, T> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AggregateRetry {
     /// A member whose MSDU is this old is dropped instead of retried.
-    pub lifetime: oer_time::Duration,
+    pub lifetime: oer_portable_time::Duration,
     /// Aggregates on the air a member may miss before it is dropped.
     pub attempts: u8,
 }
@@ -208,7 +210,9 @@ impl BlockAckMarks {
     }
 
     fn mark(&mut self, sequence: SequenceNumber, delivered: bool) {
-        let offset = oer_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence);
+        let offset = oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
+            self.start, sequence,
+        );
         let Some(bit) = 1_u64.checked_shl(u32::from(offset)) else {
             return;
         };
@@ -229,9 +233,9 @@ impl BlockAckMarks {
 /// [`MemberBank`] while its aggregate is out.
 #[derive(Debug)]
 pub(crate) struct Member<K, C> {
-    frame: oer_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
+    frame: oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>,
     order: u32,
-    admitted: oer_time::Instant,
+    admitted: oer_portable_time::Instant,
     sequence: SequenceNumber,
     attempts: u8,
 }
@@ -272,9 +276,9 @@ impl<K, C, M, const N: usize> MemberBank<K, C, M, N> {
     #[cfg(feature = "placement")]
     pub(crate) fn init_in_place(place: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
         let () = Self::PLACES;
-        oer_memory::init_in_place!(place, Self {
-            members => |members| oer_memory::init_array(members, |_| None),
-            memory => |memory| oer_memory::init_array(memory, |_| None),
+        oer_portable_memory::init_in_place!(place, Self {
+            members => |members| oer_portable_memory::init_array(members, |_| None),
+            memory => |memory| oer_portable_memory::init_array(memory, |_| None),
         })
     }
 
@@ -344,7 +348,7 @@ pub struct DataAggregateContext<
     K,
     C,
     A = AcPermit,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     admission: A,
     link: LinkEpoch<'id, Path>,
@@ -366,14 +370,15 @@ pub struct DataAggregateInfo<K, C, A> {
     members: PhantomData<fn() -> Member<K, C>>,
 }
 
-impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p> oer_radio_port::LoanedContext<'p, Path::Identity>
+impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p>
+    oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
     for DataAggregateContext<'p, K, C, A, Path>
 where
     Path::Identity: 'p,
 {
     type Owned = crate::epoch::EpochContext<Path, DataAggregateInfo<K, C, A>>;
 
-    fn enclose(self) -> oer_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
+    fn enclose(self) -> oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
         self.link.context(DataAggregateInfo {
             admission: self.admission,
             tid: self.tid,
@@ -384,7 +389,9 @@ where
         })
     }
 
-    fn restore(context: oer_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+    fn restore(
+        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
+    ) -> Self {
         let (link, data) = context.into_parts();
         Self {
             admission: data.admission,
@@ -495,7 +502,7 @@ pub enum DataAggregateReturn<'id, D: StaDataTokens, K, B, X> {
 impl<
     'id,
     D: StaDataTokens,
-    K: oer_ieee80211_contracts_port::Ieee80211Capabilities,
+    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
     const CAP: usize,
 > StaData<'id, D, K, CAP>
 {
@@ -551,8 +558,9 @@ impl<
             .take_while(|owed| {
                 let sequence = owed.context.sequence;
                 let follows = previous.is_none_or(|previous| {
-                    oer_ieee80211_core_upper_mac::sequence::forward_distance(previous, sequence)
-                        == 1
+                    oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
+                        previous, sequence,
+                    ) == 1
                 });
                 previous = Some(sequence);
                 let fits = subframe_octets(
@@ -721,14 +729,14 @@ impl<
     pub fn aggregate_returned<B, X>(
         &mut self,
         input: DataAggregateReturn<'id, D, K, B, X>,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         retry: Option<AggregateRetry>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<BlockAckMarks> {
         self.waits = None;
         // Without a policy a missing member is not retried.
         let retry = retry.unwrap_or(AggregateRetry {
-            lifetime: oer_time::Duration::ZERO,
+            lifetime: oer_portable_time::Duration::ZERO,
             attempts: 0,
         });
         let (context, ticket, completion) = match input {
@@ -810,11 +818,11 @@ impl<
                 // does: the same refusal would only come again.
                 None => Some(false),
                 Some(TxOutcome::Withdrawn(
-                    oer_ieee80211_contracts_port::WithdrawCause::GateClosed
-                    | oer_ieee80211_contracts_port::WithdrawCause::Disabled,
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::GateClosed
+                    | oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
                 )) => None,
                 Some(TxOutcome::Withdrawn(
-                    oer_ieee80211_contracts_port::WithdrawCause::KeyRemoved,
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::KeyRemoved,
                 )) => Some(false),
                 Some(TxOutcome::Indeterminate(_)) => {
                     report(events, || StaEvent::DataLost(DataLoss::Indeterminate));
@@ -834,7 +842,7 @@ impl<
                 Some(TxOutcome::Ended(end)) => {
                     let (acknowledged, aired) = match end {
                         AggregateEnd::Delivered { report, .. } => (
-                            oer_ieee80211_core_upper_mac::block_ack::acknowledges(
+                            oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
                                 *report,
                                 member.sequence,
                             ),
@@ -899,9 +907,9 @@ impl<
         &self,
         context: &DataAggregateContext<'id, K, D::Class, A, D::EpochPath>,
         index: usize,
-    ) -> Option<oer_ieee80211_contracts_port::ClassSizedFrame<D::Class, AckHeader, K>>
+    ) -> Option<oer_protocols_ieee80211_contracts_port::ClassSizedFrame<D::Class, AckHeader, K>>
     where
-        oer_ieee80211_contracts_port::ClassSizedFrame<D::Class, AckHeader, K>: Copy,
+        oer_protocols_ieee80211_contracts_port::ClassSizedFrame<D::Class, AckHeader, K>: Copy,
     {
         let place = *context.places.get(index)?;
         self.members.get(place).map(|member| member.frame)

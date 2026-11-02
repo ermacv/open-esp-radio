@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::discovery as ports;
 
-use oer_lab_model::device_id::DeviceId;
+use oer_tools_lab_model::device_id::DeviceId;
 
 /// An attached board.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -84,7 +84,7 @@ pub fn known_chip(mac: &DeviceId) -> Option<String> {
 
 fn chip_record(mac: &DeviceId) -> crate::Result<PathBuf> {
     Ok(
-        oer_os_durable::xdg::path(oer_os_durable::xdg::Base::Cache, "devices")?
+        oer_tools_os_durable::xdg::path(oer_tools_os_durable::xdg::Base::Cache, "devices")?
             .join(format!("{}.chip", mac.compact())),
     )
 }

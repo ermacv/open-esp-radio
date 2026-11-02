@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_ieee80211_driver::mac::tx::TxSlotFree;
+use oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotFree;
 
 pub fn reserve(mut free: TxSlotFree<'_, 64>) {
     if let Ok(buffer) = free.buffer_mut() {

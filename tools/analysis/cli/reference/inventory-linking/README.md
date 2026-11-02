@@ -6,7 +6,7 @@ Inventory captured executables and link images from their objects, in process.
 
 ## Inventory
 
-`oer_analysis_blobray_application::captured::inventory(executable, memory, control)` reads
+`oer_tools_analysis_blobray_application::captured::inventory(executable, memory, control)` reads
 one executable given as bytes and returns an `ArtifactInventory`: the container
 kind (`elf`, `archive` or `thin-archive`), whether member framing was intact,
 and one `ObjectInventory` per object with its `ObjectId`, member name, payload
@@ -52,11 +52,11 @@ Both JSON documents are schema 2 (`{"schema":2,"analysis_resources":{...},"input
 
 ## Synthetic linked images
 
-`oer_analysis_blobray_application::linking::link(request, executables, linker, host,
+`oer_tools_analysis_blobray_application::linking::link(request, executables, linker, host,
 directory, memory, control)` links the image a `LinkRequest` describes and
 returns a `LinkedImage`: its `ImageManifest`, the ELF bytes as an `Executable`
 and the linker's map. `linker` is the path of an explicitly selected LLD (the only
-supported linker); `host` is the linker adapter (`oer_analysis_blobray_linker::ElfLinker`);
+supported linker); `host` is the linker adapter (`oer_tools_analysis_blobray_linker::ElfLinker`);
 `directory` is where the link's private workspace is created and removed.
 
 A `LinkRequest` has ordered `inputs` (executable content identities), the

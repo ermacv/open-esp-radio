@@ -27,8 +27,8 @@
 //! any longer removes its registration.
 use crate::Result;
 use crate::fingerprint::Function;
-use oer_pins_artifacts::artifacts::project::{self, Project};
-use oer_pins_artifacts::provenance::Entry;
+use oer_tools_pins_artifacts::artifacts::project::{self, Project};
+use oer_tools_pins_artifacts::provenance::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -361,13 +361,13 @@ fn pinned_functions(
 ) -> Result<(BTreeMap<String, (PathBuf, Vec<Function>)>, BTreeSet<String>)> {
     let mut out = BTreeMap::new();
     let mut symbols = BTreeSet::new();
-    for artifact in oer_pins_artifacts::artifacts::pinned(root, chip)? {
+    for artifact in oer_tools_pins_artifacts::artifacts::pinned(root, chip)? {
         if artifact.firmware {
             continue;
         }
         let bytes = std::fs::read(&artifact.path)
             .map_err(|e| format!("{}: {e}", artifact.path.display()))?;
-        if !oer_analysis_elf::is_binary(&bytes) {
+        if !oer_tools_analysis_elf::is_binary(&bytes) {
             continue;
         }
         let (functions, defined) = crate::fingerprint::functions_and_symbols(&bytes)?;
@@ -404,7 +404,7 @@ struct Survey {
 
 fn survey(root: &Path, chip: &str) -> Result<Survey> {
     let registry = match std::fs::read_to_string(root.join(registry_path(root, chip)?)) {
-        Ok(text) => oer_pins_artifacts::provenance::parse(&text)?,
+        Ok(text) => oer_tools_pins_artifacts::provenance::parse(&text)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(error) => return Err(error.into()),
     };
@@ -435,7 +435,7 @@ fn survey(root: &Path, chip: &str) -> Result<Survey> {
             &mut found,
         )?;
     }
-    for (file, text) in oer_registers_model::descriptions(root, chip)? {
+    for (file, text) in oer_tools_registers_model::descriptions(root, chip)? {
         found.cite(&file.display().to_string(), &text);
     }
     let Found {
@@ -723,7 +723,7 @@ pub fn check(root: &Path, chip: &str) -> Result<()> {
 }
 
 fn survey_count(root: &Path, chip: &str) -> Result<usize> {
-    Ok(oer_pins_artifacts::provenance::registered(root, chip)?.len())
+    Ok(oer_tools_pins_artifacts::provenance::registered(root, chip)?.len())
 }
 
 /// Prints the annotated pinned code of a cited function.
@@ -878,7 +878,7 @@ pub fn update(
     let entries: Vec<Entry> = entries.into_iter().collect();
     std::fs::write(
         root.join(registry_path(root, chip)?),
-        oer_pins_artifacts::provenance::render(&entries),
+        oer_tools_pins_artifacts::provenance::render(&entries),
     )?;
     println!("{} registered functions", entries.len());
     Ok(())

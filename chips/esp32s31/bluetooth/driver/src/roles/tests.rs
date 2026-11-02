@@ -1,5 +1,5 @@
 use super::*;
-use oer_esp32s31_hal::memory::dma_static::Placed;
+use oer_chips_esp32s31_hal::memory::dma_static::Placed;
 use std::boxed::Box;
 
 #[test]

@@ -3,9 +3,9 @@
 //! Header boundaries follow RFC 791 §3.1 and RFC 8200 §3. Extension headers,
 //! fragments and non-TCP/UDP traffic deliberately do not yield port keys.
 
-use oer_network_wire::ethernet::{EtherType, EthernetHeader};
-use oer_network_wire::ip::{Ipv4Header, Ipv6Header};
-use oer_network_wire::transport::Ports;
+use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ip::{Ipv4Header, Ipv6Header};
+use oer_protocols_network_wire::transport::Ports;
 
 /// Directional transport identity within one Ethernet next hop.
 ///

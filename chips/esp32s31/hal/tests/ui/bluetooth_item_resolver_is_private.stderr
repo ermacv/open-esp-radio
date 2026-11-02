@@ -1,8 +1,8 @@
 error[E0603]: trait `SchedulerItemSources` is private
- --> tests/ui/bluetooth_item_resolver_is_private.rs:5:42
+ --> tests/ui/bluetooth_item_resolver_is_private.rs:5:48
   |
-5 | use oer_esp32s31_hal::bluetooth::engine::SchedulerItemSources; // ui-error: E0603
-  |                                          ^^^^^^^^^^^^^^^^^^^^ private trait
+5 | use oer_chips_esp32s31_hal::bluetooth::engine::SchedulerItemSources; // ui-error: E0603
+  |                                                ^^^^^^^^^^^^^^^^^^^^ private trait
   |
 note: the trait `SchedulerItemSources` is defined here
  --> src/bluetooth/engine/mod.rs

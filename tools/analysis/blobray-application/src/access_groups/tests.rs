@@ -1,7 +1,7 @@
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     LibraryFunction, RegisterAccess, RegisterMask, RegisterMaskKind,
 };
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AbstractValue, ArtifactId, Error, ErrorCode, FunctionRecord, MemoryKind, ObjectId,
     ObjectLocation, SymbolId, SymbolTableKind,
 };
@@ -234,7 +234,7 @@ fn same_named_functions_of_different_members_stay_apart() {
 
 #[test]
 fn loads_of_different_widths_stay_separate_entries() {
-    use oer_analysis_blobray_domain::{StoredBits, StoredBitsSource};
+    use oer_tools_analysis_blobray_domain::{StoredBits, StoredBitsSource};
     let store = |width| {
         let mut record = observation("store_byte", MemoryKind::Store, Some(0x2010_702c), None);
         if let RegisterAccess::Observation { stored, .. } = &mut record {
@@ -265,7 +265,7 @@ fn loads_of_different_widths_stay_separate_entries() {
 
 #[test]
 fn an_indexed_observation_is_selected_by_the_words_its_progression_reaches() {
-    use oer_analysis_blobray_domain::IndexedAddress;
+    use oer_tools_analysis_blobray_domain::IndexedAddress;
     let mut record = observation("coex_hw_timer_set", MemoryKind::Store, None, None);
     if let RegisterAccess::Observation { indexed, .. } = &mut record {
         *indexed = Some(IndexedAddress {
@@ -301,7 +301,7 @@ fn an_indexed_observation_is_selected_by_the_words_its_progression_reaches() {
 
 #[test]
 fn read_classes_stay_separate_and_render_sinks_precision_and_limits() {
-    use oer_analysis_blobray_domain::{
+    use oer_tools_analysis_blobray_domain::{
         ReadLimit, ReadLimitKind, ReadPrecision, ReadSink, ReadUse, ReadUses,
     };
     let mut active = observation("read_bits", MemoryKind::Load, Some(0x2010_702c), None);

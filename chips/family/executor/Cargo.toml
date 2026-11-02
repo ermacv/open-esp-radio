@@ -1,0 +1,64 @@
+[package]
+name = "oer-chips-family-executor"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "Apache-2.0"
+repository = "https://github.com/ermacv/open-esp-radio"
+description = "Scheduler-free static task executor and time driver for Espressif staged-boot applications"
+
+[features]
+default = []
+# Nominal static radio-slot declarations. Images without a port slot retain
+# their dependency graph and linked bytes.
+port-slots = ["dep:oer-protocols-radio-port"]
+# The executor and time driver over a chip binding (`bind!`), which the
+# chip's composition crate selects together with the HAL's chip.
+chip = [
+    "dep:embassy-time-driver",
+    "dep:portable-atomic",
+    "dep:oer-chips-family-interrupt-table",
+    "dep:oer-chips-family-staged-runtime",
+    "dep:oer-portable-riscv",
+    "dep:oer-portable-mmio",
+]
+
+[dependencies]
+oer-portable-trace = { path = "../../../portable/trace" }
+oer-chips-family-boot = { path = "../boot" }
+static_cell = "2.1.1"
+oer-portable-cooperate = { path = "../../../portable/cooperate" }
+oer-portable-time = { path = "../../../portable/time" }
+bytemuck = { version = "1.25.2", default-features = false }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-family-platform-port = { path = "../platform-port" }
+oer-protocols-radio-port = { path = "../../../protocols/radio/port", optional = true }
+embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
+portable-atomic = { version = "1.11", default-features = false, optional = true }
+oer-chips-family-interrupt-table = { path = "../interrupt-table", optional = true }
+oer-portable-riscv = { path = "../../../portable/riscv", optional = true }
+oer-portable-mmio = { path = "../../../portable/mmio", optional = true }
+oer-chips-family-staged-runtime = { path = "../staged-runtime", optional = true }
+
+[target.'cfg(not(target_os = "none"))'.dev-dependencies]
+tempfile = "=3.27.0"
+oer-tools-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+
+[dev-dependencies]
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-protocols-radio-port = { path = "../../../protocols/radio/port", features = ["test-support"] }
+oer-chips-family-staged-runtime = { path = "../staged-runtime" }
+oer-chips-family-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "slots"
+required-features = ["port-slots"]
+
+[package.metadata.docs.rs]
+# Chip APIs exist only for the chip target; document them there alone.
+default-target = "riscv32imafc-unknown-none-elf"
+targets = []

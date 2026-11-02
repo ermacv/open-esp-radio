@@ -26,7 +26,7 @@ use crate::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::{
     ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters},

@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_esp32s31_hal::bluetooth::engine::*;
+use oer_chips_esp32s31_hal::bluetooth::engine::*;
 
 pub fn dtm(engine: &mut Engine<ArenaMemory<'_, '_, 0, 0, 0, 0, 0, 0, 1>>) {
     let _ = engine.dtm();

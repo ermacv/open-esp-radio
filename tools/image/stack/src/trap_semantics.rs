@@ -1,10 +1,10 @@
 //! Image proof made with unknown trap behavior, before terminal traps can
 //! close any function. Platform callers supply every hart's exception entry.
 use crate::{Analysis, TrapEntry, TrapSemantics, inspect_function_as, trap_entry};
-use oer_analysis_riscv_analysis::{KnownJump, ResearchOptions, writes::closes_local_graph};
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_analysis::{KnownJump, ResearchOptions, writes::closes_local_graph};
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::{collections::BTreeMap, fmt};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

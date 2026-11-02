@@ -1,8 +1,8 @@
 //! The variant paths of the PHY's errors, for diagnostics that do not
 //! format. Each `match` is exhaustive: a new variant breaks the build.
 
-use oer_diagnostics::{DiagPath, DiagnosticPath};
-use oer_esp32s31_hal::domain::RadioClient;
+use oer_chips_esp32s31_hal::domain::RadioClient;
+use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use crate::calibration::registration::PhyCalibrationPath;
 use crate::concurrent::{ConcurrentAcquire, ConcurrentPhyError, JoinRefused};
@@ -10,12 +10,14 @@ use crate::ieee802154_client::Ieee802154PhyClientError;
 use crate::state::client::{PhyClientAcquireError, PhyPllTrackClass, PhyTrackTimeError};
 
 impl PhyCalibrationPath {
-    pub const fn name(self) -> oer_diagnostics::Name<32> {
+    pub const fn name(self) -> oer_portable_diagnostics::Name<32> {
         match self {
-            Self::FullUncached => oer_diagnostics::name!("FullUncached"; 32),
-            Self::FullForCache => oer_diagnostics::name!("FullForCache"; 32),
-            Self::FullAfterRejectedCache => oer_diagnostics::name!("FullAfterRejectedCache"; 32),
-            Self::PartialFromCache => oer_diagnostics::name!("PartialFromCache"; 32),
+            Self::FullUncached => oer_portable_diagnostics::name!("FullUncached"; 32),
+            Self::FullForCache => oer_portable_diagnostics::name!("FullForCache"; 32),
+            Self::FullAfterRejectedCache => {
+                oer_portable_diagnostics::name!("FullAfterRejectedCache"; 32)
+            }
+            Self::PartialFromCache => oer_portable_diagnostics::name!("PartialFromCache"; 32),
         }
     }
 }
@@ -127,7 +129,7 @@ impl DiagnosticPath for Ieee802154PhyClientError {
     }
 }
 
-impl<B: oer_esp32s31_hal::power::PlatformClockBackend, E: DiagnosticPath> DiagnosticPath
+impl<B: oer_chips_esp32s31_hal::power::PlatformClockBackend, E: DiagnosticPath> DiagnosticPath
     for JoinRefused<'_, B, E>
 {
     /// The refusal's error; the radio it returns is not part of the path.
@@ -196,7 +198,7 @@ impl DiagnosticPath for crate::tracking::parameters::PhyParamTrackingTransitionE
 
 #[cfg(test)]
 mod tests {
-    use oer_diagnostics::{DiagPath, DiagnosticPath};
+    use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
     use crate::{executor::PhyCalibrationTrackingRunError, tracking::calibration};
 

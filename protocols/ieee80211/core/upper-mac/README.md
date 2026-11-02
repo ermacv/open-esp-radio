@@ -1,6 +1,6 @@
 # IEEE 802.11 upper-MAC state and policy
 
-`oer-ieee80211-core-upper-mac` holds the transmit decisions that lie above the
+`oer-protocols-ieee80211-core-upper-mac` holds the transmit decisions that lie above the
 [lower-MAC port](../../contracts/port/README.md): one port submission is one hardware
 transmission attempt, and everything a backend does not report as a
 `HardwareServices` offload is decided here, once for every backend, except
@@ -53,7 +53,7 @@ OFDM 6 Mb/s in 5 GHz. A supplied empty or incompatible set refuses TX;
 the result in `management::unicast` (at most seven attempts) or
 `management::broadcast` (one), a port `ManagementTxPlan` that keeps that rate
 for every attempt. `BasicRates` reads the wire's Supported Rates codec
-(`oer_ieee80211_wire::rates`), as `NegotiatedLegacyRates` does.
+(`oer_protocols_ieee80211_wire::rates`), as `NegotiatedLegacyRates` does.
 
 `airtime::AirtimeStorage` owns a bounded, allocation-free deficit ledger.
 Its scheduler reserves credit before publication; unpublished work may be
@@ -85,7 +85,7 @@ vendor:
   threshold; `ProtectEveryHeTxop` protects every individual HE PPDU while a
   threshold is advertised.
 
-[`oer-espressif-ieee80211-policy`](../../../../chips/espressif/ieee80211-policy/README.md)
+[`oer-chips-family-ieee80211-policy`](../../../../chips/family/ieee80211-policy/README.md)
 supplies the Espressif values recovered from the vendor stack.
 
 Control-rate selection starts from the first eligible advertised basic rate.
@@ -95,7 +95,7 @@ fastest candidate no faster than the data rate, or the slowest candidate when
 all are faster, applying the BSS preamble rule afterward.
 
 Every subframe ages from its MSDU's admission into software, on the
-monotonic clock (`oer_time::Instant`, `protocols/ieee80211/contracts/port/README.md`, MSDU age): the
+monotonic clock (`oer_portable_time::Instant`, `protocols/ieee80211/contracts/port/README.md`, MSDU age): the
 caller gives each original subframe's admission instant with every
 completion, and a subframe without one ends the exchange as incomplete
 (`UnknownSubframe`), never a panic. A subframe is aged once less than the
@@ -114,7 +114,7 @@ frame and leaves the aggregate run unchanged. `AmpduLimits` includes aligned
 empty delimiters between MPDUs for the peer's start spacing at the exact
 HT/HE symbol rate, in both the byte and TXOP bounds. The final MPDU needs no
 spacing tail. Admission and backend encoders share checked delimiter geometry
-from `oer-ieee80211-wire::ampdu`; each encoder separately applies its hardware
+from `oer-protocols-ieee80211-wire::ampdu`; each encoder separately applies its hardware
 limits. `ampdu::compact` operates on
 fixed arrays of Copy metadata, never on affine MPDUs or payload owners.
 It swaps selected entries into the prefix in order, without a full-array

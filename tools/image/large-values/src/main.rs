@@ -13,7 +13,7 @@ fn main() -> ExitCode {
     let mut arguments = std::env::args_os();
     let executable = arguments.next().unwrap_or_default();
     let Some(rustc) = arguments.next() else {
-        eprintln!("usage: oer-tool-image-large-values <rustc> <rustc arguments...>");
+        eprintln!("usage: oer-tools-image-large-values <rustc> <rustc arguments...>");
         return ExitCode::FAILURE;
     };
     let arguments: Vec<OsString> = arguments.collect();

@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_contracts_port::{Configured, SampledTsfPermission, VifRole};
+use oer_protocols_ieee80211_contracts_port::{Configured, SampledTsfPermission, VifRole};
 
 enum ContractCase {
     Unsolicited,
@@ -45,7 +45,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         } = resources;
         let (arbiter, place, absence) = PortArbiter::<ServicePort<Id>>::new(
             ArbiterPolicy::DEFAULT.checked(<ModelBackend<Id, ModelCaps24, ServiceContexts> as LowerMacBackend<Id>>::PUBLICATION_BOUND).unwrap(),
-            SupportedChannel::new(oer_radio_regulatory::TEST_DOMAIN.permit(oer_ieee80211_contracts_port::RegulatedChannel::from(channel6())).unwrap()).unwrap(), arbiter_authority, gate,
+            SupportedChannel::new(oer_protocols_radio_regulatory::TEST_DOMAIN.permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel6())).unwrap()).unwrap(), arbiter_authority, gate,
         );
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
@@ -56,14 +56,16 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             config,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,
-                epochs: oer_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(connection_epoch),
+                epochs: oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(
+                    connection_epoch,
+                ),
                 tickets: station_tickets,
                 buffers: <[_; 4]>::try_from(small).ok().unwrap(),
                 place,
                 absence_place: absence,
-                keys: oer_ieee80211_contracts_port::association::reunite_vacant(
+                keys: oer_protocols_ieee80211_contracts_port::association::reunite_vacant(
                     station_association,
-                    oer_ieee80211_contracts_port::association::VacantKeyBank::new(
+                    oer_protocols_ieee80211_contracts_port::association::VacantKeyBank::new(
                         station_pairwise,
                         station_group,
                     ),
@@ -85,7 +87,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             Box::leak(Box::new(RxBlockAckStorage::<
                 _,
                 2,
-                { oer_ieee80211_testing_model::MODEL_RX_EVENTS },
+                { oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS },
             >::new(
                 block_acks, Duration::from_millis(100)
             )))
@@ -95,16 +97,15 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let access_point_association =
             <ModelTypes<ModelBackend<Id, ModelCaps24, ServiceContexts>> as PhaseTypes>::AccessPointKeys::begin_association(
                 access_point_association,
-                oer_ieee80211_wire::security::Spp::NotNegotiated,
+                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
         let [ap_pairwise, ap_installed] = access_point_pairwise;
         let [ap_group, _] = access_point_group;
         if let ContractCase::Disable { prior, overflow } = self.0 {
             let mut owner = owner.enable().await.ok().unwrap();
-            let (bank, places) = service
-                .state
-                .station
-                .finish(oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested);
+            let (bank, places) = service.state.station.finish(
+                oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested,
+            );
             let RetiredArbiter::Stopped(stopped) = service.arbiter.finish(ArbiterEnd::Stopped)
             else {
                 panic!()
@@ -112,10 +113,12 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             let (arbiter, places) = stopped
                 .restart(
                     SupportedChannel::new(
-                        oer_radio_regulatory::TEST_DOMAIN
-                            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                                channel6(),
-                            ))
+                        oer_protocols_radio_regulatory::TEST_DOMAIN
+                            .permit(
+                                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                                    channel6(),
+                                ),
+                            )
                             .unwrap(),
                     )
                     .unwrap(),
@@ -246,14 +249,16 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let owner = {
             let mut owner = owner.enable().await.ok().unwrap();
             let installed = {
-                use oer_radio_port::PortPhase as _;
+                use oer_protocols_radio_port::PortPhase as _;
                 let mut phase = owner.phase();
                 phase.access_point().install_pairwise_key(
                     &access_point_association,
                     ap_installed,
-                    oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 7])
-                        .unwrap(),
-                    oer_ieee80211_contracts_security::Ccmp128Key::new(&[5; 16]),
+                    oer_protocols_ieee80211_wire::address::IndividualAddress::new([
+                        2, 0, 0, 0, 0, 7,
+                    ])
+                    .unwrap(),
+                    oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[5; 16]),
                 );
                 let Ok(Ok(LowerMacEvent::Terminal(
                     installed @ LowerMacTerminal::PairwiseKeyInstalled(_),
@@ -280,19 +285,19 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             (
                 LowerMacTerminal::TsfSampled {
                     permission: SampledTsfPermission::Station(station_commands.tsf),
-                    sample: oer_ieee80211_contracts_port::TsfSample {
-                        tsf: oer_ieee80211_contracts_port::VifTsf::new(
+                    sample: oer_protocols_ieee80211_contracts_port::TsfSample {
+                        tsf: oer_protocols_ieee80211_contracts_port::VifTsf::new(
                             VifRole::Station,
-                            oer_ieee80211_contracts_port::tsf::TsfInstant::from_micros(0),
+                            oer_protocols_ieee80211_contracts_port::tsf::TsfInstant::from_micros(0),
                         ),
-                        local: oer_ieee80211_contracts_port::Ieee80211Stamp {
-                            at: oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(0),
-                            generation: oer_radio_port::GenerationSource::new(1).current(),
+                        local: oer_protocols_ieee80211_contracts_port::Ieee80211Stamp {
+                            at: oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(0),
+                            generation: oer_protocols_radio_port::GenerationSource::new(1).current(),
                         },
-                        uncertainty: oer_ieee80211_contracts_port::Ieee80211Duration::from_micros(
+                        uncertainty: oer_protocols_ieee80211_contracts_port::Ieee80211Duration::from_micros(
                             0,
                         ),
-                        generation: oer_radio_port::GenerationSource::new(1).current(),
+                        generation: oer_protocols_radio_port::GenerationSource::new(1).current(),
                     },
                 },
                 BackendContractViolation::UnexpectedTsfSample,
@@ -333,7 +338,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             station: PortStation<'id, B, C, 1>,
             data: PortData<'id, B>,
             rates: S,
-            terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
+            terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
                 'id,
                 <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
                 <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
@@ -369,12 +374,12 @@ fn unsolicited_tsf_and_access_point_terminals_retain_their_real_permissions() {
                 IndividualAddress::new(LOCAL).unwrap(),
                 IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
             ],
-            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
-            oer_radio_port::LocalExecution
+            oer_protocols_radio_port::LocalExecution
                 .scope(
-                    oer_radio_port::conformance::registration::guarded(
+                    oer_protocols_radio_port::conformance::registration::guarded(
                         (&mut slot)
                             .register(backend)
                             .ok()
@@ -384,7 +389,7 @@ fn unsolicited_tsf_and_access_point_terminals_retain_their_real_permissions() {
                         .await
                 )
                 .await,
-            oer_radio_port::PortEnd::Uninstalled { .. }
+            oer_protocols_radio_port::PortEnd::Uninstalled { .. }
         ));
         slot.end_model_world();
     }));
@@ -401,12 +406,12 @@ fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
                     IndividualAddress::new(LOCAL).unwrap(),
                     IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
                 ],
-                std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+                std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
             );
             assert!(matches!(
-                oer_radio_port::LocalExecution
+                oer_protocols_radio_port::LocalExecution
                     .scope(
-                        oer_radio_port::conformance::registration::guarded(
+                        oer_protocols_radio_port::conformance::registration::guarded(
                             (&mut slot)
                                 .register(backend)
                                 .ok()
@@ -422,7 +427,7 @@ fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
                         .await
                     )
                     .await,
-                oer_radio_port::PortEnd::Uninstalled { .. }
+                oer_protocols_radio_port::PortEnd::Uninstalled { .. }
             ));
             slot.end_model_world();
         }));
@@ -439,17 +444,17 @@ fn full_custody_returns_the_next_terminal_to_poisoned_port_teardown() {
                 IndividualAddress::new(LOCAL).unwrap(),
                 IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
             ],
-            std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
         assert!(matches!(
-            oer_radio_port::LocalExecution.scope(oer_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().expect("fresh local slot")), async |frontend| run_port(
+            oer_protocols_radio_port::LocalExecution.scope(oer_protocols_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().expect("fresh local slot")), async |frontend| run_port(
                 frontend,
                 ContractBody(ContractCase::Disable {
                     prior: false,
                     overflow: true
                 }),
             ).await).await,
-            oer_radio_port::PortEnd::FailStopped { outcome, .. } if matches!(outcome.outcome(), oer_radio_port::Abandon::Stopped(_))
+            oer_protocols_radio_port::PortEnd::FailStopped { outcome, .. } if matches!(outcome.outcome(), oer_protocols_radio_port::Abandon::Stopped(_))
         ));
         slot.end_model_world();
     }));

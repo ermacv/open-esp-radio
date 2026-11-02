@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::InFlight;
-use oer_ieee80211_testing_model::ModelMpdu;
+use oer_protocols_ieee80211_contracts_port::InFlight;
+use oer_protocols_ieee80211_testing_model::ModelMpdu;
 
 pub fn reorder<'id, C, T>(
     first: &mut InFlight<C, T, ModelMpdu<'id, Composition>>,
@@ -16,4 +16,4 @@ pub fn reorder<'id, C, T>(
 }
 
 pub enum UiSlot {}
-type Composition = oer_ieee80211_testing_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;
+type Composition = oer_protocols_ieee80211_testing_model::ModelBackend<oer_protocols_radio_port::StaticId<UiSlot>>;

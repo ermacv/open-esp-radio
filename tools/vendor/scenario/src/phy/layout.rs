@@ -4,7 +4,7 @@
 //! ROM pointers, scratch placement and the radio and analog I2C transport
 //! addresses. The analog command encoding, fill patterns and event capacity
 //! are shared.
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CommandBank, CommandCell, CommandPort, DeviceBehavior, DeviceDeclaration, ReadRun,
     RegionLifetime, RegisterCell,
 };

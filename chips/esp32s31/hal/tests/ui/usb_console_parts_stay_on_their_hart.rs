@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::peripherals::usb_serial_jtag::{UsbEndpoint, UsbPads};
-use oer_mmio::Placement;
+use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{UsbEndpoint, UsbPads};
+use oer_portable_mmio::Placement;
 
 fn other_hart<T: Send>(_: T) {}
 

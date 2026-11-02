@@ -11,7 +11,7 @@
 //! the contract's.
 
 use core::num::NonZeroU16;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The response the attempt solicits, which the hardware waits for.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -63,18 +63,18 @@ pub enum Protection {
     /// RTS/CTS exchange with the receiver.
     RtsCts {
         /// Legacy rate selected by the caller for RTS and CTS.
-        rate: oer_ieee80211_wire::phy::LegacyRate,
+        rate: oer_protocols_ieee80211_wire::phy::LegacyRate,
     },
     /// CTS addressed to the transmitter itself.
     CtsToSelf {
         /// Legacy rate selected by the caller for CTS-to-self.
-        rate: oer_ieee80211_wire::phy::LegacyRate,
+        rate: oer_protocols_ieee80211_wire::phy::LegacyRate,
     },
 }
 
 impl Protection {
     /// The legacy rate of the protection frame, if the attempt has one.
-    pub const fn control_rate(self) -> Option<oer_ieee80211_wire::phy::LegacyRate> {
+    pub const fn control_rate(self) -> Option<oer_protocols_ieee80211_wire::phy::LegacyRate> {
         match self {
             Self::None => None,
             Self::RtsCts { rate } | Self::CtsToSelf { rate } => Some(rate),
@@ -216,7 +216,7 @@ pub enum SingleResponse<A> {
 /// solicited is the frame's kind, which this outcome does not carry.
 ///
 /// ```compile_fail,E0063
-/// use oer_ieee80211_contracts_port::{SingleEnd, SingleResponse};
+/// use oer_protocols_ieee80211_contracts_port::{SingleEnd, SingleResponse};
 /// fn delivered() -> SingleEnd<(), ()> {
 ///     SingleEnd::Delivered { response: SingleResponse::Unsolicited }
 /// }
@@ -224,7 +224,7 @@ pub enum SingleResponse<A> {
 ///
 /// ```
 /// use core::num::NonZeroU16;
-/// use oer_ieee80211_contracts_port::{Air, PhyRate, SingleEnd, SingleResponse};
+/// use oer_protocols_ieee80211_contracts_port::{Air, PhyRate, SingleEnd, SingleResponse};
 /// fn delivered(rate: PhyRate) -> SingleEnd<i8, ()> {
 ///     let air = Air { transmissions: NonZeroU16::MIN, rate };
 ///     SingleEnd::Delivered { air, response: SingleResponse::Ack(20) }

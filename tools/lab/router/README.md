@@ -1,11 +1,11 @@
-# `oer-lab-router`
+# `oer-tools-lab-router`
 
 The stand's OpenWrt lab router, which serves the stand's access point, and
 the SSH that reaches it; the stand file's description of the stand; the
 probe of the equipment reached over SSH. Only the LAB service
-(`oer-tool-lab-service`) and the board drivers build against this crate: the
+(`oer-tools-lab-service`) and the board drivers build against this crate: the
 service owns the router's SSH, and its clients reach the router through
-the service's operations (`oer_lab_client::protocol::RouterOperation`).
+the service's operations (`oer_tools_lab_client::protocol::RouterOperation`).
 
 ## The stand
 
@@ -81,11 +81,11 @@ country = "DE"               # HIL: the laptop's non-ERP BSS domain
 
 The file holds no credentials: every access point and station of the stand
 is managed, and a run generates the SSID and passphrase it sets on both
-(`oer_lab_router::credentials`) and never logs or stores them. An SSID
+(`oer_tools_lab_router::credentials`) and never logs or stores them. An SSID
 or passphrase an older file still holds is never deserialized.
 
 A board's hub port is not written in the file: it is found on the host
-(`oer_lab_router::hub`). The board's USB location in sysfs names its hub and port
+(`oer_tools_lab_router::hub`). The board's USB location in sysfs names its hub and port
 (`3-8.3.4.4` is port 4 of hub `3-8.3.4`), and `uhubctl` confirms that the hub
 switches power per port and has that port. A port is switched off only when
 the one device below it is the board itself (no hub, nothing behind it, and
@@ -287,7 +287,7 @@ prefix. No observer silently discards its diagnostics.
 ## Stand notes
 
 Facts of the stand's Linux hosts, from stand use 2026-09 to 2026-10 (records
-outside this repository). `oer-lab-router` does not use them.
+outside this repository). `oer-tools-lab-router` does not use them.
 
 ### Hub port power without sudo
 

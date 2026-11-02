@@ -8,14 +8,14 @@
 //! 2^64 is refused ([`IndividualTwtWakePlanError::BeyondTsfRange`]). Chip code must separately prove that it can install the accepted
 //! agreement before any TWT Setup frame is published.
 
-use oer_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
-use oer_ieee80211_wire::twt::{
+use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
+use oer_protocols_ieee80211_wire::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
     IndividualTwtAction, IndividualTwtControl, IndividualTwtFlowId, IndividualTwtParameterSet,
     IndividualTwtSetup, IndividualTwtSetupCommand, IndividualTwtTeardown, TwtWakeDurationUnit,
     TwtWireError,
 };
-use oer_time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IndividualTwtRequesterConfigError {
@@ -143,7 +143,7 @@ pub struct IndividualTwtAgreement {
     pub control: IndividualTwtControl,
     pub trigger: bool,
     pub implicit: bool,
-    pub flow_type: oer_ieee80211_wire::twt::IndividualTwtFlowType,
+    pub flow_type: oer_protocols_ieee80211_wire::twt::IndividualTwtFlowType,
     pub protection: bool,
     pub target_wake_time: TsfInstant,
     pub wake_interval: TsfDuration,
@@ -389,9 +389,9 @@ pub enum IndividualTwtFlowAccess<'owner> {
 /// Only an idle flow can queue a fresh setup. The loan is consumed once.
 ///
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_roles_sta::twt::{IndividualTwtIdleFlow, IndividualTwtProposal};
+/// use oer_protocols_ieee80211_core_roles_sta::twt::{IndividualTwtIdleFlow, IndividualTwtProposal};
 /// fn twice(idle: IndividualTwtIdleFlow<'_>, proposal: IndividualTwtProposal,
-///          now: oer_time::Instant) {
+///          now: oer_portable_time::Instant) {
 ///     let _ = idle.queue_setup(proposal, now);
 ///     let _ = idle.queue_setup(proposal, now);
 /// }
@@ -406,8 +406,8 @@ pub struct IndividualTwtTeardownReady<'owner> {
 /// A transmitter-owned flow exposes no setup or teardown queue operation.
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_sta::twt::IndividualTwtTransmittingFlow;
-/// fn teardown(transmitting: IndividualTwtTransmittingFlow<'_>, now: oer_time::Instant) {
+/// use oer_protocols_ieee80211_core_roles_sta::twt::IndividualTwtTransmittingFlow;
+/// fn teardown(transmitting: IndividualTwtTransmittingFlow<'_>, now: oer_portable_time::Instant) {
 ///     transmitting.queue_teardown(now);
 /// }
 /// ```
@@ -494,8 +494,8 @@ impl IndividualTwtRequester {
     /// mutate this requester while that loan remains live.
     ///
     /// ```compile_fail,E0499
-    /// use oer_ieee80211_core_roles_sta::twt::IndividualTwtRequester;
-    /// use oer_ieee80211_wire::twt::IndividualTwtFlowId;
+    /// use oer_protocols_ieee80211_core_roles_sta::twt::IndividualTwtRequester;
+    /// use oer_protocols_ieee80211_wire::twt::IndividualTwtFlowId;
     /// fn overlap(owner: &mut IndividualTwtRequester, flow: IndividualTwtFlowId) {
     ///     let first = owner.flow(flow);
     ///     let second = owner.flow(flow);

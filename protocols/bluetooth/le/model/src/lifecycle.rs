@@ -8,9 +8,9 @@ use core::{
     ops::ControlFlow,
     task::Poll,
 };
-use oer_bluetooth_le_port::{backend::OwnedSession, *};
-use oer_radio_port::*;
-use oer_time::{Clock as _, Duration, RadioInstant, Timer};
+use oer_portable_time::{Clock as _, Duration, RadioInstant, Timer};
+use oer_protocols_bluetooth_le_port::{backend::OwnedSession, *};
+use oer_protocols_radio_port::*;
 
 type Composition<Id, X> = PhantomData<fn(Id, X) -> (Id, X)>;
 
@@ -160,7 +160,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
             || !q.poisoned_requests.with(|values| values.is_empty())
             || !self.env.is_off(&self.radio)
         {
-            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         self.env.detach(&self.radio);
@@ -185,7 +185,7 @@ impl<Id: SlotIdentity, X> SlotOwner<Id> for Backend<Id, X> {
     }
 }
 #[cfg(any(test, feature = "test-support"))]
-impl<Id: SlotIdentity, X> oer_radio_port::conformance::registration::MockCleanup<Id>
+impl<Id: SlotIdentity, X> oer_protocols_radio_port::conformance::registration::MockCleanup<Id>
     for Backend<Id, X>
 {
     fn abandon<'s>(
@@ -432,7 +432,7 @@ impl<Id: SlotIdentity, X> PortBackend<Id> for Backend<Id, X> {
             let Some(deadline) = clock.now().checked_add(Duration::from_micros(1_000)) else {
                 return;
             };
-            let Some(deadline) = oer_radio_port::earliest(Some(deadline), stop) else {
+            let Some(deadline) = oer_protocols_radio_port::earliest(Some(deadline), stop) else {
                 return;
             };
             clock.wait_until(deadline).await;

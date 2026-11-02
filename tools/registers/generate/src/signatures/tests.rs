@@ -76,7 +76,8 @@ fn compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words() {
     );
     assert_eq!(
         r.signatures["wide"].sha256,
-        oer_os_durable::sha256_file(&root.path().join("components/api/include/api.h")).unwrap()
+        oer_tools_os_durable::sha256_file(&root.path().join("components/api/include/api.h"))
+            .unwrap()
     );
 }
 
@@ -207,9 +208,9 @@ fn enum_widths_come_from_the_compiler_and_unsupported_redeclarations_conflict() 
 fn modified_header_cannot_be_published_under_its_old_pin() {
     let (root, _) = fixture("void original(void);\n");
     let repo = root.path();
-    oer_os_process::git::run(repo, ["init", "--quiet"]).unwrap();
-    oer_os_process::git::run(repo, ["add", "."]).unwrap();
-    oer_os_process::git::run(
+    oer_tools_os_process::git::run(repo, ["init", "--quiet"]).unwrap();
+    oer_tools_os_process::git::run(repo, ["add", "."]).unwrap();
+    oer_tools_os_process::git::run(
         repo,
         [
             "-c",
@@ -223,17 +224,17 @@ fn modified_header_cannot_be_published_under_its_old_pin() {
         ],
     )
     .unwrap();
-    let pin = oer_os_process::git::text(repo, ["rev-parse", "HEAD"]).unwrap();
+    let pin = oer_tools_os_process::git::text(repo, ["rev-parse", "HEAD"]).unwrap();
     let header = "components/api/include/api.h";
     let hashes = BTreeMap::from([(
         header.to_owned(),
-        oer_os_durable::sha256_file(&repo.join(header)).unwrap(),
+        oer_tools_os_durable::sha256_file(&repo.join(header)).unwrap(),
     )]);
     source::verify(repo, &hashes, &pin).unwrap();
     put(repo, header, "void changed(int a);\n");
     let dirty = BTreeMap::from([(
         header.to_owned(),
-        oer_os_durable::sha256_file(&repo.join(header)).unwrap(),
+        oer_tools_os_durable::sha256_file(&repo.join(header)).unwrap(),
     )]);
     assert!(
         source::verify(repo, &dirty, &pin)

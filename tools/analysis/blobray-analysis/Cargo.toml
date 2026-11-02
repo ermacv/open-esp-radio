@@ -1,5 +1,5 @@
 [package]
-name = "oer-analysis-blobray-analysis"
+name = "oer-tools-analysis-blobray-analysis"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,10 @@ publish = false
 description = "Bounded function control-flow analysis"
 
 [dependencies]
-oer-analysis-riscv-decode = { path = "../riscv-decode" }
-oer-analysis-blobray-domain = { path = "../blobray-domain" }
-oer-analysis-riscv-analysis = { path = "../riscv-analysis" }
-oer-analysis-riscv-model = { path = "../riscv-model" }
+oer-tools-analysis-riscv-decode = { path = "../riscv-decode" }
+oer-tools-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-tools-analysis-riscv-analysis = { path = "../riscv-analysis" }
+oer-tools-analysis-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

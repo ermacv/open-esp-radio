@@ -10,8 +10,8 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_espressif_bluetooth_engine::port::OutputInterruptPort;
-use oer_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
+use oer_chips_family_bluetooth_engine::port::OutputInterruptPort;
+use oer_portable_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
 
 use crate::bluetooth::{
     BluetoothControllerOutputReleaseError, BluetoothDynamicSourcesMasked,
@@ -35,15 +35,15 @@ pub trait SchedulerDoorbell {
 /// Typed, out-of-line clock read for the bounded P3 diagnostic settles.
 /// It reads the exact supplied clock; the boundary prevents each command's
 /// generic settle loop from inlining another copy of its conversion code.
-pub struct SchedulerInterruptClock<'a, C: oer_time::Clock>(&'a C);
-impl<'a, C: oer_time::Clock> SchedulerInterruptClock<'a, C> {
+pub struct SchedulerInterruptClock<'a, C: oer_portable_time::Clock>(&'a C);
+impl<'a, C: oer_portable_time::Clock> SchedulerInterruptClock<'a, C> {
     pub const fn new(clock: &'a C) -> Self {
         Self(clock)
     }
 }
-impl<C: oer_time::Clock> oer_time::Clock for SchedulerInterruptClock<'_, C> {
+impl<C: oer_portable_time::Clock> oer_portable_time::Clock for SchedulerInterruptClock<'_, C> {
     #[inline(never)]
-    fn now(&self) -> oer_time::Instant {
+    fn now(&self) -> oer_portable_time::Instant {
         self.0.now()
     }
 }
@@ -178,12 +178,12 @@ impl SchedulerInterruptHalf {
     pub fn service(
         &mut self,
         interrupts: &mut InterruptRegistersOwner,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<bool, crate::bluetooth::BluetoothInterruptPolicyFault> {
         let clock = SchedulerInterruptClock::new(clock);
         let mut fault = None;
         let replied = self.service_with(|command| {
-            let settle = oer_time::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
+            let settle = oer_portable_time::settle::Settle::new(super::DIAGNOSTIC_SETTLE, &clock);
             let unsettled = |_| SchedulerInterruptError::DiagnosticUnsettled;
             let reply = match command {
                 Command::ServiceBarrier => Reply::Done,

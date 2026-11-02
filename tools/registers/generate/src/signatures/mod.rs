@@ -9,7 +9,7 @@ mod source;
 mod types;
 
 use crate::Result;
-use oer_os_process::Checkout;
+use oer_tools_os_process::Checkout;
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -61,13 +61,13 @@ pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
     if options.chip != "esp32s31" {
         return Err("signature generation supports esp32s31".into());
     }
-    let manifest = oer_pins_artifacts::Manifest::load(&ctx.root, &options.chip)?;
+    let manifest = oer_tools_pins_artifacts::Manifest::load(&ctx.root, &options.chip)?;
     let revision = manifest
         .source("esp-idf")?
         .revision
         .as_deref()
         .ok_or("ESP-IDF has no revision pin")?;
-    let actual = oer_os_process::git::text(&options.idf, ["rev-parse", "HEAD"])?;
+    let actual = oer_tools_os_process::git::text(&options.idf, ["rev-parse", "HEAD"])?;
     if actual != revision {
         return Err(format!("ESP-IDF is {actual}, pinned revision is {revision}").into());
     }
@@ -77,7 +77,7 @@ pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
             .join(&options.chip)
     });
     fs::create_dir_all(&output)?;
-    let config_hash = oer_os_durable::sha256_file(&options.sdkconfig)?;
+    let config_hash = oer_tools_os_durable::sha256_file(&options.sdkconfig)?;
     let corpus = corpus::capture(ctx, &options.chip, &output)?;
     let names: BTreeSet<_> = corpus.calls.keys().cloned().collect();
     let findings = headers::inspect(&options, &names, revision, &output)?;
@@ -145,8 +145,8 @@ pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
             function: [signature],
         })?);
     }
-    if oer_os_durable::sha256_file(&options.sdkconfig)? != config_hash
-        || oer_os_process::git::text(&options.idf, ["rev-parse", "HEAD"])? != revision
+    if oer_tools_os_durable::sha256_file(&options.sdkconfig)? != config_hash
+        || oer_tools_os_process::git::text(&options.idf, ["rev-parse", "HEAD"])? != revision
     {
         return Err("source revision or sdkconfig changed during generation".into());
     }

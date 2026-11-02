@@ -7,11 +7,11 @@
 //! events. When a side stopped at undeclared memory, the report also lists
 //! every undeclared access the request reaches.
 use crate::harness::Result;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     ComparisonVerdict, EffectContract, EffectSelection, ExecutionEvent, ExecutionEvidence,
     ExecutionRequest, is_contract_effect,
 };
-use oer_analysis_riscv_model::{Result as DomainResult, RunControl};
+use oer_tools_analysis_riscv_model::{Result as DomainResult, RunControl};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -67,7 +67,7 @@ pub fn classify(
     replacement: bool,
 ) -> Result<Vec<Event>> {
     let selections: BTreeMap<usize, String> = match contract {
-        Some(contract) => oer_analysis_blobray_verification::classify_effects(
+        Some(contract) => oer_tools_analysis_blobray_verification::classify_effects(
             contract,
             events,
             replacement,
@@ -138,7 +138,7 @@ pub fn cases(
                     } if c == case
                         && *side == replacement
                         && observation.status
-                            != oer_analysis_blobray_domain::ModelStatus::Complete =>
+                            != oer_tools_analysis_blobray_domain::ModelStatus::Complete =>
                     {
                         Some(format!("{} {:?}", observation.id, observation.status))
                     }
@@ -170,11 +170,13 @@ pub fn cases(
 fn difference(
     request: &ExecutionRequest,
     case: u32,
-    difference: &Option<oer_analysis_blobray_domain::ComparisonDifference>,
+    difference: &Option<oer_tools_analysis_blobray_domain::ComparisonDifference>,
 ) -> String {
     let named = match difference {
-        Some(oer_analysis_blobray_domain::ComparisonDifference::Memory {
-            pair, offset, ..
+        Some(oer_tools_analysis_blobray_domain::ComparisonDifference::Memory {
+            pair,
+            offset,
+            ..
         }) => request
             .cases
             .get(case as usize)
@@ -274,11 +276,11 @@ pub fn write(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use oer_analysis_blobray_domain::{
+    use oer_tools_analysis_blobray_domain::{
         CallEndpoint, EffectClaimCeiling, EffectDisposition, EffectPattern, EffectRule,
         EffectSelector, EffectValue, ReviewedCallBoundary, UnclassifiedEffects,
     };
-    use oer_analysis_riscv_model::{
+    use oer_tools_analysis_riscv_model::{
         ArtifactId, ObjectId, ObjectLocation, SymbolId, SymbolTableKind,
     };
 

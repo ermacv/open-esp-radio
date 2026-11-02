@@ -31,7 +31,7 @@
 
 use super::{FreeQueue, TxAdmission};
 use core::fmt;
-use oer_radio_port::{PoolPath, Root};
+use oer_protocols_radio_port::{PoolPath, Root};
 
 use crate::mac::tx::{
     HeAmpduTxConfig, HtAmpduDensity, HtChannelWidth, HtGuardInterval, HtMcs, HtProtectionSpacing,
@@ -42,8 +42,8 @@ use crate::mac::tx::{
         TX_AMPDU_METADATA_SIZE,
     },
 };
-use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
-use oer_ieee80211_contracts_port::{
+use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
+use oer_protocols_ieee80211_contracts_port::{
     AmpduCapabilities, AmpduLengthTable, BlockAckReport, PhyFormatSet, TxStatus,
 };
 
@@ -254,7 +254,7 @@ pub struct Esp32s31AmpduBuffer<'slot, L, const SLOTS: usize> {
     pub(super) owner: Esp32s31AmpduOwner<'slot, L, SLOTS>,
     subframes: [Option<Subframe<L>>; SLOTS],
     // Separate storage avoids per-entry alignment padding on RV32.
-    admitted_at: [oer_time::Instant; SLOTS],
+    admitted_at: [oer_portable_time::Instant; SLOTS],
     count: usize,
 }
 
@@ -280,7 +280,7 @@ impl<'slot, L, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, L, SLOTS> {
         Ok(Self {
             owner,
             subframes: [const { None }; SLOTS],
-            admitted_at: [oer_time::Instant::EPOCH; SLOTS],
+            admitted_at: [oer_portable_time::Instant::EPOCH; SLOTS],
             count: 0,
         })
     }
@@ -306,7 +306,7 @@ impl<'slot, L, const SLOTS: usize> Esp32s31AmpduBuffer<'slot, L, SLOTS> {
 impl<L: PlacedBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
     pub(super) fn matches_admission<Path: PoolPath>(
         &mut self,
-        role: oer_ieee80211_contracts_port::VifRole,
+        role: oer_protocols_ieee80211_contracts_port::VifRole,
         admission: &TxAdmission<'_, Path>,
     ) -> bool {
         self.subframes.iter_mut().flatten().all(|subframe| {
@@ -351,7 +351,7 @@ impl<L: PlacedBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
         &mut self,
         mut backing: L,
         len: usize,
-        admitted_at: oer_time::Instant,
+        admitted_at: oer_portable_time::Instant,
     ) -> Result<&mut [u8], L> {
         let fits = subframe_capacity(len)
             .is_some_and(|capacity| backing.stable_dma_region().len() >= capacity);
@@ -377,7 +377,7 @@ impl<L: PlacedBacking, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
 
 impl<L, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
     /// The original admission of a retained unpublished subframe.
-    pub fn admitted_at(&self, index: usize) -> Option<oer_time::Instant> {
+    pub fn admitted_at(&self, index: usize) -> Option<oer_portable_time::Instant> {
         self.subframes.get(index)?.as_ref()?;
         self.admitted_at.get(index).copied()
     }
@@ -406,7 +406,11 @@ impl<L, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
         Ok(())
     }
 
-    fn expired_mask(&self, now: oer_time::Instant, lifetime: oer_time::Duration) -> u64 {
+    fn expired_mask(
+        &self,
+        now: oer_portable_time::Instant,
+        lifetime: oer_portable_time::Duration,
+    ) -> u64 {
         self.subframes
             .iter()
             .zip(self.admitted_at.iter())
@@ -443,7 +447,7 @@ impl<L, const SLOTS: usize> fmt::Debug for Esp32s31AmpduBuffer<'_, L, SLOTS> {
 /// The affine publication plan owns both its queue and encryption authority.
 /// A protected plan cannot be forged or retained after publication.
 #[must_use = "publish the aggregate or return its admission"]
-pub struct AmpduPlan<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>>> {
+pub struct AmpduPlan<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
     pub(super) queue: FreeQueue<'core, Path>,
     pub(super) admission: TxAdmission<'core, Path>,
     pub(super) settings: AmpduSettings,
@@ -451,7 +455,7 @@ pub struct AmpduPlan<'core, Path: PoolPath = Root<oer_radio_port::LocalId<'core>
 
 /// Register values already derived from the owned admission.
 pub(super) struct AmpduSettings {
-    pub lifetime: oer_time::Duration,
+    pub lifetime: oer_portable_time::Duration,
     pub queue: LegacyTxQueue,
     pub format: AmpduFormat,
     pub role: AmpduTxRoleAdapter,
@@ -500,16 +504,16 @@ pub struct PublishedAmpdu<
     'slot,
     B,
     const SLOTS: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     queue: FreeQueue<'core, Path>,
     admission: TxAdmission<'core, Path>,
     owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     cookie: TxCookie,
     /// The publication deadline, or the end of the abort settle.
-    deadline: oer_time::Instant,
+    deadline: oer_portable_time::Instant,
     settling: bool,
-    admitted_at: [oer_time::Instant; SLOTS],
+    admitted_at: [oer_portable_time::Instant; SLOTS],
     /// How it ended, once a service edge saw the hardware leave the chain,
     /// or the fault that stopped its service.
     end: Option<Result<AmpduOutcome, HtAmpduTxError>>,
@@ -563,7 +567,7 @@ impl<'core, 'slot, B, const SLOTS: usize, Path: PoolPath>
 }
 
 impl<B, const SLOTS: usize, Path: PoolPath> PublishedAmpdu<'_, '_, B, SLOTS, Path> {
-    pub const fn deadline(&self) -> oer_time::Instant {
+    pub const fn deadline(&self) -> oer_portable_time::Instant {
         self.deadline
     }
 
@@ -626,7 +630,7 @@ pub enum AmpduProgress<
     'slot,
     B,
     const SLOTS: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     Pending(PublishedAmpdu<'core, 'slot, B, SLOTS, Path>),
     /// The aggregate ended and released its subframes; the owner is idle.
@@ -641,13 +645,13 @@ pub struct CompletedAmpdu<
     'slot,
     B,
     const SLOTS: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     pub(super) outcome: AmpduOutcome,
     pub(super) owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     pub(super) queue: FreeQueue<'core, Path>,
     pub(super) admission: TxAdmission<'core, Path>,
-    pub(super) admitted_at: [oer_time::Instant; SLOTS],
+    pub(super) admitted_at: [oer_portable_time::Instant; SLOTS],
 }
 
 /// An aggregate fault retains every admitted right and its DMA owner. It has
@@ -658,13 +662,13 @@ pub struct AmpduFault<
     'slot,
     B,
     const SLOTS: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     pub error: HtAmpduTxError,
     _owner: Esp32s31AmpduOwner<'slot, B, SLOTS>,
     _queue: FreeQueue<'core, Path>,
     _admission: TxAdmission<'core, Path>,
-    _admitted_at: [oer_time::Instant; SLOTS],
+    _admitted_at: [oer_portable_time::Instant; SLOTS],
 }
 
 impl<'core, 'slot, B, const SLOTS: usize, Path: PoolPath> AmpduFault<'core, 'slot, B, SLOTS, Path> {
@@ -696,7 +700,7 @@ pub struct ExpiredAmpdu<
     'slot,
     L,
     const SLOTS: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     buffer: Esp32s31AmpduBuffer<'slot, L, SLOTS>,
     plan: AmpduPlan<'core, Path>,
@@ -732,7 +736,7 @@ pub enum AmpduStartError<
     'slot,
     L,
     const SLOTS: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'core>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
 > {
     Expired(ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>),
     Fault(AmpduFault<'core, 'slot, L, SLOTS, Path>),
@@ -757,8 +761,8 @@ pub fn publish<'core, 'slot, L, H, const SLOTS: usize, Path: PoolPath>(
     hardware: &mut H,
     buffer: Esp32s31AmpduBuffer<'slot, L, SLOTS>,
     plan: AmpduPlan<'core, Path>,
-    now: oer_time::Instant,
-    publication_timeout: oer_time::Duration,
+    now: oer_portable_time::Instant,
+    publication_timeout: oer_portable_time::Duration,
 ) -> Result<
     PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
     AmpduStartError<'core, 'slot, L, SLOTS, Path>,
@@ -905,7 +909,7 @@ pub fn service<B, H, const SLOTS: usize, Path: PoolPath>(
     published: &mut PublishedAmpdu<'_, '_, B, SLOTS, Path>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
-    now: oer_time::Instant,
+    now: oer_portable_time::Instant,
     returned: impl FnMut(B),
 ) -> Result<AmpduServed, HtAmpduTxError>
 where
@@ -942,7 +946,7 @@ fn service_step<B, H, const SLOTS: usize, Path: PoolPath>(
     published: &mut PublishedAmpdu<'_, '_, B, SLOTS, Path>,
     wake: WifiTxWake,
     may_begin_timeout_abort: bool,
-    now: oer_time::Instant,
+    now: oer_portable_time::Instant,
     mut returned: impl FnMut(B),
 ) -> Result<Option<AmpduOutcome>, HtAmpduTxError>
 where

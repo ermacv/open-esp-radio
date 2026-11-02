@@ -1,4 +1,4 @@
-use oer_analysis_blobray_domain::{ReadUses, StoredBits, StoredBitsSource};
+use oer_tools_analysis_blobray_domain::{ReadUses, StoredBits, StoredBitsSource};
 
 pub fn identity_bits(stored: &[StoredBits]) -> u32 {
     stored.iter().fold(0, |bits, run| {
@@ -39,11 +39,11 @@ pub fn missing_preserved_bits(reads: &ReadUses, stored: &[StoredBits], joined_bi
 /// The public schema omits load IDs, so combine witnesses for the matching
 /// function, abstract address and access width.
 pub fn assert_preserved_stores(
-    observations: &[oer_analysis_blobray_domain::RegisterAccess],
+    observations: &[oer_tools_analysis_blobray_domain::RegisterAccess],
     joins: &[JoinedBits<'_>],
 ) {
-    use oer_analysis_blobray_domain::RegisterAccess;
-    use oer_analysis_riscv_model::{FunctionRecord, MemoryKind};
+    use oer_tools_analysis_blobray_domain::RegisterAccess;
+    use oer_tools_analysis_riscv_model::{FunctionRecord, MemoryKind};
     for join in joins {
         let mut found = false;
         for observation in observations {

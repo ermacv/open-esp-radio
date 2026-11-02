@@ -1,7 +1,7 @@
-//! `cargo fw`: build, flash and run the staged images of `firmware/apps` on
+//! `cargo fw`: build, flash and run the staged images of `examples`, `hil/images` and `hil/probes` on
 //! the stand's boards (README.md). This binary parses the
 //! command line; its modules hold the commands, over the image pipeline
-//! (`oer-image-build`) and the stand's one board path (`oer-lab-board`).
+//! (`oer-tools-image-build`) and the stand's one board path (`oer-tools-lab-board`).
 
 #![forbid(unsafe_code)]
 
@@ -14,7 +14,7 @@ mod hot_code;
 mod idf;
 mod image;
 
-use oer_image_build::probe;
+use oer_tools_image_build::probe;
 
 #[derive(Parser)]
 #[command(about = "Build, flash and run staged firmware images on the stand's boards")]
@@ -27,13 +27,14 @@ struct Cli {
 enum Command {
     /// Render typed boot diagnostics from a captured console file; no board I/O.
     DecodeConsole { console: std::path::PathBuf },
-    /// Build an image of firmware/apps into target/fw/<image>/.
+    /// Build an image, named by its directory in examples/, hil/images/ or
+    /// hil/probes/, into target/fw/<image>/.
     Build {
         image: String,
         /// Select another binary of the image package.
         #[arg(long)]
         bin: Option<String>,
-        /// Package an unqualified firmware/probes image with reported checks.
+        /// Package an unqualified hil/probes image with reported checks.
         #[arg(long)]
         diagnostic: bool,
         /// Cargo features of the image package, comma-separated or repeated.
@@ -58,8 +59,8 @@ enum Command {
         #[arg(long)]
         source_root: Option<std::path::PathBuf>,
     },
-    /// Build a probe image of firmware/probes (a package named
-    /// `oer-firmware-probes-<chip>-…`) with `cfg(oer_probe)` into
+    /// Build a probe image of hil/probes (a package named
+    /// `oer-hil-probes-<chip>-…`) with `cfg(oer_probe)` into
     /// target/fw-probe/ and print its path.
     Probe {
         package: String,
@@ -162,13 +163,13 @@ fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
 }
 
 fn main() -> ExitCode {
-    if oer_os_command_tree::requested() {
-        let tree = oer_os_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
-        println!("{}", oer_os_command_tree::json(&tree));
+    if oer_tools_os_command_tree::requested() {
+        let tree = oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
+        println!("{}", oer_tools_os_command_tree::json(&tree));
         return ExitCode::SUCCESS;
     }
     let cli = Cli::parse();
-    let result = (|| -> oer_image_build::Result<ExitCode> {
+    let result = (|| -> oer_tools_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
             Command::DecodeConsole { console } => diagnostics::decode_file(&console)?,
@@ -184,9 +185,9 @@ fn main() -> ExitCode {
                 additional,
             } => {
                 let result = if additional.is_empty() {
-                    oer_image_build::sizes::compare_directories(&base, &head)?
+                    oer_tools_image_build::sizes::compare_directories(&base, &head)?
                 } else {
-                    oer_image_build::sizes::compare_composition(&base, &additional, &head)?
+                    oer_tools_image_build::sizes::compare_composition(&base, &additional, &head)?
                 };
                 print!("{}", result.output);
                 return Ok(ExitCode::SUCCESS);
@@ -196,7 +197,7 @@ fn main() -> ExitCode {
                 output,
                 source_root,
             } => {
-                let count = oer_image_build::sizes::refresh(
+                let count = oer_tools_image_build::sizes::refresh(
                     &input,
                     &output,
                     source_root.as_deref().unwrap_or(&root),
@@ -251,10 +252,10 @@ mod tests {
     #[test]
     fn remaining_images_keep_build_flash_and_run_commands() {
         for image in [
-            "boot-smoke",
-            "radio-root",
-            "../hil/esp32s31",
-            "../probes/esp32s31-radio",
+            "esp32s31-boot-smoke",
+            "esp32s31-radio-root",
+            "station",
+            "esp32s31-radio",
         ] {
             assert!(matches!(
                 parse(&format!("fw build {image}")).unwrap().command,
@@ -277,8 +278,16 @@ mod tests {
             ));
         }
         assert!(matches!(
-            parse("fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware --diagnostic").unwrap().command,
-            Command::Build { bin: Some(_), diagnostic: true, .. }
+            parse(
+                "fw build esp32s31-radio --bin oer-hil-probes-esp32s31-radio-hardware --diagnostic"
+            )
+            .unwrap()
+            .command,
+            Command::Build {
+                bin: Some(_),
+                diagnostic: true,
+                ..
+            }
         ));
         match parse("fw build wifi-station --features station,extra --features third")
             .unwrap()

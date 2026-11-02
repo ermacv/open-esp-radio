@@ -21,8 +21,8 @@
 
 use std::{process::ExitCode, time::Duration};
 
-use oer_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
-use oer_hil_protocol::{Endpoint, Key, Message};
+use oer_protocols_hil_protocol::{Endpoint, Key, Message};
+use oer_tools_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
 
 mod dut;
 #[cfg(test)]
@@ -33,7 +33,7 @@ mod run;
 mod stand;
 
 pub use finish::Cleanup;
-pub use oer_lab_client::protocol::{RouterChannelWidth, RouterOperation};
+pub use oer_tools_lab_client::protocol::{RouterChannelWidth, RouterOperation};
 pub use run::{Outcome, Verdict};
 
 /// What a scenario needs from the stand and the device.
@@ -46,7 +46,7 @@ pub struct Scenario {
     /// command, so a scenario that never commands one leases the board
     /// alone), shared when they turn a radio on, exclusive when they
     /// measure it.
-    pub(crate) air: Option<oer_lab_arbiter::claims::Mode>,
+    pub(crate) air: Option<oer_tools_lab_arbiter::claims::Mode>,
     /// Whether its cases use the lab router ([`Cx::router`]): its lease
     /// then holds the router and the air, shared.
     pub(crate) router: bool,
@@ -54,7 +54,7 @@ pub struct Scenario {
 
 impl Scenario {
     /// A scenario named `name` whose device runs `image`
-    /// (`oer_image_build::images`), which must serve every service of
+    /// (`oer_tools_image_build::images`), which must serve every service of
     /// `services` (each its `Service::KEYS`).
     pub const fn new(
         name: &'static str,
@@ -73,7 +73,7 @@ impl Scenario {
     /// This scenario, whose cases turn a radio on.
     pub const fn using_air(self) -> Self {
         Self {
-            air: Some(oer_lab_arbiter::claims::Mode::Shared),
+            air: Some(oer_tools_lab_arbiter::claims::Mode::Shared),
             ..self
         }
     }
@@ -82,7 +82,7 @@ impl Scenario {
     /// runs beside it.
     pub const fn using_air_exclusively(self) -> Self {
         Self {
-            air: Some(oer_lab_arbiter::claims::Mode::Exclusive),
+            air: Some(oer_tools_lab_arbiter::claims::Mode::Exclusive),
             ..self
         }
     }
@@ -169,7 +169,7 @@ impl<'a> Cx<'a> {
             return Err(CallError::Unconfirmed { request_id });
         }
         let Some(link) = self.dut.link() else {
-            return Err(CallError::Link(oer_hil_link::LinkError::Transport(
+            return Err(CallError::Link(oer_tools_hil_link::LinkError::Transport(
                 "the device under test has no link".to_owned(),
             )));
         };
@@ -336,7 +336,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let _signals = match oer_os_process::install_signal_handlers() {
+    let _signals = match oer_tools_os_process::install_signal_handlers() {
         Ok(signals) => signals,
         Err(error) => {
             eprintln!("error: cannot install the signal handlers: {error}");

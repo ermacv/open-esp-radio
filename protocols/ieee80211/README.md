@@ -113,7 +113,7 @@ numbers each fresh protected MPDU before the port takes it (the station's
 pairwise key in `core/roles/sta/src/port.rs` holds it); the backend encrypts with the
 supplied number. Its `sequence.rs` owns the transmit sequence spaces of every
 role. Espressif policy parameters live in
-[`oer-espressif-ieee80211-policy`](../../chips/espressif/ieee80211-policy/README.md).
+[`oer-chips-family-ieee80211-policy`](../../chips/family/ieee80211-policy/README.md).
 
 `core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
 protocol state. Its `security.rs` sibling owns secrets and generations; each
@@ -124,7 +124,7 @@ the arbiter's checked `WifiPlan` to exclusive standalone ESP-NOW ownership.
 
 The cores and the runtime keep no counters or diagnostics of their own work.
 An owner (the station, its data machine, the receive agreements, the
-ESP-NOW peer table) takes `&mut impl oer_events::EventSink<E>` as a call
+ESP-NOW peer table) takes `&mut impl oer_portable_events::EventSink<E>` as a call
 parameter and reports what it dropped, refused or decided as a value of its
 own event type `E`; it never stores the sink. The station service holds the
 sink its composition chose (`O: StationEvents`, by default `()`) and lends it
@@ -132,7 +132,7 @@ to each call of its cores. One fact is reported in one place: a refusal or
 result a call returns is its caller's to count, and an owner reports only what
 it decides and absorbs. What an event becomes, the time it is bound to and
 how it leaves the device belong to the facade or image; `()` keeps nothing and
-builds no event. No IEEE 802.11 package depends on `oer-trace`, transport
+builds no event. No IEEE 802.11 package depends on `oer-portable-trace`, transport
 serialization or HIL. Counts that decide protocol behaviour (packet numbers,
 replay frontiers, retry and probe budgets, beacon deadlines) stay in their
 owners.
@@ -142,8 +142,8 @@ port events, deadlines and commands, hands each input to the cores and
 carries out their actions through the port. It decides no protocol question
 and neither parses nor builds frames; it depends on neither `wire` nor
 `core/security/cipher`. The station unwraps RSN key data in its step over the
-synchronous block primitive its composition supplies (`oer-crypto`'s
-`Aes128Blocks`). The cores never wait. `cargo test -p oer-test-layers` checks both,
+synchronous block primitive its composition supplies (`oer-portable-crypto`'s
+`Aes128Blocks`). The cores never wait. `cargo test -p oer-tools-test-layers` checks both,
 and that `core/security/cipher`, `contracts/port` and `testing/model` take only the layers below them.
 
 The [RSN crate](core/security/rsn/README.md) separates secret ownership and derivation
@@ -161,7 +161,7 @@ Module namespaces do not create independent owners. Tests live beside their
 owner or at the shared protocol boundary. See the
 [architecture](../../docs/architecture.md#layers) for the layering contract.
 
-`ieee80211/wire` depends on `oer-wire` alone; it holds no state, profile or
+`ieee80211/wire` depends on `oer-portable-wire` alone; it holds no state, profile or
 regulatory decision. A scan record holds what the frame carries, such as the
 DS Parameter Set's channel when present (`scan::ScanRecord::ds_channel`).
 Scan results and connected beacons hand their ERP elements over as one

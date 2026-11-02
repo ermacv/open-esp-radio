@@ -1,6 +1,6 @@
 //! Typed snapshots of hardware RX counters recovered from the blob decoders.
 
-use oer_mmio::Bits;
+use oer_portable_mmio::Bits;
 
 use crate::ieee80211::registers::{MacPlacement, WifiRadioRegisters, byte, halfword};
 
@@ -151,7 +151,7 @@ pub struct MacRxDecodeErrorStatisticsDelta {
 
 impl MacRxDecodeErrorStatistics {
     pub fn wrapping_delta_since(self, earlier: Self) -> MacRxDecodeErrorStatisticsDelta {
-        const MASK: u16 = oer_esp32s31_pac::wifi_mac::brx_error::COUNT_MAX as u16;
+        const MASK: u16 = oer_chips_esp32s31_pac::wifi_mac::brx_error::COUNT_MAX as u16;
         let delta = |current: u16, previous: u16| current.wrapping_sub(previous) & MASK;
         MacRxDecodeErrorStatisticsDelta {
             brx_agc: delta(self.brx_agc, earlier.brx_agc),

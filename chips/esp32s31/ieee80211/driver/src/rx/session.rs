@@ -20,18 +20,18 @@ use crate::mac::{
     rx::pool::RxStagePool,
 };
 use core::task::{Context, Poll};
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::dma::{rx_storage::RxDmaStorage, space::ChipDma},
     owner::RadioAccess,
 };
-use oer_espressif_interrupt_table::signal::SignalExecutor;
-use oer_memory::HandlerCell;
-use oer_time::{Instant, Timer};
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_portable_memory::HandlerCell;
+use oer_portable_time::{Instant, Timer};
 
 /// The receive owners of one Wi-Fi arena across its channel transactions.
 ///
 /// `V` is the router's proof that the image binds the radio handler's part
-/// ([`Bound`](oer_espressif_interrupt_table::Bound) of a
+/// ([`Bound`](oer_chips_family_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the session holds it, and
 /// every activation takes it.
 pub struct ReceiveSession<
@@ -296,7 +296,7 @@ where
                 self.requests.activate(&self.bound, doorbell);
                 let deadline = timer
                     .now()
-                    .checked_add(oer_time::Duration::from_micros(u64::from(
+                    .checked_add(oer_portable_time::Duration::from_micros(u64::from(
                         ESP32S31_RX_WALKER_ENABLE_SETTLE_US,
                     )))
                     .ok_or(WifiRxCause::Start(
@@ -356,7 +356,8 @@ where
     pub(crate) fn port_power(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<oer_esp32s31_hal::types::MacPowerInterruptObservation, WifiRxCause>> {
+    ) -> Poll<Result<oer_chips_esp32s31_hal::types::MacPowerInterruptObservation, WifiRxCause>>
+    {
         self.power
             .poll(cx)
             .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))

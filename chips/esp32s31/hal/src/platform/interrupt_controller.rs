@@ -1,6 +1,6 @@
 //! Each hart's interrupt controller: its interrupt-matrix bank and its own
 //! CLIC, which the interrupt table's router
-//! (`oer_espressif_interrupt_table::Router`) writes through the typed blocks.
+//! (`oer_chips_family_interrupt_table::Router`) writes through the typed blocks.
 //!
 //! The CLIC is context-relative: every hart reaches its own controller at
 //! the same address (SOURCE: `HW1_S31_CLIC_20261026` and
@@ -29,17 +29,17 @@
 
 use core::marker::PhantomData;
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     clic::{self, Clic, ClicObserver},
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
 };
-use oer_espressif_interrupt_table::{Controller, Error};
-use oer_memory::{ClaimCell, zeroed::ZeroedOnce};
-use oer_riscv::clic::{Control, LevelBits, LineState, Trigger};
+use oer_chips_family_interrupt_table::{Controller, Error};
+use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
+use oer_portable_riscv::clic::{Control, LevelBits, LineState, Trigger};
 
 use crate::cores::{StopTheWorld, key};
-use oer_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_mmio::{Bits, Fixed, Index, Placement};
 
 /// Controller geometry generated from the chip facts, shared with runtime
 /// vector generation. Lines below `LINES.first` are reserved core-local inputs.
@@ -65,8 +65,8 @@ pub(crate) struct MatrixParts {
     pub(crate) clic_observer: ClicObserver,
     pub(crate) interrupt_core0: InterruptCore0,
     pub(crate) interrupt_core0_observer: InterruptCore0Observer,
-    pub(crate) interrupt_core0_status: oer_esp32s31_pac::interrupt_core::InterruptCore0Status,
-    pub(crate) interrupt_core1_status: oer_esp32s31_pac::interrupt_core::InterruptCore1Status,
+    pub(crate) interrupt_core0_status: oer_chips_esp32s31_pac::interrupt_core::InterruptCore0Status,
+    pub(crate) interrupt_core1_status: oer_chips_esp32s31_pac::interrupt_core::InterruptCore1Status,
 }
 
 /// Every hart's read-only pending sources, published once at partition split.
@@ -87,7 +87,7 @@ trait PendingStatus {
 
 macro_rules! pending_status {
     ($status:ident) => {
-        impl<P: Placement> PendingStatus for oer_esp32s31_pac::interrupt_core::$status<P> {
+        impl<P: Placement> PendingStatus for oer_chips_esp32s31_pac::interrupt_core::$status<P> {
             fn word(&self, word: u16) -> Option<u32> {
                 Some(match word {
                     0 => self.read_int_status_reg_0().int_status_0(),
@@ -278,8 +278,8 @@ pub trait RouteBank: sealed::Sealed {
 
 mod sealed {
     pub trait Sealed {}
-    impl<M: oer_mmio::Placement> Sealed for super::InterruptCore0<M> {}
-    impl<M: oer_mmio::Placement> Sealed for super::InterruptCore1<M> {}
+    impl<M: oer_portable_mmio::Placement> Sealed for super::InterruptCore0<M> {}
+    impl<M: oer_portable_mmio::Placement> Sealed for super::InterruptCore1<M> {}
 }
 
 macro_rules! route_bank {
@@ -319,7 +319,7 @@ pub struct InterruptGrant<B: RouteBank, C: Placement = Fixed<{ instances::clic::
     config: Option<ClicObserver<C>>,
 }
 
-pub use oer_espressif_platform_port::ForeignHart;
+pub use oer_chips_family_platform_port::ForeignHart;
 
 impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
     /// The root's pairing of a hart's bank with that hart's CLIC parts.
@@ -353,7 +353,7 @@ impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
     /// and the grant is lost (each hart has one).
     #[cfg(target_arch = "riscv32")]
     pub fn into_controller(self) -> Result<InterruptController<B, C>, ForeignHart> {
-        self.into_controller_on(oer_riscv::hart_id())
+        self.into_controller_on(oer_portable_riscv::hart_id())
     }
 
     /// [`into_controller`](Self::into_controller) on hart `current`.
@@ -392,7 +392,7 @@ impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
 ///
 /// ```compile_fail
 /// fn send<T: Send>() {}
-/// send::<oer_esp32s31_hal::platform::InterruptController>();
+/// send::<oer_chips_esp32s31_hal::platform::InterruptController>();
 /// ```
 #[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
 pub struct InterruptController<

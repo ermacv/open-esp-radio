@@ -19,14 +19,17 @@ pub struct HubPort {
 /// The hub port that powers `board` when its reset ladder includes `power`:
 /// the port it is attached to, found on the host, if the hub switches it
 /// and the stand's hub policy allows it.
-pub fn hub_port(stand: &oer_lab_model::Stand, board: &oer_lab_model::Board) -> Option<HubPort> {
-    if !board.reset.contains(&oer_lab_model::ResetStep::Power) {
+pub fn hub_port(
+    stand: &oer_tools_lab_model::Stand,
+    board: &oer_tools_lab_model::Board,
+) -> Option<HubPort> {
+    if !board.reset.contains(&oer_tools_lab_model::ResetStep::Power) {
         return None;
     }
-    let attached = oer_lab_router::boards::find(&board.mac)?;
-    let report = oer_lab_router::hub::status().ok()?;
-    let port = oer_lab_router::hub::power_port(
-        std::path::Path::new(oer_lab_router::hub::SYSFS_USB_DEVICES),
+    let attached = oer_tools_lab_router::boards::find(&board.mac)?;
+    let report = oer_tools_lab_router::hub::status().ok()?;
+    let port = oer_tools_lab_router::hub::power_port(
+        std::path::Path::new(oer_tools_lab_router::hub::SYSFS_USB_DEVICES),
         &report,
         Some(stand),
         &attached.location,
@@ -58,13 +61,13 @@ impl HubPower {
 
     /// Whether the port is powered.
     pub fn is_on(&self) -> crate::power::Result<bool> {
-        let mut command = oer_os_process::command("uhubctl");
+        let mut command = oer_tools_os_process::command("uhubctl");
         command
             .args(["--location", &self.port.location, "--ports"])
             .arg(self.port.port.to_string());
-        let output = oer_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
-        oer_lab_model::hubs::powered(
-            &oer_lab_model::hubs::parse(&String::from_utf8_lossy(&output.stdout)),
+        let output = oer_tools_os_process::output(&mut command, Some(Duration::from_secs(30)))?;
+        oer_tools_lab_model::hubs::powered(
+            &oer_tools_lab_model::hubs::parse(&String::from_utf8_lossy(&output.stdout)),
             &self.port.location,
             self.port.port,
         )
@@ -99,7 +102,7 @@ impl HubPower {
     /// download-mode entry) require, whose outcome then shows on its own.
     pub fn cycle_observed(
         &self,
-        mac: &oer_lab_model::device_id::DeviceId,
+        mac: &oer_tools_lab_model::device_id::DeviceId,
     ) -> crate::power::Result<PowerCycle> {
         self.action("off", 2)?;
         let left = wait_until(POWER_LEAVE, &|| !crate::discovery::is_attached(mac));
@@ -119,7 +122,7 @@ impl HubPower {
     /// reset again before the cause is read.
     pub fn prove_power_loss(
         &self,
-        mac: &oer_lab_model::device_id::DeviceId,
+        mac: &oer_tools_lab_model::device_id::DeviceId,
         reset_cause: impl FnOnce() -> crate::power::Result<ResetCause>,
     ) -> crate::power::Result<PowerLoss> {
         let cycle = self.cycle_observed(mac)?;
@@ -131,14 +134,14 @@ impl HubPower {
     }
 
     fn action(&self, action: &str, delay_secs: u64) -> crate::power::Result<()> {
-        let mut command = oer_os_process::command("uhubctl");
+        let mut command = oer_tools_os_process::command("uhubctl");
         command
             .args(["--location", &self.port.location, "--ports"])
             .arg(self.port.port.to_string())
             .args(["--action", action, "--delay"])
             .arg(delay_secs.to_string());
         let output =
-            oer_os_process::output(&mut command, Some(Duration::from_secs(30 + delay_secs)))?;
+            oer_tools_os_process::output(&mut command, Some(Duration::from_secs(30 + delay_secs)))?;
         if !output.status.success() {
             return Err(format!(
                 "uhubctl could not {action} {} port {}: {}",
@@ -224,16 +227,16 @@ impl ResetCauseField {
     pub fn resolve(
         root: &std::path::Path,
         chip: &str,
-        profile: &oer_espressif_facts::ResetCause,
+        profile: &oer_chips_family_facts::ResetCause,
     ) -> crate::power::Result<Self> {
-        let loaded = oer_registers_model::Chip::load(root, chip)?;
+        let loaded = oer_tools_registers_model::Chip::load(root, chip)?;
         Self::of(&loaded.model, profile)
             .map_err(|error| format!("{chip}'s register model: {error}").into())
     }
 
     fn of(
-        model: &oer_registers_model::chip_model::ChipModel,
-        profile: &oer_espressif_facts::ResetCause,
+        model: &oer_tools_registers_model::chip_model::ChipModel,
+        profile: &oer_chips_family_facts::ResetCause,
     ) -> std::result::Result<Self, String> {
         let (register, _) = profile
             .field
@@ -243,7 +246,7 @@ impl ResetCauseField {
             .field(&profile.field)
             .ok_or_else(|| format!("no field {}", profile.field))?;
         let address = match model.register(register).map(|register| register.location) {
-            Some(oer_registers_model::chip_model::Location::Mmio { address }) => {
+            Some(oer_tools_registers_model::chip_model::Location::Mmio { address }) => {
                 u32::try_from(address).map_err(|_| format!("{register} lies above 4 GiB"))?
             }
             _ => return Err(format!("no MMIO register {register}")),
@@ -300,14 +303,14 @@ pub fn wait_until(within: Duration, condition: &dyn Fn() -> bool) -> bool {
 }
 
 /// `uhubctl`'s report of every hub it reaches.
-pub fn report() -> crate::power::Result<Vec<oer_lab_model::hubs::HubStatus>> {
-    Ok(oer_lab_model::hubs::parse(&report_text()?))
+pub fn report() -> crate::power::Result<Vec<oer_tools_lab_model::hubs::HubStatus>> {
+    Ok(oer_tools_lab_model::hubs::parse(&report_text()?))
 }
 
 /// `uhubctl`'s report of every hub it reaches, as it printed it.
 pub fn report_text() -> crate::power::Result<String> {
-    let output = oer_os_process::output(
-        &mut oer_os_process::command("uhubctl"),
+    let output = oer_tools_os_process::output(
+        &mut oer_tools_os_process::command("uhubctl"),
         Some(Duration::from_secs(30)),
     )?;
     if !output.status.success() {

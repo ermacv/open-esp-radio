@@ -22,8 +22,8 @@ impl Wake for WakeCount {
 #[test]
 fn finite_batch_preserves_rx_before_tx_under_continuous_publication() {
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     publisher.publish(EVENT_KNOWN_MASK);
@@ -47,8 +47,8 @@ fn finite_batch_preserves_rx_before_tx_under_continuous_publication() {
 #[test]
 fn cancelled_mac_wait_releases_the_slot_for_the_next_waiter() {
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     let old = Arc::new(WakeCount::default());
@@ -78,7 +78,8 @@ fn cancelled_mac_wait_releases_the_slot_for_the_next_waiter() {
 
 #[test]
 fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
-    let mut storage = PowerIrqStorage::new(oer_espressif_interrupt_table::signal::host::signal().0);
+    let mut storage =
+        PowerIrqStorage::new(oer_chips_family_interrupt_table::signal::host::signal().0);
     let (publisher, mut consumer) = storage.split();
     let old = Arc::new(WakeCount::default());
     let current = Arc::new(WakeCount::default());
@@ -109,10 +110,10 @@ fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
 
 #[test]
 fn publication_before_registration_and_after_pending_are_both_durable() {
-    let (signal, raiser) = oer_espressif_interrupt_table::signal::host::signal();
+    let (signal, raiser) = oer_chips_family_interrupt_table::signal::host::signal();
     let mut storage = IrqStorage::new(
         signal,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     let wakes = Arc::new(WakeCount::default());
@@ -140,8 +141,8 @@ fn publication_before_registration_and_after_pending_are_both_durable() {
 #[test]
 fn hardware_counts_exclude_capacity_and_handoff_and_wrap() {
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     storage.rx_posts.store(u32::MAX - 1, Ordering::Relaxed);
     let (publisher, mut consumer) = storage.split();
@@ -159,7 +160,8 @@ fn hardware_counts_exclude_capacity_and_handoff_and_wrap() {
 
 #[test]
 fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
-    let mut storage = PowerIrqStorage::new(oer_espressif_interrupt_table::signal::host::signal().0);
+    let mut storage =
+        PowerIrqStorage::new(oer_chips_family_interrupt_table::signal::host::signal().0);
     let (publisher, mut consumer) = storage.split();
     publisher.publish(MacPowerInterruptObservation::from_semantic_events(
         true, false, true, false, false, true,
@@ -181,12 +183,12 @@ fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
 #[test]
 fn diagnostics_borrow_their_installation_and_count_unhandled_per_entry() {
     let mut first = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let mut second = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (first, _first_consumer) = first.split();
     let (second, _second_consumer) = second.split();
@@ -222,8 +224,8 @@ fn diagnostics_borrow_their_installation_and_count_unhandled_per_entry() {
 fn diagnostic_epochs_count_empty_to_pending_transitions_not_each_tx_fact() {
     // The radio executor runs only after the handler: the facts wait.
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::deferred_signal().0,
-        oer_espressif_interrupt_table::signal::host::deferred_signal().0,
+        oer_chips_family_interrupt_table::signal::host::deferred_signal().0,
+        oer_chips_family_interrupt_table::signal::host::deferred_signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     for events in [
@@ -278,8 +280,8 @@ fn entry_cycles_stop_before_the_owned_waker_runs() {
     }
     CYCLES.set(10);
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     let waker = Waker::from(Arc::new(ExpensiveWake));
@@ -306,8 +308,8 @@ fn entry_cycles_stop_before_the_owned_waker_runs() {
 #[test]
 fn masked_is_published_once_and_survives_only_one_batch() {
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     let wakes = Arc::new(WakeCount::default());
@@ -343,8 +345,8 @@ fn masked_is_published_once_and_survives_only_one_batch() {
 #[test]
 fn receive_facts_wake_only_the_receive_waiter_and_the_rest_only_the_mac_waiter() {
     let mut storage = IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     );
     let (publisher, mut consumer) = storage.split();
     let (rx_wakes, mac_wakes) = (

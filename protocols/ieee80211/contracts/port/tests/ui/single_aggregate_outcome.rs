@@ -1,8 +1,8 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     InFlight, PhaseAggregateOutcome, PhaseSingleOutcome, PhaseTypes, TxCompleted,
 };
-use oer_radio_port::Slot;
+use oer_protocols_radio_port::Slot;
 
 type Ticket<'id, P> =
     Slot<'id, <P as PhaseTypes<'id>>::TicketKind, <P as PhaseTypes<'id>>::TicketPath>;

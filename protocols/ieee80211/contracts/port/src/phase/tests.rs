@@ -8,11 +8,11 @@ fn stage(rate: u8) -> RetryStage<u8> {
         transmissions: NonZeroU8::new(rate + 1).unwrap(),
         protection: if rate.is_multiple_of(2) {
             Protection::RtsCts {
-                rate: oer_ieee80211_wire::phy::LegacyRate::Ofdm12M,
+                rate: oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm12M,
             }
         } else {
             Protection::CtsToSelf {
-                rate: oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
+                rate: oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M,
             }
         },
     }

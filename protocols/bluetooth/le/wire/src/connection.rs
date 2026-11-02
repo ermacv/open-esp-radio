@@ -4,7 +4,7 @@ use crate::advertising_header::{ADVERTISING_HEADER_LENGTH, AdvertisingHeader, Ad
 use crate::air_time::{LE_1M_MICROS_PER_OCTET, LE_1M_PACKET_OVERHEAD_OCTETS};
 use crate::{LeDeviceAddress, LeDeviceAddressKind};
 use core::num::{NonZeroU8, NonZeroU64};
-use oer_wire::Reader;
+use oer_portable_wire::Reader;
 
 pub const LEGACY_CONNECT_IND_PDU_BYTES: usize =
     ADVERTISING_HEADER_LENGTH + LEGACY_CONNECT_IND_PAYLOAD_BYTES;

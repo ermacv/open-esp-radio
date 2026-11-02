@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     ConfigurePermission, PhaseTypes, Station, StationPhase, StationReceive,
 };
 pub fn configure<'p, 'id: 'p, P: StationPhase<'p, 'id>>(

@@ -1,0 +1,21 @@
+[package]
+name = "oer-chips-family-facts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The layered facts of the Espressif chips: ISA, family, chip, module and board TOML resolved through `extends` into one checked model"
+
+[dependencies]
+serde = { version = "=1.0.229", default-features = false, features = ["alloc", "derive"] }
+toml = { version = "=1.1.4", default-features = false, features = ["parse", "serde"] }
+
+[dev-dependencies]
+proc-macro2 = "=1.0.107"
+syn = { version = "=2.0.119", features = ["full", "visit"] }
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true

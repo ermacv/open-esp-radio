@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{LowerMacTerminal, PhaseTypes};
+use oer_protocols_ieee80211_contracts_port::{LowerMacTerminal, PhaseTypes};
 
 pub fn disabled_return<'id, P: PhaseTypes<'id>>(
     frame: P::RxBuffer,

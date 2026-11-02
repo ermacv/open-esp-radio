@@ -1,6 +1,6 @@
 # Bluetooth LE runtime
 
-`oer-bluetooth-le-runtime` owns executor-independent DTM waits and the
+`oer-protocols-bluetooth-le-runtime` owns executor-independent DTM waits and the
 one-credit HCI service loop. It depends on the portable controller, LE port
 and HCI boundary, without a backend, HAL, executor or task spawner. This
 crate separates waiting from the controller's synchronous protocol state.
@@ -27,4 +27,4 @@ returns the controller's affine token to that composition; acknowledgement
 requires a fresh joined installation of the same slot/path. The composition
 supplies that response before the next command and supplies its stop opcode.
 No runtime future spawns another task. Any composition timer uses
-`oer-time`; runtime port waits and signals remain portable.
+`oer-portable-time`; runtime port waits and signals remain portable.

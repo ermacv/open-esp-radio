@@ -1,6 +1,6 @@
 //! Hardware-owned P2 cancellation guard for the port registration.
 use super::*;
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     LifecycleError, SlotCompletion, SlotFrontend, SlotRegisterError, SlotRegistration,
 };
 
@@ -27,12 +27,12 @@ pub enum RegistrationError<
         /// Unconsumed reconstruction operation.
         rejected: Rejected,
         /// Supplied ordinary join authority.
-        joined: oer_radio_port::Joined<Id>,
+        joined: oer_protocols_radio_port::Joined<Id>,
     },
     /// Construction failed after placement; cleanup stays on P2.
     Initialization {
         /// Typed construction cause.
-        cause: oer_radio_port::SlotInitError,
+        cause: oer_protocols_radio_port::SlotInitError,
         /// Hardware-owned cleanup guard.
         registration: Registration<'s, Id, D, X>,
     },
@@ -145,10 +145,10 @@ impl<'s, Id: SlotIdentity + 's, D: Device + 's, X: 's> Registration<'s, Id, D, X
     /// Drive under the owner guard, including cancellation before first poll.
     pub fn run(
         mut self,
-    ) -> oer_radio_port::DriverFuture<
+    ) -> oer_protocols_radio_port::DriverFuture<
         impl Future<Output = Result<SlotCompletion<'s, Id>, LifecycleError>>,
     > {
-        oer_radio_port::DriverFuture::new(async move {
+        oer_protocols_radio_port::DriverFuture::new(async move {
             let result = self.raw.drive().await;
             if let Err(cause) = result {
                 self.cleanup(Some(cause));

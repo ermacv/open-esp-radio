@@ -6,8 +6,8 @@
 //! stack has no radar detection, so an access point serves no such
 //! channel.
 
-use oer_ieee80211_wire::channel::Channel;
-use oer_radio_regulatory::{FrequencySpan, radar_detection_required};
+use oer_protocols_ieee80211_wire::channel::Channel;
+use oer_protocols_radio_regulatory::{FrequencySpan, radar_detection_required};
 
 /// Half the width of a 20 MHz primary channel, in kHz.
 const PRIMARY_HALF_WIDTH_KHZ: u32 = 10_000;
@@ -28,7 +28,7 @@ pub const fn requires_radar_detection(channel: Channel) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use oer_ieee80211_wire::channel::{Band, ChannelWidth};
+    use oer_protocols_ieee80211_wire::channel::{Band, ChannelWidth};
 
     use super::*;
 

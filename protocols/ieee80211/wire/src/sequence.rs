@@ -3,26 +3,26 @@
 //!
 //! Every constructor yields a twelve-bit value, so frame builders need no
 //! range validation. Their modulo-4096 arithmetic belongs to the MAC
-//! mechanisms (`oer_ieee80211_core_upper_mac::sequence::SequenceSpace`).
+//! mechanisms (`oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace`).
 
 /// One twelve-bit IEEE 802.11 sequence number.
 ///
 /// Sequence numbers are modular, so the type deliberately has no ordering;
 /// window decisions take the MAC's modular arithmetic.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
-pub struct SequenceNumber(oer_wire::U16<12>);
+pub struct SequenceNumber(oer_portable_wire::U16<12>);
 
 impl SequenceNumber {
     /// Size of the sequence-number space.
     pub const MODULUS: u16 = 4096;
-    pub const ZERO: Self = Self(oer_wire::U16::ZERO);
-    pub const MAX: Self = Self(oer_wire::U16::constant::<{ Self::MASK }>());
+    pub const ZERO: Self = Self(oer_portable_wire::U16::ZERO);
+    pub const MAX: Self = Self(oer_portable_wire::U16::constant::<{ Self::MASK }>());
 
     const MASK: u16 = Self::MODULUS - 1;
 
     /// A sequence number, or `None` when `value` exceeds twelve bits.
     pub const fn new(value: u16) -> Option<Self> {
-        match oer_wire::U16::new(value) {
+        match oer_portable_wire::U16::new(value) {
             Some(value) => Some(Self(value)),
             None => None,
         }
@@ -31,7 +31,7 @@ impl SequenceNumber {
     /// The low twelve bits of `value`, for entropy seeds and free-running
     /// counters whose wider bits are not part of the sequence space.
     pub const fn from_low_bits(value: u16) -> Self {
-        Self(oer_wire::U16::from_low_bits(value))
+        Self(oer_portable_wire::U16::from_low_bits(value))
     }
 
     /// The Sequence Number subfield of a Sequence Control field.
@@ -68,7 +68,7 @@ impl From<SequenceNumber> for u16 {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
     pub struct SequenceControl[2] (little) {
         pub fragment, with_fragment: u8 = 0..4;

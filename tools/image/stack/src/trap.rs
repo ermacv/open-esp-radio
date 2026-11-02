@@ -38,13 +38,13 @@
 //! into it.
 use crate::image::Function;
 use crate::sweep::destination;
-use oer_analysis_elf::rv32::{self, Role};
-use oer_analysis_riscv_decode::{Extension, Extensions, Inst, Instruction, decode};
-use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_riscv::clic::MINTTHRESH;
-use oer_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
-use oer_riscv::trigger::TCONTROL;
+use oer_portable_riscv::clic::MINTTHRESH;
+use oer_portable_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
+use oer_portable_riscv::trigger::TCONTROL;
+use oer_tools_analysis_elf::rv32::{self, Role};
+use oer_tools_analysis_riscv_decode::{Extension, Extensions, Inst, Instruction, decode};
+use oer_tools_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::collections::BTreeMap;
 
 /// The image symbol whose words an interrupt entry may store into outside
@@ -261,7 +261,7 @@ fn check(
 const MRET: u32 = 0x3020_0073;
 
 /// The code bytes at `address`, to the end of their section.
-fn code<'a>(file: &oer_analysis_elf::Elf<'a>, address: u32) -> Option<&'a [u8]> {
+fn code<'a>(file: &oer_tools_analysis_elf::Elf<'a>, address: u32) -> Option<&'a [u8]> {
     let address = u64::from(address);
     file.sections().find_map(|section| {
         if !section.executable || !section.contains(address) {
@@ -656,13 +656,13 @@ impl State {
     /// A CSR access: `dest` takes the old value, `csr` the new one.
     fn csr(
         &mut self,
-        op: oer_analysis_riscv_decode::CsrOp,
+        op: oer_tools_analysis_riscv_decode::CsrOp,
         dest: u8,
         operand: Value,
         writes: bool,
         csr: u16,
     ) -> Step {
-        use oer_analysis_riscv_decode::CsrOp;
+        use oer_tools_analysis_riscv_decode::CsrOp;
         // The entry runs at the interrupt's level until its handler, and
         // the exit until `mret`: nothing on the way may lower it.
         let masked = self.mstatus.enabled == Some(false);
@@ -874,7 +874,7 @@ impl State {
                 source,
                 csr,
             }) => {
-                use oer_analysis_riscv_decode::{CsrOp, Operand};
+                use oer_tools_analysis_riscv_decode::{CsrOp, Operand};
                 let operand = match source {
                     Operand::Register(register) => self.get(register),
                     Operand::Immediate(value) => Value::Constant(value),

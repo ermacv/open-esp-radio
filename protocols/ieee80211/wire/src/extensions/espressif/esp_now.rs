@@ -77,7 +77,7 @@ pub enum EspNowVersionError {
 /// v1/v2 parser; this function is not admission by itself.
 pub fn esp_now_wire_version(body: &[u8]) -> Result<EspNowWireVersion, EspNowVersionError> {
     const MINIMUM: usize = ESP_NOW_V1_ACTION_OVERHEAD;
-    let mut reader = oer_wire::Reader::new(body);
+    let mut reader = oer_portable_wire::Reader::new(body);
     let body = reader
         .array::<MINIMUM>()
         .map_err(|_| EspNowVersionError::ActionTooShort { minimum: MINIMUM })?;
@@ -422,7 +422,7 @@ impl<'payload> EspNowV1Action<'payload> {
         clippy::arithmetic_side_effects
     )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV1WireError> {
-        let mut reader = oer_wire::Reader::new(input);
+        let mut reader = oer_portable_wire::Reader::new(input);
         let Ok(
             &[
                 category,
@@ -463,7 +463,7 @@ impl<'payload> EspNowV1Action<'payload> {
                 actual: element_body.len(),
             });
         }
-        let mut reader = oer_wire::Reader::new(element_body);
+        let mut reader = oer_portable_wire::Reader::new(element_body);
         let Ok(&[o0, o1, o2, element_type, version]) =
             reader.array::<VENDOR_ELEMENT_FIXED_BODY_LEN>()
         else {
@@ -560,7 +560,7 @@ impl<'payload> EspNowV1Frame<'payload> {
         let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
             .with_retry(self.retry)
             .raw();
-        let mut writer = oer_wire::Writer::new(header);
+        let mut writer = oer_portable_wire::Writer::new(header);
         let too_small = |_| EspNowV1WireError::OutputTooSmall { required };
         writer.u16_le(frame_control).map_err(too_small)?;
         writer.u16_le(0).map_err(too_small)?;
@@ -576,7 +576,7 @@ impl<'payload> EspNowV1Frame<'payload> {
 
     /// Parse one complete unprotected, unfragmented ESP-NOW v1 Action MPDU.
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV1WireError> {
-        let mut reader = oer_wire::Reader::new(input);
+        let mut reader = oer_portable_wire::Reader::new(input);
         let header = reader
             .array::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
             .map_err(|_| EspNowV1WireError::FrameTooShort {
@@ -659,7 +659,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
         let too_short = || EspNowProtectedV1WireError::FrameTooShort {
             minimum: ESP_NOW_V1_MIN_PROTECTED_MPDU_LEN,
         };
-        let mut reader = oer_wire::Reader::new(input);
+        let mut reader = oer_portable_wire::Reader::new(input);
         let management_header = reader
             .array::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
             .map_err(|_| too_short())?;
@@ -982,14 +982,14 @@ impl fmt::Display for EspNowV1WireError {
 
 impl core::error::Error for EspNowV1WireError {}
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Common version nibble used before selecting the ESP-NOW format.
     /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
     pub struct EspNowVersion[1] (little) {
         pub version, with_version: u8 = 0..4;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// ESP-NOW v1 vendor-specific element control octet.
     /// SOURCE: Espressif ESP-NOW specification, Frame Format (vendor-specific content).
     pub struct EspNowV1Control[1] (little) {

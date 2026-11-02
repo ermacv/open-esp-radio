@@ -1,7 +1,7 @@
 //! TSF transactions serialized by the single Wi-Fi register owner.
 
-use oer_esp32s31_pac::modem_pwr::{WifiMacTsfLoad, sta_tsf_control::StaTsfMode};
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::modem_pwr::{WifiMacTsfLoad, sta_tsf_control::StaTsfMode};
+use oer_portable_mmio::Placement;
 
 use super::{MacPlacement, WifiRadioRegisters, bits};
 
@@ -47,7 +47,7 @@ const fn tsf_words(value: u64) -> (u32, u32) {
 
 /// TSF bits 35:10 of a station TSF, the station TBTT target's field value.
 const fn tsf_bits_35_10(value: u64) -> u32 {
-    ((value >> 10) as u32) & oer_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_MAX
+    ((value >> 10) as u32) & oer_chips_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_MAX
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
@@ -109,7 +109,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         load.modify_tsf_load_control(|w| {
             w.set_load_station_tsf(true);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Enable the station TSF scheduler.
@@ -125,7 +125,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         control.modify_sta_tsf_control(|w| {
             w.set_sta_tsf_mode(StaTsfMode::Enabled);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Program the station TBTT schedule and enable its interrupt.
@@ -174,7 +174,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_wakeup_signal_clear(|w| {
                 w.set_clear(true);
             });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Stop the station TBTT.
@@ -187,7 +187,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .modify_sta_tsf_control(|w| {
                 w.set_sta_tbtt_enable(false);
             });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Replace the station TBTT lead and the light-sleep wake lead beside it.

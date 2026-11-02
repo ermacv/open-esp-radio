@@ -19,7 +19,7 @@ use crate::{
 /// cannot be replaced or paired with another epoch.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::domain::PhyDomain;
+/// use oer_chips_esp32s31_phy::domain::PhyDomain;
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<PhyDomain>();
 /// ```
@@ -130,7 +130,7 @@ impl PhyDomain {
     /// refreshed here.
     pub async fn wait_for_tracking_demand(
         &self,
-        timer: &impl oer_cooperate::CooperativeTimer,
+        timer: &impl oer_portable_cooperate::CooperativeTimer,
     ) -> Result<Option<crate::tracking::schedule::Demand>, PhyTrackTimeError> {
         use crate::tracking::schedule::Schedule;
         loop {
@@ -142,7 +142,7 @@ impl PhyDomain {
                 Schedule::Due(demand) => return Ok(Some(demand)),
                 Schedule::At(deadline) => {
                     timer
-                        .wait_until(oer_time::Instant::from_micros(deadline))
+                        .wait_until(oer_portable_time::Instant::from_micros(deadline))
                         .await;
                 }
             }

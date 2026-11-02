@@ -2,18 +2,18 @@
 
 use crate::{port::WifiRetuneError, startup::WifiStartReport};
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiClocksOn},
     owner::RadioAccess,
 };
 
 use crate::mac::sta_ap_registers::disable_all_role_receive_registers;
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_radio_client::{
     DomainHealth, Leaving, Left, Member, MembershipCell, Tracked,
     wifi::{Wifi, WifiLeave, WifiLeft, WifiReturned},
 };
 
-use oer_ieee80211_wire::channel::WifiChannel;
+use oer_protocols_ieee80211_wire::channel::WifiChannel;
 
 /// Common stopped Wi-Fi owner after cold MAC initialization.
 ///
@@ -37,8 +37,8 @@ use oer_ieee80211_wire::channel::WifiChannel;
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
-/// use oer_ieee80211_wire::channel::WifiChannel;
+/// use oer_chips_esp32s31_ieee80211_driver::runtime::WifiStopped;
+/// use oer_protocols_ieee80211_wire::channel::WifiChannel;
 /// fn channel(stopped: &WifiStopped<()>) -> WifiChannel {
 ///     stopped.current_channel()
 /// }
@@ -52,8 +52,8 @@ use oer_ieee80211_wire::channel::WifiChannel;
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
-/// use oer_esp32s31_radio_client::{Member, Tracked, wifi::Wifi};
+/// use oer_chips_esp32s31_ieee80211_driver::runtime::WifiStopped;
+/// use oer_chips_esp32s31_radio_client::{Member, Tracked, wifi::Wifi};
 /// fn membership(stopped: &WifiStopped<()>) -> &Member<Wifi, Tracked> {
 ///     &stopped.member
 /// }
@@ -69,8 +69,8 @@ use oer_ieee80211_wire::channel::WifiChannel;
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::runtime::WifiStopped;
-/// use oer_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
+/// use oer_chips_esp32s31_ieee80211_driver::runtime::WifiStopped;
+/// use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
 /// async fn leave(stopped: WifiStopped<()>, cell: MembershipCell<Wifi>) {
 ///     let _ = stopped.release(cell).await;
 /// }
@@ -88,7 +88,7 @@ pub struct WifiStopped<W> {
 /// is still active; it is returned unchanged with its cell.
 #[must_use = "a failed Wi-Fi release still owns the Wi-Fi partition"]
 pub struct WifiReleaseFailure<W> {
-    pub error: oer_esp32s31_hal::owner::maintenance::Error,
+    pub error: oer_chips_esp32s31_hal::owner::maintenance::Error,
     pub stopped: WifiStopped<W>,
 }
 
@@ -108,7 +108,7 @@ impl<W> WifiRetuneFailure<W> {
             MembershipCell<Wifi>,
             Result<WifiReleased<W>, WifiReleaseFailure<W>>,
         ),
-        oer_memory::RequestQuarantine<Option<W>>,
+        oer_portable_memory::RequestQuarantine<Option<W>>,
     > {
         self.stopped.release(cell).await
     }
@@ -140,7 +140,7 @@ impl<W> WifiStopped<W> {
             MembershipCell<Wifi>,
             Result<WifiReleased<W>, WifiReleaseFailure<W>>,
         ),
-        oer_memory::RequestQuarantine<Option<W>>,
+        oer_portable_memory::RequestQuarantine<Option<W>>,
     > {
         let Self {
             platform,
@@ -175,7 +175,12 @@ impl<W> WifiStopped<W> {
             .await
         {
             Ok(answer) => answer,
-            Err(reason) => return Err(oer_memory::RequestQuarantine::new(reason, Some(platform))),
+            Err(reason) => {
+                return Err(oer_portable_memory::RequestQuarantine::new(
+                    reason,
+                    Some(platform),
+                ));
+            }
         };
         let Left {
             payload: WifiLeft { wifi },
@@ -197,16 +202,19 @@ impl<W> WifiStopped<W> {
     pub async fn retune(
         self,
         cell: MembershipCell<Wifi>,
-        channel: oer_radio_regulatory::Permitted<
-            oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        channel: oer_protocols_radio_regulatory::Permitted<
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
         >,
-        tx_ceiling: oer_radio_regulatory::TxCeiling,
+        tx_ceiling: oer_protocols_radio_regulatory::TxCeiling,
     ) -> Result<
         (
             MembershipCell<Wifi>,
-            Result<(Self, oer_esp32s31_radio_client::wifi::RetuneReport), WifiRetuneFailure<W>>,
+            Result<
+                (Self, oer_chips_esp32s31_radio_client::wifi::RetuneReport),
+                WifiRetuneFailure<W>,
+            >,
         ),
-        oer_memory::RequestQuarantine<Option<W>>,
+        oer_portable_memory::RequestQuarantine<Option<W>>,
     >
     where
         W: crate::startup::WifiMacPlatform,
@@ -219,10 +227,10 @@ impl<W> WifiStopped<W> {
     pub fn start_retune(
         self,
         cell: MembershipCell<Wifi>,
-        channel: oer_radio_regulatory::Permitted<
-            oer_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        channel: oer_protocols_radio_regulatory::Permitted<
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
         >,
-        tx_ceiling: oer_radio_regulatory::TxCeiling,
+        tx_ceiling: oer_protocols_radio_regulatory::TxCeiling,
     ) -> WifiRetunePending<W> {
         let Self {
             platform,
@@ -259,7 +267,7 @@ impl<W> WifiStopped<W> {
         WifiRetunePending {
             pending: Some(cell.retune(
                 member,
-                oer_esp32s31_radio_client::wifi::WifiRetune {
+                oer_chips_esp32s31_radio_client::wifi::WifiRetune {
                     wifi,
                     channel,
                     tx_ceiling,
@@ -285,7 +293,12 @@ impl<W> WifiStopped<W> {
     }
 
     /// Borrow the role-neutral radio state for stopped-only operations.
-    pub fn radio_mut(&mut self) -> (oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_>, &mut W) {
+    pub fn radio_mut(
+        &mut self,
+    ) -> (
+        oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal<'_>,
+        &mut W,
+    ) {
         (self.registers.wifi_mac_hal(), &mut self.platform)
     }
 
@@ -475,7 +488,10 @@ pub(crate) fn enter_esp32s31_wifi_runtime<W>(
 /// No field is structurally pinned; polling never lends a pinned platform.
 pub struct WifiRetunePending<W> {
     pending: Option<
-        oer_esp32s31_radio_client::Pending<Wifi, oer_esp32s31_radio_client::RetuneAnswer<Wifi>>,
+        oer_chips_esp32s31_radio_client::Pending<
+            Wifi,
+            oer_chips_esp32s31_radio_client::RetuneAnswer<Wifi>,
+        >,
     >,
     context: Option<(W, WifiStartReport, WifiChannel, WifiChannel)>,
     immediate: Option<(
@@ -483,7 +499,7 @@ pub struct WifiRetunePending<W> {
         Result<
             (
                 WifiStopped<W>,
-                oer_esp32s31_radio_client::wifi::RetuneReport,
+                oer_chips_esp32s31_radio_client::wifi::RetuneReport,
             ),
             WifiRetuneFailure<W>,
         >,
@@ -497,19 +513,19 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
             Result<
                 (
                     WifiStopped<W>,
-                    oer_esp32s31_radio_client::wifi::RetuneReport,
+                    oer_chips_esp32s31_radio_client::wifi::RetuneReport,
                 ),
                 WifiRetuneFailure<W>,
             >,
         ),
-        oer_memory::RequestQuarantine<Option<W>>,
+        oer_portable_memory::RequestQuarantine<Option<W>>,
     >;
     fn poll(
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         use core::{pin::Pin, task::Poll};
-        use oer_esp32s31_radio_client::{Failed, RetunedMember, wifi::WifiRetuned};
+        use oer_chips_esp32s31_radio_client::{Failed, RetunedMember, wifi::WifiRetuned};
         let this = self.get_mut();
         if let Some(answer) = this.immediate.take() {
             return Poll::Ready(Ok(answer));
@@ -522,7 +538,9 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
             Err(reason) => {
                 this.pending = None;
                 let platform = this.context.take().map(|(platform, _, _, _)| platform);
-                return Poll::Ready(Err(oer_memory::RequestQuarantine::new(reason, platform)));
+                return Poll::Ready(Err(oer_portable_memory::RequestQuarantine::new(
+                    reason, platform,
+                )));
             }
         };
         this.pending = None;

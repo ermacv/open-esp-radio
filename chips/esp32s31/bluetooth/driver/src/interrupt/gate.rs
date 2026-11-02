@@ -41,18 +41,18 @@
 
 use core::{future::poll_fn, task::Poll};
 
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::{
     self,
     engine::{
         ControllerMemory, EngineResetTimerPending, scheduler::interrupt::SchedulerInterruptHalf,
     },
 };
-use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu3Irq;
-use oer_espressif_interrupt_table::{
+use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu3Irq;
+use oer_chips_family_interrupt_table::{
     Bound,
     signal::{IrqSignal, SignalExecutor},
 };
-use oer_memory::{
+use oer_portable_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, OnceValue,
 };
 
@@ -116,13 +116,13 @@ pub trait GateHardware: 'static {
     /// Start the runtime timer of `timer` for the epoch.
     fn start_timer(timer: Self::TimerInitialized) -> Self::Timer;
     /// Serve at most one request of the scheduler channel; whether one was.
-    fn serve_request<C: oer_time::Clock>(
+    fn serve_request<C: oer_portable_time::Clock>(
         scheduler: &mut Self::Scheduler,
         bank: &mut Self::Bank,
         clock: &C,
     ) -> Result<bool, bluetooth::BluetoothInterruptPolicyFault>;
     /// Sample and acknowledge the primary status.
-    fn capture_primary<C: oer_time::Clock>(
+    fn capture_primary<C: oer_portable_time::Clock>(
         bank: &mut Self::Bank,
         clock: &C,
     ) -> PrimaryInterruptCapture;
@@ -457,7 +457,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
     /// # Errors
     ///
     /// A broken gate invariant; the first failure is returned on every later call.
-    pub fn service<C: oer_time::Clock>(&mut self, clock: &C) -> Result<(), GateFault> {
+    pub fn service<C: oer_portable_time::Clock>(&mut self, clock: &C) -> Result<(), GateFault> {
         self.check_fault()?;
         let observation = GateObservation {
             lp_status: H::lp_status(&self.status),
@@ -716,7 +716,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, R: RadioDoorbell>
     pub(crate) async fn exchange(&mut self, request: Request<H>) -> Result<Reply<H>, GateError> {
         const {
             assert!(
-                oer_espressif_interrupt_table::request_direction(R::HANDLER, R::EXECUTOR),
+                oer_chips_family_interrupt_table::request_direction(R::HANDLER, R::EXECUTOR),
                 "a request handler must be above its executor on the same hart"
             )
         };
@@ -865,10 +865,10 @@ pub enum ChipGate {}
 /// once; its handler calls [`BluetoothInterruptsOf::service`].
 pub type BluetoothInterrupts<X, B> = BluetoothInterruptsOf<ChipGate, X, B>;
 
-impl<X: SignalExecutor + 'static, B> oer_espressif_interrupt_table::InterruptSources
+impl<X: SignalExecutor + 'static, B> oer_chips_family_interrupt_table::InterruptSources
     for BluetoothInterrupts<X, B>
 {
-    const SOURCES: &'static [u16] = oer_espressif_interrupt_table::interrupt_sources![
+    const SOURCES: &'static [u16] = oer_chips_family_interrupt_table::interrupt_sources![
         bluetooth::BluetoothInterruptBankSources,
         bluetooth::ModemLpTimerSource,
         FromCpu3Irq,
@@ -907,7 +907,7 @@ impl GateHardware for ChipGate {
         timer.start_runtime_timer().stage_for_interrupt()
     }
 
-    fn serve_request<C: oer_time::Clock>(
+    fn serve_request<C: oer_portable_time::Clock>(
         scheduler: &mut Self::Scheduler,
         bank: &mut Self::Bank,
         clock: &C,
@@ -915,7 +915,7 @@ impl GateHardware for ChipGate {
         scheduler.service(bank, clock)
     }
 
-    fn capture_primary<C: oer_time::Clock>(
+    fn capture_primary<C: oer_portable_time::Clock>(
         bank: &mut Self::Bank,
         clock: &C,
     ) -> PrimaryInterruptCapture {
@@ -1003,11 +1003,11 @@ impl<X: SignalExecutor + 'static> BluetoothInterruptEnds<ChipGate, X> {
         ModemLpTimerPort<ChipGate, R>,
     )
     where
-        E: oer_espressif_interrupt_table::Entry<Part = BluetoothInterrupts<X, B>>,
+        E: oer_chips_family_interrupt_table::Entry<Part = BluetoothInterrupts<X, B>>,
     {
         const {
             assert!(
-                oer_espressif_interrupt_table::request_direction(E::CONTEXT, R::EXECUTOR),
+                oer_chips_family_interrupt_table::request_direction(E::CONTEXT, R::EXECUTOR),
                 "a request handler must be above its executor on the same hart"
             );
             assert!(

@@ -4,7 +4,7 @@
 //! Expected identities must never be substituted for returned identities. The
 //! runner works with any executor policy; neither it nor its traces allocate.
 use super::*;
-use oer_radio_port::{ContextLoan, ContextProjection, SlotIdentity};
+use oer_protocols_radio_port::{ContextLoan, ContextProjection, SlotIdentity};
 
 /// Plain fixture context. Its value is recovered from the actual returned
 /// PortContext, independently of the submitted correlation identity.

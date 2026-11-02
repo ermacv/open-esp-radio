@@ -81,14 +81,14 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
             .ok()
             .unwrap();
             let submitted = phase.station().submit(
-                (oer_ieee80211_contracts_port::Attempt {
+                (oer_protocols_ieee80211_contracts_port::Attempt {
                     context: Witness(self.drops.clone()),
                     ticket,
                     source,
                     access_category: WmmAccessCategory::BestEffort,
                     protection: Protection::None,
                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                    coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                    coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                 })
                 .admit(),
             );
@@ -150,7 +150,8 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                 let disabled = owner
                     .disable(None, &mut |_| panic!("Drained returned every terminal"))
                     .await;
-                let Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) = disabled else {
+                let Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) = disabled
+                else {
                     panic!("the fault persists")
                 };
                 Ended::uninstall(poisoned, (), ())
@@ -174,7 +175,7 @@ fn event_end_returns_every_ordinary_terminal_or_retains_every_quarantined_owner(
                     IndividualAddress::new(STATION).unwrap(),
                     IndividualAddress::new(ACCESS_POINT).unwrap(),
                 ],
-                Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+                Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
             );
             let drops = Rc::new(Cell::new(0));
             let ended = block_on(fixture::inspect_model(
@@ -255,14 +256,14 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for CancelledBody {
         phase
             .station()
             .submit(
-                (oer_ieee80211_contracts_port::Attempt {
+                (oer_protocols_ieee80211_contracts_port::Attempt {
                     context: Witness(self.0),
                     ticket: resources.tickets.remove(0),
                     source,
                     access_category: WmmAccessCategory::BestEffort,
                     protection: Protection::None,
                     power: SupportedPower::new(TxPower::Calibrated).expect("fixture power"),
-                    coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                    coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                 })
                 .admit(),
             )
@@ -279,7 +280,7 @@ fn cancelling_the_entire_model_scope_removes_async_reachability_before_releasing
             IndividualAddress::new(STATION).expect("fixture station"),
             IndividualAddress::new(ACCESS_POINT).expect("fixture AP"),
         ],
-        Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
     );
     let drops = Rc::new(Cell::new(0));
     let mut running = Box::pin(run_model(world, CancelledBody(drops.clone())));

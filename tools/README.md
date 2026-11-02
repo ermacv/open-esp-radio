@@ -22,7 +22,7 @@ tools/
               privileged installer and launchers, fixture-helpers/ the Linux helper
               programs, linux-net/ and linux-bluetooth/ their providers
   hil/        the host end of the HIL core: link/ the board's serial link, harness/ a
-              scenario program's life cycle, cli/ is `cargo hil` (scenarios: hil-scenarios/)
+              scenario program's life cycle, cli/ is `cargo hil` (scenarios: hil/scenarios/)
   vendor/     the vendor comparison, lineage, provenance and the PHY archive audit; cli/ is
               `cargo vendor-check`, scenario-cli/ the typed vendor scenarios and reviewer commands,
               ieee802154-esp32s31-cli/ the IEEE 802.15.4 host stand
@@ -44,9 +44,9 @@ with `[[bin]] name`. The aliases in `.cargo/config.toml` run the programs.
 | Audit a source-only PHY archive | [PHY archive audit](vendor/cli/PHY_ARCHIVE.md) |
 | Fetch pinned vendor inputs | [Pins library](pins/artifacts/README.md), `cargo pins` |
 | Share the stand: queue, leases, boards | [Arbiter](lab/arbiter/README.md), [board I/O](lab/board/STAND.md), `cargo stand --help` |
-| Run a HIL scenario | [`cargo hil`](hil/cli/README.md), [scenarios](../hil-scenarios/README.md) |
+| Run a HIL scenario | [`cargo hil`](hil/cli/README.md), [scenarios](../hil/README.md) |
 | Install Linux fixture software | [Fixture contract](lab/fixture/README.md) |
 
 The typed vendor scenario library is `vendor/scenario/`; its CLI is
-`vendor/scenario-cli/` (`oer-tool-vendor-scenario-cli`). Host package paths
+`vendor/scenario-cli/` (`oer-tools-vendor-scenario-cli`). Host package paths
 are listed in the [workspace inventory](../docs/repository-layout.md#workspace-packages).

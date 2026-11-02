@@ -1,5 +1,5 @@
 use super::*;
-use oer_memory::HostContext;
+use oer_portable_memory::HostContext;
 use xarxa_driver::{PacketPool, PacketPoolStorage};
 
 extern crate std;

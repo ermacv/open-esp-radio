@@ -1,7 +1,7 @@
 use super::{TonePath0, TxIqToneControlFields, configure_tone_path_0, reset_frontend_txrx};
 use crate::phy::registers::BasebandRegisters;
-use oer_esp32s31_pac::fe::PhyFedataRecovered;
-use oer_mmio::Bits;
+use oer_chips_esp32s31_pac::fe::PhyFedataRecovered;
+use oer_portable_mmio::Bits;
 use std::{vec, vec::Vec};
 
 fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
@@ -58,14 +58,14 @@ fn a_tone_path_edge_zeroes_both_reserved_lanes_and_keeps_the_high_nibble() {
 #[test]
 fn the_frontend_reset_ends_with_both_reset_bits_raised_and_keeps_every_other_bit() {
     for initial in [0xffff_ffff_u32, 0x01ff_f000, 0x0600_0000, 0x9155_aa55, 0] {
-        let mut memory: Vec<u32> = vec![initial; oer_esp32s31_pac::instances::fe::SIZE / 4];
+        let mut memory: Vec<u32> = vec![initial; oer_chips_esp32s31_pac::instances::fe::SIZE / 4];
         let mut block = PhyFedataRecovered::host(&mut memory).expect("memory holds the block");
         reset_frontend_txrx(&mut block);
         let raised = block.read_word_0440_opaque();
         assert!(raised.tx_rx_reset_bit_25() && raised.tx_rx_reset_bit_26());
         drop(block);
         let differing: Vec<u32> = changed(
-            &[initial; oer_esp32s31_pac::instances::fe::SIZE / 4],
+            &[initial; oer_chips_esp32s31_pac::instances::fe::SIZE / 4],
             &memory,
         );
         assert!(differing.len() <= 1, "one word at most");

@@ -161,11 +161,11 @@ trait BluetoothSchedulerCancellationControl {
     fn order_after_publication(&mut self);
 }
 
-struct HardwareBluetoothSchedulerCancellationControl<'registers, B: oer_mmio::Placement> {
-    registers: &'registers mut oer_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
+struct HardwareBluetoothSchedulerCancellationControl<'registers, B: oer_portable_mmio::Placement> {
+    registers: &'registers mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerCancellationControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerCancellationControl
     for HardwareBluetoothSchedulerCancellationControl<'_, B>
 {
     fn publish_skip(&mut self, request: BluetoothSchedulerSkipRequest) {
@@ -174,9 +174,9 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerCancellationControl
         self.registers.modify_scheduler_skip_request(|w| {
             w.set_compressed_sram_pointer(request.address());
             w.set_hardware_list_index(request.hardware_list_index().field_bits());
-            w.set_result(oer_mmio::Bits::constant::<0>());
+            w.set_result(oer_portable_mmio::Bits::constant::<0>());
             w.set_start(true);
-            w.set_bits_24_27_opaque(oer_mmio::Bits::constant::<0>());
+            w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<0>());
             w.set_bit_30_opaque(false);
         });
     }
@@ -194,17 +194,17 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerCancellationControl
         // written zero.
         self.registers.modify_scheduler_skip_request(|w| {
             w.clear_compressed_sram_pointer();
-            w.set_hardware_list_index(oer_mmio::Bits::constant::<0>());
-            w.set_result(oer_mmio::Bits::constant::<0>());
+            w.set_hardware_list_index(oer_portable_mmio::Bits::constant::<0>());
+            w.set_result(oer_portable_mmio::Bits::constant::<0>());
             w.set_start(false);
-            w.set_bits_24_27_opaque(oer_mmio::Bits::constant::<0>());
+            w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<0>());
             w.set_bit_30_opaque(false);
         });
     }
 
     fn clear_list_index(&mut self) {
         self.registers.modify_word_036c_opaque(|w| {
-            w.set_cancellation_hardware_list_index(oer_mmio::Bits::constant::<0x0>());
+            w.set_cancellation_hardware_list_index(oer_portable_mmio::Bits::constant::<0x0>());
         });
     }
 

@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-pins-cli"
+name = "oer-tools-pins-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ publish = false
 description = "cargo pins: fetch and verify a chip's pinned vendor artifacts"
 
 [dependencies]
-oer-pins-artifacts = { path = "../artifacts" }
-oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
+oer-tools-pins-artifacts = { path = "../artifacts" }
+oer-tools-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 clap = { version = "=4.5.48", features = ["derive"] }
 
 [lints]

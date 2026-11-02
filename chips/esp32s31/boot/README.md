@@ -4,7 +4,7 @@ The chip's cold-start composition supplies LP-fast, brownout and TRNG profiles
 and `S31: staged_bootstrap::startup::BootProfile`. It binds the root's owned HAL
 parts and existing CPU, PSRAM, cache and flash profiles to the family runner.
 Its Composition role permits that platform wiring; startup order stays in
-`oer-espressif-staged-bootstrap`, and block algorithms in `oer-espressif-boot`.
+`oer-chips-family-staged-bootstrap`, and block algorithms in `oer-chips-family-boot`.
 Neither HAL nor chip knowledge depends on this binding. LP-fast comes from
 tracked chip/profile facts, generated with the register model's named source.
 

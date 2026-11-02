@@ -1,21 +1,21 @@
-use oer_esp32s31_hal::ieee80211::init::MacInterfaceAddressHardware;
-use oer_esp32s31_hal::types::{MacDelaySlot, MacLegacyRate};
-use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_chips_esp32s31_hal::ieee80211::init::MacInterfaceAddressHardware;
+use oer_chips_esp32s31_hal::types::{MacDelaySlot, MacLegacyRate};
+use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
 use std::{cell::RefCell, rc::Rc};
 
-use oer_esp32s31_hal::ieee80211::dma::descriptor::{
+use oer_chips_esp32s31_hal::ieee80211::dma::descriptor::{
     DESCRIPTOR_BYTES, RxDescriptor, TxDescriptor, rx_armed_word, rx_landed_word, rx_rearm_word,
     tx_owned_word,
 };
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHtTxProgram, MacInterface, MacKeyInstallOutcome, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
-use oer_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
-use oer_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_protocols_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
+use oer_protocols_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
 use {
-    oer_esp32s31_hal::{
+    oer_chips_esp32s31_hal::{
         ieee80211::init::{
             MAC_COLD_HANDSHAKE_DEADLINE, MacCoexEvent, MacCoexPti, MacCoexPtiSource,
             MacColdAntennaHardware, MacColdCoexHardware, MacColdCoexPti, MacColdCryptoHardware,
@@ -27,7 +27,7 @@ use {
         },
         types::{MacTxPowerPair, MacTxPowerTable},
     },
-    oer_esp32s31_ieee80211_driver::mac::{
+    oer_chips_esp32s31_ieee80211_driver::mac::{
         crypto::{
             CcmpKeyHardware, CryptoKeyError, clear_sta_ccmp_slots, install_sta_group_ccmp,
             install_sta_pairwise_ccmp,
@@ -65,9 +65,9 @@ mod support;
 
 fn free_slot<const N: usize>(
     slot: core::pin::Pin<&mut TxSlot<N>>,
-) -> oer_esp32s31_ieee80211_driver::mac::tx::TxSlotFree<'_, N> {
+) -> oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotFree<'_, N> {
     match slot.access() {
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(free) => free,
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(free) => free,
         _ => panic!("fixture owns a free TX slot"),
     }
 }

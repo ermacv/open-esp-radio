@@ -557,19 +557,19 @@ impl PhyRxDcoMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyRxDcoCompletion, PhyRxDcoRestoreInvariant> {
         match self.action {
             PhyRxDcoAction::PrepareRxDcoControlRestore => {
-                oer_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers).map_err(
+                oer_chips_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers).map_err(
                     |error| match error {
-                        oer_esp32s31_hal::types::RxDcoControlPrepareError::TemperatureUnavailable => {
+                        oer_chips_esp32s31_hal::types::RxDcoControlPrepareError::TemperatureUnavailable => {
                             PhyRxDcoRestoreInvariant::TemperatureUnavailable
                         }
-                        oer_esp32s31_hal::types::RxDcoControlPrepareError::RestorePending => {
+                        oer_chips_esp32s31_hal::types::RxDcoControlPrepareError::RestorePending => {
                             PhyRxDcoRestoreInvariant::OwnedByOtherCalibration
                         }
-                        oer_esp32s31_hal::types::RxDcoControlPrepareError::RestoreStackFull => {
+                        oer_chips_esp32s31_hal::types::RxDcoControlPrepareError::RestoreStackFull => {
                             PhyRxDcoRestoreInvariant::NestingExceeded
                         }
                     },
@@ -581,7 +581,7 @@ impl PhyRxDcoMmioBinding {
                 path,
                 value: {
                     let result =
-                        oer_esp32s31_hal::phy::pbus::read_result(registers, selector, path);
+                        oer_chips_esp32s31_hal::phy::pbus::read_result(registers, selector, path);
                     debug_assert!(
                         result.is_some(),
                         "RX-DCO transition emitted an unrecovered PBus selector"
@@ -590,7 +590,7 @@ impl PhyRxDcoMmioBinding {
                 },
             }),
             PhyRxDcoAction::RestoreRxDcoControl => {
-                oer_esp32s31_hal::phy::rx_dco::restore_control(registers)
+                oer_chips_esp32s31_hal::phy::rx_dco::restore_control(registers)
                     .map_err(|_| PhyRxDcoRestoreInvariant::NotPending)?;
                 Ok(PhyRxDcoCompletion::RxDcoControlRestored)
             }
@@ -640,7 +640,7 @@ impl PhyRxDcoPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -648,7 +648,7 @@ impl PhyRxDcoPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,

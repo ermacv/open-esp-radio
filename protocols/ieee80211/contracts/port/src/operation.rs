@@ -4,7 +4,7 @@
 //! coexistence owner maps it to an arbitration priority. There is no urgency
 //! level.
 
-use oer_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
+use oer_protocols_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
 
 /// A frame of the connection's setup or keys, which a coexisting radio lets
 /// through first.

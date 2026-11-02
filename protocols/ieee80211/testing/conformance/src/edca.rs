@@ -2,8 +2,8 @@
 //! Fixtures inject all-ones entropy and capture actual publication draws.
 
 use super::{Environment, Execution, ModelOnlyReason, Report};
-use oer_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet, VifRole};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet, VifRole};
+use oer_protocols_ieee80211_wire::{
     extensions::wmm::{WmmAcParameters, WmmParameterSet},
     qos::WmmAccessCategory,
 };
@@ -116,23 +116,23 @@ impl Case {
 pub const fn parameters(role: VifRole, updated: bool) -> EdcaParameterSet {
     let (aifsn, minimum, maximum, txop, lifetime) = match (role, updated) {
         (VifRole::Station, _) => (
-            oer_wire::U8::constant::<3>(),
-            oer_wire::U8::constant::<4>(),
-            oer_wire::U8::constant::<6>(),
+            oer_portable_wire::U8::constant::<3>(),
+            oer_portable_wire::U8::constant::<4>(),
+            oer_portable_wire::U8::constant::<6>(),
             94,
             500,
         ),
         (VifRole::AccessPoint, false) => (
-            oer_wire::U8::constant::<7>(),
-            oer_wire::U8::constant::<2>(),
-            oer_wire::U8::constant::<3>(),
+            oer_portable_wire::U8::constant::<7>(),
+            oer_portable_wire::U8::constant::<2>(),
+            oer_portable_wire::U8::constant::<3>(),
             47,
             200,
         ),
         (VifRole::AccessPoint, true) => (
-            oer_wire::U8::constant::<5>(),
-            oer_wire::U8::constant::<1>(),
-            oer_wire::U8::constant::<2>(),
+            oer_portable_wire::U8::constant::<5>(),
+            oer_portable_wire::U8::constant::<1>(),
+            oer_portable_wire::U8::constant::<2>(),
             350,
             100,
         ),

@@ -144,7 +144,7 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
     let source = directory.join("fixture.rs");
     let object = directory.join("fixture.o");
     std::fs::write(&source, "#![no_std]\n#[unsafe(no_mangle)]\n#[unsafe(link_section=\".text.unlikely.actual_section\")]\npub extern \"C\" fn worst_handler() -> u32 { 42 }\n#[unsafe(no_mangle)]\npub extern \"C\" fn other_handler() -> u32 { 43 }\n").unwrap();
-    let result = oer_os_toolchain::command(oer_os_toolchain::Tool::Rustc)
+    let result = oer_tools_os_toolchain::command(oer_tools_os_toolchain::Tool::Rustc)
         .unwrap()
         .args([
             "--edition=2024",
@@ -169,7 +169,7 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
     std::fs::write(&script, "ENTRY(worst_handler)\nSECTIONS { .isr.text 0x20000000 : { INCLUDE strict-text.x } .text 0x50000000 : { *(.text .text.*) } }\n").unwrap();
     let output = directory.join("image.elf");
     let link = |input: &Path| {
-        let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+        let result = std::process::Command::new(oer_tools_os_toolchain::lld().unwrap())
             .arg("-L")
             .arg(directory)
             .arg("-T")
@@ -210,11 +210,11 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
         std::fs::write(directory.join(FRAGMENT), "").unwrap();
         link(input);
         let first_bytes = std::fs::read(&output).unwrap();
-        let first = oer_analysis_elf::Elf::parse(&first_bytes).unwrap();
+        let first = oer_tools_analysis_elf::Elf::parse(&first_bytes).unwrap();
         let handlers = ["worst_handler", "other_handler"].map(|name| {
             let function = first.symbol(name).unwrap();
             assert!(function.address >= 0x50000000);
-            oer_image_stack::Function {
+            oer_tools_image_stack::Function {
                 address: u32::try_from(function.address).unwrap(),
                 size: u32::try_from(function.size).unwrap(),
                 names: vec![name.into()],
@@ -242,7 +242,7 @@ fn two_handlers_at_one_level_are_both_linked_into_sram() {
         std::fs::write(directory.join(FRAGMENT), plan.fragment()).unwrap();
         link(input);
         let second_bytes = std::fs::read(&output).unwrap();
-        let second = oer_analysis_elf::Elf::parse(&second_bytes).unwrap();
+        let second = oer_tools_analysis_elf::Elf::parse(&second_bytes).unwrap();
         for handler in &handlers {
             let symbol = second.symbol(&handler.names[0]).unwrap();
             assert!(

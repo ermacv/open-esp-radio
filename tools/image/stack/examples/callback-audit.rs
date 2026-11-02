@@ -1,6 +1,6 @@
-use oer_analysis_riscv_model::{Ledger, WorkingMemory};
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_image_stack::*;
+use oer_tools_analysis_riscv_model::{Ledger, WorkingMemory};
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_image_stack::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -137,25 +137,27 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     for pair in audit.pc_relative_uses() {
         let low = image.address_uses().get(pair.low).ok_or("bad low index")?;
         let high = pair.high.and_then(|index| image.address_uses().get(index));
-        let symbol = |use_: &oer_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+        let symbol = |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
             use_.symbol
                 .as_ref()
                 .map(|symbol| format!("{}:{:?}", symbol.index, symbol.name))
                 .unwrap_or_else(|| "-".into())
         };
-        let section = |use_: &oer_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
-            use_.symbol
-                .as_ref()
-                .and_then(|s| s.section)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "-".into())
-        };
-        let address = |use_: &oer_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
-            use_.symbol
-                .as_ref()
-                .map(|s| format!("{:#010x}", s.address))
-                .unwrap_or_else(|| "-".into())
-        };
+        let section =
+            |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+                use_.symbol
+                    .as_ref()
+                    .and_then(|s| s.section)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "-".into())
+            };
+        let address =
+            |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+                use_.symbol
+                    .as_ref()
+                    .map(|s| format!("{:#010x}", s.address))
+                    .unwrap_or_else(|| "-".into())
+            };
         let classification = if let Some(reason) = pair.unknown {
             format!("{reason:?}")
         } else if pair.functions.is_empty() {

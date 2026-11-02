@@ -9,16 +9,16 @@ use alloc::boxed::Box;
 
 use core::{ops::Deref, pin::Pin};
 
-use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
+use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaState, AmpduDmaStorage, AmpduDmaStorageError, PinnedAmpduDmaStorage, RetainedAmpduDma,
     RetainedAmpduDmaStorage,
 };
-use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
+use oer_chips_esp32s31_hal::types::{
     MacHeTxProgram, MacHtTxProgram, MacTxDetachOutcome, MacTxDetachReason,
 };
 #[cfg(any(test, feature = "test-support"))]
-use oer_ieee80211_wire::frame::set_retry_bit;
+use oer_protocols_ieee80211_wire::frame::set_retry_bit;
 
 use crate::mac::tx::{
     CompletionObservation, HeAmpduTxConfig, HtAmpduTxConfig, LegacyTxQueue, TxCookie, TxDmaState,
@@ -69,8 +69,8 @@ impl<'storage, const SLOTS: usize> HtAmpduTxResources<'storage, SLOTS> {
         let dma = Box::leak(Box::new(AmpduDmaStorage::<SLOTS, 0>::new()));
         Self::new(
             metadata,
-            AmpduDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::HostDma>(
-                oer_esp32s31_hal::memory::dma_static::Placed::host(dma),
+            AmpduDmaStorage::pin::<oer_chips_esp32s31_hal::ieee80211::dma::space::HostDma>(
+                oer_chips_esp32s31_hal::memory::dma_static::Placed::host(dma),
             )?,
         )
     }
@@ -89,11 +89,11 @@ impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
     /// final addresses.
     pub fn pin_static(
         metadata: &'static mut HtAmpduTxStorage<SLOTS>,
-        dma: oer_esp32s31_hal::memory::dma_static::Placed<AmpduDmaStorage<SLOTS, 0>>,
+        dma: oer_chips_esp32s31_hal::memory::dma_static::Placed<AmpduDmaStorage<SLOTS, 0>>,
     ) -> Result<Self, HtAmpduTxError> {
         Self::new(
             HtAmpduTxStorage::pin_static(metadata),
-            AmpduDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::ChipDma>(dma)?,
+            AmpduDmaStorage::pin::<oer_chips_esp32s31_hal::ieee80211::dma::space::ChipDma>(dma)?,
         )
     }
 }
@@ -289,15 +289,15 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
     #[cfg(any(test, feature = "test-support"))]
     pub fn observe_retry_completion<
         H: HtAmpduHardware,
-        R: oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduRetry,
+        R: oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduRetry,
     >(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
         retry: &mut R,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         block_ack_operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<Option<RetainedAmpduRetryCompletion>, RetainedAmpduRetryCompletionError> {
         let Some(CompletionObservation::Observed(completion)) =
             self.acknowledge_completion(hardware)?

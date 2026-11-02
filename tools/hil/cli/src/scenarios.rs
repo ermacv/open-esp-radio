@@ -92,8 +92,8 @@ mod tests {
     fn only_flagged_packages_are_scenarios_by_their_short_name() {
         let metadata = serde_json::json!({"packages": [
             package("oer-hil-scenarios-zeta", Some(true)),
-            package("oer-hil-scenarios-images-esp32s31-sdk-rpc", None),
-            package("oer-hil-harness", Some(false)),
+            package("oer-hil-images-aes", None),
+            package("oer-tools-hil-harness", Some(false)),
             package("oer-hil-scenarios-aes", Some(true)),
         ]});
         let scenarios = discover(&metadata).unwrap();
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn a_flagged_package_outside_the_prefix_is_refused() {
-        let metadata = serde_json::json!({"packages": [package("oer-tool-other", Some(true))]});
+        let metadata = serde_json::json!({"packages": [package("oer-tools-other", Some(true))]});
         assert!(discover(&metadata).is_err());
     }
 }

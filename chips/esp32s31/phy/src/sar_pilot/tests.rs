@@ -1,13 +1,13 @@
 use super::*;
 use crate::tx::sar::Io;
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::transaction::{DetachedRadioDomain, Fault, FaultReason, Operation, TransactionSeat},
     owner::PhyRegistrationEpoch,
     root::RadioHardware,
 };
-use oer_espressif_interrupt_table::signal::host::{self, Deferred};
-use oer_time::Instant;
-use oer_time_virtual::VirtualClock;
+use oer_chips_family_interrupt_table::signal::host::{self, Deferred};
+use oer_portable_time::Instant;
+use oer_portable_time_virtual::VirtualClock;
 use std::{
     boxed::Box,
     cell::{Cell, RefCell},

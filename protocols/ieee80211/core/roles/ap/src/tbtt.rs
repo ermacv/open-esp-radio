@@ -1,6 +1,6 @@
 //! Target beacon transmission time schedule of the access point.
 
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 /// Advance the beacon schedule `send_tick + k * interval` (`k >= 1`) to the
 /// first target beacon transmission time not before `now`.

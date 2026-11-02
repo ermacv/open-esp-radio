@@ -1,5 +1,5 @@
 //! Driver publication evidence for the image declaring trace and debug-control.
-use oer_trace::{Channel, Domain, Event, Kind};
+use oer_portable_trace::{Channel, Domain, Event, Kind};
 mod edca;
 pub(crate) use edca::contention;
 pub use edca::{EdcaDraw, EdcaRecord, EdcaTable};
@@ -82,8 +82,8 @@ pub const ENCODED_MPDU: Kind = Kind::new(Domain::Ieee80211, 101);
 #[cfg(oer_trace)]
 #[inline(always)]
 pub(crate) fn encoded_mpdu(bytes: &[u8]) {
-    if oer_espressif_staged_runtime::trace::enabled(Publication::CHANNEL) {
-        oer_espressif_staged_runtime::trace::capture(ENCODED_MPDU, |snapshot| {
+    if oer_chips_family_staged_runtime::trace::enabled(Publication::CHANNEL) {
+        oer_chips_family_staged_runtime::trace::capture(ENCODED_MPDU, |snapshot| {
             snapshot.push(bytes.len() as u32);
             for chunk in bytes.chunks(4) {
                 let mut word = [0; 4];

@@ -150,7 +150,7 @@ fn reunion_waits_for_common_power() {
 #[test]
 fn exhausted_clock_identity_returns_every_split_owner_before_construction() {
     use crate::domain::transaction::{FaultReason, PhyIdentity};
-    use oer_espressif_modem_clock::IdentityExhausted;
+    use oer_chips_family_modem_clock::IdentityExhausted;
     let payload = std::rc::Rc::new(());
     let failure = RadioHardware::for_host_test()
         .split_with_clock_identity::<crate::power::test_clocks::CountingBackend, _>(

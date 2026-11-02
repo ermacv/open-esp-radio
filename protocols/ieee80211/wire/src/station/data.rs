@@ -78,7 +78,7 @@ impl StaOpenDataFrame<'_> {
             &mut header,
             &self.sequence_number.sequence_control().to_le_bytes(),
         );
-        let mut reader = oer_wire::Reader::new(&header);
+        let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             StationFrameError::OutputTooSmall {
                 required: usize::from(plan.header_len),
@@ -160,7 +160,7 @@ impl StaProtectedDataFrame<'_> {
             &mut header,
             &self.sequence_number.sequence_control().to_le_bytes(),
         );
-        let mut reader = oer_wire::Reader::new(&header);
+        let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
             StationFrameError::OutputTooSmall {
                 required: usize::from(plan.header_len),

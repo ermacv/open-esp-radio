@@ -15,7 +15,7 @@
 //! TBTT, as epoch activation does. Masked MAC closure acknowledges only its
 //! captured RAW events; WDEVPWR closure clears every latched event.
 
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::types::{
     MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
     MacPowerInterruptObservation,
 };

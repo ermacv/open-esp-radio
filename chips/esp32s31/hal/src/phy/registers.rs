@@ -1,8 +1,8 @@
 //! PHY register sets assembled from the PAC's unique ownership parts.
 //! No register logic or additional claim lives in these compositions.
 #![forbid(unsafe_code)]
-use oer_esp32s31_pac::{fe, instances, wifi_bb, wifi_bb_brx, wifi_mac};
-use oer_mmio::{Fixed, Placement};
+use oer_chips_esp32s31_pac::{fe, instances, wifi_bb, wifi_bb_brx, wifi_mac};
+use oer_portable_mmio::{Fixed, Placement};
 
 #[cfg(test)]
 pub(crate) mod host;
@@ -26,10 +26,10 @@ impl PhyPlacement for ChipPlacement {
 pub struct HostPlacement<'a>(core::marker::PhantomData<&'a mut [u32]>);
 #[cfg(test)]
 impl<'a> PhyPlacement for HostPlacement<'a> {
-    type Fe = oer_mmio::Host<'a>;
-    type WifiBb = oer_mmio::Host<'a>;
-    type WifiBbBrx = oer_mmio::Host<'a>;
-    type WifiMac = oer_mmio::Host<'a>;
+    type Fe = oer_portable_mmio::Host<'a>;
+    type WifiBb = oer_portable_mmio::Host<'a>;
+    type WifiBbBrx = oer_portable_mmio::Host<'a>;
+    type WifiMac = oer_portable_mmio::Host<'a>;
 }
 
 /// Exclusive parts used by the phy_agc_oracle operations.
@@ -41,10 +41,10 @@ pub struct AgcRegisters<P: PhyPlacement = ChipPlacement> {
 
 #[cfg(test)]
 impl<'a> AgcRegisters<HostPlacement<'a>> {
-    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         const REQUIRED: usize = 8223;
         if words.len() < REQUIRED {
-            return Err(oer_mmio::HostTooSmall {
+            return Err(oer_portable_mmio::HostTooSmall {
                 required: REQUIRED * 4,
                 available: words.len() * 4,
             });
@@ -74,10 +74,10 @@ pub struct BasebandRegisters<P: PhyPlacement = ChipPlacement> {
 
 #[cfg(test)]
 impl<'a> BasebandRegisters<HostPlacement<'a>> {
-    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         const REQUIRED: usize = 7989;
         if words.len() < REQUIRED {
-            return Err(oer_mmio::HostTooSmall {
+            return Err(oer_portable_mmio::HostTooSmall {
                 required: REQUIRED * 4,
                 available: words.len() * 4,
             });
@@ -106,10 +106,10 @@ pub struct ClockRegisters<P: PhyPlacement = ChipPlacement> {
 
 #[cfg(test)]
 impl<'a> ClockRegisters<HostPlacement<'a>> {
-    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         const REQUIRED: usize = 7969;
         if words.len() < REQUIRED {
-            return Err(oer_mmio::HostTooSmall {
+            return Err(oer_portable_mmio::HostTooSmall {
                 required: REQUIRED * 4,
                 available: words.len() * 4,
             });
@@ -136,10 +136,10 @@ pub struct FrequencyRegisters<P: PhyPlacement = ChipPlacement> {
 
 #[cfg(test)]
 impl<'a> FrequencyRegisters<HostPlacement<'a>> {
-    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub(crate) fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         const REQUIRED: usize = 7994;
         if words.len() < REQUIRED {
-            return Err(oer_mmio::HostTooSmall {
+            return Err(oer_portable_mmio::HostTooSmall {
                 required: REQUIRED * 4,
                 available: words.len() * 4,
             });
@@ -176,33 +176,33 @@ pub trait RadioPlacement: PhyPlacement {
     type ModemDatadump: Placement;
 }
 impl RadioPlacement for ChipPlacement {
-    type HpClock = Fixed<{ oer_esp32s31_pac::instances::hp_sys_clkrst::BASE }>;
-    type Pmu = Fixed<{ oer_esp32s31_pac::instances::pmu::BASE }>;
-    type ModemSyscon = Fixed<{ oer_esp32s31_pac::instances::modem_syscon::BASE }>;
-    type ModemLpcon = Fixed<{ oer_esp32s31_pac::instances::modem_lpcon::BASE }>;
-    type LpAon = Fixed<{ oer_esp32s31_pac::instances::lp_aon_clkrst::BASE }>;
-    type LpPeri = Fixed<{ oer_esp32s31_pac::instances::lp_periclkrst::BASE }>;
-    type Tsens = Fixed<{ oer_esp32s31_pac::instances::lp_tsens::BASE }>;
-    type I2c = Fixed<{ oer_esp32s31_pac::instances::i2c_ana_mst::BASE }>;
-    type I2cRam = Fixed<{ oer_esp32s31_pac::instances::i2c_ana_mst_mem::BASE }>;
-    type ModemPwr = Fixed<{ oer_esp32s31_pac::instances::modem_pwr::BASE }>;
-    type BtBb = Fixed<{ oer_esp32s31_pac::instances::bt_bb::BASE }>;
-    type ModemDatadump = Fixed<{ oer_esp32s31_pac::instances::modem_datadump::BASE }>;
+    type HpClock = Fixed<{ oer_chips_esp32s31_pac::instances::hp_sys_clkrst::BASE }>;
+    type Pmu = Fixed<{ oer_chips_esp32s31_pac::instances::pmu::BASE }>;
+    type ModemSyscon = Fixed<{ oer_chips_esp32s31_pac::instances::modem_syscon::BASE }>;
+    type ModemLpcon = Fixed<{ oer_chips_esp32s31_pac::instances::modem_lpcon::BASE }>;
+    type LpAon = Fixed<{ oer_chips_esp32s31_pac::instances::lp_aon_clkrst::BASE }>;
+    type LpPeri = Fixed<{ oer_chips_esp32s31_pac::instances::lp_periclkrst::BASE }>;
+    type Tsens = Fixed<{ oer_chips_esp32s31_pac::instances::lp_tsens::BASE }>;
+    type I2c = Fixed<{ oer_chips_esp32s31_pac::instances::i2c_ana_mst::BASE }>;
+    type I2cRam = Fixed<{ oer_chips_esp32s31_pac::instances::i2c_ana_mst_mem::BASE }>;
+    type ModemPwr = Fixed<{ oer_chips_esp32s31_pac::instances::modem_pwr::BASE }>;
+    type BtBb = Fixed<{ oer_chips_esp32s31_pac::instances::bt_bb::BASE }>;
+    type ModemDatadump = Fixed<{ oer_chips_esp32s31_pac::instances::modem_datadump::BASE }>;
 }
 #[cfg(test)]
 impl<'a> RadioPlacement for HostPlacement<'a> {
-    type HpClock = oer_mmio::Host<'a>;
-    type Pmu = oer_mmio::Host<'a>;
-    type ModemSyscon = oer_mmio::Host<'a>;
-    type ModemLpcon = oer_mmio::Host<'a>;
-    type LpAon = oer_mmio::Host<'a>;
-    type LpPeri = oer_mmio::Host<'a>;
-    type Tsens = oer_mmio::Host<'a>;
-    type I2c = oer_mmio::Host<'a>;
-    type I2cRam = oer_mmio::Host<'a>;
-    type ModemPwr = oer_mmio::Host<'a>;
-    type BtBb = oer_mmio::Host<'a>;
-    type ModemDatadump = oer_mmio::Host<'a>;
+    type HpClock = oer_portable_mmio::Host<'a>;
+    type Pmu = oer_portable_mmio::Host<'a>;
+    type ModemSyscon = oer_portable_mmio::Host<'a>;
+    type ModemLpcon = oer_portable_mmio::Host<'a>;
+    type LpAon = oer_portable_mmio::Host<'a>;
+    type LpPeri = oer_portable_mmio::Host<'a>;
+    type Tsens = oer_portable_mmio::Host<'a>;
+    type I2c = oer_portable_mmio::Host<'a>;
+    type I2cRam = oer_portable_mmio::Host<'a>;
+    type ModemPwr = oer_portable_mmio::Host<'a>;
+    type BtBb = oer_portable_mmio::Host<'a>;
+    type ModemDatadump = oer_portable_mmio::Host<'a>;
 }
 
 /// The physical PHY and modem parts retained by the shared radio owner.
@@ -211,43 +211,50 @@ pub(crate) struct RadioPhyParts<P: RadioPlacement = ChipPlacement> {
     pub(crate) phy_baseband_config_oracle: BasebandRegisters<P>,
     pub(crate) phy_clock_oracle: ClockRegisters<P>,
     pub(crate) phy_frequency_channel_oracle: FrequencyRegisters<P>,
-    pub(crate) hp_sys_clkrst_radio: oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P::HpClock>,
-    pub(crate) pmu_radio: oer_esp32s31_pac::pmu::PmuRadio<P::Pmu>,
-    pub(crate) modem_syscon_radio: oer_esp32s31_pac::modem_syscon::ModemSysconRadio<P::ModemSyscon>,
+    pub(crate) hp_sys_clkrst_radio:
+        oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P::HpClock>,
+    pub(crate) pmu_radio: oer_chips_esp32s31_pac::pmu::PmuRadio<P::Pmu>,
+    pub(crate) modem_syscon_radio:
+        oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P::ModemSyscon>,
     pub(crate) modem_syscon_clock_reset:
-        oer_esp32s31_pac::modem_syscon::ModemSysconClockReset<P::ModemSyscon>,
-    pub(crate) phy_agc_recovered_gaps: oer_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps<P::WifiBb>,
-    pub(crate) phy_bb_recovered_gaps: oer_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps<P::WifiBb>,
+        oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P::ModemSyscon>,
+    pub(crate) phy_agc_recovered_gaps:
+        oer_chips_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps<P::WifiBb>,
+    pub(crate) phy_bb_recovered_gaps:
+        oer_chips_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps<P::WifiBb>,
     pub(crate) phy_brx_recovered_gaps:
-        oer_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps<P::WifiBbBrx>,
-    pub(crate) phy_btagc_recovered: oer_esp32s31_pac::bt_bb::PhyBtagcRecovered<P::BtBb>,
-    pub(crate) phy_fectrl_recovered: oer_esp32s31_pac::fe::PhyFectrlRecovered<P::Fe>,
-    pub(crate) phy_adc_dump_recovered_fe: oer_esp32s31_pac::fe::PhyAdcDumpRecoveredFe<P::Fe>,
+        oer_chips_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps<P::WifiBbBrx>,
+    pub(crate) phy_btagc_recovered: oer_chips_esp32s31_pac::bt_bb::PhyBtagcRecovered<P::BtBb>,
+    pub(crate) phy_fectrl_recovered: oer_chips_esp32s31_pac::fe::PhyFectrlRecovered<P::Fe>,
+    pub(crate) phy_adc_dump_recovered_fe: oer_chips_esp32s31_pac::fe::PhyAdcDumpRecoveredFe<P::Fe>,
     pub(crate) phy_adc_dump_recovered_bt_bb:
-        oer_esp32s31_pac::bt_bb::PhyAdcDumpRecoveredBtBb<P::BtBb>,
+        oer_chips_esp32s31_pac::bt_bb::PhyAdcDumpRecoveredBtBb<P::BtBb>,
     pub(crate) phy_adc_dump_recovered_wifi_bb:
-        oer_esp32s31_pac::wifi_bb::PhyAdcDumpRecoveredWifiBb<P::WifiBb>,
+        oer_chips_esp32s31_pac::wifi_bb::PhyAdcDumpRecoveredWifiBb<P::WifiBb>,
     pub(crate) phy_adc_dump_recovered_modem_datadump:
-        oer_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump<P::ModemDatadump>,
-    pub(crate) phy_fedata_recovered: oer_esp32s31_pac::fe::PhyFedataRecovered<P::Fe>,
-    pub(crate) phy_fedata_wifi_recovered: oer_esp32s31_pac::fe::PhyFedataWifiRecovered<P::Fe>,
-    pub(crate) phy_i2c_command_ram: oer_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam<P::I2cRam>,
-    pub(crate) phy_iq_estimator_oracle: oer_esp32s31_pac::fe::PhyIqEstimatorOracle<P::Fe>,
+        oer_chips_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump<P::ModemDatadump>,
+    pub(crate) phy_fedata_recovered: oer_chips_esp32s31_pac::fe::PhyFedataRecovered<P::Fe>,
+    pub(crate) phy_fedata_wifi_recovered: oer_chips_esp32s31_pac::fe::PhyFedataWifiRecovered<P::Fe>,
+    pub(crate) phy_i2c_command_ram:
+        oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam<P::I2cRam>,
+    pub(crate) phy_iq_estimator_oracle: oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle<P::Fe>,
     pub(crate) bluetooth_lp_timer_clock:
-        oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P::ModemLpcon>,
-    pub(crate) coex_lp_clock: oer_esp32s31_pac::modem_lpcon::CoexLpClock<P::ModemLpcon>,
-    pub(crate) modem_lpcon_power: oer_esp32s31_pac::modem_lpcon::ModemLpconPower<P::ModemLpcon>,
+        oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P::ModemLpcon>,
+    pub(crate) coex_lp_clock: oer_chips_esp32s31_pac::modem_lpcon::CoexLpClock<P::ModemLpcon>,
+    pub(crate) modem_lpcon_power:
+        oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower<P::ModemLpcon>,
     pub(crate) modem_lpcon_phy_tick:
-        oer_esp32s31_pac::modem_lpcon::ModemLpconPhyTick<P::ModemLpcon>,
-    pub(crate) lp_aon_radio_clock: oer_esp32s31_pac::lp_aonclkrst::LpAonRadioClock<P::LpAon>,
-    pub(crate) lp_aon_clkrst: oer_esp32s31_pac::lp_aonclkrst::LpAonClkrst<P::LpAon>,
-    pub(crate) lp_periclkrst: oer_esp32s31_pac::lp_peri_clkrst::LpPericlkrst<P::LpPeri>,
-    pub(crate) lp_tsens: oer_esp32s31_pac::tsens::LpTsens<P::Tsens>,
-    pub(crate) i2c_ana_mst: oer_esp32s31_pac::i2c_ana_mst::I2cAnaMst<P::I2c>,
-    pub(crate) phy_memory: oer_esp32s31_pac::fe::PhyMemory<P::Fe>,
-    pub(crate) phy_nrx_recovered_gaps: oer_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps<P::WifiBb>,
-    pub(crate) phy_pbus: oer_esp32s31_pac::fe::PhyPbus<P::Fe>,
-    pub(crate) phy_rx_dco_oracle: oer_esp32s31_pac::fe::PhyRxDcoOracle<P::Fe>,
+        oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPhyTick<P::ModemLpcon>,
+    pub(crate) lp_aon_radio_clock: oer_chips_esp32s31_pac::lp_aonclkrst::LpAonRadioClock<P::LpAon>,
+    pub(crate) lp_aon_clkrst: oer_chips_esp32s31_pac::lp_aonclkrst::LpAonClkrst<P::LpAon>,
+    pub(crate) lp_periclkrst: oer_chips_esp32s31_pac::lp_peri_clkrst::LpPericlkrst<P::LpPeri>,
+    pub(crate) lp_tsens: oer_chips_esp32s31_pac::tsens::LpTsens<P::Tsens>,
+    pub(crate) i2c_ana_mst: oer_chips_esp32s31_pac::i2c_ana_mst::I2cAnaMst<P::I2c>,
+    pub(crate) phy_memory: oer_chips_esp32s31_pac::fe::PhyMemory<P::Fe>,
+    pub(crate) phy_nrx_recovered_gaps:
+        oer_chips_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps<P::WifiBb>,
+    pub(crate) phy_pbus: oer_chips_esp32s31_pac::fe::PhyPbus<P::Fe>,
+    pub(crate) phy_rx_dco_oracle: oer_chips_esp32s31_pac::fe::PhyRxDcoOracle<P::Fe>,
 }
 
 /// Shared PHY/modem ownership, assembled by the reset root.
@@ -260,8 +267,8 @@ impl RadioPhyRegisters {
     /// Consume the generated ownership partitions of the PHY and the
     /// analog-I2C bus, with a copy of the MAC local-time read.
     pub fn new(
-        parts: oer_esp32s31_pac::ownership::RadioPhyPeripherals,
-        analog_bus: oer_esp32s31_pac::ownership::AnalogBusPeripherals,
+        parts: oer_chips_esp32s31_pac::ownership::RadioPhyPeripherals,
+        analog_bus: oer_chips_esp32s31_pac::ownership::AnalogBusPeripherals,
         mac_local_time: crate::ieee80211::registers::MacLocalTime,
     ) -> Self {
         Self {
@@ -345,45 +352,45 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
 impl RadioPhyRegisters {
     /// Words of the radio-PHY diagnostic image [`Self::register_image`]
     /// reads.
-    pub const REGISTER_IMAGE_LEN: usize = oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio::<<ChipPlacement as RadioPlacement>::HpClock>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::pmu::PmuRadio::<<ChipPlacement as RadioPlacement>::Pmu>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_syscon::ModemSysconClockReset::<<ChipPlacement as RadioPlacement>::ModemSyscon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_syscon::ModemSysconRadio::<<ChipPlacement as RadioPlacement>::ModemSyscon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+    pub const REGISTER_IMAGE_LEN: usize = oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio::<<ChipPlacement as RadioPlacement>::HpClock>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::pmu::PmuRadio::<<ChipPlacement as RadioPlacement>::Pmu>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset::<<ChipPlacement as RadioPlacement>::ModemSyscon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio::<<ChipPlacement as RadioPlacement>::ModemSyscon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + fe::PhyAgcOracleFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb::PhyAgcOracleWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb_brx::PhyAgcOracleWifiBbBrx::<<ChipPlacement as PhyPlacement>::WifiBbBrx>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + fe::PhyBasebandConfigOracleFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_mac::PhyBasebandConfigOracleWifiMac::<<ChipPlacement as PhyPlacement>::WifiMac>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb::PhyBasebandConfigOracleWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBbBrx>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::bt_bb::PhyBtagcRecovered::<<ChipPlacement as RadioPlacement>::BtBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBbBrx>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::bt_bb::PhyBtagcRecovered::<<ChipPlacement as RadioPlacement>::BtBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + fe::PhyClockOracleFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb::PhyClockOracleWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyFectrlRecovered::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyAdcDumpRecoveredFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::bt_bb::PhyAdcDumpRecoveredBtBb::<<ChipPlacement as RadioPlacement>::BtBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::wifi_bb::PhyAdcDumpRecoveredWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump::<<ChipPlacement as RadioPlacement>::ModemDatadump>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyFedataRecovered::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyFedataWifiRecovered::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyFectrlRecovered::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyAdcDumpRecoveredFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::bt_bb::PhyAdcDumpRecoveredBtBb::<<ChipPlacement as RadioPlacement>::BtBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::wifi_bb::PhyAdcDumpRecoveredWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump::<<ChipPlacement as RadioPlacement>::ModemDatadump>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyFedataRecovered::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyFedataWifiRecovered::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + fe::PhyFrequencyChannelOracleFe::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_mac::PhyFrequencyChannelOracleWifiMac::<<ChipPlacement as PhyPlacement>::WifiMac>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
             + wifi_bb::PhyFrequencyChannelOracleWifiBb::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyIqEstimatorOracle::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_lpcon::ModemLpconPower::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_lpcon::CoexLpClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::modem_lpcon::ModemLpconPhyTick::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::lp_aonclkrst::LpAonClkrst::<<ChipPlacement as RadioPlacement>::LpAon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::lp_aonclkrst::LpAonRadioClock::<<ChipPlacement as RadioPlacement>::LpAon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::lp_peri_clkrst::LpPericlkrst::<<ChipPlacement as RadioPlacement>::LpPeri>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::tsens::LpTsens::<<ChipPlacement as RadioPlacement>::Tsens>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyMemory::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyPbus::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
-            + oer_esp32s31_pac::fe::PhyRxDcoOracle::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len();
+            + oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_lpcon::CoexLpClock::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPhyTick::<<ChipPlacement as RadioPlacement>::ModemLpcon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::lp_aonclkrst::LpAonClkrst::<<ChipPlacement as RadioPlacement>::LpAon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::lp_aonclkrst::LpAonRadioClock::<<ChipPlacement as RadioPlacement>::LpAon>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::lp_peri_clkrst::LpPericlkrst::<<ChipPlacement as RadioPlacement>::LpPeri>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::tsens::LpTsens::<<ChipPlacement as RadioPlacement>::Tsens>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyMemory::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps::<<ChipPlacement as PhyPlacement>::WifiBb>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyPbus::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len()
+            + oer_chips_esp32s31_pac::fe::PhyRxDcoOracle::<<ChipPlacement as PhyPlacement>::Fe>::RADIO_PHY_REGISTER_IMAGE_OFFSETS.len();
 }
 
 impl<P: RadioPlacement> RadioPhyRegisters<P> {
@@ -406,19 +413,19 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         }
         image_word!(
             self.peripherals.hp_sys_clkrst_radio,
-            oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio::<P::HpClock>
+            oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio::<P::HpClock>
         );
         image_word!(
             self.peripherals.pmu_radio,
-            oer_esp32s31_pac::pmu::PmuRadio::<P::Pmu>
+            oer_chips_esp32s31_pac::pmu::PmuRadio::<P::Pmu>
         );
         image_word!(
             self.peripherals.modem_syscon_clock_reset,
-            oer_esp32s31_pac::modem_syscon::ModemSysconClockReset::<P::ModemSyscon>
+            oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset::<P::ModemSyscon>
         );
         image_word!(
             self.peripherals.modem_syscon_radio,
-            oer_esp32s31_pac::modem_syscon::ModemSysconRadio::<P::ModemSyscon>
+            oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio::<P::ModemSyscon>
         );
         image_word!(
             self.peripherals.phy_agc_oracle.fe,
@@ -434,7 +441,7 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         );
         image_word!(
             self.peripherals.phy_agc_recovered_gaps,
-            oer_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps::<P::WifiBb>
+            oer_chips_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps::<P::WifiBb>
         );
         image_word!(
             self.peripherals.phy_baseband_config_oracle.fe,
@@ -450,15 +457,15 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         );
         image_word!(
             self.peripherals.phy_bb_recovered_gaps,
-            oer_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps::<P::WifiBb>
+            oer_chips_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps::<P::WifiBb>
         );
         image_word!(
             self.peripherals.phy_brx_recovered_gaps,
-            oer_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps::<P::WifiBbBrx>
+            oer_chips_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps::<P::WifiBbBrx>
         );
         image_word!(
             self.peripherals.phy_btagc_recovered,
-            oer_esp32s31_pac::bt_bb::PhyBtagcRecovered::<P::BtBb>
+            oer_chips_esp32s31_pac::bt_bb::PhyBtagcRecovered::<P::BtBb>
         );
         image_word!(
             self.peripherals.phy_clock_oracle.fe,
@@ -470,31 +477,33 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         );
         image_word!(
             self.peripherals.phy_fectrl_recovered,
-            oer_esp32s31_pac::fe::PhyFectrlRecovered::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyFectrlRecovered::<P::Fe>
         );
         image_word!(
             self.peripherals.phy_adc_dump_recovered_fe,
-            oer_esp32s31_pac::fe::PhyAdcDumpRecoveredFe::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyAdcDumpRecoveredFe::<P::Fe>
         );
         image_word!(
             self.peripherals.phy_adc_dump_recovered_bt_bb,
-            oer_esp32s31_pac::bt_bb::PhyAdcDumpRecoveredBtBb::<P::BtBb>
+            oer_chips_esp32s31_pac::bt_bb::PhyAdcDumpRecoveredBtBb::<P::BtBb>
         );
         image_word!(
             self.peripherals.phy_adc_dump_recovered_wifi_bb,
-            oer_esp32s31_pac::wifi_bb::PhyAdcDumpRecoveredWifiBb::<P::WifiBb>
+            oer_chips_esp32s31_pac::wifi_bb::PhyAdcDumpRecoveredWifiBb::<P::WifiBb>
         );
         image_word!(
             self.peripherals.phy_adc_dump_recovered_modem_datadump,
-            oer_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump::<P::ModemDatadump>
+            oer_chips_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump::<
+                P::ModemDatadump,
+            >
         );
         image_word!(
             self.peripherals.phy_fedata_recovered,
-            oer_esp32s31_pac::fe::PhyFedataRecovered::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyFedataRecovered::<P::Fe>
         );
         image_word!(
             self.peripherals.phy_fedata_wifi_recovered,
-            oer_esp32s31_pac::fe::PhyFedataWifiRecovered::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyFedataWifiRecovered::<P::Fe>
         );
         image_word!(
             self.peripherals.phy_frequency_channel_oracle.fe,
@@ -510,55 +519,55 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         );
         image_word!(
             self.peripherals.phy_iq_estimator_oracle,
-            oer_esp32s31_pac::fe::PhyIqEstimatorOracle::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle::<P::Fe>
         );
         image_word!(
             self.peripherals.bluetooth_lp_timer_clock,
-            oer_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock::<P::ModemLpcon>
+            oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock::<P::ModemLpcon>
         );
         image_word!(
             self.peripherals.coex_lp_clock,
-            oer_esp32s31_pac::modem_lpcon::CoexLpClock::<P::ModemLpcon>
+            oer_chips_esp32s31_pac::modem_lpcon::CoexLpClock::<P::ModemLpcon>
         );
         image_word!(
             self.peripherals.modem_lpcon_power,
-            oer_esp32s31_pac::modem_lpcon::ModemLpconPower::<P::ModemLpcon>
+            oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower::<P::ModemLpcon>
         );
         image_word!(
             self.peripherals.modem_lpcon_phy_tick,
-            oer_esp32s31_pac::modem_lpcon::ModemLpconPhyTick::<P::ModemLpcon>
+            oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPhyTick::<P::ModemLpcon>
         );
         image_word!(
             self.peripherals.lp_aon_radio_clock,
-            oer_esp32s31_pac::lp_aonclkrst::LpAonRadioClock::<P::LpAon>
+            oer_chips_esp32s31_pac::lp_aonclkrst::LpAonRadioClock::<P::LpAon>
         );
         image_word!(
             self.peripherals.lp_aon_clkrst,
-            oer_esp32s31_pac::lp_aonclkrst::LpAonClkrst::<P::LpAon>
+            oer_chips_esp32s31_pac::lp_aonclkrst::LpAonClkrst::<P::LpAon>
         );
         image_word!(
             self.peripherals.lp_periclkrst,
-            oer_esp32s31_pac::lp_peri_clkrst::LpPericlkrst::<P::LpPeri>
+            oer_chips_esp32s31_pac::lp_peri_clkrst::LpPericlkrst::<P::LpPeri>
         );
         image_word!(
             self.peripherals.lp_tsens,
-            oer_esp32s31_pac::tsens::LpTsens::<P::Tsens>
+            oer_chips_esp32s31_pac::tsens::LpTsens::<P::Tsens>
         );
         image_word!(
             self.peripherals.phy_memory,
-            oer_esp32s31_pac::fe::PhyMemory::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyMemory::<P::Fe>
         );
         image_word!(
             self.peripherals.phy_nrx_recovered_gaps,
-            oer_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps::<P::WifiBb>
+            oer_chips_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps::<P::WifiBb>
         );
         image_word!(
             self.peripherals.phy_pbus,
-            oer_esp32s31_pac::fe::PhyPbus::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyPbus::<P::Fe>
         );
         image_word!(
             self.peripherals.phy_rx_dco_oracle,
-            oer_esp32s31_pac::fe::PhyRxDcoOracle::<P::Fe>
+            oer_chips_esp32s31_pac::fe::PhyRxDcoOracle::<P::Fe>
         );
         let _ = index;
         None

@@ -1,12 +1,12 @@
 //! Association epoch, retransmission schedule and terminal response policy.
 
-use oer_ieee80211_wire::address::{Bssid, OwnAddress};
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_wire::status::status_code;
-use oer_ieee80211_wire::tsf::MICROS_PER_TIME_UNIT;
+use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::tsf::MICROS_PER_TIME_UNIT;
 use {
-    oer_ieee80211_core_upper_mac::sequence::SequenceCounter,
-    oer_ieee80211_wire::{
+    oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
+    oer_protocols_ieee80211_wire::{
         security::LinkProtection,
         station::{
             AssociationResponse, StaDisconnect, parse_association_response, parse_sta_disconnect,
@@ -14,7 +14,7 @@ use {
     },
 };
 
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 use super::STA_RESPONSE_TIMEOUT;
 

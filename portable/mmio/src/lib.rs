@@ -265,12 +265,12 @@ pub mod sharing {
 ///
 /// ```compile_fail,E0277
 /// struct Words;
-/// impl oer_mmio::Registers for Words {
-///     type Sharing = oer_mmio::sharing::Owned;
+/// impl oer_portable_mmio::Registers for Words {
+///     type Sharing = oer_portable_mmio::sharing::Owned;
 ///     const WORDS: &'static [usize] = &[0];
 /// }
 /// fn sync<T: Sync>() {}
-/// sync::<oer_mmio::Block<oer_mmio::Fixed<0x1000>, Words>>();
+/// sync::<oer_portable_mmio::Block<oer_portable_mmio::Fixed<0x1000>, Words>>();
 /// ```
 pub trait SharedRegisters: Registers<Sharing = sharing::Shared> {}
 
@@ -354,11 +354,11 @@ tuple_claims!(A, B, C, D, E, F, G, H);
 ///
 /// ```compile_fail,E0133
 /// struct Control;
-/// impl oer_mmio::Registers for Control {
-///     type Sharing = oer_mmio::sharing::Owned;
+/// impl oer_portable_mmio::Registers for Control {
+///     type Sharing = oer_portable_mmio::sharing::Owned;
 ///     const WORDS: &'static [usize] = &[0];
 /// }
-/// let block: oer_mmio::Block<oer_mmio::Fixed<0x1000>, Control> = oer_mmio::assume_owned();
+/// let block: oer_portable_mmio::Block<oer_portable_mmio::Fixed<0x1000>, Control> = oer_portable_mmio::assume_owned();
 /// ```
 ///
 /// # Safety
@@ -969,15 +969,15 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
 ///
 /// ```compile_fail,E0599
 /// struct Words;
-/// impl oer_mmio::Registers for Words {
-///     type Sharing = oer_mmio::sharing::Owned;
+/// impl oer_portable_mmio::Registers for Words {
+///     type Sharing = oer_portable_mmio::sharing::Owned;
 ///     const WORDS: &'static [usize] = &[0];
 /// }
-/// impl oer_mmio::Words for Words {
+/// impl oer_portable_mmio::Words for Words {
 ///     const OWNED: &'static [usize] = &[0];
 ///     const OBSERVED: &'static [usize] = &[];
 /// }
-/// fn give_up(block: oer_mmio::Block<oer_mmio::Fixed<0x1000>, Words>) {
+/// fn give_up(block: oer_portable_mmio::Block<oer_portable_mmio::Fixed<0x1000>, Words>) {
 ///     let mut reader = block.into_reader::<Words>();
 ///     reader.write::<0>(1);
 /// }

@@ -1,5 +1,5 @@
-use oer_analysis_riscv_analysis::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_analysis::*;
+use oer_tools_analysis_riscv_model::*;
 
 const TABLE: u32 = 0x1000;
 const SITE: u64 = 60;

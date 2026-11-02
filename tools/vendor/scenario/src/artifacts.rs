@@ -1,5 +1,5 @@
 //! The pinned vendor artifacts of the installed chip's `artifacts.toml`,
-//! read through `oer-pins-artifacts`, the one reader of the pins.
+//! read through `oer-tools-pins-artifacts`, the one reader of the pins.
 //!
 //! Every scenario input of a pinned artifact is authenticated against one
 //! digest: the pinned SHA-256 of a fetched artifact, which has one cache
@@ -7,7 +7,7 @@
 //! output at its pinned location once its build follows the current recipe
 //! of its catalog image. The manifest is the only place a pin changes.
 use crate::harness::{Result, invalid};
-use oer_pins_artifacts::{Artifact, Manifest};
+use oer_tools_pins_artifacts::{Artifact, Manifest};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -52,14 +52,14 @@ pub fn sha256(id: &str) -> Result<&'static str> {
 
 /// The digest of the firmware output `artifact` of the current build.
 fn built_digest(artifact: &Artifact) -> Result<String> {
-    let root = oer_os_process::built_root();
+    let root = oer_tools_os_process::built_root();
     let image = manifest()
         .source_of(artifact)
         .image
         .as_deref()
         .ok_or_else(|| invalid("a firmware source names its image"))?;
-    oer_image_build::esp_idf::catalog::current(&root, image)?;
-    oer_os_durable::sha256_file(&path(&root, &artifact.id))
+    oer_tools_image_build::esp_idf::catalog::current(&root, image)?;
+    oer_tools_os_durable::sha256_file(&path(&root, &artifact.id))
 }
 
 /// Location of artifact `id` below the repository `root`: the fetch cache
@@ -73,5 +73,5 @@ pub fn path(root: &Path, id: &str) -> PathBuf {
 /// Pinned location of `id` in this checkout: the default of every scenario
 /// input argument.
 pub fn default_path(id: &str) -> PathBuf {
-    path(&oer_os_process::built_root(), id)
+    path(&oer_tools_os_process::built_root(), id)
 }

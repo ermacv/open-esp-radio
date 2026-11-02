@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
+use oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters;
 
 /// The standard default EDCA set with ACM set on `restricted`.
 fn edca(restricted: &[WmmAccessCategory]) -> WmmParameterSet {

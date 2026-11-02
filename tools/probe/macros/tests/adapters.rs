@@ -1,4 +1,4 @@
-use oer_probe_macros::probe;
+use oer_tools_probe_macros::probe;
 
 fn with_owner<R>(call: impl FnOnce(&mut [u32; 2]) -> R) -> R {
     let mut owner = [10, 20];

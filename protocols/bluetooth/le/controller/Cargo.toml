@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-le-controller"
+name = "oer-protocols-bluetooth-le-controller"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,15 +8,15 @@ repository.workspace = true
 description = "Portable Bluetooth LE Controller: HCI bootstrap state and DTM service"
 
 [dependencies]
-oer-bluetooth-le-wire = { path = "../wire" }
-oer-bluetooth-hci = { path = "../../hci" }
-oer-bluetooth-le-port = { path = "../port" }
-oer-radio-port = { path = "../../../radio/port" }
+oer-protocols-bluetooth-le-wire = { path = "../wire" }
+oer-protocols-bluetooth-hci = { path = "../../hci" }
+oer-protocols-bluetooth-le-port = { path = "../port" }
+oer-protocols-radio-port = { path = "../../../radio/port" }
 
 [dev-dependencies]
-oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
-oer-bluetooth-le-model = { path = "../model", features = ["test-support"] }
-oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-protocols-bluetooth-le-model = { path = "../model", features = ["test-support"] }
+oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 
 [lints]
 workspace = true

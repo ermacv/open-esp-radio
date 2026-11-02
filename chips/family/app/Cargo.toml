@@ -1,0 +1,26 @@
+[package]
+name = "oer-chips-family-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+description = "What the family's application entry shares across chips: the boot's identity, the typed channel between task groups, the IP service's status and the library's observation counters"
+
+[features]
+## The library's observation counters (`observe`).
+observe = []
+
+[dependencies]
+oer-portable-embassy-net = { path = "../../../portable/embassy/net" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-protocols-network-port = { path = "../../../protocols/network/port" }
+atomic-waker = "=1.1.2"
+static_cell.workspace = true
+
+[dev-dependencies]
+oer-portable-memory = { path = "../../../portable/memory", features = ["host-context"] }
+
+[lints]
+workspace = true

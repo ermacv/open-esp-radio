@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 
-use oer_image_stack::{Analysis, TransferKind};
+use oer_tools_image_stack::{Analysis, TransferKind};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
@@ -113,7 +113,7 @@ pub trait Locate {
     fn locate(&self, address: u32) -> Vec<String>;
 }
 
-impl Locate for oer_analysis_elf::dwarf::Symbolizer {
+impl Locate for oer_tools_analysis_elf::dwarf::Symbolizer {
     fn locate(&self, address: u32) -> Vec<String> {
         self.frames(u64::from(address))
             .map(|frames| {
@@ -353,7 +353,7 @@ pub struct Copies {
 
 /// The length of the instruction at `address` in an executable segment
 /// of `elf`.
-fn instruction_length(elf: &oer_analysis_elf::Elf<'_>, address: u32) -> Option<u32> {
+fn instruction_length(elf: &oer_tools_analysis_elf::Elf<'_>, address: u32) -> Option<u32> {
     let half = elf
         .segments()
         .filter(|segment| segment.executable)
@@ -369,7 +369,7 @@ pub fn copies(
     root: &Path,
     roots: Option<&[Root]>,
 ) -> Result<Copies> {
-    let elf = oer_analysis_elf::Elf::parse(&image.elf)?;
+    let elf = oer_tools_analysis_elf::Elf::parse(&image.elf)?;
     let code = |address: u32| Code {
         name: image.names.get(&address).map_or_else(
             || format!("{address:#010x}"),
@@ -436,7 +436,7 @@ pub(crate) fn write(
     output: &Path,
     roots: Option<&[Root]>,
 ) -> Result<()> {
-    let symbolizer = oer_analysis_elf::dwarf::Symbolizer::shared(image.elf.clone())?;
+    let symbolizer = oer_tools_analysis_elf::dwarf::Symbolizer::shared(image.elf.clone())?;
     let sites = sites(&image.analysis, &image.names);
     std::fs::write(
         output.join(RUNTIME_REPORT),

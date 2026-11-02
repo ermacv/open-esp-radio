@@ -1,6 +1,6 @@
 #![cfg_attr(test, allow(clippy::disallowed_macros))]
 //! Exercise the target's real event completion future with a host waker.
-use oer_hil_agent::console::progress;
+use oer_protocols_hil_agent::console::progress;
 use std::{
     future::Future,
     sync::{

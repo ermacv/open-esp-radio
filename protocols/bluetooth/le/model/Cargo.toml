@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-le-model"
+name = "oer-protocols-bluetooth-le-model"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,20 +8,20 @@ repository.workspace = true
 description = "Deterministic Bluetooth LE DTM reference model"
 
 [features]
-test-support = ["oer-radio-port/test-support", "oer-bluetooth-le-port/test-support"]
+test-support = ["oer-protocols-radio-port/test-support", "oer-protocols-bluetooth-le-port/test-support"]
 
 [dependencies]
-oer-bluetooth-le-wire = { path = "../wire" }
-oer-bluetooth-le-port = { path = "../port" }
-oer-radio-port = { path = "../../../radio/port" }
-oer-time = { path = "../../../../portable/time" }
-oer-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-protocols-bluetooth-le-wire = { path = "../wire" }
+oer-protocols-bluetooth-le-port = { path = "../port" }
+oer-protocols-radio-port = { path = "../../../radio/port" }
+oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 
 [dev-dependencies]
-oer-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
-oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
-oer-radio-port = { path = "../../../radio/port", features = ["test-support"] }
-oer-bluetooth-le-port = { path = "../port", features = ["test-support"] }
+oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
+oer-protocols-bluetooth-le-port = { path = "../port", features = ["test-support"] }
 
 [lints]
 workspace = true

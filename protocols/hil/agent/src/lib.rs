@@ -36,4 +36,4 @@ pub mod postmortem;
 mod test_messages;
 
 #[doc(hidden)]
-pub use oer_hil_protocol as __protocol;
+pub use oer_protocols_hil_protocol as __protocol;

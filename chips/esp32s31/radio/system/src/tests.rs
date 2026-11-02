@@ -8,24 +8,24 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
-use oer_esp32s31_hal::ieee80211::init::{
+use oer_chips_esp32s31_hal::ieee80211::init::{
     MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::client::{WifiClocked, WifiCold},
     root::RadioHardware,
 };
-use oer_esp32s31_phy::{PhyCalibrationPath, PhyState};
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_phy::{PhyCalibrationPath, PhyState};
+use oer_chips_esp32s31_radio_client::{
     ClientCells, Leaving, PhyFault, RcSlow, RegistrationFault, RequestKind, claim_for_host_test,
     wifi::{
         RetuneReport, TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
-use oer_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
-use oer_time::{Clock as _, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock as _, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 
 use super::*;
 
@@ -41,7 +41,11 @@ pub(super) const PREPARE_POISON: Poison = Poison {
 const TICK_CAUSE: PoisonCause = PoisonCause::Tracking(PhyFault::EdgeTimedOut);
 
 pub(super) const fn wifi_poison(request: RequestKind, cause: PoisonCause) -> Poison {
-    Poison::request(oer_esp32s31_hal::domain::RadioClient::Wifi, request, cause)
+    Poison::request(
+        oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
+        request,
+        cause,
+    )
 }
 const TRACK_POISON: Poison = wifi_poison(
     RequestKind::Track,
@@ -209,7 +213,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             wifi: track.wifi,
             report: TrackReport {
                 probe_priority: crate::mac_sources::probe_priority(
-                    oer_espressif_coex::CoexPtiTable::VENDOR,
+                    oer_chips_family_coex::CoexPtiTable::VENDOR,
                 ),
                 tracking_micros: Some(7),
                 temperature: PhyState::default().temperature_observation(),
@@ -234,7 +238,7 @@ impl ClientBackend<Wifi, RcSlow> for Model {
             wifi: retune.wifi,
             report: RetuneReport {
                 probe_priority: crate::mac_sources::probe_priority(
-                    oer_espressif_coex::CoexPtiTable::VENDOR,
+                    oer_chips_family_coex::CoexPtiTable::VENDOR,
                 ),
                 micros: 11,
                 temperature: PhyState::default().temperature_observation(),
@@ -270,7 +274,7 @@ fn cold() -> WifiCold {
     let (_domain, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     WifiCold::from_partition(partitions.wifi)
@@ -279,23 +283,27 @@ fn cold() -> WifiCold {
 fn track_request(wifi: WifiClocked) -> WifiTrack {
     WifiTrack {
         wifi,
-        channel: oer_radio_regulatory::TEST_DOMAIN
-            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
-            ))
+        channel: oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap(),
-        tx_ceiling: oer_radio_regulatory::TEST_DOMAIN
-            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
-                WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
-            ))
+        tx_ceiling: oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap()
-            .tx_ceiling(oer_radio_regulatory::PowerLimits {
+            .tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
                 antenna_gain_mbm: 0,
                 chip_maximum_mbm: 2000,
                 owner_cap_mbm: None,
             }),
         mac: MacColdStartConfig {
-            handshake_deadline: oer_time::Duration::from_millis(1),
+            handshake_deadline: oer_portable_time::Duration::from_millis(1),
             station_address: [2, 0, 0, 0, 0, 1],
             access_point_address: [2, 0, 0, 0, 0, 2],
         },
@@ -321,7 +329,7 @@ fn run<F: Future<Output = ()>>(
 
 /// The instant `micros` past a default clock's start.
 fn at(micros: u64) -> Instant {
-    oer_time_virtual::START
+    oer_portable_time_virtual::START
         .checked_add(Duration::from_micros(micros))
         .unwrap()
 }
@@ -340,9 +348,9 @@ const REGISTRATION: PhyPreparation = PhyPreparation::Registered {
     calibration_path: PhyCalibrationPath::FullUncached,
     micros: 10,
     #[cfg(oer_trace)]
-    outcome: oer_esp32s31_phy::PhyRegisterOutcome {
+    outcome: oer_chips_esp32s31_phy::PhyRegisterOutcome {
         rf_calibration: None,
-        ready_waits: oer_esp32s31_phy::ReadyWaitDiagnostics {
+        ready_waits: oer_chips_esp32s31_phy::ReadyWaitDiagnostics {
             tx_dc_max_not_ready_samples: 0,
             pwdet_sar_max_not_ready_samples: 0,
         },
@@ -618,7 +626,7 @@ fn track_until_the_run_ends(
     seconds: u64,
 ) -> (
     TrackingFault,
-    oer_esp32s31_radio_client::MembershipCell<Wifi>,
+    oer_chips_esp32s31_radio_client::MembershipCell<Wifi>,
     TrackedMember<Wifi>,
 ) {
     let mut client = core::pin::pin!(async move {
@@ -711,12 +719,13 @@ fn a_failed_tracking_tick_ends_the_run_and_a_later_request_names_it() {
 #[test]
 fn a_tracking_deadline_the_clock_cannot_hold_ends_the_run_before_any_tick() {
     let clock = clock();
-    let overflow =
-        PoisonCause::TrackingRefused(oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-            oer_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
-                class: oer_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
+    let overflow = PoisonCause::TrackingRefused(
+        oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+            oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
             },
-        ));
+        ),
+    );
     let model = model(Script {
         deadline_fault: Some(overflow),
         ..Script::default()
@@ -760,7 +769,7 @@ fn a_tracking_deadline_the_clock_cannot_hold_ends_the_run_before_any_tick() {
 
 #[test]
 fn a_tracking_fault_names_its_stage_and_cause_and_classifies_it() {
-    use oer_diagnostics::{DiagPath, fault::Class};
+    use oer_portable_diagnostics::{DiagPath, fault::Class};
     let tick = TrackingFault {
         stage: TrackingStage::Tick,
         cause: TICK_CAUSE,
@@ -773,9 +782,9 @@ fn a_tracking_fault_names_its_stage_and_cause_and_classifies_it() {
     let overflow = TrackingFault {
         stage: TrackingStage::Deadline,
         cause: PoisonCause::TrackingRefused(
-            oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-                oer_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
-                    class: oer_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
+            oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+                oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                    class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
                 },
             ),
         ),

@@ -1,5 +1,5 @@
 [package]
-name = "oer-pins-artifacts"
+name = "oer-tools-pins-artifacts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,12 +9,12 @@ publish = false
 description = "The pins of a chip's vendor artifacts: the one reader of artifacts.toml and where a pinned artifact lies in a checkout"
 
 [dependencies]
-oer-chip-profile = { path = "../../chip/profile" }
-oer-espressif-facts = { path = "../../../chips/espressif/facts" }
+oer-tools-chip-profile = { path = "../../chip/profile" }
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.4"
-oer-os-process = { path = "../../os/process" }
-oer-os-durable = { path = "../../os/durable" }
+oer-tools-os-process = { path = "../../os/process" }
+oer-tools-os-durable = { path = "../../os/durable" }
 
 [lints]
 workspace = true

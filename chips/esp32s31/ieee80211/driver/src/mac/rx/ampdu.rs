@@ -1,7 +1,7 @@
 //! Hardware capacity and public RX BlockAck classification.
 //! Software sequence reordering belongs to the upper MAC.
 
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::mac::rx::PUBLIC_HEADER_SIZE;
 
@@ -15,7 +15,7 @@ use crate::mac::rx::PUBLIC_HEADER_SIZE;
 // descriptors: descriptors are recycled while this sequence window remains
 // active.
 pub const RX_BLOCK_ACK_MAX_WINDOW: u16 = 64;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     frame::{FrameControlFields, FrameType, QosControl},
     sequence::SequenceControl,
     trigger::BarControlFields,

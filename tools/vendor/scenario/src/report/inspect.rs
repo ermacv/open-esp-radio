@@ -3,10 +3,10 @@ use crate::{
     harness::{Result, invalid},
     registers::Registers,
 };
-use oer_analysis_blobray_application as app;
-use oer_analysis_blobray_domain::{ImageRegion, LibraryFunction, RegisterAccess};
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_application as app;
+use oer_tools_analysis_blobray_domain::{ImageRegion, LibraryFunction, RegisterAccess};
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::{
     AnalysisLimited, AnalysisProfile, CallAbi, FunctionRecord, MemoryKind, WorkingMemory,
 };
 use std::{
@@ -39,10 +39,10 @@ impl Budget {
     }
     fn report(&self, operation: &str, limited: AnalysisLimited) -> Result<()> {
         let profile = AnalysisProfile::BlobrayCli;
-        let resources = oer_analysis_riscv_model::AnalysisResources::new(
+        let resources = oer_tools_analysis_riscv_model::AnalysisResources::new(
             profile,
             profile.limits(),
-            oer_analysis_riscv_model::AnalysisUsage {
+            oer_tools_analysis_riscv_model::AnalysisUsage {
                 work_units: self.control.used(),
                 peak_admitted_bytes: self.memory.peak(),
             },
@@ -84,7 +84,7 @@ pub fn parse_offset(text: &str) -> std::result::Result<i32, String> {
 }
 
 pub fn load() -> Result<Corpus> {
-    let corpus = Corpus::load(&oer_os_process::built_root())?;
+    let corpus = Corpus::load(&oer_tools_os_process::built_root())?;
     for id in &corpus.missing {
         eprintln!("{id}: not in this checkout, skipped");
     }

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Ended, FailStopRequested, PortBackend, SlotIdentity};
+use oer_protocols_radio_port::{Ended, FailStopRequested, PortBackend, SlotIdentity};
 #[cfg(ui_reject)]
 pub fn ended<First: SlotIdentity, Second: SlotIdentity, B: PortBackend<First> + PortBackend<Second>>(proof: FailStopRequested<First, B>) -> Ended<Second, B, ()> {
     Ended::fail_stop(proof, ()) // ui-error: E0308

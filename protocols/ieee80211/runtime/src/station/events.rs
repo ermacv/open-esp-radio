@@ -7,10 +7,10 @@
 //! the service returns to the application (`ServiceOutput::MsduRefused`,
 //! `ServiceOutput::TxRefused`) is the application's to count and is no event.
 
-use oer_events::EventSink;
-use oer_ieee80211_core_roles_sta::events::StaEvent;
-use oer_ieee80211_core_roles_sta::machine::StaRxError;
-use oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
+use oer_portable_events::EventSink;
+use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
+use oer_protocols_ieee80211_core_roles_sta::machine::StaRxError;
+use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
 
 /// One decision of the station service.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

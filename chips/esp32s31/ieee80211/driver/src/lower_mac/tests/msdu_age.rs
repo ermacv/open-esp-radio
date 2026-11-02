@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_contracts_port::{EdcaParameterSet, SupportedEdca};
-use oer_time::Duration;
+use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::{EdcaParameterSet, SupportedEdca};
 
 fn lifetime(core: &mut Core<'_>, role: VifRole, micros: u64) {
     core.set_checked_edca(
@@ -216,9 +216,10 @@ fn unpublished_aggregate_expiry_releases_the_key_after_its_terminal() {
         let mut buffer = aggregate_of(source, 0, 26);
         let frame = buffer.push_from(source, 26, at(0)).unwrap();
         frame.copy_from_slice(&data_frame(BSSID));
-        let fc =
-            oer_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
-                .unwrap();
+        let fc = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+            frame[0], frame[1],
+        ]))
+        .unwrap();
         frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
         let plan = core
             .inner

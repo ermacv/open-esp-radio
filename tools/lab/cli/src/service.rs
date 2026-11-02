@@ -3,8 +3,8 @@
 
 use std::sync::mpsc;
 
-use oer_lab_arbiter::claims::Claim;
-use oer_lab_client::{
+use oer_tools_lab_arbiter::claims::Claim;
+use oer_tools_lab_client::{
     client::{Client, Running},
     protocol::{LeaseRequest, Operation},
 };
@@ -52,11 +52,11 @@ pub(crate) enum Ended {
 /// instead of queueing. It is stopped when the service ends the lease or
 /// this command is cancelled. On a terminal it is the terminal's foreground
 /// job with this command: it reads the terminal and Ctrl-C is its own
-/// (`oer_os_process::foreground`). Otherwise it owns a process group, and
+/// (`oer_tools_os_process::foreground`). Otherwise it owns a process group, and
 /// stopping it stops what it started.
 pub(crate) fn command(
     client: &Client,
-    ctx: &oer_os_process::Checkout,
+    ctx: &oer_tools_os_process::Checkout,
     argv: &[std::ffi::OsString],
     owner: &str,
 ) -> Result<Ended> {
@@ -65,29 +65,30 @@ pub(crate) fn command(
     let mut command = ctx.command(program);
     command
         .args(arguments)
-        .env(oer_lab_arbiter::owner::OWNER_ENV, owner)
+        .env(oer_tools_lab_arbiter::owner::OWNER_ENV, owner)
         .env(
-            oer_lab_client::protocol::LEASE_ENV,
+            oer_tools_lab_client::protocol::LEASE_ENV,
             client.token().ok_or("the lease has no token")?,
         );
     let mut child = if std::io::stdin().is_terminal() {
-        Child::Foreground(oer_os_process::foreground::Child::spawn(&mut command)?)
-    } else {
-        Child::Owned(oer_os_process::owned::Child::spawn_with_shutdown_grace(
+        Child::Foreground(oer_tools_os_process::foreground::Child::spawn(
             &mut command,
-            GRACE,
         )?)
+    } else {
+        Child::Owned(
+            oer_tools_os_process::owned::Child::spawn_with_shutdown_grace(&mut command, GRACE)?,
+        )
     };
     loop {
         if let Some(status) = child.try_wait()? {
             return Ok(Ended::Exited(
-                oer_os_process::exit_code(status),
+                oer_tools_os_process::exit_code(status),
                 status.success(),
             ));
         }
         let ended = match client.revoked() {
             Some(reason) => Ended::Revoked(reason),
-            None if oer_os_process::cancellation_requested() => Ended::Cancelled,
+            None if oer_tools_os_process::cancellation_requested() => Ended::Cancelled,
             None => {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 continue;
@@ -103,8 +104,8 @@ const GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// A command run under a lease.
 enum Child {
-    Foreground(oer_os_process::foreground::Child),
-    Owned(oer_os_process::owned::Child),
+    Foreground(oer_tools_os_process::foreground::Child),
+    Owned(oer_tools_os_process::owned::Child),
 }
 
 impl Child {

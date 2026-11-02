@@ -1,5 +1,5 @@
 #![no_std]
-use {oer_ieee80211_wire::ccmp::{CcmpHeader, GroupKeyId}, oer_ieee80211_core_upper_mac::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch, CcmpRxReplayState}};
+use {oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, GroupKeyId}, oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch, CcmpRxReplayState}};
 
 pub fn replace(epoch: &mut CcmpRxReplayEpoch, header: CcmpHeader, id: GroupKeyId) {
     let candidate = epoch

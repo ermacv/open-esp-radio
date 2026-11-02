@@ -1,7 +1,7 @@
 //! Station-owned BSS observations and candidate selection.
 
-use oer_ieee80211_wire::scan::{ScanFrame, ScanRecord};
-use oer_time::Instant;
+use oer_portable_time::Instant;
+use oer_protocols_ieee80211_wire::scan::{ScanFrame, ScanRecord};
 
 pub const SCAN_RECORD_CAPACITY: usize = 32;
 
@@ -41,7 +41,7 @@ pub struct BssObservation {
     pub channel: u8,
     /// The ERP protection the frame's ERP elements ask for
     /// ([`crate::association::erp_protection`]).
-    pub erp: oer_ieee80211_wire::protection::ErpProtection,
+    pub erp: oer_protocols_ieee80211_wire::protection::ErpProtection,
     /// The received signal level in dBm, `None` when the receiver reported
     /// none; an unknown level ranks below every known one.
     pub rssi: Option<i8>,
@@ -275,8 +275,8 @@ mod tests;
 impl<const N: usize> ScanTable<N> {
     /// Construct the BSS table directly in the caller's permanent storage.
     pub fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
-        oer_memory::init_in_place!(storage, Self {
-            records => |place| oer_memory::init_array(place, |_| None),
+        oer_portable_memory::init_in_place!(storage, Self {
+            records => |place| oer_portable_memory::init_array(place, |_| None),
             length: 0,
             completeness: ScanCompleteness::Complete,
         })

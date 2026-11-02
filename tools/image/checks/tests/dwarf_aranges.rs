@@ -1,8 +1,8 @@
-use oer_analysis_elf::{
+use oer_tools_analysis_elf::{
     Elf,
     dwarf::{Symbolizer, load},
 };
-use oer_os_toolchain::{Tool, command};
+use oer_tools_os_toolchain::{Tool, command};
 use std::{path::Path, process::Command, rc::Rc};
 
 fn run(command: &mut Command) {
@@ -18,7 +18,7 @@ fn run(command: &mut Command) {
 fn staged_links_keep_cu_ranges_without_the_malformed_lto_accelerator() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests-fixtures/dwarf-aranges");
     let scripts =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/espressif/staged-layout/linker");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/family/staged-layout/linker");
     for target in [
         "riscv32imafc-unknown-none-elf",
         "riscv32imac-unknown-none-elf",

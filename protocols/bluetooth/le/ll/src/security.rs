@@ -7,13 +7,13 @@
 //! the Host-selected LTK. A retransmission reuses the ciphertext already
 //! retained by that radio owner and never calls
 //! [`LePeripheralAclEncryption::encrypt_new_packet`] again. Stateless packet protection
-//! and zeroizing key material belong to `oer-bluetooth-le-cipher`.
+//! and zeroizing key material belong to `oer-protocols-bluetooth-le-cipher`.
 
-use oer_bluetooth_le_wire::encryption::{
+use oer_protocols_bluetooth_le_wire::encryption::{
     LeEncryptionControlResponse, LeEncryptionRequest, LeLongTermKeyRequest,
 };
 
-use oer_bluetooth_le_cipher::{
+use oer_protocols_bluetooth_le_cipher::{
     LE_PACKET_COUNTER_MAX, LeAclEncryptionError, LeAclInitializationVector, LeAclSessionKey,
     LeLongTermKey, LeSessionKeyDiversifier, decrypt_packet, decrypted_packet_length,
     encrypt_packet, encrypted_packet_length,
@@ -664,7 +664,7 @@ impl LePeripheralAclEncryption {
 )]
 mod tests {
     use super::*;
-    use oer_bluetooth_le_cipher::{LE_ACL_MIC_BYTES, LE_ENCRYPTED_PLAINTEXT_BYTES};
+    use oer_protocols_bluetooth_le_cipher::{LE_ACL_MIC_BYTES, LE_ENCRYPTED_PLAINTEXT_BYTES};
 
     const LTK: [u8; 16] = [
         0xbf, 0x01, 0xfb, 0x9d, 0x4e, 0xf3, 0xbc, 0x36, 0xd8, 0x74, 0xf5, 0x39, 0x41, 0x38, 0x68,

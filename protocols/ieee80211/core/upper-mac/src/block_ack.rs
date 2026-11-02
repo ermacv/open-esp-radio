@@ -1,8 +1,8 @@
 //! Block Ack negotiation and receive reorder owners.
 
-use oer_ieee80211_contracts_port::BlockAckReport;
-use oer_ieee80211_wire::block_ack::{BlockAckAction, parse_block_ack_action};
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_contracts_port::BlockAckReport;
+use oer_protocols_ieee80211_wire::block_ack::{BlockAckAction, parse_block_ack_action};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// Whether the transmitter may consider `sequence` delivered by `report`.
 ///

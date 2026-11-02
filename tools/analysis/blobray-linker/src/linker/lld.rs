@@ -19,7 +19,7 @@ pub(super) fn link(
         ));
     // The command owns both write ends; dropping it after the spawn closes
     // the parent's copies.
-    oer_os_process::child_setup::inherit(&mut command, vec![map_write, extract_write]);
+    oer_tools_os_process::child_setup::inherit(&mut command, vec![map_write, extract_write]);
     let mut child = ChildOwner(command.spawn().map_err(io)?);
     drop(command);
     let stdout = child.0.stdout.take().unwrap();
@@ -45,7 +45,7 @@ impl records::Parser for Parser {
         channel: LinkOutput,
         line: &[u8],
         evidence: LinkEvidenceSpan,
-        members: &[oer_analysis_blobray_application::linking::LinkMember],
+        members: &[oer_tools_analysis_blobray_application::linking::LinkMember],
         sink: &mut dyn LinkOutputSink,
         control: &mut dyn RunControl,
     ) -> Result<()> {

@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use std::{boxed::Box, vec::Vec};
 
 use crate::mac::rx::pool::NetworkRxFrame;
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     descriptor::rx_armed_word, rx_dma::model::RxWalkerModel, rx_ring::RxDmaArenaState,
     space::HostDma,
 };
@@ -77,13 +77,12 @@ impl Hooks for &Recorder {
 
 #[test]
 fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
-    let placed =
-        oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-            oer_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
-                RxDmaStorage::<COUNT, BUFFER, BUFFER, HostDma>::new(),
-            ))),
-        )
-        .unwrap();
+    let placed = oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
+            RxDmaStorage::<COUNT, BUFFER, BUFFER, HostDma>::new(),
+        ))),
+    )
+    .unwrap();
     let storage = placed.storage();
     let buffers = storage.buffer_addresses();
     let base = placed.descriptor_base();
@@ -101,7 +100,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
     for (descriptor, &buffer) in storage.descriptors().iter().zip(buffers.iter()).take(2) {
         storage.dma_write(&ring, buffer, &[0; 4]).unwrap();
         descriptor.write_word0(
-            oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
                 BUFFER as u32,
                 BUFFER as u32,
                 false,
@@ -109,7 +108,11 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
         );
     }
     storage.descriptors()[2].write_word0(
-        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            BUFFER as u32,
+            100,
+            true,
+        ),
     );
     hardware.set_cursor(base, 2, Some(3));
 
@@ -131,7 +134,7 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
         &mut crate::rx::test_ring::NoBufferFullCounter,
         Settle::new(
             crate::rx::receive::RELOAD_SETTLE_LIMIT,
-            &oer_time_virtual::VirtualClock::<1>::default(),
+            &oer_portable_time_virtual::VirtualClock::<1>::default(),
         ),
         &recorder,
     )
@@ -177,7 +180,7 @@ type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER, HostDma>;
 struct WordAtPublish {
     storage: &'static Storage,
     base: u32,
-    seen: RefCell<Vec<oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl>>,
+    seen: RefCell<Vec<oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl>>,
 }
 
 impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
@@ -200,8 +203,8 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
         frame: NetworkRxFrame<'pool, SLOTS, CAPACITY>,
     ) -> Result<(), NetworkRxFrame<'pool, SLOTS, CAPACITY>> {
         let offset = frame.segment().descriptor_address - self.base;
-        let index =
-            (offset / oer_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES) as usize;
+        let index = (offset / oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
+            as usize;
         self.seen
             .borrow_mut()
             .push(self.storage.descriptors()[index].word0());
@@ -211,8 +214,10 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
 
 #[test]
 fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
-    let placed = oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-        oer_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(Storage::new()))),
+    let placed = oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
+            Storage::new(),
+        ))),
     )
     .unwrap();
     let storage = placed.storage();
@@ -220,7 +225,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     let mut hardware = RxWalkerModel::new();
     // This fixture starts directly at a retained ring cursor.
     hardware.next_descriptor_low =
-        base & oer_esp32s31_hal::ieee80211::registers::WifiDescriptorAddressLow::MAX;
+        base & oer_chips_esp32s31_hal::ieee80211::registers::WifiDescriptorAddressLow::MAX;
     let mut ring = placed
         .prepare_ring(&mut hardware)
         .and_then(|ring| ring.core_ready_for_test().publish(&mut hardware))
@@ -229,7 +234,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
         .map_err(|(_, error)| error)
         .unwrap();
     let completed =
-        oer_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 40, true);
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 40, true);
     storage.descriptors()[0].write_word0(completed);
     hardware.set_cursor(base, 0, Some(1));
 
@@ -256,7 +261,7 @@ fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
         &mut crate::rx::test_ring::NoBufferFullCounter,
         Settle::new(
             crate::rx::receive::RELOAD_SETTLE_LIMIT,
-            &oer_time_virtual::VirtualClock::<1>::default(),
+            &oer_portable_time_virtual::VirtualClock::<1>::default(),
         ),
         &recorder,
     )

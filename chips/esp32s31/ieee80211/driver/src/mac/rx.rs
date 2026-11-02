@@ -1,6 +1,6 @@
 //! RX descriptor metadata decoding and bounded raw MPDU extraction.
 
-pub use oer_esp32s31_hal::ieee80211::dma::{
+pub use oer_chips_esp32s31_hal::ieee80211::dma::{
     rx_dma::{
         RxDma, RxDmaBinding, RxDmaCursorObservation, RxDmaNextDescriptor, RxDmaReloadSettled,
         RxDmaWalkerEnabled, RxDmaWalkerStopped,
@@ -12,7 +12,7 @@ pub use oer_esp32s31_hal::ieee80211::dma::{
         RxRingHalted, RxRingLive, RxRingStopped, RxRingTopologySnapshot, RxSegment,
     },
 };
-use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
+use oer_chips_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
 
 /// The MAC's receive-buffer starvation counter (`RX_STATISTICS.BUFFER_FULL`),
 /// sampled at RX service boundaries for telemetry. It never participates in
@@ -23,19 +23,19 @@ pub trait RxBufferFullCounter {
     fn buffer_full_count(&mut self) -> Option<u16>;
 }
 
-impl RxBufferFullCounter for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
+impl RxBufferFullCounter for oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
     fn buffer_full_count(&mut self) -> Option<u16> {
         Some(self.rx_buffer_full_count())
     }
 }
 
-use oer_ieee80211_contracts_port::MacRxMetadata;
-use oer_ieee80211_wire::ccmp::CcmpHeader;
-use oer_ieee80211_wire::frame::{FrameControlFields, FrameType};
-use oer_ieee80211_wire::he::HeMuSigBUser;
-use oer_ieee80211_wire::ht::HtDuplicateMcs32;
-use oer_ieee80211_wire::sequence::SequenceControl;
-use oer_ieee80211_wire::signal::{
+use oer_protocols_ieee80211_contracts_port::MacRxMetadata;
+use oer_protocols_ieee80211_wire::ccmp::CcmpHeader;
+use oer_protocols_ieee80211_wire::frame::{FrameControlFields, FrameType};
+use oer_protocols_ieee80211_wire::he::HeMuSigBUser;
+use oer_protocols_ieee80211_wire::ht::HtDuplicateMcs32;
+use oer_protocols_ieee80211_wire::sequence::SequenceControl;
+use oer_protocols_ieee80211_wire::signal::{
     HeMuSigA1, HeMuSigA2, HeSuSigA1, HeSuSigA2, HeTriggerBasedSigA1, HeTriggerBasedSigA2, HtSig,
 };
 use sig_b::{
@@ -455,7 +455,7 @@ impl HeMuBandwidth {
             Self::Mhz80 => 2,
             Self::Mhz160Or80Plus80 => 3,
             Self::Unknown(value) => {
-                oer_ieee80211_wire::signal::HeMuBandwidthCode::from_bytes([value]).code()
+                oer_protocols_ieee80211_wire::signal::HeMuBandwidthCode::from_bytes([value]).code()
             }
         }
     }
@@ -889,7 +889,7 @@ fn copy_frame(
     copied == length
 }
 
-oer_esp32s31_hal::place_rx_hot_path! {
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 #[inline(never)]
 fn extract_mpdu_allowing_consumed_trailer(
     segments: &[RxSegment<'_>],
@@ -978,7 +978,7 @@ fn extract_mpdu(
 ///
 /// This function owns only descriptor geometry and the IEEE frame-type
 /// admission check. Subtype-specific formats, including 802.11ax Trigger
-/// Common/User Info, belong to `oer-ieee80211-wire`.
+/// Common/User Info, belong to `oer-protocols-ieee80211-wire`.
 pub fn extract_control(
     segments: &[RxSegment<'_>],
     config: RxIngressConfig,
@@ -1025,7 +1025,7 @@ pub fn extract_protected_management(
     Ok(frame)
 }
 
-oer_esp32s31_hal::place_rx_hot_path! {
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 /// Extracts one unfragmented CCMP data MPDU after hardware MIC verification.
 ///
 /// This entry requires the Protected bit. A returned
@@ -1054,7 +1054,7 @@ pub fn extract_ccmp_data(
     )
 }}
 
-oer_esp32s31_hal::place_rx_hot_path! {
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 /// Validate and borrow one contiguous CCMP MPDU from independently owned RX
 /// storage.
 ///
@@ -1070,7 +1070,7 @@ pub fn view_ccmp_data<'frame>(
     view_ccmp_data_with_fragment_admission(segment, config, CcmpFragmentAdmission::Unfragmented)
 }}
 
-oer_esp32s31_hal::place_rx_hot_path! {
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 /// Validate and borrow one fragmented CCMP MPDU after hardware MIC success.
 ///
 /// This is deliberately distinct from [`view_ccmp_data`]: callers cannot
@@ -1090,7 +1090,7 @@ enum CcmpFragmentAdmission {
     Fragmented,
 }
 
-oer_esp32s31_hal::place_rx_hot_path! {
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 #[inline(never)]
 fn view_ccmp_data_with_fragment_admission<'frame>(
     segment: &RxSegment<'frame>,
@@ -1137,7 +1137,7 @@ fn view_ccmp_data_with_fragment_admission<'frame>(
     Ok(RxCcmpDataView { mpdu, frame })
 }}
 
-oer_esp32s31_hal::place_rx_hot_path! {
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 #[inline(never)]
 fn validate_ccmp_data(
     mpdu: &[u8],
@@ -1237,7 +1237,9 @@ impl NormalizedRxFrame<'_> {
     /// The PHY fields actually decoded from this frame's hardware prefix.
     pub fn observed_phy(&self) -> Option<RxPhyInfo> {
         match self.metadata.rate {
-            oer_ieee80211_contracts_port::RxEvidence::HardwareObserved(rate) => Some(rate),
+            oer_protocols_ieee80211_contracts_port::RxEvidence::HardwareObserved(rate) => {
+                Some(rate)
+            }
             _ => None,
         }
     }

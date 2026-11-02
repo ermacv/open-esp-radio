@@ -76,7 +76,7 @@ pub(crate) struct Calls<'s, 'm> {
     pub links: &'s CallLinks<'m>,
     pub summaries: &'s dyn CallSummaries,
 }
-impl<'s> oer_analysis_blobray_analysis::registers::CallAt<'s> for Calls<'s, '_> {
+impl<'s> oer_tools_analysis_blobray_analysis::registers::CallAt<'s> for Calls<'s, '_> {
     fn summary(&self, site: u64) -> Option<&'s CallSummary> {
         self.links
             .callee(site)

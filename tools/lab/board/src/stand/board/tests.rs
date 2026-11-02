@@ -1,8 +1,8 @@
 use super::*;
 use crate::power::HubPort;
 
-fn entry(chip: &str) -> oer_lab_model::Board {
-    oer_lab_model::Stand::parse(&format!(
+fn entry(chip: &str) -> oer_tools_lab_model::Board {
+    oer_tools_lab_model::Stand::parse(&format!(
         "schema = 2\n[[board]]\nid = \"b\"\nusb-serial = \"02:00:00:00:00:01\"\n\
          chip = \"{chip}\"\nreset = [\"jtag\", \"power\"]\n"
     ))

@@ -3,8 +3,8 @@
 //! choose storage or presentation through synchronous borrowed-record ports.
 
 #![forbid(unsafe_code)]
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 mod definition;
 mod image;
 pub use definition::{inspect_link_definition, undefined_names};

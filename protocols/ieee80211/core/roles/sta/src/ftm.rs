@@ -11,13 +11,13 @@
 use core::num::NonZeroU8;
 
 use heapless::Vec;
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::ftm::{
+use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::ftm::{
     FTM_INITIAL_REQUEST_BODY_LEN, FTM_TIMESTAMP_MASK, FtmBurstDuration, FtmFormatAndBandwidth,
     FtmMeasurement, FtmRequestParameters, FtmResponseParameters, FtmResponseStatus, FtmTimestampPs,
     FtmToaError, FtmTodError, encode_initial_request,
 };
-use oer_time::{Duration, Instant};
 
 /// Half the timestamp space: the horizon of modular timestamp differences.
 const FTM_TIMESTAMP_HALF_RANGE: u64 = FTM_TIMESTAMP_MASK / 2 + 1;
@@ -308,12 +308,12 @@ pub enum FtmSessionFailure {
 /// parameters into their fixed-size Action body is infallible.
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_sta::ftm::FtmRequesterError;
+/// use oer_protocols_ieee80211_core_roles_sta::ftm::FtmRequesterError;
 /// let impossible = FtmRequesterError::RequestEncode;
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_roles_sta::ftm::FtmRequesterError;
+/// use oer_protocols_ieee80211_core_roles_sta::ftm::FtmRequesterError;
 /// let refused = FtmRequesterError::DeadlineOverflow;
 /// assert!(matches!(refused, FtmRequesterError::DeadlineOverflow));
 /// ```
@@ -628,7 +628,7 @@ enum FtmRequesterPhase {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct LastMeasurement {
-    fields: oer_ieee80211_wire::ftm::FtmMeasurementFields,
+    fields: oer_protocols_ieee80211_wire::ftm::FtmMeasurementFields,
     parameters: Option<FtmResponseParameters>,
     information_elements: OwnedInformationElements,
 }

@@ -1,10 +1,10 @@
 use super::*;
-use oer_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
-use oer_ieee80211_testing_conformance::{
+use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
+use oer_protocols_ieee80211_testing_conformance::{
     self as conformance,
     msdu_age::{self as contract, Case, End, Trace},
 };
-use oer_time_virtual::VirtualClock;
 
 type Recorded = Rc<RefCell<Option<Trace<Vec<End>>>>>;
 struct Exercise {
@@ -48,12 +48,16 @@ fn send_aggregate<'k, 'p, 'id: 'k + 'p, Id: SlotIdentity + 'id>(
 }
 async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-    access: &mut oer_ieee80211_contracts_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
+    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
+        'id,
+        ModelTickets,
+        ModelPool<Id, 1>,
+    >,
 ) -> (
     Slot<'id, ModelTickets, ModelPool<Id, 1>>,
     ModelSubframes<'id, ModelBackend<Id>>,
     End,
-    Option<oer_ieee80211_contracts_port::BlockAckReport>,
+    Option<oer_protocols_ieee80211_contracts_port::BlockAckReport>,
 ) {
     let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(
         done,
@@ -61,7 +65,7 @@ async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     else {
         panic!("aggregate terminal returns its owners");
     };
-    let oer_ieee80211_contracts_port::TerminalParts {
+    let oer_protocols_ieee80211_contracts_port::TerminalParts {
         ticket,
         payload,
         outcome,
@@ -69,11 +73,12 @@ async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     } = done.into_parts(access);
     let delivered = matches!(
         outcome,
-        TxOutcome::Ended(oer_ieee80211_contracts_port::AggregateEnd::Delivered { .. })
+        TxOutcome::Ended(oer_protocols_ieee80211_contracts_port::AggregateEnd::Delivered { .. })
     );
     let report = match outcome {
-        TxOutcome::Ended(oer_ieee80211_contracts_port::AggregateEnd::Delivered {
-            report, ..
+        TxOutcome::Ended(oer_protocols_ieee80211_contracts_port::AggregateEnd::Delivered {
+            report,
+            ..
         }) => Some(report),
         _ => None,
     };
@@ -82,8 +87,8 @@ async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
 fn active_originator(
     start: SequenceNumber,
     now: Instant,
-) -> oer_ieee80211_core_upper_mac::block_ack::TxBlockAckOriginator<1> {
-    use oer_ieee80211_core_upper_mac::block_ack::{
+) -> oer_protocols_ieee80211_core_upper_mac::block_ack::TxBlockAckOriginator<1> {
+    use oer_protocols_ieee80211_core_upper_mac::block_ack::{
         DialogTokenSequence, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
         TxBlockAckOriginatorPolicy,
     };
@@ -101,7 +106,7 @@ fn active_originator(
     .unwrap();
     let request = core.begin(0, start, now).unwrap();
     core.on_response_action(
-        oer_ieee80211_wire::block_ack::BlockAckAction::AddbaResponse {
+        oer_protocols_ieee80211_wire::block_ack::BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
             status: 0,
             tid: 0,
@@ -145,9 +150,9 @@ impl Work for Exercise {
             () => {{
                 let rate = phase
                     .rate(PhyRate::Ht(
-                        oer_ieee80211_wire::phy::HtRate::new(
+                        oer_protocols_ieee80211_wire::phy::HtRate::new(
                             HtMcs::new(0).unwrap(),
-                            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
                             false,
                         )
                         .unwrap(),
@@ -170,14 +175,14 @@ impl Work for Exercise {
             owners[2] = missing.slot.index();
             let aggregate = push_subframe(
                 empty!(),
-                oer_ieee80211_contracts_port::TxNumbering::Open,
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                 buffer,
                 subframe_frame(6),
                 None,
             );
             let aggregate = push_subframe(
                 aggregate,
-                oer_ieee80211_contracts_port::TxNumbering::Open,
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                 missing,
                 subframe_frame(7),
                 None,
@@ -191,14 +196,18 @@ impl Work for Exercise {
             let delivered = subframes.next().unwrap();
             let missing = subframes.next().unwrap();
             let report = report.expect("the actual BlockAck reports the preceding delivery");
-            assert!(oer_ieee80211_core_upper_mac::block_ack::acknowledges(
-                report,
-                delivered.buffer.sequence()
-            ));
-            assert!(!oer_ieee80211_core_upper_mac::block_ack::acknowledges(
-                report,
-                missing.buffer.sequence()
-            ));
+            assert!(
+                oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
+                    report,
+                    delivered.buffer.sequence()
+                )
+            );
+            assert!(
+                !oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
+                    report,
+                    missing.buffer.sequence()
+                )
+            );
             assert_eq!(
                 originator.on_delivered(0, report.start_sequence, report.bitmap, PEER, STATION),
                 None
@@ -240,7 +249,7 @@ impl Work for Exercise {
                 active_originator(SequenceNumber::new(7).unwrap(), self.clock.now());
             let aggregate = push_subframe(
                 empty!(),
-                oer_ieee80211_contracts_port::TxNumbering::Open,
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                 buffer,
                 subframe_frame(7),
                 None,
@@ -270,7 +279,7 @@ impl Work for Exercise {
                 .unwrap();
             let aggregate = push_subframe(
                 aggregate,
-                oer_ieee80211_contracts_port::TxNumbering::Open,
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                 new,
                 subframe_frame(8),
                 Some(ModelBody(alloc::vec![5])),
@@ -310,7 +319,7 @@ impl Work for Exercise {
             // An unpublished live member also retains its age on re-formation.
             let aggregate = push_subframe(
                 empty!(),
-                oer_ieee80211_contracts_port::TxNumbering::Open,
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                 live,
                 subframe_frame(8),
                 body,
@@ -355,7 +364,7 @@ impl Work for Exercise {
             else {
                 panic!("a single terminal returns once");
             };
-            let oer_ieee80211_contracts_port::TerminalParts {
+            let oer_protocols_ieee80211_contracts_port::TerminalParts {
                 ticket,
                 payload,
                 outcome,
@@ -431,7 +440,7 @@ fn model_time_uses_the_injected_clock_and_an_offset_affine_radio_relation() {
     let (relation, sample) = air.clock_relation();
     assert_eq!(
         relation.rate(),
-        oer_radio_port::RelationRate::Affine { drift_ppm: 0 }
+        oer_protocols_radio_port::RelationRate::Affine { drift_ppm: 0 }
     );
     let initial = air.radio_now().unwrap();
     assert_ne!(initial.as_micros(), clock.now().as_micros());
@@ -493,7 +502,7 @@ fn port_now_projects_the_supplied_clock_and_renewal_starts_a_new_msdu() {
             buffer.admit(self.0.now());
             assert_eq!(buffer.admission(), Some(first_admission));
             let (mut buffer, renewed) =
-                oer_ieee80211_contracts_port::ReturnedMpdu::<_, ()>::Fresh(buffer)
+                oer_protocols_ieee80211_contracts_port::ReturnedMpdu::<_, ()>::Fresh(buffer)
                     .into_fresh(|()| panic!("fresh renewal consumes no Sent owner"));
             assert_eq!(renewed, Ok(()));
             assert_eq!(buffer.admission(), None);

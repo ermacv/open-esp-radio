@@ -7,7 +7,7 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
         PinnedDmaTxPool::new(),
     )));
     let (index, ()) = pool.claim_network(0).unwrap().publish(
-        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
         |_| {},
     );
     let mut retention = RetainedAmpduDmaStorage::new();
@@ -29,7 +29,7 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     let mut config = HtAmpduTxConfig::new(rate, aggregate.bytes, aggregate.subframes).unwrap();
     config.control = crate::mac::tx::TxControlFrame {
         protection: crate::mac::tx::protection::TxProtection::RtsCts {
-            rate: oer_esp32s31_hal::types::MacLegacyRate::Ofdm12M,
+            rate: oer_chips_esp32s31_hal::types::MacLegacyRate::Ofdm12M,
         },
         power_primary: 3,
         power_alternate: 4,
@@ -50,9 +50,9 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
     let submitted = owner.work();
     assert_eq!(
         hardware.control,
-        Some(oer_esp32s31_hal::types::MacTxControlFrame {
-            protection: oer_esp32s31_hal::types::MacTxProtection::RtsCts,
-            rate: oer_esp32s31_hal::types::MacLegacyRate::Ofdm12M,
+        Some(oer_chips_esp32s31_hal::types::MacTxControlFrame {
+            protection: oer_chips_esp32s31_hal::types::MacTxProtection::RtsCts,
+            rate: oer_chips_esp32s31_hal::types::MacLegacyRate::Ofdm12M,
             power_primary: 3,
             power_alternate: 4,
         })

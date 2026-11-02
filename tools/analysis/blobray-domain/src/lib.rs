@@ -1,9 +1,9 @@
 //! Captured inventory, execution, comparison and request records over the
-//! identities and contracts of `oer-analysis-riscv-model`. No filesystem access.
+//! identities and contracts of `oer-tools-analysis-riscv-model`. No filesystem access.
 
 #![forbid(unsafe_code)]
 
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 use serde::{Deserialize, Serialize};
 
 mod data;
@@ -77,7 +77,7 @@ impl ArtifactInventory {
 #[serde(deny_unknown_fields)]
 pub struct ObjectInventory {
     pub id: ObjectId,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name::option")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name::option")]
     pub name: Option<Vec<u8>>,
     pub content: Option<ArtifactId>,
     pub elf: Option<ElfInventory>,
@@ -101,7 +101,7 @@ pub struct ElfInventory {
 #[serde(deny_unknown_fields)]
 pub struct SectionRecord {
     pub index: u32,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name::option")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name::option")]
     pub name: Option<Vec<u8>>,
     pub section_type: u32,
     pub flags: u64,
@@ -118,7 +118,7 @@ pub struct SectionRecord {
 #[serde(deny_unknown_fields)]
 pub struct SymbolRecord {
     pub id: SymbolId,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name::option")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name::option")]
     pub name: Option<Vec<u8>>,
     pub name_offset: u32,
     pub value: u64,

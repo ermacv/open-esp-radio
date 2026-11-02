@@ -6,9 +6,9 @@ use crate::dwarf::Reader;
 use crate::dwarf::locations::LocalLocations;
 use crate::tests::{compiled, ledger, with_facts};
 use crate::{StorageEvidence, UnknownUse, audit_function_addresses};
-use oer_analysis_elf::dwarf::gimli;
-use oer_analysis_elf::rv32::Role;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_elf::dwarf::gimli;
+use oer_tools_analysis_elf::rv32::Role;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 
 fn typed_function_pointer_resolutions(
     image: &ImageFacts<'_>,
@@ -66,7 +66,7 @@ fn named(analysis: &Analysis, needle: &str) -> u32 {
         .values()
         .find(|facts| {
             facts.function.names.iter().any(|name| {
-                let name = oer_analysis_elf::demangle(name);
+                let name = oer_tools_analysis_elf::demangle(name);
                 name == needle || name.ends_with(&format!("::{needle}"))
             })
         })
@@ -274,7 +274,7 @@ fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
     );
     let mut elf = compiled(&source);
     let at = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
         let different = file
             .symbols()
             .find(|symbol| symbol.demangled().ends_with("::different"))
@@ -284,15 +284,15 @@ fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
             .find(|section| {
                 section.executable
                     && file.relocations(section.index).unwrap().any(|relocation| {
-                        relocation.target == oer_analysis_elf::Target::Symbol(different.index)
-                            && relocation.r_type == oer_analysis_elf::rv32::R_RISCV_HI20
+                        relocation.target == oer_tools_analysis_elf::Target::Symbol(different.index)
+                            && relocation.r_type == oer_tools_analysis_elf::rv32::R_RISCV_HI20
                     })
             })
             .unwrap();
         let rela = file
             .sections()
             .find(|rela| {
-                rela.kind == oer_analysis_elf::SectionKind::Rela
+                rela.kind == oer_tools_analysis_elf::SectionKind::Rela
                     && rela.relocates == Some(section.index)
             })
             .unwrap();
@@ -301,7 +301,7 @@ fn one_unknown_relocation_among_typed_uses_keeps_the_function_a_candidate() {
             .chunks_exact(12)
             .position(|entry| {
                 u32::from_le_bytes(entry[4..8].try_into().unwrap())
-                    == ((different.index as u32) << 8 | oer_analysis_elf::rv32::R_RISCV_HI20)
+                    == ((different.index as u32) << 8 | oer_tools_analysis_elf::rv32::R_RISCV_HI20)
             })
             .unwrap();
         rela.file_offset as usize + index * 12 + 4
@@ -381,7 +381,7 @@ fn the_resolver_requires_prepared_locations_without_implicitly_loading_them() {
 fn the_resolver_uses_prepared_metadata_when_debug_sections_cannot_be_loaded_again() {
     let mut elf = compiled(PROGRAM);
     let (_, mut types) = typed_debug(&elf);
-    let info = oer_analysis_elf::Elf::parse(&elf)
+    let info = oer_tools_analysis_elf::Elf::parse(&elf)
         .unwrap()
         .section_by_name(".debug_info")
         .unwrap()
@@ -396,7 +396,7 @@ fn the_resolver_uses_prepared_metadata_when_debug_sections_cannot_be_loaded_agai
     std::rc::Rc::get_mut(types.source.as_mut().unwrap()).unwrap()[flags..flags + 4]
         .copy_from_slice(&object::elf::SHF_COMPRESSED.to_le_bytes());
     with_facts(&elf, |image| {
-        assert!(oer_analysis_elf::dwarf::DebugSections::load(image.file()).is_err());
+        assert!(oer_tools_analysis_elf::dwarf::DebugSections::load(image.file()).is_err());
         let mut keep = ledger();
         let analysis = crate::analyze(
             image,
@@ -487,13 +487,14 @@ fn both_resolvers_keep_an_addend_among_exact_typed_uses() {
     let source = global_program().replace("pub static OTHER: fn(u16) -> u16 = different;", "pub static OTHER: fn(u16) -> u16 = different;\n#[unsafe(no_mangle)]\npub static EXTRA: fn(u16) -> u16 = different;").replace("black_box(&OTHER);", "black_box(&OTHER); black_box(&EXTRA);");
     let mut elf = compiled(&source);
     let (rela_at, word_at, target) = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
         let extra = file.symbols().find(|s| s.name == "EXTRA").unwrap();
         let section = file.section(extra.section.unwrap()).unwrap();
         let rela = file
             .sections()
             .find(|s| {
-                s.kind == oer_analysis_elf::SectionKind::Rela && s.relocates == Some(section.index)
+                s.kind == oer_tools_analysis_elf::SectionKind::Rela
+                    && s.relocates == Some(section.index)
             })
             .unwrap();
         let index = rela
@@ -598,7 +599,7 @@ fn missing_dwarf_supplies_no_exclusion_or_unreachable_call_proof() {
     let mut elf = compiled(&global_program());
     // Hide all debug sections from the reader, keeping the code/relocations.
     let names = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
         file.sections()
             .filter(|s| s.name.starts_with(".debug_"))
             .map(|s| s.name.as_bytes().to_vec())
@@ -746,7 +747,7 @@ fn the_common_audit_obeys_work_and_memory_budgets() {
 fn a_missing_parameter_type_does_not_exclude_a_candidate() {
     let mut elf = compiled(&global_program().replace("u16", "u32"));
     let (other_address, call_address) = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
         let address = |name| file.symbols().find(|s| s.name == name).unwrap().address as u32;
         (address("OTHER"), address("CALLBACKS") + 4)
     };
@@ -797,7 +798,7 @@ fn a_missing_parameter_type_does_not_exclude_a_candidate() {
     let length = (info.len() - 4) as u32;
     info[..4].copy_from_slice(&length.to_le_bytes());
     let indices = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
         [
             file.section_by_name(".debug_info").unwrap().index,
             file.section_by_name(".debug_abbrev").unwrap().index,

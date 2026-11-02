@@ -1,6 +1,6 @@
 # ESP32-S31 IEEE 802.15.4 driver
 
-`oer-esp32s31-ieee802154-driver` binds the Espressif MAC engine to S31 HAL
+`oer-chips-esp32s31-ieee802154-driver` binds the Espressif MAC engine to S31 HAL
 transactions. This boundary keeps HAL independent of engine orchestration.
 The crate forbids unsafe code and has no PAC dependency.
 
@@ -21,7 +21,7 @@ activation and later sessions publish the same ten runtime events. Polling
 requires `Silent`; teardown carries its saved affine sample through masking.
 
 `engine::Ieee802154Engine` retains the MAC with frame storage claimed through
-`oer_esp32s31_hal::ieee802154::frames::claim_buffers`. HAL's concrete projection
+`oer_chips_esp32s31_hal::ieee802154::frames::claim_buffers`. HAL's concrete projection
 checks each frame before the driver creates the shared engine. A refused
 placement returns both affine inputs. Detach/rebind keeps the same permanent
 storage across quiescent MAC epochs; active operations refuse detach.
