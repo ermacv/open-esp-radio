@@ -16,11 +16,11 @@ impl Memory {
     fn registers(
         &mut self,
     ) -> CoreControlRegisters<
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
-        oer_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
     > {
         let [stall, status, clocks, reset, system] = &mut self.0;
         CoreControlRegisters::host(stall, status, clocks, reset, system)

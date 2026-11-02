@@ -13,7 +13,7 @@
 //! accesses per entry. It has no callback, allocation, hidden software state,
 //! wait, delay, or hardware-dependent exit.
 
-pub use oer_esp32s31_hal::types::PhyGainMemoryEntry;
+pub use oer_chips_esp32s31_hal::types::PhyGainMemoryEntry;
 
 pub const PHY_TX_CFR_ENTRY_COUNT: u8 = 32;
 const PHY_TX_CFR_DATA_PREFIX_ENTRY_COUNT: u8 = 10;
@@ -395,14 +395,14 @@ impl PhyTxCfrMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxCfrCompletion {
         match self.action {
             PhyTxCfrAction::ReadStartIndex => PhyTxCfrCompletion::StartIndexRead {
-                base_index: oer_esp32s31_hal::phy::memory::read_table_memory_base_index(registers),
+                base_index: oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(registers),
             },
             PhyTxCfrAction::ProgramEntry(entry) => {
-                oer_esp32s31_hal::phy::memory::program_tx_cfr_entry(
+                oer_chips_esp32s31_hal::phy::memory::program_tx_cfr_entry(
                     registers,
                     entry.data,
                     entry.memory_index(),
@@ -505,11 +505,11 @@ impl PhyBbMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::PhyInitializationAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::PhyInitializationAccess,
     ) -> PhyBbMmioCompletion {
         match self.action {
             PhyBbMmioAction::SetForcedDigitalGain { enabled } => {
-                oer_esp32s31_hal::phy::baseband::configure_forced_digital_gain(
+                oer_chips_esp32s31_hal::phy::baseband::configure_forced_digital_gain(
                     registers, enabled, -120, -120,
                 );
             }
@@ -517,7 +517,7 @@ impl PhyBbMmioBinding {
                 registers.set_phy_calibration_clock(true)
             }
             PhyBbMmioAction::SetBasebandMode { mode } => {
-                oer_esp32s31_hal::phy::frequency::set_baseband_mode(
+                oer_chips_esp32s31_hal::phy::frequency::set_baseband_mode(
                     registers,
                     mode.register_value(),
                 )
@@ -526,20 +526,20 @@ impl PhyBbMmioBinding {
                 crate::hardware::configure_phy_bb_agc_register_update(registers)
             }
             PhyBbMmioAction::UpdatePostInitRegisters => {
-                oer_esp32s31_hal::phy::agc::update_post_initialization(registers)
+                oer_chips_esp32s31_hal::phy::agc::update_post_initialization(registers)
             }
             PhyBbMmioAction::EnableAgc => crate::hardware::enable_phy_agc(registers),
             PhyBbMmioAction::SetWifiEnabled { enabled } => {
-                oer_esp32s31_hal::phy::frequency::set_wifi_enabled(registers, enabled)
+                oer_chips_esp32s31_hal::phy::frequency::set_wifi_enabled(registers, enabled)
             }
             PhyBbMmioAction::ConfigureTxPowerTracking { enabled } => {
-                oer_esp32s31_hal::phy::baseband::configure_tx_power_tracking(registers, enabled)
+                oer_chips_esp32s31_hal::phy::baseband::configure_tx_power_tracking(registers, enabled)
             }
             PhyBbMmioAction::ConfigureRfRxSaturation { phase } => {
-                oer_esp32s31_hal::phy::agc::configure_rf_rx_saturation(registers, phase.enabled())
+                oer_chips_esp32s31_hal::phy::agc::configure_rf_rx_saturation(registers, phase.enabled())
             }
             PhyBbMmioAction::ConfigureI2cTxRate => {
-                oer_esp32s31_hal::phy::baseband::configure_i2c_tx_rate(registers)
+                oer_chips_esp32s31_hal::phy::baseband::configure_i2c_tx_rate(registers)
             }
             PhyBbMmioAction::ConfigurePhyRegisters { parameters } => {
                 crate::hardware::configure_phy_registers(registers, parameters)

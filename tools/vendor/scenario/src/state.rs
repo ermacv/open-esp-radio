@@ -8,7 +8,7 @@
 //! reported as unprojected in the run. A decision that matches no
 //! unprojected byte fails the run.
 use crate::harness::{Result, invalid};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     ExecutionCase, ExecutionEvidence, LayoutProjection, WrittenRange,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -101,14 +101,14 @@ impl Symbols {
     pub fn of(executables: &[&[u8]]) -> Result<Self> {
         let (mut ranges, mut anchors) = (BTreeMap::new(), BTreeSet::new());
         for bytes in executables {
-            let file = oer_analysis_elf::Elf::parse(bytes)?;
+            let file = oer_tools_analysis_elf::Elf::parse(bytes)?;
             for symbol in file.symbols() {
                 if symbol.defined
                     && let Ok(address) = u32::try_from(symbol.address)
                 {
                     anchors.insert(address);
                 }
-                if symbol.kind != oer_analysis_elf::SymbolKind::Data
+                if symbol.kind != oer_tools_analysis_elf::SymbolKind::Data
                     || symbol.size == 0
                     || !symbol.defined
                 {
@@ -173,7 +173,7 @@ fn compared(
         let projection = projections
             .iter()
             .find(|p| {
-                oer_analysis_blobray_application::in_process::projection_id(p)
+                oer_tools_analysis_blobray_application::in_process::projection_id(p)
                     .ok()
                     .as_ref()
                     == Some(selected)

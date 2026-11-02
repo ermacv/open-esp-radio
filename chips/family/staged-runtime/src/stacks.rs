@@ -54,7 +54,7 @@ mod tcontrol;
 mod watermark;
 
 #[cfg(target_arch = "riscv32")]
-use oer_riscv::{
+use oer_portable_riscv::{
     clic,
     machine::{self, status},
     trigger,
@@ -62,7 +62,7 @@ use oer_riscv::{
 
 /// The harts with an interrupt stack: the chip facts' harts.
 #[cfg(target_arch = "riscv32")]
-use oer_espressif_platform_port::HARTS;
+use oer_chips_family_platform_port::HARTS;
 
 /// The words of one hart's vector table in `_runtime_mtvt`, the table's
 /// alignment in words, generated from the chip facts
@@ -105,13 +105,13 @@ fn interrupt_stack_guard_bytes(hart: usize) -> Option<usize> {
 
 /// Linked interrupt allocation for a checked hart, including explicit zero.
 #[cfg(target_arch = "riscv32")]
-pub fn irq_stack_bytes(hart: oer_espressif_platform_port::Hart) -> usize {
+pub fn irq_stack_bytes(hart: oer_chips_family_platform_port::Hart) -> usize {
     hart.at(&crate::layout::stack_symbols()).irq.len()
 }
 
 /// Linked PSRAM task allocation for a checked hart, including explicit zero.
 #[cfg(target_arch = "riscv32")]
-pub fn task_stack_bytes(hart: oer_espressif_platform_port::Hart) -> usize {
+pub fn task_stack_bytes(hart: oer_chips_family_platform_port::Hart) -> usize {
     hart.at(&crate::layout::stack_symbols()).task.len()
 }
 
@@ -119,7 +119,7 @@ pub fn task_stack_bytes(hart: oer_espressif_platform_port::Hart) -> usize {
 #[cfg(target_arch = "riscv32")]
 #[inline(always)]
 fn current_hart() -> usize {
-    oer_riscv::hart_id()
+    oer_portable_riscv::hart_id()
 }
 
 /// The vector registers `hart` dispatches through: `mtvec` (the exception
@@ -151,7 +151,7 @@ pub fn install_interrupt_stack<const H: u8>(
     }
     // Safe architectural APIs can change MIE even while a token is held.
     // Mask here as well; the local token excludes an interrupt-context caller.
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
         return Err(crate::BootError::NoInterruptStack { hart });
     };
@@ -171,7 +171,7 @@ pub fn install_interrupt_stack<const H: u8>(
     // this hart's interrupt stack top, which every entry expects in
     // `mscratch`. Interrupts stay disabled, so no trap sees the registers
     // change.
-    unsafe { oer_riscv::install_trap_stack(mtvec, mtvt, top) };
+    unsafe { oer_portable_riscv::install_trap_stack(mtvec, mtvt, top) };
     Ok(())
 }
 
@@ -183,8 +183,8 @@ pub fn install_interrupt_stack<const H: u8>(
 /// the hart dispatches through.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn verify_current_hart_vectors() -> Result<(), crate::BootError> {
-    let mtvec = oer_riscv::read_mtvec();
-    let mtvt = oer_riscv::read_mtvt();
+    let mtvec = oer_portable_riscv::read_mtvec();
+    let mtvt = oer_portable_riscv::read_mtvt();
     if (mtvec, mtvt) != vectors_of(current_hart()) {
         return Err(crate::BootError::ForeignVectors);
     }
@@ -200,7 +200,7 @@ pub(crate) fn verify_current_hart_vectors() -> Result<(), crate::BootError> {
 pub(crate) fn watch_task_stack(address: usize) -> Result<(), crate::BootError> {
     // A NAPOT region of four bytes: the word's address with one trailing one.
     let data2 = guard::napot_guard(address, 4)?;
-    oer_riscv::arm_store_trigger(TASK_STACK_GUARD_TRIGGER, data2);
+    oer_portable_riscv::arm_store_trigger(TASK_STACK_GUARD_TRIGGER, data2);
     Ok(())
 }
 
@@ -226,7 +226,7 @@ fn invalid_hart() -> ! {
 #[cfg(target_arch = "riscv32")]
 fn guard_interrupt_stack(bottom: usize, bytes: usize) -> Result<(), crate::BootError> {
     guard::arm_interrupt_guard(bottom, bytes, |data2| {
-        oer_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);
+        oer_portable_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);
     })
 }
 
@@ -246,8 +246,8 @@ pub(crate) fn on_interrupt_stack(hart: usize, sp: usize) -> bool {
 /// Painting measures observed writes, not a worst-case call-chain bound.
 #[cfg(target_arch = "riscv32")]
 pub fn current_hart_interrupt_stack_free_bytes() -> usize {
-    let hart = oer_riscv::hart_id();
-    let sp = oer_riscv::stack_pointer();
+    let hart = oer_portable_riscv::hart_id();
+    let sp = oer_portable_riscv::stack_pointer();
     let (Some(stack), Some(painted)) = (interrupt_stack(hart), IRQ_PAINTED.get(hart)) else {
         invalid_hart()
     };
@@ -258,7 +258,7 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
         "IRQ stack sampling requires thread mode"
     );
     // MIE is hart-local. Do not acquire a cross-core lock or scan a foreign stack.
-    oer_riscv::interrupt_free(|| {
+    oer_portable_riscv::interrupt_free(|| {
         // SAFETY: own painted stack, thread mode, local interrupts masked. No other
         // hart uses this allocation; the scanner has a finite capacity and cannot panic.
         (unsafe { watermark::free_words(bottom, stack.len() / 4) }) * 4
@@ -266,7 +266,7 @@ pub fn current_hart_interrupt_stack_free_bytes() -> usize {
 }
 
 #[cfg(all(target_arch = "riscv32", oer_trace))]
-oer_memory::zeroed_static! {
+oer_portable_memory::zeroed_static! {
     /// Each hart's interrupted `ra` at its most recent interrupt entry,
     /// which every entry stores right after it saved the interrupted
     /// registers (`RECORD_RA` in the trap assembly). In SRAM, which the
@@ -287,7 +287,7 @@ oer_memory::zeroed_static! {
 #[cfg(all(target_arch = "riscv32", oer_trace))]
 pub fn interrupted_ra() -> Option<u32> {
     INTERRUPTED_RA
-        .get(oer_riscv::hart_id())
+        .get(oer_portable_riscv::hart_id())
         .map(|word| word.load(Ordering::Relaxed))
 }
 

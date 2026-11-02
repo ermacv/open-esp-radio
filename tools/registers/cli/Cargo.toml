@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-registers-cli"
+name = "oer-tools-registers-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,9 +13,9 @@ name = "registers"
 path = "src/main.rs"
 
 [dependencies]
-oer-registers-generate = { path = "../generate" }
-oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
-oer-os-process = { path = "../../os/process" }
+oer-tools-registers-generate = { path = "../generate" }
+oer-tools-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
+oer-tools-os-process = { path = "../../os/process" }
 clap = { version = "=4.5.48", features = ["derive"] }
 
 [lints]

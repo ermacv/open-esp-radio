@@ -1,7 +1,7 @@
-use oer_bluetooth_le_model::{ModelPhase, Resources};
-use oer_bluetooth_le_port::{Command, DtmCommand, LeOperationId, LePhase, Receive, Request, Supported, TestPhy};
-use oer_bluetooth_le_wire::{TestChannel};
-use oer_radio_port::{PortContext, SlotIdentity};
+use oer_protocols_bluetooth_le_model::{ModelPhase, Resources};
+use oer_protocols_bluetooth_le_port::{Command, DtmCommand, LeOperationId, LePhase, Receive, Request, Supported, TestPhy};
+use oer_protocols_bluetooth_le_wire::{TestChannel};
+use oer_protocols_radio_port::{PortContext, SlotIdentity};
 pub async fn submit<'p, Id: SlotIdentity + 'p>(phase: &ModelPhase<'_, 'p, Id, ()>, resources: Resources<'p, Id>) {
     #[cfg(ui_reject)]
     let _loan = phase.view.loan; // ui-error: E0616

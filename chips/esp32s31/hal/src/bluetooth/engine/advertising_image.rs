@@ -268,7 +268,7 @@ impl SchedulerEventPriority {
     /// Fixed role priorities are checked in a const initializer.
     ///
     /// ```compile_fail,E0080
-    /// use oer_esp32s31_hal::bluetooth::engine::SchedulerEventPriority;
+    /// use oer_chips_esp32s31_hal::bluetooth::engine::SchedulerEventPriority;
     /// const PRIORITY: SchedulerEventPriority =
     ///     SchedulerEventPriority::new(16).expect("reviewed priority fits");
     /// ```

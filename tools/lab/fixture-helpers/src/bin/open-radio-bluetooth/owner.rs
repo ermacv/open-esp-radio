@@ -9,7 +9,7 @@ use bt_hci::cmd::{
     controller_baseband::Reset,
     info::{ReadBdAddr, ReadLocalVersionInformation},
 };
-use oer_os_process::linux_socket::HciAddress;
+use oer_tools_os_process::linux_socket::HciAddress;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write as _,
@@ -80,7 +80,7 @@ struct Owner {
     powered: bool,
     identity: Vec<u8>,
     restore_needed: bool,
-    _lock: oer_os_process::lock::FileLock,
+    _lock: oer_tools_os_process::lock::FileLock,
 }
 
 impl Owner {
@@ -115,10 +115,10 @@ impl Owner {
             .mode(0o600)
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(&path)?;
-        let lock = oer_os_process::lock::FileLock::try_lock(
+        let lock = oer_tools_os_process::lock::FileLock::try_lock(
             lock,
             std::path::Path::new(&path),
-            oer_os_process::lock::Mode::Exclusive,
+            oer_tools_os_process::lock::Mode::Exclusive,
         )?
         .ok_or_else(|| format!("another helper owns adapter {adapter}"))?;
         if !recovery && connection_parameters::journal_path(adapter).try_exists()? {
@@ -224,7 +224,7 @@ impl Owner {
                             .downcast_ref::<ManagementError>()
                             .is_some_and(|error| matches!(error.status, 0x0a | 0x11)) =>
                 {
-                    oer_os_process::sleep(Duration::from_millis(50))?;
+                    oer_tools_os_process::sleep(Duration::from_millis(50))?;
                 }
                 result => return result,
             }
@@ -235,7 +235,7 @@ impl Owner {
 impl Drop for Owner {
     fn drop(&mut self) {
         if self.restore_needed
-            && let Err(error) = oer_os_process::cleanup(|| self.restore())
+            && let Err(error) = oer_tools_os_process::cleanup(|| self.restore())
         {
             eprintln!("Bluetooth restoration failed: {error}");
         }
@@ -260,7 +260,7 @@ fn checked_lifetime<T>(
     if let Err(error) = run(owner, report) {
         report.errors.push(error.to_string());
     }
-    match oer_os_process::cleanup(|| restore(owner)) {
+    match oer_tools_os_process::cleanup(|| restore(owner)) {
         Ok(()) => report.restored = true,
         Err(error) => report.errors.push(format!("restore: {error}")),
     }

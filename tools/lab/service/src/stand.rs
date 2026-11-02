@@ -1,5 +1,5 @@
 //! The service's drivers of the real stand: its boards through
-//! `oer-lab-board` and the router over its SSH.
+//! `oer-tools-lab-board` and the router over its SSH.
 //!
 //! Each board has one owner here ([`BoardOwner`]): its operations take
 //! turns on it in the order they asked. A board's radio works only on its
@@ -19,14 +19,14 @@ use std::{
     time::Duration,
 };
 
-use oer_lab_arbiter::{
+use oer_tools_lab_arbiter::{
     claims::{AIR, Claim, covers},
     journal::{ImageIdentity, Journal},
     readiness::{Confirmation, Emission, ROUTER, Recovery},
 };
-use oer_lab_board::stand::{Board, BoardConsole, ProfiledBoard, Via};
-use oer_lab_client::protocol::{FlashVia, Operation};
-use oer_lab_model::{ResetStep, Stand, rom::ResetPath};
+use oer_tools_lab_board::stand::{Board, BoardConsole, ProfiledBoard, Via};
+use oer_tools_lab_client::protocol::{FlashVia, Operation};
+use oer_tools_lab_model::{ResetStep, Stand, rom::ResetPath};
 
 use crate::service::{Drivers, OperationIo};
 
@@ -158,7 +158,7 @@ impl StandDrivers {
         }
         // A board that is re-enumerating returns within this wait; one that
         // does not is an error, never a stand-in path a reset would open.
-        let port = oer_lab_board::discovery::wait_for(&entry.device_id().map_err(text)?, REATTACH)
+        let port = oer_tools_lab_board::discovery::wait_for(&entry.device_id().map_err(text)?, REATTACH)
             .ok_or_else(|| format!("board `{}` is not attached", entry.id))?;
         Ok((
             Board::new(&stand, entry, port).map_err(text)?,
@@ -209,22 +209,22 @@ impl StandDrivers {
     /// The chip of every attached board, its ROM asked when no earlier
     /// answer is known, on each board's turn.
     fn detect(&self, stop: &AtomicBool) -> Result<serde_json::Value> {
-        let chips = oer_chip_profile::Profile::all(&self.root).map_err(text)?;
+        let chips = oer_tools_chip_profile::Profile::all(&self.root).map_err(text)?;
         let mut found = Vec::new();
-        for device in oer_lab_board::devices() {
+        for device in oer_tools_lab_board::devices() {
             let mac = device.mac.to_string();
             let _turn = self.owner(&mac).take(stop)?;
             let chip = match device.chip.clone() {
                 Some(chip) => chip,
                 None => {
-                    let name = oer_lab_board::flash::detect(&device.port).map_err(text)?;
+                    let name = oer_tools_lab_board::flash::detect(&device.port).map_err(text)?;
                     let profile = chips
                         .iter()
                         .find(|profile| profile.facts.espflash_chip == name)
                         .ok_or_else(|| {
                             format!("board {mac} is an {name}, which no chip profile names")
                         })?;
-                    oer_lab_board::device::remember_chip(&device.mac, &profile.facts.id)
+                    oer_tools_lab_board::device::remember_chip(&device.mac, &profile.facts.id)
                         .map_err(text)?;
                     profile.facts.id.clone()
                 }
@@ -243,8 +243,8 @@ impl StandDrivers {
         via: FlashVia,
         skip_carried: bool,
     ) -> Result<serde_json::Value> {
-        let bundle = oer_image_bundle::ImageBundle::load(Path::new(bundle)).map_err(text)?;
-        let store = oer_lab_board::image::Store::open().map_err(text)?;
+        let bundle = oer_tools_image_bundle::ImageBundle::load(Path::new(bundle)).map_err(text)?;
+        let store = oer_tools_lab_board::image::Store::open().map_err(text)?;
         if skip_carried && let Some(receipt) = board.carries(&store, &bundle).map_err(text)? {
             return Ok(serde_json::json!({ "written": false, "receipt": receipt }));
         }
@@ -302,7 +302,7 @@ impl StandDrivers {
                 "switching port {port} of hub `{hub}` needs a lease that holds it"
             ));
         }
-        oer_lab_board::power::HubPower::new(oer_lab_board::power::HubPort { location, port })
+        oer_tools_lab_board::power::HubPower::new(oer_tools_lab_board::power::HubPort { location, port })
             .cycle_holding(off)
             .map_err(text)
     }
@@ -310,9 +310,9 @@ impl StandDrivers {
 
 /// What `board`'s flash holds, as its receipt says; the journal is history.
 fn carried(board: &Board) -> Result<String> {
-    use oer_lab_board::image::State;
+    use oer_tools_lab_board::image::State;
     Ok(
-        match oer_lab_board::image::Store::open()
+        match oer_tools_lab_board::image::Store::open()
             .map_err(text)?
             .state(board.mac())
             .map_err(text)?
@@ -355,24 +355,24 @@ impl Drivers for StandDrivers {
         }
     }
 
-    fn inventory(&self) -> Vec<oer_lab_client::protocol::AttachedBoard> {
+    fn inventory(&self) -> Vec<oer_tools_lab_client::protocol::AttachedBoard> {
         let stand = self.stand().ok();
-        let report = oer_lab_router::hub::status().unwrap_or_default();
-        let devices = Path::new(oer_lab_router::hub::SYSFS_USB_DEVICES);
-        oer_lab_router::boards::attached()
+        let report = oer_tools_lab_router::hub::status().unwrap_or_default();
+        let devices = Path::new(oer_tools_lab_router::hub::SYSFS_USB_DEVICES);
+        oer_tools_lab_router::boards::attached()
             .into_iter()
             .map(|attached| {
                 let board = stand
                     .as_ref()
                     .and_then(|stand| stand.board_by_mac(&attached.mac));
-                let hub_port = oer_lab_router::hub::parent(&attached.location)
+                let hub_port = oer_tools_lab_router::hub::parent(&attached.location)
                     .map(|(hub, port)| format!("{hub}:{port}"));
-                oer_lab_client::protocol::AttachedBoard {
+                oer_tools_lab_client::protocol::AttachedBoard {
                     id: board.map(|board| board.id.clone()),
                     mac: attached.mac.to_string(),
                     location: attached.location.clone(),
                     tty: attached.tty.as_ref().map(|tty| tty.display().to_string()),
-                    power: oer_lab_router::hub::power_port(
+                    power: oer_tools_lab_router::hub::power_port(
                         devices,
                         &report,
                         stand.as_ref(),
@@ -389,7 +389,7 @@ impl Drivers for StandDrivers {
     }
 
     fn hubs(&self) -> std::result::Result<String, String> {
-        oer_lab_board::power::report_text().map_err(text)
+        oer_tools_lab_board::power::report_text().map_err(text)
     }
 
     fn resources(&self) -> std::result::Result<Vec<String>, String> {
@@ -404,7 +404,7 @@ impl Drivers for StandDrivers {
     }
 
     fn attached(&self) -> Vec<(String, String)> {
-        oer_lab_board::discovery::attached()
+        oer_tools_lab_board::discovery::attached()
             .into_iter()
             .filter_map(|port| Some((port.port, port.mac?.to_string())))
             .collect()
@@ -487,7 +487,7 @@ impl Drivers for StandDrivers {
                 if !covers(claims, &[Claim::shared(ROUTER)]) {
                     return Err("probing the router needs a lease that holds it".to_owned());
                 }
-                serde_json::to_value(oer_lab_router::fixtures::probe_remote(&self.stand_file))
+                serde_json::to_value(oer_tools_lab_router::fixtures::probe_remote(&self.stand_file))
                     .map_err(text)
             }
             Operation::Detect => {
@@ -498,7 +498,7 @@ impl Drivers for StandDrivers {
             }
             Operation::Describe { board } => {
                 let (board, _) = self.described(board, claims)?;
-                let port = oer_lab_board::discovery::port_of(board.mac())
+                let port = oer_tools_lab_board::discovery::port_of(board.mac())
                     .map_or_else(|_| "no port".to_owned(), |port| port.display().to_string());
                 let image = carried(&board)?;
                 // Why the chip-dependent operations are refused, if they are.

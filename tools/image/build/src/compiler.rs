@@ -22,13 +22,13 @@ use std::{
 };
 
 use crate::{Result, instrumentation::Instrumentation};
-use oer_os_toolchain::Tool;
+use oer_tools_os_toolchain::Tool;
 
 /// The image compiler setup of an image under `policy` with the classes of
 /// `instrumentation`, built from the tree at `root` with the image linker's
 /// build in `linker_target`.
 pub fn of_policy<'a>(
-    policy: &oer_chip_profile::policy::StackPolicy,
+    policy: &oer_tools_chip_profile::policy::StackPolicy,
     instrumentation: &Instrumentation,
     root: &'a Path,
     linker_target: &'a Path,
@@ -56,7 +56,7 @@ pub const BUILD_ROOT_ENV: &str = "OER_BUILD_ROOT";
 /// checkout of this host shares, since the slots bound the host's load.
 /// Nothing compiled lives here.
 pub fn host_build_root() -> Result<PathBuf> {
-    oer_os_durable::xdg::overridable(BUILD_ROOT_ENV, oer_os_durable::xdg::Base::Cache, "build")
+    oer_tools_os_durable::xdg::overridable(BUILD_ROOT_ENV, oer_tools_os_durable::xdg::Base::Cache, "build")
         .map_err(|error| error.to_string().into())
 }
 
@@ -97,8 +97,8 @@ pub fn seed_build_cache(from: &Path, to: &Path) -> Result<()> {
     if target.join("fw").exists() {
         return Err(format!("{} already has a build cache", to.display()).into());
     }
-    oer_os_process::run(
-        oer_os_process::command("cp")
+    oer_tools_os_process::run(
+        oer_tools_os_process::command("cp")
             .args(["-a", "--reflink=auto"])
             .arg(&source)
             .arg(target.join("fw")),
@@ -108,10 +108,10 @@ pub fn seed_build_cache(from: &Path, to: &Path) -> Result<()> {
 
 /// The lock of the compile cache `cache`: one build at a time, the next
 /// waiting for it.
-pub fn lock_compile_cache(cache: &Path) -> Result<oer_os_process::lock::FileLock> {
-    oer_os_process::lock::FileLock::wait(
+pub fn lock_compile_cache(cache: &Path) -> Result<oer_tools_os_process::lock::FileLock> {
+    oer_tools_os_process::lock::FileLock::wait(
         &cache.join("build.lock"),
-        oer_os_process::lock::Mode::Exclusive,
+        oer_tools_os_process::lock::Mode::Exclusive,
         &format!("waiting for another build in {}", cache.display()),
     )
     .map_err(|error| error.to_string().into())
@@ -120,7 +120,7 @@ pub fn lock_compile_cache(cache: &Path) -> Result<oer_os_process::lock::FileLock
 /// What an image's compiler setup depends on.
 #[derive(Clone, Debug)]
 pub struct ImageCompiler<'a> {
-    /// The tree being built: its `oer-image-checks` builds the linker
+    /// The tree being built: its `oer-tools-image-checks` builds the linker
     /// (`oer-image-linker`).
     pub root: &'a Path,
     /// The Cargo target directory of the linker's host build.
@@ -185,7 +185,7 @@ pub fn build_linker(root: &Path, target_dir: &Path) -> Result<PathBuf> {
     build_host_tool(
         root,
         target_dir,
-        "oer-tool-image-linker",
+        "oer-tools-image-linker",
         "oer-image-linker",
     )
 }
@@ -196,7 +196,7 @@ pub(crate) fn build_host_tool(
     package: &str,
     binary: &str,
 ) -> Result<PathBuf> {
-    let mut command = oer_os_toolchain::command(Tool::Cargo)?;
+    let mut command = oer_tools_os_toolchain::command(Tool::Cargo)?;
     command
         .current_dir(root)
         .args(["build", "--quiet", "-p", package, "--bin", binary])
@@ -215,7 +215,7 @@ pub(crate) fn build_host_tool(
     ] {
         command.env_remove(variable);
     }
-    oer_os_process::run(&mut command)
+    oer_tools_os_process::run(&mut command)
         .map_err(|error| format!("building {binary} of {} failed: {error}", root.display()))?;
     Ok(target_dir.join("debug").join(binary))
 }
@@ -322,7 +322,7 @@ fn rustflags(
             .map(str::to_owned)
             .collect::<Vec<_>>()
     }));
-    oer_image_checks::codegen::rustflags(&flags)?;
+    oer_tools_image_checks::codegen::rustflags(&flags)?;
     Ok(flags)
 }
 
@@ -383,7 +383,7 @@ mod tests {
     fn image_moves_above_the_policy_limit_warn_and_compile() {
         let directory = tempfile::tempdir().unwrap();
         let source = directory.path().join("move_limit.rs");
-        let rustc = oer_os_toolchain::program(oer_os_toolchain::Tool::Rustc).unwrap();
+        let rustc = oer_tools_os_toolchain::program(oer_tools_os_toolchain::Tool::Rustc).unwrap();
         for limit in [64, 4096] {
             let flags = rustflags(
                 vec!["-A".into(), "large-assignments".into()],
@@ -407,7 +407,7 @@ mod tests {
                 .unwrap();
                 // Object emission runs code generation's move lint without
                 // invoking the image linker or depending on a chip's inputs.
-                let output = oer_os_process::command(&rustc)
+                let output = oer_tools_os_process::command(&rustc)
                     .env("RUSTC_BOOTSTRAP", "1")
                     .args(["--edition=2024", "--crate-type=lib", "--emit=obj"])
                     .args(["-C", "opt-level=3"])
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn cargo_command_pins_encoded_flags_without_losing_argument_boundaries() {
-        use oer_image_checks::codegen::CodegenPrecondition;
+        use oer_tools_image_checks::codegen::CodegenPrecondition;
         let mut command = Command::new("not-executed");
         command
             .env("RUSTFLAGS", "-C llvm-args=-pick-merged-source-locations")
@@ -489,7 +489,7 @@ mod tests {
         assert!(arguments.contains(&"linker=/a b/linker".to_owned()));
         assert!(environment(&command, "RUSTFLAGS").is_none());
         assert_eq!(environment(&command, "RUSTC_BOOTSTRAP").unwrap(), "1");
-        assert_eq!(oer_image_checks::codegen::rustflags(&arguments), Ok(()));
+        assert_eq!(oer_tools_image_checks::codegen::rustflags(&arguments), Ok(()));
         for (variable, value) in [
             ("RUSTFLAGS", "-C llvm-args=-pick-merged-source-locations"),
             (
@@ -533,7 +533,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        let rustc = oer_os_toolchain::program(Tool::Rustc).unwrap();
+        let rustc = oer_tools_os_toolchain::program(Tool::Rustc).unwrap();
         for merge_disabled in [false, true] {
             let mut flags = rustflags(
                 Vec::new(),
@@ -546,7 +546,7 @@ mod tests {
                 flags.retain(|flag| flag != "-Zmerge-functions=disabled");
             }
             let object = directory.path().join(format!("origins-{merge_disabled}.o"));
-            let output = oer_os_process::command(&rustc)
+            let output = oer_tools_os_process::command(&rustc)
                 .env("RUSTC_BOOTSTRAP", "1")
                 .args([
                     "--edition=2024",
@@ -569,7 +569,7 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
             let bytes = std::fs::read(object).unwrap();
-            let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();
+            let elf = oer_tools_analysis_elf::Elf::parse(&bytes).unwrap();
             let origins = elf
                 .symbols()
                 .filter(|symbol| {

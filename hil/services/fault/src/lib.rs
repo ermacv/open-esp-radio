@@ -23,7 +23,7 @@
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 
-oer_hil_protocol::messages! {
+oer_protocols_hil_protocol::messages! {
     endpoint RaiseException = "fault/raise-exception" => Raising;
     topic Raising = "fault/raising";
 }
@@ -38,7 +38,7 @@ pub struct RaiseException;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Raising;
 
-oer_hil_agent::service! {
+oer_protocols_hil_agent::service! {
     /// The fault service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         RaiseException(RaiseException) => raise_exception,
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn the_service_names_its_endpoint_and_answer_by_distinct_keys() {
-        let keys = <Request as oer_hil_agent::base::Service>::KEYS;
+        let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
         assert_eq!(keys.len(), 2);
         assert_ne!(keys[0], keys[1]);
     }

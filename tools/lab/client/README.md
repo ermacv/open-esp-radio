@@ -1,7 +1,7 @@
 # LAB client
 
-`oer-lab-client` is how a command reaches the LAB service
-([`oer-tool-lab-service`](../service/README.md)), the one owner of the stand's
+`oer-tools-lab-client` is how a command reaches the LAB service
+([`oer-tools-lab-service`](../service/README.md)), the one owner of the stand's
 leases and hardware: the IPC protocol ([`protocol`](src/protocol.rs)) and
 the connection a command holds its lease by ([`client`](src/client.rs)).
 `cargo fw`, `cargo hil`, `cargo stand` and the HIL harness depend on this
@@ -27,5 +27,5 @@ crate alone; the service's scheduler and drivers stay out of their builds.
   abandoned; either way the service stops its operations first.
 
 ```console
-cargo test -p oer-lab-client
+cargo test -p oer-tools-lab-client
 ```

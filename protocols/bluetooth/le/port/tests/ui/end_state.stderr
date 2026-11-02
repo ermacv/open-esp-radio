@@ -6,8 +6,8 @@ error[E0308]: mismatched types
   |            |
   |            arguments to this enum variant are incorrect
   |
-  = note: expected struct `Session<'_, P, oer_bluetooth_le_port::Running>`
-             found struct `Session<'p, P, oer_bluetooth_le_port::Idle>`
+  = note: expected struct `Session<'_, P, oer_protocols_bluetooth_le_port::Running>`
+             found struct `Session<'p, P, oer_protocols_bluetooth_le_port::Idle>`
 note: tuple variant defined here
  --> src/lib.rs
   |

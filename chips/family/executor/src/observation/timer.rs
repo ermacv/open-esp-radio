@@ -1,7 +1,7 @@
 //! Timer boundaries routed to the image's executor observer. Timestamps and
 //! deadlines retain their low 32 monotonic microsecond bits; consumers use
 //! windows shorter than 2^31 us, as for executor activity.
-use oer_trace::{Channel, Domain, Event, Kind};
+use oer_portable_trace::{Channel, Domain, Event, Kind};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -95,7 +95,7 @@ impl Observation {
 /// Statically dispatch both bounded identities, keeping every observer call
 /// visible to the image's stack analysis. No callback table or installation.
 #[cfg(all(oer_trace, feature = "chip"))]
-pub(crate) fn emit<O: oer_trace::Observer>(
+pub(crate) fn emit<O: oer_portable_trace::Observer>(
     observer: &O,
     executor: crate::SoftwareInterrupt,
     phase: Phase,
@@ -108,7 +108,7 @@ pub(crate) fn emit<O: oer_trace::Observer>(
         } else {
             phase
         };
-    fn deliver<O: oer_trace::Observer, const E: u8>(
+    fn deliver<O: oer_portable_trace::Observer, const E: u8>(
         observer: &O,
         phase: Phase,
         at_micros: u32,
@@ -116,7 +116,7 @@ pub(crate) fn emit<O: oer_trace::Observer>(
     ) {
         macro_rules! emit {
             ($phase:literal) => {
-                oer_trace::observe!(observer, Timer::<E, $phase> { at_micros, value })
+                oer_portable_trace::observe!(observer, Timer::<E, $phase> { at_micros, value })
             };
         }
         match phase {

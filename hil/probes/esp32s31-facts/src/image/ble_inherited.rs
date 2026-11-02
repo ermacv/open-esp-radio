@@ -144,7 +144,7 @@ fn seed_enables(s: &mut Session<'_>) {
     s.ble.task_irq.modify_interrupt_enable(|w| {
         w.set_source_17(true).set_scheduler_run(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(super) fn software_reset(s: &mut Session<'_>) {
     contain(s);
@@ -177,7 +177,7 @@ pub(super) fn software_reset(s: &mut Session<'_>) {
         irq_enable_0(s),
         irq_enable_1(s),
         interrupt_enable(s),
-        oer_riscv::cycle32(),
+        oer_portable_riscv::cycle32(),
         0,
         0,
         0,
@@ -189,7 +189,7 @@ pub(super) fn software_reset(s: &mut Session<'_>) {
     }
     RETAINED[0].store(MAGIC, Ordering::Release);
     FACTS_OUTPUT[0].store(MAGIC, Ordering::Release);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     s.core_control
         .lp_sys_core_control
         .trigger_sys_ctrl_sys_sw_rst();
@@ -241,7 +241,7 @@ fn collision(s: &mut Session<'_>, kind: u32) {
     }
     let saved0 = s.ble.bank.sample_bluetooth_primary_interrupt_bank_0();
     let saved1 = s.ble.bank.sample_bluetooth_primary_interrupt_bank_1();
-    emit(0x21b0, saved0.bits(), saved1.bits(), oer_riscv::cycle32());
+    emit(0x21b0, saved0.bits(), saved1.bits(), oer_portable_riscv::cycle32());
     let cause = match kind {
         0 | 2 => 0,
         1 => 1,
@@ -253,15 +253,15 @@ fn collision(s: &mut Session<'_>, kind: u32) {
         return;
     }
     state(s, 0x21c0);
-    let before = oer_riscv::cycle32();
+    let before = oer_portable_riscv::cycle32();
     s.ble
         .bank
         .acknowledge_bluetooth_primary_interrupt_bank_0(saved0);
     s.ble
         .bank
         .acknowledge_bluetooth_primary_interrupt_bank_1(saved1);
-    oer_riscv::fence();
-    emit(0x21c8, before, oer_riscv::cycle32(), kind);
+    oer_portable_riscv::fence();
+    emit(0x21c8, before, oer_portable_riscv::cycle32(), kind);
     state(s, 0x21d0);
     // Exact set/clear coincidence is not measured: the new positive must be
     // visible before the saved W1C. Fresh same-bit recurrence is a control.
@@ -340,11 +340,11 @@ pub(super) fn retention(s: &mut Session<'_>) {
     s.ble.bank.modify_irq_enable_1(|w| {
         w.set_source_3(false);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     s.ble.task_irq.modify_interrupt_enable(|w| {
         w.set_scheduler_run(false);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     s.ble.bank.clear_bluetooth_scheduler_run_interrupts_bank_0();
     s.ble.bank.clear_bluetooth_scheduler_run_interrupts_bank_1();
     s.ble.bank.clear_bluetooth_controller_time_overflow();
@@ -359,30 +359,30 @@ pub(super) fn retention(s: &mut Session<'_>) {
             .set_source_9(false)
             .set_source_12(false);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x2220);
     mac::clear(s);
     latch_state(s, 0x2250);
-    let started = oer_riscv::cycle32();
+    let started = oer_portable_riscv::cycle32();
     if mac::produce(s, 0, 0x223f) {
         state(s, 0x2230);
     } else {
         // Retain the failed post-release crossing as a measured diagnostic,
         // then discriminate it from an APB/reset or permanent latch failure.
-        emit(0x225f, 218, oer_riscv::cycle32().wrapping_sub(started), 0);
+        emit(0x225f, 218, oer_portable_riscv::cycle32().wrapping_sub(started), 0);
         latch_state(s, 0x2260);
         // SOURCE: HW9_S31_BTLC_START_20261027: CONTROL0=1 starts BTLC.
         // This is a diagnostic reopening after the release observation,
         // never part of production retirement or an output-low proof.
         mac::command(s, 0);
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         while s.ble.core.read_btlc_timer_control().latch_request()
-            && oer_riscv::cycle32().wrapping_sub(start) < 200_000
+            && oer_portable_riscv::cycle32().wrapping_sub(start) < 200_000
         {}
         latch_state(s, 0x2270);
         emit(
             0x227f,
-            oer_riscv::cycle32().wrapping_sub(start),
+            oer_portable_riscv::cycle32().wrapping_sub(start),
             u32::from(!s.ble.core.read_btlc_timer_control().latch_request()),
             0,
         );

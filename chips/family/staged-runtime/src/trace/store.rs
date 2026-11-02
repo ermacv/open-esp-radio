@@ -8,7 +8,7 @@
 
 use core::sync::atomic::{AtomicU8, AtomicU32, Ordering, fence};
 
-use oer_trace::{Kind, Record};
+use oer_portable_trace::{Kind, Record};
 
 const MAGIC: u32 = u32::from_le_bytes(*b"OETR");
 /// Layout of [`Retained`]; storage of another layout is not reported.
@@ -132,11 +132,11 @@ impl<const ENTRIES: usize, const SLOTS: usize, const WORDS: usize> Retained<ENTR
     /// Invalid geometry is rejected even outside a static initializer.
     ///
     /// ```compile_fail,E0080
-    /// let _ = oer_espressif_staged_runtime::trace::Retained::<0, 1, 1>::new();
+    /// let _ = oer_chips_family_staged_runtime::trace::Retained::<0, 1, 1>::new();
     /// ```
     ///
     /// ```compile_fail,E0080
-    /// let _ = oer_espressif_staged_runtime::trace::Retained::<1, 32768, 1>::new();
+    /// let _ = oer_chips_family_staged_runtime::trace::Retained::<1, 32768, 1>::new();
     /// ```
     pub const fn new() -> Self {
         const {
@@ -198,8 +198,8 @@ pub struct Trace {
 }
 
 #[cfg(oer_trace)]
-oer_memory::link_fn! {
-    declare oer_memory::TraceClockSlot =>
+oer_portable_memory::link_fn! {
+    declare oer_portable_memory::TraceClockSlot =>
     /// The image's monotonic time in microseconds, which stamps records:
     /// every image that records declares it once with [`trace_clock!`](crate::trace_clock).
     fn __oer_trace_now_micros() -> u64;
@@ -433,7 +433,7 @@ impl Trace {
         self.entries.get(slot)?.read()
     }
 
-    /// Every complete entry, in storage order; see [`oer_trace::oldest_first`].
+    /// Every complete entry, in storage order; see [`oer_portable_trace::oldest_first`].
     pub fn records(&self) -> impl Iterator<Item = Record> + '_ {
         self.entries.iter().filter_map(Entry::read)
     }
@@ -663,9 +663,9 @@ mod format_tests {
 
         // A fresh run writes precisely the same legacy byte image.
         trace.restart();
-        let point = Kind::new(oer_trace::Domain::Phy, 1);
+        let point = Kind::new(oer_portable_trace::Domain::Phy, 1);
         trace.record(point, [7, 8], 10);
-        trace.freeze(Kind::new(oer_trace::Domain::Ieee80211, 7), 0);
+        trace.freeze(Kind::new(oer_portable_trace::Domain::Ieee80211, 7), 0);
         trace.capture(point, 11, |writer| writer.extend([9, 10, 11]));
         let actual: std::vec::Vec<u8> = fields()
             .flat_map(|field| field.load(Ordering::Relaxed).to_le_bytes())

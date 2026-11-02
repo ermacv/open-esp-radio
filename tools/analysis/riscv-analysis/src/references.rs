@@ -1,5 +1,5 @@
 //! Section-scoped normalization. ISA owns pairing; consumers use bounded indexes.
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 use std::ops::Deref;
 pub struct PreparedReferences<'a> {
     raw: Vec<FunctionRelocation>,

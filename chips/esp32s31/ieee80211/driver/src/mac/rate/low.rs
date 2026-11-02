@@ -1,6 +1,6 @@
 //! Cross-layer ownership boundary for the PHY low-rate path.
 
-use oer_esp32s31_hal::ieee80211::mac::WifiMacHal;
+use oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal;
 
 /// Runtime authority for the complete reviewed PHY low-rate gate.
 ///
@@ -60,7 +60,7 @@ pub struct MacLowRateTransitionError {
 /// it beyond the current synchronous hardware transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacLowRateGateProbe {
-    /// This [`oer_esp32s31_ieee80211_driver::mac::tx::TxHardware`] implementation does not own the PHY
+    /// This [`oer_chips_esp32s31_ieee80211_driver::mac::tx::TxHardware`] implementation does not own the PHY
     /// low-rate registers. No register was touched.
     OwnerUnavailable,
     /// The gate transaction was applied and the complete matching vendor leaf

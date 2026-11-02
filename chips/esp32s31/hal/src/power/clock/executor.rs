@@ -382,16 +382,16 @@ pub(crate) struct ModemExecution<'a, H, B: PlatformClockBackend, P> {
 }
 
 impl<H: ModemClockPort, B: PlatformClockBackend, P>
-    oer_espressif_modem_clock::execution::RegisterPort<Dependency> for ModemExecution<'_, H, B, P>
+    oer_chips_family_modem_clock::execution::RegisterPort<Dependency> for ModemExecution<'_, H, B, P>
 {
     type Device = ModemClockDevice;
     type Clock = PlatformClock;
     type Error = PlatformClockError;
     fn action(
         dependency: Dependency,
-    ) -> oer_espressif_modem_clock::execution::Action<ModemClockDevice, PlatformClock> {
+    ) -> oer_chips_family_modem_clock::execution::Action<ModemClockDevice, PlatformClock> {
         use super::ChipDependency as D;
-        use oer_espressif_modem_clock::execution::Action;
+        use oer_chips_family_modem_clock::execution::Action;
         Action::Device(match dependency.0 {
             D::ModemAdcCommonFe => ModemClockDevice::ModemAdcCommonFe,
             D::ModemPrivateFe => ModemClockDevice::ModemPrivateFe,
@@ -424,7 +424,7 @@ impl<H: ModemClockPort, B: PlatformClockBackend, P>
     }
 }
 impl<H: ModemClockPort, B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
-    oer_espressif_modem_clock::execution::AcquirePort<Dependency> for ModemExecution<'_, H, B, &P>
+    oer_chips_family_modem_clock::execution::AcquirePort<Dependency> for ModemExecution<'_, H, B, &P>
 {
     fn prepare_power_state(&mut self) {
         self.port.prepare_power_state();

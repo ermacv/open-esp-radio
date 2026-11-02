@@ -31,8 +31,8 @@
 //!
 //! ```
 //! use core::num::NonZeroU64;
-//! use oer_bluetooth_le_model::Environment;
-//! use oer_time::{Duration, Timer};
+//! use oer_protocols_bluetooth_le_model::Environment;
+//! use oer_portable_time::{Duration, Timer};
 //! let air = Environment::new(NonZeroU64::new(1_000).expect("profile period"));
 //! let start = air.now();
 //! air.advance(Duration::from_micros(10_000)).expect("virtual time fits");
@@ -55,7 +55,7 @@ pub use air::{Environment, Loss, Stimulus};
 pub use lifecycle::{Backend, Frontend, Invocation, Resources, Vacant, View};
 pub use queues::{ModelPhase, Queues};
 
-use oer_bluetooth_le_port::{LeCapabilities, LePhys, LeRadioCapabilities};
+use oer_protocols_bluetooth_le_port::{LeCapabilities, LePhys, LeRadioCapabilities};
 /// DTM 1M-only profile. No advertising, scanning or connection capability is
 /// inferred from a test receiver.
 pub enum ModelCaps {}

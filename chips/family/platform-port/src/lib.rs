@@ -15,7 +15,7 @@
 //! dependency runs from the chip to the family.
 //!
 //! The HAL also selects its chip through this package's chip feature (an id
-//! of `oer_espressif_facts::tracked::ids`), which enables no dependency. The
+//! of `oer_chips_family_facts::tracked::ids`), which enables no dependency. The
 //! build script then generates the chip's hart geometry ([`HARTS`],
 //! [`BOOT_HART`], the checked [`Hart`]) with the PAC's generator over the
 //! same facts and publishes the id as this package's `chip` metadata. A
@@ -38,9 +38,9 @@
 //!   hand-over of its interrupt grant, which only the hart itself makes into
 //!   its controller.
 
-use oer_mmio::InterruptSource;
+use oer_portable_mmio::InterruptSource;
 
-pub use oer_espressif_staged_layout::handoff::SecondaryEntry;
+pub use oer_chips_family_staged_layout::handoff::SecondaryEntry;
 
 #[cfg(chip_geometry)]
 mod geometry {

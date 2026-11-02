@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::ftm::{FtmOperationId, FtmSession};
+use oer_protocols_ieee80211_core_roles_sta::ftm::{FtmOperationId, FtmSession};
 
 pub fn identity<const N: usize>(session: &FtmSession<N>) -> FtmOperationId {
     #[cfg(ui_reject)]

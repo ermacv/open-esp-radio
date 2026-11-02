@@ -39,11 +39,11 @@ unsafe extern "C" {
 
 /// The image's identity: the stage-two payload CRC-32 the image packer wrote
 /// into the header and the bootstrap checked before it started the runtime
-/// (`oer_espressif_staged_layout::stage_two`). Two builds of different
+/// (`oer_chips_family_staged_layout::stage_two`). Two builds of different
 /// payloads differ in it but by chance.
 pub fn payload_crc32() -> u32 {
     // The packer writes the word after the link: never the linked zero.
-    oer_memory::read_volatile(&__runtime_payload_crc32)
+    oer_portable_memory::read_volatile(&__runtime_payload_crc32)
 }
 
 /// The linked image's sections and stacks, as address ranges.
@@ -62,9 +62,9 @@ pub struct Sections {
     pub dma_data: Range<usize>,
     pub dma_bss: Range<usize>,
     /// Each hart's SRAM interrupt stack.
-    pub irq_stacks: [Range<usize>; oer_espressif_platform_port::HARTS],
+    pub irq_stacks: [Range<usize>; oer_chips_family_platform_port::HARTS],
     /// Each hart's PSRAM task stack; an unused range is empty.
-    pub task_stacks: [Range<usize>; oer_espressif_platform_port::HARTS],
+    pub task_stacks: [Range<usize>; oer_chips_family_platform_port::HARTS],
 }
 
 fn range(start: *const [u8; 0], end: *const [u8; 0]) -> Range<usize> {
@@ -106,6 +106,6 @@ pub(crate) struct HartStacks {
     pub guard: usize,
 }
 
-pub(crate) fn stack_symbols() -> [HartStacks; oer_espressif_platform_port::HARTS] {
+pub(crate) fn stack_symbols() -> [HartStacks; oer_chips_family_platform_port::HARTS] {
     stack_addresses!()
 }

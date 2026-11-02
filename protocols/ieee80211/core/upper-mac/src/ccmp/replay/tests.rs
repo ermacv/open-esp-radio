@@ -1,7 +1,7 @@
 //! The replay check of an association's keys.
 
 use super::*;
-use oer_ieee80211_wire::ccmp::CcmpPacketNumber;
+use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 
 fn header(packet_number: u64, key_id: u8) -> CcmpHeader {
     CcmpHeader::new(
@@ -252,18 +252,18 @@ fn run(count: usize) {
         seed.push(tid);
         seed.extend_from_slice(&header(packet_number, key_id).encode());
     }
-    oer_ieee80211_wire::fuzz::inputs(&[&seed], count, 96, check_all);
+    oer_protocols_ieee80211_wire::fuzz::inputs(&[&seed], count, 96, check_all);
 }
 
 #[test]
 fn replay_check_never_panics() {
-    run(oer_ieee80211_wire::fuzz::QUICK);
+    run(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn replay_check_never_panics_full() {
-    run(oer_ieee80211_wire::fuzz::FULL);
+    run(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]

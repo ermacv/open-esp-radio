@@ -1,12 +1,12 @@
 #![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
 
 use super::*;
-use oer_bluetooth_hci::{
+use oer_protocols_bluetooth_hci::{
     self as hci, Cmd, HciCommandPacket, HciControllerResponse, LeRand, Opcode, Reset as HciReset,
 };
-use oer_bluetooth_le_controller::dtm::Submission;
-use oer_bluetooth_le_controller::dtm::*;
-use oer_bluetooth_le_port::{self as port, *};
+use oer_protocols_bluetooth_le_controller::dtm::Submission;
+use oer_protocols_bluetooth_le_controller::dtm::*;
+use oer_protocols_bluetooth_le_port::{self as port, *};
 const RESET: Opcode = HciReset::OPCODE;
 const RAND: Opcode = LeRand::OPCODE;
 use core::{
@@ -16,10 +16,10 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
-use oer_radio_port::conformance::registration::guarded;
-use oer_radio_port::*;
-use oer_time::Duration;
+use oer_protocols_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
+use oer_protocols_radio_port::conformance::registration::guarded;
+use oer_protocols_radio_port::*;
+use oer_portable_time::Duration;
 use std::{rc::Rc, vec::Vec};
 
 struct Random(Result<[u8; 8], EntropyUnavailable>);
@@ -29,8 +29,8 @@ impl Entropy for Random {
     }
 }
 fn power() -> TxPower {
-    use oer_bluetooth_le_port::{LeBand, LeTxCeiling};
-    use oer_radio_regulatory::*;
+    use oer_protocols_bluetooth_le_port::{LeBand, LeTxCeiling};
+    use oer_protocols_radio_regulatory::*;
     let band = TEST_DOMAIN.permit(LeBand).expect("test band");
     let ceiling = band.tx_ceiling(PowerLimits {
         antenna_gain_mbm: 0,
@@ -528,7 +528,7 @@ fn scenario(scenario: Scenario) {
         let mut slot = claim.place();
         let backend = Backend::new(env.clone());
         if matches!(scenario, Scenario::Indeterminate) {
-            backend.inject(oer_bluetooth_le_model::Stimulus::Indeterminate);
+            backend.inject(oer_protocols_bluetooth_le_model::Stimulus::Indeterminate);
         }
         let end = LocalExecution
             .scope(

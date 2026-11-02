@@ -189,7 +189,7 @@ impl Ieee802154Channel {
         }
     }
 
-    const fn properties(self) -> (u8, oer_radio_regulatory::FrequencySpan) {
+    const fn properties(self) -> (u8, oer_protocols_radio_regulatory::FrequencySpan) {
         match self.0 {
             ChannelNumber::Channel11 => channel_properties::<11>(),
             ChannelNumber::Channel12 => channel_properties::<12>(),
@@ -213,7 +213,7 @@ impl Ieee802154Channel {
 
 // Each closed channel selects a compile-time calculation. No raw channel or
 // frequency arithmetic, or fallible span construction, runs on the radio path.
-const fn channel_properties<const CHANNEL: u8>() -> (u8, oer_radio_regulatory::FrequencySpan) {
+const fn channel_properties<const CHANNEL: u8>() -> (u8, oer_protocols_radio_regulatory::FrequencySpan) {
     const {
         if CHANNEL < IEEE802154_MIN_CHANNEL || CHANNEL > IEEE802154_MAX_CHANNEL {
             panic!("channel properties require a supported 2.4 GHz channel");
@@ -222,7 +222,7 @@ const fn channel_properties<const CHANNEL: u8>() -> (u8, oer_radio_regulatory::F
         let frequency_code = offset * 5 + 3;
         let center_khz = (2405 + 5 * offset as u32) * 1000;
         let span =
-            match oer_radio_regulatory::FrequencySpan::new(center_khz - 1000, center_khz + 1000) {
+            match oer_protocols_radio_regulatory::FrequencySpan::new(center_khz - 1000, center_khz + 1000) {
                 Some(span) => span,
                 None => panic!("a channel has a width"),
             };
@@ -230,9 +230,9 @@ const fn channel_properties<const CHANNEL: u8>() -> (u8, oer_radio_regulatory::F
     }
 }
 
-impl oer_radio_regulatory::RadioChannel for Ieee802154Channel {
+impl oer_protocols_radio_regulatory::RadioChannel for Ieee802154Channel {
     /// The 2 MHz around the channel's center, `2405 + 5 * (channel - 11)` MHz.
-    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+    fn span(&self) -> oer_protocols_radio_regulatory::FrequencySpan {
         self.properties().1
     }
 }
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn every_channel_retains_its_two_megahertz_regulatory_span() {
-        use oer_radio_regulatory::RadioChannel;
+        use oer_protocols_radio_regulatory::RadioChannel;
         for number in IEEE802154_MIN_CHANNEL..=IEEE802154_MAX_CHANNEL {
             let channel = Ieee802154Channel::new(number).unwrap();
             let center_khz = (2405 + 5 * u32::from(number - IEEE802154_MIN_CHANNEL)) * 1000;

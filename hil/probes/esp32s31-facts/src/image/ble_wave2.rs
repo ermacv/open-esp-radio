@@ -1,6 +1,6 @@
 //! Bounded BTLC prerequisite; no RF, scheduler RUN or DMA publication.
 use super::{Session, ble, contain, emit, pac};
-use oer_mmio::Bits;
+use oer_portable_mmio::Bits;
 
 mod lp;
 pub(super) mod mac;
@@ -11,18 +11,18 @@ pub(super) use mac::{natural_ready, natural_wrap, overflow_ack, overflow_rate, o
 const LIMIT: u32 = 200_000;
 
 fn window(cycles: u32) {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
 fn capture(s: &mut Session<'_>, tag: u32) -> Option<u32> {
     s.ble.core.modify_btlc_timer_control(|w| {
         w.set_latch_request(true);
     });
-    oer_riscv::fence();
-    let start = oer_riscv::cycle32();
+    oer_portable_riscv::fence();
+    let start = oer_portable_riscv::cycle32();
     while s.ble.core.read_btlc_timer_control().latch_request()
-        && oer_riscv::cycle32().wrapping_sub(start) < LIMIT
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT
     {}
     let control = s.ble.core.read_btlc_timer_control();
     let value = s.ble.core.read_btlc_timer_capture_0().value();
@@ -30,7 +30,7 @@ fn capture(s: &mut Session<'_>, tag: u32) -> Option<u32> {
         tag,
         u32::from(control.latch_request()),
         u32::from(control.timer_arm()) + 2 * u32::from(control.config_24()),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
     );
     emit(
         tag + 1,
@@ -46,7 +46,7 @@ fn capture(s: &mut Session<'_>, tag: u32) -> Option<u32> {
 }
 
 fn digital_setup(s: &mut Session<'_>) {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     contain(s);
     ble::clocks(s);
     // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, production
@@ -90,7 +90,7 @@ fn digital_setup(s: &mut Session<'_>) {
         .modify_modem_rst_conf(|w| {
             w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Released);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
     let c = s.sar.radio.modem_syscon_clock_reset.read_clk_conf1();
     let r = s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf();
@@ -145,7 +145,7 @@ fn setup(s: &mut Session<'_>) {
             .set_config_24(true)
             .set_timer_arm(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 pub(super) fn prerequisite(s: &mut Session<'_>) {
@@ -175,7 +175,7 @@ pub(super) fn prerequisite(s: &mut Session<'_>) {
     s.ble.bank.write_irq_control_0(|w| {
         w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     pair(s, 0x9080);
     // SOURCE: current BTDM runtime preparation. Establish its separate LP
     // counter prerequisite without PHY/RF initialization or an IRQ route.
@@ -206,13 +206,13 @@ pub(super) fn prerequisite(s: &mut Session<'_>) {
         pac::modem_pwr::runtime_timer_start_command::Command::Start,
         |_| {},
     );
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     pair(s, 0x90c0);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn pair(s: &mut Session<'_>, tag: u32) {

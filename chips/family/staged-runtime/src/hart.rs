@@ -6,12 +6,12 @@ use core::marker::PhantomData;
 /// sent to another hart or shared with a concurrent context.
 ///
 /// ```compile_fail
-/// use oer_espressif_staged_runtime::{Hart, BOOT_HART};
+/// use oer_chips_family_staged_runtime::{Hart, BOOT_HART};
 /// fn send<T: Send>() {}
 /// send::<Hart<BOOT_HART>>();
 /// ```
 /// ```compile_fail
-/// use oer_espressif_staged_runtime::{Hart, BOOT_HART};
+/// use oer_chips_family_staged_runtime::{Hart, BOOT_HART};
 /// fn sync<T: Sync>() {}
 /// sync::<Hart<BOOT_HART>>();
 /// ```
@@ -32,17 +32,17 @@ impl<const H: u8> Hart<H> {
 /// constructs it; interrupt admission consumes it.
 ///
 /// ```compile_fail
-/// use oer_espressif_staged_runtime::{PreAdmission, BOOT_HART};
+/// use oer_chips_family_staged_runtime::{PreAdmission, BOOT_HART};
 /// let admission = PreAdmission::<BOOT_HART>::new();
 /// ```
 /// A secondary hart's authority comes only from its root's
 /// `SecondaryHandoff` (`secondary_entry!`):
 /// ```compile_fail
-/// use oer_espressif_staged_runtime::PreAdmission;
+/// use oer_chips_family_staged_runtime::PreAdmission;
 /// let admission = PreAdmission::<1>::new();
 /// ```
 /// ```compile_fail
-/// use oer_espressif_staged_runtime::Handoff;
+/// use oer_chips_family_staged_runtime::Handoff;
 /// fn cannot_keep_authority<P>(mut handoff: Handoff<P>) {
 ///     let admission = handoff.pre_admission();
 ///     drop(handoff);
@@ -58,7 +58,7 @@ impl<const H: u8> PreAdmission<H> {
     /// Called only while wrapping the boot entry's handoff proof or minting a
     /// secondary hart's `SecondaryHandoff`.
     pub(crate) const fn new() -> Self {
-        const { assert!((H as usize) < oer_espressif_platform_port::HARTS) };
+        const { assert!((H as usize) < oer_chips_family_platform_port::HARTS) };
         Self {
             hart: Hart {
                 _local: PhantomData,

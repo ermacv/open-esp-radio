@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use oer_espressif_ieee802154_mac_values::Ieee802154FoundationSnapshot;
+use oer_chips_family_ieee802154_mac_values::Ieee802154FoundationSnapshot;
 
 use super::{
     COEX_DISABLED_PTI, Ieee802154FoundationCheckpoint, Ieee802154Lifecycle,

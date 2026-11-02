@@ -1,18 +1,18 @@
 //! Bluetooth's shared-domain steps, serialized with Wi-Fi by the one actor.
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::{ClockedOwner, ColdOwner, PoweredOwner},
     domain::{BluetoothClient, CoexAbsent, Coexisting, CommonPower, PlatformClockProvider},
 };
-use oer_esp32s31_phy::executor::boundary::Boundary;
-use oer_esp32s31_phy::{
+use oer_chips_esp32s31_phy::executor::boundary::Boundary;
+use oer_chips_esp32s31_phy::{
     PhyTargetObserver,
     bluetooth_client::{
         BluetoothPhyMembership, bluetooth_rf_ready, join_bluetooth, leave_bluetooth,
     },
     concurrent::{PhyClientAccess, phy_ready},
 };
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_radio_client::{
     DomainHealth, Failed, Failure, LpClock, PhyPreparation, Poison, PoisonCause, RcSlow,
     RequestKind,
     bluetooth::{
@@ -26,7 +26,7 @@ use crate::{Exit, Fault, PhyDomain};
 /// Bluetooth's request `request` poisoned the domain with `cause`.
 const fn bluetooth_poison(request: RequestKind, cause: PoisonCause) -> Poison {
     Poison::request(
-        oer_esp32s31_hal::domain::RadioClient::Bluetooth,
+        oer_chips_esp32s31_hal::domain::RadioClient::Bluetooth,
         request,
         cause,
     )
@@ -109,10 +109,10 @@ impl<C, T, O, S, R, H> crate::BluetoothBackend<Esp32s31Radio<C, T, O, S, R>, RcS
     for BluetoothAttachment<H>
 where
     C: PlatformClockProvider,
-    T: oer_cooperate::CooperativeTimer,
+    T: oer_portable_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
-    R: oer_trace::Observer,
-    S: oer_esp32s31_phy::sar_pilot::Service,
+    R: oer_portable_trace::Observer,
+    S: oer_chips_esp32s31_phy::sar_pilot::Service,
     H: RadioController<C::Backend>,
 {
     fn attached(&mut self, shared: &mut Esp32s31Radio<C, T, O, S, R>) {

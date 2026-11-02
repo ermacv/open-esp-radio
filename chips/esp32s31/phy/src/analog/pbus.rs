@@ -304,7 +304,7 @@ impl PhyPbusHardwareBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), PhyPbusHardwareBindingError> {
         if self.phase != PhyPbusHardwarePhase::Start {
             return Err(if self.phase == PhyPbusHardwarePhase::Complete {
@@ -313,7 +313,7 @@ impl PhyPbusHardwareBinding {
                 PhyPbusHardwareBindingError::WrongEdge
             });
         }
-        oer_esp32s31_hal::phy::pbus::start_force_test(
+        oer_chips_esp32s31_hal::phy::pbus::start_force_test(
             registers,
             self.transaction.selector(),
             self.transaction.path(),
@@ -325,7 +325,7 @@ impl PhyPbusHardwareBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyPbusHardwareObservation, PhyPbusHardwareBindingError> {
         if self.phase != PhyPbusHardwarePhase::AwaitCompletionEdge {
             return Err(if self.phase == PhyPbusHardwarePhase::Complete {
@@ -334,11 +334,11 @@ impl PhyPbusHardwareBinding {
                 PhyPbusHardwareBindingError::WrongEdge
             });
         }
-        match oer_espressif_phy::pbus::try_finish_force_test(
-            &mut oer_esp32s31_hal::phy::pbus::port(registers),
+        match oer_chips_family_phy::pbus::try_finish_force_test(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
         ) {
             Ok(()) => self.observe_completed(true),
-            Err(oer_espressif_phy::pbus::PbusError::Busy) => self.observe_completed(false),
+            Err(oer_chips_family_phy::pbus::PbusError::Busy) => self.observe_completed(false),
         }
     }
 
@@ -553,9 +553,9 @@ impl PhyForceTxRxMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyForceTxRxCompletion {
-        oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, self.enabled, self.phase);
+        oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, self.enabled, self.phase);
         PhyForceTxRxCompletion::Configured {
             enabled: self.enabled,
             phase: self.phase,

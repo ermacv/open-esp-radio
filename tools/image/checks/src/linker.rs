@@ -83,7 +83,7 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
         }
         eprintln!(
             "oer-image-linker: a static in a zeroed region must start as all zero bytes \
-             (`oer_memory::zeroed_static!`)"
+             (`oer_portable_memory::zeroed_static!`)"
         );
         return 1;
     }
@@ -120,11 +120,11 @@ fn link(
             name = strict::SPEC_ENV,
         )
     })?;
-    let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+    let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
     // The analysis-only first ELF reserves the policy maximum without guards.
     // The final link supplies the selected physical guards from the chip contract.
-    let profile = oer_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
+    let profile = oer_tools_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
     if let Some(interrupts) = &profile.facts.interrupts {
         for hart in interrupts.irq_stack_guard_bytes.keys() {
             arguments.push(format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes=0").into());
@@ -237,7 +237,7 @@ fn output_file(arguments: &[OsString]) -> Option<PathBuf> {
 /// `rust-lld -flavor gnu` with the arguments, from the `PATH` rustc gives
 /// its linker (the sysroot's tool directory).
 fn run_linker(arguments: &[OsString]) -> i32 {
-    let mut command = oer_os_process::command("rust-lld");
+    let mut command = oer_tools_os_process::command("rust-lld");
     if arguments.first().map(OsString::as_os_str) != Some(OsStr::new("-flavor")) {
         command.args(["-flavor", "gnu"]);
     }
@@ -439,7 +439,7 @@ fn check_file(
 ) {
     if data.starts_with(b"!<arch>\n") {
         // A thin archive holds no members of its own to check.
-        for (member, member_data) in oer_analysis_elf::members(data).unwrap_or_default() {
+        for (member, member_data) in oer_tools_analysis_elf::members(data).unwrap_or_default() {
             check_object(
                 &format!("{name}({member})"),
                 &format!("{name}:{member}"),
@@ -465,7 +465,7 @@ fn check_object(
     if !data.starts_with(b"\x7fELF") {
         return;
     }
-    let Ok(file) = oer_analysis_elf::Elf::parse(data) else {
+    let Ok(file) = oer_tools_analysis_elf::Elf::parse(data) else {
         return;
     };
     for section in file.sections() {

@@ -5,7 +5,7 @@
 //! by their MAC.
 //!
 //! The journal is history: it never decides what a board carries. That is
-//! the devices layer's receipt (`oer_lab_board::image`), which every write of a
+//! the devices layer's receipt (`oer_tools_lab_board::image`), which every write of a
 //! board's flash publishes, `cargo fw` included. [`Journal::record_flash`]
 //! is the only writer of a flash event: the HIL flash operation
 //! (`oer-hil-flash`) calls it after the write and start it receipted, and
@@ -20,8 +20,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_lab_model::rom::{RecoveryStep, ResetPath};
-use oer_os_process::lock::{FileLock, Mode};
+use oer_tools_lab_model::rom::{RecoveryStep, ResetPath};
+use oer_tools_os_process::lock::{FileLock, Mode};
 use serde::{Deserialize, Serialize};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -229,7 +229,7 @@ impl BoardEvent {
 }
 
 /// The stand file's label of a board, its MAC, or `unidentified board`.
-pub fn device_label(device: Option<&str>, stand: Option<&oer_lab_model::Stand>) -> String {
+pub fn device_label(device: Option<&str>, stand: Option<&oer_tools_lab_model::Stand>) -> String {
     match (device, stand) {
         (Some(mac), Some(stand)) => stand.label(mac),
         (Some(mac), None) => mac.to_owned(),
@@ -259,7 +259,7 @@ impl Journal {
     /// The stand's journal, `board.jsonl` in its state directory.
     pub fn open() -> Result<Self> {
         Ok(Self::at(
-            oer_lab_model::paths::arbiter()?.join("board.jsonl"),
+            oer_tools_lab_model::paths::arbiter()?.join("board.jsonl"),
         ))
     }
 
@@ -270,13 +270,13 @@ impl Journal {
     /// Every readable event, for history views (`cargo stand board`, the
     /// lease report): lines another version cannot parse are skipped.
     pub fn events(&self) -> Result<Vec<BoardEvent>> {
-        oer_os_durable::jsonl::read_lossy(&self.path)
+        oer_tools_os_durable::jsonl::read_lossy(&self.path)
     }
 
     /// The newest journaled flash of the board with `mac`, read strictly: an
     /// unreadable line is an error, not an older flash.
     pub fn latest_flash(&self, mac: &str) -> Result<Option<BoardEvent>> {
-        let events: Vec<BoardEvent> = oer_os_durable::jsonl::read_strict(&self.path)?;
+        let events: Vec<BoardEvent> = oer_tools_os_durable::jsonl::read_strict(&self.path)?;
         Ok(events.into_iter().rev().find(|event| {
             event.device.as_deref() == Some(mac)
                 && matches!(event.kind, BoardEventKind::Flashed { .. })
@@ -288,7 +288,7 @@ impl Journal {
     pub fn record_flash(
         &self,
         owner: String,
-        mac: &oer_lab_model::device_id::DeviceId,
+        mac: &oer_tools_lab_model::device_id::DeviceId,
         image: &ImageIdentity,
     ) -> Result<()> {
         if image.sha256.len() != 64 || !image.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
@@ -332,7 +332,7 @@ impl Journal {
 
     fn append(&self, owner: String, device: Option<String>, kind: BoardEventKind) -> Result<()> {
         let event = BoardEvent {
-            unix: oer_os_durable::unix_seconds(),
+            unix: oer_tools_os_durable::unix_seconds(),
             owner,
             checkout: std::env::current_dir()
                 .ok()
@@ -344,9 +344,9 @@ impl Journal {
             fs::create_dir_all(parent)?;
         }
         let _lock = FileLock::acquire(&self.path.with_extension("lock"), Mode::Exclusive)?;
-        oer_os_durable::jsonl::append(&self.path, &event)?;
+        oer_tools_os_durable::jsonl::append(&self.path, &event)?;
         if fs::metadata(&self.path)?.len() > MAX_BYTES {
-            oer_os_durable::jsonl::retain_newest::<BoardEvent>(&self.path, RETAINED_RECORDS)?;
+            oer_tools_os_durable::jsonl::retain_newest::<BoardEvent>(&self.path, RETAINED_RECORDS)?;
         }
         Ok(())
     }
@@ -412,7 +412,7 @@ mod tests {
         let (flashes, artifacts) = latest(&events);
         assert_eq!(flashes, [&newer, &peer]);
         assert_eq!(artifacts, [&artifact, &other_checkout]);
-        let stand = oer_lab_model::Stand::parse(
+        let stand = oer_tools_lab_model::Stand::parse(
             "schema = 2\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
              [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n\
              [[board]]\nid = \"peer-a\"\nusb-serial = \"02:00:00:00:25:64\"\nchip = \"chip-b\"\n\
@@ -435,7 +435,7 @@ mod tests {
     fn a_flash_is_journaled_by_record_flash_alone() {
         let directory = tempfile::tempdir().unwrap();
         let arbiter = Journal::at(directory.path().join("board.jsonl"));
-        let mac = oer_lab_model::device_id::DeviceId::parse("02:00:00:00:25:64").unwrap();
+        let mac = oer_tools_lab_model::device_id::DeviceId::parse("02:00:00:00:25:64").unwrap();
         let image = ImageIdentity {
             name: "ieee802154-peer".into(),
             sha256: sha('a'),
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(latest.owner, "peer");
         assert_eq!(latest.device.as_deref(), Some("02:00:00:00:25:64"));
         // An unreadable line fails the strict reader, not the history view.
-        oer_os_durable::jsonl::append(&arbiter.path, &serde_json::json!({"broken": true})).unwrap();
+        oer_tools_os_durable::jsonl::append(&arbiter.path, &serde_json::json!({"broken": true})).unwrap();
         assert!(arbiter.latest_flash(&mac).is_err());
         assert_eq!(arbiter.events().unwrap().len(), 1);
     }

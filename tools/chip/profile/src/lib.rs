@@ -1,5 +1,5 @@
 //! The chips this repository supports, from their tracked layered facts
-//! (`oer-espressif-facts`), and the stack policy of their image families
+//! (`oer-chips-family-facts`), and the stack policy of their image families
 //! ([`policy`]).
 //!
 //! Every supported chip has `chips/<id>/platform/chip.toml`, its chip layer:
@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_espressif_facts::{Facts, Source};
+use oer_chips_family_facts::{Facts, Source};
 use serde::{Deserialize, Serialize};
 
 /// The root of the chip packages, whose `<id>/platform` directories hold
@@ -30,7 +30,7 @@ const CHIPS: &str = "chips";
 /// relative to the root: its layers, stack policy, partitions and ROM
 /// function summaries.
 pub fn platform_dir(id: &str) -> PathBuf {
-    PathBuf::from(oer_espressif_facts::platform_dir(id))
+    PathBuf::from(oer_chips_family_facts::platform_dir(id))
 }
 
 pub mod policy;
@@ -50,7 +50,7 @@ pub struct Profile {
 }
 
 /// The image registry of a chip layer: the keys
-/// [`oer_espressif_facts::REGISTRY`] names.
+/// [`oer_chips_family_facts::REGISTRY`] names.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Registry {
@@ -100,18 +100,18 @@ pub struct Probe {
 /// The repository's files, every read recorded in the caller's inputs.
 struct Tree<'a> {
     root: &'a Path,
-    inputs: &'a mut oer_os_durable::inputs::Inputs,
+    inputs: &'a mut oer_tools_os_durable::inputs::Inputs,
 }
 
 impl Source for Tree<'_> {
-    fn read(&mut self, path: &str) -> oer_espressif_facts::Result<String> {
+    fn read(&mut self, path: &str) -> oer_chips_family_facts::Result<String> {
         let path = self.root.join(path);
         self.inputs
             .read_to_string(&path)
             .map_err(|error| format!("cannot read {}: {error}", path.display()).into())
     }
 
-    fn files(&mut self, directory: &str) -> oer_espressif_facts::Result<Vec<String>> {
+    fn files(&mut self, directory: &str) -> oer_chips_family_facts::Result<Vec<String>> {
         let directory = self.root.join(directory);
         let entries = match std::fs::read_dir(&directory) {
             Ok(entries) => entries,
@@ -139,11 +139,11 @@ fn default_task_stack(source: &mut dyn Source, facts: &mut Facts) -> Result<()> 
     };
     let policy = format!(
         "{}/stack.toml",
-        oer_espressif_facts::platform_dir(&facts.id)
+        oer_chips_family_facts::platform_dir(&facts.id)
     );
     let text = source.read(&policy)?;
     let harts = u32::try_from(interrupts.harts.len())?;
-    let defaults = oer_espressif_facts::generate::default_task_stack_bytes(&text, harts)
+    let defaults = oer_chips_family_facts::generate::default_task_stack_bytes(&text, harts)
         .map_err(|error| format!("{policy}: {error}"))?;
     let placement = facts
         .placement
@@ -170,7 +170,7 @@ fn default_task_stack(source: &mut dyn Source, facts: &mut Facts) -> Result<()> 
 impl Profile {
     /// The profile of `id`, or an error naming the supported chips.
     pub fn load(root: &Path, id: &str) -> Result<Self> {
-        Self::load_with_inputs(root, id, &mut oer_os_durable::inputs::Inputs::default())
+        Self::load_with_inputs(root, id, &mut oer_tools_os_durable::inputs::Inputs::default())
     }
 
     /// Load the profile and record every layer it reads in the caller's
@@ -178,7 +178,7 @@ impl Profile {
     pub fn load_with_inputs(
         root: &Path,
         id: &str,
-        inputs: &mut oer_os_durable::inputs::Inputs,
+        inputs: &mut oer_tools_os_durable::inputs::Inputs,
     ) -> Result<Self> {
         if !supported(root)?.iter().any(|chip| chip == id) {
             return Err(format!(
@@ -191,17 +191,17 @@ impl Profile {
     }
 
     /// The profile of `id` from the layer files this build compiled in
-    /// ([`oer_espressif_facts::tracked`]).
+    /// ([`oer_chips_family_facts::tracked`]).
     pub fn tracked(id: &str) -> Result<Self> {
-        Self::from_source(&mut oer_espressif_facts::tracked::Tracked, id)
+        Self::from_source(&mut oer_chips_family_facts::tracked::Tracked, id)
     }
 
     fn from_source(source: &mut dyn Source, id: &str) -> Result<Self> {
-        let layers = oer_espressif_facts::load(source, id)?;
+        let layers = oer_chips_family_facts::load(source, id)?;
         let top = layers.top().to_owned();
         let mut table = layers.table;
         let mut registry = toml::Table::new();
-        for key in oer_espressif_facts::REGISTRY {
+        for key in oer_chips_family_facts::REGISTRY {
             if let Some(value) = table.remove(*key) {
                 registry.insert((*key).to_owned(), value);
             }
@@ -274,7 +274,7 @@ pub fn supported(root: &Path) -> Result<Vec<String>> {
     for entry in std::fs::read_dir(root.join(CHIPS))? {
         let entry = entry?;
         let id = entry.file_name().to_string_lossy().into_owned();
-        if root.join(oer_espressif_facts::chip_file(&id)).is_file() {
+        if root.join(oer_chips_family_facts::chip_file(&id)).is_file() {
             ids.push(id);
         }
     }
@@ -290,7 +290,7 @@ mod tests {
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
-        for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([(
+        for (path, text) in oer_chips_family_facts::tracked::FILES.iter().copied().chain([(
             "chips/esp32s31/platform/partitions/applications.csv",
             include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
         )]) {
@@ -312,7 +312,7 @@ mod tests {
             let facts = &chip.facts;
             assert_eq!(*chip, Profile::tracked(&facts.id).unwrap(), "{}", facts.id);
             assert!(
-                oer_espressif_facts::valid_identifier(&facts.family),
+                oer_chips_family_facts::valid_identifier(&facts.family),
                 "{}",
                 facts.id
             );
@@ -378,7 +378,7 @@ mod tests {
     fn a_load_records_every_layer_it_reads() {
         let repository = repository();
         let root = repository.path();
-        let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+        let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
         Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
         let read: Vec<PathBuf> = inputs.into_digests().into_keys().collect();
         let mut expected: Vec<PathBuf> = [

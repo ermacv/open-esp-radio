@@ -1,7 +1,7 @@
 //! The open promiscuous receive boundary.
 
 use super::{MacPlacement, WifiRadioRegisters};
-use oer_mmio::Index;
+use oer_portable_mmio::Index;
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Configure the complete working open promiscuous receive frontier.
@@ -44,7 +44,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         filter.modify_misc_packet_policy(|w| {
             w.set_open_misc_packet_classes(0xff);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 

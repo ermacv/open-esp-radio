@@ -39,7 +39,7 @@
 //! sweep) and `esp-hal/src/flash/tuning.rs:6-53` (`page_count`,
 //! `select_window`, ported here).
 
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 use crate::{
     Access, BootFailure, Busy,

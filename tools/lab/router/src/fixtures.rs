@@ -5,7 +5,7 @@
 
 use std::{path::Path, time::Duration};
 
-use oer_lab_model::equipment::{Fixture, interfaces};
+use oer_tools_lab_model::equipment::{Fixture, interfaces};
 
 /// How long one SSH probe may take before the host counts as not answering.
 const SSH_TIMEOUT: Duration = Duration::from_secs(8);

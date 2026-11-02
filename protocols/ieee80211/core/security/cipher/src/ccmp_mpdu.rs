@@ -21,13 +21,13 @@
 )]
 
 use crate::ccm::{self, MIC_LEN, NONCE_LEN};
-use oer_crypto::{
+use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
     ccm::CcmError,
 };
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_wire::ccmp::protected::{CcmpAad, ProtectedMpdu, ProtectedMpduError};
-use oer_ieee80211_wire::security::Spp;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_wire::ccmp::protected::{CcmpAad, ProtectedMpdu, ProtectedMpduError};
+use oer_protocols_ieee80211_wire::security::Spp;
 use zeroize::Zeroize;
 
 /// Why a protected data or management MPDU cannot be authenticated.

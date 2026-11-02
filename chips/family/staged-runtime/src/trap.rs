@@ -79,13 +79,13 @@ impl TrapRegisters {
     /// Read the current hart's trap CSRs.
     #[inline(always)]
     pub fn read() -> Self {
-        let hart = oer_riscv::hart_id();
-        let mcause = oer_riscv::read_mcause();
-        let mepc = oer_riscv::read_mepc();
-        let mtval = oer_riscv::read_mtval();
-        let mscratch = oer_riscv::read_mscratch();
-        let mtvec = oer_riscv::read_mtvec();
-        let mtvt = oer_riscv::read_mtvt();
+        let hart = oer_portable_riscv::hart_id();
+        let mcause = oer_portable_riscv::read_mcause();
+        let mepc = oer_portable_riscv::read_mepc();
+        let mtval = oer_portable_riscv::read_mtval();
+        let mscratch = oer_portable_riscv::read_mscratch();
+        let mtvec = oer_portable_riscv::read_mtvec();
+        let mtvt = oer_portable_riscv::read_mtvt();
         Self {
             hart,
             mcause,
@@ -106,7 +106,7 @@ pub fn current_hart_vector_slot(vector: usize) -> Option<u32> {
     if vector >= VECTORS {
         return None;
     }
-    let table = oer_riscv::read_mtvt() as *const u32;
+    let table = oer_portable_riscv::read_mtvt() as *const u32;
     // SAFETY: MTVT addresses the hart's word-aligned table of `VECTORS`
     // entries in SRAM, which the runtime installed; reading one entry calls
     // nothing.
@@ -114,7 +114,7 @@ pub fn current_hart_vector_slot(vector: usize) -> Option<u32> {
 }
 
 use crate::retained_fault::{Claim, Reentered, Terminal};
-use oer_diagnostics::fault::{Class, Domain, Record, View};
+use oer_portable_diagnostics::fault::{Class, Domain, Record, View};
 
 /// Numeric reason in the CPU-exception namespace.
 const CPU_EXCEPTION: u32 = 1;
@@ -126,7 +126,7 @@ fn encode_exception(
     hart: u32,
     mscratch: u32,
     terminal: Option<Terminal>,
-) -> Result<Record, oer_diagnostics::fault::Error> {
+) -> Result<Record, oer_portable_diagnostics::fault::Error> {
     let words = [
         frame.ra,
         frame.t0,
@@ -181,7 +181,7 @@ fn capture_first<'a>(
 /// the first committed frame. A fault before frame/commit completion remains
 /// subject to hardware protection and the preserved watchdog (best effort).
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
-pub fn handle<P: oer_espressif_platform_port::Platform>(
+pub fn handle<P: oer_chips_family_platform_port::Platform>(
     frame: &TrapFrame,
     hook: impl for<'a, 'b> FnOnce(&Claim<'_>, &TrapFrame, Result<&'b P::Stop<'a>, P::StopError>),
 ) -> ! {
@@ -189,8 +189,8 @@ pub fn handle<P: oer_espressif_platform_port::Platform>(
         let captured = capture_first(crate::retained_fault::claim(), |claim| {
             if let Ok(record) = encode_exception(
                 frame,
-                oer_riscv::hart_id() as u32,
-                oer_riscv::read_mscratch() as u32,
+                oer_portable_riscv::hart_id() as u32,
+                oer_portable_riscv::read_mscratch() as u32,
                 claim.terminal(),
             ) {
                 let _committed = claim.commit(&crate::panic::SLOT, record);
@@ -259,15 +259,15 @@ pub(crate) fn report_exception(
     let [ra, .., mepc, mcause, _, _, mtval, mscratch, terminal] = view
         .decode::<[u32; EXCEPTION_WORDS]>(Domain::CpuException)
         .map_err(|_| ())?;
-    oer_diagnostics::emit_note(
-        &oer_diagnostics::Note::fatal_exception(view.hart, mcause, mepc, mtval, ra, mscratch),
+    oer_portable_diagnostics::emit_note(
+        &oer_portable_diagnostics::Note::fatal_exception(view.hart, mcause, mepc, mtval, ra, mscratch),
         &mut emit,
     )
     .map_err(|_| ())?;
     // The number the image's own notes of this trap repeat.
     match Terminal::from_word(terminal) {
-        Some(terminal) => oer_diagnostics::emit_note(
-            &oer_diagnostics::Note::fatal_terminal(view.hart, terminal.get()),
+        Some(terminal) => oer_portable_diagnostics::emit_note(
+            &oer_portable_diagnostics::Note::fatal_terminal(view.hart, terminal.get()),
             emit,
         )
         .map_err(|_| ()),
@@ -371,7 +371,7 @@ mod tests {
     }
     /// The console frames in `bytes`.
     fn frames(bytes: &[u8]) -> usize {
-        let prefix = oer_diagnostics::console::PREFIX;
+        let prefix = oer_portable_diagnostics::console::PREFIX;
         bytes.windows(prefix.len()).filter(|w| *w == prefix).count()
     }
     #[test]

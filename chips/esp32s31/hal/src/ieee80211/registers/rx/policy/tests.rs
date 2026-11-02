@@ -1,7 +1,7 @@
 //! The receive-policy transitions over host memory: what each writes and
 //! what it keeps.
 
-use oer_esp32s31_pac::{instances, wifi_mac::WifiMacInterfaceAddress};
+use oer_chips_esp32s31_pac::{instances, wifi_mac::WifiMacInterfaceAddress};
 
 use super::{
     ACCESS_POINT, COLD_RECEIVE_QUEUE_INTERFACES, MacRoleReceivePolicy, MacStaPolicyMode, SNIFFER,

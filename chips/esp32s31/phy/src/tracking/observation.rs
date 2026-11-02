@@ -19,7 +19,7 @@ pub struct NotReadySample {
 /// Overflow is explicit: `complete()` is false if any sample did not fit.
 /// This does not consume a late result or change its deadline.
 pub struct ReadinessTrace {
-    command_at: oer_time::Instant,
+    command_at: oer_portable_time::Instant,
     not_ready: [NotReadySample; 16],
     pub maximum_first_check_micros: u32,
     pub failure_elapsed_micros: u32,
@@ -35,7 +35,7 @@ pub struct ReadinessTrace {
 impl Default for ReadinessTrace {
     fn default() -> Self {
         Self {
-            command_at: oer_time::Instant::EPOCH,
+            command_at: oer_portable_time::Instant::EPOCH,
             not_ready: [NotReadySample::default(); 16],
             maximum_first_check_micros: 0,
             failure_elapsed_micros: 0,
@@ -74,7 +74,7 @@ impl ReadinessTrace {
         }
     }
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) fn command_started(&mut self, at: oer_time::Instant) {
+    pub(crate) fn command_started(&mut self, at: oer_portable_time::Instant) {
         self.commands = self.commands.saturating_add(1);
         self.command_at = at;
     }
@@ -82,7 +82,7 @@ impl ReadinessTrace {
     #[inline(never)]
     pub(crate) fn checked(
         &mut self,
-        at: oer_time::Instant,
+        at: oer_portable_time::Instant,
         first: bool,
         not_ready: bool,
         failure: Option<(u8, u64)>,
@@ -145,9 +145,9 @@ impl RfpllCommandSample {
     #[inline(never)]
     pub(crate) fn intervals(
         command: RfpllCommand,
-        started: oer_time::Instant,
-        published: oer_time::Instant,
-        finished: oer_time::Instant,
+        started: oer_portable_time::Instant,
+        published: oer_portable_time::Instant,
+        finished: oer_portable_time::Instant,
     ) -> Self {
         let publication = published
             .checked_duration_since(started)
@@ -162,9 +162,9 @@ impl RfpllCommandSample {
             invalid: publication.is_none() || readiness.is_none(),
         }
     }
-    pub(crate) fn elapsed<C: oer_time::Clock>(
+    pub(crate) fn elapsed<C: oer_portable_time::Clock>(
         command: RfpllCommand,
-        started: Option<oer_time::Instant>,
+        started: Option<oer_portable_time::Instant>,
         clock: &C,
     ) -> Self {
         if let Some(at) = started {
@@ -239,15 +239,15 @@ impl EngineTiming {
     /// Update the bounded event counters before taking the final poll stamp.
     /// Only the final duration sum/max stores follow that stamp.
     #[inline(never)]
-    pub(crate) fn poll_finished<C: oer_time::Clock>(
+    pub(crate) fn poll_finished<C: oer_portable_time::Clock>(
         &mut self,
         clock: &C,
-        started: oer_time::Instant,
+        started: oer_portable_time::Instant,
         pending: bool,
-        resumed: Option<(oer_time::Instant, oer_time::Instant)>,
-        ready_elapsed: Option<oer_time::Duration>,
+        resumed: Option<(oer_portable_time::Instant, oer_portable_time::Instant)>,
+        ready_elapsed: Option<oer_portable_time::Duration>,
         rfpll: Option<(&mut RfpllEngineTrace, RfpllCommandSample)>,
-    ) -> oer_time::Instant {
+    ) -> oer_portable_time::Instant {
         fn increment(total: &mut u16, invalid: &mut bool) {
             if let Some(next) = total.checked_add(1) {
                 *total = next;

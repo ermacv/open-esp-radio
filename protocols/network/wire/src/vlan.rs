@@ -4,13 +4,13 @@
 //! (Tag Control Information).
 
 use crate::ethernet::EtherType;
-use oer_wire::{Error, Reader};
+use oer_portable_wire::{Error, Reader};
 
 /// Length of the tag's Tag Control Information and inner EtherType; the Tag
 /// Protocol Identifier is the outer EtherType.
 pub const TAG_LEN: usize = 4;
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// VLAN tag control information, including Priority Code Point.
     /// SOURCE: IEEE Std 802.1Q-2022, 9.6 (Tag Control Information).
     pub struct VlanTci[2] (big) {

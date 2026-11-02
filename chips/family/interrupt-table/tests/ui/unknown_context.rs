@@ -1,9 +1,9 @@
-oer_espressif_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_parts!();
 pub fn timer(_: &mut TimerIrq) {}
 
 macro_rules! table {
     ($context:ident) => {
-        oer_espressif_interrupt_table::interrupt_table! {
+        oer_chips_family_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { radio: 3; }

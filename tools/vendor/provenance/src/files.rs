@@ -37,7 +37,7 @@ impl Files {
 
     fn from_git(root: &Path) -> Result<Self> {
         let list = |arguments: &[&str]| -> Result<Vec<String>> {
-            let output = oer_os_process::git::output(root, arguments)
+            let output = oer_tools_os_process::git::output(root, arguments)
                 .map_err(|error| format!("git ls-files failed: {error}"))?;
             let listing = String::from_utf8(output)
                 .map_err(|_| "git ls-files printed a non-UTF-8 path".to_owned())?;

@@ -1,13 +1,13 @@
 //! One-credit HCI service loop over a composition-owned transport and port.
 
-use oer_bluetooth_hci::{
+use oer_protocols_bluetooth_hci::{
     Cmd, HardwareErrorEvent, HciCommandPacket, HciControllerResponse, LeRand, Opcode,
 };
-use oer_bluetooth_le_controller::dtm::{
+use oer_protocols_bluetooth_le_controller::dtm::{
     Accepted, Entropy, Reset, Response, Service, SubmitError, Submitted,
 };
-use oer_bluetooth_le_port::{LeCapabilities, LePhase};
-use oer_radio_port::{ClockError, PoolPath, PortResult};
+use oer_protocols_bluetooth_le_port::{LeCapabilities, LePhase};
+use oer_protocols_radio_port::{ClockError, PoolPath, PortResult};
 
 /// A complete command or a framing failure reported by the transport.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,7 +63,7 @@ pub enum Error<E, F> {
     Backend(F),
     ClockBusy,
     Accounting,
-    Terminal(oer_bluetooth_le_controller::dtm::Fault),
+    Terminal(oer_protocols_bluetooth_le_controller::dtm::Fault),
 }
 
 /// Serve commands in order: read, optional latch/entropy, accept/consume, submit,

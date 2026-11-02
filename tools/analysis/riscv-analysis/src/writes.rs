@@ -4,7 +4,7 @@
 //! denotes a value captured at its load PC, not the field's entry value.
 //! The separate opt-in WordPostcondition proves one word at normal return,
 //! using the common evaluator; it does not remove any generic write event.
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 
 pub(crate) mod context;
 mod tail;

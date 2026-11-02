@@ -38,14 +38,14 @@ use crate::sae::{
     SAE_KEY_LEN, SaeComebackTokens, SaeCommit, SaeError, SaeKeys, SaePassword, SaePasswordElement,
     SaePasswordToken, valid_peer_commit,
 };
-use oer_ieee80211_wire::sae::{
+use oer_protocols_ieee80211_wire::sae::{
     SAE_ANTI_CLOGGING_TOKEN_LEN, SAE_COMMIT_LEN, SAE_CONFIRM_LEN, SAE_GROUP_P256, SAE_PRIME_LEN,
     SaeCommitRefusal, SaeCommitValues, SaeReceivedCommit, anti_clogging_token_container_header,
     finite_cyclic_group, finite_cyclic_group_field, send_confirm,
 };
-use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
-use oer_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
-use oer_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
+use oer_protocols_ieee80211_wire::status::status_code;
 
 /// Sessions awaiting a Confirm, with queued Commits, beyond which a Commit
 /// must carry an anti-clogging token.
@@ -308,7 +308,7 @@ impl<const N: usize> ApSaeResponder<N> {
     pub fn receive<R: ApSaeRandom>(
         &mut self,
         frame: ApSaeFrame<'_>,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         queued_commits: usize,
         random: &mut R,
     ) -> ApSaeOutput {
@@ -359,7 +359,7 @@ impl<const N: usize> ApSaeResponder<N> {
         peer: [u8; 6],
         status: u16,
         body: &[u8],
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         queued_commits: usize,
         random: &mut R,
     ) -> ApSaeOutput {

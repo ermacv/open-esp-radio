@@ -2,10 +2,10 @@
 
 use core::num::NonZeroU64;
 
-use oer_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
+use oer_protocols_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
 
 use crate::{LeInstant, LePhy, LeRadio, LeWindow, NonZeroRadioDuration, RadioDuration};
-use oer_bluetooth_le_wire::{
+use oer_protocols_bluetooth_le_wire::{
     AccessAddress, AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, CrcInit, DataChannel,
     TestChannel, TestPayloadType,
 };
@@ -50,10 +50,10 @@ role_id!(
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct LeBand;
 
-impl oer_radio_regulatory::RadioChannel for LeBand {
-    fn span(&self) -> oer_radio_regulatory::FrequencySpan {
+impl oer_protocols_radio_regulatory::RadioChannel for LeBand {
+    fn span(&self) -> oer_protocols_radio_regulatory::FrequencySpan {
         const {
-            match oer_radio_regulatory::FrequencySpan::new(2_400_000, 2_483_500) {
+            match oer_protocols_radio_regulatory::FrequencySpan::new(2_400_000, 2_483_500) {
                 Some(span) => span,
                 None => panic!("the LE band must be non-empty"),
             }
@@ -72,14 +72,14 @@ impl oer_radio_regulatory::RadioChannel for LeBand {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct LeTxCeiling {
     dbm: i8,
-    initiate: oer_radio_regulatory::Initiate,
+    initiate: oer_protocols_radio_regulatory::Initiate,
 }
 
 impl LeTxCeiling {
     /// The band `band` under `ceiling`.
     pub const fn new(
-        band: oer_radio_regulatory::Permitted<LeBand>,
-        ceiling: oer_radio_regulatory::TxCeiling,
+        band: oer_protocols_radio_regulatory::Permitted<LeBand>,
+        ceiling: oer_protocols_radio_regulatory::TxCeiling,
     ) -> Self {
         Self {
             dbm: ceiling.dbm(),
@@ -94,7 +94,7 @@ impl LeTxCeiling {
 
     /// Whether the radio may start a transmission (advertise, send a scan or
     /// connection request) or may only listen.
-    pub const fn initiate(self) -> oer_radio_regulatory::Initiate {
+    pub const fn initiate(self) -> oer_protocols_radio_regulatory::Initiate {
         self.initiate
     }
 }
@@ -535,11 +535,11 @@ mod tests {
     };
     use crate::{LeInstant, LeWindow, NonZeroRadioDuration, RadioDuration};
     use core::num::NonZeroU64;
-    use oer_bluetooth_le_wire::{AdvertisingChannel, AdvertisingChannels};
+    use oer_protocols_bluetooth_le_wire::{AdvertisingChannel, AdvertisingChannels};
 
     #[test]
     fn le_band_covers_the_same_hopping_span_and_channel_width() {
-        use oer_radio_regulatory::RadioChannel;
+        use oer_protocols_radio_regulatory::RadioChannel;
         let span = super::LeBand.span();
         assert_eq!(span.low_khz(), 2_400_000);
         assert_eq!(span.high_khz(), 2_483_500);
@@ -549,7 +549,7 @@ mod tests {
     /// Only a connection event has a hard deadline.
     #[test]
     fn only_connection_events_have_hard_deadlines() {
-        use oer_radio_coex::{AirClass, Operation as _};
+        use oer_protocols_radio_coex::{AirClass, Operation as _};
         assert_eq!(
             Operation::AdvertisingEvent(AdvertisingEventKind::Raised).class(),
             AirClass::PtiOnly

@@ -41,30 +41,30 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
 pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
     storage: &'static PortSharedStorage<B, D::Lent, D::Body>,
-    commands: oer_memory::AffineSpscSender<
+    commands: oer_portable_memory::AffineSpscSender<
         's,
         driver::Command<'static, Id, D, B, O>,
         COMMANDS,
-        oer_memory::CompactSpscCursor,
+        oer_portable_memory::CompactSpscCursor,
     >,
-    events: oer_memory::AffineSpscReceiver<
+    events: oer_portable_memory::AffineSpscReceiver<
         's,
         owned::OwnedEvent<'static, Id, D, B>,
         { TERMINAL_CAPACITY + RX_HELD },
-        oer_memory::CompactSpscCursor,
+        oer_portable_memory::CompactSpscCursor,
     >,
     port: &'static PortStorage<D, B>,
     driver: &'s RefCell<driver::Driver<'static, Id, D, B, O>>,
     rx_out: &'s Cell<usize>,
-    failed_command: &'s oer_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
-    failed_terminal: &'s oer_memory::OnceValue<owned::Retained<'static, Id, D, B, O>>,
+    failed_command: &'s oer_portable_memory::OnceValue<driver::Command<'static, Id, D, B, O>>,
+    failed_terminal: &'s oer_portable_memory::OnceValue<owned::Retained<'static, Id, D, B, O>>,
     completions: &'s handoff::Completions<'static, Id, D, B, O>,
     gate: &'s GateIssuer<'static, Part<Id, 1>>,
     tuned: &'s mut Cell<Channel>,
     identity: &'s mut Cell<u64>,
     timer: D::Timer,
     clock_replies:
-        oer_memory::AffineSpscReceiver<'s, handoff::ClockAnswer, 1, oer_memory::CompactSpscCursor>,
+        oer_portable_memory::AffineSpscReceiver<'s, handoff::ClockAnswer, 1, oer_portable_memory::CompactSpscCursor>,
     clock_use: &'s mut Cell<handoff::ClockUse>,
     addresses: [IndividualAddress; 2],
 }
@@ -257,7 +257,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -274,7 +274,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             }),
         ) = (queues.resources.is_some(), queues.held.attached.as_mut())
         else {
-            return Err(oer_radio_port::SlotInitError::MissingResource(
+            return Err(oer_protocols_radio_port::SlotInitError::MissingResource(
                 "Wi-Fi installation resources",
             ));
         };
@@ -301,7 +301,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 clock_replies,
                 clock_use: &mut queues.held.clock_use,
                 addresses: queues.addresses.ok_or(
-                    oer_radio_port::SlotInitError::MissingResource("Wi-Fi addresses"),
+                    oer_protocols_radio_port::SlotInitError::MissingResource("Wi-Fi addresses"),
                 )?,
             },
             Invocation {
@@ -332,7 +332,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         let storage = self.storage;
         if !matches!(self.state, BackendState::Running) {
             // Only a prepared installation registers; nothing to drive.
-            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             match core::future::pending::<core::convert::Infallible>().await {}
         }
         let state = invocation.driver;
@@ -356,7 +356,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 Ok(deadline) => deadline,
                 Err(cause) => {
                     storage.poison(cause);
-                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                    retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                     match core::future::pending::<core::convert::Infallible>().await {}
                 }
             };
@@ -365,7 +365,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             let done = poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
                 if storage.shared.poisoned.is_requested() {
-                    retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                    retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                     return Poll::Pending;
                 }
                 if held.publishing.get() {
@@ -377,14 +377,14 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         Ok(mut device) => device.radio_now(),
                         Err(fault) => {
                             storage.poison(fault);
-                            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                             return Poll::Pending;
                         }
                     };
                     // Room was checked above: one outstanding clock latch.
                     if held.clock_replies.push(answer).is_err() {
                         storage.poison(Fault::Capacity);
-                        retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                        retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                         return Poll::Pending;
                     }
                     storage.shared.wake_body();
@@ -398,7 +398,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         Poll::Ready(Ok(())) => return Poll::Ready(true),
                         Poll::Ready(Err(cause)) => {
                             storage.poison(cause);
-                            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                             return Poll::Pending;
                         }
                         Poll::Pending => {
@@ -418,7 +418,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     Ok(next) => next,
                     Err(cause) => {
                         storage.poison(cause);
-                        retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                        retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                         return Poll::Pending;
                     }
                 };
@@ -447,12 +447,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             || storage.shared.network.held() != 0
             || !storage.shared.returned.all_returned()
         {
-            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         let Ok(channel) = held.channel.get() else {
             storage.poison(Fault::Setting(settings::SettingFault::ChannelUnset));
-            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             match core::future::pending::<core::convert::Infallible>().await {}
         };
         self.channel = channel;
@@ -463,7 +463,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             Ok(mut device) => device.detach(),
             Err(fault) => {
                 storage.poison(fault);
-                retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+                retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                 match core::future::pending::<core::convert::Infallible>().await {}
             }
         }
@@ -515,7 +515,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOw
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+    ) -> Result<Self::Body<'p>, oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -525,7 +525,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOw
             frontend
                 .resources
                 .take()
-                .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
                     "Wi-Fi resources",
                 ))?;
         Ok(BodyViews {

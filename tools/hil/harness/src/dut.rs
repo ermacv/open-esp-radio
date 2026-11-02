@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use oer_hil_link::{Boot, Link};
+use oer_tools_hil_link::{Boot, Link};
 
 use crate::finish::Board;
 
@@ -69,7 +69,7 @@ pub(crate) trait Device {
     /// Run `request` on the lab router under the run's lease.
     fn router(
         &self,
-        request: oer_lab_client::protocol::RouterOperation,
+        request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String>;
 }
 
@@ -97,7 +97,7 @@ impl Device for Dut<'_> {
 
     fn router(
         &self,
-        request: oer_lab_client::protocol::RouterOperation,
+        request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String> {
         self.board.router(request)
     }

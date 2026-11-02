@@ -8,14 +8,14 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, Air, IndeterminateCause, PhyRate, SingleEnd, SingleResponse, TxOutcome,
 };
-use oer_ieee80211_testing_conformance::{
+use oer_protocols_ieee80211_testing_conformance::{
     self as conformance, Environment, MpduState,
     outcomes::{self, Case, Form, Identity, Outcome, Trace},
 };
-use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
+use oer_protocols_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 
 #[test]
 fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
@@ -24,8 +24,8 @@ fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
         ends: &[End::Expired(1)][..],
         publications: 0,
         expired_msdus: 1,
-        admitted: [oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
-        returned: [oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
+        admitted: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
+        returned: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
         owners: [1, 2, 2],
         returned_owners: [1, 2, 2],
         backend_bars: 0,
@@ -33,7 +33,7 @@ fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
     };
     assert_eq!(msdu_age::verify(Case::BeforePublication, good()), Ok(()));
     let mut trace = good();
-    trace.returned[0] = oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(100);
+    trace.returned[0] = oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(100);
     assert_eq!(
         msdu_age::verify(Case::BeforePublication, trace),
         Err(Violation::Age)
@@ -69,8 +69,8 @@ fn delivery_before_expiry_requires_the_bar_to_follow_the_new_head() {
         ends: [End::Delivered, End::Expired(1)],
         publications: 1,
         expired_msdus: 1,
-        admitted: [oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
-        returned: [oer_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
+        admitted: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
+        returned: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
         owners: [1, 2, 3],
         returned_owners: [1, 2, 3],
         backend_bars: 0,
@@ -78,7 +78,7 @@ fn delivery_before_expiry_requires_the_bar_to_follow_the_new_head() {
             head: SequenceNumber::new(7).unwrap(),
             tid: 0,
             addresses: [[2, 0, 0, 0, 0, 2], [2, 0, 0, 0, 0, 1]],
-            frame: oer_ieee80211_wire::block_ack::encode_block_ack_request(
+            frame: oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
                 [2, 0, 0, 0, 0, 2],
                 [2, 0, 0, 0, 0, 1],
                 0,
@@ -124,7 +124,7 @@ fn trace(case: Case) -> Trace<(), (), ()> {
         })),
         Case::BlockAck => Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
             air,
-            report: oer_ieee80211_contracts_port::BlockAckReport::new(SequenceNumber::ZERO, 1),
+            report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(SequenceNumber::ZERO, 1),
             ack: (),
         })),
         Case::NoResponse(Form::Single) => {
@@ -252,7 +252,7 @@ fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
     first[0] = 0x08;
     first[1] = 0x41;
     let mut retry = first;
-    assert!(oer_ieee80211_wire::frame::set_retry_bit(&mut retry));
+    assert!(oer_protocols_ieee80211_wire::frame::set_retry_bit(&mut retry));
     let mut retried_frames: heapless::Vec<[u8; 40], 1> = heapless::Vec::new();
     retried_frames
         .push(retry)
@@ -272,14 +272,14 @@ fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
                 ticket: 1,
                 state: MpduState::Sent,
                 outcome: TxOutcome::Withdrawn(
-                    oer_ieee80211_contracts_port::WithdrawCause::GateClosed,
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::GateClosed,
                 ),
             },
             BarrierEvent::Tx {
                 ticket: 2,
                 state: MpduState::Fresh,
                 outcome: TxOutcome::Withdrawn(
-                    oer_ieee80211_contracts_port::WithdrawCause::GateClosed,
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::GateClosed,
                 ),
             },
             BarrierEvent::GateClosed,
@@ -297,10 +297,10 @@ fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
 #[test]
 fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands() {
     use conformance::group_keys::{self, Completion, Owners, ProgressCase, ProgressTrace, Timing};
-    use oer_time::{Clock, Duration};
+    use oer_portable_time::{Clock, Duration};
 
     struct GroupFixture<'a> {
-        clock: &'a oer_time_virtual::VirtualClock,
+        clock: &'a oer_portable_time_virtual::VirtualClock,
         calls: heapless::Vec<ProgressCase, 13>,
     }
     impl group_keys::Harness for GroupFixture<'_> {
@@ -383,7 +383,7 @@ fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands()
         }
     }
 
-    let clock: oer_time_virtual::VirtualClock = oer_time_virtual::VirtualClock::new();
+    let clock: oer_portable_time_virtual::VirtualClock = oer_portable_time_virtual::VirtualClock::new();
     let mut fixture = GroupFixture {
         clock: &clock,
         calls: heapless::Vec::new(),

@@ -16,7 +16,7 @@ fn role_adapter_changes_only_interface_and_key_authority() {
         data_power_alternate: 2,
         control: TxControlFrame {
             protection: crate::mac::tx::protection::TxProtection::RtsCts {
-                rate: oer_esp32s31_hal::types::MacLegacyRate::Ofdm24M,
+                rate: oer_chips_esp32s31_hal::types::MacLegacyRate::Ofdm24M,
             },
             power_primary: 3,
             power_alternate: 4,

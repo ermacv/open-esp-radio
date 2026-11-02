@@ -1,6 +1,6 @@
 //! Diagnostic value observations borrowed from each register's owner.
 use super::*;
-use oer_esp32s31_pac as pac;
+use oer_chips_esp32s31_pac as pac;
 
 /// Complete modeled primary enables and pending observations, granting no MMIO authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,7 +63,7 @@ fn interrupt_enable(v: pac::bt_mac::interrupt_enable::R) -> u32 {
         | (v.bits_15_16_opaque().get() << r::BITS_15_16_OPAQUE_MASK.trailing_zeros())
         | (v.bits_18_31_opaque().get() << r::BITS_18_31_OPAQUE_MASK.trailing_zeros())
 }
-pub(super) fn primary<B: oer_mmio::Placement>(
+pub(super) fn primary<B: oer_portable_mmio::Placement>(
     bank: &pac::bt_mac::BluetoothInterruptBank<B>,
 ) -> BluetoothInterruptObservation {
     // SOURCE: BT_MAC IRQ_ENABLE/STATUS and NRT snapshot fields in the register
@@ -124,7 +124,7 @@ impl TaskOwner {
     }
 }
 
-pub(super) fn task<B: oer_mmio::Placement>(
+pub(super) fn task<B: oer_portable_mmio::Placement>(
     b: &pac::bt_mac::BtmacBlePhyInit<B>,
 ) -> BluetoothTaskInterruptObservation {
     BluetoothTaskInterruptObservation {
@@ -133,7 +133,7 @@ pub(super) fn task<B: oer_mmio::Placement>(
     }
 }
 
-pub(super) fn task_enable<B: oer_mmio::Placement>(b: &pac::bt_mac::BtmacBlePhyInit<B>) -> u32 {
+pub(super) fn task_enable<B: oer_portable_mmio::Placement>(b: &pac::bt_mac::BtmacBlePhyInit<B>) -> u32 {
     interrupt_enable(b.read_interrupt_enable())
 }
 

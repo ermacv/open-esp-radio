@@ -1,4 +1,4 @@
-use oer_bluetooth_le_port::RadioDuration;
+use oer_protocols_bluetooth_le_port::RadioDuration;
 
 use super::{LE_1M_EVENT_MICROS, connection_allowances};
 

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{LocalId, SlotIdentity, StaticId};
+use oer_protocols_radio_port::{LocalId, SlotIdentity, StaticId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Foreign;

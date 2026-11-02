@@ -1,5 +1,5 @@
 //! A readable view of why analyzed functions are partial.
-use oer_analysis_blobray_domain::PartialCauses;
+use oer_tools_analysis_blobray_domain::PartialCauses;
 
 /// ` (by cause: 2 control flow, 5 opaque calls)` with every nonzero cause,
 /// or nothing when no function is partial.
@@ -28,7 +28,7 @@ pub fn human(causes: &PartialCauses) -> String {
 #[cfg(test)]
 mod tests {
     use super::human;
-    use oer_analysis_blobray_domain::PartialCauses;
+    use oer_tools_analysis_blobray_domain::PartialCauses;
 
     #[test]
     fn only_nonzero_causes_are_listed() {

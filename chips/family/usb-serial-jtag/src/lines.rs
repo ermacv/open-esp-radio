@@ -3,7 +3,7 @@
 //! not once per chunk of its encoding.
 
 use embedded_io_async::Write;
-use oer_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
+use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
 
 #[cfg(test)]
 mod tests;

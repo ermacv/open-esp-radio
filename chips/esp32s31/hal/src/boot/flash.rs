@@ -1,16 +1,16 @@
 //! The flash owner: the SPI1 user command port, the controllers' input
 //! timing words and the flash MMU (`FLASH_SPI0`).
 
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     Access, Busy,
     flash::{
         CHUNK_WORDS, FlashCommandRegisters, FlashReadCommand, FlashReadMode, FlashTimingRegisters,
     },
     mmu::{MmuEntry, MmuRegisters, MmuTarget},
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances,
     spi_mem_c::{self as spi0, Spi0Flash},
     spi1_mem_c::{self as spi1, Spi1Flash},
@@ -355,9 +355,9 @@ impl<P: Placement, Q: Placement> MmuRegisters for FlashRegisters<P, Q> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a, 'b> FlashRegisters<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
+impl<'a, 'b> FlashRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// The flash owner over host memory from each instance's base.
-    pub fn host(spi0: &'a mut [u32], spi1: &'b mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(spi0: &'a mut [u32], spi1: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             spi0: Spi0Flash::host(spi0)?,
             spi1: Spi1Flash::host(spi1)?,

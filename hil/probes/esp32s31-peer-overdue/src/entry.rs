@@ -1,37 +1,37 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_board as board;
-use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::cores::Cores;
-use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag;
-use oer_esp32s31_hal::peripherals::watchdog::{
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_board as board;
+use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_hal::cores::Cores;
+use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
+use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_chips_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
-use oer_esp32s31_hal::peripherals::{
+use oer_chips_esp32s31_hal::peripherals::{
     software_interrupt::{FromCpu0Irq, FromCpu1Irq},
     system_timer::SystimerAlarm0,
 };
-use oer_esp32s31_hal::platform::{BOOT_HART, Port};
-use oer_esp32s31_hal::root::Root;
-use oer_espressif_executor::peer::liveness::{self, Beat, Period, Responder, Supervisor};
-use oer_espressif_executor::peer::{Obligations, PeerClient, PeerServer};
-use oer_espressif_executor::{Executor, InterruptExecutor};
-use oer_espressif_interrupt_table::signal::{FromPeerHart, IrqSignal};
-use oer_espressif_staged_runtime::panic::{self, FaultReason, PreviousFault};
-use oer_espressif_staged_runtime::SecondaryHandoff;
-use oer_memory::{InPlace, RequestSlot};
-use oer_time::{Clock as _, Timer as _};
+use oer_chips_esp32s31_hal::platform::{BOOT_HART, Port};
+use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_family_executor::peer::liveness::{self, Beat, Period, Responder, Supervisor};
+use oer_chips_family_executor::peer::{Obligations, PeerClient, PeerServer};
+use oer_chips_family_executor::{Executor, InterruptExecutor};
+use oer_chips_family_interrupt_table::signal::{FromPeerHart, IrqSignal};
+use oer_chips_family_staged_runtime::panic::{self, FaultReason, PreviousFault};
+use oer_chips_family_staged_runtime::SecondaryHandoff;
+use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_time::{Clock as _, Timer as _};
 
-oer_espressif_staged_runtime::interrupt_table! {
+oer_chips_family_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; hart1_executor: 2; }
     /// The boot hart's executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The boot hart's executor's timer alarm; it only acknowledges and pends.
-    alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: AlarmToken = SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
     /// Hart 1's interrupt-mode executor on `FROM_CPU1`, routed to hart 1's bank.
-    hart1: Hart1Token = FromCpu1Irq => oer_espressif_executor::Round<Hart1Tasks>, line 16, context hart1_executor, hart 1, Executor;
+    hart1: Hart1Token = FromCpu1Irq => oer_chips_family_executor::Round<Hart1Tasks>, line 16, context hart1_executor, hart 1, Executor;
 }
 
 /// The boot hart's thread-mode executor on `FROM_CPU0`, the time driver's
@@ -40,7 +40,7 @@ type Hart0Executor = Executor<Esp32s31, 0>;
 /// Hart 1's interrupt-mode executor on `FROM_CPU1`.
 type Hart1Executor = InterruptExecutor<Esp32s31, 1>;
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
@@ -49,7 +49,7 @@ oer_espressif_executor::tasks! {
     }
 }
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// Hart 1's tasks.
     pub Hart1Tasks: InterruptExecutor<Esp32s31, 1> {
         respond(server: Server) = respond;
@@ -75,8 +75,8 @@ type LivenessResponder = Responder<Hart1Executor, Hart0Executor>;
 /// The liveness supervision of hart 1, as boot-smoke's: a beat every
 /// 100 ms, each echoed within 50 ms. Stated configuration.
 const LIVENESS: Period = match Period::new(
-    oer_time::Duration::from_millis(100),
-    oer_time::Duration::from_millis(50),
+    oer_portable_time::Duration::from_millis(100),
+    oer_portable_time::Duration::from_millis(50),
 ) {
     Ok(period) => period,
     Err(_) => panic!("the liveness deadline lies within its period"),
@@ -84,10 +84,10 @@ const LIVENESS: Period = match Period::new(
 
 /// The abandoned request's deadline after its post: longer than two beat
 /// periods, so beats complete after the post and before the deadline.
-const ABANDON: oer_time::Duration = oer_time::Duration::from_millis(300);
+const ABANDON: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(300);
 
 /// How often the probe looks for the stand's arming word.
-const ARM_POLL: oer_time::Duration = oer_time::Duration::from_millis(50);
+const ARM_POLL: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(50);
 
 /// The one watched channel: the supervisor issues its seat 0.
 const WATCHED: usize = 1;
@@ -96,7 +96,7 @@ const CHANNEL: u32 = 0;
 /// The supervisor's mark in a `PeerUnanswered` record.
 const SUPERVISOR_MARK: u32 = 2;
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// The request was posted for hart 1's task: raised by the boot hart's task.
     static POSTED: IrqSignal<Hart1Executor> = IrqSignal::new::<FromPeerHart<Hart0Executor, WakeToken>, Hart1Token>(), in critical_data "hart_exchange";
     /// The request was answered: raised by hart 1's task.
@@ -125,7 +125,7 @@ static ABANDONED: AtomicU32 = AtomicU32::new(0);
 // (low, high word), the beats completed since the post, the requests hart 1
 // served, and a check word over the first five. The stand writes `ARMED`
 // into the first word over JTAG to arm one injection.
-oer_espressif_staged_runtime::retained_static! { static PROBE: [u32; 6]; }
+oer_chips_family_staged_runtime::retained_static! { static PROBE: [u32; 6]; }
 
 /// The stand armed one injection.
 const ARMED: u32 = 0x4152_4d44;
@@ -178,7 +178,7 @@ fn armed() -> bool {
     PROBE
         .try_lock()
         .is_some_and(|words| {
-            let [state, ..] = oer_memory::read_volatile(&*words);
+            let [state, ..] = oer_portable_memory::read_volatile(&*words);
             state == ARMED
         })
 }
@@ -199,25 +199,25 @@ struct Hart1Parts {
     liveness: LivenessResponder,
 }
 
-oer_espressif_staged_runtime::entry!(main, Port);
-oer_espressif_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1_main);
+oer_chips_family_staged_runtime::entry!(main, Port);
+oer_chips_family_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1_main);
 
-fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
+fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     // Before the runtime reports and clears it.
     let previous = panic::peek_previous_fault();
     let injected = read_injected();
     let Some(root) = Root::take() else {
-        fail(oer_diagnostics::name!("root-taken"; 32));
+        fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((runtime_system_timer, runtime_software_interrupts, runtime_watchdogs, reset_causes, hart1), _psram, mut adopted) =
-        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_compose::phy_fault::report_previous,
             |hardware| {
-                let reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                let reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 (
                     hardware.system_timer,
                     hardware.software_interrupts,
@@ -242,25 +242,25 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
     };
     clear();
     let Some(interrupts) = Interrupts::take() else {
-        fail(oer_diagnostics::name!("interrupt-table"; 32));
+        fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
     let software = runtime_software_interrupts;
     let hart1_executor = InterruptExecutor::<Esp32s31, 1>::new(software.line1);
     let Some((supervisor, responder)) =
         liveness::pair(&BEAT_SEAT, &BEAT_POSTED, &BEAT_ANSWERED, LIVENESS, &OBLIGATIONS)
     else {
-        fail(oer_diagnostics::name!("liveness-claimed"; 32));
+        fail(oer_portable_diagnostics::name!("liveness-claimed"; 32));
     };
     let Some(seat) = supervisor.watch() else {
-        fail(oer_diagnostics::name!("obligation-seat"; 32));
+        fail(oer_portable_diagnostics::name!("obligation-seat"; 32));
     };
-    let Some((client, server)) = oer_espressif_executor::peer::pair(&SLOT, &POSTED, &ANSWERED, seat)
+    let Some((client, server)) = oer_chips_family_executor::peer::pair(&SLOT, &POSTED, &ANSWERED, seat)
     else {
-        fail(oer_diagnostics::name!("channel-claimed"; 32));
+        fail(oer_portable_diagnostics::name!("channel-claimed"; 32));
     };
     let timer = runtime_system_timer;
-    let timers = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
+    let timers = oer_chips_family_executor::init::<Esp32s31, 0, _, _, _>(
+        oer_chips_family_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -287,15 +287,15 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
         match executor
             .run(&hart, &mut router, interrupts.wake, software.irq0, (), (), move |spawner| {
                 if Tasks::rtc_watchdog(spawner, watchdog).is_err() {
-                    fail(oer_diagnostics::name!("task-start"; 32));
+                    fail(oer_portable_diagnostics::name!("task-start"; 32));
                 }
             })
             .unwrap_or_else(|failure| failure.reset()) {}
     }
     let Ok(Some(mut cores)) = Cores::take() else {
-        fail(oer_diagnostics::name!("cores-taken"; 32));
+        fail(oer_portable_diagnostics::name!("cores-taken"; 32));
     };
-    let hart1 = oer_esp32s31_compose::secondary::launch_hart1(
+    let hart1 = oer_chips_esp32s31_compose::secondary::launch_hart1(
         &mut cores,
         hart1,
         reset_causes,
@@ -323,7 +323,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
                 || Tasks::supervise(spawner, supervisor).is_err()
                 || Tasks::abandon(spawner, client).is_err()
             {
-                fail(oer_diagnostics::name!("task-start"; 32));
+                fail(oer_portable_diagnostics::name!("task-start"; 32));
             }
         })
         .unwrap_or_else(|failure| failure.reset()) {}
@@ -377,10 +377,10 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
         .unwrap_or_else(|failure| failure.reset());
     if Hart1Tasks::respond(&spawner, server).is_err() || Hart1Tasks::beat(&spawner, liveness).is_err()
     {
-        fail(oer_diagnostics::name!("hart1-task-start"; 32));
+        fail(oer_portable_diagnostics::name!("hart1-task-start"; 32));
     }
     match adopted.enable_interrupts() {
-        Ok(_router_and_hart) => oer_espressif_staged_runtime::idle(),
+        Ok(_router_and_hart) => oer_chips_family_staged_runtime::idle(),
         Err(error) => fail(error.name()),
     }
 }
@@ -431,11 +431,11 @@ async fn supervise_hart1(supervisor: LivenessSupervisor) {
 async fn abandon_when_armed(mut client: Client) {
     while !armed() {
         if EmbassyClock.wait_for(ARM_POLL).await.is_err() {
-            fail(oer_diagnostics::name!("arm-poll-time"; 32));
+            fail(oer_portable_diagnostics::name!("arm-poll-time"; 32));
         }
     }
     let Ok(deadline) = EmbassyClock.deadline_after(ABANDON) else {
-        fail(oer_diagnostics::name!("abandon-deadline"; 32));
+        fail(oer_portable_diagnostics::name!("abandon-deadline"; 32));
     };
     // The next boot's expectation exists before the obligation does.
     store_injected(Injected {
@@ -445,7 +445,7 @@ async fn abandon_when_armed(mut client: Client) {
     });
     ABANDONED.store(1, Ordering::Release);
     if client.post(Ask { value: 7, answer: 0 }, deadline).is_err() {
-        fail(oer_diagnostics::name!("abandon-post"; 32));
+        fail(oer_portable_diagnostics::name!("abandon-post"; 32));
     }
     let mut line = *b"OER-PROBE peer-overdue posted channel=00000000 deadline=0000000000000000\r\n";
     put_hex(&mut line, 38, CHANNEL);
@@ -459,7 +459,7 @@ async fn abandon_when_armed(mut client: Client) {
 
 /// Feed the RTC watchdog for good.
 async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
-    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    let period = oer_portable_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
     match watchdog.feed_every(&EmbassyClock, period).await {}
 }
 
@@ -483,10 +483,10 @@ fn put_hex(line: &mut [u8], at: usize, word: u32) {
 }
 
 /// Retain and report a failed boot step before explicitly resetting the image.
-fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
-        let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
+fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
+    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
+        let _note = usb_serial_jtag::fatal_note(&oer_portable_diagnostics::Note::runtime_fail(reason));
     })
 }
 
-oer_espressif_executor::time_driver!(Esp32s31);
+oer_chips_family_executor::time_driver!(Esp32s31);

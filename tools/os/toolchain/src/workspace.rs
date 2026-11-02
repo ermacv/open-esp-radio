@@ -13,7 +13,7 @@ pub fn binary(root: &Path, name: &str) -> PathBuf {
 
 /// Build `package`'s binary `name` with [`PROFILE`] and return its path.
 pub fn build(root: &Path, package: &str, name: &str) -> crate::Result<PathBuf> {
-    oer_os_process::run(crate::cargo_in(root).args([
+    oer_tools_os_process::run(crate::cargo_in(root).args([
         "build",
         "--locked",
         "--profile",

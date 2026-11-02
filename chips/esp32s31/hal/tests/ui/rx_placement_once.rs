@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::PlacedRxDma};
+use oer_chips_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::PlacedRxDma};
 
 pub fn prepare<M: RxDma>(placed: PlacedRxDma<2, 16, 16>, mmio: &mut M) {
     let _ = placed.prepare_ring(mmio);

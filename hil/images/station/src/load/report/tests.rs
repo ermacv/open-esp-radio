@@ -1,6 +1,6 @@
 use super::*;
-use oer_espressif::observe::parts::{LIBRARY_PARTS, PartSample};
-use oer_trace::profile::{PcSample, ReturnSample};
+use oer::observe::parts::{LIBRARY_PARTS, PartSample};
+use oer_portable_trace::profile::{PcSample, ReturnSample};
 
 fn executor(executor: u8, hart: u8, work_us: Option<u64>, idle_us: Option<u64>) -> ExecutorSample {
     ExecutorSample {

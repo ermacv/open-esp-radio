@@ -1,7 +1,7 @@
 //! The address map of a staged boot.
 //!
 //! Each chip's layout crate (`chips/<chip>/layout`) generates its [`Layout`]
-//! from the chip facts (`oer-espressif-facts`); sizes describe the module's
+//! from the chip facts (`oer-chips-family-facts`); sizes describe the module's
 //! fitted memories and the staged-boot contract, not universal chip
 //! capabilities.
 
@@ -17,7 +17,7 @@ impl Region {
     /// Fixed maps check admission in a const initializer.
     ///
     /// ```compile_fail,E0080
-    /// use oer_espressif_staged_layout::Region;
+    /// use oer_chips_family_staged_layout::Region;
     /// const INVALID: Region = Region::new(u32::MAX, 1).expect("region fits");
     /// ```
     pub const fn new(origin: u32, length: u32) -> Option<Self> {
@@ -44,7 +44,7 @@ impl Region {
     /// Returns `None` when `offset` lies beyond the region.
     ///
     /// ```compile_fail,E0080
-    /// use oer_espressif_staged_layout::Region;
+    /// use oer_chips_family_staged_layout::Region;
     /// const REGION: Region = Region::new(0x100, 0x100).expect("region fits");
     /// const INVALID: Region = REGION.after(0x101).expect("subregion fits");
     /// ```
@@ -62,7 +62,7 @@ impl Region {
     /// Returns `None` when `length` exceeds this region's length.
     ///
     /// ```compile_fail,E0080
-    /// use oer_espressif_staged_layout::Region;
+    /// use oer_chips_family_staged_layout::Region;
     /// const REGION: Region = Region::new(0x100, 0x100).expect("region fits");
     /// const INVALID: Region = REGION.first(0x101).expect("subregion fits");
     /// ```

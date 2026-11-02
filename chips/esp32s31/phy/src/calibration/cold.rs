@@ -42,7 +42,7 @@ use crate::{
     },
 };
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::owner::SharedPhyAccess;
+use oer_chips_esp32s31_hal::owner::SharedPhyAccess;
 
 pub use crate::state::{PhyRegisterTemperatureControl, PhyState};
 
@@ -227,7 +227,7 @@ impl PhyColdI2cTransaction {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), PhyColdI2cError> {
@@ -255,7 +255,7 @@ impl PhyColdI2cTransaction {
 
     /// Consume exactly one independently delivered target completion edge.
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &P,
     ) -> Result<PhyColdI2cObservation, PhyColdI2cError> {
@@ -345,7 +345,7 @@ impl PhyColdI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), PhyColdI2cError> {
@@ -353,7 +353,7 @@ impl PhyColdI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<PhyColdI2cObservation, PhyColdI2cError> {
@@ -373,34 +373,34 @@ impl PhyColdI2cBinding {
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyColdI2cConfigurationBinding {
     outer_action: PhyRfInitPrefixAction,
-    transaction: oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationTransaction,
+    transaction: oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationTransaction,
 }
 
 impl PhyColdI2cConfigurationBinding {
     pub fn new(outer_action: PhyRfInitPrefixAction) -> Result<Self, PhyColdLoweringError> {
         let operation = match outer_action {
             PhyRfInitPrefixAction::ConfigureBiasRegisters => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::BiasRegisters
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::BiasRegisters
             }
             PhyRfInitPrefixAction::ConfigureI2cBbpll => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::EnableBbpllCalibration
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::EnableBbpllCalibration
             }
             PhyRfInitPrefixAction::AdcRate(AdcRateAction::ConfigureI2c { rate }) => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::ConfigureAdcRate(rate)
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::ConfigureAdcRate(rate)
             }
             PhyRfInitPrefixAction::ConfigureRcCalibrationSettings => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::RcCalibrationSettings
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::RcCalibrationSettings
             }
             PhyRfInitPrefixAction::ConfigureSar2 => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::Sar2Initialization
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::Sar2Initialization
             }
             PhyRfInitPrefixAction::FilterDcap(FilterDcapAction::Configure(parameters)) => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::FilterDcap(
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::FilterDcap(
                     parameters.pac_inputs(),
                 )
             }
             PhyRfInitPrefixAction::I2cInit1(I2cInit1Action::Configure(parameters)) => {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::InitializationStageOne(
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationOperation::InitializationStageOne(
                     parameters.pac_initialization_stage_one_inputs(),
                 )
             }
@@ -408,22 +408,22 @@ impl PhyColdI2cConfigurationBinding {
         };
         Ok(Self {
             outer_action,
-            transaction: oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationTransaction::new(operation),
+            transaction: oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationTransaction::new(operation),
         })
     }
 
-    pub fn action(&self) -> oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction {
+    pub fn action(&self) -> oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction {
         self.transaction.action()
     }
 
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        platform: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        platform: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), PhyColdI2cError> {
-        oer_esp32s31_hal::phy::i2c::start_configuration(&mut self.transaction, platform).map_err(
+        oer_chips_esp32s31_hal::phy::i2c::start_configuration(&mut self.transaction, platform).map_err(
             |error| match error {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationError::BusyAtStart => {
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationError::BusyAtStart => {
                     PhyColdI2cError::BusyAtStart
                 }
                 _ => PhyColdI2cError::WrongEdge,
@@ -434,14 +434,14 @@ impl PhyColdI2cConfigurationBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        platform: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        platform: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyColdI2cObservation, PhyColdI2cError> {
-        oer_esp32s31_hal::phy::i2c::observe_configuration(&mut self.transaction, platform)
+        oer_chips_esp32s31_hal::phy::i2c::observe_configuration(&mut self.transaction, platform)
             .map(|observation| match observation {
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationObservation::StillPending => {
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationObservation::StillPending => {
                     PhyColdI2cObservation::StillPending
                 }
-                oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationObservation::EdgeConsumed => {
+                oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationObservation::EdgeConsumed => {
                     PhyColdI2cObservation::EdgeConsumed
                 }
             })
@@ -449,7 +449,7 @@ impl PhyColdI2cConfigurationBinding {
     }
 
     pub fn into_completion(self) -> Result<PhyRfInitPrefixCompletion, PhyColdLoweringError> {
-        if self.action() != oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::Complete {
+        if self.action() != oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::Complete {
             return Err(PhyColdLoweringError::IncompleteTransaction);
         }
         match self.outer_action {
@@ -861,7 +861,7 @@ impl PhyColdMmioBinding {
     /// Execute exactly one finite target MMIO transaction and consume its
     /// identity token.
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<R: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn execute_target<R: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         self,
         registers: &mut R,
         settle_temperature_reset: impl FnOnce() -> bool,
@@ -869,7 +869,7 @@ impl PhyColdMmioBinding {
         match self.outer_action {
             PhyRfInitPrefixAction::ConfigureFeBbClock => {
                 registers.open_frontend_baseband_internal_clocks();
-                oer_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(registers);
+                oer_chips_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(registers);
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::OpenI2cXpd(OpenI2cXpdAction::ConfigurePreDelay) => {
@@ -877,29 +877,29 @@ impl PhyColdMmioBinding {
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigurePowerDetectorRegisters => {
-                oer_esp32s31_hal::phy::power_detector::initialize_registers(registers)
+                oer_chips_esp32s31_hal::phy::power_detector::initialize_registers(registers)
                     .map_err(|_| PhyColdLoweringError::HardwareRestoreInvariant)?;
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureTxPowerControlBackground => {
-                oer_esp32s31_hal::phy::power_detector::configure_background(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_background(registers);
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureTemperatureSensorRead => {
-                oer_esp32s31_hal::phy::temperature::initialize(registers, settle_temperature_reset)
+                oer_chips_esp32s31_hal::phy::temperature::initialize(registers, settle_temperature_reset)
                     .map_err(|_| PhyColdLoweringError::HardwareRestoreInvariant)?;
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled } => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureI2cClockSelection => {
-                oer_esp32s31_hal::phy::i2c::configure_clock_selection(registers);
+                oer_chips_esp32s31_hal::phy::i2c::configure_clock_selection(registers);
                 return self.into_completion();
             }
             PhyRfInitPrefixAction::ConfigureI2cMasterRegisters => {
-                oer_esp32s31_hal::phy::i2c::configure_master_registers(registers);
+                oer_chips_esp32s31_hal::phy::i2c::configure_master_registers(registers);
                 return self.into_completion();
             }
             _ => {}
@@ -907,15 +907,15 @@ impl PhyColdMmioBinding {
 
         match self.outer_action {
             PhyRfInitPrefixAction::PbusClear(PhyPbusClearAction::ConfigureDebugMode) => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 )
             }
             PhyRfInitPrefixAction::PbusClear(PhyPbusClearAction::ConfigureWorkModePulse) => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers)
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers)
             }
             PhyRfInitPrefixAction::PbusClear(PhyPbusClearAction::ClearWorkModePulse) => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers)
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers)
             }
             PhyRfInitPrefixAction::AdcRate(AdcRateAction::ConfigureMmio { rate }) => {
                 crate::hardware::configure_phy_adc_rate(registers, rate)
@@ -931,7 +931,7 @@ impl PhyColdMmioBinding {
             }
             PhyRfInitPrefixAction::ChannelFrequency(
                 PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override },
-            ) => oer_esp32s31_hal::phy::frequency::initialize_registers(
+            ) => oer_chips_esp32s31_hal::phy::frequency::initialize_registers(
                 registers,
                 parameter_override,
             ),
@@ -950,10 +950,10 @@ impl PhyColdMmioBinding {
                     mode,
                     ..
                 },
-            )) => oer_esp32s31_hal::phy::frequency::write_memory(registers, address, value, mode),
+            )) => oer_chips_esp32s31_hal::phy::frequency::write_memory(registers, address, value, mode),
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::I2c(
                 PhyFrequencyI2cAction::ConfigureNumberAddresses(addresses),
-            )) => oer_esp32s31_hal::phy::frequency::configure_i2c_number_addresses(
+            )) => oer_chips_esp32s31_hal::phy::frequency::configure_i2c_number_addresses(
                 registers, addresses,
             ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -967,14 +967,14 @@ impl PhyColdMmioBinding {
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureRxClock { enabled }),
-            )) => oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureTxClock { enabled }),
-            )) => oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigurePbusDebugMode),
-            )) => oer_espressif_phy::pbus::configure_debug_mode(
-                &mut oer_esp32s31_hal::phy::pbus::port(registers),
+            )) => oer_chips_family_phy::pbus::configure_debug_mode(
+                &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
             ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::PrepareRxDcoControlRestore),
@@ -983,7 +983,7 @@ impl PhyColdMmioBinding {
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(
                     PhyRxDcoAction::PrepareRxDcoControlRestore,
                 )),
-            )) => oer_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers)
+            )) => oer_chips_esp32s31_hal::phy::rx_dco::prepare_control_restore(registers)
                 .map_err(|_| PhyColdLoweringError::HardwareRestoreInvariant)?,
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RestoreRxDcoControl),
@@ -992,7 +992,7 @@ impl PhyColdMmioBinding {
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(
                     PhyRxDcoAction::RestoreRxDcoControl,
                 )),
-            )) => oer_esp32s31_hal::phy::rx_dco::restore_control(registers)
+            )) => oer_chips_esp32s31_hal::phy::rx_dco::restore_control(registers)
                 .map_err(|_| PhyColdLoweringError::HardwareRestoreInvariant)?,
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(PhyRxDcoAction::DcIq(
@@ -1015,10 +1015,10 @@ impl PhyColdMmioBinding {
                 )),
             )) => match clock {
                 crate::rx::signal_power::PhySignalPowerClock::Tx => {
-                    oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled)
+                    oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled)
                 }
                 crate::rx::signal_power::PhySignalPowerClock::Rx => {
-                    oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled)
+                    oer_chips_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled)
                 }
             },
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -1037,16 +1037,16 @@ impl PhyColdMmioBinding {
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureRxClock { enabled }),
-            )) => oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureTxClock { enabled }),
-            )) => oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigurePbusWorkModePulse),
-            )) => oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers),
+            )) => oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ClearPbusWorkModePulse),
-            )) => oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers),
+            )) => oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers),
             _ => return Err(PhyColdLoweringError::UnsupportedAction),
         }
         self.into_completion()
@@ -1852,14 +1852,14 @@ impl PhyColdObservationBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<R: oer_esp32s31_hal::owner::SharedPhyContext>(
+    pub fn execute_target<R: oer_chips_esp32s31_hal::owner::SharedPhyContext>(
         self,
         registers: &mut R,
     ) -> Result<PhyRfInitPrefixCompletion, PhyColdLoweringError> {
         if self.request == PhyColdObservationRequest::ConfigureOpenI2cPowerAndPulse {
             crate::analog::i2c::configure_open_i2c_power_and_pulse(registers);
             let started_at_cycle =
-                oer_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers);
+                oer_chips_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers);
             return self.into_completion(PhyColdObservationResult::OpenI2cPowerAndPulse {
                 started_at_cycle,
             });
@@ -1875,7 +1875,7 @@ impl PhyColdObservationBinding {
                 maximum_cycles,
             } => {
                 let current_cycle =
-                    oer_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers);
+                    oer_chips_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers);
                 self.into_completion(PhyColdObservationResult::OpenI2cSdmDeadline {
                     expired: phy_sdm_deadline_expired(
                         started_at_cycle,
@@ -1885,14 +1885,14 @@ impl PhyColdObservationBinding {
                 })
             }
             PhyColdObservationRequest::ConfigurePbusWorkMode => {
-                let settle_required = oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                let settle_required = oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 self.into_completion(PhyColdObservationResult::PbusWorkMode { settle_required })
             }
             PhyColdObservationRequest::ReadRxDcoPbus { selector, path } => {
                 let value = u32::from(
-                    oer_esp32s31_hal::phy::pbus::read_result(registers, selector, path)
+                    oer_chips_esp32s31_hal::phy::pbus::read_result(registers, selector, path)
                         .ok_or(PhyColdLoweringError::UnexpectedOutcome)?,
                 );
                 self.into_completion(PhyColdObservationResult::RxDcoPbusRead {
@@ -1920,7 +1920,7 @@ impl PhyColdObservationBinding {
                 })
             }
             PhyColdObservationRequest::ReadSignalPowerAccumulators(request) => {
-                let snapshot = oer_esp32s31_hal::phy::iq_estimator::read_signal_power(registers);
+                let snapshot = oer_chips_esp32s31_hal::phy::iq_estimator::read_signal_power(registers);
                 self.into_completion(PhyColdObservationResult::SignalPowerAccumulators {
                     request,
                     snapshot: crate::rx::signal_power::PhySignalPowerAccumulatorSnapshot {
@@ -2071,7 +2071,7 @@ impl PhyColdPbusBinding {
                 PhyColdPbusError::WrongEdge
             });
         }
-        oer_esp32s31_hal::phy::pbus::start_force_test(
+        oer_chips_esp32s31_hal::phy::pbus::start_force_test(
             registers,
             self.transaction.selector(),
             self.transaction.path(),
@@ -2092,11 +2092,11 @@ impl PhyColdPbusBinding {
                 PhyColdPbusError::WrongEdge
             });
         }
-        match oer_espressif_phy::pbus::try_finish_force_test(
-            &mut oer_esp32s31_hal::phy::pbus::port(registers),
+        match oer_chips_family_phy::pbus::try_finish_force_test(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
         ) {
             Ok(()) => self.observe_result(PhyColdPbusHardwareResult::Completed),
-            Err(oer_espressif_phy::pbus::PbusError::Busy) => {
+            Err(oer_chips_family_phy::pbus::PbusError::Busy) => {
                 self.observe_result(PhyColdPbusHardwareResult::Busy)
             }
         }

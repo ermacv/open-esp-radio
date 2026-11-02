@@ -2,7 +2,7 @@
 //! data, dropped RSN input and scan table outcomes.
 //!
 //! The station reports each as a [`StaEvent`] to the sink its caller lends a
-//! call ([`oer_events`]). It keeps no count of them.
+//! call ([`oer_portable_events`]). It keeps no count of them.
 
 /// One decision of the station core.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,19 +44,19 @@ pub struct AggregateSettled {
     pub refused: bool,
     /// The rate its last transmission went at; `None` when none reached
     /// the air.
-    pub rate: Option<oer_ieee80211_contracts_port::PhyRate>,
+    pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
 }
 
 /// The returned buffer, renewed for a new MSDU. A buffer whose memory is
 /// not the station's still returns to its pool, reported.
-pub(crate) fn fresh<B: oer_ieee80211_contracts_port::TxBufferMemory, S>(
-    returned: oer_ieee80211_contracts_port::ReturnedMpdu<B, S>,
+pub(crate) fn fresh<B: oer_protocols_ieee80211_contracts_port::TxBufferMemory, S>(
+    returned: oer_protocols_ieee80211_contracts_port::ReturnedMpdu<B, S>,
     renew: impl FnOnce(S) -> B,
-    events: &mut impl oer_events::EventSink<StaEvent>,
+    events: &mut impl oer_portable_events::EventSink<StaEvent>,
 ) -> B {
     let (buffer, renewed) = returned.into_fresh(renew);
     if renewed.is_err() {
-        oer_events::report(events, || StaEvent::BufferMemoryUnavailable);
+        oer_portable_events::report(events, || StaEvent::BufferMemoryUnavailable);
     }
     buffer
 }

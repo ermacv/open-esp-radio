@@ -5,9 +5,9 @@ use std::{
     path::Path,
 };
 
-const VALUES: &str = "oer-espressif-ieee802154-mac-values";
-const KNOWLEDGE: &str = "oer-esp32s31-knowledge";
-const ENGINE: &str = "oer-espressif-ieee802154-engine";
+const VALUES: &str = "oer-chips-family-ieee802154-mac-values";
+const KNOWLEDGE: &str = "oer-chips-esp32s31-knowledge";
+const ENGINE: &str = "oer-chips-family-ieee802154-engine";
 
 fn normal_dependencies(value: &toml::Value, workspace: &toml::Value) -> BTreeSet<String> {
     let mut tables = vec![value];
@@ -100,7 +100,7 @@ fn the_dictionary_stays_below_execution_and_apache_consumers_state_the_license()
             .iter()
             .filter(|name| {
                 name.as_str() == ENGINE
-                    || name.as_str() == "oer-esp32s31-hal"
+                    || name.as_str() == "oer-chips-esp32s31-hal"
                     || name.starts_with("oer-ieee802154-")
             })
             .collect::<Vec<_>>();

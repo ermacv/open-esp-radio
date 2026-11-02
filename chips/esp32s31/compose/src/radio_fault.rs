@@ -3,10 +3,10 @@
 //! safe continuation is not established. The record keeps the fault's
 //! class and its variant path (names, then numbers) as text, retained until
 //! the next boot's complete output.
-use oer_diagnostics::DiagPath;
-use oer_diagnostics::fault::{Class, Domain, Record};
-use oer_espressif_staged_runtime::retained_fault;
-oer_espressif_staged_runtime::retained_static! { static RADIO_FAULT: Record; }
+use oer_portable_diagnostics::DiagPath;
+use oer_portable_diagnostics::fault::{Class, Domain, Record};
+use oer_chips_family_staged_runtime::retained_fault;
+oer_chips_family_staged_runtime::retained_static! { static RADIO_FAULT: Record; }
 
 /// The record's reason: the periodic tracking failed.
 const TRACKING: u32 = 1;
@@ -24,7 +24,7 @@ pub struct Failure {
 
 impl Failure {
     /// The failure of class `class` with `value`'s variant path.
-    pub fn of(class: Class, value: &impl oer_diagnostics::DiagnosticPath) -> Self {
+    pub fn of(class: Class, value: &impl oer_portable_diagnostics::DiagnosticPath) -> Self {
         Self {
             class,
             path: DiagPath::of(value),
@@ -34,7 +34,7 @@ impl Failure {
     /// Record the failure for the next boot, then reset the chip.
     #[cfg(target_arch = "riscv32")]
     pub fn reset(self) -> ! {
-        oer_espressif_staged_runtime::fatal::reset_recording::<oer_esp32s31_hal::platform::Port>(
+        oer_chips_family_staged_runtime::fatal::reset_recording::<oer_chips_esp32s31_hal::platform::Port>(
             |claim, _stop| {
                 if let Ok(record) = encode(self) {
                     let _committed = claim.commit(&RADIO_FAULT, record);
@@ -49,8 +49,8 @@ impl Failure {
 /// value had. Text past the payload is cut, and its last two bytes become
 /// ` +`.
 #[cfg(any(test, target_arch = "riscv32"))]
-fn text(path: &DiagPath) -> ([u8; oer_diagnostics::fault::PAYLOAD_BYTES], usize) {
-    let mut text = [0; oer_diagnostics::fault::PAYLOAD_BYTES];
+fn text(path: &DiagPath) -> ([u8; oer_portable_diagnostics::fault::PAYLOAD_BYTES], usize) {
+    let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
     let mut length = 0usize;
     let mut cut = false;
     let mut put = |bytes: &[u8]| {
@@ -118,13 +118,13 @@ const fn class_name(class: Class) -> &'static [u8] {
 }
 
 #[cfg(any(test, target_arch = "riscv32"))]
-fn encode(failure: Failure) -> Result<Record, oer_diagnostics::fault::Error> {
+fn encode(failure: Failure) -> Result<Record, oer_portable_diagnostics::fault::Error> {
     let (text, length) = text(&failure.path);
     Record::new(
         failure.class,
         Domain::Phy,
         TRACKING,
-        oer_diagnostics::fault::UNKNOWN_HART,
+        oer_portable_diagnostics::fault::UNKNOWN_HART,
         0,
         text.get(..length).unwrap_or(&[]),
     )
@@ -134,7 +134,7 @@ fn encode(failure: Failure) -> Result<Record, oer_diagnostics::fault::Error> {
 pub fn report_previous() {
     if let Some(mut record) = retained_fault::peek(&RADIO_FAULT) {
         let _reported = report(&mut record, |bytes: &[u8]| {
-            oer_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole()
+            oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole()
         });
     }
 }
@@ -166,7 +166,7 @@ mod tests {
     use super::*;
 
     struct Path;
-    impl oer_diagnostics::DiagnosticPath for Path {
+    impl oer_portable_diagnostics::DiagnosticPath for Path {
         fn push_path(&self, path: &mut DiagPath) {
             for name in ["Tick", "CalibrationTracking", "Step", "EdgeTimedOut"] {
                 path.name(name);
@@ -215,7 +215,7 @@ mod tests {
             long.name("AVeryLongVariantNameThatTheRecordMustCutAtItsEnd");
         }
         let (cut, length) = super::text(&long);
-        assert_eq!(length, oer_diagnostics::fault::PAYLOAD_BYTES);
+        assert_eq!(length, oer_portable_diagnostics::fault::PAYLOAD_BYTES);
         assert!(cut.ends_with(b" +"));
     }
 }

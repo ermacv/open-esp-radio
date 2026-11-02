@@ -30,12 +30,12 @@
 //! (the 160 MHz source before the modem PLL-source gate and after it on
 //! release) is the modem clock executor's.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::HpSysClkrstPll160, instances, modem_lpcon::ModemLpconChipClocks,
     ownership::ChipClockPeripherals,
 };
-use oer_memory::ClaimCell;
-use oer_mmio::{Fixed, Placement};
+use oer_portable_memory::ClaimCell;
+use oer_portable_mmio::{Fixed, Placement};
 
 use super::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
@@ -55,7 +55,7 @@ mod tests;
 /// every radio reference, so it never reaches zero.
 ///
 /// ```compile_fail,E0624
-/// let _forged = oer_esp32s31_hal::power::PsramMpll::adopted();
+/// let _forged = oer_chips_esp32s31_hal::power::PsramMpll::adopted();
 /// ```
 #[derive(Debug)]
 pub struct PsramMpll {
@@ -69,7 +69,7 @@ impl PsramMpll {
     }
 }
 
-use oer_espressif_radio::clocks::{ClockCounts, ClockError, ClockGates, ClockReferences};
+use oer_chips_family_radio::clocks::{ClockCounts, ClockError, ClockGates, ClockReferences};
 
 impl ClockReferences for PlatformClockHolds {
     type Clock = PlatformClock;
@@ -105,12 +105,12 @@ impl ClockWords {
 }
 
 #[cfg(test)]
-impl<'a, 'b> ClockWords<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
+impl<'a, 'b> ClockWords<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// The words over host memory from each instance's base.
     pub(crate) fn host(
         modem_lpcon: &'a mut [u32],
         hp_sys_clkrst: &'b mut [u32],
-    ) -> Result<Self, oer_mmio::HostTooSmall> {
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             lpcon: ModemLpconChipClocks::host(modem_lpcon)?,
             pll_f160m: HpSysClkrstPll160::host(hp_sys_clkrst)?,
@@ -150,7 +150,7 @@ static CHIP_CLOCKS: ClaimCell<ClockCounts<ClockWords, PsramMpll>> = ClaimCell::n
 /// or a count is exhausted.
 ///
 /// ```compile_fail,E0451
-/// let _forged = oer_esp32s31_hal::power::ChipClocks { _private: () };
+/// let _forged = oer_chips_esp32s31_hal::power::ChipClocks { _private: () };
 /// ```
 #[derive(Debug)]
 #[must_use = "the chip clock owner is the provider of every radio clock reference"]

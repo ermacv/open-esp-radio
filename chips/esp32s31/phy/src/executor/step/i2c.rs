@@ -1,7 +1,7 @@
 //! Shared counted I2C policy for cold RFPLL and Wi-Fi temperature tracking.
 use super::{Failure, Step, io::Io};
 use crate::calibration::cold::{PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cTransaction};
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 /// Retain the original attempt limit and first/repeated one-us observations.
 /// Scheduler pauses do not consume a direct path's twenty-us settle budget.

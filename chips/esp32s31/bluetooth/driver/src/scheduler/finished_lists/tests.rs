@@ -1,6 +1,6 @@
 use crate::interrupt::{SchedulerWakeCell, SchedulerWorkerWakeClass};
 
-use oer_esp32s31_hal::bluetooth::engine::EngineFinishedListObservation;
+use oer_chips_esp32s31_hal::bluetooth::engine::EngineFinishedListObservation;
 
 use super::{
     SchedulerFinishedListBackend, SchedulerFinishedListCaptureError, SchedulerFinishedListWorker,
@@ -28,7 +28,7 @@ fn backend(lists: &[u8]) -> Backend {
 
 fn wake(class: SchedulerWorkerWakeClass) -> crate::interrupt::SchedulerWakeBatch {
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
+        SchedulerWakeCell::new(oer_chips_family_interrupt_table::signal::host::deferred_signal().0);
     let _publication = cell.publish_class_for_test(class);
     cell.take()
         .expect("the host executor's context")
@@ -108,11 +108,11 @@ fn sole_list_zero_exhausts_the_capture() {
 
 #[test]
 fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_receipt() {
-    use oer_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
+    use oer_chips_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
     let (_, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .ok()
         .expect("host radio split");
@@ -132,7 +132,7 @@ fn stopped_capture_borrows_only_the_engine_and_refuses_before_mmio_without_its_r
 fn an_overflow_only_batch_grants_no_finished_list_transfer() {
     use crate::interrupt::PrimaryInterruptCapture;
     let cell =
-        SchedulerWakeCell::new(oer_espressif_interrupt_table::signal::host::deferred_signal().0);
+        SchedulerWakeCell::new(oer_chips_family_interrupt_table::signal::host::deferred_signal().0);
     cell.publish_from_interrupt(PrimaryInterruptCapture::controller_time_overflow_for_test())
         .unwrap();
     let batch = cell.take().unwrap().unwrap().classify().unwrap();

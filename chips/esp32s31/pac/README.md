@@ -16,17 +16,17 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
 - **Accessors by class.** Reads, read-modify-writes that keep every bit
   they do not set, writes from zero that take the fields no write may leave
   zero, triggers, doorbells, command starts refusing while busy
-  (`oer_mmio::CommandBusy`), write-one-to-clear samples and their
+  (`oer_portable_mmio::CommandBusy`), write-one-to-clear samples and their
   acknowledgements, FIFO pops and pushes, data-port stores and the strobes
   and stores of shared parts.
 - **Typed pointers.** A field the hardware reads as an address is set only
-  from an `oer_memory::DmaRef` of its target layout or a `DmaWindowAddress`,
+  from an `oer_portable_memory::DmaRef` of its target layout or a `DmaWindowAddress`,
   never from an integer; a pointer's high field only to its placement's
   prefix.
 - **Ownership.** Each part of the policy is one owner type over its words:
   the interrupt and task sides of a block, the parts of a divided block,
   read-only and `Copy` views and shared blocks. A part that serves an
-  interrupt names its source (`oer_mmio::InterruptSource`). `take()` is the
+  interrupt names its source (`oer_portable_mmio::InterruptSource`). `take()` is the
   one place the claimed words are assumed exclusive; the generated
   `disjoint_blocks` checks prove no two claimed blocks of one hart's context
   list one word. The CLIC is hart-local: its `Clic` and `ClicObserver`

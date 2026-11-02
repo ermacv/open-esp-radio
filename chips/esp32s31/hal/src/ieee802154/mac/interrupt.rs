@@ -5,14 +5,14 @@
 //! SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689:
 //! masked timer status is hidden; a saved positive sample clears under mask.
 
-use oer_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
+use oer_chips_esp32s31_pac::ieee802154::{Ieee802154MacIrq, event_status};
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154Event, Ieee802154EventMask, Ieee802154EventObservation,
     Ieee802154RxAbortReasonObservation, Ieee802154StateSnapshot,
     Ieee802154TxAbortReasonObservation, Ieee802154TxStateCode,
 };
-use oer_mmio::Placement;
+use oer_portable_mmio::Placement;
 
 use super::{Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, codes, task::byte};
 

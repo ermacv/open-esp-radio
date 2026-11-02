@@ -1,5 +1,5 @@
 [package]
-name = "oer-os-process"
+name = "oer-tools-os-process"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

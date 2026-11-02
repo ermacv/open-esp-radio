@@ -8,7 +8,7 @@ use crate::{
         parameters::{PhyParamTrackingCompletion, PhyParamTrackingTemperatureTransition},
     },
 };
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 type Result =
     core::result::Result<(PhyParamTrackingCompletion, PhyTemperatureOutcome), PhyTargetPortError>;

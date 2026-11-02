@@ -1,7 +1,7 @@
 use core::cell::Cell;
 
-use oer_time::{Clock, Duration};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Duration};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::Ticking;
 use crate::wait::{BootBudget, BootDeadline, BootWait, WaitFailure};
@@ -126,7 +126,7 @@ fn a_failure_names_its_reason_and_wait() {
 
 #[test]
 fn a_hold_that_overflows_time_is_refused_without_shortening_it() {
-    let clock: VirtualClock = VirtualClock::starting_at(oer_time::Instant::from_micros(u64::MAX));
+    let clock: VirtualClock = VirtualClock::starting_at(oer_portable_time::Instant::from_micros(u64::MAX));
     let deadline = BootDeadline::start(&clock, budget(1_000));
     assert_eq!(
         deadline.hold(WAIT),
@@ -137,7 +137,7 @@ fn a_hold_that_overflows_time_is_refused_without_shortening_it() {
 
 #[test]
 fn an_exhausted_time_domain_still_runs_the_final_poll_attempt() {
-    let clock: VirtualClock = VirtualClock::starting_at(oer_time::Instant::from_micros(u64::MAX));
+    let clock: VirtualClock = VirtualClock::starting_at(oer_portable_time::Instant::from_micros(u64::MAX));
     let deadline = BootDeadline::start(&clock, budget(1_000));
     assert_eq!(deadline.poll(WAIT, || Some(7)), Ok(7));
     assert_eq!(

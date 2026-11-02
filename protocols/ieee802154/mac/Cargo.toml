@@ -1,5 +1,5 @@
 [package]
-name = "oer-ieee802154-mac"
+name = "oer-protocols-ieee802154-mac"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,8 @@ repository.workspace = true
 description = "Sans-IO IEEE 802.15.4 MAC policy and state machines"
 
 [dependencies]
-oer-ieee802154-wire = { path = "../wire" }
-oer-ieee802154-port = { path = "../port" }
+oer-protocols-ieee802154-wire = { path = "../wire" }
+oer-protocols-ieee802154-port = { path = "../port" }
 
 [lints]
 workspace = true

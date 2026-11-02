@@ -6,12 +6,12 @@
 //! the RTC watchdog the bootloader armed. A wait ends with its value, or with
 //! a [`WaitFailure`] naming it: past its own bound, or past the deadline.
 //!
-//! Like [`oer_time::settle`], a poll reads the time before each attempt and
+//! Like [`oer_portable_time::settle`], a poll reads the time before each attempt and
 //! runs one attempt after the limit was seen, so an interrupt between an
 //! attempt and the time check never fails a wait whose hardware completed
 //! meanwhile.
 
-use oer_time::{Clock, Duration, Instant};
+use oer_portable_time::{Clock, Duration, Instant};
 
 /// One named boot wait: what it waits for and the longest it may take.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

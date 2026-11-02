@@ -1,5 +1,5 @@
 [package]
-name = "oer-firmware-apps-boot-smoke"
+name = "oer-hil-probes-boot-smoke"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,20 +10,20 @@ description = "The smallest staged image: boots through the staged runtime, repo
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-espressif-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-espressif-executor = { path = "../../../chips/family/executor" }
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-time = { path = "../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../../chips/family/interrupt-table" }
-oer-memory = { path = "../../../portable/memory" }
-oer-crypto = { path = "../../../portable/crypto" }
+oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-crypto = { path = "../../../portable/crypto" }
 
 [build-dependencies]
-oer-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

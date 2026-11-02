@@ -4,7 +4,7 @@
 //! each reviewed `phy_param` field compares with its production output
 //! location.
 use crate::esp32s31::layout::{OUTPUT, PHY_PARAM_BYTES};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallEndpoint, FieldLocation, LayoutDomain, LayoutEndpoint, LayoutField, LayoutProjection,
 };
 

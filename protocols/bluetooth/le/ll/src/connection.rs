@@ -6,11 +6,11 @@
 //! event owner with its own hardware ticket before reporting completion.
 //!
 //! [`acknowledgement`] owns acknowledgement and flow control; data-header
-//! fields live in `oer-bluetooth-le-wire`.
+//! fields live in `oer-protocols-bluetooth-le-wire`.
 
 use core::num::NonZeroU16;
 
-use oer_bluetooth_le_wire::connection::*;
+use oer_protocols_bluetooth_le_wire::connection::*;
 
 /// Timing change applied by a Central Connection Update at one exact instant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

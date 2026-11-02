@@ -3,8 +3,8 @@
 
 use std::{vec, vec::Vec};
 
-use oer_memory::ClaimCell;
-use oer_mmio::Host;
+use oer_portable_memory::ClaimCell;
+use oer_portable_mmio::Host;
 
 use crate::platform::core_control::{
     CoreControlRegisters, HOST_SIZES, UART0_HOST_SIZE, Uart0ClockRegisters,
@@ -12,7 +12,7 @@ use crate::platform::core_control::{
 
 use super::{CoresError, Hart, StopError, operate, reset_with, restore_uart0_with, stop_with};
 
-use oer_espressif_boot::drivers::cores::{CoreState, Stopped, park, prepare_reset, state};
+use oer_chips_family_boot::drivers::cores::{CoreState, Stopped, park, prepare_reset, state};
 
 type HostRegisters<'a> = CoreControlRegisters<Host<'a>, Host<'a>, Host<'a>, Host<'a>, Host<'a>>;
 
@@ -402,8 +402,8 @@ mod launch {
     use crate::cores::{SecondaryEntry, SecondaryHart, StartError};
     use crate::peripherals::reset_cause::{ResetCauseRegisters, ResetCauses};
     use core::cell::Cell;
-    use oer_esp32s31_pac::{instances, interrupt_core::InterruptCore1};
-    use oer_mmio::{Bits, Index};
+    use oer_chips_esp32s31_pac::{instances, interrupt_core::InterruptCore1};
+    use oer_portable_mmio::{Bits, Index};
 
     const HART: SecondaryHart = Hart::SECONDARIES[0];
     const ENTRY: u32 = 0x2f00_1000;
@@ -455,7 +455,7 @@ mod launch {
 
         fn routed(&mut self) -> usize {
             let bank = InterruptCore1::host(&mut self.routes).expect("host bank");
-            (0..oer_esp32s31_pac::interrupt_core::route::COUNT)
+            (0..oer_chips_esp32s31_pac::interrupt_core::route::COUNT)
                 .filter(|&source| {
                     bank.read_route(Index::new(source).expect("a source"))
                         .map()
@@ -543,7 +543,7 @@ mod launch {
 
     #[test]
     fn hart_1_sets_its_own_level_bits_when_it_builds_its_controller() {
-        use oer_espressif_interrupt_table::Controller as _;
+        use oer_chips_family_interrupt_table::Controller as _;
         let mut memory = held();
         let cell = memory.cell();
         let mut permit = Permit::new(&[]);
@@ -557,7 +557,7 @@ mod launch {
         assert_eq!(controller.hart(), 1);
         drop(controller);
         drop(released);
-        let (_, config) = oer_esp32s31_pac::clic::clic_host(&mut permit.clic).expect("host CLIC");
+        let (_, config) = oer_chips_esp32s31_pac::clic::clic_host(&mut permit.clic).expect("host CLIC");
         assert_eq!(
             u32::from(crate::platform::interrupt_controller::facts::LEVEL_BITS),
             config.read_int_config().mnlbits().get()

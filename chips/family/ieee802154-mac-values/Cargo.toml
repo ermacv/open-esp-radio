@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-ieee802154-mac-values"
+name = "oer-chips-family-ieee802154-mac-values"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,9 @@ repository.workspace = true
 description = "Closed typed IEEE 802.15.4 MAC values and transactions shared between chips"
 
 [dependencies]
-oer-memory = { path = "../../../portable/memory" }
+oer-portable-memory = { path = "../../../portable/memory" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
-oer-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
+oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [lints]
 workspace = true

@@ -111,7 +111,7 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
     for directory in ["chips/esp32s31", "chips/family", "firmware"] {
         scan(&root.join(directory), &mut declarations);
     }
-    let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("S31 facts");
+    let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31").expect("S31 facts");
     let rom = facts.rom.expect("S31 ROM");
     let exports: BTreeSet<_> = rom
         .functions
@@ -127,7 +127,7 @@ fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
 
 #[test]
 fn s31_exports_only_the_rom_printf_slot_installers() {
-    let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("S31 facts");
+    let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31").expect("S31 facts");
     let rom = facts.rom.expect("S31 ROM");
     let names: BTreeSet<_> = rom
         .functions
@@ -138,7 +138,7 @@ fn s31_exports_only_the_rom_printf_slot_installers() {
         names,
         BTreeSet::from(["ets_install_putc1", "ets_install_putc2"])
     );
-    let script = oer_espressif_facts::generate::rom_script(&rom).expect("S31 ROM script");
+    let script = oer_chips_family_facts::generate::rom_script(&rom).expect("S31 ROM script");
     for name in [
         "ets_delay_us",
         "ets_update_cpu_frequency",

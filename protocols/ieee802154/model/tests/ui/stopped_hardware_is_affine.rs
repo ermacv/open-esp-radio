@@ -1,5 +1,5 @@
-use oer_ieee802154_model::{ModelVacant, OwnedModel};
-use oer_radio_port::SlotIdentity;
+use oer_protocols_ieee802154_model::{ModelVacant, OwnedModel};
+use oer_protocols_radio_port::SlotIdentity;
 
 pub fn resume<Id: SlotIdentity>(hardware: ModelVacant) {
     let backend = OwnedModel::<Id>::resume(hardware);

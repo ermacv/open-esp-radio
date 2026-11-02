@@ -1,21 +1,21 @@
 # Wi-Fi runtime
 
-`oer-ieee80211-runtime`: the asynchronous glue between the lower-MAC port
-and the sans-IO cores. It selects over port events, `oer-time::Timer`
+`oer-protocols-ieee80211-runtime`: the asynchronous glue between the lower-MAC port
+and the sans-IO cores. It selects over port events, `oer-portable-time::Timer`
 deadlines and application commands, hands each input to the cores and
 carries out their actions through the port. It decides no protocol question
 and neither parses nor builds frames: its normal dependencies are the port,
 the cores (`sta`, `upper-mac`, `arbiter`) and portable support, never
-`oer-ieee80211-wire`, `oer-ieee80211-core-security-cipher`, a chip crate, an executor or
-Embassy time (`cargo test -p oer-test-layers`).
+`oer-protocols-ieee80211-wire`, `oer-protocols-ieee80211-core-security-cipher`, a chip crate, an executor or
+Embassy time (`cargo test -p oer-tools-test-layers`).
 
 The station unwraps its key data in its own step, over the block
 primitive its callbacks supply; the runtime carries no unwrap.
 
 `station` provides `Control` and the port-generic `Runner`; `monitor` holds the capture and
 injection handoffs of a monitor. The frames a monitor keeps and the channels
-it visits are `oer-ieee80211-core-upper-mac`'s `monitor`; the requested owner
-topology is checked by `oer-ieee80211-core-arbiter`'s `configuration`.
+it visits are `oer-protocols-ieee80211-core-upper-mac`'s `monitor`; the requested owner
+topology is checked by `oer-protocols-ieee80211-core-arbiter`'s `configuration`.
 
 `station::Control` owns the sole command producer, product status and a
 cooperative stop connection. Control and its neutral network end can exist
@@ -41,7 +41,7 @@ restores them before delivering a concrete callback, and reports a duplicate
 in-flight kind without minting a permission. No installation lifetime or
 pool path crosses the application command boundary.
 
-`State` retains status and the `oer-time` connected-task connection. `Control::stop`
+`State` retains status and the `oer-portable-time` connected-task connection. `Control::stop`
 requests cooperative Runner shutdown independently of command-queue capacity.
 Runner completion is published only after machine retirement; dropping its
 endpoint poisons reuse. The completed radio/resource banks remain in the
@@ -49,9 +49,9 @@ Runner's owned result. `Control::wait_stopped` observes completion;
 `try_finish` consumes the control epoch and returns its command producer.
 The `connected-tasks` feature is enabled by the runtime, never by a core.
 
-Host tests use the allocating in-memory backend from `oer-ieee80211-testing-model`
+Host tests use the allocating in-memory backend from `oer-protocols-ieee80211-testing-model`
 as a dev-dependency. The model's fixtures run the shared conformance cases in
-`oer-ieee80211-contracts-port`; runtime tests cover its station service over that model.
+`oer-protocols-ieee80211-contracts-port`; runtime tests cover its station service over that model.
 
 `StationPort` is a composition-owned mapping with a concrete `Backend`,
 `SlotId` and `Caps`. `station::Runner` owns that backend's lifecycle directly.
@@ -78,7 +78,7 @@ owner, and the arbiter's access-point commands. `ServiceIo` borrows a concrete
 `ServiceOutputSink`; closures implement that trait without erasing their type.
 Frame refusals transfer their original frame owner by value. Command events carry
 the original kind and correlation; the affine permission stays with Runner.
-Commands and network frames travel through `oer_memory::WakingSpscQueue`.
+Commands and network frames travel through `oer_portable_memory::WakingSpscQueue`.
 
 Every transmission's parameters come from the cores: a station frame's rate
 plan, coexistence class, access category, protection exchange and power from
@@ -129,7 +129,7 @@ refused Ethernet owners stay opaque and affine. `Device::new` is the separate
 network wiring constructor. The HIL binding translates only the public contract.
 
 The station runtime owns its optional reconnect policy through the existing
-`oer-time` timer. Station requests have one admission: each command kind's
+`oer-portable-time` timer. Station requests have one admission: each command kind's
 permission in `State`, which an `Operation`'s request and the policy's
 request both take and which returns at that request's terminal. While
 another request holds it, `connect`/`disconnect`/`scan` wait and the policy

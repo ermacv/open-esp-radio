@@ -332,7 +332,7 @@ fn ampdu_owner_accepts_checked_counts_without_a_post_mutation_error() {
 
 #[test]
 fn the_vendor_word_wraps_from_the_clock_start() {
-    use oer_time::{CLOCK_EPOCH_OFFSET, Duration};
+    use oer_portable_time::{CLOCK_EPOCH_OFFSET, Duration};
     // A clock starts at the epoch offset: the vendor word has bit 31 set
     // from the first read and wraps 2^31 us later.
     let start = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();
@@ -544,7 +544,7 @@ fn non_data_frames_use_the_association_control_schedule() {
 }
 
 mod seam {
-    use oer_ieee80211_contracts_port::{BlockAckSnr, LinkMetric, SnrSample};
+    use oer_protocols_ieee80211_contracts_port::{BlockAckSnr, LinkMetric, SnrSample};
 
     /// BlockAck evidence named by its hardware condition, as the S31's is.
     enum Evidence {
@@ -560,12 +560,12 @@ mod seam {
             }
         }
     }
-    use oer_ieee80211_core_upper_mac::rate_control::{
+    use oer_protocols_ieee80211_core_upper_mac::rate_control::{
         AmpduUnavailable, MpduOutcome, RateControl, RatePeer,
     };
     use {
-        oer_ieee80211_core_upper_mac::phy_mode::PhyMode,
-        oer_ieee80211_wire::{
+        oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
+        oer_protocols_ieee80211_wire::{
             ht::ht_peer_capabilities,
             phy::{HtMcs, HtRate, PhyRate, PpduBandwidth},
         },
@@ -583,7 +583,7 @@ mod seam {
         RatePeer {
             phy: PhyMode::Ht20,
             legacy_rates:
-                oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+                oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                     &[2, 4, 11, 22, 12, 18, 24, 36],
                     &[48, 72, 96, 108],
                 )
@@ -622,7 +622,7 @@ mod seam {
                 schedule.kind(),
                 schedule_state(schedule).rate,
                 PpduBandwidth::Mhz20,
-                oer_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
+                oer_protocols_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
             );
             if let Some(raw @ PhyRate::Ht(rate)) = raw {
                 assert_eq!(with.rate(schedule), raw);
@@ -702,7 +702,7 @@ mod seam {
         assert_eq!(control.association().filtered_ack_snr(), None);
         assert_eq!(
             control.observe_ampdu(
-                oer_time::Instant::from_micros(1_000),
+                oer_portable_time::Instant::from_micros(1_000),
                 tally(4, 4),
                 &Evidence::Measured(30)
             ),
@@ -714,7 +714,7 @@ mod seam {
     #[test]
     fn a_block_ack_without_a_sample_leaves_the_filter_and_still_counts_its_window() {
         let mut control = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60));
-        let now = oer_time::Instant::from_micros(1_000);
+        let now = oer_portable_time::Instant::from_micros(1_000);
         assert_eq!(
             control.observe_ampdu(now, tally(4, 4), &Evidence::Measured(30)),
             Ok(())
@@ -740,7 +740,7 @@ mod seam {
         let peer = RatePeer {
             phy: PhyMode::Legacy,
             legacy_rates:
-                oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+                oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                     &[2, 4, 11, 22, 12, 18, 24, 36],
                     &[48, 72, 96, 108],
                 )
@@ -753,7 +753,7 @@ mod seam {
         let before = control.ampdu_rate();
         assert_eq!(
             control.observe_ampdu(
-                oer_time::Instant::from_micros(1_000),
+                oer_portable_time::Instant::from_micros(1_000),
                 tally(4, 4),
                 &Evidence::Measured(30)
             ),
@@ -872,7 +872,7 @@ fn the_last_record_of_every_table_is_the_slowest() {
             kind,
             code,
             PpduBandwidth::Mhz20,
-            oer_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
+            oer_protocols_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
         )
         .map(|rate| rate.nominal_kbps())
         .unwrap_or_else(|| panic!("{kind:?} record {index} code {code:#x} has no rate"))
@@ -889,4 +889,4 @@ fn the_last_record_of_every_table_is_the_slowest() {
 }
 
 use crate::rate_record::RateScheduleRef;
-use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;

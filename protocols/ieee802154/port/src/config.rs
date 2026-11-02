@@ -11,8 +11,8 @@
 //! values within one frame, at once while listening with no frame in progress. The port itself
 //! is the owner shape of [`crate::owner`].
 
-pub use oer_radio_port::ClockError;
-pub use oer_radio_port::{ClockInfo, EventsLost, Poisoned, PortResult};
+pub use oer_protocols_radio_port::ClockError;
+pub use oer_protocols_radio_port::{ClockInfo, EventsLost, Poisoned, PortResult};
 
 use crate::radio::{
     capabilities::RadioCapabilities,
@@ -58,7 +58,7 @@ pub struct CslCapability {
 /// only in the same request as new keys (`Ieee802154Client::set_mac_keys`).
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee802154_port::FrameCounterUpdate;
+/// use oer_protocols_ieee802154_port::FrameCounterUpdate;
 /// let rollback = FrameCounterUpdate::Set(0);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

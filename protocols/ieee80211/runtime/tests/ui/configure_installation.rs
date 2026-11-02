@@ -1,13 +1,13 @@
 #![no_std]
 extern crate alloc;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     Channel, ChannelWidth, ConfigurePermission, LowerMacPhase, Station, StationPhase,
     StationReceive,
 };
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_radio_port::{SlotIdentity, LocalId, with_local_slot, Disabled, Ended, Owner, PortBody, run_port};
-use oer_ieee80211_testing_model::{ModelBackend, ModelPool, ModelResources};
-use oer_radio_port::Child;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_radio_port::{SlotIdentity, LocalId, with_local_slot, Disabled, Ended, Owner, PortBody, run_port};
+use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelPool, ModelResources};
+use oer_protocols_radio_port::Child;
 
 async fn run_model<P>(channel: Channel, body: P)
 where for<'scope> P: PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>>, Output = ()> {
@@ -15,8 +15,8 @@ where for<'scope> P: PortBody<LocalId<'scope>, ModelBackend<LocalId<'scope>>, Ou
         let mut slot = claim.place();
         let (backend, _) = ModelBackend::new(channel,
             [IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(), IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap()],
-            alloc::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()));
-        drop(oer_radio_port::LocalExecution.scope(oer_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().unwrap()), async |frontend| run_port(frontend, body).await).await);
+            alloc::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()));
+        drop(oer_protocols_radio_port::LocalExecution.scope(oer_protocols_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().unwrap()), async |frontend| run_port(frontend, body).await).await);
         slot.end_model_world();
     }).await
 }

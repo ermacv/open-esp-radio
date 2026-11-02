@@ -1,4 +1,4 @@
-# oer-ieee80211-contracts-security
+# oer-protocols-ieee80211-contracts-security
 
 The IEEE 802.11 installed-protection contract. `Ccmp128Key` is the one
 owner of a CCMP-128 temporal key between RSN, the port, the software cipher

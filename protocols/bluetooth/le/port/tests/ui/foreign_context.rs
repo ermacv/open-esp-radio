@@ -1,7 +1,7 @@
 #![no_std]
 #![allow(unused_variables)]
-use oer_bluetooth_le_port::{Request, LeCapabilities};
-use oer_radio_port::{PoolPath, PortContext};
+use oer_protocols_bluetooth_le_port::{Request, LeCapabilities};
+use oer_protocols_radio_port::{PoolPath, PortContext};
 pub fn context<'p, P: PoolPath, X, Y, C: LeCapabilities>(
     request: Request<'p, P, X, C>, foreign: PortContext<'p, P::Identity, Y>,
 ) -> Request<'p, P, X, C> {

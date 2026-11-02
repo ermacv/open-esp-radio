@@ -1,9 +1,9 @@
 #![no_std]
-use oer_mmio::{Block, Fixed, Registers, Words};
+use oer_portable_mmio::{Block, Fixed, Registers, Words};
 
 pub struct Pair;
 impl Registers for Pair {
-    type Sharing = oer_mmio::sharing::Owned;
+    type Sharing = oer_portable_mmio::sharing::Owned;
     const WORDS: &'static [usize] = &[0, 4];
 }
 

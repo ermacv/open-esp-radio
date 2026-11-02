@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Joined, PortSlot, SlotIdentity, SlotOwner};
+use oer_protocols_radio_port::{Joined, PortSlot, SlotIdentity, SlotOwner};
 
 pub fn reinstall<Id: SlotIdentity, Other: SlotIdentity, S: SlotOwner<Id>>(
     slot: &mut PortSlot<Id, S>, own: Joined<Id>, foreign: Joined<Other>, owner: S,

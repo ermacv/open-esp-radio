@@ -1,6 +1,6 @@
 # Bluetooth LE wire formats
 
-`oer-bluetooth-le-wire` owns stateless LE addresses, channel indices,
+`oer-protocols-bluetooth-le-wire` owns stateless LE addresses, channel indices,
 advertising and data PDU envelopes, CONNECT_IND fields, LL Control bodies,
 data-length fields and standard Direct Test Mode payload generation.
 It has no clock domain, protocol state or backend dependency.

@@ -64,7 +64,7 @@ fn bin_reports_follow_the_elf_when_cargo_uplifts_a_cached_feature_variant() {
         }
         fs::hard_link(hashed, &binary).expect("Cargo uplift");
         let facts = serde_json::json!({"schema":2,"driver_id":"current","manifest":manifest,
-            "metadata_hash":hash,"max_move_bytes":4096,"records":[],"binary_sha256":oer_os_durable::sha256_file(&binary).expect("digest")});
+            "metadata_hash":hash,"max_move_bytes":4096,"records":[],"binary_sha256":oer_tools_os_durable::sha256_file(&binary).expect("digest")});
         fs::write(
             release.join(format!("deps/fixture-{hash}.large-values.json")),
             facts.to_string(),
@@ -177,7 +177,7 @@ fn a_plain_cargo_cache_is_repaired_and_then_produces_identical_reports() {
         )
         .env(
             "OER_LARGE_VALUES_DRIVER_ID",
-            oer_os_durable::sha256_file(&binary).expect("driver digest"),
+            oer_tools_os_durable::sha256_file(&binary).expect("driver digest"),
         );
     let mut first = build(
         &mut command,
@@ -395,7 +395,7 @@ fn copied_uplifts_in_a_separate_build_directory_require_unique_matching_outputs(
         let sidecar = deps.join("fixture-0123456789abcdef.large-values.json");
         let facts = serde_json::json!({"schema":2,"driver_id":"current","manifest":manifest,
             "metadata_hash":"0123456789abcdef","max_move_bytes":4096,"records":[],
-            "binary_sha256":oer_os_durable::sha256_file(&hashed).expect("digest")});
+            "binary_sha256":oer_tools_os_durable::sha256_file(&hashed).expect("digest")});
         fs::write(&sidecar, facts.to_string()).expect("compiler facts");
         let uplift = release.join(name);
         fs::copy(&hashed, &uplift).expect("Cargo copy across filesystems");

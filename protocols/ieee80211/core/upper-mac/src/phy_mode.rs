@@ -1,5 +1,5 @@
 //! The PHY mode of one association and the elements it requests.
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     he::{parse_he20_capabilities, parse_he20_operation},
     scan::ScanRecord,
     station::association::{

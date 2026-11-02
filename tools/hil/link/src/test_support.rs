@@ -6,7 +6,7 @@ use std::{
     os::unix::net::UnixStream,
 };
 
-use oer_hil_protocol::{Envelope, FrameDecoder, FrameEncoder, Key, Message, WireKind, base::Hello};
+use oer_protocols_hil_protocol::{Envelope, FrameDecoder, FrameEncoder, Key, Message, WireKind, base::Hello};
 
 use crate::Link;
 

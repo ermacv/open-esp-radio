@@ -1,25 +1,25 @@
 [alias]
 # The captured binary analysis tool (tools/analysis/blobray-README.md).
-blobray = "run --quiet --profile tools -p oer-tool-analysis-cli --"
+blobray = "run --quiet --profile tools -p oer-tools-analysis-cli --"
 # The register tool: validate the register model and generate SVD, PAC and
 # bindings (tools/registers/generate/README.md).
-registers = "run --quiet --profile tools -p oer-tool-registers-cli --"
+registers = "run --quiet --profile tools -p oer-tools-registers-cli --"
 # The firmware tool: build, flash and run staged images on the stand's
 # boards (tools/image/cli/README.md).
-fw = "run --quiet --profile tools -p oer-tool-image-cli --"
+fw = "run --quiet --profile tools -p oer-tools-image-cli --"
 # Fetch and verify a chip's pinned vendor artifacts into the host-wide store
 # (tools/pins/cli).
-pins = "run --quiet --profile tools -p oer-tool-pins-cli --"
+pins = "run --quiet --profile tools -p oer-tools-pins-cli --"
 # Regenerate the regulatory tables from a wireless-regdb db.txt
 # (tools/regulatory/generate).
-regdb = "run --quiet --profile tools -p oer-tool-regulatory-generate --"
+regdb = "run --quiet --profile tools -p oer-tools-regulatory-generate --"
 # The stand: boards, leases, power, fixtures (tools/lab/cli).
-stand = "run --quiet --profile tools -p oer-tool-lab-cli --"
+stand = "run --quiet --profile tools -p oer-tools-lab-cli --"
 # HIL scenarios: list and run them (tools/hil/cli).
-hil = "run --quiet --profile tools -p oer-tool-hil-cli --"
+hil = "run --quiet --profile tools -p oer-tools-hil-cli --"
 # The vendor comparison: provenance, scenarios and the probe
 # images (tools/vendor/cli).
-vendor-check = "run --quiet --profile tools -p oer-tool-vendor-cli --"
+vendor-check = "run --quiet --profile tools -p oer-tools-vendor-cli --"
 
 [net]
 # GitHub access uses HTTPS credentials managed by Git. Delegate git
@@ -32,4 +32,4 @@ git-fetch-with-cli = true
 # The firmware crates that declare executor tasks (`tasks!`), and the
 # executor's own tests of the macro, keep each task's future in a static of
 # its own type, `type_alias_impl_trait`.
-RUSTC_BOOTSTRAP = "oer_tool_image_large_values,oer_espressif,oer_espressif_executor,oer_firmware_probes_esp32s31_radio,oer_firmware_probes_esp32s31_radio_hardware,oer_firmware_probes_esp32s31_rx_chain,oer_firmware_probes_esp32s31_peer_overdue,oer_firmware_probes_esp32s31_aes_timing,oer_firmware_probes_esp32s31_mcycle,oer_esp32s31_wifi,oer_firmware_apps_boot_smoke,oer_firmware_apps_radio_root"
+RUSTC_BOOTSTRAP = "oer_tools_image_large_values,oer,oer_chips_family_executor,oer_hil_probes_esp32s31_radio,oer_hil_probes_esp32s31_radio_hardware,oer_hil_probes_esp32s31_rx_chain,oer_hil_probes_esp32s31_peer_overdue,oer_hil_probes_esp32s31_aes_timing,oer_hil_probes_esp32s31_mcycle,oer_chips_esp32s31_wifi,oer_hil_probes_boot_smoke,oer_hil_probes_radio_root"

@@ -1,6 +1,6 @@
 //! Local timer causes only: no RF operation or DMA pointer publication.
 use super::{Session, ble, contain, emit, pac};
-use oer_mmio::{Bits, Index};
+use oer_portable_mmio::{Bits, Index};
 
 pub(super) struct Radio {
     pub local_time: pac::modem_pwr::WifiMacLocalTime,
@@ -22,12 +22,12 @@ const TIMER0: Index<{ pac::modem_pwr::control::COUNT }> = Index::constant::<0>()
 const TIMER1: Index<{ pac::modem_pwr::control::COUNT }> = Index::constant::<1>();
 
 fn window() {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 
 fn prepare(s: &mut Session<'_>) {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     contain(s);
     ble::clocks(s);
     // SOURCE: HAL modem::ops::configure_modem_source_clocks. Adopt the
@@ -73,7 +73,7 @@ fn prepare(s: &mut Session<'_>) {
         .modify_modem_rst_conf(|w| {
             w.set_rst_wifimac(pac::modem_syscon::modem_rst_conf::RstWifimac::Released);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     let c = s.sar.radio.modem_syscon_clock_reset.read_clk_conf1();
     let r = s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf();
     emit(
@@ -126,7 +126,7 @@ fn zb_mask(s: &mut Session<'_>, enabled: bool) {
             .set_rx_sfd_done(false)
             .set_events_13(false);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn zb_state(s: &Session<'_>, tag: u32) {
     let mask = s.radio.zb.ieee802154_mac_task.read_event_enable();
@@ -153,7 +153,7 @@ fn zb_clear(s: &mut Session<'_>) {
         .zb
         .ieee802154_mac_irq
         .acknowledge_event_status(snapshot);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn zb_start(s: &mut Session<'_>, second: bool) {
     use pac::ieee802154::command::Opcode;
@@ -169,8 +169,8 @@ fn zb_start(s: &mut Session<'_>, second: bool) {
         });
         mac.write_command(Opcode::Timer0Start, |_| {});
     }
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
         let status = s.radio.zb.ieee802154_mac_irq.read_event_status();
         if if second {
             status.timer1_overflow()
@@ -188,7 +188,7 @@ fn zb_start(s: &mut Session<'_>, second: bool) {
         },
         |_| {},
     );
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn ieee_prepare(s: &mut Session<'_>) {
@@ -249,7 +249,7 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
         .zb
         .ieee802154_mac_irq
         .acknowledge_event_status(retained);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     zb_mask(s, true);
     zb_state(s, 0x8264);
     zb_start(s, true);
@@ -266,7 +266,7 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
         .zb
         .ieee802154_mac_irq
         .acknowledge_event_status(selected);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     zb_state(s, 0x8290); // timer0 clear preserves timer1
     zb_clear(s);
     zb_state(s, 0x82a0); // enabled W1C
@@ -283,7 +283,7 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
         .zb
         .ieee802154_mac_irq
         .acknowledge_event_status(retained);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     zb_mask(s, true);
     zb_state(s, 0x82e0);
     zb_mask(s, false);
@@ -305,7 +305,7 @@ fn wifi_mask(s: &mut Session<'_>, enabled: bool) {
             .set_beacon_miss(false)
             .set_bits_20_31_opaque(Bits::constant::<0>());
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn wifi_state(s: &mut Session<'_>, tag: u32) {
     let raw = s.radio.power.read_raw();
@@ -357,8 +357,8 @@ fn wifi_start(s: &mut Session<'_>, second: bool) {
         w.set_target_high(Bits::truncate(high))
             .set_timer_enable(true);
     });
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
         let raw = s.radio.power.read_raw();
         if if second {
             raw.tsf_timer_1()
@@ -371,7 +371,7 @@ fn wifi_start(s: &mut Session<'_>, second: bool) {
     s.radio.timer.modify_control(i, |w| {
         w.set_timer_enable(false);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn wifi_prepare(s: &mut Session<'_>) {
@@ -394,14 +394,14 @@ fn wifi_prepare(s: &mut Session<'_>) {
         .systimer
         .systimer_counter
         .trigger_unit0_op_timer_unit0_update();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while !s
         .generic
         .systimer
         .systimer_counter
         .read_unit0_op()
         .timer_unit0_value_valid()
-        && oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
     {}
     emit(
         0x8300,
@@ -457,7 +457,7 @@ fn wifi_prepare(s: &mut Session<'_>) {
     s.radio.load.modify_tsf_load_control(|w| {
         w.set_load_station_tsf(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     window();
     emit(
         0x8302,
@@ -478,7 +478,7 @@ pub(super) fn wifi_timers(s: &mut Session<'_>) {
     wifi_mask(s, false);
     wifi_state(s, 0x8340);
     s.radio.power.acknowledge_mac_power_interrupt(selected);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     wifi_state(s, 0x8350); // sampled W1C with mask=0
     wifi_mask(s, true);
     wifi_state(s, 0x8360);
@@ -486,12 +486,12 @@ pub(super) fn wifi_timers(s: &mut Session<'_>) {
     wifi_state(s, 0x8370);
     let selected = s.radio.power.sample_mac_power_interrupt();
     s.radio.power.acknowledge_mac_power_interrupt(selected);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     wifi_state(s, 0x8380); // enabled W1C
     wifi_mask(s, false);
     wifi_start(s, false);
     wifi_state(s, 0x8390);
     s.radio.power.clear_all_mac_power_interrupts();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     wifi_state(s, 0x83a0); // production mask/all-clear policy
 }

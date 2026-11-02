@@ -27,23 +27,23 @@
 use crate::coex::Ieee802154Coexistence;
 use crate::ll::{self, Ieee802154LowLevel};
 use crate::pib::{Ieee802154Permit, Ieee802154Pib, Ieee802154PibDefaults};
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154Channel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
     Ieee802154MacCommand, Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
     Ieee802154RxAbortEnableSet, Ieee802154RxAbortReason, Ieee802154RxAbortReasonObservation,
     Ieee802154RxStatus, Ieee802154Timer, Ieee802154TxAbortReason,
     Ieee802154TxAbortReasonObservation, Ieee802154TxPowerLevels,
 };
-use oer_ieee802154_port::RadioOperation;
-use oer_ieee802154_port::{PendingTable, ack_pending};
-use oer_ieee802154_wire::{FrameAddress, FrameType, FrameVersion, PhrFrame};
+use oer_protocols_ieee802154_port::RadioOperation;
+use oer_protocols_ieee802154_port::{PendingTable, ack_pending};
+use oer_protocols_ieee802154_wire::{FrameAddress, FrameType, FrameVersion, PhrFrame};
 
 mod rx_index;
 mod settings;
 use rx_index::RxIndex;
 mod statistics;
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     DmaFrame, FRAME_SIZE, Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
 };
 
@@ -579,7 +579,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         ll: &mut L,
         env: &mut E,
         index: Ieee802154MultipanIndex,
-        mode: oer_ieee802154_port::AutoPendingMode,
+        mode: oer_protocols_ieee802154_port::AutoPendingMode,
     ) -> Result<(), MultipanError>
     where
         L: Ieee802154LowLevel<Address = Address> + ?Sized,
@@ -834,7 +834,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
     pub fn set_ack_timeout<L: Ieee802154LowLevel<Address = Address> + ?Sized>(
         &mut self,
         ll: &mut L,
-        timeout: oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout,
+        timeout: oer_chips_family_ieee802154_mac_values::Ieee802154AckTimeout,
     ) {
         let units = timeout.units();
         self.settings.ack_timeout = Some(units);
@@ -846,7 +846,7 @@ impl<'storage, Address: Copy + Eq> Ieee802154Engine<'storage, Address> {
         &mut self,
         ll: &mut L,
     ) -> u32 {
-        oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout::from_units(ll.ack_timeout())
+        oer_chips_family_ieee802154_mac_values::Ieee802154AckTimeout::from_units(ll.ack_timeout())
             .effective_microseconds()
     }
 

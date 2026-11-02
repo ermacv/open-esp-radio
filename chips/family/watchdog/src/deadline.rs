@@ -1,6 +1,6 @@
 //! Finite system-deadline protection owned by the platform watchdog.
 //!
-//! The pure [`oer_time::deadline`] policy checks time observations; this
+//! The pure [`oer_portable_time::deadline`] policy checks time observations; this
 //! owner alone programs and stops the hardware reset. No periodic feed,
 //! implicit renewal or Drop-based disarm exists. A caller completes a lease
 //! only after its own physical postconditions hold. This is engineering
@@ -8,8 +8,8 @@
 //! Sleep and external clock changes while armed are unsupported.
 //!
 //! ```compile_fail,E0382
-//! use oer_espressif_watchdog::{MainWatchdogRegisters, deadline::{DeadlineBudget, DeadlineWatchdog}};
-//! fn arm_twice<R: MainWatchdogRegisters, C: oer_time::Clock>(
+//! use oer_chips_family_watchdog::{MainWatchdogRegisters, deadline::{DeadlineBudget, DeadlineWatchdog}};
+//! fn arm_twice<R: MainWatchdogRegisters, C: oer_portable_time::Clock>(
 //!     watchdog: DeadlineWatchdog<R, C>, budget: DeadlineBudget,
 //! ) {
 //!     let first = watchdog.arm(budget);
@@ -17,8 +17,8 @@
 //! }
 //! ```
 
-pub use oer_time::deadline::{DeadlineBudget, DeadlineError};
-use oer_time::{Clock, deadline::Controller};
+pub use oer_portable_time::deadline::{DeadlineBudget, DeadlineError};
+use oer_portable_time::{Clock, deadline::Controller};
 
 use crate::{MainWatchdog, MainWatchdogRegisters, Microseconds};
 
@@ -68,8 +68,8 @@ impl<R: MainWatchdogRegisters, C: Clock> DeadlineWatchdog<R, C> {
 /// Dropping or forgetting it leaves reset armed.
 ///
 /// ```compile_fail,E0382
-/// use oer_espressif_watchdog::{MainWatchdogRegisters, deadline::DeadlineLease};
-/// fn complete_twice<R: MainWatchdogRegisters, C: oer_time::Clock>(lease: DeadlineLease<R, C>) {
+/// use oer_chips_family_watchdog::{MainWatchdogRegisters, deadline::DeadlineLease};
+/// fn complete_twice<R: MainWatchdogRegisters, C: oer_portable_time::Clock>(lease: DeadlineLease<R, C>) {
 ///     let first = lease.complete();
 ///     let second = lease.complete();
 /// }

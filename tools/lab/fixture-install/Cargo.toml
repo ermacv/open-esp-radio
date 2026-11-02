@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-lab-fixture-install"
+name = "oer-tools-lab-fixture-install"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,10 @@ publish = false
 description = "Privileged Linux fixture installer and fixed launchers for open ESP radio HIL"
 
 [dependencies]
-oer-lab-fixture = { path = "../fixture" }
+oer-tools-lab-fixture = { path = "../fixture" }
 clap = { version = "4.5", features = ["derive"] }
 rustix = { version = "1.1.4", features = ["fs", "process", "event", "time"] }
-oer-os-process = { path = "../../os/process" }
+oer-tools-os-process = { path = "../../os/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tempfile = "3"

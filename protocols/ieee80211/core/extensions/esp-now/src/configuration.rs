@@ -3,8 +3,8 @@
 //! Shared Wi-Fi topology is validated by the arbiter before this module
 //! narrows it to a station VIF with no AP or monitor sharing its radio owner.
 
-use oer_ieee80211_contracts_port::ChannelContextId;
-use oer_ieee80211_core_arbiter::{configuration::WifiPlan, interface::BoundVirtualInterface};
+use oer_protocols_ieee80211_contracts_port::ChannelContextId;
+use oer_protocols_ieee80211_core_arbiter::{configuration::WifiPlan, interface::BoundVirtualInterface};
 
 /// Capability-checked station-address VIF reserved exclusively for ESP-NOW.
 ///

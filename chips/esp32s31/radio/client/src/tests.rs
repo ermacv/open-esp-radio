@@ -230,7 +230,7 @@ fn an_abandoned_actor_response_returns_an_error_without_a_new_cell() {
     drop(responder);
     assert!(matches!(
         pending.as_mut().poll(&mut cx),
-        Poll::Ready(Err(oer_memory::RequestError::Unanswered {
+        Poll::Ready(Err(oer_portable_memory::RequestError::Unanswered {
             kind: 1,
             slot: 0,
             epoch: 0,
@@ -248,7 +248,7 @@ fn an_abandoned_actor_response_returns_an_error_without_a_new_cell() {
 fn abandoned<O: sealed::Reply<TestClient>>(
     pending: Pending<TestClient, O>,
     inbox: ClientInbox<TestClient>,
-) -> oer_memory::RequestError {
+) -> oer_portable_memory::RequestError {
     let mut pending = core::pin::pin!(pending);
     let mut cx = Context::from_waker(core::task::Waker::noop());
     assert!(pending.as_mut().poll(&mut cx).is_pending());

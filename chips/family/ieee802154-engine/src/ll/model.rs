@@ -6,8 +6,8 @@
 
 use super::{Ieee802154LowLevel, Ieee802154RecentRssi};
 use crate::coex::CoexPti;
-use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::COEX_DISABLED_PTI;
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
     Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
@@ -371,8 +371,8 @@ pub enum ModelAddress {
 }
 
 /// The model's addresses for one engine, keyed only by slot identity.
-pub fn addresses() -> oer_espressif_ieee802154_mac_values::Ieee802154DmaAddresses<ModelAddress> {
-    oer_espressif_ieee802154_mac_values::Ieee802154DmaAddresses {
+pub fn addresses() -> oer_chips_family_ieee802154_mac_values::Ieee802154DmaAddresses<ModelAddress> {
+    oer_chips_family_ieee802154_mac_values::Ieee802154DmaAddresses {
         rx: core::array::from_fn(|index| ModelAddress::Receive(index as u8)),
         tx: ModelAddress::Transmit,
         enhanced_ack: ModelAddress::EnhancedAck,

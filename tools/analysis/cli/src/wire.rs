@@ -2,8 +2,8 @@
 //!
 //! The renderer emits these shapes and typed clients decode them; payloads are
 //! the application/domain records themselves, not copies of their schemas.
-use oer_analysis_blobray_domain::{LibraryFunction, RegisterAccess, RegisterAccessSummary};
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_domain::{LibraryFunction, RegisterAccess, RegisterAccessSummary};
+use oer_tools_analysis_riscv_model::{
     ArtifactId, CallAbi, Error, FunctionCoverage, FunctionRecord, ReadOnlyWindow, SemanticSummary,
 };
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ pub struct RegisterAccessInput {
 #[serde(deny_unknown_fields)]
 pub struct RegisterAccessDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     /// Selected callee names; absent for the load-only query.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub call_results: Vec<String>,
@@ -45,7 +45,7 @@ pub struct RegisterAccessDocument {
     pub records: Vec<RegisterAccess>,
     /// The selected observations grouped as `--group-by` requested.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub groups: Option<Vec<oer_analysis_blobray_application::access_groups::AccessGroup>>,
+    pub groups: Option<Vec<oer_tools_analysis_blobray_application::access_groups::AccessGroup>>,
     /// The whole analysis, independent of the filter.
     pub summary: RegisterAccessSummary,
 }
@@ -61,13 +61,13 @@ pub const FIELD_ACCESSES_SCHEMA: u32 = 7;
 pub const CALLERS_SCHEMA: u32 = 6;
 
 /// Every memory access of the analyzed functions that lands on one field
-/// offset, as a field of its root ([`oer_analysis_blobray_application::field`]), and the functions no
+/// offset, as a field of its root ([`oer_tools_analysis_blobray_application::field`]), and the functions no
 /// analysis could read.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FieldAccessesDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -81,14 +81,14 @@ pub struct FieldAccessesDocument {
     pub width: Option<u8>,
     /// The functions with at least one such access, in input, object and
     /// symbol order.
-    pub functions: Vec<oer_analysis_blobray_application::field::FieldAccessFunction>,
+    pub functions: Vec<oer_tools_analysis_blobray_application::field::FieldAccessFunction>,
     /// Functions that cannot be analyzed: their accesses are unknown.
     pub blocked: Vec<LibraryFunction>,
     /// Analyzed functions whose coverage or value semantics is incomplete:
     /// some of their accesses may be missing above.
     pub partial: u64,
     /// `partial` by cause.
-    pub partial_causes: oer_analysis_blobray_domain::PartialCauses,
+    pub partial_causes: oer_tools_analysis_blobray_domain::PartialCauses,
     /// Code no function covers, whose accesses are unknown too.
     pub gaps: u64,
     /// Accesses of the analyzed functions whose address is not known at
@@ -102,7 +102,7 @@ pub struct FieldAccessesDocument {
 #[serde(deny_unknown_fields)]
 pub struct FunctionRecordsDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -130,7 +130,7 @@ pub enum NamedFunction {
         /// Ordered tables or complete target sets proven by the build's facts.
         /// Each payload explicitly distinguishes index mappings from sets.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        jump_tables: Vec<oer_analysis_riscv_model::JumpDispatch>,
+        jump_tables: Vec<oer_tools_analysis_riscv_model::JumpDispatch>,
     },
     /// It cannot be analyzed; its behavior is unknown.
     Blocked {
@@ -144,7 +144,7 @@ pub enum NamedFunction {
 #[serde(deny_unknown_fields)]
 pub struct CallersDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -155,13 +155,13 @@ pub struct CallersDocument {
     /// The requested symbol names.
     pub symbols: Vec<String>,
     /// The referencing functions, in input, object and symbol order.
-    pub callers: Vec<oer_analysis_blobray_application::references::Caller>,
+    pub callers: Vec<oer_tools_analysis_blobray_application::references::Caller>,
     /// Candidates for indirect calls, not proven calls.
-    pub stored: Vec<oer_analysis_blobray_application::references::Stored>,
-    pub scan: oer_analysis_blobray_application::references::ScanSummary,
+    pub stored: Vec<oer_tools_analysis_blobray_application::references::Stored>,
+    pub scan: oer_tools_analysis_blobray_application::references::ScanSummary,
     pub functions: u64,
     pub partial: u64,
-    pub partial_causes: oer_analysis_blobray_domain::PartialCauses,
+    pub partial_causes: oer_tools_analysis_blobray_domain::PartialCauses,
     /// Functions that cannot be analyzed: their references are unknown.
     pub blocked: Vec<LibraryFunction>,
     /// Code no function covers.
@@ -177,7 +177,7 @@ pub const CALL_ARGUMENTS_SCHEMA: u32 = 7;
 #[serde(deny_unknown_fields)]
 pub struct CallArgumentsDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
     /// The calling convention the analysis assumed, if any.
     pub abi: Option<CallAbi>,
@@ -189,14 +189,14 @@ pub struct CallArgumentsDocument {
     pub symbols: Vec<String>,
     /// The calling functions with their call sites, in input, object and
     /// symbol order.
-    pub callers: Vec<oer_analysis_blobray_application::call_arguments::CallingFunction>,
+    pub callers: Vec<oer_tools_analysis_blobray_application::call_arguments::CallingFunction>,
     /// Functions that cannot be analyzed: their calls are unknown.
     pub blocked: Vec<LibraryFunction>,
     /// Analyzed functions whose coverage or value semantics are incomplete:
     /// they can hold further call sites or less precise values.
     pub partial: u64,
     /// `partial` by cause.
-    pub partial_causes: oer_analysis_blobray_domain::PartialCauses,
+    pub partial_causes: oer_tools_analysis_blobray_domain::PartialCauses,
     /// Code no function covers.
     pub gaps: u64,
 }
@@ -209,7 +209,7 @@ pub const MMIO_DIFF_SCHEMA: u32 = 6;
 #[serde(deny_unknown_fields)]
 pub struct MmioDiffDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub old: Vec<RegisterAccessInput>,
     pub new: Vec<RegisterAccessInput>,
     pub abi: Option<CallAbi>,
@@ -218,7 +218,7 @@ pub struct MmioDiffDocument {
     /// The windows the analysis took as read-only.
     pub read_only: Vec<ReadOnlyWindow>,
     #[serde(flatten)]
-    pub diff: oer_analysis_blobray_domain::MmioDiff,
+    pub diff: oer_tools_analysis_blobray_domain::MmioDiff,
 }
 
 /// Schema of the `symbols` document (`{"schema":2,"inputs":[...],"symbols":[...]}`).
@@ -229,9 +229,9 @@ pub const SYMBOLS_SCHEMA: u32 = 2;
 #[serde(deny_unknown_fields)]
 pub struct SymbolsDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
-    pub symbols: Vec<oer_analysis_blobray_application::symbols::SymbolRow>,
+    pub symbols: Vec<oer_tools_analysis_blobray_application::symbols::SymbolRow>,
 }
 
 /// Schema of the `strings` document (`{"schema":2,"inputs":[...],"strings":[...]}`).
@@ -242,7 +242,7 @@ pub const STRINGS_SCHEMA: u32 = 2;
 #[serde(deny_unknown_fields)]
 pub struct StringsDocument {
     pub schema: u32,
-    pub analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    pub analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     pub inputs: Vec<RegisterAccessInput>,
-    pub strings: Vec<oer_analysis_blobray_application::symbols::StringRow>,
+    pub strings: Vec<oer_tools_analysis_blobray_application::symbols::StringRow>,
 }

@@ -10,8 +10,8 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-use oer_ieee802154_port::TransmitSecurity;
-use oer_ieee802154_wire::{EnhancedAck, KeyIdMode};
+use oer_protocols_ieee802154_port::TransmitSecurity;
+use oer_protocols_ieee802154_wire::{EnhancedAck, KeyIdMode};
 
 /// The MAC keys of key identifier mode 1 and the MAC frame counter, as
 /// ESP-IDF's OpenThread port keeps them for its driver callback

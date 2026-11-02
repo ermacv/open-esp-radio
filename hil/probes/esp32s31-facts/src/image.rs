@@ -9,8 +9,8 @@ use core::{
     ptr,
     sync::atomic::{AtomicPtr, AtomicU32, Ordering},
 };
-use oer_esp32s31_pac as pac;
-use oer_mmio::{Bits, Index};
+use oer_chips_esp32s31_pac as pac;
+use oer_portable_mmio::{Bits, Index};
 #[path = "opaque.rs"]
 mod opaque;
 #[path = "opaque_wave2.rs"]
@@ -60,7 +60,7 @@ addi t0, t0, 4
 j 1b
 2: j facts_main
 "#,
-    mie = const oer_riscv::machine::status::MIE,
+    mie = const oer_portable_riscv::machine::status::MIE,
 );
 
 // SAFETY: these controlled admission entries preserve C-ABI callee registers
@@ -68,8 +68,8 @@ j 1b
 // reaches the typed Rust raise thunk; the trap ABI preserves interrupted state.
 core::arch::global_asm!(
     include_str!("threshold-entry.s"),
-    mie = const oer_riscv::machine::status::MIE,
-    mintthresh = const oer_riscv::clic::MINTTHRESH,
+    mie = const oer_portable_riscv::machine::status::MIE,
+    mintthresh = const oer_portable_riscv::clic::MINTTHRESH,
 );
 
 // SAFETY: addresses only; definitions and extents are supplied by facts.x.
@@ -129,9 +129,9 @@ fn emit(tag: u32, a: u32, b: u32, c: u32) {
 }
 
 fn halt() -> ! {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     loop {
-        oer_riscv::wait_for_interrupt();
+        oer_portable_riscv::wait_for_interrupt();
     }
 }
 
@@ -139,9 +139,9 @@ fn halt() -> ! {
 // SOURCE points to the live shared PAC source until all interrupts are disabled.
 #[unsafe(no_mangle)]
 extern "C" fn facts_irq() {
-    let cycle = oer_riscv::cycle32();
+    let cycle = oer_portable_riscv::cycle32();
     IRQ_CYCLE.store(cycle, Ordering::Relaxed);
-    IRQ_PC.store(oer_riscv::read_mepc() as u32, Ordering::Relaxed);
+    IRQ_PC.store(oer_portable_riscv::read_mepc() as u32, Ordering::Relaxed);
     if generic::interrupt() {
         IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
         return;
@@ -166,8 +166,8 @@ extern "C" fn facts_irq() {
             emit(
                 0x14f0,
                 id,
-                oer_riscv::read_mintstatus() as u32,
-                oer_riscv::read_mcause() as u32,
+                oer_portable_riscv::read_mintstatus() as u32,
+                oer_portable_riscv::read_mcause() as u32,
             );
             run(sar);
         } else {
@@ -178,7 +178,7 @@ extern "C" fn facts_irq() {
     }
     let count = IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
     if count >= 8 {
-        emit(0xee, oer_riscv::read_mcause() as u32, count, cycle);
+        emit(0xee, oer_portable_riscv::read_mcause() as u32, count, cycle);
         FACTS_OUTPUT[0].store(0xbad00001, Ordering::Release);
         halt();
     }
@@ -190,9 +190,9 @@ extern "C" fn facts_irq() {
 extern "C" fn facts_exception(_frame: usize) -> ! {
     emit(
         0xef,
-        oer_riscv::read_mcause() as u32,
-        oer_riscv::read_mepc() as u32,
-        oer_riscv::read_mtval() as u32,
+        oer_portable_riscv::read_mcause() as u32,
+        oer_portable_riscv::read_mepc() as u32,
+        oer_portable_riscv::read_mtval() as u32,
     );
     FACTS_OUTPUT[0].store(0xbad00002, Ordering::Release);
     halt()
@@ -860,7 +860,7 @@ const PROBES: &[Probe] = &[
 // SAFETY: _start initializes the image and calls this once on hart 0.
 #[unsafe(no_mangle)]
 extern "C" fn facts_main() -> ! {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     let Some(p) = pac::take() else { halt() };
     let source_owner = p.software_interrupt_2.from_cpu2;
     let mut s = Session {
@@ -949,14 +949,14 @@ extern "C" fn facts_main() -> ! {
                 FACTS_OUTPUT[0].store(0xbad00004, Ordering::Release);
                 halt();
             }
-            oer_riscv::disable_interrupts();
+            oer_portable_riscv::disable_interrupts();
             FACTS_OUTPUT[0].store(0xfac70001, Ordering::Release);
         }
         FACTS_REQUEST.store(u32::MAX, Ordering::Release);
         loop {
             // WFI is idle, not a measurement loop. A debugger resumes the
             // halted context after publishing the next command in SRAM.
-            oer_riscv::wait_for_interrupt();
+            oer_portable_riscv::wait_for_interrupt();
             request = FACTS_REQUEST.load(Ordering::Acquire);
             if request != u32::MAX {
                 break;
@@ -1019,7 +1019,7 @@ fn boot_address(s: &mut Session<'_>) {
             .modify_boot_addr_hp_core(SECONDARY.index(), |w| {
                 w.set_boot_addr_hp_core(value);
             });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         let read = c
             .lp_sys_core_control
             .read_boot_addr_hp_core(SECONDARY.index())
@@ -1057,7 +1057,7 @@ fn boot_address(s: &mut Session<'_>) {
 }
 
 fn setup(s: &mut Session<'_>) {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     contain(s);
     let matrix = &mut s.interrupt_matrix;
     for n in 0..pac::interrupt_core::route::COUNT {
@@ -1082,13 +1082,13 @@ fn setup(s: &mut Session<'_>) {
     // SAFETY: the probe-owned trap ABI; generated table and both exclusive
     // stacks remain in SRAM for this whole image, with IRQ stack below task stack.
     unsafe {
-        oer_riscv::install_trap_stack(
-            ptr::addr_of!(_facts_start_trap) as usize | oer_riscv::machine::MTVEC_CLIC_MODE,
+        oer_portable_riscv::install_trap_stack(
+            ptr::addr_of!(_facts_start_trap) as usize | oer_portable_riscv::machine::MTVEC_CLIC_MODE,
             ptr::addr_of!(_facts_mtvt) as usize,
             ptr::addr_of!(__runtime_cpu0_irq_stack_top) as usize,
         );
     }
-    oer_riscv::restore_interrupt_threshold(0);
+    oer_portable_riscv::restore_interrupt_threshold(0);
     IRQ_COUNT.store(0, Ordering::Relaxed);
 }
 fn line(s: &mut Session<'_>, control: u8, edge: bool) {
@@ -1111,8 +1111,8 @@ fn line(s: &mut Session<'_>, control: u8, edge: bool) {
 }
 fn wait_window() {
     // A bounded observation window, not a service-time or stress qualification.
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 fn edge(s: &mut Session<'_>) {
     setup(s);
@@ -1122,9 +1122,9 @@ fn edge(s: &mut Session<'_>) {
         w.set_ip(true);
     });
     let pending = s.interrupt_matrix.clic[0].read_ctrl(i).ip();
-    oer_riscv::enable_interrupts();
+    oer_portable_riscv::enable_interrupts();
     wait_window();
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     emit(
         0x10,
         u32::from(pending),
@@ -1149,19 +1149,19 @@ fn threshold(s: &mut Session<'_>) {
         setup(s);
         route_source(s);
         line(s, control, false);
-        oer_riscv::restore_interrupt_threshold(u8::MAX);
+        oer_portable_riscv::restore_interrupt_threshold(u8::MAX);
         raise(s);
-        oer_riscv::enable_interrupts();
+        oer_portable_riscv::enable_interrupts();
         // Pending source and MIE are already live: only this CSR write lowers
         // admission. The public restore has three NOPs and no CSR readback.
-        oer_riscv::restore_interrupt_threshold(CONTROLS[1]);
+        oer_portable_riscv::restore_interrupt_threshold(CONTROLS[1]);
         wait_window();
-        oer_riscv::disable_interrupts();
+        oer_portable_riscv::disable_interrupts();
         let masked = IRQ_COUNT.load(Ordering::Relaxed);
-        oer_riscv::enable_interrupts();
-        oer_riscv::restore_interrupt_threshold(0);
+        oer_portable_riscv::enable_interrupts();
+        oer_portable_riscv::restore_interrupt_threshold(0);
         wait_window();
-        oer_riscv::disable_interrupts();
+        oer_portable_riscv::disable_interrupts();
         emit(
             0x40 + level as u32,
             control.into(),
@@ -1176,11 +1176,11 @@ fn latency(s: &mut Session<'_>) {
     line(s, CONTROLS[1], false);
     for sample in 0..5 {
         IRQ_COUNT.store(0, Ordering::Relaxed);
-        oer_riscv::enable_interrupts();
-        let start = oer_riscv::cycle32();
+        oer_portable_riscv::enable_interrupts();
+        let start = oer_portable_riscv::cycle32();
         raise(s);
         wait_window();
-        oer_riscv::disable_interrupts();
+        oer_portable_riscv::disable_interrupts();
         emit(
             0x50 + sample,
             IRQ_CYCLE.load(Ordering::Relaxed).wrapping_sub(start),
@@ -1211,10 +1211,10 @@ fn threshold_raising(s: &mut Session<'_>) {
     emit(0x95, k, u32::from(CONTROLS[0]), u32::from(CONTROLS[1]));
     for (variant, &entry) in entries.iter().enumerate() {
         for sample in 0..3 {
-            oer_riscv::disable_interrupts();
+            oer_portable_riscv::disable_interrupts();
             s.source.store_hp_cpu_int_from_cpu_2(false);
-            oer_riscv::fence();
-            oer_riscv::restore_interrupt_threshold(0);
+            oer_portable_riscv::fence();
+            oer_portable_riscv::restore_interrupt_threshold(0);
             IRQ_COUNT.store(0, Ordering::Relaxed);
             IRQ_CYCLE.store(0, Ordering::Relaxed);
             IRQ_PC.store(0, Ordering::Relaxed);
@@ -1238,10 +1238,10 @@ fn threshold_raising(s: &mut Session<'_>) {
             // This pending sample is outside the timed instruction window.
             wait_window();
             let still_pending = s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip();
-            oer_riscv::restore_interrupt_threshold(0);
-            oer_riscv::enable_interrupts();
+            oer_portable_riscv::restore_interrupt_threshold(0);
+            oer_portable_riscv::enable_interrupts();
             wait_window();
-            oer_riscv::disable_interrupts();
+            oer_portable_riscv::disable_interrupts();
             emit(0x90, variant as u32, sample, u32::from(pending));
             emit(0x91, marks[0], marks[1], cycle);
             emit(0x92, count, pc, marks[2]);
@@ -1287,13 +1287,13 @@ fn reset(s: &mut Session<'_>) {
         .modify_boot_addr_hp_core(SECONDARY.index(), |w| {
             w.set_boot_addr_hp_core(0);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     c.lp_aon_clkrst_core_reset
         .trigger_hpcore_reset_ctrl_hpcore_sw_reset(SECONDARY.hart().index());
     c.pmu_cpu_stall.modify_cpu_stall_sw(|w| {
         w.set_hpcore_sw_stall_code(SECONDARY.hart().index(), 0x86);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     FACTS_OUTPUT[0].store(0xfac70007, Ordering::Release);
     let held = c
         .hp_sys_clkrst_core
@@ -1316,7 +1316,7 @@ fn reset(s: &mut Session<'_>) {
     ]) {
         word.store(value, Ordering::Relaxed);
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     c.lp_sys_core_control.trigger_sys_ctrl_sys_sw_rst();
     halt()
 }
@@ -1379,9 +1379,9 @@ fn run_sar(s: &mut Session<'_>, id: u32) {
     SAR_DONE.store(0, Ordering::Relaxed);
     SAR_CONTEXT.store(ptr::addr_of_mut!(s.sar), Ordering::Release);
     raise(s);
-    oer_riscv::enable_interrupts();
+    oer_portable_riscv::enable_interrupts();
     wait_window();
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     SAR_CONTEXT.store(ptr::null_mut(), Ordering::Release);
     if SAR_DONE.load(Ordering::Acquire) != 1 {
         emit(0x14ee, 8, id, 0);

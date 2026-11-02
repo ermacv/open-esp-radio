@@ -222,11 +222,11 @@ impl PhyRxSaturationSampleBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxSaturationCompletion {
         PhyRxSaturationCompletion::StatusSampled {
             sample_index: self.sample_index,
-            active: oer_esp32s31_hal::phy::iq_estimator::sample_activity(registers),
+            active: oer_chips_esp32s31_hal::phy::iq_estimator::sample_activity(registers),
         }
     }
 }
@@ -254,18 +254,18 @@ impl PhyRxSaturationMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyRxSaturationCompletion {
         match self.action {
             PhyRxSaturationAction::ConfigureDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyRxSaturationCompletion::DebugModeConfigured
             }
             PhyRxSaturationAction::ConfigureWorkMode => {
-                let _ = oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                let _ = oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyRxSaturationCompletion::WorkModeConfigured
             }
@@ -315,7 +315,7 @@ impl PhyRxSaturationPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -323,7 +323,7 @@ impl PhyRxSaturationPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,

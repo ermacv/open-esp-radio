@@ -14,9 +14,9 @@ use std::{
 };
 
 use crate::mac::irq::consumer::{IrqPublisher, IrqStorage};
-use oer_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word;
-use oer_time::Duration;
-use oer_time_virtual::VirtualClock;
+use oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word;
+use oer_portable_time::Duration;
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 use crate::{
@@ -36,15 +36,15 @@ fn leak<T>(value: T) -> &'static mut T {
 /// storage.
 fn ends(
     counters: &'static WifiRxCounters,
-) -> RxFrameEnds<'static, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host> {
+) -> RxFrameEnds<'static, SLOTS, BUFFER, oer_chips_family_interrupt_table::signal::host::Host> {
     let (publisher, _consumer) = leak(IrqStorage::new(
-        oer_espressif_interrupt_table::signal::host::signal().0,
-        oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
+        oer_chips_family_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let publisher: &'static IrqPublisher<
         'static,
-        oer_espressif_interrupt_table::signal::host::Host,
+        oer_chips_family_interrupt_table::signal::host::Host,
     > = leak(publisher);
     RxFrameQueue::init_in_place(leak(core::mem::MaybeUninit::uninit()))
         .split(counters, RxReturnNotifier::new(publisher))
@@ -56,9 +56,9 @@ fn poll_next<'a>(
         'a,
         SLOTS,
         BUFFER,
-        oer_espressif_interrupt_table::signal::host::Host,
+        oer_chips_family_interrupt_table::signal::host::Host,
     >,
-) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host>> {
+) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>> {
     let mut next = pin!(receiver.next());
     match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
         Poll::Ready(frame) => Some(frame),
@@ -71,7 +71,7 @@ struct Fixture {
     clock: &'static VirtualClock,
     sink: QueueSink<'static, VirtualClock, SLOTS, BUFFER>,
     receiver:
-        FrameReceiver<'static, SLOTS, BUFFER, oer_espressif_interrupt_table::signal::host::Host>,
+        FrameReceiver<'static, SLOTS, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
     admission: CountingAdmission<'static>,
     ring: Ring,
 }
@@ -304,8 +304,8 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
 
 mod normalized_handoff {
     use crate::mac::portable::rx_meta;
-    use oer_ieee80211_contracts_port::{Channel, ChannelWidth, RxEvidence};
-    use oer_time::Instant;
+    use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RxEvidence};
+    use oer_portable_time::Instant;
 
     use super::*;
 
@@ -359,7 +359,7 @@ mod normalized_handoff {
         let mut normalized = 0;
         let channel = Channel::ghz2_4(CHANNEL, ChannelWidth::Mhz20).unwrap();
         // One second past the clock's start.
-        let base = oer_time_virtual::START.as_micros() + 1_000_000;
+        let base = oer_portable_time_virtual::START.as_micros() + 1_000_000;
         let stand = |tsf| management(8, STAND, tsf, b"stand", Some(CHANNEL));
         let mut data = std::vec![0_u8; 24];
         data[0] = 0x08;

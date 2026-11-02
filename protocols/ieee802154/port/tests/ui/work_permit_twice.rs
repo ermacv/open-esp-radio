@@ -1,9 +1,9 @@
 #![no_std]
-use oer_ieee802154_port::{
+use oer_protocols_ieee802154_port::{
     Interface, RequestId,
     owner::{WorkPermit, WorkPermits},
 };
-use oer_radio_port::PermitPool;
+use oer_protocols_radio_port::PermitPool;
 pub fn admit<'q, 'id, K, P: PermitPool<'id, K>>(
     pool: &WorkPermits<'id, K, P>,
     permit: WorkPermit<'q, 'id, K>,

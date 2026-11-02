@@ -4,8 +4,8 @@
 #![forbid(unsafe_code)]
 
 use crate::phy::registers::{FrequencyRegisters, PhyPlacement};
-use oer_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam;
-use oer_mmio::{Bits, Index, Placement};
+use oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam;
+use oer_portable_mmio::{Bits, Index, Placement};
 
 /// Capture admission and the exact fields changed by ownership and read selection.
 pub fn capture_read_configuration<P: PhyPlacement>(
@@ -52,7 +52,7 @@ const fn image_index(offsets: &[u32], offset: usize) -> usize {
 
 /// Ordered, side-effect-free whole-word observations from the generated image.
 pub fn observe<P: PhyPlacement>(frequency: &FrequencyRegisters<P>) -> Option<super::Observation> {
-    use oer_esp32s31_pac::fe::{self, PhyFrequencyChannelOracleFe};
+    use oer_chips_esp32s31_pac::fe::{self, PhyFrequencyChannelOracleFe};
     let control_image = frequency.fe.radio_phy_register_image(
         const {
             image_index(
@@ -223,9 +223,9 @@ pub fn observe_software_frequency_boundary<P: PhyPlacement>(frequency: &Frequenc
 pub fn set_hardware_control<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, enabled: bool) {
     frequency.fe.modify_frequency_control(|w| {
         w.set_hardware_frequency_disable(if !enabled {
-            oer_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
+            oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
         } else {
-            oer_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
+            oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
         });
     });
 }
@@ -250,9 +250,9 @@ pub fn initialize_registers<P: PhyPlacement>(
     frequency.fe.modify_frequency_control(|w| {
         w.set_channel_switch_pulse(false)
             .set_hardware_frequency_disable(if false {
-                oer_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
+                oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
             } else {
-                oer_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
+                oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
             });
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
@@ -517,7 +517,7 @@ pub fn configure_bt_filter<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P
 /// register 2 with the readback in command slot one.
 pub fn publish_tx_cap<P: Placement>(command_ram: &mut PhyI2cCommandRam<P>, value: u8) {
     command_ram.write_command_memory(Index::constant::<1>(), |w| {
-        w.set_block(oer_esp32s31_pac::analog_i2c::blocks::TXRF.code())
+        w.set_block(oer_chips_esp32s31_pac::analog_i2c::blocks::TXRF.code())
             .set_register(2)
             .set_data(value);
     });

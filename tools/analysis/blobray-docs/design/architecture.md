@@ -57,11 +57,11 @@ requires a reviewed change to the contract, not an automatic transfer.
 
 Crate boundaries enforce independent dependency and authority rules. Modules
 inside each crate divide implementation without acquiring extra capabilities.
-The command line package is `oer-tool-analysis-cli` and its executable is `blobray`; the
-Linux linker adapters are the separate `oer-analysis-blobray-linker`, so a consumer that
+The command line package is `oer-tools-analysis-cli` and its executable is `blobray`; the
+Linux linker adapters are the separate `oer-tools-analysis-blobray-linker`, so a consumer that
 links, such as the vendor scenarios, does not depend on the command line.
 
-Resource provenance is `oer-analysis-riscv-model::AnalysisResources`, under
+Resource provenance is `oer-tools-analysis-riscv-model::AnalysisResources`, under
 `analysis_resources` in CLI JSON and the first line of image analysis reports.
 The named `blobray-cli`, `image-checks`, `register-inventory`,
 `signature-corpus`, `vendor-scenario` and `vendor-copies` profiles select defaults;
@@ -142,15 +142,15 @@ listing it does not claim that the operation exercised or exhausted it.
 
 | Crate | Principal modules | Owns | Allowed local dependencies |
 | --- | --- | --- | --- |
-| `oer-analysis-elf` | classify, dwarf, rv32 | ELF/archive parsing and raw ELF classification | None |
-| `oer-analysis-blobray-domain` | identity, observations, effects, resources, ports | Shared values and narrow extension interfaces | `oer-analysis-riscv-model` |
-| `oer-analysis-blobray-artifacts` | containers, objects, symbols, relocations, mappings | Structural inspection of supplied immutable bytes | `oer-analysis-blobray-domain`, `oer-analysis-elf`, `oer-analysis-riscv-model`, `oer-analysis-riscv-program` |
-| `oer-analysis-blobray-analysis` | code closure, register navigation | Blobray analyses over the shared function analysis | `oer-analysis-blobray-domain`, `oer-analysis-riscv-model`, `oer-analysis-riscv-analysis` |
-| `oer-analysis-blobray-riscv` | execution over lifted RV32 | Concrete machine state and RV32 execution | `oer-analysis-blobray-domain`, `oer-analysis-riscv-model`, `oer-analysis-riscv-decode`, `oer-analysis-riscv-lift` |
-| `oer-analysis-blobray-verification` | scenarios, comparison, record validation | Comparison relations and verdict construction | `oer-analysis-blobray-domain`, `oer-analysis-riscv-model` |
-| `oer-analysis-blobray-application` | captured, library, field, call_arguments, references, symbols, access_groups, linking, data, in_process | Operations, inventory queries, result types and register-access selection/grouping over given executables | `oer-analysis-elf`, `oer-analysis-blobray-domain`, `oer-analysis-blobray-artifacts`, `oer-analysis-blobray-analysis`, `oer-analysis-blobray-verification`, `oer-analysis-riscv-model`, `oer-analysis-riscv-analysis`, `oer-analysis-riscv-program` |
-| `oer-analysis-blobray-linker` | LLD adapter, bounded subprocess transport | External linker processes behind `LinkerHost` | `oer-analysis-blobray-domain`, `oer-analysis-blobray-application`, `oer-analysis-riscv-model` |
-| `oer-tool-analysis-cli` | CLI, JSON wire documents | Arguments, file reads, JSON envelopes, rendering and concrete dependency selection | `oer-analysis-blobray-application`, `oer-analysis-blobray-domain`, `oer-analysis-blobray-riscv`, `oer-analysis-riscv-model`, `oer-analysis-riscv-lift` |
+| `oer-tools-analysis-elf` | classify, dwarf, rv32 | ELF/archive parsing and raw ELF classification | None |
+| `oer-tools-analysis-blobray-domain` | identity, observations, effects, resources, ports | Shared values and narrow extension interfaces | `oer-tools-analysis-riscv-model` |
+| `oer-tools-analysis-blobray-artifacts` | containers, objects, symbols, relocations, mappings | Structural inspection of supplied immutable bytes | `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-elf`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-program` |
+| `oer-tools-analysis-blobray-analysis` | code closure, register navigation | Blobray analyses over the shared function analysis | `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-analysis` |
+| `oer-tools-analysis-blobray-riscv` | execution over lifted RV32 | Concrete machine state and RV32 execution | `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-decode`, `oer-tools-analysis-riscv-lift` |
+| `oer-tools-analysis-blobray-verification` | scenarios, comparison, record validation | Comparison relations and verdict construction | `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-riscv-model` |
+| `oer-tools-analysis-blobray-application` | captured, library, field, call_arguments, references, symbols, access_groups, linking, data, in_process | Operations, inventory queries, result types and register-access selection/grouping over given executables | `oer-tools-analysis-elf`, `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-blobray-artifacts`, `oer-tools-analysis-blobray-analysis`, `oer-tools-analysis-blobray-verification`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-analysis`, `oer-tools-analysis-riscv-program` |
+| `oer-tools-analysis-blobray-linker` | LLD adapter, bounded subprocess transport | External linker processes behind `LinkerHost` | `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-blobray-application`, `oer-tools-analysis-riscv-model` |
+| `oer-tools-analysis-cli` | CLI, JSON wire documents | Arguments, file reads, JSON envelopes, rendering and concrete dependency selection | `oer-tools-analysis-blobray-application`, `oer-tools-analysis-blobray-domain`, `oer-tools-analysis-blobray-riscv`, `oer-tools-analysis-riscv-model`, `oer-tools-analysis-riscv-lift` |
 
 The `oer-riscv-*` crates belong to the
 [shared RV32 layer](../../riscv-README.md), which is Blobray's ISA layer:
@@ -158,7 +158,7 @@ decoding, lifting, function analysis and the static image view live there and
 the stack analyzer shares them. Application depends on the ISA-neutral model,
 the function analysis and the static image view; RV32 facts such as relocation
 types and register numbers stay in that layer. The command line selects the
-concrete decoder from `oer-analysis-riscv-lift`. The allowed
+concrete decoder from `oer-tools-analysis-riscv-lift`. The allowed
 dependencies are `oer_repo::policy::COMPONENTS`. Verification can
 request execution through an injected executor and compares typed
 observations; it cannot select a different input behind the caller's back.
@@ -214,7 +214,7 @@ reason in this section. The table records the current paths and their limits;
 
 | Question | Owner | Other current paths | Known differences |
 | --- | --- | --- | --- |
-| ELF, archives and DWARF | [`oer-analysis-elf`](../../elf/README.md), including [`classify`](../../elf/src/classify.rs); [`blobray-artifacts`](../../blobray-artifacts/README.md) for metered streaming and object emission; [`application::symbols`](../../blobray-application/src/symbols.rs) and [`references`](../../blobray-application/src/references.rs) for inventory queries | — | Raw ELF classification is shared. Inventory queries select parsed facts; whole-file and bounded-streaming parsers retain distinct authority. |
+| ELF, archives and DWARF | [`oer-tools-analysis-elf`](../../elf/README.md), including [`classify`](../../elf/src/classify.rs); [`blobray-artifacts`](../../blobray-artifacts/README.md) for metered streaming and object emission; [`application::symbols`](../../blobray-application/src/symbols.rs) and [`references`](../../blobray-application/src/references.rs) for inventory queries | — | Raw ELF classification is shared. Inventory queries select parsed facts; whole-file and bounded-streaming parsers retain distinct authority. |
 | Instruction decoding and semantics | [`riscv-decode`](../../riscv-decode/README.md), [`riscv-lift`](../../riscv-lift/README.md) | — | Decoder extension profiles differ explicitly; consumers share lifted operations. |
 | Function CFG and values | [`riscv-analysis`](../../riscv-analysis/README.md) | — | Coverage and semantic gaps remain explicit in canonical function records. |
 | Transfers outside the function CFG | No single owner | [`blobray-analysis::closure`](../../blobray-analysis/src/closure.rs), [`image/stack::sweep`](../../../image/stack/src/sweep.rs) | Closure follows reachable code and supplied observations, sweep scans a function's entire extent. Their scopes and unresolved-target evidence differ. |
@@ -248,15 +248,15 @@ flowchart TD
     RV --> Lift
     RV --> Decode
     subgraph ISA[Shared RV32 layer]
-        Lift[oer-analysis-riscv-lift] --> Decode[oer-analysis-riscv-decode]
-        FnAnalysis[oer-analysis-riscv-analysis]
-        Program[oer-analysis-riscv-program]
+        Lift[oer-tools-analysis-riscv-lift] --> Decode[oer-tools-analysis-riscv-decode]
+        FnAnalysis[oer-tools-analysis-riscv-analysis]
+        Program[oer-tools-analysis-riscv-program]
     end
 ```
 
-The graph leaves out the edges to `oer-analysis-riscv-model` (from every Blobray crate
-and from `oer-analysis-riscv-lift`, `oer-analysis-riscv-analysis` and `oer-analysis-riscv-program`) and to
-`oer-analysis-elf` (from `oer-analysis-blobray-application`, `oer-analysis-blobray-artifacts`, `oer-analysis-riscv-lift` and `oer-analysis-riscv-program`). The table above lists
+The graph leaves out the edges to `oer-tools-analysis-riscv-model` (from every Blobray crate
+and from `oer-tools-analysis-riscv-lift`, `oer-tools-analysis-riscv-analysis` and `oer-tools-analysis-riscv-program`) and to
+`oer-tools-analysis-elf` (from `oer-tools-analysis-blobray-application`, `oer-tools-analysis-blobray-artifacts`, `oer-tools-analysis-riscv-lift` and `oer-tools-analysis-riscv-program`). The table above lists
 the Blobray crates' edges, and the
 [shared layer's table](../../riscv-README.md#dependency-table) lists the edges
 of the `oer-riscv-*` crates.

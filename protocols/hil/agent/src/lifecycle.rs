@@ -1,11 +1,11 @@
 //! Generic lifecycle service. The image owns the terminal reset action.
 use crate::console::{Console, Immediate, progress::ReceiverLimit};
-use oer_hil_protocol::{RequestIdentity, lifecycle::ResetAccepted};
+use oer_protocols_hil_protocol::{RequestIdentity, lifecycle::ResetAccepted};
 
 crate::requests! {
     /// Mounted only by images that can perform a requested reset.
     pub enum Request (sessions = false) {
-        Reset(oer_hil_protocol::lifecycle::RequestReset),
+        Reset(oer_protocols_hil_protocol::lifecycle::RequestReset),
     }
 }
 
@@ -13,8 +13,8 @@ crate::requests! {
 /// Constructed only after the completion barrier succeeds.
 ///
 /// ```compile_fail
-/// use oer_hil_agent::lifecycle::AcknowledgedReset;
-/// use oer_hil_protocol::RequestIdentity;
+/// use oer_protocols_hil_agent::lifecycle::AcknowledgedReset;
+/// use oer_protocols_hil_protocol::RequestIdentity;
 /// let acknowledged = AcknowledgedReset {
 ///     request: RequestIdentity { boot_id: 1, session_id: 0, request_id: 1 },
 ///     sequence: 1,

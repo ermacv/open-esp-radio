@@ -1,11 +1,11 @@
-use oer_esp32s31_phy::PhyState;
+use oer_chips_esp32s31_phy::PhyState;
 
 use super::*;
 
 fn sources() -> MacSources {
     MacSources {
         pti: [1, 3, 10, 15].map(|value| {
-            oer_espressif_coex::CoexPti::new(value)
+            oer_chips_family_coex::CoexPti::new(value)
                 .expect("a coexistence priority")
                 .into()
         }),

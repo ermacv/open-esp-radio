@@ -3,7 +3,7 @@ use super::*;
 #[derive(Default)]
 struct Hardware {
     plans: std::vec::Vec<MacStaApReceivePlan>,
-    disabled: std::vec::Vec<oer_esp32s31_hal::types::MacInterface>,
+    disabled: std::vec::Vec<oer_chips_esp32s31_hal::types::MacInterface>,
     disabled_all: usize,
 }
 
@@ -14,12 +14,12 @@ impl StaApRegisterHardware for Hardware {
 
     fn disable_station_receive_registers(&mut self) {
         self.disabled
-            .push(oer_esp32s31_hal::types::MacInterface::Station);
+            .push(oer_chips_esp32s31_hal::types::MacInterface::Station);
     }
 
     fn disable_access_point_receive_registers(&mut self) {
         self.disabled
-            .push(oer_esp32s31_hal::types::MacInterface::AccessPoint);
+            .push(oer_chips_esp32s31_hal::types::MacInterface::AccessPoint);
     }
 
     fn disable_all_role_receive_registers(&mut self) {
@@ -60,8 +60,8 @@ fn each_role_can_leave_without_reconfiguring_the_surviving_bank() {
     assert_eq!(
         hardware.disabled,
         [
-            oer_esp32s31_hal::types::MacInterface::Station,
-            oer_esp32s31_hal::types::MacInterface::AccessPoint
+            oer_chips_esp32s31_hal::types::MacInterface::Station,
+            oer_chips_esp32s31_hal::types::MacInterface::AccessPoint
         ]
     );
 }

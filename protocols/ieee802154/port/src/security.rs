@@ -8,7 +8,7 @@
 //!
 
 use crate::AppliedSecurity;
-use oer_ieee802154_wire::KeyIdMode;
+use oer_protocols_ieee802154_wire::KeyIdMode;
 
 /// The frame counter, key identifier and key the port gives one transmit
 /// attempt of a secured frame (`otPlatRadioTransmit`).
@@ -30,7 +30,7 @@ impl TransmitSecurity {
     /// frame's key identifier mode, or `None` when the image has no
     /// auxiliary security header to write.
     pub fn apply(&self, image: &mut [u8]) -> Option<KeyIdMode> {
-        oer_ieee802154_wire::security::write_security_header(image, self.frame_counter, self.key_id)
+        oer_protocols_ieee802154_wire::security::write_security_header(image, self.frame_counter, self.key_id)
     }
 
     /// The fields [`Self::apply`] wrote into a frame of `mode`: none when
@@ -51,7 +51,7 @@ impl AppliedSecurity {
     /// frame, as the radio wrote them into its copy. Returns `false` when
     /// the image has no auxiliary security header to write.
     pub fn write(&self, image: &mut [u8]) -> bool {
-        oer_ieee802154_wire::security::write_security_header(
+        oer_protocols_ieee802154_wire::security::write_security_header(
             image,
             Some(self.frame_counter),
             self.key_id,

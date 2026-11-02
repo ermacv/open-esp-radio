@@ -1,11 +1,11 @@
 #![no_std]
-use oer_esp32s31_hal::ieee802154::{
+use oer_chips_esp32s31_hal::ieee802154::{
     mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner,
         Ieee802154InterruptSetupOwner, Ieee802154StartupPort, Ieee802154TaskOwner},
     polled::Ieee802154MacOwners,
 };
-use oer_espressif_ieee802154_mac_values::{Ieee802154EventMask, Ieee802154InterruptStartup};
-use oer_espressif_interrupt_table::{Bound, Controller, Entry, Router, Silent};
+use oer_chips_family_ieee802154_mac_values::{Ieee802154EventMask, Ieee802154InterruptStartup};
+use oer_chips_family_interrupt_table::{Bound, Controller, Entry, Router, Silent};
 
 pub fn setup_is_not_bindable<const H: u8, C: Controller, I: Entry<Part = Ieee802154InterruptOwner>>(
     router: &mut Router<C, H>, token: I, setup: Ieee802154InterruptSetupOwner,
@@ -33,7 +33,7 @@ pub fn no_early_parts(setup: Ieee802154InterruptSetupOwner, task: Ieee802154Task
 }
 
 pub struct OtherIrq;
-impl oer_mmio::InterruptSource for OtherIrq { const SOURCE: u16 = 3; }
+impl oer_portable_mmio::InterruptSource for OtherIrq { const SOURCE: u16 = 3; }
 
 pub fn foreign_bound<I: Entry<Part = OtherIrq>>(
     startup: Ieee802154ArmedTaskOwner, bound: &Bound<I>,

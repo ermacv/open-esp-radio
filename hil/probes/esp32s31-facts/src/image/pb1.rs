@@ -9,8 +9,8 @@ fn counter(s: &Session<'_>) -> u32 {
     s.ble.timer.read_word_0048_opaque().counter_low().get()
 }
 fn window() {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 fn feed(s: &mut Session<'_>) {
     let w = &mut s.ble.watchdog;
@@ -54,13 +54,13 @@ fn mode(s: &mut Session<'_>, enabled: bool) {
     s.ble.timer.modify_word_0058_opaque(|w| {
         w.set_control_0(enabled).set_control_4(enabled);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn park(s: &mut Session<'_>) {
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.trigger_word_0058_opaque_control_1();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn stop(s: &mut Session<'_>) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
@@ -71,10 +71,10 @@ fn stop(s: &mut Session<'_>) {
     s.ble.etm.trigger_channel_enable_clear_ch7();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn init(s: &mut Session<'_>) -> bool {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     // Existing sourced advancing-BTLC/digital-ETM prefix; no scheduler RUN.
     ble_wave2::prerequisite(s);
     ble::init_lp(s);
@@ -135,14 +135,14 @@ fn init(s: &mut Session<'_>) -> bool {
     okay
 }
 fn crossed(s: &Session<'_>, origin: u32, distance: u32, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < SHORT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < SHORT {
         if counter(s).wrapping_sub(origin) & MAX >= distance {
             emit(
                 tag,
                 origin,
                 counter(s),
-                oer_riscv::cycle32().wrapping_sub(start),
+                oer_portable_riscv::cycle32().wrapping_sub(start),
             );
             return true;
         }
@@ -189,7 +189,7 @@ fn dynamic(s: &mut Session<'_>, enabled: bool) {
     });
 }
 pub(super) fn bank1(s: &mut Session<'_>) {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     contain(s);
     ble::clocks(s);
     let old = s.ble.bank.read_irq_enable_1();
@@ -302,7 +302,7 @@ fn sleep0_command(s: &mut Session<'_>, enabled: bool) {
     s.ble.timer.modify_word_0078_opaque(|w| {
         w.set_control_25(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn reference(s: &Session<'_>, tag: u32) {
     let before = counter(s);
@@ -432,13 +432,13 @@ fn width_modes(s: &mut Session<'_>, modes: &[bool], first: u32) {
     stop(s);
 }
 fn natural_wrap(s: &mut Session<'_>, tag: u32, observe_reference: bool) -> bool {
-    let mut last_cycle = oer_riscv::cycle32();
+    let mut last_cycle = oer_portable_riscv::cycle32();
     let mut elapsed = 0_u64;
     let mut last_feed = 0_u64;
     let mut prior = counter(s);
     let mut observed = false;
     while elapsed < CPU_HZ * 190 {
-        let cycle = oer_riscv::cycle32();
+        let cycle = oer_portable_riscv::cycle32();
         elapsed += u64::from(cycle.wrapping_sub(last_cycle));
         last_cycle = cycle;
         if elapsed - last_feed >= CPU_HZ {

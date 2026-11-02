@@ -411,7 +411,7 @@ fn all(common: Common, inputs: AllInputs, report: &dyn RunReport) -> Result<Exit
     }
     // A line is unobserved when no scenario observes it; every decision must
     // still review one.
-    let root = oer_os_process::built_root();
+    let root = oer_tools_os_process::built_root();
     let unobserved_lines = lines.unobserved();
     let mut sources = observation::Sources::default();
     sources.check(&root, decisions::observation::DECISIONS, &unobserved_lines)?;

@@ -14,17 +14,17 @@
 //! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
 //! `components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c`.
 
-use oer_ieee80211_core_security_rsn::Pmk;
-use oer_ieee80211_core_security_rsn::sae::{SaeCommit, SaeError, SaeKeys};
-use oer_ieee80211_wire::address::{Bssid, OwnAddress};
-use oer_ieee80211_wire::sae::{SAE_COMMIT_LEN, SaeCommitValues, anti_clogging_token};
-use oer_ieee80211_wire::security::SaePwe;
-use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
-use oer_ieee80211_wire::station::{
+use oer_protocols_ieee80211_core_security_rsn::Pmk;
+use oer_protocols_ieee80211_core_security_rsn::sae::{SaeCommit, SaeError, SaeKeys};
+use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_protocols_ieee80211_wire::sae::{SAE_COMMIT_LEN, SaeCommitValues, anti_clogging_token};
+use oer_protocols_ieee80211_wire::security::SaePwe;
+use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::station::{
     SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, parse_sae_authentication, parse_sta_disconnect,
 };
-use oer_ieee80211_wire::status::status_code;
-use oer_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::status::status_code;
+use oer_portable_time::{Duration, Instant};
 
 pub const STA_SAE_COMMIT_TIMEOUT: Duration = Duration::from_secs(4);
 pub const STA_SAE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(2);
@@ -78,9 +78,9 @@ pub enum StaPeerDisconnectKind {
     Disassociation,
     Deauthentication,
 }
-impl From<oer_ieee80211_wire::station::StaDisconnectKind> for StaPeerDisconnectKind {
-    fn from(value: oer_ieee80211_wire::station::StaDisconnectKind) -> Self {
-        use oer_ieee80211_wire::station::StaDisconnectKind as C;
+impl From<oer_protocols_ieee80211_wire::station::StaDisconnectKind> for StaPeerDisconnectKind {
+    fn from(value: oer_protocols_ieee80211_wire::station::StaDisconnectKind) -> Self {
+        use oer_protocols_ieee80211_wire::station::StaDisconnectKind as C;
         match value {
             C::Disassociation => Self::Disassociation,
             C::Deauthentication => Self::Deauthentication,

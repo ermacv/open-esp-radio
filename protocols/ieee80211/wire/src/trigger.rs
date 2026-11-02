@@ -65,7 +65,7 @@ pub enum TriggerEncodeError {
     BasicDependentInfoOutOfRange,
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger Type subfield).
     pub enum TriggerType: u8 (from_raw, raw) {
         Basic = 0,
@@ -439,7 +439,7 @@ macro_rules! dbm_values {
 }
 
 impl TriggerTargetRssi {
-    const fn from_user_encoding(value: oer_wire::U8<7>) -> Self {
+    const fn from_user_encoding(value: oer_portable_wire::U8<7>) -> Self {
         dbm_values!(value, 110, 1;
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
@@ -452,7 +452,7 @@ impl TriggerTargetRssi {
             ; Self::Reserved
         )
     }
-    const fn from_trs_encoding(value: oer_wire::U8<5>) -> Self {
+    const fn from_trs_encoding(value: oer_portable_wire::U8<5>) -> Self {
         dbm_values!(value, 45, 2;
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
@@ -468,7 +468,7 @@ pub enum TriggerApTxPower {
 }
 
 impl TriggerApTxPower {
-    const fn from_common_encoding(value: oer_wire::U8<6>) -> Self {
+    const fn from_common_encoding(value: oer_portable_wire::U8<6>) -> Self {
         dbm_values!(value, 20, 1;
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
@@ -477,7 +477,7 @@ impl TriggerApTxPower {
             ; Self::Dbm(43)
         )
     }
-    const fn from_trs_encoding(value: oer_wire::U8<5>) -> Self {
+    const fn from_trs_encoding(value: oer_portable_wire::U8<5>) -> Self {
         dbm_values!(value, 10, 2;
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
             16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
@@ -607,7 +607,7 @@ impl<'a> Iterator for TriggerUserIterator<'a> {
         if self.finished || self.remaining.is_empty() {
             return None;
         }
-        let mut reader = oer_wire::Reader::new(self.remaining);
+        let mut reader = oer_portable_wire::Reader::new(self.remaining);
         let Ok(user_info) = reader.array::<TRIGGER_USER_INFO_LEN>() else {
             return self.fail(TriggerParseError::Truncated {
                 required: TRIGGER_USER_INFO_LEN,
@@ -667,7 +667,7 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
     let truncated = TriggerParseError::Truncated {
         required: TRIGGER_FRAME_MIN_LEN,
     };
-    let mut reader = oer_wire::Reader::new(frame);
+    let mut reader = oer_portable_wire::Reader::new(frame);
     let frame_control = reader.read().map_err(|_| truncated)?;
     let duration = reader.read().map_err(|_| truncated)?;
     let receiver_address = reader.read().map_err(|_| truncated)?;
@@ -713,7 +713,7 @@ pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, Trig
         uplink_stbc: fields.uplink_stbc(),
         ldpc_extra_symbol_segment: fields.ldpc_extra_symbol_segment(),
         ap_tx_power_encoding,
-        ap_tx_power: TriggerApTxPower::from_common_encoding(oer_wire::U8::from_low_bits(
+        ap_tx_power: TriggerApTxPower::from_common_encoding(oer_portable_wire::U8::from_low_bits(
             ap_tx_power_encoding,
         )),
         pre_fec_padding_factor_encoding,
@@ -762,7 +762,7 @@ pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerP
         number_of_ra_ru: fields.number_of_ra_ru(),
         more_ra_ru: fields.more_ra_ru(),
         target_rssi_encoding,
-        target_rssi: TriggerTargetRssi::from_user_encoding(oer_wire::U8::from_low_bits(
+        target_rssi: TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::from_low_bits(
             target_rssi_encoding,
         )),
         reserved: fields.reserved(),
@@ -811,7 +811,7 @@ pub fn parse_trigger_user_spatial_stream(
         spatial_stream_count_encoding,
         spatial_stream_count: spatial_stream_count_encoding.saturating_add(1),
         target_rssi_encoding,
-        target_rssi: TriggerTargetRssi::from_user_encoding(oer_wire::U8::from_low_bits(
+        target_rssi: TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::from_low_bits(
             target_rssi_encoding,
         )),
         reserved: fields.reserved(),
@@ -934,10 +934,10 @@ pub fn parse_trigger_response_scheduling_control(
         uplink_target_rssi_encoding: fields.uplink_target_rssi_encoding(),
         mcs: fields.mcs(),
         trailing_reserved: fields.trailing_reserved(),
-        ap_tx_power: TriggerApTxPower::from_trs_encoding(oer_wire::U8::from_low_bits(
+        ap_tx_power: TriggerApTxPower::from_trs_encoding(oer_portable_wire::U8::from_low_bits(
             ap_tx_power_encoding,
         )),
-        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(oer_wire::U8::from_low_bits(
+        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(oer_portable_wire::U8::from_low_bits(
             uplink_target_rssi_encoding,
         )),
     })
@@ -971,12 +971,12 @@ pub fn parse_uplink_power_headroom_control(
 }
 
 fn chunk<const N: usize>(bytes: &[u8]) -> Result<&[u8; N], TriggerParseError> {
-    oer_wire::Reader::new(bytes)
+    oer_portable_wire::Reader::new(bytes)
         .array()
         .map_err(|_| TriggerParseError::Truncated { required: N })
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerCommonFields[8] (little) {
         pub trigger_type, with_trigger_type: u8 = 0..4;
@@ -999,7 +999,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Shared prefix of scheduled and random-access Trigger User Info.
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerUserPrefix[3] (little) {
@@ -1008,7 +1008,7 @@ oer_wire::bitfield! {
         pub ru_allocation, with_ru_allocation: u8 = 13..20;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Scheduled spatial-stream form of Trigger User Info.
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerScheduledUserFields[5] (little) {
@@ -1024,7 +1024,7 @@ oer_wire::bitfield! {
         pub reserved, with_reserved: bool = 39..40;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// Random-access RU form of Trigger User Info.
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerRandomAccessUserFields[5] (little) {
@@ -1041,7 +1041,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerBasicFields[1] (little) {
         pub mpdu_mu_spacing_factor, with_mpdu_mu_spacing_factor: u8 = 0..2;
@@ -1051,7 +1051,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerNfrpFields[5] (little) {
         pub starting_aid, with_starting_aid: u16 = 0..12;
@@ -1063,7 +1063,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, TRS Control).
     pub struct TrsFields[4] (little) {
         pub control_id, with_control_id: u8 = 0..6;
@@ -1077,7 +1077,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.2.4.6 (HE variant HT Control, UPH Control).
     pub struct UphFields[4] (little) {
         pub control_id, with_control_id: u8 = 0..6;
@@ -1088,7 +1088,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
     pub struct BarControlFields[2] (little) {
         pub ack_policy, with_ack_policy: bool = 0..1;
@@ -1097,7 +1097,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (GI And HE-LTF Type subfield).
     pub struct GiLtfValue[1] (little) {
         pub value, with_value: u8 = 0..2;

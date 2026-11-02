@@ -2,7 +2,7 @@ extern crate std;
 
 use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 use crate::memory::dma_static::{PlacedTxLease, PlacedTxPool};
-use oer_memory::{PinnedDmaTxPool, PinnedDmaTxRadioLease};
+use oer_portable_memory::{PinnedDmaTxPool, PinnedDmaTxRadioLease};
 
 use super::*;
 
@@ -33,7 +33,7 @@ fn pool() -> &'static Pool {
 fn lease(pool: &'static Pool, index: u8) -> Lease {
     pool.claim_network(index)
         .unwrap()
-        .publish(oer_memory::FrameLen::constant::<0>(), |_| {});
+        .publish(oer_portable_memory::FrameLen::constant::<0>(), |_| {});
     pool.claim_radio(index).unwrap()
 }
 
@@ -248,7 +248,7 @@ fn impossible_sequence_can_only_quarantine_backing() {
 
 #[test]
 fn zeroed_storage_is_the_free_storage_new_builds() {
-    let zeroed = oer_memory::zeroed::zeroed::<TxDmaStorage>();
+    let zeroed = oer_portable_memory::zeroed::zeroed::<TxDmaStorage>();
     let new = TxDmaStorage::new();
     assert_eq!(zeroed.state, new.state);
     assert_eq!(zeroed.state, TxDmaState::Free);

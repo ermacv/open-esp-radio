@@ -31,7 +31,7 @@
 //! [`Request`] and [`Engine`], and the host scenario, which sends them and
 //! checks the answers against its own reference.
 
-use oer_crypto::{
+use oer_portable_crypto::{
     Aes128Key, KeyData, KeyUnwrapError, KeyUnwrapRequest,
     block::{Aes128Engine, BlockError, unwrap_now},
 };
@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 /// block (RFC 3394 §2.2.1).
 pub const MAX_WRAPPED: usize = 40;
 
-oer_hil_protocol::messages! {
+oer_protocols_hil_protocol::messages! {
     endpoint UnwrapKey = "aes/key-unwrap" => Unwrapped;
     topic Unwrapped = "aes/key-unwrapped";
 }
@@ -96,7 +96,7 @@ impl From<KeyUnwrapError> for UnwrapError {
     }
 }
 
-oer_hil_agent::service! {
+oer_protocols_hil_agent::service! {
     /// The AES service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         UnwrapKey(UnwrapKey) => unwrap_key,

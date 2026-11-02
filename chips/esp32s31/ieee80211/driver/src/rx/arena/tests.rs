@@ -1,12 +1,12 @@
 use std::boxed::Box;
 
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     rx_dma::model::RxWalkerModel,
     rx_ring::RxDmaArenaState,
     space::{HOST_ARENA_BASE, HostDma},
 };
 
-use oer_time_virtual::VirtualClock;
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 use crate::rx::{
@@ -17,7 +17,7 @@ use crate::rx::{
 };
 
 type HostStatic =
-    WifiRxStatic<32, 1_664, 1_664, 32, oer_espressif_interrupt_table::signal::host::Host, HostDma>;
+    WifiRxStatic<32, 1_664, 1_664, 32, oer_chips_family_interrupt_table::signal::host::Host, HostDma>;
 
 #[test]
 fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
@@ -26,11 +26,11 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     let end = start + core::mem::size_of::<HostStatic>();
 
     let (parts, mut stop, frames) = WifiRxArena::bind(
-        oer_esp32s31_hal::memory::dma_static::Placed::host(placed),
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(placed),
         crate::rx::arena::WifiIrqSignals {
-            mac: oer_espressif_interrupt_table::signal::host::signal().0,
-            receive: oer_espressif_interrupt_table::signal::host::signal().0,
-            power: oer_espressif_interrupt_table::signal::host::signal().0,
+            mac: oer_chips_family_interrupt_table::signal::host::signal().0,
+            receive: oer_chips_family_interrupt_table::signal::host::signal().0,
+            power: oer_chips_family_interrupt_table::signal::host::signal().0,
         },
     )
     .expect("a zeroed static binds");
@@ -83,9 +83,9 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
     assert!(parts.control.stop_requested());
 
     // The line lands in the arena's own slot.
-    let cell: &'static oer_memory::HandlerCell<
-        WifiIrqLine<oer_espressif_interrupt_table::signal::host::Host>,
-    > = Box::leak(Box::new(oer_memory::HandlerCell::new()));
+    let cell: &'static oer_portable_memory::HandlerCell<
+        WifiIrqLine<oer_chips_family_interrupt_table::signal::host::Host>,
+    > = Box::leak(Box::new(oer_portable_memory::HandlerCell::new()));
     let Ok(installed) = parts.line.install(cell) else {
         panic!("an empty cell takes the line");
     };

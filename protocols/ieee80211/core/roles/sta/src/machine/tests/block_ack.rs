@@ -1,10 +1,10 @@
 use super::*;
-use oer_ieee80211_wire::block_ack::frame::{
+use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_STATUS_REQUEST_DECLINED, BlockAckAction, encode_addba_request, parse_block_ack_action,
 };
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_time::Clock;
-use oer_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_portable_time::Clock;
+use oer_portable_time_virtual::VirtualClock;
 
 #[test]
 fn unsupported_addba_receives_an_explicit_decline() {
@@ -26,7 +26,7 @@ fn unsupported_addba_receives_an_explicit_decline() {
         let responses: Vec<_> = world
             .frames
             .iter()
-            .filter_map(|frame| oer_ieee80211_wire::frame::DecodedHeader::decode(frame))
+            .filter_map(|frame| oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(frame))
             .filter(|header| header.control().subtype() == 13)
             .filter_map(|header| parse_block_ack_action(header.body()))
             .collect();
@@ -56,9 +56,9 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
         let reply = RxBlockAckReply::for_association(
             world.station.epoch.unwrap(),
             Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
-            oer_ieee80211_core_upper_mac::block_ack::AddbaResponse {
+            oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
                 dialog_token: 17,
-                status: oer_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
+                status: oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: 0,
                 window: 8,
                 timeout_tu: 0,

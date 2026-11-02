@@ -35,8 +35,8 @@ impl Probe {
     }
 }
 
-fn prepared_probe(queues: Option<&Probe>) -> Result<&Probe, oer_radio_port::SlotInitError> {
-    queues.ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)
+fn prepared_probe(queues: Option<&Probe>) -> Result<&Probe, oer_protocols_radio_port::SlotInitError> {
+    queues.ok_or(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)
 }
 
 #[cfg(test)]
@@ -47,7 +47,7 @@ mod tests {
     fn unprepared_probe_returns_the_construction_error() {
         assert!(matches!(
             prepared_probe(None),
-            Err(oer_radio_port::SlotInitError::QueuesUnprepared)
+            Err(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)
         ));
         let probe = Probe::new();
         assert!(
@@ -60,7 +60,7 @@ macro_rules! port {
     ($module:ident, $port:ident) => {
         mod $module {
             use super::*;
-            use oer_radio_port::conformance::registration::{MockCleanup, guarded};
+            use oer_protocols_radio_port::conformance::registration::{MockCleanup, guarded};
             use $port::*;
             struct Backend<'a>(&'a Probe);
             struct View<'p, 'a, Id: SlotIdentity> {
@@ -101,7 +101,7 @@ macro_rules! port {
                 fn split<'s>(
                     queues: &'s mut Self::Queues,
                     _: SlotWakes<'s, Id>,
-                ) -> Result<(&'r Probe, &'r Probe), oer_radio_port::SlotInitError>
+                ) -> Result<(&'r Probe, &'r Probe), oer_protocols_radio_port::SlotInitError>
                 where
                     Self: 's,
                     Id: 's,
@@ -163,7 +163,7 @@ macro_rules! port {
                 fn lend<'p, 's>(
                     frontend: &'p mut Self::Frontend<'s>,
                     loan: BodyLoan<'p, Id, Self>,
-                ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+                ) -> Result<Self::Body<'p>, oer_protocols_radio_port::SlotInitError>
                 where
                     Self: 's,
                     Id: 's,
@@ -262,7 +262,7 @@ macro_rules! port {
                 async fn now<'a, 'p>(
                     _: Call,
                     _: &'a Self::View<'p>,
-                ) -> PortResult<oer_time::RadioInstant<()>, ClockError, u32>
+                ) -> PortResult<oer_portable_time::RadioInstant<()>, ClockError, u32>
                 where
                     Self: 'p,
                     Id: 'p,
@@ -368,8 +368,8 @@ macro_rules! port {
     };
 }
 
-port!(bluetooth, oer_radio_port);
-port!(ieee802154, oer_radio_port);
+port!(bluetooth, oer_protocols_radio_port);
+port!(ieee802154, oer_protocols_radio_port);
 
 static BLE: Probe = Probe::new();
 static IEEE: Probe = Probe::new();

@@ -247,21 +247,21 @@ enum Phase {
 /// 802.15.4 readiness.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::RegisteredPhyState;
+/// use oer_chips_esp32s31_phy::RegisteredPhyState;
 ///
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<RegisteredPhyState>();
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::{PhyConfig, PhyState, RegisteredPhyState};
+/// use oer_chips_esp32s31_phy::{PhyConfig, PhyState, RegisteredPhyState};
 ///
 /// let ordinary = PhyState::new(PhyConfig::production());
 /// let _forged = RegisteredPhyState { state: ordinary };
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::{PhyConfig, PhyState, RegisteredPhyState};
+/// use oer_chips_esp32s31_phy::{PhyConfig, PhyState, RegisteredPhyState};
 ///
 /// fn replace_state(registered: &mut RegisteredPhyState) {
 ///     let ordinary = PhyState::new(PhyConfig::production());
@@ -270,14 +270,14 @@ enum Phase {
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::PhyRegisterTransition;
+/// use oer_chips_esp32s31_phy::PhyRegisterTransition;
 ///
 /// let model = PhyRegisterTransition::with_production_config();
 /// let _hardware_proof = model.into_registered_parts();
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::{PhyRegisterTransition, RegisteredPhyState};
+/// use oer_chips_esp32s31_phy::{PhyRegisterTransition, RegisteredPhyState};
 ///
 /// let model = PhyRegisterTransition::with_production_config();
 /// if let Ok((ordinary, _cache)) = model.into_model_parts() {
@@ -286,7 +286,7 @@ enum Phase {
 /// ```
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::RegisteredPhyState;
+/// use oer_chips_esp32s31_phy::RegisteredPhyState;
 ///
 /// fn discard_proof(registered: RegisteredPhyState) {
 ///     let _ordinary = registered.into_state();
@@ -296,7 +296,7 @@ pub struct RegisteredPhyState {
     state: crate::state::PhyState,
     /// The registration's one grant: only this state publishes the BTBB
     /// gain of its registration.
-    grant: oer_esp32s31_hal::owner::PhyRegistrationGrant,
+    grant: oer_chips_esp32s31_hal::owner::PhyRegistrationGrant,
 }
 
 impl RegisteredPhyState {
@@ -315,8 +315,8 @@ impl RegisteredPhyState {
     /// (`phy_param[0x120]`) with its registration's grant.
     pub(crate) fn publish_btbb_gain(
         &self,
-        publisher: oer_esp32s31_hal::domain::BtbbPublisher<'_>,
-    ) -> Result<oer_esp32s31_hal::domain::BtbbGain, oer_esp32s31_hal::domain::BtbbError> {
+        publisher: oer_chips_esp32s31_hal::domain::BtbbPublisher<'_>,
+    ) -> Result<oer_chips_esp32s31_hal::domain::BtbbGain, oer_chips_esp32s31_hal::domain::BtbbError> {
         publisher.publish(
             &self.grant,
             self.state.register_init_parameters().parameter_120,
@@ -349,7 +349,7 @@ impl RegisteredPhyState {
     #[cfg(test)]
     pub(crate) fn from_wrapper_test_model(
         mut state: crate::state::PhyState,
-        grant: oer_esp32s31_hal::owner::PhyRegistrationGrant,
+        grant: oer_chips_esp32s31_hal::owner::PhyRegistrationGrant,
     ) -> Self {
         state.mark_phy_registered();
         Self { state, grant }
@@ -1345,40 +1345,40 @@ impl PhyRegisterMmioBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<P, R: oer_esp32s31_hal::owner::PhyInitializationAccess>(
+    pub fn execute_target<P, R: oer_chips_esp32s31_hal::owner::PhyInitializationAccess>(
         self,
         _platform: &mut P,
         registers: &mut R,
     ) -> PhyRegisterMmioCompletion {
         match self.action {
             PhyRegisterMmioAction::PrepareColdStart => {
-                oer_esp32s31_hal::phy::frequency::prepare_common_phy_control(registers)
+                oer_chips_esp32s31_hal::phy::frequency::prepare_common_phy_control(registers)
             }
             PhyRegisterMmioAction::ConfigureForceTxRx { enabled, phase } => {
-                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase)
+                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase)
             }
             PhyRegisterMmioAction::ResetFrequencyModule => {
-                oer_esp32s31_hal::phy::frequency::reset_module(registers)
+                oer_chips_esp32s31_hal::phy::frequency::reset_module(registers)
             }
             PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled } => {
-                oer_esp32s31_hal::phy::frequency::set_hardware_control(registers, enabled)
+                oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(registers, enabled)
             }
             PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
                 let host = if index == 0 {
-                    oer_esp32s31_hal::phy::i2c::Host::Host0
+                    oer_chips_esp32s31_hal::phy::i2c::Host::Host0
                 } else {
-                    oer_esp32s31_hal::phy::i2c::Host::Host1
+                    oer_chips_esp32s31_hal::phy::i2c::Host::Host1
                 };
-                oer_esp32s31_hal::phy::i2c::pulse_master_reset(registers, host)
+                oer_chips_esp32s31_hal::phy::i2c::pulse_master_reset(registers, host)
             }
             PhyRegisterMmioAction::ConfigureXtal40Mhz => {
-                oer_esp32s31_hal::phy::prelude::configure_fixed_xtal_40mhz(registers)
+                oer_chips_esp32s31_hal::phy::prelude::configure_fixed_xtal_40mhz(registers)
             }
             PhyRegisterMmioAction::SetCalibrationClock { enabled } => {
                 crate::hardware::set_phy_register_calibration_clock(registers, enabled)
             }
             PhyRegisterMmioAction::SetBbpllCalibration { enabled } => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled)
+                oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled)
             }
         }
         PhyRegisterMmioCompletion {
@@ -1404,19 +1404,19 @@ impl PhyRegisterResetSampleBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn execute_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         self,
         registers: &mut P,
     ) -> PhyRegisterCompletion {
         let host = if self.index == 0 {
-            oer_esp32s31_hal::phy::i2c::Host::Host0
+            oer_chips_esp32s31_hal::phy::i2c::Host::Host0
         } else {
-            oer_esp32s31_hal::phy::i2c::Host::Host1
+            oer_chips_esp32s31_hal::phy::i2c::Host::Host1
         };
         PhyRegisterCompletion::I2cMasterResetSampled {
             index: self.index,
             sample: self.sample,
-            busy: oer_esp32s31_hal::phy::i2c::sample_master_reset_busy(registers, host),
+            busy: oer_chips_esp32s31_hal::phy::i2c::sample_master_reset_busy(registers, host),
         }
     }
 }
@@ -1499,7 +1499,7 @@ impl PhyRegisterFinalI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -1507,7 +1507,7 @@ impl PhyRegisterFinalI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<

@@ -6,7 +6,7 @@
 
 use crate::AkmKeys;
 use crate::{Akm, DEFAULT_EAPOL_FRAME_CAPACITY, EapolKeyMessage, OwnedEapolFrame, RsnInterface};
-use oer_ieee80211_wire::eapol::KeyInformation;
+use oer_protocols_ieee80211_wire::eapol::KeyInformation;
 
 pub const RSN_NONCE_LEN: usize = 32;
 
@@ -58,7 +58,7 @@ pub struct RsnTransmit {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnStateError {
-    InvalidFrame(oer_ieee80211_wire::eapol::EapolParseError),
+    InvalidFrame(oer_protocols_ieee80211_wire::eapol::EapolParseError),
     WrongInterface,
     WrongPeer,
     UnsupportedDescriptorVersion,
@@ -79,8 +79,8 @@ pub enum RsnStateError {
     RetainedFrameMismatch,
 }
 
-impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnStateError {
-    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
+impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStateError {
+    fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }

@@ -1,7 +1,7 @@
 #![cfg(target_os = "linux")]
-use oer_analysis_blobray_application as app;
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_application as app;
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 mod support;
 use support::{executable as elf, executable_with_symbols as elf_with_symbols};
 /// Work and working-memory limits of one execution.
@@ -99,7 +99,7 @@ impl Fixture {
                 dependence: None,
                 patches: &[],
             },
-            &oer_analysis_blobray_riscv::RiscvExecutor,
+            &oer_tools_analysis_blobray_riscv::RiscvExecutor,
             &memory,
             &mut Limits {
                 units: 0,

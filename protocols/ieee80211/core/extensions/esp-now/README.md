@@ -1,14 +1,14 @@
 # ESP-NOW protocol owners
 
-`oer-ieee80211-core-extensions-esp-now` contains the sans-IO ESP-NOW peer, security,
+`oer-protocols-ieee80211-core-extensions-esp-now` contains the sans-IO ESP-NOW peer, security,
 duplicate-detection and bounded v2 reassembly owners, and the Espressif
 long-range PHY requests of an ESP-NOW peer. It forbids unsafe code and
-neither waits nor performs I/O. Frame codecs live in `oer-ieee80211-wire`;
+neither waits nor performs I/O. Frame codecs live in `oer-protocols-ieee80211-wire`;
 transmit sequences, CCMP packet numbers and receive replay frontiers belong
-to `oer-ieee80211-core-upper-mac`.
+to `oer-protocols-ieee80211-core-upper-mac`.
 
 Wi-Fi VIF identities, channel-context bindings and shared topology validation
-belong to `oer-ieee80211-core-arbiter`. ESP-NOW protocols take its
+belong to `oer-protocols-ieee80211-core-arbiter`. ESP-NOW protocols take its
 `interface::BoundVirtualInterface` to identify their station VIF.
 `configuration::WifiStandaloneEspNowPlan::new` narrows an arbiter `WifiPlan`
 to a station-address VIF without an AP or monitor sharing the radio. It

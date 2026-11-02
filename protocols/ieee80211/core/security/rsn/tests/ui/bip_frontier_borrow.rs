@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_core_security_rsn::bip::BipPacketNumber;
-use oer_ieee80211_core_upper_mac::packet_number::PacketNumberFrontier;
+use oer_protocols_ieee80211_core_security_rsn::bip::BipPacketNumber;
+use oer_protocols_ieee80211_core_upper_mac::packet_number::PacketNumberFrontier;
 
 pub fn admit(frontier: &mut PacketNumberFrontier<BipPacketNumber>, ipn: BipPacketNumber) {
     let candidate = frontier.prepare(ipn).unwrap();

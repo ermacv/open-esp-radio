@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::{BluetoothControllerReset, engine::{with_epoch, with_pool, DtmStorage, HostDma, SchedulerAllocationNumbers, SchedulerRolePoolStorage}},
     memory::dma_static::Placed,
 };

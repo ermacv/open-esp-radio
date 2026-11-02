@@ -95,7 +95,7 @@ pub(super) fn drain(
     Ok(())
 }
 pub(super) fn command(path: &Path) -> Command {
-    let mut command = oer_os_process::command(path);
+    let mut command = oer_tools_os_process::command(path);
     command
         .env_clear()
         .env("LC_ALL", "C")
@@ -103,6 +103,6 @@ pub(super) fn command(path: &Path) -> Command {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    oer_os_process::child_setup::without_core_dumps(&mut command);
+    oer_tools_os_process::child_setup::without_core_dumps(&mut command);
     command
 }

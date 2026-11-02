@@ -13,7 +13,7 @@
 //! prove, or whose entries leave the function, stays an indirect gap.
 use crate::KnownJump;
 use crate::tables::{JumpTableSource, ProvenTables};
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 
 #[cfg(test)]
 mod tests;

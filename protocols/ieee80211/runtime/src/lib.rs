@@ -33,7 +33,7 @@
 )]
 
 //! The asynchronous glue between the Wi-Fi lower-MAC port and the sans-IO
-//! cores: it waits on port events, `oer_time::Timer` deadlines and the
+//! cores: it waits on port events, `oer_portable_time::Timer` deadlines and the
 //! application's commands, hands each input to the cores and carries out
 //! their actions through the port. It decides no protocol question and
 //! neither parses nor builds frames; it binds no executor.
@@ -44,7 +44,7 @@
 //! concrete task assembly belong to the chip backend and its integration.
 //!
 //! The station's SPSC sender waits through `ready(&mut self)`, returning a
-//! `oer_memory::WakingSpscSendPermit` that holds its exclusive producer borrow.
+//! `oer_portable_memory::WakingSpscSendPermit` that holds its exclusive producer borrow.
 //! `send` publishes without a fallible second capacity check. Cancelling the
 //! wait or dropping the permit consumes neither a value nor queue capacity;
 //! the receiver may run on another thread.

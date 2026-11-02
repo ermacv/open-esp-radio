@@ -2,14 +2,14 @@
 //! Only externally published events and the bridge's bounded continuation may
 //! poll this task. Virtual time never supplies a bridge wake.
 use core::{future::Future, task::Poll};
-use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, ethernet::EthernetBridge};
-use oer_memory::HostContext;
-use oer_network_port::{
+use oer_portable_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, ethernet::EthernetBridge};
+use oer_portable_memory::HostContext;
+use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, LinkSnapshot, LinkState, NetDevice,
     TransmitError, TransmitRefused,
 };
-use oer_time::Duration;
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::Duration;
+use oer_portable_time_virtual::VirtualClock;
 use std::{
     cell::RefCell,
     collections::VecDeque,
@@ -49,10 +49,10 @@ fn allocator<const N: usize>() -> PacketBufAllocator {
     Box::leak(Box::new(PacketPool::new(storage))).allocator()
 }
 struct Frame(u8);
-impl oer_network_port::ReceivedFrame for Frame {
+impl oer_protocols_network_port::ReceivedFrame for Frame {
     type Storage = core::convert::Infallible;
     type Copied = Self;
-    fn into_lent(self) -> Result<oer_network_port::LentFrame<Self::Storage>, Self> {
+    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Self::Storage>, Self> {
         Err(self)
     }
 }
@@ -183,7 +183,7 @@ fn hil_bridge_parks_retains_credit_and_services_rx_until_tx_credit_event() {
     let mut bridge = EthernetBridge::new(
         radio,
         Port(state.clone(), LinkSnapshot::DOWN),
-        None::<&'static oer_embassy_net::ethernet::LentSlots<_, 1>>,
+        None::<&'static oer_portable_embassy_net::ethernet::LentSlots<_, 1>>,
     );
     let mut task = core::pin::pin!(core::future::poll_fn(|cx| bridge.poll(
         cx,

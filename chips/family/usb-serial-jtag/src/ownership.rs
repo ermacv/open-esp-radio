@@ -23,12 +23,12 @@
 //!   live.
 //!
 //! The early writer writes while the FIFO has room, drops the rest and
-//! counts it ([`oer_diagnostics::FifoWriter`]); before an executor exists
+//! counts it ([`oer_portable_diagnostics::FifoWriter`]); before an executor exists
 //! there is nothing to yield to, so it waits for room within
 //! [`EARLY_PATIENCE`] per record. A fatal note never waits.
 
-use oer_diagnostics::{FifoWriter, Lost, Note, Patience, Written};
-use oer_memory::{Claim, ClaimCell};
+use oer_portable_diagnostics::{FifoWriter, Lost, Note, Patience, Written};
+use oer_portable_memory::{Claim, ClaimCell};
 
 use crate::EndpointRegisters;
 
@@ -73,7 +73,7 @@ pub struct Ownership<T> {
 /// never has room and a record written to it is only counted.
 pub struct Fifo<'a, R>(Option<&'a mut R>);
 
-impl<R: EndpointRegisters> oer_diagnostics::Fifo for Fifo<'_, R> {
+impl<R: EndpointRegisters> oer_portable_diagnostics::Fifo for Fifo<'_, R> {
     fn has_room(&self) -> bool {
         self.0.as_deref().is_some_and(EndpointRegisters::has_room)
     }

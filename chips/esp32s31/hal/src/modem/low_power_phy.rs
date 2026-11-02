@@ -18,7 +18,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     pub fn configure_fixed_xtal_40mhz_tick(&mut self) {
         // SOURCE: BLOB_LIBPHY_PHY_GET_XTAL_FREQ. The 40 MHz crystal counts from zero.
         self.peripherals.modem_lpcon_phy_tick.modify_tick_conf(|w| {
-            w.set_modem_pwr_tick_target(oer_mmio::Bits::constant::<39>());
+            w.set_modem_pwr_tick_target(oer_portable_mmio::Bits::constant::<39>());
         });
     }
 }

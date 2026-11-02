@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Ended, FailStopRequested, PortBackend, SlotIdentity};
+use oer_protocols_radio_port::{Ended, FailStopRequested, PortBackend, SlotIdentity};
 pub fn end<Id: SlotIdentity, B: PortBackend<Id>>(request: FailStopRequested<Id, B>) {
     let first = Ended::fail_stop(request, ());
     #[cfg(ui_reject)]

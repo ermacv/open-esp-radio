@@ -1,20 +1,20 @@
-//! The library's observations (`oer_espressif::observe`) in the load
+//! The library's observations (`oer::observe`) in the load
 //! service's vocabulary: the executors' CPU, the parts' polls, the PHY
 //! tracking ticks, the link's and the station's counts, the boot hart's
 //! counters and the sampler's pages, each the difference of a window's two
 //! readings where the service reports one.
 
-use oer_espressif::observe::Bridge;
-use oer_espressif::observe::cpu::ExecutorSample;
-use oer_espressif::observe::link;
-use oer_espressif::observe::parts::{PARTS, PartReading};
-use oer_espressif::observe::tracking::TrackingSample;
-use oer_services_load::{
+use oer::observe::Bridge;
+use oer::observe::cpu::ExecutorSample;
+use oer::observe::link;
+use oer::observe::parts::{PARTS, PartReading};
+use oer::observe::tracking::TrackingSample;
+use oer_hil_services_load::{
     CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, ExecutorLoad, HartLoad,
     InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, PartWindow, Parts, Rates, RxCounts,
     RxLink, Sample, Samples, StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
 };
-use oer_trace::profile::Thinning;
+use oer_portable_trace::profile::Thinning;
 
 /// The CPU report at image microsecond `now_us` of every executor's
 /// sample: a hart's idle time for each executor that saw idle, the work of
@@ -279,11 +279,11 @@ pub(crate) use chip::snapshot;
 /// The chip's own types: the cache's, the driver's and the station's.
 #[cfg(target_arch = "riscv32")]
 mod chip {
-    use oer_espressif::observe::{
+    use oer::observe::{
         CacheGeometry, CacheLevel, Counters, DataBus, HartCounters, InstructionBus,
         StationRxCounts, StationRxKind, WifiRxReport,
     };
-    use oer_services_load as wire;
+    use oer_hil_services_load as wire;
 
     use super::Snapshot;
 

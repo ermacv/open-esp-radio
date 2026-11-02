@@ -6,7 +6,7 @@
 //! their real hardware/software boundary instead of being advertised by one
 //! ambiguous offload boolean.
 
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
     MacServiceCapabilities,
 };
@@ -35,7 +35,7 @@ use crate::mac::{
 /// The station exposes one group-key slot until additional receive-side key
 /// lookup is established. One slot cannot receive both old and new GTK IDs
 /// after replacement. The hardware helper
-/// [`oer_esp32s31_ieee80211_driver::mac::crypto::replace_sta_group_ccmp_with_rollback`] restores the old
+/// [`oer_chips_esp32s31_ieee80211_driver::mac::crypto::replace_sta_group_ccmp_with_rollback`] restores the old
 /// entry if a replacement write fails; it does not own replay state. The
 /// portable phase's replacement terminal defines that state transition.
 /// The S31 lower-MAC port implements the phase lifecycle and key operations.

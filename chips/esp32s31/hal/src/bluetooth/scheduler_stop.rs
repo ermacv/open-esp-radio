@@ -5,7 +5,7 @@
 //! idle sample nor this sequence alone releases descriptor/software ownership.
 
 #[cfg(feature = "bluetooth-engine")]
-use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
 
 #[cfg(feature = "bluetooth-engine")]
 use super::engine::scheduler::interrupt::{
@@ -17,9 +17,9 @@ use crate::bluetooth::registers::{
 };
 use core::task::{Context, Poll, ready};
 #[cfg(test)]
-use oer_time::settle::Unsettled;
+use oer_portable_time::settle::Unsettled;
 
-use oer_espressif_bluetooth_engine::phase::StopPhase as Phase;
+use oer_chips_family_bluetooth_engine::phase::StopPhase as Phase;
 
 /// Durable progress of the common scheduler stop transaction, including each
 /// outstanding P3 request. Dropping a poll borrower never resets this state.

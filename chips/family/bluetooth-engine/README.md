@@ -1,6 +1,6 @@
 # BLE engine contracts
 
-`oer-espressif-bluetooth-engine` is a hardware-free family contract, with no
+`oer-chips-family-bluetooth-engine` is a hardware-free family contract, with no
 chip, HAL or PAC dependency. It forbids unsafe code and runtime panic paths.
 The S31 HAL implements its ports on the owners that already hold the physical
 parts; the S31 Bluetooth driver's controller-time worker uses the same port

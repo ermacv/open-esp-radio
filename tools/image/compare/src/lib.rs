@@ -1,7 +1,7 @@
 //! Compare two linked RISC-V images function by function, modulo placement.
 //!
-//! Symbols and sections come from [`oer_analysis_elf`]; each function's listing comes
-//! from [`oer_analysis_riscv_lift::listing`], which decodes the instructions and
+//! Symbols and sections come from [`oer_tools_analysis_elf`]; each function's listing comes
+//! from [`oer_tools_analysis_riscv_lift::listing`], which decodes the instructions and
 //! replaces every address they form by the location the image names.
 //!
 //! Moving code between crates or adding a crate changes symbol hashes and,
@@ -35,7 +35,7 @@ struct Symbol {
 struct Sections(Vec<(u64, u64)>);
 
 impl Sections {
-    fn of(elf: &oer_analysis_elf::Elf<'_>) -> Self {
+    fn of(elf: &oer_tools_analysis_elf::Elf<'_>) -> Self {
         Self(
             elf.sections()
                 .filter(|section| section.allocated && !section.nobits)
@@ -112,7 +112,7 @@ struct Image {
 }
 
 impl Image {
-    fn of(elf: &oer_analysis_elf::Elf<'_>, aliases: &Aliases) -> Self {
+    fn of(elf: &oer_tools_analysis_elf::Elf<'_>, aliases: &Aliases) -> Self {
         let mut symbols = elf
             .symbols()
             .filter(|symbol| {
@@ -120,7 +120,7 @@ impl Image {
                     && names_a_location(symbol.name)
                     && !matches!(
                         symbol.kind,
-                        oer_analysis_elf::SymbolKind::Section | oer_analysis_elf::SymbolKind::File
+                        oer_tools_analysis_elf::SymbolKind::Section | oer_tools_analysis_elf::SymbolKind::File
                     )
             })
             .map(|symbol| Symbol {
@@ -149,7 +149,7 @@ impl Image {
     }
 }
 
-impl oer_analysis_riscv_lift::listing::Placement for Image {
+impl oer_tools_analysis_riscv_lift::listing::Placement for Image {
     fn locate(&self, address: u64) -> String {
         let mut index = self.starts.partition_point(|start| *start <= address);
         while index > 0 {
@@ -177,10 +177,10 @@ impl oer_analysis_riscv_lift::listing::Placement for Image {
 /// Normalized instruction lists of every function, by name. A name that
 /// occurs in several places keeps each body.
 fn functions(
-    elf: &oer_analysis_elf::Elf<'_>,
+    elf: &oer_tools_analysis_elf::Elf<'_>,
     image: &Image,
 ) -> Result<BTreeMap<String, Vec<Vec<String>>>> {
-    use oer_analysis_riscv_lift::listing::{Placement, normalize};
+    use oer_tools_analysis_riscv_lift::listing::{Placement, normalize};
     let mut functions: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
     for function in elf.functions()? {
         let section = elf.section(function.section)?;
@@ -262,8 +262,8 @@ fn compare_functions(
 pub fn compare_elf(old: &Path, new: &Path, review: &Review) -> Result<Comparison> {
     let (old_bytes, new_bytes) = (std::fs::read(old)?, std::fs::read(new)?);
     let (old_elf, new_elf) = (
-        oer_analysis_elf::Elf::executable(&old_bytes)?,
-        oer_analysis_elf::Elf::executable(&new_bytes)?,
+        oer_tools_analysis_elf::Elf::executable(&old_bytes)?,
+        oer_tools_analysis_elf::Elf::executable(&new_bytes)?,
     );
     let image_old = Image::of(&old_elf, &review.aliases);
     let image_new = Image::of(&new_elf, &review.aliases);
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn a_symbol_of_an_unsized_label_locates_the_addresses_after_it() {
-        use oer_analysis_riscv_lift::listing::Placement;
+        use oer_tools_analysis_riscv_lift::listing::Placement;
         let symbol = |address, size, name: &str| Symbol {
             address,
             size,

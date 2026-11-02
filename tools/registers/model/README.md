@@ -882,7 +882,7 @@ names the file and the entity.
 
 `chip_render::render(model, policy)` renders the PAC of a loaded
 `ChipModel` and `ChipPolicy` (`chips/<chip>/pac/src/generated.rs`), over
-`oer-mmio` and without `unsafe`; `chip_render::dma_window(model)` renders
+`oer-portable-mmio` and without `unsafe`; `chip_render::dma_window(model)` renders
 the images' linker fragment. The PAC is the exact model: field accessors by
 class, value domains, typed pointers, ownership parts, layouts and the
 analog-I2C dictionary, and no logic.
@@ -909,13 +909,13 @@ the only others are the generated controls of the root's links (below).
 | `set_<instance>_<role>_clock(&mut self, on: bool)`, `set_<instance>_<role>_reset(&mut self, asserted: bool)` | each clock or reset link of the root (a fact: which field gates or resets which instance) whose one-bit `plain` field, set as a `bool`, lies in a word the part holds with a `modify_<register>` that needs no index; a field in `[[shared-controls]]` takes one `set_<shared control>_clock` or `_reset` instead of one per user; muxes and other links have none |
 
 Names are the model's in snake case (`r#` before a keyword). A repeated
-register takes `index: oer_mmio::Index<COUNT>` first. A field value is
+register takes `index: oer_portable_mmio::Index<COUNT>` first. A field value is
 `bool` for one bit, the native integer for 8, 16 and 32 bits,
-`oer_mmio::Bits<WIDTH>` otherwise. A field limited to its `values` by
+`oer_portable_mmio::Bits<WIDTH>` otherwise. A field limited to its `values` by
 `write-values-only`, or one whose `values` cover its width, takes its enum
 unless a narrower `write-range` bounds it: then it takes a bounded
 `<Field>Range`. A field with `values` has a `<field>_variant()` getter. A
-field with a `pointer` fact takes `oer_memory::DmaRef<Layout>` of its target
+field with a `pointer` fact takes `oer_portable_memory::DmaRef<Layout>` of its target
 layout, or the window's `DmaWindowAddress` for a raw buffer, and stores its
 encoding (`member-offset` added, shifted, its width kept), and
 `clear_<field>()` stores its zero image, no address; a high field has

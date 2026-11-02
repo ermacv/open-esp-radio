@@ -1,9 +1,9 @@
 use super::*;
 use crate::tests::{compiled, ledger, with_facts};
 use crate::{Analysis, DebugMetadata, StorageEvidence, UnknownUse, read_debug};
-use oer_analysis_elf::rv32::{self, Role};
-use oer_analysis_riscv_model::{ErrorCode, UnknownCallBehavior};
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_elf::rv32::{self, Role};
+use oer_tools_analysis_riscv_model::{ErrorCode, UnknownCallBehavior};
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::rc::Rc;
 
 const PROGRAM: &str = r#"
@@ -59,7 +59,7 @@ fn named(analysis: &Analysis, name: &str) -> u32 {
         .values()
         .find(|facts| {
             facts.function.names.iter().any(|symbol| {
-                let symbol = oer_analysis_elf::demangle(symbol);
+                let symbol = oer_tools_analysis_elf::demangle(symbol);
                 symbol == name || symbol.ends_with(&format!("::{name}"))
             })
         })
@@ -169,7 +169,7 @@ struct PairBytes {
 }
 
 fn pair_bytes(elf: &[u8]) -> PairBytes {
-    let file = oer_analysis_elf::Elf::parse(elf).unwrap();
+    let file = oer_tools_analysis_elf::Elf::parse(elf).unwrap();
     let function = file.symbols().find(|s| s.name == "different").unwrap();
     let (section, high) = file
         .sections()
@@ -178,7 +178,7 @@ fn pair_bytes(elf: &[u8]) -> PairBytes {
                 .ok()?
                 .find(|r| {
                     r.r_type == rv32::R_RISCV_PCREL_HI20
-                        && r.target == oer_analysis_elf::Target::Symbol(function.index)
+                        && r.target == oer_tools_analysis_elf::Target::Symbol(function.index)
                 })
                 .map(|r| (s, r))
         })
@@ -189,7 +189,7 @@ fn pair_bytes(elf: &[u8]) -> PairBytes {
         .find(|r| {
             r.r_type == rv32::R_RISCV_PCREL_LO12_I
                 && match r.target {
-                    oer_analysis_elf::Target::Symbol(index) => {
+                    oer_tools_analysis_elf::Target::Symbol(index) => {
                         file.symbol_at(index).unwrap().address == high.at
                     }
                     _ => false,
@@ -199,10 +199,10 @@ fn pair_bytes(elf: &[u8]) -> PairBytes {
     let rela = file
         .sections()
         .find(|s| {
-            s.kind == oer_analysis_elf::SectionKind::Rela && s.relocates == Some(section.index)
+            s.kind == oer_tools_analysis_elf::SectionKind::Rela && s.relocates == Some(section.index)
         })
         .unwrap();
-    let offset = |r: &oer_analysis_elf::Relocation| {
+    let offset = |r: &oer_tools_analysis_elf::Relocation| {
         rela.file_offset as usize
             + 12 * rela
                 .data
@@ -220,7 +220,7 @@ fn pair_bytes(elf: &[u8]) -> PairBytes {
             rv32::transfers(u32::from_le_bytes(entry[4..8].try_into().unwrap()) & 255)
         })
         .unwrap();
-    let label = if let oer_analysis_elf::Target::Symbol(index) = low.target {
+    let label = if let oer_tools_analysis_elf::Target::Symbol(index) = low.target {
         Some(index)
     } else {
         None
@@ -296,12 +296,12 @@ fn label_identity_pairs_nonadjacent_uses_even_with_equal_symbol_names() {
     let mut elf = compiled(&source);
     let p = pair_bytes(&elf);
     let other_label = {
-        let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
         file.relocations(p.section)
             .unwrap()
             .filter(|r| r.r_type == rv32::R_RISCV_PCREL_LO12_I)
             .find_map(|r| match r.target {
-                oer_analysis_elf::Target::Symbol(index) if index != p.label => Some(index),
+                oer_tools_analysis_elf::Target::Symbol(index) if index != p.label => Some(index),
                 _ => None,
             })
             .unwrap()
@@ -342,7 +342,7 @@ fn absent_ambiguous_wrong_and_cross_section_pairs_never_use_the_label_as_a_callb
                 elf[p.spare..p.spare + 12].copy_from_slice(&copy);
             }
             2 => {
-                let file = oer_analysis_elf::Elf::parse(&elf).unwrap();
+                let file = oer_tools_analysis_elf::Elf::parse(&elf).unwrap();
                 let wrong = file
                     .symbols()
                     .find(|s| s.name == "different")
@@ -417,12 +417,12 @@ fn addends_and_interior_symbols_keep_the_original_function_possible() {
     assert_barrier(&addend, UnknownUse::NonExactAddress);
     let mut interior = original;
     let (index, section) = {
-        let file = oer_analysis_elf::Elf::parse(&interior).unwrap();
+        let file = oer_tools_analysis_elf::Elf::parse(&interior).unwrap();
         let index = file
             .symbols()
             .find(|s| {
                 s.size == 0
-                    && s.kind == oer_analysis_elf::SymbolKind::Unknown
+                    && s.kind == oer_tools_analysis_elf::SymbolKind::Unknown
                     && s.section
                         .is_some_and(|i| !file.section(i).unwrap().allocated)
             })
@@ -547,10 +547,10 @@ fn normalization_and_proof_temporary_storage_obey_resource_limits() {
             &mut ledger(),
             &mut || Ok(()),
         )?;
-        let memory = oer_analysis_riscv_model::WorkingMemory::new(1 << 24)?;
+        let memory = oer_tools_analysis_riscv_model::WorkingMemory::new(1 << 24)?;
         let mut total = 0;
         {
-            let mut keep = oer_analysis_riscv_model::Ledger::new(&memory, &mut || Ok(()))?;
+            let mut keep = oer_tools_analysis_riscv_model::Ledger::new(&memory, &mut || Ok(()))?;
             let audit = audit_function_addresses(image, &analysis, &types, &mut keep, &mut || {
                 total += 1;
                 Ok(())
@@ -561,12 +561,12 @@ fn normalization_and_proof_temporary_storage_obey_resource_limits() {
         for stop in [1, total / 3, total * 2 / 3, total] {
             let mut checkpoints = 0;
             {
-                let mut keep = oer_analysis_riscv_model::Ledger::new(&memory, &mut || Ok(()))?;
+                let mut keep = oer_tools_analysis_riscv_model::Ledger::new(&memory, &mut || Ok(()))?;
                 let error =
                     audit_function_addresses(image, &analysis, &types, &mut keep, &mut || {
                         checkpoints += 1;
                         if checkpoints == stop {
-                            Err(oer_analysis_riscv_model::Error::new(
+                            Err(oer_tools_analysis_riscv_model::Error::new(
                                 ErrorCode::Cancelled,
                                 "cancelled",
                             ))
@@ -580,9 +580,9 @@ fn normalization_and_proof_temporary_storage_obey_resource_limits() {
             }
             assert_eq!(memory.used(), 0);
         }
-        let tiny = oer_analysis_riscv_model::WorkingMemory::new(1)?;
+        let tiny = oer_tools_analysis_riscv_model::WorkingMemory::new(1)?;
         {
-            let mut keep = oer_analysis_riscv_model::Ledger::new(&tiny, &mut || Ok(()))?;
+            let mut keep = oer_tools_analysis_riscv_model::Ledger::new(&tiny, &mut || Ok(()))?;
             let error =
                 audit_function_addresses(image, &analysis, &types, &mut keep, &mut || Ok(()))
                     .err()

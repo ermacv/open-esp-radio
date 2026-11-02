@@ -11,7 +11,7 @@ pub(super) fn route(s: &mut Session<'_>, source: pac::Interrupt, map: u32) {
             w.set_map(Bits::truncate(map));
         });
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(super) fn inherited(s: &Session<'_>) {
     for source in [
@@ -31,7 +31,7 @@ pub(super) fn clear(s: &mut Session<'_>) {
             w.set_ip(false);
         });
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(super) fn pending(s: &Session<'_>) -> u32 {
     INPUTS.into_iter().enumerate().fold(0, |v, (n, i)| {

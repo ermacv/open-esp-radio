@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=build.rs");
-    let (facts, files) = oer_espressif_facts::generate::tracked("esp32s31")?;
+    let (facts, files) = oer_chips_family_facts::generate::tracked("esp32s31")?;
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for file in files {
         println!("cargo:rerun-if-changed={}", root.join(file).display());
     }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").ok_or("cargo sets OUT_DIR")?);
-    let geometry = oer_espressif_facts::generate::Vectors::of(&facts)?;
+    let geometry = oer_chips_family_facts::generate::Vectors::of(&facts)?;
     std::fs::write(out.join("interrupts.rs"), geometry.rust()?)?;
     std::fs::write(out.join("pending.rs"), pending_banks(geometry.harts)?)?;
     Ok(())
@@ -29,7 +29,7 @@ fn pending_banks(harts: u32) -> Result<String, std::fmt::Error> {
     for hart in 0..harts {
         writeln!(
             rust,
-            "hart{hart}: oer_esp32s31_pac::interrupt_core::InterruptCore{hart}Status<P{hart}>,"
+            "hart{hart}: oer_chips_esp32s31_pac::interrupt_core::InterruptCore{hart}Status<P{hart}>,"
         )?;
     }
     rust.push_str("}\nimpl<");
@@ -64,7 +64,7 @@ fn pending_banks(harts: u32) -> Result<String, std::fmt::Error> {
     for hart in 0..harts {
         writeln!(
             rust,
-            "hart{hart}: oer_esp32s31_pac::interrupt_core::InterruptCore{hart}Status::host(hart{hart}).expect(\"host pending bank\"),"
+            "hart{hart}: oer_chips_esp32s31_pac::interrupt_core::InterruptCore{hart}Status::host(hart{hart}).expect(\"host pending bank\"),"
         )?;
     }
     rust.push_str("}\n}}; }\n");

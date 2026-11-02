@@ -1,12 +1,12 @@
 //! Building an image through the image pipeline and printing its
 //! analysis reports; where images live and what their bundle is belong to
-//! `oer_image_build::images`.
+//! `oer_tools_image_build::images`.
 
 use std::path::Path;
 
-pub use oer_image_build::images::{CHIP, bundle, package};
-use oer_image_build::{Enforced, Result, images};
-use oer_image_bundle::ImageBundle;
+pub use oer_tools_image_build::images::{CHIP, bundle, package};
+use oer_tools_image_build::{Enforced, Result, images};
+use oer_tools_image_bundle::ImageBundle;
 
 /// Build `image` into its bundle.
 pub fn build(
@@ -16,7 +16,7 @@ pub fn build(
     binary: Option<&str>,
     features: &[String],
 ) -> Result<ImageBundle> {
-    let bundle = oer_image_build::build(&specification(root, image, enforced, binary, features)?)?;
+    let bundle = oer_tools_image_build::build(&specification(root, image, enforced, binary, features)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -32,7 +32,7 @@ fn specification(
     enforced: Enforced,
     binary: Option<&str>,
     features: &[String],
-) -> Result<oer_image_build::ImageSpec> {
+) -> Result<oer_tools_image_build::ImageSpec> {
     let mut specification = images::spec(root, image, enforced)?;
     if let Some(binary) = binary {
         specification.application.binary = binary.to_owned();
@@ -43,7 +43,7 @@ fn specification(
 
 /// Print the frame and panic inventories, including every reported location.
 fn write_analysis_reports(bundle: &ImageBundle, output: &mut impl std::io::Write) -> Result<()> {
-    use oer_image_checks::{panics, stack::frames};
+    use oer_tools_image_checks::{panics, stack::frames};
 
     for report in &bundle.reports {
         if [
@@ -67,12 +67,12 @@ fn write_analysis_reports(bundle: &ImageBundle, output: &mut impl std::io::Write
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_image_build::images::output;
-    use oer_image_bundle::Purpose;
+    use oer_tools_image_build::images::output;
+    use oer_tools_image_bundle::Purpose;
 
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
-        for (path, text) in oer_espressif_facts::tracked::FILES {
+        for (path, text) in oer_chips_family_facts::tracked::FILES {
             let path = directory.path().join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn frame_and_panic_reports_print_locations_for_both_elfs() {
         let directory = repository();
-        let profile = oer_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
+        let profile = oer_tools_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
         let mut bundle = ImageBundle::new(
             directory.path(),
             &profile,
@@ -168,18 +168,18 @@ mod tests {
     fn flash_loads_reported_failures_without_enforcing_checks() {
         let directory = repository();
         let root = directory.path();
-        let profile = oer_chip_profile::Profile::load(root, CHIP).unwrap();
+        let profile = oer_tools_chip_profile::Profile::load(root, CHIP).unwrap();
         let output = output(root, "boot-smoke");
-        let staging = oer_image_bundle::staging_directory(&output).unwrap();
+        let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
         let mut built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
         for segment in built.segments() {
             std::fs::write(segment.file, b"fixture").unwrap();
         }
-        built.checks.push(oer_image_bundle::CheckRecord {
-            elf: oer_image_bundle::CheckedElf::Runtime,
+        built.checks.push(oer_tools_image_bundle::CheckRecord {
+            elf: oer_tools_image_bundle::CheckedElf::Runtime,
             check: "interrupts".into(),
-            result: oer_image_bundle::CheckResult::Failed("no bound".into()),
+            result: oer_tools_image_bundle::CheckResult::Failed("no bound".into()),
         });
         let published = built.publish(&output).unwrap();
         let loaded = bundle(root, "boot-smoke").unwrap();
@@ -191,9 +191,9 @@ mod tests {
     fn flash_and_run_cannot_write_an_analysis_bundle_in_the_normal_directory() {
         let directory = repository();
         let root = directory.path();
-        let profile = oer_chip_profile::Profile::load(root, CHIP).unwrap();
+        let profile = oer_tools_chip_profile::Profile::load(root, CHIP).unwrap();
         let output = output(root, "radio-root");
-        let staging = oer_image_bundle::staging_directory(&output).unwrap();
+        let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         for purpose in [Purpose::Analysis, Purpose::Flash] {
             std::fs::create_dir_all(&staging).unwrap();
             let mut built =

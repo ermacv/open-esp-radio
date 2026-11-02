@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{InterfaceAttempt, InterfacePhase};
+use oer_protocols_ieee80211_contracts_port::{InterfaceAttempt, InterfacePhase};
 pub fn submit<'k, 'p, 'id: 'k + 'p, I: InterfacePhase<'p, 'id>>(
     phase: &mut I,
     attempt: InterfaceAttempt<'k, 'p, 'id, I>,

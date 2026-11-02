@@ -3,9 +3,9 @@
 
 use core::num::NonZeroU64;
 
-use oer_ieee80211_core_upper_mac::HeTxopRtsBudget;
-use oer_ieee80211_core_upper_mac::protection::{HePacketPadding, HeTxopDurationRtsThreshold};
-use oer_ieee80211_wire::phy::{HeGiLtf, HeRate};
+use oer_protocols_ieee80211_core_upper_mac::HeTxopRtsBudget;
+use oer_protocols_ieee80211_core_upper_mac::protection::{HePacketPadding, HeTxopDurationRtsThreshold};
+use oer_protocols_ieee80211_wire::phy::{HeGiLtf, HeRate};
 
 /// The nominal packet padding code the vendor stores from the peer's HE
 /// Capabilities.
@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(nominal_packet_padding_code(&element[..10]), 0);
     }
 
-    use oer_ieee80211_wire::phy::{FecCoding, HeMcs, PpduBandwidth, SpatialStreams};
+    use oer_protocols_ieee80211_wire::phy::{FecCoding, HeMcs, PpduBandwidth, SpatialStreams};
 
     use super::*;
 

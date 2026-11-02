@@ -15,4 +15,4 @@ pub mod core_control;
 pub mod interrupt_controller;
 pub(crate) mod port;
 
-pub use oer_esp32s31_pac::{BOOT_HART, HARTS, Hart, SecondaryHart};
+pub use oer_chips_esp32s31_pac::{BOOT_HART, HARTS, Hart, SecondaryHart};

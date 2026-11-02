@@ -49,8 +49,8 @@ fn link_stacks(
         include_str!("../../../../chips/family/staged-layout/linker/runtime/sections.x"),
     )
     .unwrap();
-    let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").unwrap();
-    let mut vectors = oer_espressif_facts::generate::Vectors::of(&facts).unwrap();
+    let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31").unwrap();
+    let mut vectors = oer_chips_family_facts::generate::Vectors::of(&facts).unwrap();
     vectors.harts = harts;
     vectors.boot_hart = 0;
     fs::write(
@@ -90,7 +90,7 @@ fn link_stacks(
     object.append_section_bss(bss, 64, 4);
     fs::write(path.join("fixture.o"), object.write().unwrap()).unwrap();
 
-    let mut command = Command::new(oer_os_toolchain::lld().unwrap());
+    let mut command = Command::new(oer_tools_os_toolchain::lld().unwrap());
     command
         .current_dir(path)
         .args(["-T", "link.x", "fixture.o", "-o", "runtime.elf"]);
@@ -182,7 +182,7 @@ fn checks_hart_one_alignment_only_when_it_exists() {
 fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_state() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for chip in ["esp32s31"] {
-        let profile = oer_chip_profile::Profile::load(&root, chip).unwrap();
+        let profile = oer_tools_chip_profile::Profile::load(&root, chip).unwrap();
         let contract = profile.facts.interrupts.unwrap();
         let mut sizes = vec![0; contract.harts.len()];
         for &hart in &contract.harts {
@@ -197,7 +197,7 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
             profile.facts.memory.as_ref().unwrap().sram.origin(),
         )
         .unwrap();
-        let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();
+        let elf = oer_tools_analysis_elf::Elf::parse(&bytes).unwrap();
         for &hart in &contract.harts {
             let bottom = elf
                 .address(&format!("__runtime_cpu{hart}_irq_stack_bottom"))

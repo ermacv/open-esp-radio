@@ -1,5 +1,5 @@
 //! Bank-zero enable diagnostics, one current model field per output value.
-use oer_esp32s31_pac::bt_mac::irq_enable_0;
+use oer_chips_esp32s31_pac::bt_mac::irq_enable_0;
 
 pub(super) fn bank0(a: irq_enable_0::R) -> [[u32; 3]; 5] {
     [
@@ -35,8 +35,8 @@ pub(super) fn bank0(a: irq_enable_0::R) -> [[u32; 3]; 5] {
 #[allow(clippy::expect_used, reason = "host register fixture construction")]
 mod tests {
     use super::*;
-    use oer_esp32s31_pac::{bt_mac::BluetoothInterruptBank, instances};
-    use oer_mmio::Bits;
+    use oer_chips_esp32s31_pac::{bt_mac::BluetoothInterruptBank, instances};
+    use oer_portable_mmio::Bits;
 
     #[test]
     fn split_fields_remain_independent_without_displacing_other_observations() {

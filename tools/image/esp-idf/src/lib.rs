@@ -1,6 +1,6 @@
 //! Build ESP-IDF projects of the firmware catalog against a chip's pinned
 //! ESP-IDF: peers, vendor references and each chip's second-stage
-//! bootloader (`oer_image_build::esp_idf::catalog`). Every build uses the
+//! bootloader (`oer_tools_image_build::esp_idf::catalog`). Every build uses the
 //! ESP-IDF revision pinned by the chip's `artifacts.toml`, checked out once
 //! per host in the user's cache (`$OER_IDF_CACHE`, default
 //! `~/.cache/open-esp-radio/esp-idf`) below `<revision>-<pins>/`, where
@@ -20,7 +20,7 @@
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-use oer_pins_artifacts::GitPin;
+use oer_tools_pins_artifacts::GitPin;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -47,16 +47,16 @@ const ARCHIVE_EXTENSION: &str = ".a";
 /// that commit. The checkout's `origin` is `repository`, so git resolves
 /// relative submodule URLs against the upstream rather than the directory.
 fn checkout(directory: &Path, repository: &str, revision: &str) -> Result<()> {
-    if oer_os_process::git::text(directory, ["rev-parse", "HEAD"])
+    if oer_tools_os_process::git::text(directory, ["rev-parse", "HEAD"])
         .is_ok_and(|head| head == revision)
         && directory.join(".git").exists()
     {
-        if oer_os_process::git::text(directory, ["remote", "get-url", "origin"]).is_err() {
-            oer_os_process::git::text(directory, ["remote", "add", "origin", repository])?;
+        if oer_tools_os_process::git::text(directory, ["remote", "get-url", "origin"]).is_err() {
+            oer_tools_os_process::git::text(directory, ["remote", "add", "origin", repository])?;
             // Submodules initialized without an origin resolved against the
             // directory; take their URLs from `.gitmodules` again.
             if directory.join(".gitmodules").is_file() {
-                oer_os_process::git::text(directory, ["submodule", "sync", "--quiet"])?;
+                oer_tools_os_process::git::text(directory, ["submodule", "sync", "--quiet"])?;
             }
         }
         return Ok(());
@@ -65,13 +65,13 @@ fn checkout(directory: &Path, repository: &str, revision: &str) -> Result<()> {
         std::fs::remove_dir_all(directory)?;
     }
     std::fs::create_dir_all(directory)?;
-    oer_os_process::git::text(directory, ["init", "--quiet"])?;
-    oer_os_process::git::text(directory, ["remote", "add", "origin", repository])?;
-    oer_os_process::git::text(
+    oer_tools_os_process::git::text(directory, ["init", "--quiet"])?;
+    oer_tools_os_process::git::text(directory, ["remote", "add", "origin", repository])?;
+    oer_tools_os_process::git::text(
         directory,
         ["fetch", "--quiet", "--depth", "1", "origin", revision],
     )?;
-    oer_os_process::git::text(directory, ["checkout", "--quiet", "FETCH_HEAD"])?;
+    oer_tools_os_process::git::text(directory, ["checkout", "--quiet", "FETCH_HEAD"])?;
     Ok(())
 }
 
@@ -109,7 +109,7 @@ fn normalize(repository: &str) -> String {
 
 /// Submodule paths of `tree` by resolved upstream repository.
 fn submodules(tree: &Path, repository: &str) -> Result<BTreeMap<String, String>> {
-    let listing = oer_os_process::git::text(
+    let listing = oer_tools_os_process::git::text(
         tree,
         [
             "config",
@@ -159,7 +159,7 @@ fn prepare_tree(cache: &Path, pins: &[GitPin]) -> Result<(PathBuf, Vec<Override>
         };
         let directory = tree.join(path);
         checkout(&directory, &pin.repository, &pin.revision)?;
-        oer_os_process::git::text(
+        oer_tools_os_process::git::text(
             &tree,
             [
                 "update-index",
@@ -167,9 +167,9 @@ fn prepare_tree(cache: &Path, pins: &[GitPin]) -> Result<(PathBuf, Vec<Override>
                 &format!("160000,{},{path}", pin.revision),
             ],
         )?;
-        oer_os_process::git::text(&tree, ["submodule", "init", "--quiet", path])?;
+        oer_tools_os_process::git::text(&tree, ["submodule", "init", "--quiet", path])?;
         for (artifact, sha256) in &pin.artifacts {
-            let actual = oer_os_durable::sha256_file(&directory.join(artifact))?;
+            let actual = oer_tools_os_durable::sha256_file(&directory.join(artifact))?;
             if &actual != sha256 {
                 return Err(format!("{path}/{artifact}: sha256 {actual}, pinned {sha256}").into());
             }
@@ -185,7 +185,7 @@ fn prepare_tree(cache: &Path, pins: &[GitPin]) -> Result<(PathBuf, Vec<Override>
 
 fn bash(script: &str, env: &[(&str, &Path)], log: &Path) -> Result<()> {
     let file = std::fs::File::create(log)?;
-    let status = oer_os_process::command("bash")
+    let status = oer_tools_os_process::command("bash")
         .args(["-ec", script])
         .envs(env.iter().map(|(k, v)| (*k, v.as_os_str())))
         .stdout(file.try_clone()?)
@@ -199,7 +199,7 @@ fn bash(script: &str, env: &[(&str, &Path)], log: &Path) -> Result<()> {
 
 /// The host-wide cache of ESP-IDF trees and tools.
 pub fn cache_directory() -> Result<PathBuf> {
-    oer_os_durable::xdg::esp_idf_cache()
+    oer_tools_os_durable::xdg::esp_idf_cache()
 }
 
 /// Directory name of the tree prepared for `pins`: the IDF revision and a
@@ -297,7 +297,7 @@ fn unpinned_archives(map: &str, tree: &Path, pins: &[GitPin]) -> Result<Vec<Stri
             .map(|(_, sha256)| sha256.as_str())
             .collect::<Vec<_>>();
         if !digests.is_empty()
-            && !digests.contains(&oer_os_durable::sha256_file(Path::new(&archive))?.as_str())
+            && !digests.contains(&oer_tools_os_durable::sha256_file(Path::new(&archive))?.as_str())
         {
             unpinned.push(archive);
         }
@@ -341,7 +341,7 @@ pub fn output(root: &Path, project: &Project) -> PathBuf {
 /// directory with its contents. Files the project names outside its
 /// directory, such as a shared partition table, are not part of it.
 pub fn recipe(root: &Path, pins: &str, project: &Project) -> Result<String> {
-    project_recipe(&oer_pins_artifacts::git_pins(root, pins)?, &project.source)
+    project_recipe(&oer_tools_pins_artifacts::git_pins(root, pins)?, &project.source)
 }
 
 fn project_recipe(pins: &[GitPin], source: &Path) -> Result<String> {
@@ -355,10 +355,10 @@ fn project_recipe(pins: &[GitPin], source: &Path) -> Result<String> {
     files.sort();
     let mut text = format!("tree {}\n", tree_name(pins, revision));
     for file in files {
-        let digest = oer_os_durable::sha256_file(&source.join(&file))?;
+        let digest = oer_tools_os_durable::sha256_file(&source.join(&file))?;
         text.push_str(&format!("{digest} {}\n", file.display()));
     }
-    Ok(oer_os_durable::sha256_bytes(text.as_bytes()))
+    Ok(oer_tools_os_durable::sha256_bytes(text.as_bytes()))
 }
 
 /// Every file below `directory`, relative to the project root.
@@ -445,15 +445,15 @@ pub fn build(root: &Path, pins: &str, projects: &[Project]) -> Result<Vec<Build>
         .iter()
         .map(|project| recipe(root, pins, project))
         .collect::<Result<Vec<_>>>()?;
-    let pins = oer_pins_artifacts::git_pins(root, pins)?;
+    let pins = oer_tools_pins_artifacts::git_pins(root, pins)?;
     let cache = cache_directory()?;
     std::fs::create_dir_all(&cache)?;
-    use oer_os_process::lock::{FileLock, Mode};
+    use oer_tools_os_process::lock::{FileLock, Mode};
     // Exclusive while the tree and tools may change, then shared for the
     // builds; the lock converts in place.
     let mut lock = FileLock::acquire(&cache.join(".lock"), Mode::Exclusive)?;
     let (tree, overrides) = prepare_tree(&cache, &pins)?;
-    let revision = oer_os_process::git::text(&tree, ["rev-parse", "HEAD"])?;
+    let revision = oer_tools_os_process::git::text(&tree, ["rev-parse", "HEAD"])?;
     let mut tools = PathBuf::new();
     for project in projects {
         tools = install_tools(&cache, &tree, &project.chip, &revision)?;
@@ -510,7 +510,7 @@ idf.py --preview -C "$OER_PROJECT" -B "$OER_BUILD" -DIDF_TARGET="$OER_CHIP" -DSD
             idf_revision: revision.clone(),
             idf_tree: Some(tree.clone()),
             overrides: overrides.clone(),
-            application_sha256: oer_os_durable::sha256_file(&application)?,
+            application_sha256: oer_tools_os_durable::sha256_file(&application)?,
             application: application.display().to_string(),
             elf: elf.display().to_string(),
             recipe,
@@ -678,7 +678,7 @@ mod tests {
         let digest = |bytes: &[u8]| {
             let path = tree.join("digest");
             std::fs::write(&path, bytes).unwrap();
-            oer_os_durable::sha256_file(&path).unwrap()
+            oer_tools_os_durable::sha256_file(&path).unwrap()
         };
         let pins = [GitPin {
             id: "esp-phy-lib".into(),

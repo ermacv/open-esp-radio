@@ -1,5 +1,5 @@
 use crate::executor::test_clock::VirtualClock;
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::{RadioClient, RadioDomain},
     owner::PhyInitializationAccess,
     root::RadioHardware,
@@ -16,7 +16,7 @@ fn registered_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, Conc
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     {
@@ -39,7 +39,7 @@ fn rf_closed_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, Concu
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     {
@@ -95,7 +95,7 @@ fn an_unregistered_domain_rejects_every_client_operation() {
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     let domain = &mut radio;
@@ -129,8 +129,8 @@ fn due_tracking_blocks_clients_until_maintenance_is_admitted() {
         Err(ConcurrentPhyError::NoTrackingPending)
     );
     // One period later the periodic callback requests tracking.
-    let later = oer_time_virtual::START
-        .checked_add(oer_time::Duration::from_micros(
+    let later = oer_portable_time_virtual::START
+        .checked_add(oer_portable_time::Duration::from_micros(
             DEFAULT_PLL_TRACK_PERIOD_MICROS,
         ))
         .unwrap();
@@ -209,7 +209,7 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
     let (mut radio, _partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     {
@@ -231,12 +231,12 @@ fn the_final_state_cache_follows_the_registered_domain_across_rf_close() {
 
 /// Enter `client` with a proof for the domain's registration.
 fn enter_client(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+    radio: &mut oer_chips_esp32s31_hal::domain::RadioDomain<
         crate::test_clocks::TestClockBackend,
         crate::concurrent::ConcurrentPhy,
     >,
-    client: oer_esp32s31_hal::domain::RadioClient,
-    clock: &impl oer_time::Clock,
+    client: oer_chips_esp32s31_hal::domain::RadioClient,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
 }
@@ -260,7 +260,7 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
         future::Future,
         task::{Context, Waker},
     };
-    use oer_time::Clock;
+    use oer_portable_time::Clock;
     let clock = VirtualClock::<1>::new();
     let mut radio = registered_domain();
     assert_eq!(

@@ -25,7 +25,7 @@ impl Io {
     }
     pub(in crate::executor::step) fn power_gain_entry(
         &mut self,
-        entry: oer_esp32s31_hal::types::PhyGainMemoryEntry,
+        entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry,
     ) -> Result<(), Failure> {
         self.atom();
         if self.power_gain_failure == Some(self.power_gain_entries.len()) {
@@ -307,7 +307,7 @@ fn expected_records(
     state: &PhyState,
     class: Class,
     gain_base: i8,
-) -> Vec<oer_esp32s31_hal::types::PhyGainMemoryEntry> {
+) -> Vec<oer_chips_esp32s31_hal::types::PhyGainMemoryEntry> {
     use crate::hardware::{packed_halfword, tx_baseband_gain_index};
     match class {
         Class::Wifi => {
@@ -325,7 +325,7 @@ fn expected_records(
                             packed_halfword(&image.output_32, index - 12)
                         }
                     };
-                    oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+                    oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
                         0xf3_u8.wrapping_add(i as u8),
                         packed_halfword(&image.output_72, i),
                         gain_64,
@@ -347,7 +347,7 @@ fn expected_records(
                 .map(|i| {
                     let gain_64 = image.output_64[i];
                     let index = tx_baseband_gain_index(gain_64) * 4;
-                    oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+                    oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
                         0xf3_u8.wrapping_add(32).wrapping_add(i as u8),
                         image.output_72[i],
                         gain_64,

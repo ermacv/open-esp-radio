@@ -1,6 +1,6 @@
 //! Serial PHY byte transport over an exclusively borrowed master.
 //! SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C.
-use oer_espressif_analog::model::{ByteAddress, Host};
+use oer_chips_family_analog::model::{ByteAddress, Host};
 
 /// One byte has not started or completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_hal::{coex::CoexPti, ieee80211::init::MacCoexPti, types::MacPti};
+use oer_chips_esp32s31_hal::{coex::CoexPti, ieee80211::init::MacCoexPti, types::MacPti};
 
 pub fn project(pti: CoexPti) {
     let _ = MacCoexPti::from(pti);

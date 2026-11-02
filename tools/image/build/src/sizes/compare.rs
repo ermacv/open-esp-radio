@@ -1,7 +1,7 @@
 //! Size comparison: `CLAUDE.md`, "Sizes"; growth is reported, never a stop.
 use super::{Provenance, Summary};
 use crate::Result;
-use oer_image_checks::sizes::{Measurements, Section};
+use oer_tools_image_checks::sizes::{Measurements, Section};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
@@ -62,8 +62,8 @@ fn summaries(directory: &Path) -> Result<BTreeMap<String, Summary>> {
                 p.binary,
                 p.features.join(","),
                 match p.purpose {
-                    oer_image_bundle::Purpose::Analysis => "analysis",
-                    oer_image_bundle::Purpose::Flash => "flash",
+                    oer_tools_image_bundle::Purpose::Analysis => "analysis",
+                    oer_tools_image_bundle::Purpose::Flash => "flash",
                 }
             );
             if out.insert(key.clone(), summary).is_some() {
@@ -71,10 +71,10 @@ fn summaries(directory: &Path) -> Result<BTreeMap<String, Summary>> {
             }
             return Ok(());
         }
-        if directory.join(oer_image_bundle::MANIFEST).is_file() {
+        if directory.join(oer_tools_image_bundle::MANIFEST).is_file() {
             return Err(format!(
                 "missing sizes.json beside {}",
-                directory.join(oer_image_bundle::MANIFEST).display()
+                directory.join(oer_tools_image_bundle::MANIFEST).display()
             )
             .into());
         }
@@ -237,7 +237,7 @@ fn composition(baselines: &[Summary], head: &Summary) -> Result<Comparison> {
 }
 
 fn composition_row(output: &mut String, name: &str, measurements: &Measurements) {
-    let totals = |select: fn(&oer_image_checks::sizes::Totals) -> u64| -> u128 {
+    let totals = |select: fn(&oer_tools_image_checks::sizes::Totals) -> u64| -> u128 {
         measurements
             .totals
             .values()

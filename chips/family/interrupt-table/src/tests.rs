@@ -1,5 +1,5 @@
 use crate::{Entry, Error, Router};
-use oer_riscv::clic::{Control, LineState, Trigger};
+use oer_portable_riscv::clic::{Control, LineState, Trigger};
 
 crate::__fake_table!();
 
@@ -151,7 +151,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
             .all(|line| !line.enabled)
     );
 
-    static OTHER_CELL: oer_memory::HandlerCell<TimerIrq> = oer_memory::HandlerCell::new();
+    static OTHER_CELL: oer_portable_memory::HandlerCell<TimerIrq> = oer_portable_memory::HandlerCell::new();
     extern "C" fn other_cell_handler() {
         let _ = OTHER_CELL.with(on_timer);
     }

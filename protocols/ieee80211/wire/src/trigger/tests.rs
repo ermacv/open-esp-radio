@@ -500,7 +500,7 @@ fn every_prefix_of_a_trigger_frame_is_handled() {
 #[test]
 fn every_bounded_power_encoding_has_its_exact_dbm_value() {
     for code in 0..128 {
-        let actual = TriggerTargetRssi::from_user_encoding(oer_wire::U8::new(code).unwrap());
+        let actual = TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::new(code).unwrap());
         let expected = if code == 127 {
             TriggerTargetRssi::Reserved
         } else {
@@ -510,12 +510,12 @@ fn every_bounded_power_encoding_has_its_exact_dbm_value() {
     }
     for code in 0..64 {
         assert_eq!(
-            TriggerApTxPower::from_common_encoding(oer_wire::U8::new(code).unwrap()),
+            TriggerApTxPower::from_common_encoding(oer_portable_wire::U8::new(code).unwrap()),
             TriggerApTxPower::Dbm((i16::from(code) - 20) as i8)
         );
     }
     for code in 0..32 {
-        let code_value = oer_wire::U8::new(code).unwrap();
+        let code_value = oer_portable_wire::U8::new(code).unwrap();
         assert_eq!(
             TriggerTargetRssi::from_trs_encoding(code_value),
             if code == 31 {

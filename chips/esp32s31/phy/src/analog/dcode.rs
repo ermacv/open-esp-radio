@@ -304,7 +304,7 @@ impl PhyDcodeI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -312,7 +312,7 @@ impl PhyDcodeI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<

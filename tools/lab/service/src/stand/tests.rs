@@ -45,7 +45,7 @@ fn a_stopped_operation_leaves_the_queue_without_its_turn() {
 
 #[test]
 fn only_a_router_operation_needs_the_air() {
-    use oer_lab_client::protocol::RouterOperation;
+    use oer_tools_lab_client::protocol::RouterOperation;
     let board = || "02:00:00:00:00:01".to_owned();
     let alone = [Claim::board(&board()), Claim::shared(ROUTER)];
     let router = Operation::Router {
@@ -58,7 +58,7 @@ fn only_a_router_operation_needs_the_air() {
         Operation::Flash {
             board: board(),
             bundle: "bundle".to_owned(),
-            image: oer_lab_arbiter::journal::ImageIdentity {
+            image: oer_tools_lab_arbiter::journal::ImageIdentity {
                 name: "aes".to_owned(),
                 sha256: String::new(),
                 commit: None,

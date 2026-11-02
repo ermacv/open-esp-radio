@@ -1,7 +1,7 @@
 //! Receive metadata of one MPDU.
 
 use crate::Ieee80211Stamp;
-use oer_ieee80211_wire::{channel::Channel, phy::PhyRate};
+use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Provenance of one receive value.
 ///

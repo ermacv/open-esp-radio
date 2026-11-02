@@ -1,8 +1,8 @@
-use oer_analysis_elf::{
+use oer_tools_analysis_elf::{
     Elf,
     dwarf::{Symbolizer, load},
 };
-use oer_os_toolchain::{Tool, command};
+use oer_tools_os_toolchain::{Tool, command};
 use std::{path::Path, process::Command, rc::Rc};
 
 fn run(command: &mut Command) {

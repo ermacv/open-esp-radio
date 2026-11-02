@@ -12,7 +12,7 @@ use crate::management::MAX_SSID_LEN;
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 pub struct WifiSsid {
     bytes: [u8; MAX_SSID_LEN],
-    length: oer_wire::PrefixLength<MAX_SSID_LEN>,
+    length: oer_portable_wire::PrefixLength<MAX_SSID_LEN>,
 }
 
 impl WifiSsid {
@@ -20,7 +20,7 @@ impl WifiSsid {
         if bytes.is_empty() {
             return Err(WifiSsidError::Empty);
         }
-        let length = oer_wire::PrefixLength::new(bytes.len()).ok_or(WifiSsidError::TooLong {
+        let length = oer_portable_wire::PrefixLength::new(bytes.len()).ok_or(WifiSsidError::TooLong {
             length: bytes.len(),
             maximum: MAX_SSID_LEN,
         })?;

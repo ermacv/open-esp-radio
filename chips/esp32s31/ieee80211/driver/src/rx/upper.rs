@@ -19,18 +19,18 @@
 //! quarantined with [`DrainTimeout`](super::control::WifiRxQuarantine::DrainTimeout).
 
 use core::{future::poll_fn, task::Poll};
-use oer_espressif_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, decode_rx_local_timestamp, first_segment_layout,
     pool::{NetworkRxFrame, RxTimes},
 };
 use atomic_waker::AtomicWaker;
-use oer_memory::{
+use oer_portable_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, AffineSpscTryReceiveError,
     AffineSpscTrySendError,
 };
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 use super::{
     counters::WifiRxCounters,
@@ -57,7 +57,7 @@ pub(crate) struct RxFrameQueue<'a, const SLOTS: usize, const BUFFER: usize> {
 
 impl<'a, const SLOTS: usize, const BUFFER: usize> RxFrameQueue<'a, SLOTS, BUFFER> {
     pub(crate) fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
-        oer_memory::init_in_place!(storage, Self {
+        oer_portable_memory::init_in_place!(storage, Self {
             frames => AffineSpscQueue::init_in_place,
             waker: AtomicWaker::new(),
         })

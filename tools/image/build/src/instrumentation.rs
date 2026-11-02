@@ -203,6 +203,6 @@ mod tests {
                 .classes()
                 .collect::<Vec<_>>()
         };
-        assert_eq!(classes("oer-firmware-apps-boot-smoke"), []);
+        assert_eq!(classes("oer-hil-probes-boot-smoke"), []);
     }
 }

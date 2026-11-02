@@ -4,7 +4,7 @@
 use super::{Bits, Index, Session, contain, emit, opaque, opaque_wave2, pac};
 
 fn begin(s: &mut Session<'_>) {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     contain(s);
     // SOURCE: the existing facts-image BLE leaves retain/feed the ROM WDT.
     let wdt = &mut s.ble.watchdog;
@@ -18,7 +18,7 @@ fn begin(s: &mut Session<'_>) {
 }
 
 fn wait(s: &Session<'_>, us: u32) {
-    s.sar.until(oer_riscv::cycle32(), us);
+    s.sar.until(oer_portable_riscv::cycle32(), us);
 }
 
 fn state(s: &Session<'_>, tag: u32) {
@@ -40,7 +40,7 @@ fn dac(s: &mut Session<'_>, value: u8) -> Option<u32> {
     let old = s.sar.analog_byte(field.address(), None)?;
     let new = field.insert(old, value)?;
     s.sar.analog_byte(field.address(), Some(new))?;
-    let end = oer_riscv::cycle32();
+    let end = oer_portable_riscv::cycle32();
     emit(0x3102, value.into(), old.into(), new.into());
     Some(end)
 }
@@ -118,7 +118,7 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
 }
 
 fn sample(s: &Session<'_>, tag: u32, start: u32) {
-    let before = oer_riscv::cycle32();
+    let before = oer_portable_riscv::cycle32();
     let control = s.sar.radio.lp_tsens.read_tsens_control_image();
     let clock = s.sar.radio.lp_tsens.read_tsens_clock_image();
     emit(tag, before.wrapping_sub(start), control, clock);
@@ -126,7 +126,7 @@ fn sample(s: &Session<'_>, tag: u32, start: u32) {
 
 fn injection_at(s: &mut Session<'_>, lanes: u32, pattern: u32, us: u32, start: u32) {
     if (us == 20 && pattern != 0) || (us == 70 && pattern == 3) || (us == 520 && pattern == 4) {
-        let before = oer_riscv::cycle32();
+        let before = oer_portable_riscv::cycle32();
         lane(s, lanes, true);
         if pattern == 2 {
             lane(s, lanes, false);
@@ -134,7 +134,7 @@ fn injection_at(s: &mut Session<'_>, lanes: u32, pattern: u32, us: u32, start: u
         emit(
             0x31c0,
             before.wrapping_sub(start),
-            oer_riscv::cycle32().wrapping_sub(start),
+            oer_portable_riscv::cycle32().wrapping_sub(start),
             s.sar.radio.lp_tsens.read_tsens_clock_image(),
         );
     }

@@ -9,12 +9,12 @@
 use core::fmt;
 
 use crate::interface::{BoundVirtualInterface, VifId, VirtualInterface};
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     ChannelContextId, MacServiceCapabilities, MonitorTapPoint, VifRole,
 };
-use oer_ieee80211_core_upper_mac::monitor::MonitorFilter;
+use oer_protocols_ieee80211_core_upper_mac::monitor::MonitorFilter;
 
-use oer_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
 
 /// Configuration needed when creating a station protocol owner.
 ///

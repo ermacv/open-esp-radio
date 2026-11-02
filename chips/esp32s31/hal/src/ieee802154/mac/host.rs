@@ -6,13 +6,13 @@
 
 use std::{vec, vec::Vec};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     bt_bb::BtV32BasebandRxInfo,
     ieee802154::ieee802154_host,
     instances::{bt_bb, ieee802154, modem_etm},
     modem_etm::modem_etm_host,
 };
-use oer_mmio::Host;
+use oer_portable_mmio::Host;
 
 use super::{Ieee802154InterruptSetupOwner, Ieee802154TaskOwner};
 
@@ -68,13 +68,13 @@ pub(crate) fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
 /// the router's proofs in tests: its writes change nothing it reports.
 pub(crate) struct NoRoutes;
 
-impl oer_espressif_interrupt_table::Controller for NoRoutes {
+impl oer_chips_family_interrupt_table::Controller for NoRoutes {
     const SOURCES: u16 = 256;
     const LINES: u8 = crate::platform::interrupt_controller::facts::LINES.count;
-    const LEVEL_BITS: oer_riscv::clic::LevelBits = oer_riscv::clic::LevelBits::constant::<
+    const LEVEL_BITS: oer_portable_riscv::clic::LevelBits = oer_portable_riscv::clic::LevelBits::constant::<
         { crate::platform::interrupt_controller::facts::LEVEL_BITS },
     >();
-    fn verify_configuration(&self) -> Result<(), oer_espressif_interrupt_table::Error> {
+    fn verify_configuration(&self) -> Result<(), oer_chips_family_interrupt_table::Error> {
         Ok(())
     }
     fn hart(&self) -> u8 {
@@ -84,10 +84,10 @@ impl oer_espressif_interrupt_table::Controller for NoRoutes {
         &mut self,
         _source: u16,
         _line: u8,
-    ) -> Result<(), oer_espressif_interrupt_table::Error> {
+    ) -> Result<(), oer_chips_family_interrupt_table::Error> {
         Ok(())
     }
-    fn silence(&mut self, _source: u16) -> Result<(), oer_espressif_interrupt_table::Error> {
+    fn silence(&mut self, _source: u16) -> Result<(), oer_chips_family_interrupt_table::Error> {
         Ok(())
     }
     fn routed(&self, _source: u16) -> Option<u8> {
@@ -96,20 +96,20 @@ impl oer_espressif_interrupt_table::Controller for NoRoutes {
     fn set_line(
         &mut self,
         _line: u8,
-        _state: oer_riscv::clic::LineState,
-    ) -> Result<(), oer_espressif_interrupt_table::Error> {
+        _state: oer_portable_riscv::clic::LineState,
+    ) -> Result<(), oer_chips_family_interrupt_table::Error> {
         Ok(())
     }
-    fn line(&self, _line: u8) -> oer_riscv::clic::LineState {
-        oer_riscv::clic::LineState::DISABLED
+    fn line(&self, _line: u8) -> oer_portable_riscv::clic::LineState {
+        oer_portable_riscv::clic::LineState::DISABLED
     }
 }
 
 /// The router's proof that no line receives the MAC's source, over a table
 /// without entries.
 pub(crate) fn silent<'a>()
--> oer_espressif_interrupt_table::Silent<super::Ieee802154InterruptOwner<Host<'a>>> {
-    oer_espressif_interrupt_table::Router::<_, 0>::install(NoRoutes, &[])
+-> oer_chips_family_interrupt_table::Silent<super::Ieee802154InterruptOwner<Host<'a>>> {
+    oer_chips_family_interrupt_table::Router::<_, 0>::install(NoRoutes, &[])
         .and_then(|router| router.silent())
         .expect("a table without entries leaves the MAC's source silent")
 }
@@ -122,7 +122,7 @@ pub(crate) fn arm<'a>(
     super::Ieee802154ArmedTaskOwner<Host<'a>, Host<'a>, Host<'a>>,
     super::Ieee802154InterruptOwner<Host<'a>>,
 ) {
-    use oer_espressif_ieee802154_mac_values::Ieee802154InterruptStartup as _;
+    use oer_chips_family_ieee802154_mac_values::Ieee802154InterruptStartup as _;
     type P<'a> = super::Ieee802154StartupPort<Host<'a>, Host<'a>, Host<'a>>;
     let p = P::mask_events(setup, task);
     let p = P::runtime_tx_aborts(p);
@@ -140,7 +140,7 @@ pub(crate) fn deactivate<'a>(
     interrupt: super::Ieee802154InterruptOwner<Host<'a>>,
     task: &mut HostTask<'a>,
 ) -> HostSetup<'a> {
-    use oer_espressif_ieee802154_mac_values::Ieee802154InterruptTeardown as _;
+    use oer_chips_family_ieee802154_mac_values::Ieee802154InterruptTeardown as _;
     type P<'a, 'b> = super::Ieee802154TeardownPort<'b, Host<'a>, Host<'a>, Host<'a>>;
     let p = P::stop_operation(interrupt, task);
     let p = P::stop_timer0(p);

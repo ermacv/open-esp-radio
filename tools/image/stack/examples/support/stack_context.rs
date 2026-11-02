@@ -1,9 +1,9 @@
 //! Diagnostic orchestration only. Numerical facts are made by the common
 //! checked factories, never by the validator's names, offsets or budgets.
-use oer_analysis_riscv_analysis::stack_context::*;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_image_stack::*;
+use oer_tools_analysis_riscv_analysis::stack_context::*;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_image_stack::*;
 use std::{collections::BTreeSet, path::Path};
 
 #[allow(clippy::too_many_arguments)]
@@ -17,8 +17,8 @@ pub fn derive<'m>(
     keep: &mut Ledger<'_>,
     c: &mut dyn RunControl,
 ) -> std::result::Result<Option<StackContext<'m>>, Box<dyn std::error::Error>> {
-    use oer_analysis_riscv_lift::StructuralRiscvDecoder;
-    use oer_chip_profile::{
+    use oer_tools_analysis_riscv_lift::StructuralRiscvDecoder;
+    use oer_tools_chip_profile::{
         Profile,
         policy::{StackPolicy, Storage},
     };
@@ -35,9 +35,9 @@ pub fn derive<'m>(
         .task_stack(boot_hart)
         .ok_or("missing boot task stack")?;
     let task_bounds = match task.storage() {
-        Storage::Symbol(name) => oer_analysis_elf::StorageBounds::symbol(image.file(), name)?,
+        Storage::Symbol(name) => oer_tools_analysis_elf::StorageBounds::symbol(image.file(), name)?,
         Storage::Range { bottom, top } => {
-            oer_analysis_elf::StorageBounds::range(image.file(), bottom, top)?
+            oer_tools_analysis_elf::StorageBounds::range(image.file(), bottom, top)?
         }
     }
     .ok_or("missing task storage")?;
@@ -66,7 +66,7 @@ pub fn derive<'m>(
             if matches!(
                 record,
                 FunctionRecord::ReturnInputs { .. } | FunctionRecord::Value { register: 2, .. }
-            ) || !oer_analysis_riscv_analysis::writes::closes_local_graph(record)
+            ) || !oer_tools_analysis_riscv_analysis::writes::closes_local_graph(record)
             {
                 println!("stack-setup-input\t{record:?}");
             }
@@ -91,7 +91,7 @@ pub fn derive<'m>(
     let mut irq_storage = None;
     for range in &placement.range {
         let bounds =
-            oer_analysis_elf::StorageBounds::range(image.file(), &range.range[0], &range.range[1])?;
+            oer_tools_analysis_elf::StorageBounds::range(image.file(), &range.range[0], &range.range[1])?;
         if let Some(bounds) = bounds
             && bounds.end == u64::from(setup.scratch())
             && range.region == "sram"
@@ -280,7 +280,7 @@ impl<'m> Paths<'_, 'm> {
                 let mut closed = true;
                 for record in index.records() {
                     c.checkpoint(1)?;
-                    if !oer_analysis_riscv_analysis::writes::closes_local_graph(record) {
+                    if !oer_tools_analysis_riscv_analysis::writes::closes_local_graph(record) {
                         println!("stack-context-open\t{address:#010x}\t{record:?}");
                         closed = false;
                     }

@@ -5,9 +5,9 @@
     clippy::indexing_slicing
 )]
 use super::{domain::*, membership::*};
-use oer_radio_coex::RadioClient::*;
-use oer_time::{Clock as _, Duration};
-use oer_time_virtual::VirtualClock;
+use oer_protocols_radio_coex::RadioClient::*;
+use oer_portable_time::{Clock as _, Duration};
+use oer_portable_time_virtual::VirtualClock;
 use std::vec::Vec;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,7 +30,7 @@ struct Power {
 impl Power {
     fn new() -> Self {
         Self {
-            time: VirtualClock::starting_at(oer_time::Instant::from_micros(0)),
+            time: VirtualClock::starting_at(oer_portable_time::Instant::from_micros(0)),
             log: Vec::new(),
             baseline: 7,
             power_fails: false,
@@ -373,7 +373,7 @@ impl ExternalStartPort<u8> for External {
 fn external_coexistence_validates_before_clocks_and_stops_before_release_failure() {
     let mut held = None;
     let mut port = External {
-        time: VirtualClock::starting_at(oer_time::Instant::from_micros(0)),
+        time: VirtualClock::starting_at(oer_portable_time::Instant::from_micros(0)),
         log: Vec::new(),
         fail_enable: false,
         fail_disable: false,
@@ -415,7 +415,7 @@ fn external_coexistence_validates_before_clocks_and_stops_before_release_failure
     );
 }
 
-use oer_espressif_modem_clock as clocks;
+use oer_chips_family_modem_clock as clocks;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Dep {
     Source,

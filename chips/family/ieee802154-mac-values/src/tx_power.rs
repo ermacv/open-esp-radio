@@ -190,7 +190,7 @@ impl Ieee802154TxPowerCode {
 /// the retained field code.
 ///
 /// ```compile_fail
-/// use oer_espressif_ieee802154_mac_values::{
+/// use oer_chips_family_ieee802154_mac_values::{
 ///     Ieee802154Channel, Ieee802154ResolvedTxPower,
 /// };
 ///
@@ -199,7 +199,7 @@ impl Ieee802154TxPowerCode {
 /// ```
 ///
 /// ```compile_fail
-/// use oer_espressif_ieee802154_mac_values::{
+/// use oer_chips_family_ieee802154_mac_values::{
 ///     Ieee802154Channel, Ieee802154TxPowerLevels,
 /// };
 ///

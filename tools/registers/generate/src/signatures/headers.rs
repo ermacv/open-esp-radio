@@ -202,7 +202,7 @@ _Static_assert(sizeof(void *) == 4 && sizeof(int) == 4 && sizeof(long) == 4, \"R
         let source = directory.join(format!("{stage}.c"));
         fs::write(&source, self.source(header, extra)?)?;
         let ast_path = directory.join(format!("{stage}.json"));
-        let mut command = oer_os_process::command(&self.options.clang);
+        let mut command = oer_tools_os_process::command(&self.options.clang);
         command.args([
             "--target=riscv32-unknown-elf",
             "-march=rv32im",
@@ -302,7 +302,7 @@ fn declarations(
                 name: name.to_owned(),
                 c_name: c_name.to_owned(),
                 header: relative.to_string_lossy().replace('\\', "/"),
-                sha256: oer_os_durable::sha256_bytes(&bytes),
+                sha256: oer_tools_os_durable::sha256_bytes(&bytes),
                 line,
             },
         );
@@ -357,7 +357,7 @@ pub(super) fn inspect(
             .strip_prefix(&compiler.root)?
             .to_string_lossy()
             .to_string();
-        let id = oer_os_durable::sha256_bytes(relative.as_bytes());
+        let id = oer_tools_os_durable::sha256_bytes(relative.as_bytes());
         let directory = output.join("headers").join(&id[..16]);
         let root = match compiler.run(&directory, &header, "declarations", "")? {
             Ok(v) => v,

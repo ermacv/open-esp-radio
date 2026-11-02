@@ -100,7 +100,7 @@ pub fn parse_sta_beacon(
     expected_bssid: [u8; 6],
     association_id: u16,
 ) -> Result<StaBeaconFrame<'_>, StaBeaconError> {
-    let mut reader = oer_wire::Reader::new(mpdu);
+    let mut reader = oer_portable_wire::Reader::new(mpdu);
     let header = reader
         .array::<FIXED_BEACON_LENGTH>()
         .map_err(|_| StaBeaconError::Truncated)?;
@@ -164,7 +164,7 @@ pub fn parse_sta_beacon(
     let mut remaining = elements;
     while !remaining.is_empty() {
         let element = remaining;
-        let mut reader = oer_wire::Reader::new(remaining);
+        let mut reader = oer_portable_wire::Reader::new(remaining);
         let &[id, length] = reader
             .array::<2>()
             .map_err(|_| StaBeaconError::MalformedInformationElement)?;
@@ -175,7 +175,7 @@ pub fn parse_sta_beacon(
         if id == VENDOR_ELEMENT_ID
             && let Some(element) = usize::from(length)
                 .checked_add(2)
-                .and_then(|whole| oer_wire::Reader::new(element).take(whole).ok())
+                .and_then(|whole| oer_portable_wire::Reader::new(element).take(whole).ok())
             && let Some(parameters) = crate::extensions::wmm::parse_wmm_parameter_element(element)
         {
             edca = Some(parameters);

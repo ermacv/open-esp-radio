@@ -14,8 +14,8 @@
 //! [`RateMonitor`] reports a caller that checkpoints too often.
 
 use crc::{CRC_32_ISCSI, Crc};
-use oer_diagnostics::fault::{Class, Domain, Error as FaultError, Record as FaultEnvelope};
-use oer_hil_protocol::base::{
+use oer_portable_diagnostics::fault::{Class, Domain, Error as FaultError, Record as FaultEnvelope};
+use oer_protocols_hil_protocol::base::{
     CHECKPOINT_NAME_BYTES, Checkpoint, Fault, HangFault, HartState, POST_MORTEM_CHECKPOINT_PAGE,
     POST_MORTEM_CHECKPOINTS, PanicFault, PostMortemCheckpoints, PostMortemSummary, TaskSlot,
     TaskStall,
@@ -242,7 +242,7 @@ pub fn encode_hang(hang: &HangFault) -> Result<FaultEnvelope, FaultError> {
         Class::SoftwareInvariant,
         Domain::Postmortem,
         FAULT_HANG,
-        oer_diagnostics::fault::UNKNOWN_HART,
+        oer_portable_diagnostics::fault::UNKNOWN_HART,
         0,
         &payload.bytes(),
     )
@@ -255,7 +255,7 @@ pub fn encode_panic(file: &str, line: u32, message: &str) -> Result<FaultEnvelop
         Class::RustPanic,
         Domain::Postmortem,
         FAULT_PANIC,
-        oer_diagnostics::fault::UNKNOWN_HART,
+        oer_portable_diagnostics::fault::UNKNOWN_HART,
         0,
         &payload.bytes(),
     )

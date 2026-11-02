@@ -5,7 +5,7 @@
 //! (IEEE Std 802.11-2020, 10.23.2.2). The model draws its backoff from an
 //! injected word, so its draws are deterministic.
 
-use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
+use oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters;
 
 /// The four-bit ECW fields of the EDCA Parameter Set bound every exponent.
 /// SOURCE: IEEE Std 802.11-2020, 9.4.2.28, Figure 9-354 (ECWmin/ECWmax).

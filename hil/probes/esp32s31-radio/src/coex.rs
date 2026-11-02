@@ -2,8 +2,8 @@
 //! radio domain: each lends the domain to the production core or timer
 //! sequence and compares the registers it leaves.
 
-use oer_esp32s31_hal::coex::{CoexDomainPorts, CoexPolicyTimer, CoexPolicyTimerBank};
-use oer_espressif_coex::{CoexClockSelector, CoexCore, CoexError, CoexEventId};
+use oer_chips_esp32s31_hal::coex::{CoexDomainPorts, CoexPolicyTimer, CoexPolicyTimerBank};
+use oer_chips_family_coex::{CoexClockSelector, CoexCore, CoexError, CoexEventId};
 
 use crate::session;
 

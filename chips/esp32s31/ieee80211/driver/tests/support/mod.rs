@@ -1,15 +1,15 @@
-use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use crate::*;
-pub(super) use oer_esp32s31_hal::ieee80211::dma::rx_dma::model::{
+pub(super) use oer_chips_esp32s31_hal::ieee80211::dma::rx_dma::model::{
     RxWalkerModel, RxWalkerOperation as Walker,
 };
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     rx_ring::RxDmaBufferAddresses,
     rx_storage::{PlacedRxDma, RxDmaStorage},
     space::HostDma,
 };
-use oer_esp32s31_hal::memory::dma_static::Placed;
+use oer_chips_esp32s31_hal::memory::dma_static::Placed;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Operation {
@@ -64,7 +64,7 @@ pub(super) struct MockMmio {
     pub(super) tx_collision_pending: [bool; 4],
     pub(super) tx_queue_attached: [bool; 4],
     pub(super) tx_detach_fails: [bool; 4],
-    pub(super) tx_control: [Option<oer_esp32s31_hal::types::MacTxControlFrame>; 4],
+    pub(super) tx_control: [Option<oer_chips_esp32s31_hal::types::MacTxControlFrame>; 4],
     pub(super) ccmp_valid: [bool; 25],
 }
 
@@ -157,7 +157,7 @@ pub(super) const fn rx_descriptor_low(address: u32) -> u32 {
     if address == 0 {
         0
     } else {
-        address - oer_esp32s31_hal::layouts::DMA_WINDOW.start
+        address - oer_chips_esp32s31_hal::layouts::DMA_WINDOW.start
     }
 }
 
@@ -265,8 +265,8 @@ pub(super) const STALE_PAYLOAD: u8 = 0x5a;
 impl CcmpKeyHardware for MockMmio {
     fn configure_ccmp_association(
         &mut self,
-        _interface: oer_esp32s31_hal::types::MacInterface,
-        _mode: oer_esp32s31_hal::types::MacSppMode,
+        _interface: oer_chips_esp32s31_hal::types::MacInterface,
+        _mode: oer_chips_esp32s31_hal::types::MacSppMode,
     ) {
     }
     fn install_sta_ccmp_entry(
@@ -354,7 +354,7 @@ impl MacColdHandshakeHardware for MockMmio {
 /// Drive `future` on `clock`, advancing it to the next deadline whenever the
 /// future waits.
 pub(super) fn run<F: core::future::Future>(
-    clock: &oer_time_virtual::VirtualClock,
+    clock: &oer_portable_time_virtual::VirtualClock,
     future: F,
 ) -> F::Output {
     let mut future = core::pin::pin!(future);
@@ -469,7 +469,7 @@ impl TxHardware for MockMmio {
     fn prepare_bound_legacy_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacLegacyTxProgram,
     ) -> bool {
         let queue = queue.get() as u8;
@@ -480,7 +480,7 @@ impl TxHardware for MockMmio {
     fn prepare_bound_ht_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         let queue = queue.get() as u8;
@@ -491,8 +491,8 @@ impl TxHardware for MockMmio {
     fn prepare_bound_he_tx(
         &mut self,
         _dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
-        program: oer_esp32s31_hal::types::MacHeTxProgram,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        program: oer_chips_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {
         let queue = queue.get() as u8;
         self.tx_control[usize::from(queue)] = Some(program.control());
@@ -502,7 +502,7 @@ impl TxHardware for MockMmio {
     fn start_bound_legacy_tx(
         &mut self,
         _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
         self.record_fence();
         self.record_fence();
@@ -511,7 +511,7 @@ impl TxHardware for MockMmio {
     fn start_bound_ht_tx(
         &mut self,
         _dma: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
         self.record_fence();
         self.record_fence();
@@ -519,13 +519,13 @@ impl TxHardware for MockMmio {
 
     fn take_tx_completion(
         &mut self,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacTxCompletionObservation> {
         let queue = queue.get() as u8;
         self.tx_completions[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(&mut self, queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
         let queue = queue.get() as u8;
         if !self.tx_timeout_pending[usize::from(queue)] {
             return false;
@@ -537,7 +537,7 @@ impl TxHardware for MockMmio {
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        queue: oer_esp32s31_hal::types::MacTxQueueIndex,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         expected_descriptor_head: u32,
         reason: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -585,8 +585,8 @@ impl TxHardware for MockMmio {
 
     fn take_block_ack_completion(
         &mut self,
-        _queue: oer_esp32s31_hal::types::MacTxQueueIndex,
-    ) -> Option<oer_esp32s31_hal::types::MacHtAmpduCompletionObservation> {
+        _queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> Option<oer_chips_esp32s31_hal::types::MacHtAmpduCompletionObservation> {
         None
     }
 }
@@ -632,7 +632,7 @@ impl MacTxPowerSource for MockPlatform {
 impl MacCoexPtiSource for MockPlatform {
     fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {
         self.operations.push(PlatformOperation::CoexPti(event));
-        oer_espressif_coex::CoexPtiTable::VENDOR
+        oer_chips_family_coex::CoexPtiTable::VENDOR
             .pti(event.coex_event())
             .into()
     }

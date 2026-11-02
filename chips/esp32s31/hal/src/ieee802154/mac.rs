@@ -17,7 +17,7 @@
 //!   ED result words; the task side holds every other register.
 //!
 //! The armed interrupt owner has two homes. An interrupt table's handler
-//! holds it once `oer_espressif_interrupt_table::Router::bind` placed it, and the task
+//! holds it once `oer_chips_family_interrupt_table::Router::bind` placed it, and the task
 //! activates its affine startup task owner with the binding's `Bound` proof,
 //! selecting the same ten runtime events as its later sessions
 //! ([`Ieee802154TaskOwner::enable_events`]) and mask them again at the end
@@ -34,13 +34,13 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     bt_bb::BtV32BasebandRxInfo,
     ieee802154::{Ieee802154MacIrq, Ieee802154MacTask},
     modem_etm::ModemEtmIeee802154,
 };
-use oer_espressif_interrupt_table::{Bound, Silent};
-use oer_mmio::{Fixed, Placement};
+use oer_chips_family_interrupt_table::{Bound, Silent};
+use oer_portable_mmio::{Fixed, Placement};
 
 mod codes;
 mod etm;
@@ -56,13 +56,13 @@ pub use task::Ieee802154PowerSequence;
 pub(crate) use task::Ieee802154Pti;
 
 /// Where the chip places the IEEE 802.15.4 MAC block.
-pub type MacPlacement = Fixed<{ oer_esp32s31_pac::instances::ieee802154::BASE }>;
+pub type MacPlacement = Fixed<{ oer_chips_esp32s31_pac::instances::ieee802154::BASE }>;
 
 /// Where the chip places the modem ETM block.
-pub type EtmPlacement = Fixed<{ oer_esp32s31_pac::instances::modem_etm::BASE }>;
+pub type EtmPlacement = Fixed<{ oer_chips_esp32s31_pac::instances::modem_etm::BASE }>;
 
 /// Where the chip places the shared BTBB baseband block.
-pub type RxInfoPlacement = Fixed<{ oer_esp32s31_pac::instances::bt_bb::BASE }>;
+pub type RxInfoPlacement = Fixed<{ oer_chips_esp32s31_pac::instances::bt_bb::BASE }>;
 
 /// Exclusive task-side owner of the IEEE 802.15.4 MAC registers: every MAC
 /// register but `EVENT_STATUS`, the ETM channels zero and one and the
@@ -85,23 +85,23 @@ pub struct Ieee802154TaskOwner<
 /// become available only after activation with `Bound` or a polling pair's `Silent`.
 ///
 /// ```compile_fail,E0599
-/// use oer_esp32s31_hal::ieee802154::mac::Ieee802154ArmedTaskOwner;
+/// use oer_chips_esp32s31_hal::ieee802154::mac::Ieee802154ArmedTaskOwner;
 /// fn too_early(mut startup: Ieee802154ArmedTaskOwner) {
 ///     startup.mask_events();
 /// }
 /// ```
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_hal::ieee802154::mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner};
-/// use oer_espressif_interrupt_table::{Bound, Entry};
+/// use oer_chips_esp32s31_hal::ieee802154::mac::{Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner};
+/// use oer_chips_family_interrupt_table::{Bound, Entry};
 /// fn twice<I: Entry<Part = Ieee802154InterruptOwner>>(startup: Ieee802154ArmedTaskOwner, bound: &Bound<I>) {
-///     let _first = startup.activate(bound, oer_espressif_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
-///     let _second = startup.activate(bound, oer_espressif_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
+///     let _first = startup.activate(bound, oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
+///     let _second = startup.activate(bound, oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0);
 /// }
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
+/// use oer_chips_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
 /// fn no_general_ack(task: &mut Ieee802154TaskOwner) {
 ///     task.clear_events();
 /// }
@@ -119,10 +119,10 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B>
     /// Publish the driver-selected events after the IRQ owner has moved into
     /// its permanent handler. This accesses only task-owned enable registers;
     /// it never borrows the handler cell or grants acknowledgement authority.
-    pub fn activate<I: oer_espressif_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+    pub fn activate<I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
         mut self,
         _bound: &Bound<I>,
-        events: oer_espressif_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
     ) -> Ieee802154TaskOwner<P, E, B> {
         self.task.publish_events(events);
         self.task
@@ -153,30 +153,30 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// binding's proof:
 ///
 /// ```no_run
-/// use oer_esp32s31_hal::ieee802154::mac::{
+/// use oer_chips_esp32s31_hal::ieee802154::mac::{
 ///     Ieee802154ArmedTaskOwner,
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
-/// use oer_esp32s31_hal::platform::InterruptController;
-/// use oer_espressif_interrupt_table::{BindError, Bound, Router};
-/// # const LINES: oer_espressif_interrupt_table::Lines =
-/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
-/// use oer_espressif_ieee802154_mac_values::Ieee802154EventMask;
+/// use oer_chips_esp32s31_hal::platform::InterruptController;
+/// use oer_chips_family_interrupt_table::{BindError, Bound, Router};
+/// # const LINES: oer_chips_family_interrupt_table::Lines =
+/// #     oer_chips_family_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
+/// use oer_chips_family_ieee802154_mac_values::Ieee802154EventMask;
 /// pub fn on_ieee802154(mac: &mut Ieee802154InterruptOwner) {
 ///     // Acknowledge the sampled named events; latch them for the task.
 ///     let snapshot = mac.events();
 ///     let _observed = snapshot.observation();
 ///     mac.clear_events(snapshot, Ieee802154EventMask::NAMED);
 /// }
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
 ///     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// }
 /// # fn prepare(setup: Ieee802154InterruptSetupOwner, task: Ieee802154TaskOwner) -> (Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner) {
-/// # use oer_espressif_ieee802154_mac_values::Ieee802154InterruptStartup as _;
-/// # type P = oer_esp32s31_hal::ieee802154::mac::Ieee802154StartupPort;
+/// # use oer_chips_family_ieee802154_mac_values::Ieee802154InterruptStartup as _;
+/// # type P = oer_chips_esp32s31_hal::ieee802154::mac::Ieee802154StartupPort;
 /// # let p = P::mask_events(setup, task);
 /// # let p = P::runtime_tx_aborts(p);
 /// # let p = P::runtime_rx_aborts(p);
@@ -212,13 +212,13 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// The owner moves into its one binding:
 ///
 /// ```compile_fail,E0382
-/// # use oer_esp32s31_hal::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
-/// # use oer_esp32s31_hal::platform::InterruptController;
-/// # use oer_espressif_interrupt_table::Router;
-/// # const LINES: oer_espressif_interrupt_table::Lines =
-/// #     oer_espressif_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_esp32s31_pac::HARTS as u8, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
+/// # use oer_chips_esp32s31_hal::ieee802154::mac::{Ieee802154InterruptOwner, Ieee802154TaskOwner};
+/// # use oer_chips_esp32s31_hal::platform::InterruptController;
+/// # use oer_chips_family_interrupt_table::Router;
+/// # const LINES: oer_chips_family_interrupt_table::Lines =
+/// #     oer_chips_family_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
 /// # pub fn on_ieee802154(_: &mut Ieee802154InterruptOwner) {}
-/// # oer_espressif_interrupt_table::interrupt_table! {
+/// # oer_chips_family_interrupt_table::interrupt_table! {
 /// #     lines: LINES,
 /// #     handler_attributes: [];
 /// #     contexts { radio: 3; }
@@ -253,7 +253,7 @@ pub struct Ieee802154Partition {
 impl Ieee802154Partition {
     /// Assemble the protocol's parts without accessing any register.
     pub fn new(
-        mac: oer_esp32s31_pac::ownership::Ieee802154Peripherals,
+        mac: oer_chips_esp32s31_pac::ownership::Ieee802154Peripherals,
         etm: ModemEtmIeee802154,
         rx_info: BtV32BasebandRxInfo,
     ) -> Self {
@@ -266,8 +266,8 @@ impl Ieee802154Partition {
     }
 }
 
-impl<P: Placement> oer_mmio::InterruptSource for Ieee802154InterruptOwner<P> {
-    const SOURCE: u16 = <Ieee802154MacIrq<P> as oer_mmio::InterruptSource>::SOURCE;
+impl<P: Placement> oer_portable_mmio::InterruptSource for Ieee802154InterruptOwner<P> {
+    const SOURCE: u16 = <Ieee802154MacIrq<P> as oer_portable_mmio::InterruptSource>::SOURCE;
 }
 
 /// Split the partition into the task owner and the inactive interrupt
@@ -331,7 +331,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
 
     /// Order descriptor memory and MMIO at a hardware ownership boundary.
     pub(crate) fn order_device_accesses(&mut self) {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 
@@ -351,7 +351,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// written.
     ///
     /// ```compile_fail,E0061
-    /// # use oer_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
+    /// # use oer_chips_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
     /// fn enable(task: &mut Ieee802154TaskOwner) {
     ///     // Enabling the interrupt takes the binding's proof.
     ///     task.enable_events();
@@ -359,23 +359,23 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// ```
     ///
     /// ```compile_fail,E0271
-    /// # use oer_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
-    /// # use oer_espressif_interrupt_table::Bound;
+    /// # use oer_chips_esp32s31_hal::ieee802154::mac::Ieee802154TaskOwner;
+    /// # use oer_chips_family_interrupt_table::Bound;
     /// struct OtherIrq;
-    /// impl oer_mmio::InterruptSource for OtherIrq {
+    /// impl oer_portable_mmio::InterruptSource for OtherIrq {
     ///     const SOURCE: u16 = 3;
     /// }
-    /// fn enable<E: oer_espressif_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
+    /// fn enable<E: oer_chips_family_interrupt_table::Entry<Part = OtherIrq>>(task: &mut Ieee802154TaskOwner, bound: &Bound<E>) {
     ///     // Another part's binding proves nothing about this interrupt.
-    ///     task.enable_events(bound, oer_espressif_ieee802154_mac_values::Ieee802154EventMask::NAMED);
+    ///     task.enable_events(bound, oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::NAMED);
     /// }
     /// ```
     pub fn enable_events<
-        I: oer_espressif_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+        I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
     >(
         &mut self,
         bound: &Bound<I>,
-        events: oer_espressif_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
     ) {
         let _bound = bound;
         self.publish_events(events);
@@ -384,10 +384,10 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// The runtime events, published and fenced.
     pub(crate) fn publish_events(
         &mut self,
-        events: oer_espressif_ieee802154_mac_values::Ieee802154EventMask,
+        events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,
     ) {
         self.replace_events(events);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Mask every MAC event at the end of a session, fenced: the MAC raises
@@ -400,7 +400,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     /// HW26_S31_IEEE_ABORT_20261027 (RX_ABORT reason 26 only).
     pub fn mask_events(&mut self) {
         self.mask_all_events();
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 

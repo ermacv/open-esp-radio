@@ -1,7 +1,7 @@
 //! The production lifecycle future constructors. Hardware execution lives
 //! in the parent kernels; host tests bind these same entrypoints to virtual time.
 use super::*;
-use oer_esp32s31_hal::domain::transaction::Operation;
+use oer_chips_esp32s31_hal::domain::transaction::Operation;
 
 /// Register the shared PHY domain through an owned PHY transaction.
 ///
@@ -20,7 +20,7 @@ use oer_esp32s31_hal::domain::transaction::Operation;
 )]
 #[inline(always)]
 pub fn register_concurrent_phy<'a, B: PlatformClockBackend + 'a, P, D, O>(
-    timer: &'a impl oer_cooperate::CooperativeTimer,
+    timer: &'a impl oer_portable_cooperate::CooperativeTimer,
     radio: RadioDomain<B, ConcurrentPhy>,
     platform: &'a mut P,
     clocks: &'a impl PlatformClockProvider<Backend = B>,
@@ -60,7 +60,7 @@ where
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
 pub fn close_concurrent_rf<B: PlatformClockBackend, P, D>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
 ) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
@@ -90,7 +90,7 @@ where
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
 pub fn wake_concurrent_rf<B: PlatformClockBackend, D>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     radio: RadioDomain<B, ConcurrentPhy>,
     clocks: &impl PlatformClockProvider<Backend = B>,
 ) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
@@ -115,7 +115,7 @@ where
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
 pub fn maintain_concurrent_phy<B: PlatformClockBackend, P, D, O>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,

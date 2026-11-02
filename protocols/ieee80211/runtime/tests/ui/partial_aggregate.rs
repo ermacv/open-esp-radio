@@ -1,9 +1,9 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{InFlight, PhaseTypes, TxCompleted};
-use oer_ieee80211_testing_model::{
+use oer_protocols_ieee80211_contracts_port::{InFlight, PhaseTypes, TxCompleted};
+use oer_protocols_ieee80211_testing_model::{
     ModelAggregateOutcome, ModelSingleOutcome, ModelSubframes, ModelTypes,
 };
-use oer_radio_port::Slot;
+use oer_protocols_radio_port::Slot;
 
 type Ticket<'id> = Slot<
     'id,
@@ -14,7 +14,7 @@ pub fn finish<'id>(
     operation: InFlight<(), Ticket<'id>, ModelSubframes<'id, Composition>>,
     outcome: ModelAggregateOutcome,
     _single: ModelSingleOutcome,
-    _access: &mut oer_ieee80211_contracts_port::TerminalAccess<'id, <ModelTypes<Composition> as PhaseTypes<'id>>::TicketKind, <ModelTypes<Composition> as PhaseTypes<'id>>::TicketPath>,
+    _access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<'id, <ModelTypes<Composition> as PhaseTypes<'id>>::TicketKind, <ModelTypes<Composition> as PhaseTypes<'id>>::TicketPath>,
 ) -> TxCompleted<'id, ModelTypes<Composition>> {
     #[cfg(ui_reject)]
     {
@@ -27,4 +27,4 @@ pub fn finish<'id>(
 }
 
 pub enum UiSlot {}
-type Composition = oer_ieee80211_testing_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;
+type Composition = oer_protocols_ieee80211_testing_model::ModelBackend<oer_protocols_radio_port::StaticId<UiSlot>>;

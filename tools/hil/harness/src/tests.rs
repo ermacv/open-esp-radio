@@ -1,7 +1,7 @@
 use std::{thread, time::Duration};
 
-use oer_hil_link::test_support::{Device, HELLO};
-use oer_hil_protocol::{
+use oer_tools_hil_link::test_support::{Device, HELLO};
+use oer_protocols_hil_protocol::{
     Endpoint, Key, Message, WireKind,
     base::{GetImageKeys, Hello, ImageKeyPage, RejectReason, Rejected, digest, sorted_keys},
 };
@@ -29,7 +29,7 @@ const SERVICE: &[Key] = &[Ask::KEY, Told::KEY];
 const SCENARIO: Scenario = Scenario::new("test", "test-image", &[SERVICE]);
 
 /// Run `cases` on the device behind `link`.
-fn run_cases(link: oer_hil_link::Link, cases: &[&Case]) -> Vec<Outcome> {
+fn run_cases(link: oer_tools_hil_link::Link, cases: &[&Case]) -> Vec<Outcome> {
     let board = crate::fakes::FakeBoard::new(Vec::new());
     let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
     run::cases(&mut dut, &SCENARIO, cases, &mut Vec::new()).outcomes
@@ -349,7 +349,7 @@ fn a_case_filter_keeps_the_scenarios_order_and_refuses_an_unknown_name() {
 
 #[test]
 fn a_case_runs_router_operations_and_an_unanswered_router_leaves_it_incomplete() {
-    use oer_lab_client::protocol::RouterOperation;
+    use oer_tools_lab_client::protocol::RouterOperation;
     fn probe(cx: &mut Cx<'_>) -> Result<(), Failure> {
         let answer = cx.router(RouterOperation::VerifyRuntime)?;
         check(answer == serde_json::json!(null), format!("{answer}"))?;

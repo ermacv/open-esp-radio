@@ -14,7 +14,7 @@ first system-timer microsecond after the current one (the image's clock,
 
 | Line | What it measures |
 | --- | --- |
-| `read mcycle64` / `read now` / `read empty` | Cycles of 256 reads of `oer_riscv::cycle64`, of `EmbassyClock.now()` and of an empty loop, each through `black_box`, and per read |
+| `read mcycle64` / `read now` / `read empty` | Cycles of 256 reads of `oer_portable_riscv::cycle64`, of `EmbassyClock.now()` and of an empty loop, each through `black_box`, and per read |
 | `rate hart=<h> busy` | Cycles over 10 ms of the system timer while the hart polls the clock (`per-10ms`) |
 | `debugger hart=0 connected=` | Whether the executor's idle skips its wait for interrupt (an attached debugger) |
 | `wfi direct hart=0` | A 1 ms timer deadline waited for with `wait_for_interrupt` directly in the task: timer microseconds, cycles, retired instructions and wakes |

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{AmpduPhase, LowerMacPhase, PhyRate};
+use oer_protocols_ieee80211_contracts_port::{AmpduPhase, LowerMacPhase, PhyRate};
 
 pub fn check<'p, 'id: 'p, P, Q>(source: &mut P, destination: &mut Q, raw: PhyRate)
 where

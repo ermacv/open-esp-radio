@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::Station;
-use oer_ieee80211_contracts_port::association::{
+use oer_protocols_ieee80211_contracts_port::Station;
+use oer_protocols_ieee80211_contracts_port::association::{
     AssociationPool, AssociationSlot, GroupKeySlot, PairwiseKeySlot,
 };
 

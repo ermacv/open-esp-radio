@@ -1,7 +1,7 @@
 # Task and interrupt notifications
 
 The execution levels are in [architecture](architecture.md#execution). Task
-notifications that travel upwards use `oer_sync::PriorityWaker`. It has one
+notifications that travel upwards use `oer_portable_sync::PriorityWaker`. It has one
 serialized consumer on one hart. A higher-priority producer completes before
 interrupted registration resumes; a lower-priority producer may remain suspended. Producers publish input before notifying; the consumer registers
 before its Acquire check of that input. Notifications can coalesce and do
@@ -11,7 +11,7 @@ all its notifications finish. No lock, critical section or unsafe code is
 needed. Cross-core memory safety does not imply this priority progress
 guarantee.
 
-`oer-sync` is a separate portable crate because memory ownership, protocol
+`oer-portable-sync` is a separate portable crate because memory ownership, protocol
 ports and chip drivers consume it independently. Its only dependency is the
 atomic-waker implementation; it does not pull memory's buffer machinery or
 Embassy into a protocol contract.
@@ -34,7 +34,7 @@ name does not establish that its task runs on P2.
 | Same file: answer | Radio-system actor P2 → requesting client P1/P2 | `PriorityWaker` also supports a higher-priority client without changing the request-slot contract. |
 | `protocols/radio/port/src/slot.rs`: p2 | Frontend/body P1, registration teardown P2 → registered owner P2 | Upward wake, protected by `PriorityWaker`; commands, returns, retirement and quarantine publish their state before notification. |
 | Same file: join | Registered owner P2 → frontend P1 | Ordinary AtomicWaker, descending priority. |
-| `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | HIL station/network tasks P1 ↔ P1 | `oer_sync::PriorityWaker` over atomic link state. The image retains the same P1 composition; endpoint and link-controller loans are affine and local. |
+| `portable/embassy/net/src/owned.rs`: radio_waker, network_waker | HIL station/network tasks P1 ↔ P1 | `oer_portable_sync::PriorityWaker` over atomic link state. The image retains the same P1 composition; endpoint and link-controller loans are affine and local. |
 | `owned/tx_queue.rs`, `owned/tx_budget.rs` and RX in `owned.rs` | HIL network producer, station consumer and packet return P1 ↔ P1 | TX metadata and its coalesced publication hint use `ContextCell` with a private checked `Entered<X>` proof. All Waker callbacks run after the borrow ends. Admission is atomic and uses `PriorityWaker`; packet destruction precedes credit return. RX uses affine `WakingSpscQueue` ends and ordinary AtomicWakers. |
 | Xarxa's pinned `PacketPoolWaiter`, through `owned.rs` | Network packet destruction P1 → RX publisher P1 | Dependency's ordinary AtomicWaker, same executor. Moving the publisher to P2 would require reviewing this path too. |
 | `chips/family/executor/src/peer/obligation.rs` | Peer client task → liveness supervisor task, both of one executor `C` | No waker cell: the supervisor's task handle (`C::current`) sits in a `ContextCell` of `C`'s context and every seat write wakes it with `C::wake`. Writes take the checked proof of `C`'s context (`signal::enter`) and the supervisor registers only after `signal::enter_task`, so both run in one executor context, never at once, and the wake stays on its hart. |
@@ -42,7 +42,7 @@ name does not establish that its task runs on P2.
 | `protocols/ieee80211/runtime/src/station/notifies.rs` | Station P1 ↔ network P1 on one hart | `SameHart` names ordinary AtomicWakers for the network channels' queue ends and `PriorityWaker`s for the link and stop. `AcrossHarts` names executor-signal notifies and no waker. |
 | `oer/src/net.rs`: IP waiters | IP service task → `wait_ipv4`/`wait_link_down` waiters, all on the application executor (P1) | Up to `K` waiter `Waker`s, each under its wait's number, in a `ContextCell` checked with `Entered<X>`; a wait refreshes its own slot and frees it when it ends or is dropped. The service's status callback takes them all and wakes them after the borrow ends. A full table refuses the wait with a typed error. |
 | `portable/cooperate/src/connected_tasks.rs` | Parent/worker tasks on the composition's executor | Embassy Signal under the supplied RawMutex. No hardware P1 → P2 composition uses these cells. A composition must not introduce an upward wake through them. |
-| `protocols/ieee80211/runtime/src/monitor/{capture,injection}.rs` | Monitor capture/injection producer → consumer on the composition's executor | `oer_memory::WakingSpscQueue` (ordinary AtomicWakers) and a `ClaimCell` binding; no lock. A composition must not compose them across priorities with an upward wake. |
+| `protocols/ieee80211/runtime/src/monitor/{capture,injection}.rs` | Monitor capture/injection producer → consumer on the composition's executor | `oer_portable_memory::WakingSpscQueue` (ordinary AtomicWakers) and a `ClaimCell` binding; no lock. A composition must not compose them across priorities with an upward wake. |
 | `protocols/hil/agent/src/console.rs`; HIL request/console Channels | Synchronous callers only queue; the sole async console and dispatch run on P1 | Embassy Mutex/Channel/Watch use CriticalSectionRawMutex, which masks the hart, including P3, during a P1 operation. Logger waits descend to P1; this remains a checked deviation from the blocking critical-section restriction. |
 | `chips/esp32s31/ieee80211/driver/src/rx/returns.rs`, Wi-Fi MAC/power interrupt consumers | Held-frame return P1 → P2; MAC/power P3 → P2 | `IrqSignal::raise` ORs facts and pends P2 without a waker call. Registration of the polling task's handle and its wake occur only in the bound P2 executor. |
 | `chips/esp32s31/bluetooth/driver/src/interrupt/{halves,wake}.rs`, `modem_lp_timer_queue.rs` | Scheduler request P2 → doorbell P3; scheduler/timer reply P3 → P2 | P2 rings the hardware doorbell; P3 owns scheduler registers and raises typed IrqSignals back. No task waker is invoked on P3. |
@@ -68,7 +68,7 @@ the absence of priority preemption does not admit a new mutex-backed path.
 
 ## Static check
 
-`cargo test -p oer-test-layers` inventories raw AtomicWaker spellings in
+`cargo test -p oer-tools-test-layers` inventories raw AtomicWaker spellings in
 production source under `chips/`, `portable/`, `protocols/` and `firmware/`.
 Only reviewed files with their recorded occurrence counts are admitted; new
 files or additional uses require review. The upward fields are separately

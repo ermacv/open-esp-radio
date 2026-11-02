@@ -36,7 +36,7 @@
 //! A raise publishes its facts (fetch-or, Release), then the executor's
 //! pend fences `w, o` before its software interrupt's raise; the
 //! receiving handler lowers its line and fences `o, rw` before it swaps
-//! the facts (`oer-espressif-executor`'s software line). Across harts this
+//! the facts (`oer-chips-family-executor`'s software line). Across harts this
 //! order is conditional on the line's hardware preconditions stated
 //! there.
 
@@ -50,7 +50,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_memory::{
+use oer_portable_memory::{
     Entered, ExecutionContext,
     signal::{SignalCore, SignalList},
 };
@@ -295,7 +295,7 @@ impl<E: SignalExecutor> PeerNotify<E> {
     }
 }
 
-impl<E: SignalExecutor> oer_memory::QueueNotify for PeerNotify<E>
+impl<E: SignalExecutor> oer_portable_memory::QueueNotify for PeerNotify<E>
 where
     IrqSignal<E>: Sync,
 {
@@ -358,13 +358,13 @@ pub mod host {
     extern crate std;
     use super::{ContextToken, ForeignTask, IrqSignal, SignalExecutor};
     use core::{cell::RefCell, task::Context};
-    use oer_memory::signal::{Raiser, SignalList};
+    use oer_portable_memory::signal::{Raiser, SignalList};
     use std::{boxed::Box, task::Waker, vec::Vec};
 
     std::thread_local! {
-        static HOST_LIST: &'static SignalList<HostTask, oer_memory::HostContext> = Box::leak(Box::new(SignalList::new()));
-        static DEFERRED_LIST: &'static SignalList<HostTask, oer_memory::HostContext> = Box::leak(Box::new(SignalList::new()));
-        static FOREIGN_LIST: &'static SignalList<HostTask, oer_memory::Never> = Box::leak(Box::new(SignalList::new()));
+        static HOST_LIST: &'static SignalList<HostTask, oer_portable_memory::HostContext> = Box::leak(Box::new(SignalList::new()));
+        static DEFERRED_LIST: &'static SignalList<HostTask, oer_portable_memory::HostContext> = Box::leak(Box::new(SignalList::new()));
+        static FOREIGN_LIST: &'static SignalList<HostTask, oer_portable_memory::Never> = Box::leak(Box::new(SignalList::new()));
         static TASKS: RefCell<Vec<&'static Waker>> = const { RefCell::new(Vec::new()) };
     }
 
@@ -416,7 +416,7 @@ pub mod host {
     pub enum Foreign {}
 
     impl SignalExecutor for Host {
-        type Context = oer_memory::HostContext;
+        type Context = oer_portable_memory::HostContext;
         type Task = HostTask;
         const SOURCE: u16 = 5;
         const INTERRUPT_MODE: bool = true;
@@ -438,7 +438,7 @@ pub mod host {
     }
 
     impl SignalExecutor for Deferred {
-        type Context = oer_memory::HostContext;
+        type Context = oer_portable_memory::HostContext;
         type Task = HostTask;
         const SOURCE: u16 = 5;
         const INTERRUPT_MODE: bool = true;
@@ -458,7 +458,7 @@ pub mod host {
     }
 
     impl SignalExecutor for Foreign {
-        type Context = oer_memory::Never;
+        type Context = oer_portable_memory::Never;
         type Task = HostTask;
         const SOURCE: u16 = 6;
         const INTERRUPT_MODE: bool = false;

@@ -6,7 +6,7 @@ Analyze captured code and inspect coverage, symbolic values and explicit gaps.
 
 ## Function analysis contract
 
-`oer_analysis_blobray_application::library::analyze_library(inputs, assumptions, decoder, memory,
+`oer_tools_analysis_blobray_application::library::analyze_library(inputs, assumptions, decoder, memory,
 control, visit)` analyzes the selected functions of the given executables in process
 and visits one `LibraryOutcome` per function, in input, object and symbol
 order:
@@ -278,8 +278,8 @@ is no execution or equivalence claim, no interprocedural engine and no
 computation reused between calls.
 
 Domain owns values and the ISA port; artifacts lends captured code and
-structural ELF facts; `oer-analysis-blobray-riscv` interprets instructions and
-relocations; `oer-analysis-blobray-analysis` builds local graphs and coverage. Application
+structural ELF facts; `oer-tools-analysis-blobray-riscv` interprets instructions and
+relocations; `oer-tools-analysis-blobray-analysis` builds local graphs and coverage. Application
 enumerates objects, prepares each object once for all its functions and owns
 the visit. No analysis or backend module opens a path. Graph allocations
 require working-capacity admission.
@@ -391,10 +391,10 @@ addition and scaling on the jump's unique predecessor chain; `base` is the
 constant, image address or object symbol the
 addition reads, so a base the block or a loop's preheader forms gives the
 same record on every pass even when the index merges to an unknown value.
-A dispatch's table is proven by the build's facts (`oer-analysis-riscv-model`'s
+A dispatch's table is proven by the build's facts (`oer-tools-analysis-riscv-model`'s
 `TableEntries` port):
 
-- In a relocatable object (`oer-analysis-riscv-program`'s `ObjectTables`), a table has
+- In a relocatable object (`oer-tools-analysis-riscv-program`'s `ObjectTables`), a table has
   no label, so the bounds check guarding the dispatch states the entry count
   (at most 4096): the dispatch block's only incoming edge must be the
   in-range side of a conditional branch on the same, known index against a
@@ -430,7 +430,7 @@ every table it followed and more, so a dispatch reached only through another
 table's case (a nested `switch`) is followed too. A pass that no longer
 proves a table it followed proves none: the function is then reported
 without following any table. The recognizer and these passes are
-`oer-analysis-riscv-analysis`'s (`RecognizedTables`, `research_following_tables`); the
+`oer-tools-analysis-riscv-analysis`'s (`RecognizedTables`, `research_following_tables`); the
 stack analyzer runs the same driver. The facts this needs, the recognizer's
 indexes and the found entries are held in admitted working memory, and
 every record the recognizer visits is charged to the work budget; a return

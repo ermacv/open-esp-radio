@@ -1,4 +1,4 @@
-use oer_time::Duration;
+use oer_portable_time::Duration;
 
 use super::{
     BOOT_BUDGET, BOOTLOADER_RTC_WATCHDOG, ClockRates, CpuProfile, CpuRoot, FLASH_READ_COMMANDS,

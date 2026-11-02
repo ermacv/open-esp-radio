@@ -592,10 +592,10 @@ fn an_extending_set_numbers_its_tasks_after_its_base_and_polls_both() {
 mod thread_signals {
     use super::*;
     use crate::context::Running;
-    use oer_espressif_interrupt_table::signal::{
+    use oer_chips_family_interrupt_table::signal::{
         ContextToken, ForeignTask, IrqSignal, SignalExecutor,
     };
-    use oer_memory::signal::SignalList;
+    use oer_portable_memory::signal::SignalList;
 
     pub(super) struct TestThread;
 
@@ -624,7 +624,7 @@ mod thread_signals {
     // true only inside `run_round`, at the level it entered at, which
     // services the list before polling; a preempting `interrupt` runs at
     // another level.
-    unsafe impl oer_memory::ExecutionContext for TestThread {
+    unsafe impl oer_portable_memory::ExecutionContext for TestThread {
         type Sharing = *mut ();
         fn running() -> bool {
             RUNNING.with(|running| running.at(LEVEL.with(Cell::get))) == EXECUTOR
@@ -663,7 +663,7 @@ mod thread_signals {
         let running = RUNNING.with(|running| *running);
         let mut more = false;
         running.enter(EXECUTOR, LEVEL.with(Cell::get), || {
-            oer_espressif_interrupt_table::signal::service::<TestThread>();
+            oer_chips_family_interrupt_table::signal::service::<TestThread>();
             more = CURRENT.with(|current| round::<T>(current));
         });
         more
@@ -716,7 +716,7 @@ mod thread_signals {
             Poll::Pending
         }
     }
-    use oer_espressif_interrupt_table::signal::ForeignContext;
+    use oer_chips_family_interrupt_table::signal::ForeignContext;
 }
 
 #[test]
@@ -745,7 +745,7 @@ fn a_signal_raised_for_a_thread_executor_task_wakes_it() {
 
 #[test]
 fn a_hardware_interrupt_that_preempts_a_thread_executor_task_is_refused_its_signals() {
-    use oer_espressif_interrupt_table::signal::ForeignContext;
+    use oer_chips_family_interrupt_table::signal::ForeignContext;
     use thread_signals::{PREEMPTED_SIGNAL, Preempted, Seized, run_round};
     probe_set!(Set, Thread, Preempted);
     let seized: &'static core::cell::RefCell<Seized> = Box::leak(Box::default());

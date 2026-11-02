@@ -5,7 +5,7 @@ use core::{
     task::Waker,
 };
 
-use oer_sync::PriorityWaker;
+use oer_portable_sync::PriorityWaker;
 
 /// Lock-free admission count. A credit may be released in any context, so
 /// releasing never depends on the endpoint's execution context.

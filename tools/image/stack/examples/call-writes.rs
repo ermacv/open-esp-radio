@@ -3,9 +3,9 @@
 mod cli;
 mod support;
 use clap::Parser;
-use oer_analysis_riscv_analysis::writes::*;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_analysis::writes::*;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 
 #[derive(Debug, Parser)]
 #[command(name = "call-writes", about = "Inspect a call's write summaries")]
@@ -26,9 +26,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
     let mut keep = Ledger::new(&memory, &mut control)?;
-    let (dwarf, _) = oer_image_stack::read_debug(
+    let (dwarf, _) = oer_tools_image_stack::read_debug(
         &bytes,
-        oer_image_stack::DebugMetadata::Standard,
+        oer_tools_image_stack::DebugMetadata::Standard,
         &mut keep,
         &mut control,
     )?;
@@ -49,7 +49,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!(
         "caller\t{:#010x}\t{}",
         caller.address,
-        oer_analysis_elf::demangle(&caller.label())
+        oer_tools_analysis_elf::demangle(&caller.label())
     );
     println!(
         "inputs\t{site:#010x}\t{:?}",
@@ -95,7 +95,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         )?;
         println!(
             "callee\t{target:#010x}\t{}\tclosed={}\tunknown-effects={}",
-            oer_analysis_elf::demangle(&callee.label()),
+            oer_tools_analysis_elf::demangle(&callee.label()),
             summary.closed_graph,
             summary.has_unknown_memory_effects()
         );

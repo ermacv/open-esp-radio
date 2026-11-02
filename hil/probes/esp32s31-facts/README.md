@@ -12,7 +12,7 @@ seeding and holds the board for about 38 minutes. Selection 231 is its bounded
 request-zero batches. Project policy requires a separate decision for other
 long runs or repetitions. See [the observation contract](BTLC.md).
 
-Build with `cargo fw probe oer-firmware-probes-esp32s31-facts`. Load the ELF
+Build with `cargo fw probe oer-hil-probes-esp32s31-facts`. Load the ELF
 into SRAM with the ROM loader under a `cargo stand lease --board s31-a --air none`.
 The entry owns its stack, clears BSS and preserves its LP `.noinit` record.
 The observed ROM-download state rejects direct JTAG execution from SRAM with

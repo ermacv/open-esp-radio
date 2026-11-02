@@ -116,7 +116,7 @@ pub const PARENT: [OutputField; 7] = [
 /// Fixed projection geometry is evaluated at compile time.
 ///
 /// ```compile_fail,E0080
-/// let _ = oer_esp32s31_knowledge::phy_relation::committed::committed::<{u32::MAX}>();
+/// let _ = oer_chips_esp32s31_knowledge::phy_relation::committed::committed::<{u32::MAX}>();
 /// ```
 pub fn committed<const START: u32>() -> [OutputField; 5] {
     const {

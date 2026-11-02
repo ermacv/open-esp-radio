@@ -79,7 +79,7 @@
 //! (`LOCK_DONE`), `:1574-1620` (`SYNC_DONE`), `:1672-1684`
 //! (`L1_ICACHE0_PRELOAD_DONE`), `:2049-2061` (`L1_ICACHE0_AUTOLOAD_ENA`/`_DONE`).
 
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 use crate::{
     Access, BootFailure, Busy,

@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 
 use crate::encode;
 use crate::encode::Encoding;
-use oer_chip_profile::policy::StackPolicy;
-use oer_image_bundle::{ImageBundle, Staged, files};
+use oer_tools_chip_profile::policy::StackPolicy;
+use oer_tools_image_bundle::{ImageBundle, Staged, files};
 
 use crate::{
     ImageSpec, Result, build_log::BuildLog, exclusion::Staging, instrumentation::Instrumentation,
@@ -25,13 +25,13 @@ pub(crate) use compile::cargo;
 
 pub(crate) struct CompileInput<'a> {
     spec: &'a ImageSpec,
-    profile: &'a oer_chip_profile::Profile,
+    profile: &'a oer_tools_chip_profile::Profile,
     instrumentation: &'a Instrumentation,
     policy: &'a StackPolicy,
     task_stack_proven: bool,
     critical_section_hart: u32,
     harts: &'a [u32],
-    panics: &'a oer_image_checks::panics::Contract,
+    panics: &'a oer_tools_image_checks::panics::Contract,
     output: &'a Path,
     log: &'a BuildLog,
 }
@@ -52,12 +52,12 @@ const LOADER_REPORT: &str = "bootstrap-loader.txt";
 
 pub(crate) fn build(
     spec: &ImageSpec,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     instrumentation: &Instrumentation,
     task_stack_proven: bool,
     critical_section_hart: u32,
     harts: &[u32],
-    panics: &oer_image_checks::panics::Contract,
+    panics: &oer_tools_image_checks::panics::Contract,
     compile: impl FnOnce(&CompileInput<'_>, &mut ImageBundle) -> Result<Compiled>,
 ) -> Result<ImageBundle> {
     let root = spec.root.as_path();
@@ -106,15 +106,15 @@ pub(crate) fn build(
         .as_ref()
         .ok_or("a staged bootstrap needs its SRAM map")?;
     let placement =
-        oer_image_checks::placement::bootstrap(memory.sram, memory.flash_xip, &bootstrap_elf)
+        oer_tools_image_checks::placement::bootstrap(memory.sram, memory.flash_xip, &bootstrap_elf)
             .map_err(|error| log.failed("bootstrap cache-off placement", error))?;
     std::fs::write(
-        output.join(oer_image_checks::placement::BOOTSTRAP_REPORT),
+        output.join(oer_tools_image_checks::placement::BOOTSTRAP_REPORT),
         placement,
     )?;
     bundle
         .reports
-        .push(oer_image_checks::placement::BOOTSTRAP_REPORT.into());
+        .push(oer_tools_image_checks::placement::BOOTSTRAP_REPORT.into());
     match values.publish(&output) {
         Ok(()) => bundle
             .reports
@@ -174,7 +174,7 @@ pub(crate) fn build(
 /// at the flash map's application offset, audited against that partition.
 fn encode_application(
     root: &Path,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     elf: &[u8],
     bundle: &ImageBundle,
 ) -> Result<(Vec<u8>, Option<String>)> {
@@ -204,7 +204,7 @@ fn encode_application(
 /// A loader's segment-count contract is independent of ELF permissions and
 /// cannot be downgraded by a diagnostic gate. Check the actual encoded image.
 fn audit_loader_mappings(
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     bytes: &[u8],
 ) -> Result<Option<String>> {
     let Some(expected) = profile
@@ -234,7 +234,7 @@ fn audit_loader_mappings(
 /// selection of the first slot into `bundle`.
 pub(crate) fn encode_boot_files(
     root: &Path,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     elf: &[u8],
     bundle: &mut ImageBundle,
 ) -> Result<()> {

@@ -4,7 +4,7 @@
 //! that function's [`fingerprint`] in the chip's provenance registry
 //! ([`registry`]): its check fails when a pinned artifact's function no
 //! longer matches its registered fingerprint. [`diff`] compares two
-//! revisions of an archive function by function, and `oer-vendor-lineage`
+//! revisions of an archive function by function, and `oer-tools-vendor-lineage`
 //! pairs functions across revisions by the same fingerprints.
 
 #![forbid(unsafe_code)]

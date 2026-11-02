@@ -2,26 +2,26 @@ use super::*;
 
 #[derive(Default)]
 struct RegisterHardware {
-    configured: Option<oer_esp32s31_hal::types::MacStaApReceivePlan>,
-    disabled: std::vec::Vec<oer_esp32s31_hal::types::MacInterface>,
+    configured: Option<oer_chips_esp32s31_hal::types::MacStaApReceivePlan>,
+    disabled: std::vec::Vec<oer_chips_esp32s31_hal::types::MacInterface>,
 }
 
 impl StaApRegisterHardware for RegisterHardware {
     fn apply_sta_ap_receive_registers(
         &mut self,
-        plan: oer_esp32s31_hal::types::MacStaApReceivePlan,
+        plan: oer_chips_esp32s31_hal::types::MacStaApReceivePlan,
     ) {
         self.configured = Some(plan);
     }
 
     fn disable_station_receive_registers(&mut self) {
         self.disabled
-            .push(oer_esp32s31_hal::types::MacInterface::Station);
+            .push(oer_chips_esp32s31_hal::types::MacInterface::Station);
     }
 
     fn disable_access_point_receive_registers(&mut self) {
         self.disabled
-            .push(oer_esp32s31_hal::types::MacInterface::AccessPoint);
+            .push(oer_chips_esp32s31_hal::types::MacInterface::AccessPoint);
     }
 
     fn disable_all_role_receive_registers(&mut self) {
@@ -160,8 +160,8 @@ fn preserve_edges_map_to_one_complete_register_action() {
     assert_eq!(
         hardware.disabled,
         [
-            oer_esp32s31_hal::types::MacInterface::AccessPoint,
-            oer_esp32s31_hal::types::MacInterface::Station,
+            oer_chips_esp32s31_hal::types::MacInterface::AccessPoint,
+            oer_chips_esp32s31_hal::types::MacInterface::Station,
         ]
     );
 }

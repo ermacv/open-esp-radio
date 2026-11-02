@@ -4,8 +4,8 @@
 //! orchestration one finite operation instead of allowing it to interleave
 //! the STA=0 and AP=1 receive-context transactions by hand.
 
-use oer_esp32s31_hal::ieee80211::mac::MacStaApReceivePlan;
-use oer_esp32s31_hal::ieee80211::mac::WifiMacHal;
+use oer_chips_esp32s31_hal::ieee80211::mac::MacStaApReceivePlan;
+use oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal;
 
 /// Minimal hardware authority required by the combined receive-context plan.
 pub trait StaApRegisterHardware {
@@ -33,7 +33,7 @@ impl StaApRegisterHardware for WifiMacHal<'_> {
     }
 }
 
-impl StaApRegisterHardware for oer_esp32s31_hal::owner::RadioAccess {
+impl StaApRegisterHardware for oer_chips_esp32s31_hal::owner::RadioAccess {
     fn apply_sta_ap_receive_registers(&mut self, plan: MacStaApReceivePlan) {
         self.wifi_mac_hal().configure_sta_ap_receive_plan(plan);
     }

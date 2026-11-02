@@ -16,8 +16,8 @@ pub mod ops;
 /// Software fields modified by a held frequency-memory read transaction.
 #[derive(Debug)]
 pub struct ReadConfiguration {
-    control: oer_esp32s31_pac::fe::frequency_control::R,
-    number: oer_esp32s31_pac::fe::i2c_number_control::R,
+    control: oer_chips_esp32s31_pac::fe::frequency_control::R,
+    number: oer_chips_esp32s31_pac::fe::i2c_number_control::R,
 }
 
 /// Read selection and ownership, without assigning the dual-use high bit a role.

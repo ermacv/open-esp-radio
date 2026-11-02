@@ -28,13 +28,13 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_ieee80211_contracts_port::association;
-use oer_ieee80211_contracts_port::*;
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId};
-use oer_radio_port::{self as radio, Child, Root, Slot};
-use oer_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
-use oer_time::{Clock, Duration, Instant, Timer};
+use oer_protocols_ieee80211_contracts_port::association;
+use oer_protocols_ieee80211_contracts_port::*;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId};
+use oer_protocols_radio_port::{self as radio, Child, Root, Slot};
+use oer_protocols_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
+use oer_portable_time::{Clock, Duration, Instant, Timer};
 
 mod aggregate;
 pub use aggregate::{Aggregate, AggregateExecution, SubframeMpdus, Subframes, TX_AMPDU_SUBFRAMES};
@@ -54,7 +54,7 @@ mod phase;
 #[cfg(any(target_arch = "riscv32", test))]
 mod receive;
 mod settings;
-use oer_sync::PriorityWaker;
+use oer_portable_sync::PriorityWaker;
 #[cfg(all(oer_trace, oer_debug_control))]
 pub mod trace;
 pub use buffer::*;
@@ -96,7 +96,7 @@ const _: () = {
 
 /// The transmit pool every MPDU and subframe is written into.
 pub type TxPool<const B: usize> =
-    oer_esp32s31_hal::memory::dma_static::PlacedTxPool<B, 0, 0, TX_BUFFERS>;
+    oer_chips_esp32s31_hal::memory::dma_static::PlacedTxPool<B, 0, 0, TX_BUFFERS>;
 
 /// One aggregate descriptor chain over the pool's buffers.
 pub type AmpduChain<const B: usize> =
@@ -190,7 +190,7 @@ pub trait ReceiveUnit: 'static {
     /// Narrow the view to `length` bytes from `offset` in it; a range
     /// outside it is refused and changes nothing. Normalization reads the
     /// whole received unit, so it runs before.
-    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError>;
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_portable_memory::FrameRangeError>;
     /// [`Self::bytes`], then the rest of the unit's allocation; every byte
     /// is initialized.
     fn storage(&self) -> &[u8];
@@ -238,7 +238,7 @@ pub trait Device<const B: usize>: Sized + 'static {
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        channel: oer_ieee80211_wire::channel::WifiChannel,
+        channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>>;
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>>;
     /// The driver's turn: take the interrupt facts but the receive ones,
@@ -315,9 +315,9 @@ pub enum Fault {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WifiRetuneError {
     /// The MAC or its RX walker was still active; nothing was posted.
-    NotStopped(oer_esp32s31_hal::owner::maintenance::Error),
+    NotStopped(oer_chips_esp32s31_hal::owner::maintenance::Error),
     /// The radio system answered the retune with this failure.
-    Radio(oer_esp32s31_radio_client::Failure),
+    Radio(oer_chips_esp32s31_radio_client::Failure),
 }
 impl From<LowerMacFault> for Fault {
     fn from(value: LowerMacFault) -> Self {
@@ -327,7 +327,7 @@ impl From<LowerMacFault> for Fault {
 
 pub struct Esp32s31Caps<const B: usize>;
 impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
-    type SppScope = oer_ieee80211_wire::security::spp::Interface;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Interface;
     const CAPS: LowerMacCapabilities = esp32s31_lower_mac_capabilities(B);
 }
 
@@ -352,7 +352,7 @@ pub struct PortSharedStorage<
     P: LentNotifies = SameHart,
     Body = core::convert::Infallible,
 > {
-    poisoned: oer_memory::OnceValue<Fault>,
+    poisoned: oer_portable_memory::OnceValue<Fault>,
     // The driver's waker keeps a slot for a notifier the driver preempts;
     // beside the station on its executor none does. The body's consumer
     // never preempts its producer, so its AtomicWaker needs no second slot.
@@ -360,7 +360,7 @@ pub struct PortSharedStorage<
     body: AtomicWaker,
     key_live: [KeyActivity; 20],
     /// Each pool buffer's place, holding it while the CPU owns it.
-    returned: oer_memory::ReturnBank<TxBacking<B>, TX_BUFFERS>,
+    returned: oer_portable_memory::ReturnBank<TxBacking<B>, TX_BUFFERS>,
     /// Each pool buffer's subframe record while an aggregate names it.
     subframes: aggregate::SubframeTable<B, Body>,
     /// The receive units lent to the network.
@@ -368,11 +368,11 @@ pub struct PortSharedStorage<
     settings: settings::Settings,
     /// Slot and permission of a GTK command the installation quarantined.
     #[cfg(test)]
-    retained_group: oer_memory::OnceValue<(u8, u8)>,
+    retained_group: oer_portable_memory::OnceValue<(u8, u8)>,
     /// Previous and attempted KeyID of a quarantined GTK replacement, and
     /// whether its rollback restored the previous entry.
     #[cfg(test)]
-    rolled_back: oer_memory::OnceValue<(u8, u8, bool)>,
+    rolled_back: oer_portable_memory::OnceValue<(u8, u8, bool)>,
 }
 #[cfg(test)]
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Backend<Id, D, B, O> {
@@ -453,18 +453,18 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
     pub const fn with_network(notifies: P) -> Self {
         let network = lent::NetworkCredit::with(notifies);
         Self {
-            poisoned: oer_memory::OnceValue::new(),
+            poisoned: oer_portable_memory::OnceValue::new(),
             driver: PriorityWaker::new(),
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
-            returned: oer_memory::ReturnBank::new(),
-            subframes: oer_memory::ReturnBank::new(),
+            returned: oer_portable_memory::ReturnBank::new(),
+            subframes: oer_portable_memory::ReturnBank::new(),
             network,
             settings: settings::Settings::new(),
             #[cfg(test)]
-            retained_group: oer_memory::OnceValue::new(),
+            retained_group: oer_portable_memory::OnceValue::new(),
             #[cfg(test)]
-            rolled_back: oer_memory::OnceValue::new(),
+            rolled_back: oer_portable_memory::OnceValue::new(),
         }
     }
     fn poison(&self, cause: Fault) {
@@ -632,7 +632,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
 fn claim<const B: usize>(pool: &'static TxPool<B>, place: u8) -> Option<TxBacking<B>> {
     pool.claim_network(place)
         .ok()?
-        .publish(oer_memory::FrameLen::constant::<0>(), |_| {});
+        .publish(oer_portable_memory::FrameLen::constant::<0>(), |_| {});
     pool.claim_radio(place).ok()
 }
 
@@ -723,13 +723,13 @@ pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
 /// Poisons the installation when its receive buffer is lost: dropping a
 /// buffer does not authorize rearming its allocation.
 pub(crate) struct LossGuard {
-    poison: &'static oer_memory::OnceValue<Fault>,
+    poison: &'static oer_portable_memory::OnceValue<Fault>,
     driver: &'static PriorityWaker,
     armed: bool,
 }
 impl LossGuard {
     pub(crate) fn new(
-        poison: &'static oer_memory::OnceValue<Fault>,
+        poison: &'static oer_portable_memory::OnceValue<Fault>,
         driver: &'static PriorityWaker,
     ) -> Self {
         Self {

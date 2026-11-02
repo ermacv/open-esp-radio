@@ -1,5 +1,5 @@
 //! S31 binding of family lifecycle and consuming interrupt transactions.
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::RadioDomain,
     ieee802154::{
         Ieee802154Clocked,
@@ -10,12 +10,12 @@ use oer_esp32s31_hal::{
     },
     power::PlatformClockBackend,
 };
-use oer_espressif_ieee802154_engine::{
+use oer_chips_family_ieee802154_engine::{
     interrupt,
     lifecycle::{Ieee802154Lifecycle, Ieee802154ResetFailure, state},
 };
-use oer_espressif_interrupt_table::{Bound, Entry};
-use oer_mmio::Placement;
+use oer_chips_family_interrupt_table::{Bound, Entry};
+use oer_portable_mmio::Placement;
 
 /// Pulse the private MAC/APB reset through the shared radio's exclusive loan.
 pub fn reset_mac<B: PlatformClockBackend, T>(

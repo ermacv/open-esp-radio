@@ -3,7 +3,7 @@
 //! This module understands Bluetooth air-interface fields only. It contains no
 //! ESP32 descriptor layout, MMIO, HCI packet framing, executor, or allocator.
 
-use oer_wire::{PrefixLength, Reader};
+use oer_portable_wire::{PrefixLength, Reader};
 
 use crate::advertising_header::{ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType};
 use crate::{LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind};

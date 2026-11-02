@@ -1,8 +1,8 @@
 # Static RV32 images
 
-`oer-analysis-riscv-program` reads one borrowed static RV32 ELF executable, through
-[`oer-analysis-elf`](../elf/README.md) only, for the program model of
-[`oer-analysis-riscv-model`](../riscv-model/README.md): its ELF
+`oer-tools-analysis-riscv-program` reads one borrowed static RV32 ELF executable, through
+[`oer-tools-analysis-elf`](../elf/README.md) only, for the program model of
+[`oer-tools-analysis-riscv-model`](../riscv-model/README.md): its ELF
 floating-point ABI (`abi`), the `ProgramView` of its memory and the file-backed
 constants it serves as `ImageMemory` to the
 [analysis](../riscv-analysis/README.md), its code symbols
@@ -19,7 +19,7 @@ section. Lookups never parse again. The stack analyzer reads images through
 it.
 
 `ImageFacts::address_uses` indexes every non-transfer, non-hint relocation
-of allocated code and data, classified by `oer-analysis-elf::rv32`. It keeps
+of allocated code and data, classified by `oer-tools-analysis-elf::rv32`. It keeps
 the original site, section, relocation type, target identity, addend and
 REL/RELA form, the original symbol (including aliases), the numerical target
 and its relationship to this ELF's functions. Exact entries, odd and interior

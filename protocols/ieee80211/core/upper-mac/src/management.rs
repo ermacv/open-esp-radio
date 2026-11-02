@@ -2,8 +2,8 @@
 
 use core::num::NonZeroU8;
 
-use oer_ieee80211_contracts_port::ManagementTxPlan;
-use oer_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_contracts_port::ManagementTxPlan;
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 /// The default dot11ShortRetryLimit, attempts including the first.
 /// SOURCE: IEEE Std 802.11-2020, Annex C, dot11ShortRetryLimit.

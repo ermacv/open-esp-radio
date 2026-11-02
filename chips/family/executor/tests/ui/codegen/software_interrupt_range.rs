@@ -1,4 +1,4 @@
-oer_espressif_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_parts!();
 include!("support/doorbell.rs");
 #[cfg(ui_reject)]
 const INDEX: u8 = 4;

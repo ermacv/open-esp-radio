@@ -43,7 +43,7 @@ digests the manifest records.
 Every image builds with the compiler's frame records (`-Z emit-stack-sizes`),
 implicit moves above the stack policy's `max_move_bytes` reported (`-W
 large-assignments`), and through the image linker
-(`oer-tool-image-linker` of `tools/image/linker`), which refuses bytes in an input section
+(`oer-tools-image-linker` of `tools/image/linker`), which refuses bytes in an input section
 the boot zeroes. The stack checks then bound the runtime's task and
 interrupt stacks and the bootstrap's stack under
 `chips/esp32s31/platform/stack.toml` (`runtime-stack.txt`,
@@ -108,7 +108,7 @@ HIL images retain their existing envelopes and console path.
 
 Boards and hubs come from the owner's stand file,
 `~/.config/open-esp-radio/stand.toml` (or `OER_STAND_FILE`, mode 0600),
-which `oer-lab-router` reads ([tools/lab/router/README.md](../../lab/router/README.md): its
+which `oer-tools-lab-router` reads ([tools/lab/router/README.md](../../lab/router/README.md): its
 schema, what each command reads of it, which values are secret). Attached
 boards are found by the LAB service in sysfs as Espressif USB Serial/JTAG
 devices (`303a:1001`), whose serial number is the chip's MAC. Only ESP32-S31

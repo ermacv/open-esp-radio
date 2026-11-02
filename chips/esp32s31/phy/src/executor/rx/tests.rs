@@ -7,7 +7,7 @@ use crate::{
     },
     rx::program::tests::{Oracle, at_estimator, at_field, parameters},
 };
-use oer_time::Timer;
+use oer_portable_time::Timer;
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
 struct Delay;
@@ -317,7 +317,7 @@ fn an_immediately_ready_timer_is_consumed_once_and_resumes_in_a_later_poll() {
             self.0.now()
         }
     }
-    impl oer_cooperate::CooperativeTimer for Immediate<'_> {
+    impl oer_portable_cooperate::CooperativeTimer for Immediate<'_> {
         fn should_yield(&self) -> bool {
             true
         }

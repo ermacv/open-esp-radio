@@ -1,15 +1,15 @@
 //! The engine's LL contract implemented over HAL-owned finite transactions.
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee802154::{
         mac::{EtmPlacement, Ieee802154PowerSequence, MacPlacement, RxInfoPlacement},
         polled::Ieee802154MacOwners,
     },
     layouts::DmaWindowAddress,
 };
-use oer_espressif_coex::CoexPti;
-use oer_espressif_ieee802154_engine::ll::{Ieee802154LowLevel, Ieee802154RecentRssi};
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_coex::CoexPti;
+use oer_chips_family_ieee802154_engine::ll::{Ieee802154LowLevel, Ieee802154RecentRssi};
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
     Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
@@ -17,7 +17,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
-use oer_mmio::Placement;
+use oer_portable_mmio::Placement;
 
 /// Own the HAL's task/IRQ/Silent pair for one engine epoch.
 #[must_use = "retain the MAC adapter until the engine returns its hardware owners"]
@@ -124,7 +124,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154LowLevel for S31Mac<P, 
     }
 
     fn rssi_compensation_dbm(&self) -> i8 {
-        oer_esp32s31_knowledge::ieee802154::RSSI_COMPENSATION_DBM
+        oer_chips_esp32s31_knowledge::ieee802154::RSSI_COMPENSATION_DBM
     }
 
     fn cca_busy(&mut self) -> bool {

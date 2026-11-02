@@ -1,13 +1,13 @@
 //! The finite Wi-Fi CCMP key-table transactions.
 
-use oer_esp32s31_pac::wifi_mac::{WifiMacCryptoControl, WifiMacKeyTable};
-use oer_mmio::{Index, Placement};
+use oer_chips_esp32s31_pac::wifi_mac::{WifiMacCryptoControl, WifiMacKeyTable};
+use oer_portable_mmio::{Index, Placement};
 
 use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, bits, element};
 
-const KEY_ENTRY_COUNT: usize = oer_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
+const KEY_ENTRY_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
 const MAX_GROUP_KEY_ID: u8 =
-    oer_esp32s31_pac::wifi_mac::entry_peer_control::LOGICAL_KEY_INDEX_MAX as u8;
+    oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LOGICAL_KEY_INDEX_MAX as u8;
 
 /// Hardware authentication of the QoS A-MSDU-present bit for one interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -191,7 +191,7 @@ fn store_peer_control<P: Placement>(
             .set_bit_20_opaque(false)
             .set_direction(bits(value.direction))
             .set_interface(
-                oer_esp32s31_pac::wifi_mac::entry_peer_control::Interface::from_field(
+                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Interface::from_field(
                     value.interface.bits(),
                 ),
             )
@@ -323,7 +323,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             interface_control(interface),
             matches!(mode, MacSppMode::Authenticated),
         );
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Encode and install one semantic STA CCMP key into an invalid entry.
@@ -364,13 +364,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let (peer, direction, logical_key_index) = match identity {
             MacCcmpKeyIdentity::Pairwise { peer } => (
                 peer,
-                oer_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Pairwise.bits(),
-                oer_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise.bits()
+                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Pairwise.bits(),
+                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise.bits()
                     as u8,
             ),
             MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => (
                 [u8::MAX; 6],
-                oer_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Group.bits(),
+                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Group.bits(),
                 key_id,
             ),
             MacCcmpKeyIdentity::Group { .. } => return MacKeyInstallOutcome::Rejected,
@@ -398,11 +398,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             entry,
             PeerControl {
                 peer_high: u16::from_le_bytes([e, f]),
-                algorithm: oer_esp32s31_pac::wifi_mac::entry_peer_control::Algorithm::Ccmp.bits(),
+                algorithm: oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Algorithm::Ccmp.bits(),
                 direction,
                 interface,
                 logical_index_not_three: logical_key_index
-                    != oer_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::WithoutFlag
+                    != oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::WithoutFlag
                         .bits() as u8,
                 logical_key_index,
             },
@@ -426,7 +426,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         publish_key_entry_validity(control, validity);
         let spp = control.read_interface_control(control_index).spp_amsdu();
         enable_ccmp(control, control_index, spp);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
 
         if key_entry_validity(control)
             .get(position)
@@ -448,7 +448,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         }
         publish_key_entry_validity(control, validity);
         clear_key_entry_words(&mut self.mac.wifi_mac_key_table, key_entry(index));
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 

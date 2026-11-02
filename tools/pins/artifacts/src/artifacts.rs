@@ -30,7 +30,7 @@ pub const STORE_ENV: &str = "OER_VENDOR_CACHE";
 /// snapshot and image build shares: `$OER_VENDOR_CACHE`, else
 /// `open-esp-radio/vendor` in the user's cache directory.
 pub fn store() -> Result<PathBuf> {
-    oer_os_durable::xdg::overridable(STORE_ENV, oer_os_durable::xdg::Base::Cache, "vendor")
+    oer_tools_os_durable::xdg::overridable(STORE_ENV, oer_tools_os_durable::xdg::Base::Cache, "vendor")
 }
 
 /// Makes `root`'s `target/vendor` a link to `store`, merging a former
@@ -110,7 +110,7 @@ fn pinned_sha256(artifact: &Artifact) -> Result<&str> {
 
 /// Whether `path` is a file whose SHA-256 is `expected`.
 pub fn verified(path: &Path, expected: &str) -> Result<bool> {
-    Ok(path.is_file() && oer_os_durable::sha256_file(path)? == expected)
+    Ok(path.is_file() && oer_tools_os_durable::sha256_file(path)? == expected)
 }
 
 /// `https://github.com/<owner>/<repo>` as `<owner>/<repo>`.
@@ -126,7 +126,7 @@ pub(crate) fn download(url: &str, destination: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let partial = destination.with_extension("partial");
-    let status = oer_os_process::command("curl")
+    let status = oer_tools_os_process::command("curl")
         .args([
             "--fail",
             "--silent",
@@ -181,12 +181,12 @@ fn fetch(root: &Path, source: &Source, artifact: &Artifact) -> Result<PathBuf> {
                     &format!("{repository}/releases/download/{revision}/{asset}"),
                     &tarball,
                 )?;
-                let actual = oer_os_durable::sha256_file(&tarball)?;
+                let actual = oer_tools_os_durable::sha256_file(&tarball)?;
                 if actual != expected {
                     return Err(format!("{asset}: sha256 {actual}, pinned {expected}").into());
                 }
             }
-            let status = oer_os_process::command("tar")
+            let status = oer_tools_os_process::command("tar")
                 .arg("-xzf")
                 .arg(&tarball)
                 .arg("-C")
@@ -199,7 +199,7 @@ fn fetch(root: &Path, source: &Source, artifact: &Artifact) -> Result<PathBuf> {
         }
         SourceKind::Firmware => unreachable!("firmware outputs are not fetched"),
     }
-    let actual = oer_os_durable::sha256_file(&destination)?;
+    let actual = oer_tools_os_durable::sha256_file(&destination)?;
     if actual != pin {
         return Err(format!("{}: fetched sha256 {actual}, pinned {pin}", artifact.id).into());
     }
@@ -271,7 +271,7 @@ pub fn ensure(root: &Path, chip: &str, id: &str) -> Result<PathBuf> {
         root,
         chip,
         id,
-        &mut oer_os_durable::inputs::Inputs::default(),
+        &mut oer_tools_os_durable::inputs::Inputs::default(),
     )
 }
 
@@ -280,7 +280,7 @@ pub fn ensure_with_inputs(
     root: &Path,
     chip: &str,
     id: &str,
-    inputs: &mut oer_os_durable::inputs::Inputs,
+    inputs: &mut oer_tools_os_durable::inputs::Inputs,
 ) -> Result<PathBuf> {
     link_store(root, &store()?)?;
     let manifest = Manifest::load_with_inputs(root, chip, inputs)?;
@@ -433,7 +433,7 @@ mod tests {
     fn tracked_manifests_parse_with_complete_sources() {
         let repository = repository();
         let root = repository.path();
-        for chip in oer_chip_profile::supported(&root).unwrap() {
+        for chip in oer_tools_chip_profile::supported(&root).unwrap() {
             let Ok(manifest) = Manifest::load(&root, &chip) else {
                 continue;
             };
@@ -472,7 +472,7 @@ mod tests {
              [[artifact]]\nid = \"fetched\"\nsource = \"vendor\"\npath = \"lib.a\"\nsha256 = \"{}\"\n\
              [[artifact]]\nid = \"missing\"\nsource = \"vendor\"\npath = \"other.a\"\nsha256 = \"00\"\n\
              [[artifact]]\nid = \"unbuilt\"\nsource = \"build\"\npath = \"out.elf\"\n",
-            oer_os_durable::sha256_file(&cached).unwrap()
+            oer_tools_os_durable::sha256_file(&cached).unwrap()
         );
         let manifest = Manifest::parse(&manifest).unwrap();
         let unbuilt = manifest.artifact("unbuilt").unwrap();
@@ -557,7 +557,7 @@ mod tests {
 pub(crate) fn repository() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in oer_espressif_facts::tracked::FILES.iter().copied().chain([
+    for (path, text) in oer_chips_family_facts::tracked::FILES.iter().copied().chain([
         (
             "chips/esp32c5/vendor/artifacts.toml",
             include_str!("../../../../chips/esp32c5/vendor/artifacts.toml"),

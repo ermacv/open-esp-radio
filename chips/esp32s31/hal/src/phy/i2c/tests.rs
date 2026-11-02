@@ -118,13 +118,13 @@ struct FakeConfigurationI2c {
     observed: core::cell::RefCell<std::vec::Vec<Address>>,
 }
 
-impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
+impl oer_chips_family_analog::AnalogRegisterBus for FakeConfigurationI2c {
     type Address = Address;
 
-    fn try_start_read(&mut self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
+    fn try_start_read(&mut self, address: Address) -> Result<(), oer_chips_family_analog::Busy> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
-            return Err(oer_espressif_analog::Busy);
+            return Err(oer_chips_family_analog::Busy);
         }
         self.accepted_commands += 1;
         self.started.set(Some(address));
@@ -135,33 +135,33 @@ impl oer_espressif_analog::AnalogRegisterBus for FakeConfigurationI2c {
         &mut self,
         address: Address,
         _value: u8,
-    ) -> Result<(), oer_espressif_analog::Busy> {
+    ) -> Result<(), oer_chips_family_analog::Busy> {
         if self.busy_starts != 0 {
             self.busy_starts -= 1;
-            return Err(oer_espressif_analog::Busy);
+            return Err(oer_chips_family_analog::Busy);
         }
         self.accepted_commands += 1;
         self.started.set(Some(address));
         Ok(())
     }
 
-    fn try_finish_read(&self, address: Address) -> Result<u8, oer_espressif_analog::Busy> {
+    fn try_finish_read(&self, address: Address) -> Result<u8, oer_chips_family_analog::Busy> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
             Ok(0xa0)
         } else {
-            Err(oer_espressif_analog::Busy)
+            Err(oer_chips_family_analog::Busy)
         }
     }
 
-    fn try_finish_write(&self, address: Address) -> Result<(), oer_espressif_analog::Busy> {
+    fn try_finish_write(&self, address: Address) -> Result<(), oer_chips_family_analog::Busy> {
         assert_eq!(self.started.get(), Some(address));
         self.observed.borrow_mut().push(address);
         if self.pending_observations == 0 {
             Ok(())
         } else {
-            Err(oer_espressif_analog::Busy)
+            Err(oer_chips_family_analog::Busy)
         }
     }
 }

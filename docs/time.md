@@ -1,29 +1,29 @@
 # Clocks, stamps and alarms
 
-How time is represented across the stack. The vocabulary is in `oer-time`
-(`portable/time`) and `oer-radio-port` (`protocols/radio/port`); measured
+How time is represented across the stack. The vocabulary is in `oer-portable-time`
+(`portable/time`) and `oer-protocols-radio-port` (`protocols/radio/port`); measured
 facts about the Wi-Fi stamp are cataloged as
 `HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03` in
 [hil-open.toml](../chips/esp32s31/registers/evidence/hil-open.toml).
 
 ## Three kinds of time object
 
-- A **clock** reads "now" in its domain and nothing else: `oer_time::Clock`
+- A **clock** reads "now" in its domain and nothing else: `oer_portable_time::Clock`
   for monotonic time, a port's `now()` for its radio domain.
 - A **stamp** is a value the hardware recorded when an event happened. It
   carries its domain and the generation of its clock relation
-  (`oer_radio_port::RadioStamp<D>`).
+  (`oer_protocols_radio_port::RadioStamp<D>`).
 - An **alarm** wakes something at an instant of its domain. An executor wait
-  is an alarm of monotonic time (`oer_time::Timer`). A hardware timer of a MAC
+  is an alarm of monotonic time (`oer_portable_time::Timer`). A hardware timer of a MAC
   or PHY (station TBTT, the TSF timers, the BLE modem LP timer) is an alarm of
   its own domain, armed through a port or driver operation, never an
-  `oer_time::Timer`.
+  `oer_portable_time::Timer`.
 
 ## Domains
 
 | Domain | Counted by | Type | Relation to monotonic time |
 | --- | --- | --- | --- |
-| Monotonic CPU time | the system timer, through `oer-embassy-time` | `oer_time::Instant` | itself |
+| Monotonic CPU time | the system timer, through `oer-portable-embassy-time` | `oer_portable_time::Instant` | itself |
 | ESP32-S31 Wi-Fi MAC local time | `WIFI_MAC_LOCAL_TIME` (`MacLocalTime`), widened by `MacTimeline` | `Ieee80211Instant`, `Ieee80211Stamp` | affine; its relation owner is the lower-MAC port backend, generations `Ieee80211ClockGeneration` |
 | An interface's TSF | the MAC's TSF of that interface | `TsfInstant`, as `VifTsf` with its interface | affine to the port's radio clock (`TSF_RELATION`, `TSF_DRIFT_PPM` = 200 ppm: the AP's timer and the station's crystal), sampled by `TsfSample` |
 | BLE controller | the controller clock, extended from its 32-bit latch | `LeInstant` | none |
@@ -46,7 +46,7 @@ sample of another generation does not convert (`StaleSample`).
 - Domains do not mix at the type level: a port's instants are
   `RadioInstant<D>` of its domain `D`, a coordinate in its owner's radio
   epoch. Raw microseconds establish no relation between clocks.
-- Radio arithmetic belongs to `oer-time`: `RadioDuration<D>` spans add only
+- Radio arithmetic belongs to `oer-portable-time`: `RadioDuration<D>` spans add only
   to instants of the same domain. Checked operations return `None` outside
   the represented range; nothing wraps, narrows or clamps. `RadioWindow` is
   non-empty and half-open; touching windows do not overlap.
@@ -67,6 +67,6 @@ sample of another generation does not convert (`StaleSample`).
   above as read-only capabilities (`MacLocalTime`) or port operations.
 - Only adapters, the executor binding (`chips/family/executor`, the time
   driver) and the firmware depend on `embassy-time`, dev dependencies
-  included; every lower layer reads and waits through the `oer-time` ports,
+  included; every lower layer reads and waits through the `oer-portable-time` ports,
   takes its timer from its owner or caller, and is tested with
-  `oer-time-virtual`.
+  `oer-portable-time-virtual`.

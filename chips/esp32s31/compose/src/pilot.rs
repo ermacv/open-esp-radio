@@ -1,16 +1,16 @@
 //! Permanent SAR/PWDET binding; image entries retain priority and hart policy.
 use crate::Esp32s31;
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::transaction::{Fault, FaultReason, PhyTransaction, SarSetupFault, SarSetupStorage},
     peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts},
 };
-use oer_esp32s31_phy::sar_pilot::{self, Service};
-use oer_espressif_executor::InterruptExecutor;
-use oer_espressif_interrupt_table::{
+use oer_chips_esp32s31_phy::sar_pilot::{self, Service};
+use oer_chips_family_executor::InterruptExecutor;
+use oer_chips_family_interrupt_table::{
     Bound, Controller, Entry, Router,
     signal::{FromExecutorLevel, IrqSignal},
 };
-use oer_memory::HandlerCell;
+use oer_portable_memory::HandlerCell;
 use static_cell::StaticCell;
 type Executor = InterruptExecutor<Esp32s31, 2>;
 type Handler<I> = sar_pilot::Interrupt<Bound<I>, Executor>;
@@ -36,7 +36,7 @@ pub struct Storage<I: Entry<Part = Timg0AlarmInterrupt> + 'static> {
 impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
     pub const fn new<R: Entry>() -> Self
     where
-        R::Part: oer_espressif_interrupt_table::InterruptSource,
+        R::Part: oer_chips_family_interrupt_table::InterruptSource,
     {
         Self {
             cells: StaticCell::new(),
@@ -64,8 +64,8 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
             reset(SarSetupStorage::Handler);
         }
         let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
-            oer_espressif_staged_runtime::interrupts::reset_binding::<
-                oer_esp32s31_hal::platform::Port,
+            oer_chips_family_staged_runtime::interrupts::reset_binding::<
+                oer_chips_esp32s31_hal::platform::Port,
                 _,
             >(error)
         });
@@ -76,7 +76,7 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
     pub fn interrupt(&self, part: &mut Timg0AlarmInterrupt) {
         match self
             .handler
-            .with(|handler| handler.service(part, &oer_embassy_time::EmbassyClock))
+            .with(|handler| handler.service(part, &oer_portable_embassy_time::EmbassyClock))
         {
             Some(Ok(())) => {}
             Some(Err(fault)) => crate::phy_fault::reset(Fault {

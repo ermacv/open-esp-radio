@@ -1,5 +1,5 @@
-use oer_espressif_ieee802154_mac_values::Ieee802154FoundationSnapshot;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::Ieee802154FoundationSnapshot;
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
     Ieee802154MultipanEnableState, Ieee802154PanIdentity, Ieee802154RxStateCode,
     Ieee802154TxStateCode,
@@ -12,7 +12,7 @@ use super::{
 };
 use crate::ieee802154::mac;
 use crate::root::RadioPartitions;
-use oer_espressif_ieee802154_mac_values::Ieee802154MacPolicySnapshot;
+use oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicySnapshot;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
@@ -50,7 +50,7 @@ impl FakeRegisters {
                 Ieee802154RxStateCode::from_parts(
                     rx,
                     u32::from(rx)
-                        .cmp(&oer_esp32s31_pac::ieee802154::rx_status::State::ReceiveSfd.bits()),
+                        .cmp(&oer_chips_esp32s31_pac::ieee802154::rx_status::State::ReceiveSfd.bits()),
                 ),
                 Ieee802154TxStateCode::from_field(tx),
             ),

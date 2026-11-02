@@ -57,7 +57,7 @@ impl ProbeRequest<'_> {
             .supported_rates
             .len()
             .min(SUPPORTED_RATES_ELEMENT_CAPACITY);
-        let mut reader = oer_wire::Reader::new(self.supported_rates);
+        let mut reader = oer_portable_wire::Reader::new(self.supported_rates);
         let first_rates = reader
             .take(first_rates_len)
             .map_err(|_| ProbeRequestError::TooManySupportedRates)?;
@@ -182,7 +182,7 @@ impl ManagementHeader {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
     pub struct CapabilityInformation[2] (little) {
         pub ess, with_ess: bool = 0..1;
@@ -203,7 +203,7 @@ oer_wire::bitfield! {
         pub immediate_ba, with_immediate_ba: bool = 15..16;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
     pub struct AssociationId[2] (little) {
         pub aid, with_aid: u16 = 0..14;

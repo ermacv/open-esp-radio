@@ -561,7 +561,7 @@ pub fn parse_individual_twt_action(body: &[u8]) -> Result<IndividualTwtAction, T
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.199 (TWT element).
     pub struct TwtControlFields[1] (little) {
         pub ndp_paging, with_ndp_paging: bool = 0..1;
@@ -573,7 +573,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.199 (TWT Request Type field).
     pub struct TwtRequestFields[2] (little) {
         pub requesting_sta, with_requesting_sta: bool = 0..1;
@@ -587,7 +587,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, Figure 9-965 (TWT Teardown field).
     pub struct TwtTeardownFields[1] (little) {
         pub flow_id, with_flow_id: u8 = 0..3;

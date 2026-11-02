@@ -9,10 +9,10 @@
     clippy::unimplemented,
     clippy::indexing_slicing
 )]
-//! The HIL agent on the `oer-espressif` application entry.
+//! The HIL agent on the `oer` application entry.
 //!
 //! A HIL test image builds its drivers and services through the same
-//! `oer_espressif::entry!` boot as an example of the same function and adds
+//! `oer::entry!` boot as an example of the same function and adds
 //! only the `console` feature, overrides of the library's defaults and the
 //! handlers of its services. This crate holds what every such image serves
 //! besides its handlers:

@@ -1,4 +1,4 @@
-use oer_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
+use oer_chips_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
 
 use crate::{
     controller_hal::ControllerHalInitialized,
@@ -7,17 +7,17 @@ use crate::{
 };
 
 fn scheduler(
-    cells: &ControllerEventCells<oer_espressif_interrupt_table::signal::host::Deferred>,
+    cells: &ControllerEventCells<oer_chips_family_interrupt_table::signal::host::Deferred>,
 ) -> SchedulerInitialized<
     '_,
     4,
-    oer_espressif_interrupt_table::signal::host::Deferred,
+    oer_chips_family_interrupt_table::signal::host::Deferred,
     crate::test_clocks::ModelMemory,
 > {
     let (_shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .ok()
         .expect("host radio split");

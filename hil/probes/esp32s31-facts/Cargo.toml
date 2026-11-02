@@ -1,5 +1,5 @@
 [package]
-name = "oer-firmware-probes-esp32s31-facts"
+name = "oer-hil-probes-esp32s31-facts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,9 @@ build = "build.rs"
 description = "Short PAC-only ESP32-S31 hardware fact experiments"
 
 [dependencies]
-oer-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
-oer-mmio = { path = "../../../portable/mmio" }
-oer-riscv = { path = "../../../portable/riscv" }
+oer-chips-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
+oer-portable-mmio = { path = "../../../portable/mmio" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
 
 [build-dependencies]
 toml = "=1.1.4"

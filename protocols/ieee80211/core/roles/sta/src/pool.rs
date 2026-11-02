@@ -1,7 +1,7 @@
 //! A bounded pool of tokens, whose capacity a const check proves.
 
 use crate::events::StaEvent;
-use oer_events::{EventSink, report};
+use oer_portable_events::{EventSink, report};
 
 /// The tokens of one kind a station machine holds at most.
 pub(crate) const POOL_CAPACITY: usize = 8;
@@ -209,8 +209,8 @@ impl<X, const N: usize> Fifo<X, N> {
     /// Initialize an empty queue in place.
     #[cfg(feature = "placement")]
     pub(crate) fn init_in_place(place: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
-        oer_memory::init_in_place!(place, Self {
-            items => |items| oer_memory::init_array(items, |_| None),
+        oer_portable_memory::init_in_place!(place, Self {
+            items => |items| oer_portable_memory::init_array(items, |_| None),
             head: 0,
             len: 0,
         })

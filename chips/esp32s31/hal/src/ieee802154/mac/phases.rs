@@ -1,11 +1,11 @@
 //! Owned startup/teardown phases; operation order is executed by the family driver.
 use super::*;
 use core::marker::PhantomData;
-use oer_esp32s31_pac::ieee802154::command::Opcode;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_esp32s31_pac::ieee802154::command::Opcode;
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154InterruptStartup, Ieee802154InterruptTeardown,
 };
-use oer_mmio::Placement;
+use oer_portable_mmio::Placement;
 
 /// S31 implementation of the consuming startup register port.
 pub struct Ieee802154StartupPort<P = MacPlacement, E = EtmPlacement, B = RxInfoPlacement>(
@@ -56,7 +56,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptStartup
         phase.advance()
     }
     fn order_before_stop(phase: Self::RxAborts) -> Self::Ordered {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         phase.advance()
     }
     fn stop_operation(mut phase: Self::Ordered) -> Self::Stopped {
@@ -72,7 +72,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptStartup
         phase.advance()
     }
     fn order_before_discard(phase: Self::TimersStopped) -> Self::DiscardReady {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         phase.advance()
     }
     fn discard_startup_events(mut phase: Self::DiscardReady) -> Self::Discarded {
@@ -80,7 +80,7 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154InterruptStartup
         phase.advance()
     }
     fn finish(phase: Self::Discarded) -> Self::Output {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         (
             Ieee802154ArmedTaskOwner { task: phase.task },
             Ieee802154InterruptOwner {
@@ -123,13 +123,13 @@ impl<'a, P: Placement + 'a, E: Placement + 'a, B: Placement + 'a> Ieee802154Inte
     type TimersStopped = Ieee802154Teardown<'a, P, E, B, 3>;
     type SampleReady = Ieee802154Teardown<'a, P, E, B, 4>;
     type Sampled =
-        Ieee802154Teardown<'a, P, E, B, 5, oer_esp32s31_pac::ieee802154::event_status::Snapshot>;
+        Ieee802154Teardown<'a, P, E, B, 5, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
     type Masked =
-        Ieee802154Teardown<'a, P, E, B, 6, oer_esp32s31_pac::ieee802154::event_status::Snapshot>;
+        Ieee802154Teardown<'a, P, E, B, 6, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
     type TxMasked =
-        Ieee802154Teardown<'a, P, E, B, 7, oer_esp32s31_pac::ieee802154::event_status::Snapshot>;
+        Ieee802154Teardown<'a, P, E, B, 7, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
     type AllMasked =
-        Ieee802154Teardown<'a, P, E, B, 8, oer_esp32s31_pac::ieee802154::event_status::Snapshot>;
+        Ieee802154Teardown<'a, P, E, B, 8, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
     type Acknowledged = Ieee802154Teardown<'a, P, E, B, 9>;
     type Output = Ieee802154InterruptSetupOwner<P>;
     fn stop_operation(interrupt: Self::Interrupt, task: Self::Task) -> Self::Stopped {
@@ -149,7 +149,7 @@ impl<'a, P: Placement + 'a, E: Placement + 'a, B: Placement + 'a> Ieee802154Inte
         phase.advance()
     }
     fn order_before_sample(phase: Self::TimersStopped) -> Self::SampleReady {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         phase.advance()
     }
     fn sample_events(phase: Self::SampleReady) -> Self::Sampled {
@@ -181,7 +181,7 @@ impl<'a, P: Placement + 'a, E: Placement + 'a, B: Placement + 'a> Ieee802154Inte
         }
     }
     fn finish(phase: Self::Acknowledged) -> Self::Output {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         Ieee802154InterruptSetupOwner {
             mac: phase.interrupt.mac,
         }

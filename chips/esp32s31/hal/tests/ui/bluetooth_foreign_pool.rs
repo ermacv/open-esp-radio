@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_esp32s31_hal::bluetooth::engine::{DtmPool, SchedulerRoleInstance};
+use oer_chips_esp32s31_hal::bluetooth::engine::{DtmPool, SchedulerRoleInstance};
 
 // Same storage, capacity and epoch: only the pool brand differs.
 pub fn release<'a, 'b, 'epoch>(

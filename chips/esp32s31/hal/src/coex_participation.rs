@@ -7,7 +7,7 @@
 //! its [`CoexAbsent`]: it cannot leave power while it takes part. External
 //! coexistence takes part with its own [`ExternalCoexistence`]. The
 //! domain's participant set follows these states; the coexistence policy
-//! acts on it in the shared radio's owner (the `oer-espressif-coex` README
+//! acts on it in the shared radio's owner (the `oer-chips-family-coex` README
 //! records the participant policy).
 //!
 //! Coexistence does not depend on the client's common power: Wi-Fi enables
@@ -23,12 +23,12 @@ use crate::clock::{RadioClient, RadioClientKind};
 /// A client leaves common power only while it shows this state:
 ///
 /// ```
-/// use oer_esp32s31_hal::{
+/// use oer_chips_esp32s31_hal::{
 ///     ieee802154::Ieee802154Powered,
 ///     domain::{CoexAbsent, CommonPower, Ieee802154Client, RadioDomain},
 /// };
 ///
-/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
 ///     powered: Ieee802154Powered,
 ///     power: CommonPower<Ieee802154Client>,
@@ -41,12 +41,12 @@ use crate::clock::{RadioClient, RadioClientKind};
 /// Not while it takes part:
 ///
 /// ```compile_fail,E0308
-/// use oer_esp32s31_hal::{
+/// use oer_chips_esp32s31_hal::{
 ///     ieee802154::Ieee802154Powered,
 ///     domain::{CommonPower, Coexisting, Ieee802154Client, RadioDomain},
 /// };
 ///
-/// fn leave<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
 ///     powered: Ieee802154Powered,
 ///     power: CommonPower<Ieee802154Client>,
@@ -59,7 +59,7 @@ use crate::clock::{RadioClient, RadioClientKind};
 /// And the state cannot be made outside the radio split:
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_hal::domain::{CoexAbsent, WifiClient};
+/// use oer_chips_esp32s31_hal::domain::{CoexAbsent, WifiClient};
 ///
 /// let _coex: CoexAbsent<WifiClient> = CoexAbsent { _client: core::marker::PhantomData };
 /// ```
@@ -106,7 +106,7 @@ pub struct ExternalCoexistence {
 
 /// The radios that enabled coexistence (`coex_core_enable`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct CoexParticipants(oer_espressif_radio::membership::Participants);
+pub(crate) struct CoexParticipants(oer_chips_family_radio::membership::Participants);
 
 impl CoexParticipants {
     pub(crate) const fn count(self) -> u32 {

@@ -10,7 +10,7 @@ pub struct EventPoll {
     poll: Poll,
     events: Events,
     wake: Arc<Waker>,
-    _cancellation: oer_os_process::CancellationNotification,
+    _cancellation: oer_tools_os_process::CancellationNotification,
 }
 
 #[derive(Default)]
@@ -24,7 +24,7 @@ impl EventPoll {
         let poll = Poll::new()?;
         let wake = Arc::new(Waker::new(poll.registry(), CONTROL)?);
         let notify = Arc::clone(&wake);
-        let cancellation = oer_os_process::notify_on_cancel(move || {
+        let cancellation = oer_tools_os_process::notify_on_cancel(move || {
             let _ = notify.wake();
         });
         Ok(Self {

@@ -9,7 +9,7 @@ use std::{boxed::Box, sync::Arc, task::Wake};
 
 use super::*;
 use core::sync::atomic::{AtomicU32, Ordering};
-use oer_memory::signal::{Raiser, SignalList};
+use oer_portable_memory::signal::{Raiser, SignalList};
 
 #[cfg(oer_debug_control)]
 #[test]
@@ -63,7 +63,7 @@ std::thread_local! {
 #[allow(unsafe_code, reason = "the test executor's contract")]
 // SAFETY: the test thread alone touches its leaked signals and list;
 // the pend counts, and the test plays its executor's handler.
-unsafe impl oer_memory::ExecutionContext for TestExecutor {
+unsafe impl oer_portable_memory::ExecutionContext for TestExecutor {
     type Sharing = *mut ();
     fn running() -> bool {
         RUNNING.with(Cell::get)
@@ -324,7 +324,7 @@ fn list_pending_observation_preserves_undelivered_and_delivered_facts() {
     )]
     // SAFETY: only this test thread accesses its fixture list and signals;
     // pend never polls, and running is true only in this test's context.
-    unsafe impl oer_memory::ExecutionContext for ObserveExecutor {
+    unsafe impl oer_portable_memory::ExecutionContext for ObserveExecutor {
         type Sharing = *mut ();
         fn running() -> bool {
             true
@@ -374,7 +374,7 @@ fn a_waker_of_no_task_is_refused_without_registering() {
     )]
     // SAFETY: only this test thread accesses its fixture list and signals;
     // `current` refuses every waker, so no task is ever registered.
-    unsafe impl oer_memory::ExecutionContext for Refusing {
+    unsafe impl oer_portable_memory::ExecutionContext for Refusing {
         type Sharing = *mut ();
         fn running() -> bool {
             true

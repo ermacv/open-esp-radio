@@ -11,7 +11,7 @@
 )]
 
 use crate::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     address::{AddressFlags, Bssid, OwnAddress},
     ccmp::CcmpHeader,
     data::{MsduParts, decapsulate_payload},
@@ -83,7 +83,7 @@ impl<'a> AdmittedData<'a> {
             }
             let replay = replay.ok_or(RxDropReason::Protection)?;
             let (bytes, rest) = payload
-                .split_first_chunk::<{ oer_ieee80211_wire::ccmp::CCMP_HEADER_LEN }>()
+                .split_first_chunk::<{ oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN }>()
                 .ok_or(RxDropReason::Header)?;
             let ccmp = CcmpHeader::parse(*bytes).map_err(|_| RxDropReason::Header)?;
             let protection = if receiver == local.get() {
@@ -129,7 +129,7 @@ impl<'a> AdmittedData<'a> {
 mod tests {
     extern crate std;
     use super::*;
-    use oer_ieee80211_wire::{
+    use oer_protocols_ieee80211_wire::{
         address::IndividualAddress,
         ccmp::{CcmpKeyId, CcmpPacketNumber, GroupKeyId},
     };
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn ccmp_integrity_does_not_admit_an_llc_aliased_amsdu() {
         let mut frame = packet(true, false, true);
-        frame.truncate(26 + oer_ieee80211_wire::ccmp::CCMP_HEADER_LEN);
+        frame.truncate(26 + oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN);
         frame[24] |= 0x80;
         frame.extend_from_slice(&[
             0xaa, 0xaa, 3, 0, 0, 0, // Ordinary MSDU LLC prefix, forged DA.
@@ -309,7 +309,7 @@ mod tests {
             }
         }
         let mut amsdu = packet(true, false, true);
-        amsdu.truncate(26 + oer_ieee80211_wire::ccmp::CCMP_HEADER_LEN);
+        amsdu.truncate(26 + oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN);
         amsdu[24] |= 0x80;
         amsdu.extend_from_slice(&[2, 2, 2, 2, 2, 2, 6, 6, 6, 6, 6, 6, 0, 10]);
         amsdu.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0, 1, 2]);
@@ -317,17 +317,17 @@ mod tests {
         amsdu.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x06, 0xde, 0xad]);
         seeds.push(amsdu);
         let seeds: Vec<&[u8]> = seeds.iter().map(Vec::as_slice).collect();
-        oer_ieee80211_wire::fuzz::inputs(&seeds, count, 96, admit_all);
+        oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 96, admit_all);
     }
 
     #[test]
     fn admission_never_panics() {
-        run(oer_ieee80211_wire::fuzz::QUICK);
+        run(oer_protocols_ieee80211_wire::fuzz::QUICK);
     }
 
     #[test]
     #[ignore = "the full run"]
     fn admission_never_panics_full() {
-        run(oer_ieee80211_wire::fuzz::FULL);
+        run(oer_protocols_ieee80211_wire::fuzz::FULL);
     }
 }

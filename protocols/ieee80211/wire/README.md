@@ -1,11 +1,11 @@
 # IEEE 802.11 wire formats
 
-`oer-ieee80211-wire`: allocation-free IEEE 802.11 frame formats, parsers, encoders
-and the constants of the standard. Fixed-width fields use `oer-wire::bitfield!`
+`oer-protocols-ieee80211-wire`: allocation-free IEEE 802.11 frame formats, parsers, encoders
+and the constants of the standard. Fixed-width fields use `oer-portable-wire::bitfield!`
 declarations with standard-clause sources; bounded readers and writers handle
 byte streams. The crate holds no time, policy or state: it has no normal
-dependency on `oer-time` or on an IEEE 802.11 crate above it
-(`oer-test-layers`). Mutable exchange state, timing and selection policy belong
+dependency on `oer-portable-time` or on an IEEE 802.11 crate above it
+(`oer-tools-test-layers`). Mutable exchange state, timing and selection policy belong
 to upper-mac, the role cores and the runtime. The lower-MAC port's codecs live
 here: the data and management MAC header (`frame::MacHeader`) with its QoS
 Control field, the legacy rates of the Supported Rates elements (`rates`) and
@@ -18,7 +18,7 @@ Action and Compressed BlockAckReq codecs, the Timestamp field and the time
 unit (`tsf`), status and reason codes (`status`), EtherType values
 (`ethertype`), the EAPOL-Key Key Information field and KDEs (`eapol`), the SAE
 Commit and Confirm body codecs, whose scalar, element and confirm are byte
-values for `oer-ieee80211-core-security-rsn` to interpret, and extension element IDs
+values for `oer-protocols-ieee80211-core-security-rsn` to interpret, and extension element IDs
 (`sae`), the AAD and nonce of a CCMP-protected MPDU (`ccmp::protected`),
 the BIP Management MIC element (`bip`), single information elements
 (`element`), RSN element and RSNXE encoders, beacon template element edits and the HE-SIG-B user field codecs.

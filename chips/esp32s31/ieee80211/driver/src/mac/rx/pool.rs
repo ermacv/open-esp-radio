@@ -16,13 +16,13 @@ use crate::mac::rx::{
     NormalizedRxFrame, RxError, RxIngressConfig, RxPhyInfo, decode_normalized_rx_metadata,
     view_normalized_rx_frame,
 };
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     rx_dma::RxDma,
     rx_ring::{RxRingError, RxSegment},
     rx_storage::{RxDmaCompletedUnit, RxDmaDetachedUnit},
 };
-use oer_ieee80211_contracts_port::MacRxMetadata;
-use oer_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
+use oer_protocols_ieee80211_contracts_port::MacRxMetadata;
+use oer_portable_memory::{ExternalRxHandoffPool, ExternalRxRadioLease};
 
 pub const VENDOR_LARGE_RX_SLOT_COUNT: usize = 32;
 pub const VENDOR_LARGE_RX_PAYLOAD_CAPACITY: usize = 1_700;
@@ -57,7 +57,7 @@ pub enum RxDmaDeferredStageUnitOutcome<'pool, const SLOTS: usize, const CAPACITY
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct StagedMetadata {
     descriptor_address: u32,
-    descriptor_word0: oer_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
+    descriptor_word0: oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
     next_descriptor_address: u32,
     length: usize,
 }
@@ -77,7 +77,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         }
     }
 
-    oer_esp32s31_hal::place_rx_hot_path! {
+    oer_chips_esp32s31_hal::place_rx_hot_path! {
     /// Transfer one completed single-descriptor DMA buffer to the upper RX
     /// owner without copying payload bytes.
     ///
@@ -97,7 +97,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
         const COUNT: usize,
         const BUFFER_SIZE: usize,
         const STORAGE_SIZE: usize,
-        S: oer_esp32s31_hal::ieee80211::dma::space::DmaSpace,
+        S: oer_chips_esp32s31_hal::ieee80211::dma::space::DmaSpace,
         H: RxDma,
     >(
         &'pool self,
@@ -138,7 +138,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
             .map(RxDmaDeferredStageUnitOutcome::Staged)
     }}
 
-    oer_esp32s31_hal::place_rx_hot_path! {
+    oer_chips_esp32s31_hal::place_rx_hot_path! {
     /// Admit an allocation detached from its completed descriptor.
     ///
     /// The descriptor remains observed while this affine allocation is owned
@@ -163,7 +163,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> RxStagePool<SLOTS, CAPACITY> {
             Ok(lease) => lease,
             Err((buffer, error)) => {
                 drop(buffer);
-                if let oer_memory::PoolError::Length(_) = error {
+                if let oer_portable_memory::PoolError::Length(_) = error {
                     return Err(RxStageTransactionError::Stage(RxStageError::TooLong));
                 }
                 return Err(RxStageTransactionError::Stage(RxStageError::Exhausted));
@@ -229,7 +229,7 @@ pub struct NetworkRxFrame<'pool, const SLOTS: usize, const CAPACITY: usize> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxTimes {
     /// The monotonic time of the frame's first executor-visible handoff.
-    pub handoff: oer_time::Instant,
+    pub handoff: oer_portable_time::Instant,
     /// The frame's receive timestamp: the raw MAC local time the hardware
     /// wrote into its RX-control prefix (`rx::decode_rx_local_timestamp`).
     pub stamp: Option<u32>,
@@ -284,7 +284,7 @@ impl<const SLOTS: usize, const CAPACITY: usize> NetworkRxFrame<'_, SLOTS, CAPACI
         &mut self,
         offset: usize,
         length: usize,
-    ) -> Result<(), oer_memory::FrameRangeError> {
+    ) -> Result<(), oer_portable_memory::FrameRangeError> {
         self.lease.narrow(offset, length)
     }
 

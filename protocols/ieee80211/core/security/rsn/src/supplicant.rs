@@ -24,12 +24,12 @@ use crate::{
     keys::RsnKeyInstall,
     state::{RsnStaAction, RsnStaPhase, RsnStaState, RsnStateError, RsnTransmit},
 };
-use oer_crypto::{
+use oer_portable_crypto::{
     Aes128Key, KeyUnwrapError, KeyUnwrapRequest,
     block::{Aes128Engine, BlockError},
 };
-use oer_ieee80211_core_security_cipher::aes::RsnKeyData;
-use oer_time::{Duration, Instant};
+use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
+use oer_portable_time::{Duration, Instant};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Hardware-qualified open-STA compatibility window for the first EAPOL-Key
@@ -120,7 +120,7 @@ impl RsnStaResponseDeadline {
 pub enum RsnStaSupplicantError {
     State(RsnStateError),
     Frame(RsnFrameError),
-    InvalidFrame(oer_ieee80211_wire::eapol::EapolParseError),
+    InvalidFrame(oer_protocols_ieee80211_wire::eapol::EapolParseError),
     /// A previously validated local security-IE owner lost its invariant.
     RetainedSecurityIes(RsnFrameError),
     /// The station's own Association RSN element names no supported suite.
@@ -157,7 +157,7 @@ impl RsnStaSupplicantError {
 pub enum RsnStaProcessError {
     Supplicant(RsnStaSupplicantError),
     /// The authenticated Key Data field is longer than
-    /// [`oer_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
+    /// [`oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
     KeyDataTooLong,
     /// The authenticated key data did not unwrap.
     KeyUnwrap(KeyUnwrapError),
@@ -178,13 +178,13 @@ impl From<RsnStaSupplicantError> for RsnStaProcessError {
     }
 }
 
-impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnStaSupplicantError {
-    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
+impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStaSupplicantError {
+    fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }
-impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnStaProcessError {
-    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
+impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStaProcessError {
+    fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::Supplicant(error.into())
     }
 }
@@ -268,7 +268,7 @@ fn unwrap_key_data<E: Aes128Engine>(
     wrapped: &[u8],
 ) -> Result<RsnKeyData, KeyDataError> {
     let wrapped = RsnKeyData::try_copy(wrapped).map_err(|_| KeyDataError::TooLong)?;
-    oer_crypto::block::unwrap_now(
+    oer_portable_crypto::block::unwrap_now(
         engine,
         KeyUnwrapRequest::new(Aes128Key::copy_from(kek), wrapped),
     )
@@ -324,7 +324,7 @@ pub enum RsnConnectedSupplicantError {
     StaleCompletion,
     InstallFailed,
     Frame(RsnFrameError),
-    InvalidFrame(oer_ieee80211_wire::eapol::EapolParseError),
+    InvalidFrame(oer_protocols_ieee80211_wire::eapol::EapolParseError),
     /// A previously validated local security-IE owner lost its invariant.
     RetainedSecurityIes(RsnFrameError),
     /// The AES engine refused a MIC's key or block.
@@ -337,7 +337,7 @@ pub enum RsnConnectedSupplicantError {
 pub enum RsnConnectedProcessError {
     Supplicant(RsnConnectedSupplicantError),
     /// The authenticated Key Data field is longer than
-    /// [`oer_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
+    /// [`oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
     KeyDataTooLong,
     /// The authenticated key data did not unwrap.
     KeyUnwrap(KeyUnwrapError),
@@ -349,13 +349,13 @@ impl From<RsnConnectedSupplicantError> for RsnConnectedProcessError {
     }
 }
 
-impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnConnectedSupplicantError {
-    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
+impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnConnectedSupplicantError {
+    fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }
-impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnConnectedProcessError {
-    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
+impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnConnectedProcessError {
+    fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::Supplicant(error.into())
     }
 }

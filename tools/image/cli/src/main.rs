@@ -1,7 +1,7 @@
 //! `cargo fw`: build, flash and run the staged images of `firmware/apps` on
 //! the stand's boards (README.md). This binary parses the
 //! command line; its modules hold the commands, over the image pipeline
-//! (`oer-image-build`) and the stand's one board path (`oer-lab-board`).
+//! (`oer-tools-image-build`) and the stand's one board path (`oer-tools-lab-board`).
 
 #![forbid(unsafe_code)]
 
@@ -14,7 +14,7 @@ mod hot_code;
 mod idf;
 mod image;
 
-use oer_image_build::probe;
+use oer_tools_image_build::probe;
 
 #[derive(Parser)]
 #[command(about = "Build, flash and run staged firmware images on the stand's boards")]
@@ -162,13 +162,13 @@ fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
 }
 
 fn main() -> ExitCode {
-    if oer_os_command_tree::requested() {
-        let tree = oer_os_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
-        println!("{}", oer_os_command_tree::json(&tree));
+    if oer_tools_os_command_tree::requested() {
+        let tree = oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
+        println!("{}", oer_tools_os_command_tree::json(&tree));
         return ExitCode::SUCCESS;
     }
     let cli = Cli::parse();
-    let result = (|| -> oer_image_build::Result<ExitCode> {
+    let result = (|| -> oer_tools_image_build::Result<ExitCode> {
         let root = command::root()?;
         match cli.command {
             Command::DecodeConsole { console } => diagnostics::decode_file(&console)?,
@@ -184,9 +184,9 @@ fn main() -> ExitCode {
                 additional,
             } => {
                 let result = if additional.is_empty() {
-                    oer_image_build::sizes::compare_directories(&base, &head)?
+                    oer_tools_image_build::sizes::compare_directories(&base, &head)?
                 } else {
-                    oer_image_build::sizes::compare_composition(&base, &additional, &head)?
+                    oer_tools_image_build::sizes::compare_composition(&base, &additional, &head)?
                 };
                 print!("{}", result.output);
                 return Ok(ExitCode::SUCCESS);
@@ -196,7 +196,7 @@ fn main() -> ExitCode {
                 output,
                 source_root,
             } => {
-                let count = oer_image_build::sizes::refresh(
+                let count = oer_tools_image_build::sizes::refresh(
                     &input,
                     &output,
                     source_root.as_deref().unwrap_or(&root),
@@ -277,7 +277,7 @@ mod tests {
             ));
         }
         assert!(matches!(
-            parse("fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware --diagnostic").unwrap().command,
+            parse("fw build ../probes/esp32s31-radio --bin oer-hil-probes-esp32s31-radio-hardware --diagnostic").unwrap().command,
             Command::Build { bin: Some(_), diagnostic: true, .. }
         ));
         match parse("fw build wifi-station --features station,extra --features third")

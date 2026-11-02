@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::Slot;
+use oer_protocols_radio_port::Slot;
 
 pub enum Kind {}
 

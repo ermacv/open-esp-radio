@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use super::strict::{InputSection, PlacedFunction, script_name};
 use crate::Result;
-use oer_os_durable::inputs::Inputs;
+use oer_tools_os_durable::inputs::Inputs;
 
 /// The generated linker fragment `.hot.text` includes.
 pub const FRAGMENT: &str = "hot-text.x";
@@ -152,7 +152,7 @@ pub struct ProfiledFunction {
 
 /// The functions of `elf` by their build-stable name: the smallest demangled
 /// name (without crate hashes) among each function's symbols.
-pub fn profiled_functions(elf: &oer_analysis_elf::Elf<'_>) -> Result<Vec<ProfiledFunction>> {
+pub fn profiled_functions(elf: &oer_tools_analysis_elf::Elf<'_>) -> Result<Vec<ProfiledFunction>> {
     let sections: BTreeMap<usize, String> = elf
         .sections()
         .map(|section| (section.index, section.name.to_owned()))
@@ -175,7 +175,7 @@ pub fn profiled_functions(elf: &oer_analysis_elf::Elf<'_>) -> Result<Vec<Profile
 pub fn key(symbols: &[String]) -> Option<String> {
     symbols
         .iter()
-        .map(|symbol| oer_analysis_elf::demangle(symbol))
+        .map(|symbol| oer_tools_analysis_elf::demangle(symbol))
         .min()
 }
 

@@ -52,7 +52,7 @@ enum Write {
 }
 
 #[derive(Default)]
-struct Recorded(Vec<Write>, oer_time_virtual::VirtualClock);
+struct Recorded(Vec<Write>, oer_portable_time_virtual::VirtualClock);
 
 impl ClockGates for Recorded {
     type References = References;
@@ -73,7 +73,7 @@ impl Recorded {
     fn record(&mut self, write: Write) {
         self.0.push(write);
         self.1
-            .advance(oer_time::Duration::from_micros(1))
+            .advance(oer_portable_time::Duration::from_micros(1))
             .expect("finite test time");
     }
     fn set_pll_f160m(&mut self, on: bool) {
@@ -208,7 +208,7 @@ fn an_exhausted_count_refuses_without_a_write() {
 
 #[test]
 fn refused_edges_do_not_advance_the_port_clock() {
-    use oer_time::Clock;
+    use oer_portable_time::Clock;
     let mut counts = adopted();
     let at = counts.gates.1.now();
     assert_eq!(

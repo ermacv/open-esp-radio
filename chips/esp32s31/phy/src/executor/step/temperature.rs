@@ -13,7 +13,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 pin_project_lite::pin_project! {
     struct Sample<F> { #[pin] inner: F }

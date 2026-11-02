@@ -1,8 +1,8 @@
 use core::mem::size_of;
-use oer_esp32s31_hal::platform::Port;
-use oer_esp32s31_layout::LAYOUT;
-use oer_espressif_boot::flash;
-use oer_espressif_staged_bootstrap::{self as staged, startup};
+use oer_chips_esp32s31_hal::platform::Port;
+use oer_chips_esp32s31_layout::LAYOUT;
+use oer_chips_family_boot::flash;
+use oer_chips_family_staged_bootstrap::{self as staged, startup};
 use static_cell::ConstStaticCell;
 
 // The bootstrap's reports and panic go through the HAL's early writer.
@@ -10,7 +10,7 @@ staged::panic_handler!(Port);
 
 staged::app_descriptor!(
     "0.1.0",
-    "oer-firmware-bootstrap-esp32s31",
+    "oer-chips-esp32s31-bootstrap",
     LAYOUT.mmu_page_bytes
 );
 
@@ -52,7 +52,7 @@ static FLASH_TUNING_SCRATCH: ConstStaticCell<[u32; flash::TUNING_SCRATCH_WORDS]>
 // SAFETY: the reset entry calls this symbol after stack/BSS initialization.
 #[unsafe(no_mangle)]
 extern "C" fn bootstrap_main() -> ! {
-    startup::run::<oer_esp32s31_boot::S31, RUNTIME_ENTRY, RUNTIME_HARTS>(startup::Resources {
+    startup::run::<oer_chips_esp32s31_boot::S31, RUNTIME_ENTRY, RUNTIME_HARTS>(startup::Resources {
         layout: &LAYOUT,
         payload: &RUNTIME_PAYLOAD,
         tuning_reference: &FLASH_TUNING_REFERENCE,

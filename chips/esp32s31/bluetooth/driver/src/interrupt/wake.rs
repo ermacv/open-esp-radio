@@ -16,7 +16,7 @@ use core::{
     task::{Context, Poll},
 };
 
-use oer_espressif_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
+use oer_chips_family_interrupt_table::signal::{ForeignContext, IrqSignal, SignalExecutor};
 
 use super::PrimaryInterruptCapture;
 
@@ -53,7 +53,7 @@ pub enum SchedulerWakePublication {
 /// authorize at most one fresh finished-list transfer:
 ///
 /// ```compile_fail
-/// use oer_esp32s31_bluetooth_driver::interrupt::SchedulerWakeBatch;
+/// use oer_chips_esp32s31_bluetooth_driver::interrupt::SchedulerWakeBatch;
 ///
 /// fn replay(batch: SchedulerWakeBatch) {
 ///     consume(batch);

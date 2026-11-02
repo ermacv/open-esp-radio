@@ -4,16 +4,16 @@
 //! recorder counters and the global pointer/mask live in ordinary atomic RAM.
 
 mod store;
-use oer_trace::{Channel, Event, Kind};
+use oer_portable_trace::{Channel, Event, Kind};
 pub use store::{
     Boot, Geometry, Previous, Retained, SnapshotRecord, SnapshotWriter, Trace, Trigger,
 };
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_memory::StaticRef;
+use oer_portable_memory::StaticRef;
 
-oer_memory::zeroed_static! {
+oer_portable_memory::zeroed_static! {
     /// Enabled channels, one bit each; zero unless a trace is running. In
     /// SRAM, which interrupt handlers and the panic path reach without a
     /// cache.

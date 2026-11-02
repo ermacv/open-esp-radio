@@ -2,7 +2,7 @@
 
 use core::num::NonZeroU8;
 
-use oer_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 /// A management frame keeps its derived rate for every attempt.
 ///

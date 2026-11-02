@@ -47,7 +47,7 @@ facts at build time; the host checks read the same facts.
   and [retained storage](../portable/memory/src/retained.rs).
 - `zeroed_static!` provides an all-zero initializer for statics in regions
   the boot clears: [zeroed storage rustdoc](../portable/memory/src/zeroed.rs)
-  in [`oer-memory`](../portable/memory/src/lib.rs).
+  in [`oer-portable-memory`](../portable/memory/src/lib.rs).
 - Executor running-context storage has one slot for each facts-defined hart.
   Executor identities remain global software-source identities; their packed
   assignment/poll words derive hart-bit width and the unassigned sentinel

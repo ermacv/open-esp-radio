@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::machine::{PendingGroupM1, PendingM3};
+use oer_protocols_ieee80211_core_roles_sta::machine::{PendingGroupM1, PendingM3};
 
 pub fn pairwise(pending: PendingM3) {
     let _frame = pending.into_frame();

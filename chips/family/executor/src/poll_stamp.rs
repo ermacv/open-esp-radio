@@ -12,7 +12,7 @@ pub(crate) struct Stamp<const HARTS: usize>;
 
 /// The stamp of the chip the platform port's geometry describes.
 #[cfg(feature = "chip")]
-pub(crate) type ChipStamp = Stamp<{ oer_espressif_platform_port::HARTS }>;
+pub(crate) type ChipStamp = Stamp<{ oer_chips_family_platform_port::HARTS }>;
 
 impl<const HARTS: usize> Stamp<HARTS> {
     const HART_BITS: u32 = HARTS.ilog2() + 1;
@@ -43,4 +43,4 @@ impl<const HARTS: usize> Stamp<HARTS> {
 }
 
 /// Reserve 100 us for admission, one <=50-us atom and the return path.
-pub(crate) const POLL_ADMISSION_MICROS: u32 = oer_cooperate::POLL_ADMISSION_MICROS;
+pub(crate) const POLL_ADMISSION_MICROS: u32 = oer_portable_cooperate::POLL_ADMISSION_MICROS;

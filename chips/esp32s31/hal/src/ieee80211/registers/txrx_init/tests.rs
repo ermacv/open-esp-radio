@@ -1,6 +1,6 @@
 //! The `mac_txrx_init` transactions over host memory.
 
-use oer_esp32s31_pac::{instances, wifi_mac::SharedRadioInitControl};
+use oer_chips_esp32s31_pac::{instances, wifi_mac::SharedRadioInitControl};
 
 use super::MacDelaySlot;
 use crate::ieee80211::registers::{HostWords, element};

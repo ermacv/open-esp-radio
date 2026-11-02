@@ -52,11 +52,11 @@ file must match its pinned SHA-256. The stand needs a host C compiler.
 ## Running
 
 ```console
-cargo test -p oer-vendor-ieee802154-esp32s31 -p oer-tool-vendor-ieee802154-esp32s31-cli
-cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- list
-cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- run transmit-with-ack
-cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare transmit-with-ack
-cargo run -p oer-tool-vendor-ieee802154-esp32s31-cli -- compare all
+cargo test -p oer-tools-vendor-ieee802154-esp32s31 -p oer-tools-vendor-ieee802154-esp32s31-cli
+cargo run -p oer-tools-vendor-ieee802154-esp32s31-cli -- list
+cargo run -p oer-tools-vendor-ieee802154-esp32s31-cli -- run transmit-with-ack
+cargo run -p oer-tools-vendor-ieee802154-esp32s31-cli -- compare transmit-with-ack
+cargo run -p oer-tools-vendor-ieee802154-esp32s31-cli -- compare all
 ```
 
 The library here decides the verdicts; its program,
@@ -80,7 +80,7 @@ check the catalog against expectations read from the pinned source.
 ## Comparing the production engine
 
 `compare` runs the same scenario through the production engine
-(`oer_espressif_ieee802154_engine::engine`) and prints `MATCH`, `DIFF` with the first
+(`oer_chips_family_ieee802154_engine::engine`) and prints `MATCH`, `DIFF` with the first
 differing record, or `INCOMPLETE` with the reason. [`src/port.rs`](src/port.rs)
 renders each HAL low-level call as the vendor `ieee802154_ll_*` accessor and
 argument, and each modem ETM access as the vendor's direct register access;
@@ -92,7 +92,7 @@ content. Both sides resolve transmit power against the ESP32-S31 BTBB level
 set recovered from the vendor library (`TX_POWER_LEVELS_DBM`): the stand
 provides it as the driver's `bt_bb_get_tx_pwr_table`, and the engine uses the
 a typed level set composed from chip knowledge's `TX_POWER_LEVELS_DBM`
-(`oer-esp32s31-knowledge`); the stand links no HAL. The catalog requires `MATCH` or its exact documented `EXPECTED` trace pair.
+(`oer-chips-esp32s31-knowledge`); the stand links no HAL. The catalog requires `MATCH` or its exact documented `EXPECTED` trace pair.
 
 The `recent-rssi` scenario reads `esp_ieee802154_get_recent_rssi` disabled,
 idle, receiving, awaiting an ACK and asleep, over receive-information images
@@ -150,7 +150,7 @@ in both builds; the two expectation tests that pin the default build's trace
 run only without the feature.
 
 ```console
-cargo test -p oer-tool-vendor-ieee802154-esp32s31-cli --features multipan
+cargo test -p oer-tools-vendor-ieee802154-esp32s31-cli --features multipan
 ```
 
 ## Software coexistence
@@ -167,7 +167,7 @@ with the HAL. The test that pins the build without coexistence runs only
 without the feature.
 
 ```console
-cargo test -p oer-tool-vendor-ieee802154-esp32s31-cli --features sw-coex
+cargo test -p oer-tools-vendor-ieee802154-esp32s31-cli --features sw-coex
 ```
 
 ## Limits

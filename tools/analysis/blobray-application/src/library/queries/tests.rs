@@ -31,7 +31,7 @@ fn operation_work_failure_returns_no_resource_marked_report() {
         &[object(0x0000_8067, 4)],
         Assumptions::default(),
         &[],
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |_, _| {
@@ -62,21 +62,21 @@ fn all_three_queries_count_blocked_functions_gaps_and_partial_causes_identically
         };
         let mut blocks = [0; 3];
         let field = field_accesses(
-            &inputs, assumptions, 148, Some(1), &oer_analysis_riscv_lift::RiscvDecoder,
+            &inputs, assumptions, 148, Some(1), &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory, &mut || Ok(()), &mut |result, _| {
                 if matches!(result, FunctionResult::Blocked { error, .. } if error.code == ErrorCode::NeedsExtent) { blocks[0] += 1; }
                 Ok(())
             },
         ).unwrap();
         let arguments = call_arguments(
-            &inputs, assumptions, &symbols, &oer_analysis_riscv_lift::RiscvDecoder,
+            &inputs, assumptions, &symbols, &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory, &mut || Ok(()), &mut |result, _| {
                 if matches!(result, FunctionResult::Blocked { error, .. } if error.code == ErrorCode::NeedsExtent) { blocks[1] += 1; }
                 Ok(())
             },
         ).unwrap();
         let references = callers(
-            &inputs, assumptions, &symbols, &oer_analysis_riscv_lift::RiscvDecoder,
+            &inputs, assumptions, &symbols, &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory, &mut || Ok(()), &mut |result, _| {
                 if matches!(result, CallerResult::Function(FunctionResult::Blocked { error, .. }) if error.code == ErrorCode::NeedsExtent) { blocks[2] += 1; }
                 Ok(())

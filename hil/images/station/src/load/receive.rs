@@ -1,9 +1,9 @@
 //! What the image counts of the datagrams on a run's port: the run's load
 //! in the shared [`Tally`], and beside it what the tally does not count.
 
-use oer_services_load::Received;
-use oer_services_load::header::Header;
-use oer_services_load::tally::{Arrival, Tally};
+use oer_hil_services_load::Received;
+use oer_hil_services_load::header::Header;
+use oer_hil_services_load::tally::{Arrival, Tally};
 
 /// What one datagram on the port is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -113,7 +113,7 @@ impl Receiving {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_services_load::header::LENGTH;
+    use oer_hil_services_load::header::LENGTH;
 
     /// Each arrival: its sequence and whether it falls in the window.
     fn received(arrivals: &[(u64, bool)]) -> Received {

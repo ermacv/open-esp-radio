@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::LocalId;
+use oer_protocols_radio_port::LocalId;
 
 pub fn select<'long: 'short, 'short>(
     own: LocalId<'short>,

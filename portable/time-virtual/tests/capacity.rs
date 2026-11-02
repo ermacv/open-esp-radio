@@ -15,12 +15,12 @@ fn every_constructor_rejects_zero_capacity_during_codegen() {
     )).unwrap();
     for constructor in [
         "VirtualClock::new()",
-        "VirtualClock::starting_at(oer_time_virtual::START)",
+        "VirtualClock::starting_at(oer_portable_time_virtual::START)",
         "VirtualClock::default()",
     ] {
         for capacity in [1, 0] {
             fs::write(scratch.path().join("case.rs"), format!(
-                "use oer_time_virtual::VirtualClock;\npub fn make() -> VirtualClock<{capacity}> {{ {constructor} }}\n"
+                "use oer_portable_time_virtual::VirtualClock;\npub fn make() -> VirtualClock<{capacity}> {{ {constructor} }}\n"
             )).unwrap();
             let output = Command::new("cargo")
                 .args(["build", "--offline", "--lib", "--manifest-path"])

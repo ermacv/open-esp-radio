@@ -31,7 +31,7 @@ The toolchain is pinned in `rust-toolchain.toml`.
 ```console
 cargo test
 cargo clippy --all-targets
-cargo check -p oer-esp32s31-hal --target riscv32imafc-unknown-none-elf
+cargo check -p oer-chips-esp32s31-hal --target riscv32imafc-unknown-none-elf
 ```
 
 The S31 workspace uses its own PAC, HAL, reset entry and staged runtime.

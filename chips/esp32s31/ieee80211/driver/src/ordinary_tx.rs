@@ -10,9 +10,9 @@
 //! prove either receipt or absence of the solicited response.
 
 use core::pin::Pin;
-use oer_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
-use oer_ieee80211_contracts_port::backend::RetryCounters;
-use oer_time::{Clock, Instant, Timer};
+use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
+use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
+use oer_portable_time::{Clock, Instant, Timer};
 
 use crate::mac::{
     edca::EdcaContentionParameters,
@@ -26,11 +26,11 @@ use crate::mac::{
     },
 };
 pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
-use oer_esp32s31_hal::types::MacInterface;
-use oer_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
-use oer_ieee80211_contracts_port::{ManagementTxPlan, VifRole};
-use oer_ieee80211_wire::frame::FrameControl;
-use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
+use oer_chips_esp32s31_hal::types::MacInterface;
+use oer_protocols_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
+use oer_protocols_ieee80211_contracts_port::{ManagementTxPlan, VifRole};
+use oer_protocols_ieee80211_wire::frame::FrameControl;
+use oer_protocols_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
 
 use crate::tx::{WifiTxProgress, WifiTxWake, capped_power};
 
@@ -41,7 +41,7 @@ pub const TX_FCS_SIZE: usize = 4;
 /// Settle interval between the forced-CCA edge of a queue's timeout abort
 /// and its detach (`SOURCE[PROMOTED_LMAC_TX]`, see
 /// `TxSlot::begin_timeout_abort`).
-pub(crate) const TX_ABORT_SETTLE: oer_time::Duration = oer_time::Duration::from_micros(16);
+pub(crate) const TX_ABORT_SETTLE: oer_portable_time::Duration = oer_portable_time::Duration::from_micros(16);
 /// First Frame Control byte of a BlockAckReq: control type, subtype eight.
 const BLOCK_ACK_REQUEST_FRAME_CONTROL: u8 = 0x84;
 
@@ -176,12 +176,12 @@ impl OrdinaryTxRetryReport {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OrdinaryTxCompleted {
     completion: TxCompletion,
-    status: oer_ieee80211_contracts_port::TxStatus,
+    status: oer_protocols_ieee80211_contracts_port::TxStatus,
     report: OrdinaryTxReport,
 }
 
 impl OrdinaryTxCompleted {
-    pub const fn status(&self) -> oer_ieee80211_contracts_port::TxStatus {
+    pub const fn status(&self) -> oer_protocols_ieee80211_contracts_port::TxStatus {
         self.status
     }
 
@@ -306,7 +306,7 @@ pub struct MacTxPlan<Rate = PhyRate> {
     /// Executor watchdog applied independently to each publication.
     ///
     /// This is not the on-air MPDU lifetime and not a blocking delay.
-    pub publication_timeout: oer_time::Duration,
+    pub publication_timeout: oer_portable_time::Duration,
 }
 
 /// Observable state of the ordinary transmit queue.
@@ -348,10 +348,10 @@ pub struct OrdinaryTxPlan {
 pub enum SingleAttemptProtection {
     None,
     RtsCts {
-        rate: oer_esp32s31_hal::types::MacLegacyRate,
+        rate: oer_chips_esp32s31_hal::types::MacLegacyRate,
     },
     CtsToSelf {
-        rate: oer_esp32s31_hal::types::MacLegacyRate,
+        rate: oer_chips_esp32s31_hal::types::MacLegacyRate,
     },
 }
 
@@ -413,7 +413,7 @@ impl<const BUFFER_SIZE: usize> QueuedSingleAttempt<'_, BUFFER_SIZE> {
 
     /// The publication deadline, or the end of the abort settle while one
     /// runs.
-    pub const fn deadline(&self) -> oer_time::Instant {
+    pub const fn deadline(&self) -> oer_portable_time::Instant {
         self.active.deadline
     }
 
@@ -485,10 +485,10 @@ struct ActiveTx {
     response: MacLegacyTxResponse,
     /// Protection selected for the current publication.
     protection: TxProtectionDecision,
-    completion_timeout: oer_time::Duration,
+    completion_timeout: oer_portable_time::Duration,
     /// Next service boundary: publication expiry or abort-settle expiry.
     /// The previous phase's deadline is no longer actionable after transition.
-    deadline: oer_time::Instant,
+    deadline: oer_portable_time::Instant,
     phase: OrdinaryTxPhase,
     retries: OrdinaryTxRetryReport,
 }
@@ -498,7 +498,7 @@ type OrdinaryCompletion = CompletionObservation<(TxCompletion, Option<HtBlockAck
 /// A published operation moves into this value only after Observed(status).
 struct FinishedTx {
     active: ActiveTx,
-    status: oer_ieee80211_contracts_port::TxStatus,
+    status: oer_protocols_ieee80211_contracts_port::TxStatus,
 }
 
 impl ActiveTx {
@@ -507,7 +507,7 @@ impl ActiveTx {
         completion: TxCompletion,
         block_ack: Option<HtBlockAckObservation>,
     ) -> FinishedTx {
-        use oer_ieee80211_contracts_port::TxStatus;
+        use oer_protocols_ieee80211_contracts_port::TxStatus;
         let status = match (self.response, block_ack, completion.tx_status()) {
             (MacLegacyTxResponse::BlockAck, Some(_), _) => TxStatus::Success,
             (MacLegacyTxResponse::BlockAck, None, TxStatus::Success) => TxStatus::AckTimeout,
@@ -618,7 +618,7 @@ impl<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, const N: usize, const LE
     pub fn service_polling<H: TxHardware>(
         self,
         hardware: &mut H,
-        poll_interval: oer_time::Duration,
+        poll_interval: oer_portable_time::Duration,
     ) -> impl Future<Output = Result<WifiTxProgress, OrdinaryTxError>> {
         self.owner.service_active_polling(hardware, poll_interval)
     }
@@ -748,7 +748,7 @@ where
     }
 
     /// Current hardware-visible descriptor ownership word.
-    pub fn descriptor_word0(&self) -> oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl {
+    pub fn descriptor_word0(&self) -> oer_chips_esp32s31_hal::layouts::WifiTxDmaDescriptorControl {
         self.slot.as_ref().get_ref().descriptor_word0()
     }
 
@@ -852,7 +852,7 @@ where
     }
 
     /// The next service deadline, including an in-progress hardware abort.
-    pub fn next_deadline(&self) -> Option<oer_time::Instant> {
+    pub fn next_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.active.as_ref().map(|active| active.deadline)
     }
 
@@ -1218,7 +1218,7 @@ where
             response,
             protection: TxProtectionDecision::UNPROTECTED,
             completion_timeout: plan.exchange.publication_timeout,
-            deadline: oer_time::Instant::EPOCH,
+            deadline: oer_portable_time::Instant::EPOCH,
             phase: OrdinaryTxPhase::Published,
             retries: OrdinaryTxRetryReport::default(),
         };
@@ -1323,7 +1323,7 @@ where
     async fn service_active_polling<H: TxHardware>(
         &mut self,
         hardware: &mut H,
-        poll_interval: oer_time::Duration,
+        poll_interval: oer_portable_time::Duration,
     ) -> Result<WifiTxProgress, OrdinaryTxError> {
         let progress = self.poll_once(hardware)?;
         if progress == WifiTxProgress::Pending {
@@ -1453,7 +1453,7 @@ where
         let decision = if active.single_attempt.is_some() {
             // One publication is the whole transaction: the retry state
             // never sees the completion, so it can never re-publish.
-            if status == oer_ieee80211_contracts_port::TxStatus::Success {
+            if status == oer_protocols_ieee80211_contracts_port::TxStatus::Success {
                 self.policy
                     .record_success(active.route.role(), active.route.queue());
             } else if !active.external_contention {
@@ -1466,7 +1466,7 @@ where
         };
         match decision {
             FixedRetryDecision::Complete => {
-                let success = status == oer_ieee80211_contracts_port::TxStatus::Success;
+                let success = status == oer_protocols_ieee80211_contracts_port::TxStatus::Success;
                 let report = OrdinaryTxReport {
                     status: MacTxStatus {
                         result: if success {
@@ -1503,7 +1503,7 @@ where
                 Ok(Step::Complete(outcome))
             }
             FixedRetryDecision::Retry { set_retry_bit } => {
-                use oer_ieee80211_contracts_port::TxStatus;
+                use oer_protocols_ieee80211_contracts_port::TxStatus;
                 match status {
                     TxStatus::AckTimeout => {
                         active.retries.ack_timeouts = active.retries.ack_timeouts.saturating_add(1);
@@ -1565,7 +1565,7 @@ where
         } else {
             self.management_completion(
                 &mut active,
-                oer_ieee80211_contracts_port::TxStatus::Collision,
+                oer_protocols_ieee80211_contracts_port::TxStatus::Collision,
             )
         };
         match decision {
@@ -1759,12 +1759,12 @@ where
     fn management_completion(
         &mut self,
         active: &mut ActiveTx,
-        status: oer_ieee80211_contracts_port::TxStatus,
+        status: oer_protocols_ieee80211_contracts_port::TxStatus,
     ) -> FixedRetryDecision {
         let decision = active.retry.observe(status);
         match decision {
             FixedRetryDecision::Complete
-                if status == oer_ieee80211_contracts_port::TxStatus::Success =>
+                if status == oer_protocols_ieee80211_contracts_port::TxStatus::Success =>
             {
                 self.policy
                     .record_success(active.route.role(), active.route.queue())
@@ -1880,8 +1880,8 @@ impl FixedRateRetry {
     fn counters(&self) -> RetryCounters {
         self.counters
     }
-    fn observe(&mut self, status: oer_ieee80211_contracts_port::TxStatus) -> FixedRetryDecision {
-        use oer_ieee80211_contracts_port::TxStatus;
+    fn observe(&mut self, status: oer_protocols_ieee80211_contracts_port::TxStatus) -> FixedRetryDecision {
+        use oer_protocols_ieee80211_contracts_port::TxStatus;
         match status {
             TxStatus::Success | TxStatus::TimedOut => return FixedRetryDecision::Complete,
             TxStatus::AckTimeout => {

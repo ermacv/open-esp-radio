@@ -2,8 +2,8 @@
 
 use super::ll::S31Mac;
 use core::{mem::ManuallyDrop, ops::Deref};
-use oer_esp32s31_hal::{ieee802154::frames, layouts::DmaWindowAddress, memory::dma_static::Placed};
-use oer_espressif_ieee802154_engine::{
+use oer_chips_esp32s31_hal::{ieee802154::frames, layouts::DmaWindowAddress, memory::dma_static::Placed};
+use oer_chips_family_ieee802154_engine::{
     engine::{
         Fault, Ieee802154Engine as SharedEngine, Ieee802154Interfaces,
         owner::{DetachedIeee802154Engine as DetachedEngine, Ieee802154EngineOwner},
@@ -11,15 +11,15 @@ use oer_espressif_ieee802154_engine::{
     ll::Ieee802154LowLevel,
     pib::{Ieee802154Permit, Ieee802154PibDefaults},
 };
-use oer_espressif_ieee802154_mac_values::{Ieee802154EngineBuffers, Ieee802154TxPowerLevels};
+use oer_chips_family_ieee802154_mac_values::{Ieee802154EngineBuffers, Ieee802154TxPowerLevels};
 /// The MAC token and placed frame storage of one IEEE 802.15.4 engine.
 ///
 /// Its operations borrow its own MAC; callers see frames and slots, never
 /// DMA addresses or an independently reusable register owner.
 ///
 /// ```compile_fail,E0596
-/// use oer_esp32s31_ieee802154_driver::engine::Ieee802154Engine;
-/// use oer_espressif_ieee802154_engine::engine::Ieee802154Environment;
+/// use oer_chips_esp32s31_ieee802154_driver::engine::Ieee802154Engine;
+/// use oer_chips_family_ieee802154_engine::engine::Ieee802154Environment;
 /// fn bypass(engine: &mut Ieee802154Engine, env: &mut impl Ieee802154Environment) {
 ///     engine.service(env);
 /// }
@@ -33,13 +33,13 @@ pub struct Ieee802154Engine<Ll: Ieee802154LowLevel<Address = DmaWindowAddress> =
 /// Dropping this value retains its owners until reset.
 ///
 /// ```compile_fail,E0599
-/// use oer_esp32s31_ieee802154_driver::engine::{Ieee802154Engine, Quarantined};
+/// use oer_chips_esp32s31_ieee802154_driver::engine::{Ieee802154Engine, Quarantined};
 /// fn release(fault: Quarantined<Ieee802154Engine>) {
 ///     fault.detach();
 /// }
 /// ```
 /// ```compile_fail,E0599
-/// use oer_esp32s31_ieee802154_driver::engine::{Ieee802154Engine, Quarantined};
+/// use oer_chips_esp32s31_ieee802154_driver::engine::{Ieee802154Engine, Quarantined};
 /// fn reuse(fault: Quarantined<Ieee802154Engine>) {
 ///     fault.enable();
 /// }
@@ -78,7 +78,7 @@ pub struct DetachedIeee802154Engine {
 
 /// Rejected placement returns both unchanged affine owners.
 pub struct PlacementRefusal<Ll> {
-    pub error: oer_esp32s31_hal::memory::dma_address::ProjectionError,
+    pub error: oer_chips_esp32s31_hal::memory::dma_address::ProjectionError,
     pub mac: Ll,
     pub buffers: Placed<Ieee802154EngineBuffers>,
 }
@@ -114,7 +114,7 @@ impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {
         clippy::result_large_err,
         reason = "quarantine retains the complete affine owner"
     )]
-    pub fn isr<E: oer_espressif_ieee802154_engine::engine::Ieee802154Environment + ?Sized>(
+    pub fn isr<E: oer_chips_family_ieee802154_engine::engine::Ieee802154Environment + ?Sized>(
         mut self,
         env: &mut E,
     ) -> Result<Self, Quarantined<Self>> {

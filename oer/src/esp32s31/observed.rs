@@ -21,11 +21,11 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
 use embassy_futures::yield_now;
-use oer_esp32s31_compose::sampler::{self, Ended, StartError, Storage, Timer};
-use oer_esp32s31_hal::peripherals::cache_counters::{Buses, CacheCounters};
-use oer_esp32s31_hal::peripherals::timg1_alarm::{Timg1AlarmInterrupt, Timg1AlarmParts};
-use oer_esp32s31_wifi::observation as station;
-use oer_memory::ClaimCell;
+use oer_chips_esp32s31_compose::sampler::{self, Ended, StartError, Storage, Timer};
+use oer_chips_esp32s31_hal::peripherals::cache_counters::{Buses, CacheCounters};
+use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1AlarmInterrupt, Timg1AlarmParts};
+use oer_chips_esp32s31_wifi::observation as station;
+use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
@@ -36,13 +36,13 @@ use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSam
 use crate::observe::{Bridge, BridgeCounter, Concurrent};
 
 pub use crate::observe::link::{Link, TxAmpdu};
-pub use oer_esp32s31_hal::peripherals::cache_counters::{
+pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
     DataBus, Geometry as CacheGeometry, InstructionBus, Level as CacheLevel,
     Snapshot as CacheSnapshot,
 };
-pub use oer_esp32s31_wifi::WifiRxReport;
-pub use oer_esp32s31_wifi::observation::StationRxKind;
-pub use oer_trace::profile::{PcSample, Thinning};
+pub use oer_chips_esp32s31_wifi::WifiRxReport;
+pub use oer_chips_esp32s31_wifi::observation::StationRxKind;
+pub use oer_portable_trace::profile::{PcSample, Thinning};
 
 /// The library's executors.
 pub const EXECUTORS: usize = 3;
@@ -173,7 +173,7 @@ pub fn counters() -> Counters {
         },
         ampdu: LINK.ampdu(),
         link: LINK.link(),
-        driver: oer_esp32s31_wifi::rx_counters(),
+        driver: oer_chips_esp32s31_wifi::rx_counters(),
     }
 }
 
@@ -242,9 +242,9 @@ impl<F: Future> Future for Polled<'_, F> {
 #[derive(Clone, Copy, Default)]
 pub(crate) struct ExecutorObserver<const SLOT: usize>;
 
-impl<const SLOT: usize> oer_trace::Observer for ExecutorObserver<SLOT> {
-    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
-        use oer_espressif_executor::observation::{Activity, Phase as Executor};
+impl<const SLOT: usize> oer_portable_trace::Observer for ExecutorObserver<SLOT> {
+    fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, event: E) {
+        use oer_chips_family_executor::observation::{Activity, Phase as Executor};
         const {
             if SLOT >= EXECUTORS {
                 panic!("the observer's executor is one of the library's");
@@ -280,15 +280,15 @@ pub(crate) const fn executor_observer<const SLOT: usize>() -> ExecutorObserver<S
 pub struct Observer;
 
 impl Observer {
-    fn decoded<E: oer_trace::Event + Copy, D: oer_trace::Event>(event: E) -> Option<D> {
+    fn decoded<E: oer_portable_trace::Event + Copy, D: oer_portable_trace::Event>(event: E) -> Option<D> {
         (E::KIND == D::KIND)
             .then(|| D::decode(event.encode()))
             .flatten()
     }
 }
 
-impl oer_trace::Observer for Observer {
-    fn event<E: oer_trace::Event + Copy + 'static>(&self, event: E) {
+impl oer_portable_trace::Observer for Observer {
+    fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, event: E) {
         if let Some(span) = Self::decoded::<E, station::ServiceSpan>(event)
             && let Some(counter) = PART_COUNTERS.get(span_part(span.span) as usize)
         {
@@ -339,7 +339,7 @@ impl oer_trace::Observer for Observer {
         if let Some(sample) = Self::decoded::<E, PcSample>(event) {
             let _ = KEPT.lend(|buffer| buffer.record(sample));
         }
-        if let Some(ret) = Self::decoded::<E, oer_trace::profile::ReturnSample>(event) {
+        if let Some(ret) = Self::decoded::<E, oer_portable_trace::profile::ReturnSample>(event) {
             let _ = KEPT.lend(|buffer| buffer.record_return(ret));
         }
     }
@@ -420,26 +420,26 @@ fn tracking_tick(observed: station::TrackingTick) -> Tick {
 
 /// The network bridge took a frame from the station.
 #[cfg(feature = "wifi")]
-pub(crate) fn bridge_received(_: oer_embassy_net::EthernetFrameView<'_>) {
+pub(crate) fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {
     BRIDGE.received();
 }
 
 /// The stack refused a frame from the station for `reason`.
 #[cfg(feature = "wifi")]
-pub(crate) fn bridge_refused(reason: oer_embassy_net::RxEnqueueError) {
+pub(crate) fn bridge_refused(reason: oer_portable_embassy_net::RxEnqueueError) {
     BRIDGE.refused(reason);
 }
 
 /// The bridge copied a frame the station lent in place.
 #[cfg(feature = "wifi")]
-pub(crate) fn bridge_copied(_: oer_embassy_net::ethernet::LentCopy) {
+pub(crate) fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {
     BRIDGE.copied();
 }
 
 /// The samples one session keeps.
 pub const SAMPLES: usize = 2048;
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     static SAMPLER: Storage<SamplerToken, Observer> = Storage::new(), in critical_data "pc_sampler";
     static BUFFER: ConstStaticCell<Thinning<SAMPLES>> = ConstStaticCell::new(Thinning::new()), in critical_data "pc_samples";
     /// The buffer, lent to the observer in the sampler's handler while a
@@ -477,8 +477,8 @@ impl Hart0 {
         if start {
             self.cache.start(Buses::ALL);
         }
-        let cycles = oer_riscv::cycle64();
-        let instructions = oer_riscv::instret64();
+        let cycles = oer_portable_riscv::cycle64();
+        let instructions = oer_portable_riscv::instret64();
         HartCounters {
             cycles,
             instructions,

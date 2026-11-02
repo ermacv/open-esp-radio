@@ -1,7 +1,7 @@
 //! Explicit companion definitions are captured occurrences, never fabricated
 //! implementations.
 use super::*;
-use oer_analysis_elf::{SymbolKind, classify as elf};
+use oer_tools_analysis_elf::{SymbolKind, classify as elf};
 
 /// The companion records of one static executable, matched by symbol.
 struct Scan<'a> {
@@ -144,7 +144,7 @@ pub(super) fn resolve(
         }
         let bytes: &[u8] = find(executables, &symbol.object.artifact)?.bytes();
         let address =
-            oer_analysis_blobray_artifacts::inspect_link_definition(&bytes, symbol, memory, c)?;
+            oer_tools_analysis_blobray_artifacts::inspect_link_definition(&bytes, symbol, memory, c)?;
         if request.layout.code.contains(u64::from(address), 1)
             || request.layout.data.contains(u64::from(address), 1)
         {

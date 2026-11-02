@@ -23,9 +23,9 @@
 //! `PHY_CALIBRATION` only while registration or RF wake runs. After the last
 //! client leaves, closing RF releases `PHY`; waking RF takes it again.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_esp32s31_hal::domain::{
+use oer_chips_esp32s31_hal::domain::{
     BtbbAcquired, BtbbError, BtbbGain, ModemClockError, RadioClient, RadioDomain,
 };
 
@@ -330,8 +330,8 @@ impl ConcurrentPhy {
 /// It cannot be copied for a second client:
 ///
 /// ```compile_fail,E0599
-/// use oer_esp32s31_phy::concurrent::PhyReady;
-/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// use oer_chips_esp32s31_phy::concurrent::PhyReady;
+/// use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 /// fn clone<'l, B: PlatformClockBackend>(ready: &PhyReady<'l, B>) -> PhyReady<'l, B> {
 ///     ready.clone()
 /// }
@@ -340,9 +340,9 @@ impl ConcurrentPhy {
 /// And a client cannot make one from a domain without the check:
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_hal::domain::RadioDomain;
-/// use oer_esp32s31_phy::concurrent::{ConcurrentPhy, PhyReady};
-/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// use oer_chips_esp32s31_hal::domain::RadioDomain;
+/// use oer_chips_esp32s31_phy::concurrent::{ConcurrentPhy, PhyReady};
+/// use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 /// fn forge<'l, B: PlatformClockBackend>(radio: &'l mut RadioDomain<B, ConcurrentPhy>) -> PhyReady<'l, B> {
 ///     PhyReady { radio }
 /// }
@@ -386,11 +386,11 @@ pub enum PhyClientAccess<'l, B: PlatformClockBackend, K: PhyClientKind> {
 /// Exclusive, consumed join authority for one protocol and registration.
 ///
 /// ```no_run
-/// use oer_esp32s31_phy::{concurrent::PhyClientReady, wifi_client::{WifiPhyMembership, join_wifi}};
-/// use oer_esp32s31_hal::ieee80211::client::WifiClocked;
-/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// use oer_chips_esp32s31_phy::{concurrent::PhyClientReady, wifi_client::{WifiPhyMembership, join_wifi}};
+/// use oer_chips_esp32s31_hal::ieee80211::client::WifiClocked;
+/// use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 /// fn wifi<B: PlatformClockBackend>(ready: PhyClientReady<'_, B, WifiPhyMembership>, clocks: &WifiClocked,
-///         clock: &impl oer_time::Clock) {
+///         clock: &impl oer_portable_time::Clock) {
 ///     let _ = join_wifi(ready, clocks, clock);
 /// }
 /// ```
@@ -398,12 +398,12 @@ pub enum PhyClientAccess<'l, B: PlatformClockBackend, K: PhyClientKind> {
 /// A different protocol's permission cannot authorize Wi-Fi:
 ///
 /// ```compile_fail,E0308
-/// use oer_esp32s31_phy::{concurrent::PhyClientReady,
+/// use oer_chips_esp32s31_phy::{concurrent::PhyClientReady,
 ///     bluetooth_client::BluetoothPhyMembership, wifi_client::join_wifi};
-/// use oer_esp32s31_hal::ieee80211::client::WifiClocked;
-/// use oer_esp32s31_hal::power::PlatformClockBackend;
+/// use oer_chips_esp32s31_hal::ieee80211::client::WifiClocked;
+/// use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 /// fn foreign<B: PlatformClockBackend>(ready: PhyClientReady<'_, B, BluetoothPhyMembership>, clocks: &WifiClocked,
-///            clock: &impl oer_time::Clock) {
+///            clock: &impl oer_portable_time::Clock) {
 ///     let _ = join_wifi(ready, clocks, clock);
 /// }
 /// ```
@@ -511,7 +511,7 @@ pub fn phy_ready<'l, B: PlatformClockBackend>(
 pub(crate) fn acquire_client<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     client: RadioClient,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {
@@ -543,7 +543,7 @@ pub(crate) enum BtbbClientAcquireError {
 pub(crate) fn acquire_btbb_client<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     client: RadioClient,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
     acquire: impl FnOnce(
         &mut RadioDomain<B, ConcurrentPhy>,
         &BtbbGain,
@@ -610,7 +610,7 @@ fn publish_acquisition(
 pub(crate) fn resume_client<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     key: PhyClientKey,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {
@@ -714,7 +714,7 @@ pub(crate) fn suspend_client<B: PlatformClockBackend>(
 /// domain is unchanged.
 pub fn evaluate_periodic_tracking<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {

@@ -1,6 +1,6 @@
 use super::*;
 use crate::serial::PhyI2cError;
-use oer_time::Timer;
+use oer_portable_time::Timer;
 mod channel_gain;
 mod dc_iq;
 mod dcode;
@@ -25,7 +25,7 @@ use crate::{
     },
     calibration::cold::PhyColdI2cRequest,
 };
-use oer_time::{Clock, Duration};
+use oer_portable_time::{Clock, Duration};
 use std::{
     cell::Cell,
     rc::Rc,
@@ -65,7 +65,7 @@ pub(crate) struct Io {
     rfpll_failure: Option<usize>,
     power_actions: Vec<crate::tracking::power::PhyTxPowerTrackingAction>,
     power_failure: Option<usize>,
-    power_gain_entries: Vec<oer_esp32s31_hal::types::PhyGainMemoryEntry>,
+    power_gain_entries: Vec<oer_chips_esp32s31_hal::types::PhyGainMemoryEntry>,
     power_gain_failure: Option<usize>,
     channel_base_reads: usize,
     code: u8,
@@ -364,7 +364,7 @@ impl Io {
     }
 }
 impl Registers for Io {
-    fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
@@ -372,7 +372,7 @@ impl Registers for Io {
     ) -> Step {
         job.advance_one::<D, _>(super::io::Io::Test(self), clock, now)
     }
-    fn advance_power<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance_power<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
@@ -704,7 +704,7 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
             self.0.now()
         }
     }
-    impl oer_cooperate::CooperativeTimer for AsyncTimer {
+    impl oer_portable_cooperate::CooperativeTimer for AsyncTimer {
         fn should_yield(&self) -> bool {
             true
         }
@@ -819,7 +819,7 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
             self.clock.now()
         }
     }
-    impl oer_cooperate::CooperativeTimer for Probe<'_> {
+    impl oer_portable_cooperate::CooperativeTimer for Probe<'_> {
         fn should_yield(&self) -> bool {
             true
         }
@@ -874,7 +874,7 @@ struct CommandCost<'a> {
     clock: &'a VirtualClock<1>,
 }
 impl Registers for CommandCost<'_> {
-    fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
@@ -1482,7 +1482,7 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
             self.clock.now()
         }
     }
-    impl oer_cooperate::CooperativeTimer for NoWait<'_> {
+    impl oer_portable_cooperate::CooperativeTimer for NoWait<'_> {
         fn should_yield(&self) -> bool {
             false
         }

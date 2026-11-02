@@ -8,7 +8,7 @@
 //! every missing symbol at once. The mapped bytes and answers are placeholders
 //! for the declaration a scenario still owes; they never produce evidence.
 use crate::harness::Result;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallBinding, CallBoundary, CallDeclaration, CallRepetition, CallResponse, ExecutionCase,
     ExecutionEvidence, ExecutionGap, ExecutionStop, Invocation, MemoryAccess, RegionLifetime,
 };
@@ -52,7 +52,7 @@ impl Symbols {
     pub fn of(elfs: &[&[u8]], registers: crate::registers::Registers) -> Self {
         let mut ranges = BTreeMap::new();
         for bytes in elfs {
-            let Ok(file) = oer_analysis_elf::Elf::parse(bytes) else {
+            let Ok(file) = oer_tools_analysis_elf::Elf::parse(bytes) else {
                 continue;
             };
             for symbol in file.symbols() {
@@ -60,7 +60,7 @@ impl Symbols {
                 if symbol.section.is_none()
                     || !matches!(
                         symbol.kind,
-                        oer_analysis_elf::SymbolKind::Data | oer_analysis_elf::SymbolKind::Text
+                        oer_tools_analysis_elf::SymbolKind::Data | oer_tools_analysis_elf::SymbolKind::Text
                     )
                     || symbol.size == 0
                 {
@@ -293,7 +293,7 @@ fn chains(cases: &[ExecutionCase]) -> Vec<std::ops::Range<usize>> {
     let mut starts: Vec<usize> = cases
         .iter()
         .enumerate()
-        .filter(|(_, c)| c.reset == oer_analysis_blobray_domain::SessionReset::Cold)
+        .filter(|(_, c)| c.reset == oer_tools_analysis_blobray_domain::SessionReset::Cold)
         .map(|(i, _)| i)
         .collect();
     if starts.first() != Some(&0) {
@@ -340,7 +340,7 @@ pub fn render(missing: &[Missing]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_analysis_blobray_domain::{ExecutionGoal, SessionReset};
+    use oer_tools_analysis_blobray_domain::{ExecutionGoal, SessionReset};
 
     fn outcome(address: Option<(u32, MemoryAccess)>) -> Vec<ExecutionEvidence> {
         let stop = match address {

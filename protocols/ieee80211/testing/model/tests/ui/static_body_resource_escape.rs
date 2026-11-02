@@ -2,9 +2,9 @@
 extern crate alloc;
 use alloc::boxed::Box;
 use core::any::Any;
-use oer_ieee80211_testing_model::{ModelBackend, ModelResources};
-use oer_ieee80211_contracts_port::TxBufferMemory;
-use oer_radio_port::{Disabled, Ended, Owner, PortBody, StaticId};
+use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelResources};
+use oer_protocols_ieee80211_contracts_port::TxBufferMemory;
+use oer_protocols_radio_port::{Disabled, Ended, Owner, PortBody, StaticId};
 
 pub enum Declaration {}
 type Id = StaticId<Declaration>;

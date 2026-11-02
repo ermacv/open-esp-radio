@@ -8,8 +8,8 @@
     clippy::disallowed_methods
 )]
 
-use oer_time::{Clock, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
 
 mod cache;
 mod clock;

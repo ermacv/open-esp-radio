@@ -20,7 +20,7 @@
 //! estimate a transmitter uses, so it is an [`HeTxopRtsBudget`] the caller
 //! supplies.
 
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     phy::{DsssPreamble, HeRate, LegacyRate, PhyRate, PpduBandwidth},
     protection::HtProtectionMode,
 };
@@ -68,7 +68,7 @@ pub use bss::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold, ProtectedPpdu,
     RtsLengthThreshold, TxProtectionDecision, TxProtectionReasons, TxPsdu, TxReceiver,
 };
-use oer_ieee80211_contracts_port::Protection;
+use oer_protocols_ieee80211_contracts_port::Protection;
 
 /// BSS requirements plus the local length threshold of one transmitter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

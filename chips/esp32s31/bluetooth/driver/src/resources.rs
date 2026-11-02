@@ -6,26 +6,26 @@
 //! same lifecycle before stable interrupt publication.
 
 #[cfg(any(target_arch = "riscv32", test))]
-use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+use oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListsCleared;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListsCleared;
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerHalInitConfig;
 #[cfg(any(target_arch = "riscv32", test))]
-use oer_esp32s31_hal::bluetooth::InterruptSetupOwner as HalBluetoothInterruptSetupOwner;
+use oer_chips_esp32s31_hal::bluetooth::InterruptSetupOwner as HalBluetoothInterruptSetupOwner;
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::bluetooth::TaskOwner as HalBluetoothTaskOwner;
+use oer_chips_esp32s31_hal::bluetooth::TaskOwner as HalBluetoothTaskOwner;
 #[cfg(target_arch = "riscv32")]
 use {
-    oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerOwnerError,
-    oer_esp32s31_hal::bluetooth::ControllerRandomAddress,
-    oer_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
-    oer_esp32s31_hal::domain::RadioDomain,
+    oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerOwnerError,
+    oer_chips_esp32s31_hal::bluetooth::ControllerRandomAddress,
+    oer_chips_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner,
+    oer_chips_esp32s31_hal::domain::RadioDomain,
 };
 
 #[cfg(any(target_arch = "riscv32", test))]
@@ -45,7 +45,7 @@ use crate::controller_time::{
 /// controller masks or a CPU interrupt route.
 #[cfg(any(target_arch = "riscv32", test))]
 pub(crate) fn separate_interrupt_owner<M: ControllerMemory>(
-    engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+    engine: oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
     interrupts: HalBluetoothInterruptSetupOwner,
 ) -> (TaskResources<M>, InterruptBankOwner) {
     (
@@ -63,7 +63,7 @@ pub(crate) fn separate_interrupt_owner<M: ControllerMemory>(
 #[must_use = "the Bluetooth task owner must return to the clocked client"]
 #[cfg(any(target_arch = "riscv32", test))]
 pub struct TaskResources<M: ControllerMemory> {
-    engine: oer_esp32s31_hal::bluetooth::engine::Engine<M>,
+    engine: oer_chips_esp32s31_hal::bluetooth::engine::Engine<M>,
     controller_time: ControllerTimeWorker,
 }
 
@@ -90,11 +90,11 @@ impl<M: ControllerMemory> TaskResources<M> {
     pub(crate) fn shut_down<B: PlatformClockBackend, T>(
         self,
         radio: &mut RadioDomain<B, T>,
-        output: oer_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
-        stopped: oer_esp32s31_hal::bluetooth::ModemLpTimerStopped,
+        output: oer_chips_esp32s31_hal::bluetooth::InterruptOutputReleasedOwner,
+        stopped: oer_chips_esp32s31_hal::bluetooth::ModemLpTimerStopped,
     ) -> Result<
-        oer_esp32s31_hal::bluetooth::engine::EngineResetTimerPending<M>,
-        oer_esp32s31_hal::bluetooth::engine::EngineShutdownFailure<M>,
+        oer_chips_esp32s31_hal::bluetooth::engine::EngineResetTimerPending<M>,
+        oer_chips_esp32s31_hal::bluetooth::engine::EngineShutdownFailure<M>,
     > {
         self.engine.shut_down(radio, output, stopped)
     }
@@ -115,10 +115,10 @@ impl<M: ControllerMemory> TaskResources<M> {
     #[cfg(target_arch = "riscv32")]
     pub async fn release_controller_output(
         &mut self,
-        bell: &impl oer_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell,
+        bell: &impl oer_chips_esp32s31_hal::bluetooth::engine::scheduler::interrupt::SchedulerDoorbell,
     ) -> Result<
-        oer_esp32s31_hal::bluetooth::BluetoothOutputReleased,
-        oer_esp32s31_hal::bluetooth::engine::EngineOutputReleaseError,
+        oer_chips_esp32s31_hal::bluetooth::BluetoothOutputReleased,
+        oer_chips_esp32s31_hal::bluetooth::engine::EngineOutputReleaseError,
     > {
         self.engine.release_controller_output(bell).await
     }
@@ -135,7 +135,7 @@ impl<M: ControllerMemory> TaskResources<M> {
     pub fn program_random_device_address_while_idle(
         &mut self,
         address: ControllerRandomAddress,
-    ) -> Result<(), oer_esp32s31_hal::bluetooth::engine::EngineFault> {
+    ) -> Result<(), oer_chips_esp32s31_hal::bluetooth::engine::EngineFault> {
         self.engine
             .program_random_device_address_while_idle(address)
     }
@@ -153,7 +153,7 @@ impl<M: ControllerMemory> TaskResources<M> {
     ) -> Result<
         (
             ModemLpTimerLowPowerHardwareInitializedOwner,
-            oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+            oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
         ),
         BluetoothModemLpTimerOwnerError,
     > {
@@ -253,12 +253,12 @@ impl<M: ControllerMemory> TaskResources<M> {
     pub(crate) fn initialize_controller_hal(
         &mut self,
         config: BluetoothControllerHalInitConfig,
-    ) -> Result<(), oer_esp32s31_hal::bluetooth::engine::EngineInitError> {
+    ) -> Result<(), oer_chips_esp32s31_hal::bluetooth::engine::EngineInitError> {
         self.engine.initialize_controller_hal(config)
     }
 
     /// The one engine holding this task's register token and complete arena.
-    pub fn engine(&mut self) -> &mut oer_esp32s31_hal::bluetooth::engine::Engine<M> {
+    pub fn engine(&mut self) -> &mut oer_chips_esp32s31_hal::bluetooth::engine::Engine<M> {
         &mut self.engine
     }
 

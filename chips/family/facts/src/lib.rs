@@ -61,7 +61,7 @@ pub use model::*;
 pub const SCHEMA: u32 = 2;
 
 /// The keys of a chip layer that hold the image registry, not facts
-/// (`oer-chip-profile` reads them): a caller takes them out of the resolved
+/// (`oer-tools-chip-profile` reads them): a caller takes them out of the resolved
 /// table before [`Facts::from_table`].
 pub const REGISTRY: &[&str] = &["packages", "probe"];
 

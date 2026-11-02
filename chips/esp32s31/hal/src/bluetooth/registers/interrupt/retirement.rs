@@ -196,7 +196,7 @@ fn release(
 }
 
 struct BankHardware<'a, P: BluetoothPlacements> {
-    bank: &'a mut oer_esp32s31_pac::bt_mac::BluetoothInterruptBank<P::BtMac>,
+    bank: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothInterruptBank<P::BtMac>,
     /// The handler acknowledged a fault during the epoch.
     fault_acknowledged: bool,
 }
@@ -228,7 +228,7 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
             w.set_source_15(false);
             w.set_source_16(false);
             w.set_source_21(false);
-            w.set_sources_27_28(oer_mmio::Bits::constant::<0x0>());
+            w.set_sources_27_28(oer_portable_mmio::Bits::constant::<0x0>());
         });
         self.bank.modify_irq_enable_1(|w| {
             w.set_controller_time_overflow(false);
@@ -283,34 +283,34 @@ impl<P: BluetoothPlacements> TaskControl for TaskHardware<'_, P> {
         task.modify_interrupt_enable(|w| {
             w.set_scheduler_run(false);
             w.set_source_17(false);
-            w.set_bits_0_13_opaque(oer_mmio::Bits::constant::<0>());
-            w.set_bits_15_16_opaque(oer_mmio::Bits::constant::<0>());
-            w.set_bits_18_31_opaque(oer_mmio::Bits::constant::<0>());
+            w.set_bits_0_13_opaque(oer_portable_mmio::Bits::constant::<0>());
+            w.set_bits_15_16_opaque(oer_portable_mmio::Bits::constant::<0>());
+            w.set_bits_18_31_opaque(oer_portable_mmio::Bits::constant::<0>());
         });
         // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS: init publishes all task WT
         // lanes together. The opaque task status is not read; this store makes
         // no readback or universal silicon-clear claim and never reads/ORs a WT word.
         task.trigger_interrupt_clear(|t| {
             t.bit_0_opaque()
-                .bits_1_2_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_1_2_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .bit_3_opaque()
                 .bit_4_opaque()
-                .bits_5_9_opaque(oer_mmio::Bits::constant::<0x1f>())
+                .bits_5_9_opaque(oer_portable_mmio::Bits::constant::<0x1f>())
                 .bit_10_opaque()
                 .bit_11_opaque()
-                .bits_12_13_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_12_13_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .scheduler_run()
                 .bit_15_opaque()
                 .bit_16_opaque()
                 .bit_17_opaque()
-                .bits_18_19_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_18_19_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .bit_20_opaque()
                 .bit_21_opaque()
-                .bits_22_23_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_22_23_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .bit_24_opaque()
-                .bits_25_27_opaque(oer_mmio::Bits::constant::<0x7>())
+                .bits_25_27_opaque(oer_portable_mmio::Bits::constant::<0x7>())
                 .bit_28_opaque()
-                .bits_29_31_opaque(oer_mmio::Bits::constant::<0x7>());
+                .bits_29_31_opaque(oer_portable_mmio::Bits::constant::<0x7>());
         });
     }
 

@@ -7,7 +7,7 @@
 //! value. Any other stored image address compares by value.
 use crate::in_process::Executable;
 use crate::*;
-use oer_analysis_elf::{SymbolKind, classify as elf};
+use oer_tools_analysis_elf::{SymbolKind, classify as elf};
 use std::collections::BTreeMap;
 
 /// One function's MMIO accesses in one build, every instance of its name
@@ -257,7 +257,7 @@ fn collect<'m>(
                 entry.analyzed = true;
                 entry.incomplete |= !analyzed.complete();
                 c.phase(RunPhase::AnalyzeValues)?;
-                let facts = oer_analysis_blobray_analysis::navigation::Facts::new(
+                let facts = oer_tools_analysis_blobray_analysis::navigation::Facts::new(
                     analyzed.records,
                     memory,
                     c,
@@ -296,7 +296,7 @@ fn collect<'m>(
                         if let FunctionRecord::MemoryAccess { width, .. } = o.fact {
                             o.mask = o.mask.or_else(|| {
                                 stored.as_deref().and_then(|stored| {
-                                    oer_analysis_blobray_analysis::registers::write_mask(
+                                    oer_tools_analysis_blobray_analysis::registers::write_mask(
                                         *width, stored,
                                     )
                                 })

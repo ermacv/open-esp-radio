@@ -54,7 +54,7 @@ impl Encoding {
 
     /// The application image's encoding of the chip flash map `flash`, with
     /// MMU pages of `mmu_page_size` bytes.
-    pub fn application(flash: &oer_espressif_facts::FlashMap, mmu_page_size: u32) -> Result<Self> {
+    pub fn application(flash: &oer_chips_family_facts::FlashMap, mmu_page_size: u32) -> Result<Self> {
         let settings = &flash.application_encoding;
         Ok(Self {
             mode: Some(mode(settings.mode)),
@@ -66,7 +66,7 @@ impl Encoding {
 
     /// The encoding the ROM reads the bootloader in: the application's, in
     /// the flash map's bootloader mode.
-    pub fn bootloader(flash: &oer_espressif_facts::FlashMap, mmu_page_size: u32) -> Result<Self> {
+    pub fn bootloader(flash: &oer_chips_family_facts::FlashMap, mmu_page_size: u32) -> Result<Self> {
         Ok(Self {
             mode: Some(mode(flash.bootloader_mode)),
             ..Self::application(flash, mmu_page_size)?
@@ -74,12 +74,12 @@ impl Encoding {
     }
 }
 
-fn mode(mode: oer_espressif_facts::FlashMode) -> FlashMode {
+fn mode(mode: oer_chips_family_facts::FlashMode) -> FlashMode {
     match mode {
-        oer_espressif_facts::FlashMode::Qio => FlashMode::Qio,
-        oer_espressif_facts::FlashMode::Qout => FlashMode::Qout,
-        oer_espressif_facts::FlashMode::Dio => FlashMode::Dio,
-        oer_espressif_facts::FlashMode::Dout => FlashMode::Dout,
+        oer_chips_family_facts::FlashMode::Qio => FlashMode::Qio,
+        oer_chips_family_facts::FlashMode::Qout => FlashMode::Qout,
+        oer_chips_family_facts::FlashMode::Dio => FlashMode::Dio,
+        oer_chips_family_facts::FlashMode::Dout => FlashMode::Dout,
     }
 }
 
@@ -263,7 +263,7 @@ pub fn rom_bootloader(bytes: &[u8]) -> Result<&[u8]> {
 /// (24-byte image header, 8-byte segment header).
 pub(crate) fn mapped_segment_count(
     bytes: &[u8],
-    flash: oer_espressif_facts::Region,
+    flash: oer_chips_family_facts::Region,
 ) -> Result<usize> {
     let image_header = bytes.get(..24).ok_or("truncated ESP image header")?;
     let count = image_header
@@ -362,7 +362,7 @@ pub fn require_partition_table(bytes: &[u8]) -> Result<()> {
 /// Fails unless the ELF holds the ESP-IDF application descriptor the
 /// second-stage bootloader requires.
 pub fn require_app_descriptor(elf: &[u8]) -> Result<()> {
-    let elf = oer_analysis_elf::Elf::parse(elf)?;
+    let elf = oer_tools_analysis_elf::Elf::parse(elf)?;
     if elf.symbols().any(|symbol| symbol.name == "esp_app_desc")
         || elf.section_by_name(".flash.appdesc").is_some()
         || elf.section_by_name(".rodata_desc").is_some()

@@ -143,7 +143,7 @@ pub fn previous(previous: &Path, arbiter: &Arbiter) -> crate::Result<Option<Impo
             imported.records.push(record.to_owned());
         }
     }
-    oer_os_durable::atomic_write(&arbiter.state_path(), &serde_json::to_vec_pretty(&state)?)?;
+    oer_tools_os_durable::atomic_write(&arbiter.state_path(), &serde_json::to_vec_pretty(&state)?)?;
     let parent = previous
         .parent()
         .ok_or("the previous arbiter directory has no parent")?;

@@ -2,7 +2,7 @@
 //! then its payload's path or numbers, so a line or a note names a nested
 //! cause without formatting it (`Failed(Sae(Protocol(Malformed)))`).
 
-use oer_diagnostics::{DiagPath, DiagnosticPath};
+use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use super::{
     ChannelRefusal, CommandRefusal, DisconnectReason, EapolParseError, LayoutError, LeaveReason,

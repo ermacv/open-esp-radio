@@ -1,6 +1,6 @@
 # Durable host files
 
-`oer-os-durable` owns the file primitives every repository tool shares:
+`oer-tools-os-durable` owns the file primitives every repository tool shares:
 
 - `atomic_write` and `atomic_json` replace a file atomically (a temporary
   file in the same directory, synced, renamed, then the directory synced);
@@ -22,5 +22,5 @@
 It depends only on `serde`, `serde_json` and `sha2`.
 
 ```console
-cargo test -p oer-os-durable
+cargo test -p oer-tools-os-durable
 ```

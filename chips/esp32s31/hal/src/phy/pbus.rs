@@ -88,7 +88,7 @@ pub fn port<T: SharedPhyAccess + ?Sized>(owner: &mut T) -> Port<'_, T> {
 }
 
 #[cfg(target_arch = "riscv32")]
-impl<T: SharedPhyAccess + ?Sized> oer_espressif_phy::pbus::PbusAccess for Port<'_, T> {
+impl<T: SharedPhyAccess + ?Sized> oer_chips_family_phy::pbus::PbusAccess for Port<'_, T> {
     fn set_work_mode(&mut self, enabled: bool) {
         ops::set_work_mode(&mut phy_blocks_mut(self.0).phy_pbus, enabled);
     }
@@ -103,7 +103,7 @@ impl<T: SharedPhyAccess + ?Sized> oer_espressif_phy::pbus::PbusAccess for Port<'
     }
 }
 #[cfg(target_arch = "riscv32")]
-impl<T: SharedPhyContext + ?Sized> oer_espressif_phy::pbus::PbusContext for Port<'_, T> {
+impl<T: SharedPhyContext + ?Sized> oer_chips_family_phy::pbus::PbusContext for Port<'_, T> {
     fn wifi_baseband_enabled(&self) -> bool {
         crate::phy_blocks(self.0)
             .modem_syscon_radio

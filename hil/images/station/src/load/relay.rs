@@ -9,10 +9,10 @@
 
 use core::convert::Infallible;
 
-use oer_espressif::observe::{self, Hart0, Sampler};
-use oer_espressif::{ApplicationEnd, Channel, SecondEnd};
-use oer_hil_protocol::RequestIdentity;
-use oer_services_load::{LoadError, SamplesCollected};
+use oer::observe::{self, Hart0, Sampler};
+use oer::{ApplicationEnd, Channel, SecondEnd};
+use oer_protocols_hil_protocol::RequestIdentity;
+use oer_hil_services_load::{LoadError, SamplesCollected};
 
 use super::report::Snapshot;
 
@@ -82,7 +82,7 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
                 observe::counters(),
             )),
             Command::Page(identity, from) => {
-                oer_hil_agent_espressif::answer(identity, &page(hart0.sampler(), from));
+                oer_hil_agent::answer(identity, &page(hart0.sampler(), from));
                 continue;
             }
         };

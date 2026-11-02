@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_wire::extensions::wmm::WmmParameterSet;
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 fn best_effort() -> ModelWindow {
     ModelWindow::from_wmm(

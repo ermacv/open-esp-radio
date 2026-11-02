@@ -1,5 +1,5 @@
 //! The IRQ bank preserves sibling lanes when changing T0's enable.
-use oer_esp32s31_pac::timg::Timg0Timer0;
+use oer_chips_esp32s31_pac::timg::Timg0Timer0;
 
 #[test]
 fn masking_timer0_preserves_the_timer1_and_watchdog_enables() {

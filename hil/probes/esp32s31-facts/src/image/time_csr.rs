@@ -50,7 +50,7 @@ pub(super) fn rate(s: &mut Session<'_>) {
 /// 0x4601: divider applied and the update's completion; 0x46ff: the
 /// restored divider and its completion.
 ///
-/// SOURCE: production `oer_esp32s31_hal::boot::clock` (`stage`, then
+/// SOURCE: production `oer_chips_esp32s31_hal::boot::clock` (`stage`, then
 /// `ROOT_CLK_CTRL0.SOC_CLK_UPDATE` until it clears; ESP-IDF 4d80c1b2
 /// `clk_tree_ll.h:602-606`).
 pub(super) fn rate_halved(s: &mut Session<'_>) {
@@ -88,9 +88,9 @@ fn set_cpu_divider(s: &mut Session<'_>, divider: u8) -> bool {
     if clocks.start_root_clk_ctrl0_reg_soc_clk_update().is_err() {
         return false;
     }
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while clocks.root_clk_ctrl0_reg_soc_clk_update_busy() {
-        if oer_riscv::cycle32().wrapping_sub(start) >= 2_000_000 {
+        if oer_portable_riscv::cycle32().wrapping_sub(start) >= 2_000_000 {
             return false;
         }
     }
@@ -101,8 +101,8 @@ fn measure(s: &mut Session<'_>) {
     let first = read();
     emit(0x4501, first[0], first[1], first[2]);
     let systimer_first = generic::systimer_now(s);
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < WINDOW_CYCLES {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < WINDOW_CYCLES {}
     let second = read();
     let systimer_second = generic::systimer_now(s);
     emit(0x4502, second[0], second[1], second[2]);

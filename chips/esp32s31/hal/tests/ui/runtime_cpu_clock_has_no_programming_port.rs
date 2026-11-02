@@ -1,8 +1,8 @@
 #![no_std]
-use oer_esp32s31_hal::root::Root;
+use oer_chips_esp32s31_hal::root::Root;
 
 #[cfg(ui_reject)]
-fn program<C: oer_espressif_boot::clock::CpuClockRegisters>(_: C) {}
+fn program<C: oer_chips_family_boot::clock::CpuClockRegisters>(_: C) {}
 
 pub fn split(root: Root) {
     let clock = root.into_runtime().cpu_clock;

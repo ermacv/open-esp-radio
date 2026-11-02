@@ -8,8 +8,8 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use core::marker::PhantomData;
 
-use oer_esp32s31_pac::wifi_mac::plcp1::Rate as PlcpRate;
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate as PlcpRate;
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::ieee80211::registers::{
     MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiDescriptorAddressLow,
@@ -121,7 +121,7 @@ impl MacLegacyRate {
 
     /// Decode a non-HT observation; unknown and HT codes are refused.
     pub const fn from_code(code: u8) -> Option<Self> {
-        use oer_esp32s31_pac::wifi_mac::plcp1::Rate;
+        use oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate;
         match Rate::from_bits(code as u32) {
             Some(Rate::Dsss1mLong) => Some(Self::Dsss1MLong),
             Some(Rate::Dsss2mLong) => Some(Self::Dsss2MLong),
@@ -197,13 +197,13 @@ impl MacLegacyTxResponse {
     const fn plcp_format(self) -> u8 {
         match self {
             Self::None => {
-                oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::NoResponse.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::NoResponse.bits() as u8
             }
             Self::Ack => {
-                oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::AckResponse.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::AckResponse.bits() as u8
             }
             Self::BlockAck => {
-                oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::BlockAckResponse.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::BlockAckResponse.bits() as u8
             }
         }
     }
@@ -329,14 +329,14 @@ pub enum MacHtMcs {
 impl MacHtMcs {
     const fn index(self) -> u8 {
         match self {
-            Self::Mcs0 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs0.bits() as u8,
-            Self::Mcs1 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs1.bits() as u8,
-            Self::Mcs2 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs2.bits() as u8,
-            Self::Mcs3 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs3.bits() as u8,
-            Self::Mcs4 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs4.bits() as u8,
-            Self::Mcs5 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs5.bits() as u8,
-            Self::Mcs6 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs6.bits() as u8,
-            Self::Mcs7 => oer_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs7.bits() as u8,
+            Self::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs0.bits() as u8,
+            Self::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs1.bits() as u8,
+            Self::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs2.bits() as u8,
+            Self::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs3.bits() as u8,
+            Self::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs4.bits() as u8,
+            Self::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs5.bits() as u8,
+            Self::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs6.bits() as u8,
+            Self::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs7.bits() as u8,
         }
     }
 }
@@ -390,52 +390,52 @@ impl MacHtRate {
     const fn register_value(self) -> u8 {
         match (self.guard_interval, self.mcs) {
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs0) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs0.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs0.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs1) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs1.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs1.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs2) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs2.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs2.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs3) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs3.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs3.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs4) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs4.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs4.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs5) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs5.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs5.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs6) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs6.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs6.bits() as u8
             }
             (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs7) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs7.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs7.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs0) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs0.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs0.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs1) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs1.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs1.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs2) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs2.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs2.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs3) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs3.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs3.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs4) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs4.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs4.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs5) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs5.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs5.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs6) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs6.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs6.bits() as u8
             }
             (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs7) => {
-                oer_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs7.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs7.bits() as u8
             }
         }
     }
@@ -525,16 +525,16 @@ pub enum MacHeMcs {
 impl MacHeMcs {
     const fn index(self) -> u8 {
         match self {
-            Self::Mcs0 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs0.bits() as u8,
-            Self::Mcs1 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs1.bits() as u8,
-            Self::Mcs2 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs2.bits() as u8,
-            Self::Mcs3 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs3.bits() as u8,
-            Self::Mcs4 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs4.bits() as u8,
-            Self::Mcs5 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs5.bits() as u8,
-            Self::Mcs6 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs6.bits() as u8,
-            Self::Mcs7 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs7.bits() as u8,
-            Self::Mcs8 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs8.bits() as u8,
-            Self::Mcs9 => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs9.bits() as u8,
+            Self::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs0.bits() as u8,
+            Self::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs1.bits() as u8,
+            Self::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs2.bits() as u8,
+            Self::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs3.bits() as u8,
+            Self::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs4.bits() as u8,
+            Self::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs5.bits() as u8,
+            Self::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs6.bits() as u8,
+            Self::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs7.bits() as u8,
+            Self::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs8.bits() as u8,
+            Self::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs9.bits() as u8,
         }
     }
 }
@@ -548,13 +548,13 @@ pub enum MacHeGuardIntervalAndLtf {
 }
 
 impl MacHeGuardIntervalAndLtf {
-    const fn register_value(self) -> oer_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf {
+    const fn register_value(self) -> oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf {
         match self {
-            Self::OneLtf800Ns => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::OneLtf800ns,
-            Self::TwoLtf800Ns => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf800ns,
-            Self::TwoLtf1600Ns => oer_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf1600ns,
+            Self::OneLtf800Ns => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::OneLtf800ns,
+            Self::TwoLtf800Ns => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf800ns,
+            Self::TwoLtf1600Ns => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf1600ns,
             Self::FourLtf3200Ns => {
-                oer_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::FourLtf3200ns
+                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::FourLtf3200ns
             }
         }
     }
@@ -577,16 +577,16 @@ pub struct MacHeRate {
 impl MacHeRate {
     const fn plcp_rate_field(self) -> u8 {
         match self.mcs {
-            MacHeMcs::Mcs0 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs0.bits() as u8,
-            MacHeMcs::Mcs1 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs1.bits() as u8,
-            MacHeMcs::Mcs2 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs2.bits() as u8,
-            MacHeMcs::Mcs3 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs3.bits() as u8,
-            MacHeMcs::Mcs4 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs4.bits() as u8,
-            MacHeMcs::Mcs5 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs5.bits() as u8,
-            MacHeMcs::Mcs6 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs6.bits() as u8,
-            MacHeMcs::Mcs7 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs7.bits() as u8,
-            MacHeMcs::Mcs8 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs8.bits() as u8,
-            MacHeMcs::Mcs9 => oer_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs9.bits() as u8,
+            MacHeMcs::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs0.bits() as u8,
+            MacHeMcs::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs1.bits() as u8,
+            MacHeMcs::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs2.bits() as u8,
+            MacHeMcs::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs3.bits() as u8,
+            MacHeMcs::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs4.bits() as u8,
+            MacHeMcs::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs5.bits() as u8,
+            MacHeMcs::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs6.bits() as u8,
+            MacHeMcs::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs7.bits() as u8,
+            MacHeMcs::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs8.bits() as u8,
+            MacHeMcs::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs9.bits() as u8,
         }
     }
 }
@@ -1046,29 +1046,29 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) -> bool {
         let parameters = program.parameters;
         assert!(
-            u32::from(parameters.timeout) <= oer_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
+            u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
             "the program bounds the timeout"
         );
         assert!(
             u32::from(parameters.scheduler_priority)
-                <= oer_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         assert!(
-            u32::from(parameters.aifsn) <= oer_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
+            u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
             "the program bounds AIFSN"
         );
         assert!(
             u32::from(parameters.contention_window)
-                <= oer_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
             "the program bounds the window"
         );
 
@@ -1248,15 +1248,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let parameters = program.parameters;
         assert!(
             u32::from(parameters.scheduler_priority)
-                <= oer_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         self.publish_prepared_control(
@@ -1271,7 +1271,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 rate: parameters.rate.code(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
-                vector_format: oer_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy.bits() as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy.bits() as u8,
                 cbw40: false,
             },
         );
@@ -1308,16 +1308,16 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) -> bool {
         let parameters = program.parameters;
         assert!(
-            u32::from(parameters.timeout) <= oer_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
+            u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
             "the program bounds the timeout"
         );
         assert!(
-            u32::from(parameters.aifsn) <= oer_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
+            u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
             "the program bounds AIFSN"
         );
         assert!(
             u32::from(parameters.contention_window)
-                <= oer_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
             "the program bounds the window"
         );
 
@@ -1354,7 +1354,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let parameters = program.parameters;
         assert!(
             u32::from(parameters.descriptor_count)
-                <= oer_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX,
             "the program bounds the count"
         );
         assert!(
@@ -1363,15 +1363,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         );
         assert!(
             u32::from(parameters.scheduler_priority)
-                <= oer_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
 
@@ -1382,10 +1382,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             program.descriptor_head,
             match parameters.format {
                 MacHtTxFormat::SingleMpdu => {
-                    oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtSingleMpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtSingleMpdu.bits() as u8
                 }
                 MacHtTxFormat::Ampdu => {
-                    oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtAmpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtAmpdu.bits() as u8
                 }
             },
         );
@@ -1396,7 +1396,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 rate: parameters.rate.register_value(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
-                vector_format: oer_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Ht.bits() as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Ht.bits() as u8,
                 cbw40,
             },
         );
@@ -1421,7 +1421,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_required_one(true)
                 .set_aggregation(matches!(parameters.format, MacHtTxFormat::Ampdu))
                 .set_stbc(bits(
-                    oer_esp32s31_pac::wifi_mac::ht_signal::Stbc::None.bits(),
+                    oer_chips_esp32s31_pac::wifi_mac::ht_signal::Stbc::None.bits(),
                 ))
                 .set_fec_coding(false)
                 .set_short_gi(matches!(
@@ -1495,29 +1495,29 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             "the program bounds the spacing"
         );
         assert!(
-            u32::from(parameters.timeout) <= oer_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
+            u32::from(parameters.timeout) <= oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX,
             "the program bounds the timeout"
         );
         assert!(
             u32::from(parameters.scheduler_priority)
-                <= oer_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         assert!(
-            u32::from(parameters.aifsn) <= oer_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
+            u32::from(parameters.aifsn) <= oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX,
             "the program bounds AIFSN"
         );
         assert!(
             u32::from(parameters.contention_window)
-                <= oer_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX,
             "the program bounds the window"
         );
 
@@ -1558,15 +1558,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         );
         assert!(
             u32::from(parameters.scheduler_priority)
-                <= oer_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
+                <= oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         let bank = queue::bank(queue);
@@ -1575,10 +1575,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             program.descriptor_head,
             match parameters.format {
                 MacHeTxFormat::Smpdu => {
-                    oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeSmpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeSmpdu.bits() as u8
                 }
                 MacHeTxFormat::Ampdu => {
-                    oer_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeAmpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeAmpdu.bits() as u8
                 }
             },
         );
@@ -1589,7 +1589,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 rate: parameters.rate.plcp_rate_field(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
-                vector_format: oer_esp32s31_pac::wifi_mac::plcp1::VectorFormat::He.bits() as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::He.bits() as u8,
                 cbw40: false,
             },
         );
@@ -1612,9 +1612,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_bss_color(bits(u32::from(parameters.bss_color)))
                 .set_vector_required_14(true)
                 .set_spatial_reuse(bits(u32::from(parameters.spatial_reuse)))
-                .set_bandwidth(bits(oer_esp32s31_pac::wifi_mac::he_su_signal_a1::Bandwidth::Mhz20.bits()))
+                .set_bandwidth(bits(oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Bandwidth::Mhz20.bits()))
                 .set_gi_ltf(parameters.rate.guard_interval_and_ltf.register_value())
-                .set_nsts_and_midamble_periodicity(bits(oer_esp32s31_pac::wifi_mac::he_su_signal_a1::NstsAndMidamblePeriodicity::OneStreamNoMidamble.bits()))
+                .set_nsts_and_midamble_periodicity(bits(oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::NstsAndMidamblePeriodicity::OneStreamNoMidamble.bits()))
                 .set_vector_required_high(bits(0x3f));
         });
         vectors.modify_he_su_signal_a2_length(bank, |w| {
@@ -1687,7 +1687,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 
     pub(crate) fn start_prepared_mac_tx(&mut self, queue: MacTxQueueIndex) {
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         // SOURCE: publication prefix of `libpp[hal_mac_tx.o]::hal_mac_txq_enable` offsets 0x00..0x1e, before libpp[lmac.o]::GetAccess. It reads the
         // already prepared CONTROL word and ORs only ENABLE|VALID before
         // writing it back. In particular, it does not reconstruct PLCP0 from
@@ -1696,7 +1696,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // The remaining vendor body updates access/HE bookkeeping and
         // statistics; equivalence of this prefix does not cover that body.
         queue::publish_queue(&mut self.mac.wifi_mac_tx_queue_control, queue);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     pub fn take_mac_tx_completion(
@@ -1755,7 +1755,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let common = &mut self.mac.wifi_mac_tx_common;
         let trigger_flow = queue::queue_in_trigger_flow(common, queue);
         queue::acknowledge_completion(common, queue);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         Some(MacTxCompletionObservation {
             status,
             detail,
@@ -1797,7 +1797,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             return false;
         }
         let _ = queue::set_cca_force(common, 3);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         true
     }
 
@@ -1823,7 +1823,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 // SOURCE: complete `libpp[lmac.o]::lmacProcessCollisions`
                 // reaches disable before clearing the collision edge.
                 queue::disable_queue(queue_control, queue);
-                oer_riscv::fence();
+                oer_portable_riscv::fence();
                 queue::acknowledge_collision(common, queue);
             }
             MacTxDetachReason::Timeout => {
@@ -1845,7 +1845,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 queue::disable_queue(queue_control, queue);
             }
         }
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         if queue::queue_enabled(queue_control, queue) || queue::queue_valid(queue_control, queue) {
             return MacTxDetachOutcome::Failed;
         }

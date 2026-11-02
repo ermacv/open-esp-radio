@@ -40,12 +40,12 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         &mut self,
         descriptor: DmaRef<BleDirectionFindingDescriptor>,
     ) -> BluetoothDirectionFindingDisabledBaselinePrepared {
-        let slot = oer_mmio::Index::constant::<0>();
+        let slot = oer_portable_mmio::Index::constant::<0>();
         let ring = &mut self.bluetooth.ble_hw_cte_ring_control;
 
         device_fence();
         ring.modify_ring_control(|w| {
-            w.set_max_buffer_number(oer_mmio::Bits::constant::<0x6>());
+            w.set_max_buffer_number(oer_portable_mmio::Bits::constant::<0x6>());
         });
         ring.modify_buffer_pointer(slot, |w| {
             w.set_compressed_descriptor_pointer(descriptor);

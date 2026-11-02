@@ -51,7 +51,7 @@ pub struct RxDmaBinding<'storage> {
 /// The proof stays on the core that observed the walker: it is not `Send`.
 /// ```compile_fail,E0277
 /// fn send<T: Send>() {}
-/// send::<oer_esp32s31_hal::ieee80211::dma::rx_dma::RxDmaWalkerStopped<'static>>();
+/// send::<oer_chips_esp32s31_hal::ieee80211::dma::rx_dma::RxDmaWalkerStopped<'static>>();
 /// ```
 pub struct RxDmaWalkerStopped<'confirmation> {
     arena: &'confirmation RxArenaWords,

@@ -1,5 +1,5 @@
 use crate::{support::*, *};
-use oer_esp32s31_ieee80211_driver::mac::tx::CompletionObservation;
+use oer_chips_esp32s31_ieee80211_driver::mac::tx::CompletionObservation;
 
 fn observed<T>(event: CompletionObservation<T>) -> T {
     match event {
@@ -10,9 +10,9 @@ fn observed<T>(event: CompletionObservation<T>) -> T {
 
 #[test]
 fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
-    use oer_esp32s31_hal::types::{MacLegacyRate, MacTxControlFrame, MacTxProtection};
-    use oer_esp32s31_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
-    use oer_esp32s31_ieee80211_driver::mac::tx::{
+    use oer_chips_esp32s31_hal::types::{MacLegacyRate, MacTxControlFrame, MacTxProtection};
+    use oer_chips_esp32s31_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::{
         HeSmpduTxConfig, HtTxConfig, TxControlFrame, protection::TxProtection,
     };
 
@@ -140,7 +140,7 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
         );
         assert!(!matches!(
             slot.as_mut().access(),
-            oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+            oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
         ));
         hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(0, 0));
         let completion = slot
@@ -152,11 +152,11 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
         assert_eq!(completion.cookie(), cookie);
         assert!(!matches!(
             slot.as_mut().access(),
-            oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+            oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
         ));
         assert!(matches!(
             slot.as_mut().access(),
-            oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Completed
+            oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Completed
         ));
         if let Some(stale) = previous {
             assert_eq!(
@@ -198,7 +198,7 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(!matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
     hardware.tx_detach_fails[0] = false;
     assert_eq!(
@@ -207,7 +207,7 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
     );
     assert!(matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::ResetRequired
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::ResetRequired
     ));
 }
 
@@ -218,7 +218,7 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
     assert!(!matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
     assert_eq!(slot.descriptor_word0().size(), 512);
     assert_eq!(slot.descriptor_word0().length(), 100);
@@ -272,11 +272,11 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
     assert_eq!(slot.state(), TxDmaState::Free);
     assert_eq!(
         slot.descriptor_word0(),
-        oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl::ZERO
+        oer_chips_esp32s31_hal::layouts::WifiTxDmaDescriptorControl::ZERO
     );
     assert!(matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
     assert_eq!(
         slot.as_mut().cancel_reservation(cookie),
@@ -301,7 +301,7 @@ fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() 
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(!matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
     assert_eq!(slot.as_mut().require_reset(cookie), Err(TxError::Stale));
     drop(slot);
@@ -430,7 +430,7 @@ fn tx_slot_disables_before_acknowledging_one_collision_queue() {
 
 #[test]
 fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
-    use oer_esp32s31_ieee80211_driver::mac::tx::CompletionFault;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::CompletionFault;
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
@@ -453,7 +453,7 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
     );
     assert!(!matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
     hardware.set_tx_completion(0, MacTxCompletionObservation::new_model(1, 0xc0));
     assert_eq!(
@@ -463,6 +463,6 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
     assert_eq!(slot.state(), TxDmaState::ResetRequired);
     assert!(!matches!(
         slot.as_mut().access(),
-        oer_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
+        oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlotAccess::Free(_)
     ));
 }

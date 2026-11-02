@@ -4,8 +4,8 @@
 use std::vec::Vec;
 
 use super::MacKeys;
-use oer_ieee802154_port::AppliedSecurity;
-use oer_ieee802154_wire::KeyIdMode;
+use oer_protocols_ieee802154_port::AppliedSecurity;
+use oer_protocols_ieee802154_wire::KeyIdMode;
 
 #[test]
 fn counter_only_moves_back_with_replacement_keys() {
@@ -139,7 +139,7 @@ fn csl_retransmissions_take_a_new_counter() {
     );
 }
 
-use oer_ieee802154_wire::{FrameView, generate_enhanced_ack};
+use oer_protocols_ieee802154_wire::{FrameView, generate_enhanced_ack};
 
 fn secured(key_id_mode: u8, key_index: u8) -> Vec<u8> {
     std::vec![

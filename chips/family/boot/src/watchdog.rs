@@ -24,7 +24,7 @@
 //! `components/bootloader_support/src/esp32s31/bootloader_esp32s31.c:118-123`
 //! (the super watchdog fed by hardware).
 
-use oer_espressif_watchdog::{
+use oer_chips_family_watchdog::{
     MainWatchdogEnable, RtcWatchdog, RtcWatchdogRegisters, StoppedMainWatchdog, SuperWatchdog,
     SuperWatchdogRegisters,
 };

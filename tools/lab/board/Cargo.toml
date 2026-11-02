@@ -1,5 +1,5 @@
 [package]
-name = "oer-lab-board"
+name = "oer-tools-lab-board"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,19 +11,19 @@ description = "Board discovery, serial consoles, resets, OpenOCD and receipted i
 [dependencies]
 hex = "=0.4.3"
 espflash = { version = "=4.5.0", default-features = false, features = ["serialport"] }
-oer-chip-profile = { path = "../../chip/profile" }
-oer-espressif-facts = { path = "../../../chips/family/facts" }
-oer-lab-model = { path = "../model" }
-oer-os-durable = { path = "../../os/durable" }
-oer-image-bundle = { path = "../../image/bundle" }
-oer-os-process = { path = "../../os/process" }
+oer-tools-chip-profile = { path = "../../chip/profile" }
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
+oer-tools-lab-model = { path = "../model" }
+oer-tools-os-durable = { path = "../../os/durable" }
+oer-tools-image-bundle = { path = "../../image/bundle" }
+oer-tools-os-process = { path = "../../os/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 serialport = { version = "4.8.1", default-features = false }
-oer-os-serial = { path = "../../os/serial" }
+oer-tools-os-serial = { path = "../../os/serial" }
 tempfile = { version = "3" }
-oer-lab-router = { path = "../router" }
-oer-registers-model = { path = "../../registers/model" }
+oer-tools-lab-router = { path = "../router" }
+oer-tools-registers-model = { path = "../../registers/model" }
 
 [dev-dependencies]
 tempfile = "3"

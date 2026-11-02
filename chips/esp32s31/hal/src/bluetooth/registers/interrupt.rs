@@ -10,7 +10,7 @@ use crate::bluetooth::registers::{
     BluetoothInterruptRegisters, BluetoothInterruptSetup, BluetoothPlacements, Chip,
     InterruptBlocks, device_fence,
 };
-use oer_esp32s31_pac::bt_mac as bank;
+use oer_chips_esp32s31_pac::bt_mac as bank;
 
 trait BluetoothSchedulerRunInterruptControl {
     fn clear_scheduler_run_bank_0(&mut self);
@@ -19,7 +19,7 @@ trait BluetoothSchedulerRunInterruptControl {
     fn enable_scheduler_run_bank_1(&mut self);
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerRunInterruptControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerRunInterruptControl
     for HardwareInterruptControl<'_, B>
 {
     fn clear_scheduler_run_bank_0(&mut self) {
@@ -33,7 +33,7 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerRunInterruptControl
     fn enable_scheduler_run_bank_0(&mut self) {
         self.bank.modify_irq_enable_0(|w| {
             w.set_source_21(true);
-            w.set_sources_27_28(oer_mmio::Bits::truncate(w.sources_27_28().get() | 0x3));
+            w.set_sources_27_28(oer_portable_mmio::Bits::truncate(w.sources_27_28().get() | 0x3));
         });
     }
 
@@ -75,11 +75,11 @@ trait BluetoothInterruptControl {
     fn silence_controller_time_overflow(&mut self);
 }
 
-struct HardwareInterruptControl<'a, B: oer_mmio::Placement> {
-    bank: &'a mut oer_esp32s31_pac::bt_mac::BluetoothInterruptBank<B>,
+struct HardwareInterruptControl<'a, B: oer_portable_mmio::Placement> {
+    bank: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothInterruptBank<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptControl<'_, B> {
+impl<B: oer_portable_mmio::Placement> BluetoothInterruptControl for HardwareInterruptControl<'_, B> {
     fn clear_primary_baseline_bank_0(&mut self) {
         self.bank.clear_bluetooth_primary_baseline_bank_0();
     }
@@ -105,19 +105,19 @@ impl<B: oer_mmio::Placement> BluetoothInterruptControl for HardwareInterruptCont
 
     fn prepare_output(&mut self) {
         self.bank.write_irq_control_0(|w| {
-            w.set_command(oer_esp32s31_pac::bt_mac::irq_control_0::Command::Command1.bits());
+            w.set_command(oer_chips_esp32s31_pac::bt_mac::irq_control_0::Command::Command1.bits());
         });
     }
 
     fn release_output_0(&mut self) {
         self.bank.write_irq_control_1(|w| {
-            w.set_command(oer_esp32s31_pac::bt_mac::irq_control_1::Command::Command1.bits());
+            w.set_command(oer_chips_esp32s31_pac::bt_mac::irq_control_1::Command::Command1.bits());
         });
     }
 
     fn release_output_1(&mut self) {
         self.bank.write_irq_control_2(|w| {
-            w.set_command(oer_esp32s31_pac::bt_mac::irq_control_2::Command::Command1.bits());
+            w.set_command(oer_chips_esp32s31_pac::bt_mac::irq_control_2::Command::Command1.bits());
         });
     }
 
@@ -199,7 +199,7 @@ trait BluetoothPrimaryInterruptControl {
     fn capture_diagnostic_state(&mut self);
 }
 
-impl<B: oer_mmio::Placement> BluetoothPrimaryInterruptControl for HardwareInterruptControl<'_, B> {
+impl<B: oer_portable_mmio::Placement> BluetoothPrimaryInterruptControl for HardwareInterruptControl<'_, B> {
     type Bank0Snapshot = bank::BluetoothPrimaryInterruptBank0Snapshot;
     type Bank1Snapshot = bank::BluetoothPrimaryInterruptBank1Snapshot;
 
@@ -462,7 +462,7 @@ fn acknowledge_nrt_if_admitted<T>(
 
 /// The same affine sample/admit/acknowledge transaction serves runtime and
 /// terminal release. Diagnostic observations cannot supply its clear images.
-fn capture_nrt_and_acknowledge<B: oer_mmio::Placement>(
+fn capture_nrt_and_acknowledge<B: oer_portable_mmio::Placement>(
     bank: &mut bank::BluetoothInterruptBank<B>,
 ) -> Result<Option<BluetoothNrtInterruptAcknowledged>, BluetoothNrtInterruptFault> {
     let bank_0 = bank.sample_bluetooth_interrupt_bank_0();

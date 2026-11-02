@@ -38,7 +38,7 @@ pub const DEFAULT_PLL_TRACK_PERIOD_MICROS: u64 = 1_000_000;
 
 /// One typed user of the shared PHY software client set: the portable
 /// radio client.
-pub use oer_esp32s31_hal::domain::RadioClient;
+pub use oer_chips_esp32s31_hal::domain::RadioClient;
 
 /// The bit of `client` in the reviewed software client set.
 pub(crate) const fn client_bit(client: RadioClient) -> u8 {
@@ -106,7 +106,7 @@ impl PhyClientSnapshot {
     /// The reviewed due predicate is strictly greater than the interval, so
     /// the first due microsecond is `previous + period + 1`. An active class
     /// never tracked in this registration epoch is due at once: its deadline
-    /// is `0`, [`oer_time::Instant::EPOCH`]. Inactive classes do not arm a
+    /// is `0`, [`oer_portable_time::Instant::EPOCH`]. Inactive classes do not arm a
     /// timer. An unrepresentable deadline is an error, not an immediately due
     /// timer or a silently disabled tracker.
     pub fn next_tracking_deadline_micros(self) -> Result<Option<u64>, PhyTrackTimeError> {
@@ -140,7 +140,7 @@ impl PhyClientSnapshot {
 // distinguish two separate modeled radios with equal hardware epoch values.
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct PhyClientKey(oer_esp32s31_hal::owner::PhyRegistrationEpoch);
+pub(crate) struct PhyClientKey(oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch);
 #[cfg(not(target_arch = "riscv32"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct PhyClientKey(core::num::NonZeroU32);
@@ -171,15 +171,15 @@ pub enum PhyClientAccess {
 /// Consumed authority for one acquisition; it cannot start another acquisition.
 ///
 /// ```no_run
-/// use oer_esp32s31_phy::state::client::PhyClientAvailable;
-/// fn once(available: PhyClientAvailable, clock: &impl oer_time::Clock) {
+/// use oer_chips_esp32s31_phy::state::client::PhyClientAvailable;
+/// fn once(available: PhyClientAvailable, clock: &impl oer_portable_time::Clock) {
 ///     let _ = available.acquire(clock);
 /// }
 /// ```
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_phy::state::client::PhyClientAvailable;
-/// fn twice(available: PhyClientAvailable, clock: &impl oer_time::Clock) {
+/// use oer_chips_esp32s31_phy::state::client::PhyClientAvailable;
+/// fn twice(available: PhyClientAvailable, clock: &impl oer_portable_time::Clock) {
 ///     let _ = available.acquire(clock);
 ///     let _ = available.acquire(clock);
 /// }
@@ -201,7 +201,7 @@ impl PhyClientAvailable {
     }
     pub fn acquire(
         self,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         let client = self.owner.selected_client;
         self.owner.acquire_available(client, clock)
@@ -209,7 +209,7 @@ impl PhyClientAvailable {
 
     pub(crate) fn prepare(
         self,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PreparedClientAcquire, PhyClientAcquireFailure> {
         let client = self.owner.selected_client;
         self.owner.prepare_available(client, clock)
@@ -279,7 +279,7 @@ pub struct PhyClientSuspended {
 impl PhyClientSuspended {
     pub fn resume(
         self,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         let client = self.owner.selected_client;
         self.owner.acquire_available(client, clock)
@@ -314,7 +314,7 @@ pub struct PhyClientState {
     selected_client: RadioClient,
     // Registration that minted this client set. It occupies alignment padding
     // beside the flags, so detached owners carry it without growing.
-    epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
+    epoch: Option<oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch>,
     // Last tracking time per class; `None`: never tracked in this
     // registration epoch, so the first acquisition is due at once. SOURCE:
     // ESP-IDF 4d80c1b2 components/esp_phy/src/phy_common.c:60,63 keeps
@@ -336,7 +336,7 @@ impl PhyClientState {
     #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) fn for_registration(
         period_micros: u64,
-        epoch: oer_esp32s31_hal::owner::PhyRegistrationEpoch,
+        epoch: oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch,
     ) -> Self {
         Self::empty(period_micros, Some(epoch))
     }
@@ -354,7 +354,7 @@ impl PhyClientState {
     #[cfg(any(target_arch = "riscv32", test))]
     fn empty(
         period_micros: u64,
-        epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
+        epoch: Option<oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch>,
     ) -> Self {
         Self {
             #[cfg(not(target_arch = "riscv32"))]
@@ -388,7 +388,7 @@ impl PhyClientState {
     /// without registration identity never describes hardware.
     pub(crate) fn describes(
         &self,
-        hardware: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        hardware: &impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> bool {
         self.describes_epoch(hardware.registration_epoch())
     }
@@ -399,7 +399,7 @@ impl PhyClientState {
     /// such as the retained radio root, report their epoch directly.
     pub(crate) fn describes_epoch(
         &self,
-        epoch: Option<oer_esp32s31_hal::owner::PhyRegistrationEpoch>,
+        epoch: Option<oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch>,
     ) -> bool {
         self.epoch.is_some() && epoch == self.epoch
     }
@@ -460,7 +460,7 @@ impl PhyClientState {
     fn acquire_available(
         self,
         client: RadioClient,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         self.prepare_available(client, clock)
             .map(PreparedClientAcquire::commit)
@@ -469,7 +469,7 @@ impl PhyClientState {
     fn prepare_available(
         self,
         client: RadioClient,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PreparedClientAcquire, PhyClientAcquireFailure> {
         let bit = client_bit(client);
         let prospective_bits = self.bits | bit;
@@ -522,7 +522,7 @@ impl PhyClientState {
     /// hardware work.
     pub fn evaluate_immediate_tracking(
         mut self,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         let evaluation = match self.evaluate_for_bits(self.bits, clock) {
             Ok(evaluation) => evaluation,
@@ -544,7 +544,7 @@ impl PhyClientState {
     /// a request and refreshes its timestamp on every callback.
     pub fn evaluate_periodic_tracking(
         mut self,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         let wifi_active = self.bits & WIFI_BIT != 0;
         let bluetooth_ieee802154_active = self.bits & (BLUETOOTH_BIT | IEEE802154_BIT) != 0;
@@ -566,7 +566,7 @@ impl PhyClientState {
     fn evaluate_for_bits(
         &self,
         bits: u8,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<TrackEvaluation, PhyTrackTimeError> {
         let wifi_active = bits & WIFI_BIT != 0;
         let bluetooth_ieee802154_active = bits & (BLUETOOTH_BIT | IEEE802154_BIT) != 0;
@@ -601,7 +601,7 @@ impl PhyClientState {
         wifi_active: bool,
         bluetooth_ieee802154_active: bool,
         request_due: bool,
-        clock: &impl oer_time::Clock,
+        clock: &impl oer_portable_time::Clock,
     ) -> Result<TrackEvaluation, PhyTrackTimeError> {
         if !request_due {
             return Ok(TrackEvaluation {
@@ -829,7 +829,7 @@ impl PhyPendingTracking {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn describes(
         &self,
-        hardware: &impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        hardware: &impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> bool {
         self.owner.describes(hardware)
     }

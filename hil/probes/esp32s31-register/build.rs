@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let directory = std::env::var_os("CARGO_MANIFEST_DIR")
         .ok_or("Cargo supplies the package manifest directory")?;
     let directory = std::path::PathBuf::from(directory);
-    oer_probe_codegen::build(
+    oer_tools_probe_codegen::build(
         &directory.join("src/lib.rs"),
         &std::env::var("CARGO_PKG_NAME")?,
         &std::path::PathBuf::from(std::env::var_os("OUT_DIR").ok_or("Cargo output directory")?),

@@ -8,14 +8,14 @@ const QUERY: WordQuery = WordQuery {
     offset: 0,
 };
 
-use oer_analysis_riscv_analysis::stack_context::*;
+use oer_tools_analysis_riscv_analysis::stack_context::*;
 
 fn stack_facts<'m>(words: &[u32], start: u64, memory: &'m WorkingMemory) -> RecordBuffer<'m> {
     let bytes: Vec<_> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
         FunctionInput {
-            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+            traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {
@@ -29,7 +29,7 @@ fn stack_facts<'m>(words: &[u32], start: u64, memory: &'m WorkingMemory) -> Reco
             returns: &NoSummaries,
             call_behavior: &UnknownCallBehavior,
         },
-        &oer_analysis_riscv_lift::StackRiscvDecoder,
+        &oer_tools_analysis_riscv_lift::StackRiscvDecoder,
         memory,
         &mut || Ok(()),
         &mut saved,
@@ -125,7 +125,7 @@ fn facts_in_capture<'m>(
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
         FunctionInput {
-            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+            traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(image),
             section: 1,
             extent: CodeRange {
@@ -976,7 +976,7 @@ fn specialized_query<'m>(
     let bytes: Vec<_> = code.iter().flat_map(|word| word.to_le_bytes()).collect();
     contextual_word_function_writes(
         FunctionInput {
-            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+            traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {

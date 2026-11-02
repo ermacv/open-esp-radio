@@ -18,7 +18,7 @@
 //! implementation, scheduler or hardware is owned here; LE runtime awaits port IO.
 //!
 //! - [`bootstrap`]: reset-scoped Host configuration of the software-only HCI
-//!   bootstrap subset over the `oer-bluetooth-hci` codecs;
+//!   bootstrap subset over the `oer-protocols-bluetooth-hci` codecs;
 //! - [`dtm`]: one-credit Reset/Rand/DTM 1M HCI service over the LE port,
 //!   with durable command, session and response ownership.
 

@@ -258,7 +258,7 @@ pub struct LibraryFunction {
     /// Position of the defining input among the analyzed inputs.
     pub input: u64,
     pub symbol: SymbolId,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name::option")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name::option")]
     pub name: Option<Vec<u8>>,
 }
 
@@ -273,7 +273,7 @@ pub enum ArgumentValue {
         address: u32,
     },
     Symbol {
-        #[serde(with = "oer_analysis_riscv_model::symbol_name")]
+        #[serde(with = "oer_tools_analysis_riscv_model::symbol_name")]
         name: Vec<u8>,
         addend: i64,
     },
@@ -532,7 +532,7 @@ pub struct RegisterAccessSummary {
     /// reason. They belong to no emitted record, so a projection of the
     /// records adds them; they are not part of the report.
     #[serde(skip)]
-    pub summary_failure_results: oer_analysis_riscv_model::AnalysisLimited,
+    pub summary_failure_results: oer_tools_analysis_riscv_model::AnalysisLimited,
 }
 
 #[cfg(test)]

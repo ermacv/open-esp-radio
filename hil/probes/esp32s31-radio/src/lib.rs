@@ -13,8 +13,8 @@
 //! API alone: [`open_probe_session_init`] takes the reset root once and the
 //! later entries borrow the session's owners ([`session`]).
 
-use oer_esp32s31_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
-use oer_ieee80211_contracts_port::backend::RetryCounters;
+use oer_chips_esp32s31_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
+use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 
 mod calibration_leaves;
 mod coex;
@@ -35,7 +35,7 @@ pub extern "C" fn ets_delay_us(micros: u32) {
     core::hint::black_box(micros);
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Start the verifier session: take the reset root, split it and bring
     /// Wi-Fi up through its public client path. Zero, or why the session
     /// did not start; nothing of it is compared.
@@ -44,7 +44,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_wifi_sta_trace_hal_disable_sta_beacon_filter() {
         let _ = session::with(|session| {
             let _ = session.wifi.prepare_connected_sta_without_power_save();
@@ -52,34 +52,34 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_libpp_rx_trace_hal_mac_rx_is_dscr_reload() -> u32 {
         session::with(|session| u32::from(session.wifi.rx_dma().snapshot().reload_pending))
             .unwrap_or(REJECTED)
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_enable(index: u32) =>
         coex::enable_timer(index);
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_disable(index: u32) =>
         coex::disable_timer(index);
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_force(index: u32) =>
         coex::force_timer(index);
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_coex_trace_coex_hw_timer_unforce(index: u32) =>
         coex::unforce_timer(index);
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Compiled production-path probe for the complete `coex_core_pti_get`
     /// contract. The vendor ABI returns `0x102` for a null output pointer and
     /// otherwise copies one entry from its priority table, which the radio
@@ -91,10 +91,10 @@ oer_probe_macros::probe! {
         if output.is_null() {
             return 0x102;
         }
-        let Some(event) = oer_espressif_coex::CoexEventId::new(event as u8) else {
+        let Some(event) = oer_chips_family_coex::CoexEventId::new(event as u8) else {
             return 0x102;
         };
-        let pti = oer_espressif_coex::CoexPtiTable::VENDOR.pti(event);
+        let pti = oer_chips_family_coex::CoexPtiTable::VENDOR.pti(event);
         // SAFETY: verification profiles provide a writable caller-owned output
         // byte and compare its final state with the vendor execution.
         unsafe { output.write(pti.value()) };
@@ -102,7 +102,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Compiled production-path probe for `coex_core_event_duration_get`.
     /// The vendor leaf accepts only the five events backed by `g_coex_param`,
     /// clears a non-null output for every other event, and uses `u32::MAX` as its
@@ -114,8 +114,8 @@ oer_probe_macros::probe! {
         if output.is_null() {
             return u32::MAX;
         }
-        let duration = oer_espressif_coex::CoexEventId::new(event as u8)
-            .and_then(|event| oer_espressif_coex::CoexEventDurations::reviewed_vendor().duration(event));
+        let duration = oer_chips_family_coex::CoexEventId::new(event as u8)
+            .and_then(|event| oer_chips_family_coex::CoexEventDurations::reviewed_vendor().duration(event));
         // SAFETY: verification profiles provide a writable caller-owned output
         // word and compare its final state with the vendor execution.
         unsafe { output.write(duration.unwrap_or(0)) };
@@ -123,18 +123,18 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Compiled production-path projection of the complete vendor event-to-timer
     /// switch. `0xff` is the exact unmapped sentinel returned by the vendor leaf.
     pub fn open_coex_core_trace_timer_idx_get(event: u32) -> u32 {
-        let Some(event) = oer_espressif_coex::CoexEventId::new(event as u8) else {
+        let Some(event) = oer_chips_family_coex::CoexEventId::new(event as u8) else {
             return 0xff;
         };
-        oer_espressif_coex::timer_index(event).map_or(0xff, |index| u32::from(index.value()))
+        oer_chips_family_coex::timer_index(event).map_or(0xff, |index| u32::from(index.value()))
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Compiled production-path probe for the complete
     /// `coex_hw_timer_freq_set(selector, divisor)` transaction, returning its
     /// acceptance as the vendor's one or zero.
@@ -143,11 +143,11 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Complete register projection of `coex_core_release`. The vendor ABI keeps
     /// the client in `a0` but selects the timer exclusively from event `a1`.
     pub fn open_coex_core_trace_release(_client: u32, event: u32) -> u32 {
-        use oer_espressif_coex::{CoexError, CoexEventId};
+        use oer_chips_family_coex::{CoexError, CoexEventId};
 
         let Some(event) = CoexEventId::new(event as u8) else {
             return 0x102;
@@ -160,7 +160,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Register-only production projection of vendor `wifi_set_rx_policy`
     /// policies two, six, eight and nine through the role-receive HAL.
     ///
@@ -173,7 +173,7 @@ oer_probe_macros::probe! {
         address_high: u32,
         mode: u32,
     ) -> u32 {
-        use oer_esp32s31_hal::types::{MacRoleReceivePolicy, MacStaPolicyMode};
+        use oer_chips_esp32s31_hal::types::{MacRoleReceivePolicy, MacStaPolicyMode};
 
         let low = address_low.to_le_bytes();
         let high = address_high.to_le_bytes();
@@ -200,13 +200,13 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// The role-neutral suffix of vendor `wifi_set_rx_policy(0)`: the exact
     /// production operation that disables both receive contexts after the
     /// cold transaction published the interface addresses.
     pub fn open_wifi_sta_ap_trace_disable_all_role_receive(_policy: u32) -> u32 {
         session::with(|session| {
-            oer_esp32s31_ieee80211_driver::mac::sta_ap_registers::disable_all_role_receive_registers(
+            oer_chips_esp32s31_ieee80211_driver::mac::sta_ap_registers::disable_all_role_receive_registers(
                 &mut session.wifi.wifi_mac_hal(),
             );
             1
@@ -215,7 +215,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// ABI projection around the exact production normal-rate selector.
     ///
     /// The vendor entry receives a pointer-rich descriptor and stores the chosen
@@ -240,7 +240,7 @@ oer_probe_macros::probe! {
         };
         let selected = match retry::select(
             initial_rate, counters,
-            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder,
+            &oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder,
         ) {
             Ok(selected) => selected,
             Err(refusal) => return refusal.status() as u32,
@@ -251,16 +251,16 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_libpp_crypto_trace_hal_crypto_enable(interface: u32, _algorithm: u32, _management: u32, spp: u32) {
         let interface = match interface {
-            0 => oer_esp32s31_hal::types::MacInterface::Station,
-            1 => oer_esp32s31_hal::types::MacInterface::AccessPoint,
+            0 => oer_chips_esp32s31_hal::types::MacInterface::Station,
+            1 => oer_chips_esp32s31_hal::types::MacInterface::AccessPoint,
             _ => return,
         };
         let spp = match spp {
-            0 => oer_esp32s31_hal::types::MacSppMode::Unauthenticated,
-            1 => oer_esp32s31_hal::types::MacSppMode::Authenticated,
+            0 => oer_chips_esp32s31_hal::types::MacSppMode::Unauthenticated,
+            1 => oer_chips_esp32s31_hal::types::MacSppMode::Authenticated,
             _ => return,
         };
         let _ = session::with(|session| {
@@ -270,8 +270,8 @@ oer_probe_macros::probe! {
 }
 
 /// The MAC interface of the vendor's interface index, or `None` past the four.
-fn mac_interface(interface: u32) -> Option<oer_esp32s31_hal::types::MacInterface> {
-    use oer_esp32s31_hal::types::MacInterface;
+fn mac_interface(interface: u32) -> Option<oer_chips_esp32s31_hal::types::MacInterface> {
+    use oer_chips_esp32s31_hal::types::MacInterface;
     match interface {
         0 => Some(MacInterface::Station),
         1 => Some(MacInterface::AccessPoint),
@@ -281,7 +281,7 @@ fn mac_interface(interface: u32) -> Option<oer_esp32s31_hal::types::MacInterface
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_libpp_interface_trace_hal_mac_set_addr(interface: u32, address: &[u8; 6]) {
         if let Some(interface) = mac_interface(interface) {
             let _ = session::with(|session| {
@@ -294,7 +294,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_libpp_interface_trace_hal_mac_set_bssid(interface: u32, address: &[u8; 6]) {
         if let Some(interface) = mac_interface(interface) {
             let _ = session::with(|session| {
@@ -307,7 +307,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_libpp_ap_tsf_trace_hal_disable_softap_tsf() {
         let _ = session::with(|session| {
             AccessPointTsf::new(0).stop(&mut session.wifi.wifi_mac_hal())
@@ -315,7 +315,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_libpp_ap_tsf_start_trace_hal_mac_tsf_reset(selector: u32) {
         if selector == 0 {
             let _ = session::with(|session| {
@@ -325,7 +325,7 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Read the STA TSF into the caller's two output words: the production
     /// snapshot reads both words.
     ///
@@ -347,10 +347,10 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     pub fn open_phy_trace_dis_hw_set_freq() {
         let _ = session::with(|session| session.phy(|phy| {
-            oer_esp32s31_hal::phy::frequency::set_hardware_control(phy, false)
+            oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(phy, false)
         }));
         ets_delay_us(2);
         // Keep the delay as a non-tail edge so the executor sees the named
@@ -359,12 +359,12 @@ oer_probe_macros::probe! {
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Execute the shipping command-memory transaction with explicit parameter
     /// bytes on the session's shared PHY. Encoding and all MMIO remain in the
     /// production HAL/PAC.
     pub fn open_phy_trace_command_memory(parameters: &[u8; 6]) {
-        let inputs = oer_esp32s31_hal::phy::i2c::PhyI2cCommandMemoryInputs::new(
+        let inputs = oer_chips_esp32s31_hal::phy::i2c::PhyI2cCommandMemoryInputs::new(
             parameters[0],
             parameters[1],
             parameters[2],
@@ -373,19 +373,19 @@ oer_probe_macros::probe! {
             parameters[5],
         );
         let _ = session::with(|session| session.phy(|phy| {
-            oer_esp32s31_hal::phy::i2c::configure_command_memory(phy, inputs)
+            oer_chips_esp32s31_hal::phy::i2c::configure_command_memory(phy, inputs)
         }));
     }
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Initialize captured mutable parameter memory during an explicit setup phase.
     /// This harness copy supplies scenario inputs; it performs no PHY computation.
     pub fn open_phy_trace_initialize_parameters(destination: &mut [u8; 400], source: &[u8; 400]) =>
         destination.copy_from_slice(source);
 }
 
-oer_probe_macros::probe! {
+oer_tools_probe_macros::probe! {
     /// Exercise the production software-frequency transition on the session's
     /// shared PHY. This also exposes the preserved ordinary delay-call boundary.
     pub fn open_phy_trace_owned_software_frequency_control() =>
@@ -408,24 +408,24 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
     probe_halt()
 }
 #[cfg(target_arch = "riscv32")]
-static PHY_FAULT: oer_memory::OnceValue<oer_esp32s31_hal::domain::transaction::Fault> =
-    oer_memory::OnceValue::new();
+static PHY_FAULT: oer_portable_memory::OnceValue<oer_chips_esp32s31_hal::domain::transaction::Fault> =
+    oer_portable_memory::OnceValue::new();
 #[cfg(target_arch = "riscv32")]
-fn report_phy_fault(fault: oer_esp32s31_hal::domain::transaction::Fault) -> ! {
+fn report_phy_fault(fault: oer_chips_esp32s31_hal::domain::transaction::Fault) -> ! {
     let _first = PHY_FAULT.set(fault);
     probe_halt()
 }
 #[cfg(target_arch = "riscv32")]
-oer_esp32s31_hal::phy_fault_reporter!(report_phy_fault);
+oer_chips_esp32s31_hal::phy_fault_reporter!(report_phy_fault);
 #[cfg(target_arch = "riscv32")]
-static PHY_SEAT: oer_esp32s31_hal::domain::transaction::TransactionSeat =
-    oer_esp32s31_hal::domain::transaction::TransactionSeat::new();
+static PHY_SEAT: oer_chips_esp32s31_hal::domain::transaction::TransactionSeat =
+    oer_chips_esp32s31_hal::domain::transaction::TransactionSeat::new();
 #[cfg(target_arch = "riscv32")]
-fn phy_identity() -> oer_esp32s31_hal::domain::transaction::PhyIdentity {
+fn phy_identity() -> oer_chips_esp32s31_hal::domain::transaction::PhyIdentity {
     match PHY_SEAT.claim() {
         Some(identity) => identity,
-        None => report_phy_fault(oer_esp32s31_hal::domain::transaction::Fault {
-            reason: oer_esp32s31_hal::domain::transaction::FaultReason::IdentityClaimed,
+        None => report_phy_fault(oer_chips_esp32s31_hal::domain::transaction::Fault {
+            reason: oer_chips_esp32s31_hal::domain::transaction::FaultReason::IdentityClaimed,
             registration: None,
         }),
     }

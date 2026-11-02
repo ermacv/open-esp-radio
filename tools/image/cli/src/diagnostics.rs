@@ -3,16 +3,16 @@
 
 use std::borrow::Cow;
 
-use oer_diagnostics::radio_root::RadioRoot;
-use oer_diagnostics::render::{Gap, Next};
-use oer_diagnostics::{
+use oer_portable_diagnostics::radio_root::RadioRoot;
+use oer_portable_diagnostics::render::{Gap, Next};
+use oer_portable_diagnostics::{
     BootSmokePassed, HartAes, HartExchange, HartLiveness, MAX_PAYLOAD, Record, SecondaryReady,
 };
-use oer_trace::Event;
+use oer_portable_trace::Event;
 
 #[derive(Default)]
 pub(crate) struct Decoder {
-    stream: oer_diagnostics::render::Stream,
+    stream: oer_portable_diagnostics::render::Stream,
     /// The last line was a diagnostic one: the empty line its frame's line
     /// ends make before the next frame is not the console's.
     after_frame: bool,
@@ -23,7 +23,7 @@ impl Decoder {
     pub(crate) fn line<'a>(
         &mut self,
         line: &'a [u8],
-    ) -> oer_image_build::Result<Option<Cow<'a, str>>> {
+    ) -> oer_tools_image_build::Result<Option<Cow<'a, str>>> {
         if line.is_empty() && std::mem::take(&mut self.after_frame) {
             return Ok(None);
         }
@@ -32,8 +32,8 @@ impl Decoder {
         Ok(Some(text))
     }
 
-    fn decode<'a>(&mut self, line: &'a [u8]) -> oer_image_build::Result<Cow<'a, str>> {
-        if oer_lab_model::rom::is_reset_line(&String::from_utf8_lossy(line)) {
+    fn decode<'a>(&mut self, line: &'a [u8]) -> oer_tools_image_build::Result<Cow<'a, str>> {
+        if oer_tools_lab_model::rom::is_reset_line(&String::from_utf8_lossy(line)) {
             self.stream.restart();
         }
         let mut scratch = [0; MAX_PAYLOAD + 7];
@@ -71,7 +71,7 @@ impl Decoder {
             }
             Record::Note(note) => {
                 let mut text = String::new();
-                oer_diagnostics::render::note(&note, &mut text)
+                oer_portable_diagnostics::render::note(&note, &mut text)
                     .map_err(|_| format!("boot diagnostic note does not render: {note:?}"))?;
                 text
             }
@@ -132,7 +132,7 @@ impl Decoder {
 
 /// Replay the raw console lines without opening a board. Diagnostic lines
 /// require their terminating newline; an interrupted last record is an error.
-pub(crate) fn decode_file(path: &std::path::Path) -> oer_image_build::Result<()> {
+pub(crate) fn decode_file(path: &std::path::Path) -> oer_tools_image_build::Result<()> {
     let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
     render_stream(&mut reader, &mut std::io::stdout().lock())?;
     Ok(())
@@ -141,7 +141,7 @@ pub(crate) fn decode_file(path: &std::path::Path) -> oer_image_build::Result<()>
 fn render_stream(
     reader: &mut impl std::io::BufRead,
     output: &mut impl std::io::Write,
-) -> oer_image_build::Result<()> {
+) -> oer_tools_image_build::Result<()> {
     let mut decoder = Decoder::default();
     let mut line = Vec::new();
     while reader.read_until(b'\n', &mut line)? != 0 {

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::ftm::FtmTerminal;
+use oer_protocols_ieee80211_core_roles_sta::ftm::FtmTerminal;
 pub fn result<const N: usize>(terminal: FtmTerminal<N>) {
     let (_requester, _outcome) = terminal.into_parts();
     #[cfg(ui_reject)]

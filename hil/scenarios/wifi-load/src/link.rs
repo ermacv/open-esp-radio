@@ -1,13 +1,13 @@
 //! What the link ran within a window, seen from both ends: the access
 //! point's view of the station (the LAB router's `station-link` operation,
 //! read before a run and after its drain) and the image's own counts
-//! ([`oer_services_load::Link`], over the image's window). Directions are
+//! ([`oer_hil_services_load::Link`], over the image's window). Directions are
 //! the image's: RX is what the access point sent it.
 
 use std::time::Duration;
 
-use oer_hil_harness::{Cx, RouterOperation};
-use oer_services_load::{Link, Rates};
+use oer_tools_hil_harness::{Cx, RouterOperation};
+use oer_hil_services_load::{Link, Rates};
 use serde_json::{Value, json};
 
 /// One reading of the access point's view of the station; why there is
@@ -261,7 +261,7 @@ fn percent(part: u64, whole: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_services_load::{RxLink, TxLink};
+    use oer_hil_services_load::{RxLink, TxLink};
 
     const SPAN: Duration = Duration::from_millis(6200);
 

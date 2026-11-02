@@ -173,7 +173,7 @@ const fn word_at(words: [u32; 8], index: u8) -> u32 {
 
 const fn first_table(parameter_002: u8) -> [u32; 8] {
     [
-        oer_esp32s31_hal::phy::memory::pbus_memory_parameter_002_data(parameter_002),
+        oer_chips_esp32s31_hal::phy::memory::pbus_memory_parameter_002_data(parameter_002),
         0x0044_01ff,
         0x0017_13ff,
         0x0048_03ff,
@@ -201,7 +201,7 @@ const fn data_word(parameters: PhyPbusMemoryParameters, group: u8, index: u8) ->
         }
         8 => match index {
             1 => 0x0014_fdff,
-            2 => oer_esp32s31_hal::phy::memory::pbus_memory_parameter_014_data(
+            2 => oer_chips_esp32s31_hal::phy::memory::pbus_memory_parameter_014_data(
                 parameters.parameter_014,
             ),
             _ => word_at(TABLE_B, index),
@@ -335,11 +335,11 @@ impl PhyPbusBoundaryRestoreMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyPbusBoundaryRestoreCompletion, PhyPbusMemoryBindingError> {
-        oer_esp32s31_hal::phy::memory::configure_pbus_memory_group_boundary(
+        oer_chips_esp32s31_hal::phy::memory::configure_pbus_memory_group_boundary(
             registers,
-            oer_esp32s31_hal::phy::memory::PbusMemoryGroupBoundary {
+            oer_chips_esp32s31_hal::phy::memory::PbusMemoryGroupBoundary {
                 group: self.boundary.group(),
                 first_entry: self.boundary.first_entry(),
                 last_entry: self.boundary.last_entry(),
@@ -493,28 +493,28 @@ impl PhyPbusMemoryMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyPbusMemoryCompletion, PhyPbusMemoryBindingError> {
         match self.action {
             PhyPbusMemoryAction::Program(entry) => {
                 let boundary = entry.boundary().map(|field| {
-                    oer_esp32s31_hal::phy::memory::PbusMemoryGroupBoundary {
+                    oer_chips_esp32s31_hal::phy::memory::PbusMemoryGroupBoundary {
                         group: field.group(),
                         first_entry: field.first_entry(),
                         last_entry: field.last_entry(),
                     }
                 });
-                oer_esp32s31_hal::phy::memory::program_pbus_memory_entry(
+                oer_chips_esp32s31_hal::phy::memory::program_pbus_memory_entry(
                     registers,
                     boundary,
                     entry.data(),
                     entry.memory_command(),
                 )
                 .map_err(|error| match error {
-                    oer_esp32s31_hal::phy::memory::PhyMemoryError::PbusGroupOutOfRange => {
+                    oer_chips_esp32s31_hal::phy::memory::PhyMemoryError::PbusGroupOutOfRange => {
                         PhyPbusMemoryBindingError::InvalidGroup
                     }
-                    oer_esp32s31_hal::phy::memory::PhyMemoryError::PbusCommandOutOfRange => {
+                    oer_chips_esp32s31_hal::phy::memory::PhyMemoryError::PbusCommandOutOfRange => {
                         PhyPbusMemoryBindingError::InvalidCommand
                     }
                 })?;

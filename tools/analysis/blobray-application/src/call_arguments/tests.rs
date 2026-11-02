@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AbstractValue, ArtifactId, Expression, FunctionRecord, FunctionRelocation, ObjectId,
     ObjectLocation, ReferenceKind, ReferenceTarget, SymbolDefinition, SymbolId, SymbolTableKind,
     ValueAlternative, ValueAlternatives,
@@ -311,11 +311,11 @@ fn call_sites(
     targets: &[String],
     image: Option<&[(u64, u64, String)]>,
 ) -> Vec<CallSite> {
-    let memory = oer_analysis_riscv_model::WorkingMemory::new(8192)
+    let memory = oer_tools_analysis_riscv_model::WorkingMemory::new(8192)
         .expect("navigation fixture should succeed");
-    let facts = oer_analysis_riscv_model::FunctionIndex::new(
+    let facts = oer_tools_analysis_riscv_model::FunctionIndex::new(
         records,
-        oer_analysis_riscv_model::RecordPolicy::Dictionary,
+        oer_tools_analysis_riscv_model::RecordPolicy::Dictionary,
         &memory,
         &mut || Ok(()),
     )
@@ -336,7 +336,7 @@ fn call_sites(
 
 #[test]
 fn call_argument_lookup_errors_reach_the_caller_after_any_checkpoint() {
-    use oer_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
+    use oer_tools_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
     let records = [
         reference(0, "callee", 1, ReferenceKind::Call),
         inputs(

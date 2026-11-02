@@ -11,7 +11,7 @@ use crate::esp32s31::harness::{
 use crate::esp32s31::layout::*;
 use crate::esp32s31::phy::{PhyImage, image_layout};
 use crate::esp32s31::session::Session;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallCapture, DataSelector, DeviceBehavior, DeviceDeclaration, ExecutionEvent, Invocation,
     LinkRequest, RegionLifetime, RegisterCell, SessionReset,
 };
@@ -306,7 +306,7 @@ impl Gain {
         let exported = session.data("coefficients", &request)?;
         let coefficients = exported.bytes;
         if exported.payload.as_str() != OBJECT_SHA
-            || oer_os_durable::sha256_bytes(&coefficients) != COEFFICIENT_SHA
+            || oer_tools_os_durable::sha256_bytes(&coefficients) != COEFFICIENT_SHA
         {
             return Err(invalid("gain object or coefficient identity mismatch"));
         }
@@ -324,7 +324,7 @@ impl Gain {
             "register_chipv7_phy_init_param",
             "phy_wifi_set_tx_gain_new",
         ]);
-        let root = |input: usize, name: &str| -> Result<oer_analysis_riscv_model::SymbolId> {
+        let root = |input: usize, name: &str| -> Result<oer_tools_analysis_riscv_model::SymbolId> {
             Ok(symbol(inventory, input, name)?.id.clone())
         };
         let mut link = LinkRequest {
@@ -367,11 +367,11 @@ impl Gain {
                 include_tail: true,
                 argument_words: 0,
                 overrides: vec![
-                    oer_analysis_blobray_domain::CallWordCount {
+                    oer_tools_analysis_blobray_domain::CallWordCount {
                         target: self.sym(1, "memcpy"),
                         words: 3,
                     },
-                    oer_analysis_blobray_domain::CallWordCount {
+                    oer_tools_analysis_blobray_domain::CallWordCount {
                         target: self.sym(1, "phy_wifi_get_tx_gain"),
                         words: 11,
                     },

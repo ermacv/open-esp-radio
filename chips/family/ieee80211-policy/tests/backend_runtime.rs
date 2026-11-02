@@ -1,23 +1,23 @@
-use oer_esp32s31_ieee80211_driver::mac::{
+use oer_chips_esp32s31_ieee80211_driver::mac::{
     edca::*,
     portable::legacy_from_phy_rate,
     tx::{runtime::*, *},
 };
-use oer_espressif_ieee80211_policy::{backend::EspressifAmpduRetryState, lmac};
-use oer_ieee80211_contracts_port::backend::*;
-use oer_ieee80211_contracts_port::backend_aggregate::*;
-use oer_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
+use oer_chips_family_ieee80211_policy::{backend::EspressifAmpduRetryState, lmac};
+use oer_protocols_ieee80211_contracts_port::backend::*;
+use oer_protocols_ieee80211_contracts_port::backend_aggregate::*;
+use oer_protocols_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
 type AmpduRetryState<const C: usize> = EspressifAmpduRetryState<C>;
 const VENDOR_SHORT_RETRY_LIMIT: u8 = lmac::SHORT_RETRY_LIMIT;
 const VENDOR_AMPDU_MSDU_LIFETIME_MICROS: u32 = lmac::AMPDU_MSDU_LIFETIME_MICROS;
 
-use oer_esp32s31_ieee80211_driver::mac::tx::test_support::model_completion;
-use oer_esp32s31_ieee80211_driver::mac::tx::{
+use oer_chips_esp32s31_ieee80211_driver::mac::tx::test_support::model_completion;
+use oer_chips_esp32s31_ieee80211_driver::mac::tx::{
     TxCompletion, TxCookie,
     ampdu::{HtAmpduTxCompletion, HtBlockAckObservation},
 };
-use oer_ieee80211_contracts_port::VifRole;
-use oer_ieee80211_wire::extensions::wmm::parse_wmm_parameter_element;
+use oer_protocols_ieee80211_contracts_port::VifRole;
+use oer_protocols_ieee80211_wire::extensions::wmm::parse_wmm_parameter_element;
 
 const STANDARD_WMM: [u8; 26] = [
     221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x85, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42, 0x43,
@@ -53,7 +53,7 @@ fn vif_tables_are_separate_and_contention_belongs_to_the_ac_queue() {
     policy
         .install_edca(
             VifRole::AccessPoint,
-            oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+            oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
                 parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
             ),
         )
@@ -112,8 +112,8 @@ fn negotiated_txop_is_bounded_and_medium_ownership_stays_unsupported() {
 
 #[test]
 fn ordinary_he_retries_walk_the_dot11ax_record() {
-    use oer_esp32s31_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
-    use oer_esp32s31_ieee80211_driver::mac::tx::{HeMcs, HeRate};
+    use oer_chips_esp32s31_ieee80211_driver::mac::rx::HeGuardIntervalAndLtf;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::{HeMcs, HeRate};
     let counters = |failures| RetryCounters {
         mpdu: failures,
         short: 0,
@@ -124,19 +124,19 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         HeGuardIntervalAndLtf::TwoLtf1600Ns,
     ));
     assert_eq!(
-        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
+        oer_protocols_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs9.phy_rate(),
             counters(0),
-            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+            &oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder
         )
         .and_then(|rate| TxPhyRate::try_from(rate).ok()),
         Some(mcs9)
     );
     assert_eq!(
-        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
+        oer_protocols_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs9.phy_rate(),
             counters(2),
-            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+            &oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder
         )
         .and_then(|rate| TxPhyRate::try_from(rate).ok()),
         Some(TxPhyRate::He(HeRate::new(
@@ -145,10 +145,10 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
         )))
     );
     assert_eq!(
-        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
+        oer_protocols_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs9.phy_rate(),
             counters(4),
-            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+            &oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder
         )
         .and_then(|rate| TxPhyRate::try_from(rate).ok()),
         Some(TxPhyRate::Legacy(legacy_from_phy_rate(LegacyRate::Ofdm6M)))
@@ -156,10 +156,10 @@ fn ordinary_he_retries_walk_the_dot11ax_record() {
     // An 800-ns rate below MCS9 has no record and keeps its rate.
     let mcs8 = TxPhyRate::He(HeRate::new(HeMcs::Mcs8, HeGuardIntervalAndLtf::OneLtf800Ns));
     assert_eq!(
-        oer_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
+        oer_protocols_ieee80211_core_upper_mac::retry::select_ordinary_retry_rate(
             mcs8.phy_rate(),
             counters(4),
-            &oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder
+            &oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder
         )
         .and_then(|rate| TxPhyRate::try_from(rate).ok()),
         Some(mcs8)
@@ -190,8 +190,8 @@ fn completion(status: u8, starting_sequence: u16, bitmap: u64) -> HtAmpduTxCompl
     )
 }
 
-const HT_LIFETIME: oer_time::Duration =
-    oer_time::Duration::from_micros(VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64);
+const HT_LIFETIME: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_micros(VENDOR_AMPDU_MSDU_LIFETIME_MICROS as u64);
 
 #[test]
 fn partial_block_ack_compacts_sequences_across_retained_attempts() {
@@ -255,8 +255,8 @@ fn cts_timeout_republishes_the_unchanged_aggregate_then_requests_its_block_ack()
     assert_eq!(state.current_subframes(), 3);
 }
 
-fn block_ack(starting_sequence: u16, bitmap: u64) -> oer_ieee80211_contracts_port::BlockAckReport {
-    oer_ieee80211_contracts_port::BlockAckReport::new(
+fn block_ack(starting_sequence: u16, bitmap: u64) -> oer_protocols_ieee80211_contracts_port::BlockAckReport {
+    oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
         SequenceNumber::new(starting_sequence).unwrap(),
         bitmap,
     )
@@ -679,19 +679,19 @@ fn an_ended_agreement_still_discards_aged_or_completes_acknowledged_mpdus() {
     );
 }
 
-fn mono(micros: u64) -> oer_time::Instant {
-    oer_time::Instant::from_micros(micros)
+fn mono(micros: u64) -> oer_portable_time::Instant {
+    oer_portable_time::Instant::from_micros(micros)
 }
 
 /// Every MPDU's MSDU admitted at zero.
-fn admitted_at_zero(_: u8) -> Option<oer_time::Instant> {
-    Some(oer_time::Instant::from_micros(0))
+fn admitted_at_zero(_: u8) -> Option<oer_portable_time::Instant> {
+    Some(oer_portable_time::Instant::from_micros(0))
 }
 
 #[test]
 fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
-    use oer_ieee80211_contracts_port::EdcaParameterSet;
-    use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+    use oer_protocols_ieee80211_contracts_port::EdcaParameterSet;
+    use oer_protocols_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
     let table = |aifsn, min, max, txop, lifetime| {
         EdcaParameterSet::from_tu(
             WmmParameterSet::new(
@@ -699,9 +699,9 @@ fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
                 false,
                 [WmmAcParameters {
                     admission_control_mandatory: false,
-                    aifsn: oer_wire::U8::new(aifsn).unwrap(),
-                    ecw_min: oer_wire::U8::new(min).unwrap(),
-                    ecw_max: oer_wire::U8::new(max).unwrap(),
+                    aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
+                    ecw_min: oer_portable_wire::U8::new(min).unwrap(),
+                    ecw_max: oer_portable_wire::U8::new(max).unwrap(),
                     txop_limit_units_32_us: txop,
                 }; 4],
             ),
@@ -734,7 +734,7 @@ fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
         assert_eq!(record.txop_limit_units_32_us(), 350);
         assert_eq!(
             record.msdu_lifetime(),
-            oer_time::Duration::from_micros(100 * 1024)
+            oer_portable_time::Duration::from_micros(100 * 1024)
         );
         policy.record_retry_failure(VifRole::AccessPoint, queue);
         assert_eq!(

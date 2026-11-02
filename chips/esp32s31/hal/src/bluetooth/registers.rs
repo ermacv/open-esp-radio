@@ -22,7 +22,7 @@
     )
 )]
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     ble_accelerator, bt_bb, bt_mac, btdm, instances,
     modem_etm::{self, ModemEtmBluetooth, ModemEtmBluetoothPhy},
     modem_pwr,
@@ -31,7 +31,7 @@ use oer_esp32s31_pac::{
         BluetoothModemLpTimerPeripherals,
     },
 };
-use oer_mmio::{Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use crate::modem::{
     BluetoothLowPowerClockObservation, ModemSysconBluetoothObservation,
@@ -442,11 +442,11 @@ impl BluetoothModemLpTimerRegisters {
 
 /// Order SRAM descriptor writes and MMIO at a hardware ownership boundary.
 pub(crate) fn device_fence() {
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 /// A field of at most eight bits read back, as a byte.
-pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_mmio::Bits<WIDTH>) -> u8 {
+pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_portable_mmio::Bits<WIDTH>) -> u8 {
     const { assert!(WIDTH <= 8, "the field fits a byte") };
     bits.get().to_le_bytes()[0]
 }

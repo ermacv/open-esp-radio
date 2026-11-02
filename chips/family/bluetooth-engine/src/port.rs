@@ -10,7 +10,7 @@
 ///
 /// A generic driver cannot reuse a consumed publication receipt:
 /// ```compile_fail,E0382
-/// use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+/// use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
 /// fn clear_twice<P: SchedulerTaskPort>(port: &mut P, receipt: P::LockPublished) {
 ///     port.clear_execution_lock(receipt);
 ///     port.clear_execution_lock(receipt);
@@ -18,14 +18,14 @@
 /// ```
 /// The two commands retain distinct associated receipts:
 /// ```compile_fail,E0308
-/// use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+/// use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
 /// fn wrong_command<P: SchedulerTaskPort>(port: &mut P, receipt: P::LockPublished) {
 ///     port.clear_execution_modify(receipt);
 /// }
 /// ```
 /// A task port grants no interrupt-bank access:
 /// ```compile_fail,E0599
-/// use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+/// use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
 /// fn mask_from_task<P: SchedulerTaskPort>(port: &mut P) {
 ///     port.mask_run();
 /// }
@@ -111,7 +111,7 @@ pub trait OutputPhases {
 /// RUN disable. These receipts authorize no arena reclamation or owner transfer.
 ///
 /// ```compile_fail,E0308
-/// use oer_espressif_bluetooth_engine::port::OutputTaskPort;
+/// use oer_chips_family_bluetooth_engine::port::OutputTaskPort;
 /// fn skip_handler<P: OutputTaskPort>(port: &mut P, admitted: P::Admitted) {
 ///     port.confirm_heads_absent(admitted);
 /// }
@@ -132,18 +132,18 @@ pub trait OutputTaskPort: OutputPhases {
 /// masked pending is not observable. Refusal never yields a released receipt.
 /// These transactions retain the current HAL policy and diagnostic settles.
 pub trait OutputInterruptPort: OutputPhases {
-    fn sample_idle<C: oer_time::Clock + ?Sized>(
+    fn sample_idle<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         admitted: &Self::Admitted,
-        settle: oer_time::settle::Settle<'_, C>,
+        settle: oer_portable_time::settle::Settle<'_, C>,
     ) -> Result<Self::IdleSampled, Self::Error>;
     fn mask_dynamic(
         &mut self,
         heads: &Self::HeadsAbsent,
     ) -> Result<Self::DynamicMasked, Self::Error>;
-    fn release_idle<C: oer_time::Clock + ?Sized>(
+    fn release_idle<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         run: &Self::RunDisabled,
-        settle: oer_time::settle::Settle<'_, C>,
+        settle: oer_portable_time::settle::Settle<'_, C>,
     ) -> Result<Self::Released, Self::Error>;
 }

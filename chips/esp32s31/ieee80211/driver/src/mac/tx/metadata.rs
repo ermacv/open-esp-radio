@@ -4,8 +4,8 @@
 //! belong to the chip representation. IEEE 802.11 framing retains typed WMM
 //! categories without depending on this encoding.
 
-use oer_esp32s31_hal::layouts::WifiTxDescriptorPrefixPriority;
-use oer_ieee80211_wire::{
+use oer_chips_esp32s31_hal::layouts::WifiTxDescriptorPrefixPriority;
+use oer_protocols_ieee80211_wire::{
     address::AddressFlags,
     data::{DataEncapPlan, IEEE80211_QOS_DATA_HEADER_LEN},
     frame::FrameControlFields,

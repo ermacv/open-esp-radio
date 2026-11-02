@@ -1,11 +1,11 @@
 //! Bounded multi-peer AP MLME and security ownership.
 
 use core::fmt;
-use oer_crypto::rfc3394::KeyWrapError;
-use oer_ieee80211_core_upper_mac::sequence::SequenceCounter;
-use oer_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
-use oer_ieee80211_wire::security::spp::SppScope;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_portable_crypto::rfc3394::KeyWrapError;
+use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::spp::SppScope;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 mod block_ack;
 mod management;
@@ -26,11 +26,11 @@ pub use crate::limits::{
     AccessPointClientLimitError,
 };
 
-use oer_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
+use oer_protocols_ieee80211_wire::ap::{ApAssociationSecurityObservation, ApPowerSaveObservation};
 
 use crate::security_policy::ApSecurityPolicy;
-use oer_ieee80211_core_security_rsn::pmksa::{Pmksa, PmksaCache};
-use oer_ieee80211_core_security_rsn::{
+use oer_protocols_ieee80211_core_security_rsn::pmksa::{Pmksa, PmksaCache};
+use oer_protocols_ieee80211_core_security_rsn::{
     OwnedEapolFrame, Pmk, Ptk, PtkContext,
     authenticator::{RsnAuthenticator, RsnAuthenticatorError, RsnAuthenticatorStep},
     element::{ValidatedRsnElement, validate_rsn_element},
@@ -41,33 +41,33 @@ use oer_ieee80211_core_security_rsn::{
     retry::{RsnRetry, RsnRetryAction, RsnRetryAlarm, RsnRetryConfig, RsnRetryError},
     state::{RsnApPhase, RsnApState, RsnStateError},
 };
-use oer_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
-use oer_ieee80211_wire::ht::HtPeerCapabilities;
-use oer_ieee80211_wire::protection::{
+use oer_protocols_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
+use oer_protocols_ieee80211_wire::ht::HtPeerCapabilities;
+use oer_protocols_ieee80211_wire::protection::{
     ApBssProtection, ErpProtection, HtOperationProtection, HtProtectionMode,
 };
-use oer_ieee80211_wire::security::{
+use oer_protocols_ieee80211_wire::security::{
     AssociationAkm, AssociationSecurity, GroupManagementCipher, LinkProtection, RsnAssociation,
     SaePwe, rsn::Akm,
 };
 use {
-    oer_ieee80211_core_upper_mac::block_ack::{
+    oer_protocols_ieee80211_core_upper_mac::block_ack::{
         AddbaRequest, DialogTokenSequence, OperationalTxBlockAck, TxBlockAckOriginator,
         TxBlockAckOriginatorConfig, TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy,
         TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry,
     },
-    oer_ieee80211_wire::block_ack::BlockAckAction,
+    oer_protocols_ieee80211_wire::block_ack::BlockAckAction,
 };
 
-pub const AP_ASSOCIATION_DEADLINE: oer_time::Duration = oer_time::Duration::from_secs(15);
+pub const AP_ASSOCIATION_DEADLINE: oer_portable_time::Duration = oer_portable_time::Duration::from_secs(15);
 /// AP-owned response window for each four-way-handshake publication.
 ///
 /// This follows the generic hostap authenticator policy: a 100-ms first
 /// EAPOL-Key response window, 1-second subsequent windows, and four total
 /// publications. An acknowledged Message 1 uses the subsequent window
 /// immediately. It is protocol policy, not an ESP32 hardware fact.
-pub const AP_WPA2_FIRST_RETRY_INTERVAL: oer_time::Duration = oer_time::Duration::from_millis(100);
-pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_time::Duration = oer_time::Duration::from_secs(1);
+pub const AP_WPA2_FIRST_RETRY_INTERVAL: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(100);
+pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_portable_time::Duration = oer_portable_time::Duration::from_secs(1);
 /// Retransmissions after the original M1 or M3 publication.
 pub const AP_WPA2_RETRY_ATTEMPTS: u8 = 3;
 pub const AP_TX_BLOCK_ACK_TID: u8 = 0;
@@ -76,8 +76,8 @@ pub const AP_TX_BLOCK_ACK_TID: u8 = 0;
 /// duplex fairness must be provided by the common MAC transaction scheduler,
 /// not by weakening the AP's negotiated BlockAck capability.
 pub const AP_TX_BLOCK_ACK_WINDOW: u16 = 32;
-pub const AP_TX_BLOCK_ACK_NEGOTIATION_TIMEOUT: oer_time::Duration =
-    oer_time::Duration::from_millis(100);
+pub const AP_TX_BLOCK_ACK_NEGOTIATION_TIMEOUT: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_millis(100);
 
 /// Validated inactivity policy for an associated SoftAP peer.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -99,8 +99,8 @@ impl AccessPointInactiveTimeout {
         self.0
     }
 
-    pub const fn duration(self) -> oer_time::Duration {
-        oer_time::Duration::from_secs(self.0 as u32)
+    pub const fn duration(self) -> oer_portable_time::Duration {
+        oer_portable_time::Duration::from_secs(self.0 as u32)
     }
 }
 
@@ -338,7 +338,7 @@ pub enum ApMlmeAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApServiceError {
-    InvalidAssociationSecurity(oer_ieee80211_wire::security::rsn::RsnSyntaxError),
+    InvalidAssociationSecurity(oer_protocols_ieee80211_wire::security::rsn::RsnSyntaxError),
     UnknownPeer,
     /// The next identity would reuse the storage's exhausted u32 frontier.
     GenerationExhausted,
@@ -372,7 +372,7 @@ pub enum ApWpa2Error {
     UnexpectedAction,
     Retry(RsnRetryError),
     /// The AES engine refused an EAPOL-Key MIC's key or block.
-    Engine(oer_crypto::block::BlockError),
+    Engine(oer_portable_crypto::block::BlockError),
 }
 
 impl From<RsnRetryError> for ApWpa2Error {
@@ -466,8 +466,8 @@ struct ApPeer {
     power_state: ApPeerPowerState,
     buffered_unicast_frames: u16,
     buffered_release_in_flight: bool,
-    last_activity: oer_time::Instant,
-    deadline: oer_time::Instant,
+    last_activity: oer_portable_time::Instant,
+    deadline: oer_portable_time::Instant,
 }
 
 /// Caller-owned storage for all per-client AP protocol and key state.
@@ -505,7 +505,7 @@ impl AccessPointPeerStorage {
     /// from a retired service into the next service.
     ///
     /// ```compile_fail,E0499
-    /// use oer_ieee80211_core_roles_ap::AccessPointPeerStorage;
+    /// use oer_protocols_ieee80211_core_roles_ap::AccessPointPeerStorage;
     /// fn twice(storage: &mut AccessPointPeerStorage) {
     ///     let first = storage.lend();
     ///     let second = storage.lend();
@@ -514,7 +514,7 @@ impl AccessPointPeerStorage {
     /// ```
     ///
     /// ```
-    /// use oer_ieee80211_core_roles_ap::AccessPointPeerStorage;
+    /// use oer_protocols_ieee80211_core_roles_ap::AccessPointPeerStorage;
     /// fn sequential(storage: &mut AccessPointPeerStorage) {
     ///     let first = storage.lend();
     ///     drop(first);
@@ -544,7 +544,7 @@ impl AccessPointPeerStorage {
 /// remains the runtime's separate obligation.
 ///
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_roles_ap::AccessPointPeers;
+/// use oer_protocols_ieee80211_core_roles_ap::AccessPointPeers;
 /// fn duplicate(peers: AccessPointPeers<'_>) {
 ///     let first = peers;
 ///     let second = peers;
@@ -552,7 +552,7 @@ impl AccessPointPeerStorage {
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_roles_ap::AccessPointPeers;
+/// use oer_protocols_ieee80211_core_roles_ap::AccessPointPeers;
 /// fn transfer(peers: AccessPointPeers<'_>) -> AccessPointPeers<'_> { peers }
 /// ```
 #[must_use = "retain the table owner for the service or its restart bank"]
@@ -597,7 +597,7 @@ impl ApPeer {
         address: [u8; 6],
         association_id: u16,
         association_epoch: u32,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
     ) -> Result<Self, ApServiceError> {
         Ok(Self {
             address,
@@ -707,8 +707,8 @@ pub struct ApPeerStatus {
     pub power_state: ApPeerPowerState,
     pub buffered_unicast_frames: u16,
     pub buffered_release_in_flight: bool,
-    pub last_activity: oer_time::Instant,
-    pub deadline: oer_time::Instant,
+    pub last_activity: oer_portable_time::Instant,
+    pub deadline: oer_portable_time::Instant,
 }
 
 impl ApPeerStatus {
@@ -746,7 +746,7 @@ pub struct AccessPointService<'peers, S: SppScope> {
     spp_scope: core::marker::PhantomData<S>,
     address: [u8; 6],
     security: AccessPointSecurityMaterial,
-    group_management: Option<oer_ieee80211_core_security_rsn::bip::BipTransmitter>,
+    group_management: Option<oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter>,
     peer_storage: AccessPointPeers<'peers>,
     client_limit: AccessPointClientLimit,
     inactive_timeout: AccessPointInactiveTimeout,
@@ -839,7 +839,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         peer_storage.storage.generation = generation;
         let group_management = match &security {
             AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } => Some(
-                oer_ieee80211_core_security_rsn::bip::BipTransmitter::new(igtk),
+                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter::new(igtk),
             ),
             AccessPointSecurityMaterial::Open
             | AccessPointSecurityMaterial::Wpa2Personal { .. } => None,

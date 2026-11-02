@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_testing_model::{ModelBackend, ModelBuffer, ModelSmall};
-use oer_radio_port::StaticId;
+use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelBuffer, ModelSmall};
+use oer_protocols_radio_port::StaticId;
 
 pub enum First {}
 pub enum Second {}

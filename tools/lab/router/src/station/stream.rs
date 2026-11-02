@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use oer_os_process::owned::Child;
+use oer_tools_os_process::owned::Child;
 
 use crate::{
     mac::Mac,

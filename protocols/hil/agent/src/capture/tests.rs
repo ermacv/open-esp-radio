@@ -6,7 +6,7 @@
 )]
 use super::*;
 use collector::{Clock, Collector};
-use oer_trace::{Channel, Domain, Event, Kind, Observer};
+use oer_portable_trace::{Channel, Domain, Event, Kind, Observer};
 
 #[derive(Clone, Copy)]
 pub(super) struct Step;
@@ -108,7 +108,7 @@ fn invalid_reads_and_exhausted_counter_banks_are_typed() {
 #[test]
 fn service_keys_only_appear_when_mounted_and_maximum_pages_fit_frames() {
     use crate::base::Service;
-    use oer_hil_protocol::{Envelope, FrameEncoder};
+    use oer_protocols_hil_protocol::{Envelope, FrameEncoder};
     crate::image_keys! { MOUNTED = [Request] }
     crate::image_keys! { PLAIN = [] }
     for key in Request::KEYS {
@@ -173,15 +173,15 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
         console::{Console, Immediate},
     };
     use embassy_futures::{block_on, select::select};
-    use oer_hil_protocol::{
+    use oer_protocols_hil_protocol::{
         Envelope, FrameDecoder, FrameEncoder, Message, WireKind,
         base::{BootEvidence, PostMortemCheckpoints, ResetReason},
     };
     use std::{cell::RefCell, collections::VecDeque, rc::Rc, vec::Vec};
     struct Early;
     impl Immediate for Early {
-        fn note(_: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
-            oer_diagnostics::Written::Retired
+        fn note(_: &oer_portable_diagnostics::Note<'_>) -> oer_portable_diagnostics::Written {
+            oer_portable_diagnostics::Written::Retired
         }
         fn take_lost() -> u32 {
             0

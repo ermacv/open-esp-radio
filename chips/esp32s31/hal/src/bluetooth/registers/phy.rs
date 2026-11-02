@@ -10,8 +10,8 @@
 
 use crate::layouts::{BlePhyEnvironment, BleResolvingList, DmaRef};
 
-use oer_esp32s31_pac::{bt_bb::BtV32Baseband, modem_etm::ModemEtmBluetoothPhy};
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::{bt_bb::BtV32Baseband, modem_etm::ModemEtmBluetoothPhy};
+use oer_portable_mmio::Placement;
 
 use crate::bluetooth::registers::{BluetoothPlacements, BluetoothTaskRegisters, device_fence};
 
@@ -72,10 +72,10 @@ where
 /// SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS.
 fn route_and_enable<E: Placement>(etm: &mut ModemEtmBluetoothPhy<E>) {
     etm.modify_ch2_event(|w| {
-        w.set_id(oer_esp32s31_pac::modem_etm::ch_event::Id::BlePhyEvent08.bits());
+        w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_event::Id::BlePhyEvent08.bits());
     });
     etm.modify_ch2_task(|w| {
-        w.set_id(oer_esp32s31_pac::modem_etm::ch_task::Id::BlePhyTask14.bits());
+        w.set_id(oer_chips_esp32s31_pac::modem_etm::ch_task::Id::BlePhyTask14.bits());
     });
     etm.trigger_channel_enable_set_ch2();
 }
@@ -213,32 +213,32 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         // the word is written zero.
         btmac.modify_interrupt_enable(|w| {
             w.set_scheduler_run(false);
-            w.set_bits_0_13_opaque(oer_mmio::Bits::constant::<0>());
-            w.set_bits_15_16_opaque(oer_mmio::Bits::constant::<0>());
-            w.set_bits_18_31_opaque(oer_mmio::Bits::constant::<0>());
+            w.set_bits_0_13_opaque(oer_portable_mmio::Bits::constant::<0>());
+            w.set_bits_15_16_opaque(oer_portable_mmio::Bits::constant::<0>());
+            w.set_bits_18_31_opaque(oer_portable_mmio::Bits::constant::<0>());
         });
         // Clear every source in one write of all ones.
         btmac.trigger_interrupt_clear(|t| {
             t.bit_0_opaque()
-                .bits_1_2_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_1_2_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .bit_3_opaque()
                 .bit_4_opaque()
-                .bits_5_9_opaque(oer_mmio::Bits::constant::<0x1f>())
+                .bits_5_9_opaque(oer_portable_mmio::Bits::constant::<0x1f>())
                 .bit_10_opaque()
                 .bit_11_opaque()
-                .bits_12_13_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_12_13_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .scheduler_run()
                 .bit_15_opaque()
                 .bit_16_opaque()
                 .bit_17_opaque()
-                .bits_18_19_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_18_19_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .bit_20_opaque()
                 .bit_21_opaque()
-                .bits_22_23_opaque(oer_mmio::Bits::constant::<0x3>())
+                .bits_22_23_opaque(oer_portable_mmio::Bits::constant::<0x3>())
                 .bit_24_opaque()
-                .bits_25_27_opaque(oer_mmio::Bits::constant::<0x7>())
+                .bits_25_27_opaque(oer_portable_mmio::Bits::constant::<0x7>())
                 .bit_28_opaque()
-                .bits_29_31_opaque(oer_mmio::Bits::constant::<0x7>());
+                .bits_29_31_opaque(oer_portable_mmio::Bits::constant::<0x7>());
         });
 
         // `r_ble_phy_ramup_time_set`: the TX-on delay fields, then the
@@ -255,7 +255,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         // above it take the byte's bits 8..=10, zero for a byte.
         baseband.modify_le_tx_on_delay(|w| {
             w.set_encoded_value_minus_10(timing_byte.wrapping_sub(10));
-            w.set_bits_16_18_opaque(oer_mmio::Bits::constant::<0>());
+            w.set_bits_16_18_opaque(oer_portable_mmio::Bits::constant::<0>());
         });
 
         btmac.modify_crc_config(|w| {
@@ -293,10 +293,10 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             w.set_init_byte_1(w.init_byte_1() | 0x1);
         });
         btmac.modify_word_0654_opaque(|w| {
-            w.set_init_byte_2_low_7(oer_mmio::Bits::constant::<0x0>());
+            w.set_init_byte_2_low_7(oer_portable_mmio::Bits::constant::<0x0>());
         });
         btmac.modify_word_0654_opaque(|w| {
-            w.set_init_byte_2_low_7(oer_mmio::Bits::truncate(w.init_byte_2_low_7().get() | 0x32));
+            w.set_init_byte_2_low_7(oer_portable_mmio::Bits::truncate(w.init_byte_2_low_7().get() | 0x32));
             w.set_init_byte_2_high(true);
         });
 
@@ -304,7 +304,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             w.set_bits_0_31_opaque(0x0);
         });
         bluetooth.ble_hw_positional_word_891c.write_value(|w| {
-            w.set_bits_5_6_opaque(oer_mmio::Bits::constant::<0x1>());
+            w.set_bits_5_6_opaque(oer_portable_mmio::Bits::constant::<0x1>());
         });
         bluetooth.ble_hw_accelerator.modify_init_config(|w| {
             w.set_value(0x2f0);
@@ -383,7 +383,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             w.set_init_high_half(0xf);
         });
         btmac.modify_word_094c_opaque(|w| {
-            w.set_init_low_5(oer_mmio::Bits::constant::<0x12>());
+            w.set_init_low_5(oer_portable_mmio::Bits::constant::<0x12>());
         });
 
         if inputs.set_branch_control_0470_bit_18 {
@@ -392,7 +392,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             });
         }
         bluetooth.ble_hw_positional_word_891c.write_value(|w| {
-            w.set_bits_5_6_opaque(oer_mmio::Bits::constant::<0x2>());
+            w.set_bits_5_6_opaque(oer_portable_mmio::Bits::constant::<0x2>());
         });
 
         bluetooth

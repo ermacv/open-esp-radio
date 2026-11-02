@@ -2,9 +2,9 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::panic, clippy::todo, clippy::unimplemented)]
 
-//! The HIL image of the radio-free scenarios: the `oer-espressif` AES
-//! service with the library's defaults, the HIL base module and the AES
-//! service over the USB Serial/JTAG console, without Wi-Fi.
+//! The HIL image of the SDK station scenario: the `oer` Wi-Fi
+//! station and IP service with the library's defaults, the HIL base module
+//! and the SDK station service over the USB Serial/JTAG console.
 
 #[cfg(target_arch = "riscv32")]
 include!("entry.rs");
@@ -13,3 +13,6 @@ fn main() {}
 
 #[cfg(any(target_arch = "riscv32", test))]
 mod services;
+
+#[cfg(any(target_arch = "riscv32", test))]
+mod load;

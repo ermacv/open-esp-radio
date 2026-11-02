@@ -1,6 +1,6 @@
 use super::*;
 use crate::{BodyLoan, Mint, Root, Slot, SlotBody, SlotBodyOwner, SlotWakes, Slots};
-use oer_memory::{
+use oer_portable_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, LocalSpscReceiver, LocalSpscSender,
 };
 

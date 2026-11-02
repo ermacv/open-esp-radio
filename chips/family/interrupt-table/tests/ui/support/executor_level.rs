@@ -1,10 +1,10 @@
-oer_espressif_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_parts!();
 
 pub fn on_timer(_: &mut TimerIrq) {}
 pub fn on_wake(_: &mut AbsentIrq) {}
 pub fn on_irq(_: &mut PairIrq) {}
 
-oer_espressif_interrupt_table::interrupt_table! {
+oer_chips_family_interrupt_table::interrupt_table! {
     lines: FAKE_LINES,
     handler_attributes: [];
     contexts { app_wake: 1; radio_executor: 2; radio: 3; }

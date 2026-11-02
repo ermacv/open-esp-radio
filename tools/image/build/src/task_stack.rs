@@ -92,7 +92,7 @@ mod tests {
         .collect();
         let metadata = serde_json::json!({"packages": packages});
         let proven = |package| proven_of_metadata(&metadata, package).unwrap();
-        assert!(proven("oer-firmware-apps-boot-smoke"));
-        assert!(proven("oer-firmware-apps-radio-root"));
+        assert!(proven("oer-hil-probes-boot-smoke"));
+        assert!(proven("oer-hil-probes-radio-root"));
     }
 }

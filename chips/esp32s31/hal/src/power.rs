@@ -9,7 +9,7 @@ pub(crate) struct RoutePower<'route, P: PlatformClockProvider> {
     pub(crate) platform: &'route P,
 }
 
-impl<P: PlatformClockProvider> oer_espressif_radio::power::PowerSequenceBackend
+impl<P: PlatformClockProvider> oer_chips_family_radio::power::PowerSequenceBackend
     for RoutePower<'_, P>
 {
     fn publish_modem_power_state(&mut self) {
@@ -20,9 +20,9 @@ impl<P: PlatformClockProvider> oer_espressif_radio::power::PowerSequenceBackend
     }
     fn acquire_platform_clock(
         &mut self,
-        clock: oer_espressif_radio::power::PowerClock,
-    ) -> Result<(), oer_espressif_radio::power::ReferenceRefused> {
-        use oer_espressif_radio::power::{PowerClock, ReferenceRefused};
+        clock: oer_chips_family_radio::power::PowerClock,
+    ) -> Result<(), oer_chips_family_radio::power::ReferenceRefused> {
+        use oer_chips_family_radio::power::{PowerClock, ReferenceRefused};
         let clock = match clock {
             PowerClock::Mpll => PlatformClock::Mpll,
             PowerClock::Pll160m => PlatformClock::Pll160m,
@@ -50,11 +50,11 @@ impl<P: PlatformClockProvider> oer_espressif_radio::power::PowerSequenceBackend
     fn prepare_shared_modem_clock_map(&mut self) {
         self.phy.prepare_shared_modem_clock_map();
     }
-    fn power_readback(&self) -> oer_espressif_radio::power::PowerClockReadback {
+    fn power_readback(&self) -> oer_chips_family_radio::power::PowerClockReadback {
         let platform = self.phy.platform_clock_power_observation();
         let modem = self.phy.modem_syscon_power_observation();
         let shared = self.phy.shared_modem_clock_observation();
-        oer_espressif_radio::power::PowerClockReadback {
+        oer_chips_family_radio::power::PowerClockReadback {
             reset_released: modem.wifi_reset_released,
             hp_active_icg_selected: platform.hp_active_icg_selected,
             modem_bus_clock_enabled: platform.modem_register_bus_clock_enabled,

@@ -37,7 +37,7 @@ fn snapshot(s: &Session<'_>) -> [u32; 5] {
 fn state(s: &Session<'_>, tag: u32) -> [u32; 5] {
     let v = snapshot(s);
     emit(tag, v[0], v[1], v[2]);
-    emit(tag + 1, v[3], v[4], oer_riscv::cycle32());
+    emit(tag + 1, v[3], v[4], oer_portable_riscv::cycle32());
     v
 }
 fn clocks(s: &Session<'_>, tag: u32) {
@@ -70,16 +70,16 @@ fn clocks(s: &Session<'_>, tag: u32) {
     );
 }
 fn window() {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 fn wait_wrap(s: &Session<'_>, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut prior = counter(s);
-    while oer_riscv::cycle32().wrapping_sub(start) < LIMIT {
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {
         let now = counter(s);
         if now < prior {
-            emit(tag, prior, now, oer_riscv::cycle32().wrapping_sub(start));
+            emit(tag, prior, now, oer_portable_riscv::cycle32().wrapping_sub(start));
             return true;
         }
         prior = now;
@@ -92,12 +92,12 @@ fn enable(s: &mut Session<'_>, compare: bool, rollover: bool) {
         w.set_compare_software_delivery_set(compare)
             .set_rollover_delivery_set(rollover);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn clear(s: &mut Session<'_>) {
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn run(s: &mut Session<'_>, scenario: u32) {
     ble::init_lp(s);
@@ -112,9 +112,9 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     });
     enable(s, true, true);
     if compare {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         while s.ble.timer.read_word_0024_opaque().low_byte() == 0
-            && oer_riscv::cycle32().wrapping_sub(start) < 200_000
+            && oer_portable_riscv::cycle32().wrapping_sub(start) < 200_000
         {}
     }
     let before = state(s, 0xb010);
@@ -128,8 +128,8 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     // SOURCE: staged-runtime fatal::reset_recording -> HAL cores::{fatal,
     // stop_other, software_reset, prepare_reset}, hart0, other hart already Held.
     // No HAL call, peripheral takeover, UART perturbation or timer cleanup.
-    let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
-    oer_riscv::disable_interrupts();
+    let _ = oer_portable_riscv::swap_interrupt_threshold(u8::MAX);
+    oer_portable_riscv::disable_interrupts();
     core::sync::atomic::compiler_fence(Ordering::SeqCst);
     let held = s
         .core_control
@@ -169,7 +169,7 @@ fn run(s: &mut Session<'_>, scenario: u32) {
         before[3],
         before[4],
         target,
-        oer_riscv::cycle32(),
+        oer_portable_riscv::cycle32(),
         1,
         !scenario,
     ]) {
@@ -177,7 +177,7 @@ fn run(s: &mut Session<'_>, scenario: u32) {
     }
     RETAINED[0].store(MAGIC, Ordering::Release);
     FACTS_OUTPUT[0].store(MAGIC, Ordering::Release);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     s.core_control
         .lp_sys_core_control
         .trigger_sys_ctrl_sys_sw_rst();
@@ -243,7 +243,7 @@ pub(super) fn observe(s: &mut Session<'_>) {
     s.ble
         .timer
         .publish_bluetooth_modem_lp_timer_software_pending();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     window();
     state(s, 0xb130);
     enable(s, true, false);
@@ -290,5 +290,5 @@ fn source_clocks(s: &mut Session<'_>) {
                 .set_clk_lp_timer_sel_xtal(true)
                 .set_clk_lp_timer_div_num(Bits::constant::<1>());
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }

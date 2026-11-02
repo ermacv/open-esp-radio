@@ -1,10 +1,10 @@
 # S31 crypto
 
 `AesBlocks` owns the HAL's CPU Typical AES port by value for one owner and
-is a synchronous AES-128 engine (`oer_crypto::block::Aes128Engine`): loading
+is a synchronous AES-128 engine (`oer_portable_crypto::block::Aes128Engine`): loading
 a key sets the accelerator up, and each block is written, started and waited
 for in place on the `STATE` flag, its output read back before the call
-returns. `oer_crypto::block::unwrap_now` runs `oer-crypto`'s one RFC 3394
+returns. `oer_portable_crypto::block::unwrap_now` runs `oer-portable-crypto`'s one RFC 3394
 unwrap over it, in place in the request's buffer. The engine runs on
 the hart its composition places the AES owner on and never yields.
 `compose::crypto::aes_engine` builds it for its owner: the Wi-Fi station,
@@ -14,7 +14,7 @@ SDK RPC image, which serves its unwraps to the host; or
 boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart.
 
 A block waits on `STATE` in the named settle `BLOCK_SETTLE`
-(`oer_time::settle`, 10 µs on the engine's clock: the executors' clock in
+(`oer_portable_time::settle`, 10 µs on the engine's clock: the executors' clock in
 `compose`). TRM v0.1 §10.5.3 and the pinned ESP-IDF 4d80c1b2 AES HAL state
 no block latency; the bound comes from the `esp32s31-aes-timing` probe,
 which measured 270–279 cycles (0.87 µs) from the start to `STATE` reading

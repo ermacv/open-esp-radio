@@ -1,12 +1,12 @@
 //! Test-only owned ports shared by the driver and its staged runner tests.
 #![allow(clippy::panic, clippy::unwrap_used)]
-use oer_espressif_boot::adoption::{self, InitError, Owners, Port, WatchdogParts, WatchdogProfile};
-use oer_espressif_watchdog::{
+use oer_chips_family_boot::adoption::{self, InitError, Owners, Port, WatchdogParts, WatchdogProfile};
+use oer_chips_family_watchdog::{
     Access, MainConfig, MainWatchdogEnable, MainWatchdogRegisters, MicrosecondTick, RtcStageAction,
     RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };
-use oer_time::{Clock, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
 use std::{cell::RefCell, marker::PhantomData, vec::Vec};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-executor"
+name = "oer-chips-family-executor"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97.1"
@@ -11,45 +11,45 @@ description = "Scheduler-free static task executor and time driver for Espressif
 default = []
 # Nominal static radio-slot declarations. Images without a port slot retain
 # their dependency graph and linked bytes.
-port-slots = ["dep:oer-radio-port"]
+port-slots = ["dep:oer-protocols-radio-port"]
 # The executor and time driver over a chip binding (`bind!`), which the
 # chip's composition crate selects together with the HAL's chip.
 chip = [
     "dep:embassy-time-driver",
     "dep:portable-atomic",
-    "dep:oer-espressif-interrupt-table",
-    "dep:oer-espressif-staged-runtime",
-    "dep:oer-riscv",
-    "dep:oer-mmio",
+    "dep:oer-chips-family-interrupt-table",
+    "dep:oer-chips-family-staged-runtime",
+    "dep:oer-portable-riscv",
+    "dep:oer-portable-mmio",
 ]
 
 [dependencies]
-oer-trace = { path = "../../../portable/trace" }
-oer-espressif-boot = { path = "../boot" }
+oer-portable-trace = { path = "../../../portable/trace" }
+oer-chips-family-boot = { path = "../boot" }
 static_cell = "2.1.1"
-oer-cooperate = { path = "../../../portable/cooperate" }
-oer-time = { path = "../../../portable/time" }
+oer-portable-cooperate = { path = "../../../portable/cooperate" }
+oer-portable-time = { path = "../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
-oer-memory = { path = "../../../portable/memory" }
-oer-espressif-platform-port = { path = "../platform-port" }
-oer-radio-port = { path = "../../../protocols/radio/port", optional = true }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-family-platform-port = { path = "../platform-port" }
+oer-protocols-radio-port = { path = "../../../protocols/radio/port", optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
-oer-espressif-interrupt-table = { path = "../interrupt-table", optional = true }
-oer-riscv = { path = "../../../portable/riscv", optional = true }
-oer-mmio = { path = "../../../portable/mmio", optional = true }
-oer-espressif-staged-runtime = { path = "../staged-runtime", optional = true }
+oer-chips-family-interrupt-table = { path = "../interrupt-table", optional = true }
+oer-portable-riscv = { path = "../../../portable/riscv", optional = true }
+oer-portable-mmio = { path = "../../../portable/mmio", optional = true }
+oer-chips-family-staged-runtime = { path = "../staged-runtime", optional = true }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"
-oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+oer-tools-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [dev-dependencies]
-oer-riscv = { path = "../../../portable/riscv" }
-oer-radio-port = { path = "../../../protocols/radio/port", features = ["test-support"] }
-oer-espressif-staged-runtime = { path = "../staged-runtime" }
-oer-espressif-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
-oer-time-virtual = { path = "../../../portable/time-virtual" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-protocols-radio-port = { path = "../../../protocols/radio/port", features = ["test-support"] }
+oer-chips-family-staged-runtime = { path = "../staged-runtime" }
+oer-chips-family-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 
 [lints]
 workspace = true

@@ -1,13 +1,13 @@
 # Espressif coexistence policy
 
-`oer-espressif-coex` is the coexistence policy the Espressif chips share,
+`oer-chips-family-coex` is the coexistence policy the Espressif chips share,
 recovered from ESP32-S31 esp-coex-lib `fa152b3b`: the 49-event priority table
 (`CoexPtiTable`, equal in the pinned ESP32-S31 and ESP32-C5 archives) with
 the IEEE 802.15.4 levels it resolves, the timer programming sequence, clock
 conversion, event-to-timer mapping and software schedule state. It owns no
 register: each chip's radio domain keeps its own copy of the table as
 shared state, and each chip's HAL, such as
-[`oer-esp32s31-hal`](../../esp32s31/hal/README.md)'s `coex` module, binds the
+[`oer-chips-esp32s31-hal`](../../esp32s31/hal/README.md)'s `coex` module, binds the
 `CoexTimerHardware` and `CoexClockHardware` ports to its registers.
 `CoexTimerHardware::pti` reads the arbiter's table when a request is
 programmed, and a priority change goes through the arbiter's lease. The
@@ -33,7 +33,7 @@ without a runtime range check.
 
 ## Portable clients and operations
 
-The portable vocabulary is [`oer-radio-coex`](../../../protocols/radio/coex/README.md).
+The portable vocabulary is [`oer-protocols-radio-coex`](../../../protocols/radio/coex/README.md).
 `CoexClient` converts from its `RadioClient` into the vendor request kind
 (IEEE 802.15.4 has none) and `CoexStatusType` into the status word a client
 publishes. Each protocol port owns its operation enum; this crate maps an
@@ -68,7 +68,7 @@ notified radio; no runner is in this repository. A radio publishes its status
 through the schedule's `set_status_bits` and `clear_status_bits`; Wi-Fi
 reacts to its phases, while Bluetooth LE does not wait for its own.
 
-On the ESP32-S31, `oer_esp32s31_hal::coex::CoexDomainPorts` lends one arbiter
+On the ESP32-S31, `oer_chips_esp32s31_hal::coex::CoexDomainPorts` lends one arbiter
 lease's timer bank, event priorities and clock to `CoexCore` as its timer and
 clock ports.
 

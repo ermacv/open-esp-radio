@@ -1,10 +1,10 @@
 //! HE-SIG-B user streams of the chip's RX report: the complete HE20 SIG-B
 //! bytes the report carries, cut into the user fields the vendor parsers
-//! retain. The per-field codecs (`oer_ieee80211_wire::he`) stay air formats;
+//! retain. The per-field codecs (`oer_protocols_ieee80211_wire::he`) stay air formats;
 //! the stream bounds and user limits here are those of the pinned `libpp`
 //! RX parsers.
 
-use oer_ieee80211_wire::he::{
+use oer_protocols_ieee80211_wire::he::{
     HE_MU_SIG_B_USER_BITS, HE20_MU_SIG_B_COMMON_BITS, HE20_MU_SIG_B_USER_PAIR_BITS,
     He20MuSigBRuAllocation, He20MuSigBRuAllocationError, HeMuMimoSpatialConfiguration,
     HeMuSigBMimoUser, HeMuSigBNonMimoUser, read_sig_b_user_field,

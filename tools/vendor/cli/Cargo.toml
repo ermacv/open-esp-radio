@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-vendor-cli"
+name = "oer-tools-vendor-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,22 +9,22 @@ publish = false
 description = "`cargo vendor-check`: vendor pins fetched, vendor diffs, provenance, typed scenarios, comparison probes, host stands, symbol lineage and the PHY archive audit"
 
 [dependencies]
-oer-image-build = { path = "../../image/build" }
-oer-probe-codegen = { path = "../../probe/codegen" }
-oer-analysis-blobray-application = { path = "../../analysis/blobray-application" }
-oer-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
-oer-chip-profile = { path = "../../chip/profile" }
-oer-analysis-elf = { path = "../../analysis/elf" }
-oer-registers-model = { path = "../../registers/model" }
-oer-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
-oer-analysis-riscv-model = { path = "../../analysis/riscv-model" }
-oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
-oer-os-process = { path = "../../os/process" }
-oer-os-toolchain = { path = "../../os/toolchain" }
-oer-pins-artifacts = { path = "../../pins/artifacts" }
-oer-vendor-lineage = { path = "../lineage" }
-oer-os-durable = { path = "../../os/durable" }
-oer-vendor-provenance = { path = "../provenance" }
+oer-tools-image-build = { path = "../../image/build" }
+oer-tools-probe-codegen = { path = "../../probe/codegen" }
+oer-tools-analysis-blobray-application = { path = "../../analysis/blobray-application" }
+oer-tools-analysis-blobray-domain = { path = "../../analysis/blobray-domain" }
+oer-tools-chip-profile = { path = "../../chip/profile" }
+oer-tools-analysis-elf = { path = "../../analysis/elf" }
+oer-tools-registers-model = { path = "../../registers/model" }
+oer-tools-analysis-riscv-lift = { path = "../../analysis/riscv-lift" }
+oer-tools-analysis-riscv-model = { path = "../../analysis/riscv-model" }
+oer-tools-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
+oer-tools-os-process = { path = "../../os/process" }
+oer-tools-os-toolchain = { path = "../../os/toolchain" }
+oer-tools-pins-artifacts = { path = "../../pins/artifacts" }
+oer-tools-vendor-lineage = { path = "../lineage" }
+oer-tools-os-durable = { path = "../../os/durable" }
+oer-tools-vendor-provenance = { path = "../provenance" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
@@ -37,5 +37,5 @@ object = { version = "=0.39.1", default-features = false, features = ["elf", "st
 workspace = true
 
 [[bin]]
-name = "oer-tool-vendor"
+name = "oer-tools-vendor"
 path = "src/main.rs"

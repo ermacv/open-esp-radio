@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::boot::PsramRegisters;
-use oer_espressif_boot::psram::MappedPsram;
+use oer_chips_esp32s31_hal::boot::PsramRegisters;
+use oer_chips_family_boot::psram::MappedPsram;
 
 pub fn loan(mapped: MappedPsram<PsramRegisters>) {
     let observed = mapped.mapped();

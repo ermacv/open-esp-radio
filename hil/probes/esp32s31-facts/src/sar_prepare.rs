@@ -136,7 +136,7 @@ impl Sar {
         self.radio.pmu_radio.modify_rf_pwc(|w| {
             w.set_xpd_rf_circuit(pac::pmu::rf_pwc::XpdRfCircuit::PoweredOff);
         });
-        self.until(oer_riscv::cycle32(), 100);
+        self.until(oer_portable_riscv::cycle32(), 100);
         let p = &mut self.radio.pmu_radio;
         p.modify_rf_pwc(|w| {
             w.set_xpd_rf_circuit(pac::pmu::rf_pwc::XpdRfCircuit::PoweredOn);
@@ -160,7 +160,7 @@ impl Sar {
         }
         // SOURCE: OpenI2cXpdTransition accepts whole SDM byte 0x5b. This
         // short probe uses a 100 us mcycle limit rather than 9999 MAC ticks.
-        let sdm_start = oer_riscv::cycle32();
+        let sdm_start = oer_portable_riscv::cycle32();
         loop {
             let value = self.analog_byte(
                 pac::analog_i2c::sdm::update_enable::UPDATE_ENABLE.address(),
@@ -171,21 +171,21 @@ impl Sar {
                     0x1409,
                     1,
                     0x5b,
-                    oer_riscv::cycle32().wrapping_sub(sdm_start),
+                    oer_portable_riscv::cycle32().wrapping_sub(sdm_start),
                 );
                 break;
             }
-            if value.is_none() || oer_riscv::cycle32().wrapping_sub(sdm_start) >= self.cycles(100) {
+            if value.is_none() || oer_portable_riscv::cycle32().wrapping_sub(sdm_start) >= self.cycles(100) {
                 emit(
                     0x14ee,
                     10,
                     value.map_or(u32::MAX, u32::from),
-                    oer_riscv::cycle32().wrapping_sub(sdm_start),
+                    oer_portable_riscv::cycle32().wrapping_sub(sdm_start),
                 );
                 return false;
             }
         }
-        self.until(oer_riscv::cycle32(), 10);
+        self.until(oer_portable_riscv::cycle32(), 10);
         if !self.pbus_clear() {
             return false;
         }
@@ -284,9 +284,9 @@ impl Sar {
                     .set_test_value(Bits::truncate(value))
                     .set_path(Bits::truncate(path));
             });
-            let start = oer_riscv::cycle32();
+            let start = oer_portable_riscv::cycle32();
             while pbus.read_status_clock_force().busy() {
-                if oer_riscv::cycle32().wrapping_sub(start) >= bound {
+                if oer_portable_riscv::cycle32().wrapping_sub(start) >= bound {
                     emit(0x14ee, 11, selector, path);
                     return false;
                 }
@@ -307,7 +307,7 @@ impl Sar {
             .read_wifi_bb_cfg()
             .wifi_enable()
         {
-            self.until(oer_riscv::cycle32(), 1);
+            self.until(oer_portable_riscv::cycle32(), 1);
             let agc = &mut self.radio.phy_agc_oracle_wifi_bb;
             agc.modify_agc_shared_control(|w| {
                 w.set_forced_gain_index(0x32);
@@ -315,7 +315,7 @@ impl Sar {
             agc.modify_agc_shared_control(|w| {
                 w.set_forced_gain_enable(wifi_bb::agc_shared_control::ForcedGainEnable::Enabled);
             });
-            self.until(oer_riscv::cycle32(), 2);
+            self.until(oer_portable_riscv::cycle32(), 2);
             self.radio
                 .phy_agc_oracle_wifi_bb
                 .modify_agc_shared_control(|w| {
@@ -431,7 +431,7 @@ impl Sar {
         p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
             w.set_rstb_perif_i2c(false);
         });
-        self.until(oer_riscv::cycle32(), 1);
+        self.until(oer_portable_riscv::cycle32(), 1);
         let p = &mut self.radio;
         p.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
             w.set_xpd_perif_i2c(true);

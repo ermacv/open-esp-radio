@@ -6,9 +6,9 @@ use core::{
     num::{NonZeroU32, NonZeroU64},
     task::Waker,
 };
-use oer_bluetooth_le_port::{PacketCount, Receive, Transmit};
-use oer_time::{Clock, Duration, Instant, TimeOverflow, Timer};
-use oer_time_virtual::VirtualClock;
+use oer_protocols_bluetooth_le_port::{PacketCount, Receive, Transmit};
+use oer_portable_time::{Clock, Duration, Instant, TimeOverflow, Timer};
+use oer_portable_time_virtual::VirtualClock;
 
 /// Explicit propagation input. Loss applies to numbered packets per transmitter.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -62,7 +62,7 @@ struct Propagation {
     sequence: u64,
     received: u64,
 }
-/// Shared, deterministic test ether on `oer-time-virtual`. A caller supplies the
+/// Shared, deterministic test ether on `oer-portable-time-virtual`. A caller supplies the
 /// packet period as a test-profile input, not as a hardware timing guarantee.
 /// Packets are generated at period boundaries strictly after TX starts. Only
 /// radios already receiving on a matching channel and PHY collect them.

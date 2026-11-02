@@ -1,14 +1,14 @@
 //! Family cold-start order. Chip bindings supply owners, profiles and leaf
 //! adapters; images supply only their payload and flash-tuning resources.
-use oer_espressif_boot::{
+use oer_chips_family_boot::{
     cache, clock,
     drivers::{self, access_control, cores, entropy, system_timer::LatchStuck},
     flash, mmu, psram,
     wait::{BootBudget, BootDeadline, BootWait},
 };
-use oer_espressif_platform_port::EarlyText;
-use oer_espressif_staged_layout::Layout;
-use oer_time::Clock;
+use oer_chips_family_platform_port::EarlyText;
+use oer_chips_family_staged_layout::Layout;
+use oer_portable_time::Clock;
 
 /// CPU settings expressed in the register value types of one chip binding.
 pub type CpuConfiguration<B> = clock::CpuClockProfile<
@@ -259,7 +259,7 @@ where
 }
 
 #[cfg(target_arch = "riscv32")]
-fn checked<B: BootProfile, T>(result: Result<T, oer_espressif_boot::BootFailure>) -> T {
+fn checked<B: BootProfile, T>(result: Result<T, oer_chips_family_boot::BootFailure>) -> T {
     result.unwrap_or_else(|error| crate::fail_boot::<B::Port>(error))
 }
 
@@ -270,7 +270,7 @@ impl flash::XipWindow for Reference<'_> {
     fn word(&self, index: usize) -> Result<u32, flash::FlashFailure> {
         self.0
             .get(index)
-            .map(oer_memory::read_volatile)
+            .map(oer_portable_memory::read_volatile)
             .ok_or(flash::FlashFailure::XipOutside {
                 index,
                 words: self.0.len(),
@@ -283,7 +283,7 @@ mod tests {
     use super::*;
     #[test]
     fn xip_reads_return_the_exact_rejected_index_and_region_length() {
-        use oer_espressif_boot::flash::XipWindow;
+        use oer_chips_family_boot::flash::XipWindow;
 
         let words = [0x1234_5678, 0x89ab_cdef];
         let region = Reference(&words);

@@ -3,8 +3,8 @@ use crate::{
     AmpduAttemptResult, AmpduRetryDecision as UpperAmpduRetryDecision,
     AmpduRetryError as UpperAmpduRetryError, AmpduRetryState as UpperAmpduRetryState,
 };
-use oer_ieee80211_contracts_port::{TxStatus, backend_aggregate::*};
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_contracts_port::{TxStatus, backend_aggregate::*};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 /// Bounded core retry owner accepting detached port completion facts.
 pub struct BoundedAmpduRetryState<const CAPACITY: usize> {
     state: UpperAmpduRetryState,
@@ -61,9 +61,9 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
         &mut self,
         completion: impl Into<BackendAmpduCompletion>,
         observed_subframes: u8,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         block_ack_operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         let completion = completion.into();
         let result = if completion.trigger_flow_end {
@@ -95,10 +95,10 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
     /// record.
     pub fn observe_block_ack_request(
         &mut self,
-        block_ack: Option<oer_ieee80211_contracts_port::BlockAckReport>,
-        now: oer_time::Instant,
+        block_ack: Option<oer_protocols_ieee80211_contracts_port::BlockAckReport>,
+        now: oer_portable_time::Instant,
         block_ack_operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         self.state
             .observe_block_ack_request(block_ack, now, block_ack_operational, admitted)
@@ -173,7 +173,7 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
 
     /// Whether an MSDU admitted at `admitted` is aged at `now`: less than
     /// one lifetime unit remains.
-    pub fn aged(&self, admitted: oer_time::Instant, now: oer_time::Instant) -> bool {
+    pub fn aged(&self, admitted: oer_portable_time::Instant, now: oer_portable_time::Instant) -> bool {
         self.state.aged(admitted, now)
     }
 
@@ -217,9 +217,9 @@ impl<const CAPACITY: usize> BackendAmpduRetry for BoundedAmpduRetryState<CAPACIT
         &mut self,
         completion: BackendAmpduCompletion,
         subframes: u8,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         self.observe(completion, subframes, now, operational, admitted)
     }

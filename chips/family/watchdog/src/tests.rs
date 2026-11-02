@@ -4,8 +4,8 @@
 use core::{cell::RefCell, num::NonZeroU32};
 use std::vec::Vec;
 
-use oer_time::Duration;
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::Duration;
+use oer_portable_time_virtual::VirtualClock;
 
 use super::{
     Access, LOCK, MainConfig, MainStageAction, MainWatchdog, MainWatchdogEnable,
@@ -392,7 +392,7 @@ fn a_platform_reset_lease_retains_the_original_budget_and_refuses_late_completio
 #[test]
 fn an_unrepresentable_deadline_returns_the_platform_owner_without_programming_reset() {
     let log = Log::default();
-    let clock = VirtualClock::<1>::starting_at(oer_time::Instant::from_micros(u64::MAX));
+    let clock = VirtualClock::<1>::starting_at(oer_portable_time::Instant::from_micros(u64::MAX));
     let (owner, error) = DeadlineWatchdog::new(owned(&log), &clock)
         .arm(budget(100))
         .unwrap_err();

@@ -150,7 +150,7 @@ struct Calibration {
 enum Work {
     Idle,
     Frequency(RfpllFrequencyTransition),
-    Field(oer_espressif_analog::FieldWriteTransition<i2c::Address>),
+    Field(oer_chips_family_analog::FieldWriteTransition<i2c::Address>),
     Calibration(Calibration),
 }
 
@@ -166,7 +166,7 @@ struct RestoreObligation {
 /// Only the enclosing physical owner may run it or publish its terminal result.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::rx::gain::RxProgram;
+/// use oer_chips_esp32s31_phy::rx::gain::RxProgram;
 /// let program = RxProgram::with_initialized_tables();
 /// let moved = program;
 /// let _ = program.terminal();
@@ -1176,7 +1176,7 @@ impl I2cStep<'_> {
         model
             .advance(completion)
             .map_err(|_| RxError::WrongCompletion)?;
-        if model.action() == oer_espressif_analog::Action::Complete(()) {
+        if model.action() == oer_chips_family_analog::Action::Complete(()) {
             if self.program.cursor.pc == Pc::SharedI2cRestore {
                 self.program.cleanup_dc(AfterDc::Wifi);
             } else {

@@ -2,12 +2,12 @@
 //! Bluetooth adapter, probed for `cargo stand fixtures`.
 use std::{path::Path, time::Duration};
 
-use oer_lab_model::equipment::{Fixture, interfaces_or_names, radio_switch};
+use oer_tools_lab_model::equipment::{Fixture, interfaces_or_names, radio_switch};
 
 /// The fixtures of this host the stand file at `lab` uses: its Wi-Fi radios
 /// and its Bluetooth adapter.
 pub(crate) fn probe_local(lab: &Path) -> Vec<Fixture> {
-    let adapter = oer_lab_model::Stand::load(lab)
+    let adapter = oer_tools_lab_model::Stand::load(lab)
         .ok()
         .and_then(|stand| stand.bluetooth)
         .map(|bluetooth| bluetooth.adapter);
@@ -45,8 +45,8 @@ fn local_radios() -> Vec<Fixture> {
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
-            let probed = oer_os_process::output(
-                oer_os_process::command("sh").args(["-c", &script]),
+            let probed = oer_tools_os_process::output(
+                oer_tools_os_process::command("sh").args(["-c", &script]),
                 Some(Duration::from_secs(5)),
             )
             .ok()

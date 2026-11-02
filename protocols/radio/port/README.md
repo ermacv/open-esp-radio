@@ -1,6 +1,6 @@
 # Radio port lifecycle and vocabulary
 
-`oer-radio-port` supplies caller-owned lifecycle storage, slot identities,
+`oer-protocols-radio-port` supplies caller-owned lifecycle storage, slot identities,
 capacity tokens, errors and clock relations shared by radio ports.
 
 | Value | Meaning |
@@ -224,7 +224,7 @@ returned output. Separate poll boundaries keep body and registration frames
 independent. Linked image analysis measures their actual compiler frames,
 future backing and all allocated sections, including one-time initialization.
 The host [cost probe](examples/lifecycle_cost.rs) exercises two concrete backends
-and reports their future sizes with `cargo run -p oer-radio-port --features test-support --example lifecycle_cost`.
+and reports their future sizes with `cargo run -p oer-protocols-radio-port --features test-support --example lifecycle_cost`.
 
 UI cases and their positive twins cover closed identities, affine placement,
 foreign paths and resources, body-loan escape, quarantine and Joined. They

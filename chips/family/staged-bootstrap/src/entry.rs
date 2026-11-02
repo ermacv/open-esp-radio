@@ -47,8 +47,8 @@ _bootstrap_trap:
     j 3b
     .size _bootstrap_trap, . - _bootstrap_trap
 "#,
-    mie = const oer_riscv::machine::status::MIE,
-    boot_hart = const oer_espressif_staged_layout::boot::BOOT_HART,
+    mie = const oer_portable_riscv::machine::status::MIE,
+    boot_hart = const oer_chips_family_staged_layout::boot::BOOT_HART,
 );
 
 #[cfg(target_feature = "f")]
@@ -67,7 +67,7 @@ _bootstrap_enable_fpu:
     ret
     .size _bootstrap_enable_fpu, . - _bootstrap_enable_fpu
 "#,
-    fs = const oer_riscv::machine::status::FS_MASK,
+    fs = const oer_portable_riscv::machine::status::FS_MASK,
 );
 #[cfg(not(target_feature = "f"))]
 core::arch::global_asm!(

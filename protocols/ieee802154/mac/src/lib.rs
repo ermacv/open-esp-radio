@@ -26,7 +26,7 @@
 //! Sans-IO IEEE 802.15.4 MAC core: unslotted CSMA-CA backoff over the
 //! backend's single clear-channel assessment, retry policy, key/counter
 //! ownership, CSL phase and network-time calculation. Backends use the
-//! separate `oer-ieee802154-port` and `oer-ieee802154-wire` crates.
+//! separate `oer-protocols-ieee802154-port` and `oer-protocols-ieee802154-wire` crates.
 
 #[cfg(test)]
 extern crate std;

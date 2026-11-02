@@ -7,8 +7,8 @@ use bt_hci::{
     cmd::SyncCmd,
     event::{CommandCompleteWithStatus, Event},
 };
-use oer_bluetooth_hci::h4;
-use oer_os_process::linux_socket::HciAddress;
+use oer_protocols_bluetooth_hci::h4;
+use oer_tools_os_process::linux_socket::HciAddress;
 use rustix::{
     event::{PollFd, PollFlags, Timespec, poll},
     io::Errno,
@@ -57,7 +57,7 @@ impl Socket {
     }
 
     pub(super) fn send(&self, bytes: &[u8]) -> Result<()> {
-        oer_os_process::check_cancelled()?;
+        oer_tools_os_process::check_cancelled()?;
         let count = send(&self.0, bytes, SendFlags::NOSIGNAL)?;
         if count != bytes.len() {
             return Err("short HCI socket write".into());
@@ -67,7 +67,7 @@ impl Socket {
 
     pub(super) fn receive(&self, deadline: Instant) -> Result<Vec<u8>> {
         loop {
-            oer_os_process::check_cancelled()?;
+            oer_tools_os_process::check_cancelled()?;
             if Instant::now() >= deadline {
                 return Err("HCI response timeout".into());
             }

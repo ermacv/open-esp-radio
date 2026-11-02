@@ -4,7 +4,7 @@
 //!
 //! `serialport` hands a port's descriptor over only as a raw number. This
 //! crate is the one place that takes ownership of it; it is a crate of its
-//! own so that the root fixture installer, which links `oer-os-process`,
+//! own so that the root fixture installer, which links `oer-tools-os-process`,
 //! does not link `serialport`.
 
 use std::os::fd::{FromRawFd as _, IntoRawFd as _, OwnedFd};

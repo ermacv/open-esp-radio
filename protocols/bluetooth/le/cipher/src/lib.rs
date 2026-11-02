@@ -19,7 +19,7 @@
 //! counter allocation and replay state belong to LL or the backend caller.
 //! Key material and RustCrypto AES key schedules are zeroized on drop.
 
-use oer_bluetooth_le_wire::data_header::{HeaderFlags, ReceivedHeader, SequenceNumber};
+use oer_protocols_bluetooth_le_wire::data_header::{HeaderFlags, ReceivedHeader, SequenceNumber};
 
 use aes::{
     Aes128,

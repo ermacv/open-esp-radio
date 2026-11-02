@@ -7,7 +7,7 @@ use crate::{
     coex::{CoexPti, Ieee802154CoexPriorities, Ieee802154Coexistence},
     ll::*,
 };
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
     Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
@@ -1427,7 +1427,7 @@ fn a_refused_transmission_counts_as_deferred() {
 /// The priorities the vendor table resolves for the driver's default
 /// operations (idle 1, TX/RX 3, timed TX/RX 8, ACK 8).
 pub(super) fn vendor_priorities() -> Ieee802154CoexPriorities {
-    Ieee802154CoexPriorities::resolve(&oer_espressif_coex::CoexPtiTable::VENDOR)
+    Ieee802154CoexPriorities::resolve(&oer_chips_family_coex::CoexPtiTable::VENDOR)
 }
 
 #[test]
@@ -1476,7 +1476,7 @@ fn listening_publishes_rx_settings_without_publishing_transmit_settings() {
             pib.set_auto_ack_tx(false);
             pib.set_pending_mode(
                 Ieee802154MultipanIndex::CONTEXT0,
-                oer_ieee802154_port::AutoPendingMode::Enhanced,
+                oer_protocols_ieee802154_port::AutoPendingMode::Enhanced,
             );
         });
     assert_subsequence(
@@ -1528,7 +1528,7 @@ fn rx_settings_wait_for_the_current_frame_and_its_ack() {
             pib.set_coordinator(true);
             pib.set_pending_mode(
                 Ieee802154MultipanIndex::CONTEXT0,
-                oer_ieee802154_port::AutoPendingMode::Enhanced,
+                oer_protocols_ieee802154_port::AutoPendingMode::Enhanced,
             );
         });
     assert_eq!(bench.hw.calls, [Call::IsCurrentRxFrame]);
@@ -2363,7 +2363,7 @@ fn invalid_multipan_api_input_has_no_writes_or_state_changes() {
                 &mut bench.hw,
                 &mut bench.env,
                 index,
-                oer_ieee802154_port::AutoPendingMode::Enable
+                oer_protocols_ieee802154_port::AutoPendingMode::Enable
             ),
             error
         );

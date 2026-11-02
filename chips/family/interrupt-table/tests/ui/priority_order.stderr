@@ -1,7 +1,7 @@
 error[E0080]: evaluation panicked: declared low-to-high priority contradicts the chip's line tie-break
   --> tests/ui/priority_order.rs:8:9
    |
- 8 | /         oer_espressif_interrupt_table::interrupt_table! { // ui-error: E0080
+ 8 | /         oer_chips_family_interrupt_table::interrupt_table! { // ui-error: E0080
  9 | |             lines: FAKE_LINES,
 10 | |             handler_attributes: [];
 11 | |             contexts { radio: 3; }
@@ -13,7 +13,7 @@ error[E0080]: evaluation panicked: declared low-to-high priority contradicts the
 18 |   table!(16);
    |   ---------- in this macro invocation
    |
-note: inside `oer_espressif_interrupt_table::__private::check`
+note: inside `oer_chips_family_interrupt_table::__private::check`
   --> $RUST/core/src/panic.rs
    |
    |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));

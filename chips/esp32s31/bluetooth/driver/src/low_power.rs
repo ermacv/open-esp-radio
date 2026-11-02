@@ -1,6 +1,6 @@
 //! Hardware-only modem low-power initialization and runtime ownership.
 
-use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+use oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
 use crate::{
     runtime_resources::{
@@ -8,15 +8,15 @@ use crate::{
     },
     scheduler::SchedulerInitialized,
 };
-use oer_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig;
-use oer_espressif_interrupt_table::signal::SignalExecutor;
+use oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig;
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
 
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothLowPowerRuntimeControlObservation, BluetoothModemLpTimerOwnerError,
     ModemLpTimerLowPowerHardwareInitializedOwner,
 };
 
-use oer_esp32s31_hal::bluetooth::BluetoothControllerTimeScale;
+use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerTimeScale;
 
 /// Powered Controller ownership after the complete modem low-power hardware
 /// component and before source 127 is installed.
@@ -33,7 +33,7 @@ pub struct ControllerLowPowerHardwareInitialized<
 > {
     scheduler: SchedulerInitialized<'cells, MODEM_TIMER_CAPACITY, X, M>,
     timer_hardware: Option<ModemLpTimerLowPowerHardwareInitializedOwner>,
-    stale_pending: oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
+    stale_pending: oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation,
 }
 
 /// Lossless failure to initialize the disjoint modem low-power timer owner.
@@ -134,7 +134,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     /// Inherited pending bytes sampled and cleared before rollover was armed.
     pub const fn stale_pending_observation(
         &self,
-    ) -> oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
+    ) -> oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
         self.stale_pending
     }
 
@@ -160,7 +160,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
     /// The caller runs outside the event cells' executor.
     pub fn runtime_is_pristine(
         &self,
-    ) -> Result<bool, oer_espressif_interrupt_table::signal::ForeignContext> {
+    ) -> Result<bool, oer_chips_family_interrupt_table::signal::ForeignContext> {
         self.scheduler.runtime_is_pristine()
     }
 
@@ -188,7 +188,7 @@ impl<'cells, const MODEM_TIMER_CAPACITY: usize, X: SignalExecutor, M: Controller
 
     /// Borrow clocked task authority for the shared actor's BTBB join.
     #[cfg(target_arch = "riscv32")]
-    pub fn phy_task_owner(&self) -> &oer_esp32s31_hal::bluetooth::TaskOwner {
+    pub fn phy_task_owner(&self) -> &oer_chips_esp32s31_hal::bluetooth::TaskOwner {
         self.task().hal()
     }
 

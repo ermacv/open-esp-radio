@@ -99,7 +99,7 @@ fn lp_clocks(s: &mut Session<'_>, on: bool) {
                 w.set_clk_lp_timer_sel_xtal(true);
             });
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn reset(s: &mut Session<'_>, full: bool) {
@@ -194,7 +194,7 @@ fn reset(s: &mut Session<'_>, full: bool) {
                 w.set_rst_modem_sec(r::RstModemSec::Released);
             });
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn observe_reset(s: &mut Session<'_>, full: bool, gated: bool, tag: u32) {
@@ -218,7 +218,7 @@ fn clear_and_stop(b: &mut Ble) {
     b.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     b.timer.clear_bluetooth_modem_lp_timer_state_0024();
     b.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 pub(super) fn run(s: &mut Session<'_>, full: bool, gated: bool) {
@@ -246,10 +246,10 @@ pub(super) fn run(s: &mut Session<'_>, full: bool, gated: bool) {
     // One natural rollover, bounded independently of debugger capture time.
     init_lp(s);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut prior = counter(&s.ble);
     let mut wrapped = false;
-    while oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
         let now = counter(&s.ble);
         if now < prior {
             wrapped = true;
@@ -260,7 +260,7 @@ pub(super) fn run(s: &mut Session<'_>, full: bool, gated: bool) {
     emit(
         0x33ff,
         u32::from(wrapped),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     state(s, 0x3300);
@@ -281,13 +281,13 @@ pub(super) fn run(s: &mut Session<'_>, full: bool, gated: bool) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     state(s, 0x3380);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x3390);
     window(4096);
     state(s, 0x33a0);
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x33b0);
     // Publication without rearm, followed by a separate enable control.
     s.ble

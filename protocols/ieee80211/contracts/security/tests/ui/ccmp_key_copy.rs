@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 pub fn transfer(key: Ccmp128Key) {
     let installed = key;
     #[cfg(ui_reject)]

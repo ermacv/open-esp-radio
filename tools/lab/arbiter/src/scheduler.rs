@@ -147,7 +147,7 @@ impl Scheduler {
 
     /// Persist the state at `path`, atomically.
     pub fn save(&self, path: &Path) -> crate::Result<()> {
-        oer_os_durable::atomic_write(path, &serde_json::to_vec_pretty(&self.state)?)?;
+        oer_tools_os_durable::atomic_write(path, &serde_json::to_vec_pretty(&self.state)?)?;
         Ok(())
     }
 

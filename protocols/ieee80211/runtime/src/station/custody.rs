@@ -61,7 +61,7 @@ pub struct UnroutedAggregate<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'i
     pub stray: Option<StationTxBuffer<'id, B>>,
     /// The subframes not taken.
     pub rest: <<B::Types<'id> as PhaseTypes<'id>>::TxAggregate as IntoIterator>::IntoIter,
-    pub outcome: oer_ieee80211_contracts_port::PhaseAggregateOutcome<'id, B::Types<'id>>,
+    pub outcome: oer_protocols_ieee80211_contracts_port::PhaseAggregateOutcome<'id, B::Types<'id>>,
 }
 
 /// The first offending return, with every resource still owned.

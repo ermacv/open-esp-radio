@@ -12,13 +12,13 @@ use crate::harness::{Arg, Buffer, Input, Result, case, direct, filled, invalid, 
 use crate::phy::layout::{layout, radio_aperture};
 use crate::phy::{image_layout, select};
 use crate::session::{Session, image_symbol_id, request};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallBinding, CallBoundary, CallCapture, CallDeclaration, CallRepetition, CallResponse,
     ComparisonVerdict, EffectDisposition, EffectPattern, EffectRule, EffectSelector, EffectValue,
     ExecutionCase, ExecutionEvidence, ExecutionGoal, ExecutionTarget, LinkRequest, MemoryPair,
     ModelStatus, RegionLifetime, SessionReset,
 };
-use oer_analysis_riscv_model::{ArtifactId, ObjectId, ObjectLocation};
+use oer_tools_analysis_riscv_model::{ArtifactId, ObjectId, ObjectLocation};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -263,10 +263,10 @@ pub struct Objects {
     /// Registers both sides read as a finite sequence, as (address, runs):
     /// a read beyond the runs fails the case, so both sides must read each
     /// exactly as often as the runs allow.
-    pub sequences: Vec<(u32, Vec<oer_analysis_blobray_domain::ReadRun>)>,
+    pub sequences: Vec<(u32, Vec<oer_tools_analysis_blobray_domain::ReadRun>)>,
     /// Further device models both sides share, ahead of the radio aperture,
     /// such as the analog command bank a transport drives.
-    pub devices: Vec<oer_analysis_blobray_domain::DeviceDeclaration>,
+    pub devices: Vec<oer_tools_analysis_blobray_domain::DeviceDeclaration>,
 }
 
 /// Builds a case's objects from the semantic probe words, followed by the
@@ -486,7 +486,7 @@ pub fn compared_bytes(objects: &[(u32, Vec<u8>)], compared: &[(u32, u32)]) -> Re
 /// static byte in `.bss.<name>`, is addressed by its section.
 pub fn image_symbols(elf: &std::path::Path) -> Result<BTreeMap<String, u32>> {
     let bytes = std::fs::read(elf)?;
-    let file = oer_analysis_elf::Elf::parse(&bytes)?;
+    let file = oer_tools_analysis_elf::Elf::parse(&bytes)?;
     let mut symbols = BTreeMap::new();
     for symbol in file.symbols() {
         if let Ok(address) = u32::try_from(symbol.address)
@@ -701,7 +701,7 @@ impl LeafRun {
     }
 
     /// Exact code endpoint of the vendor function of `leaf`.
-    fn vendor_endpoint(&self, leaf: &Leaf) -> Result<oer_analysis_blobray_domain::CallEndpoint> {
+    fn vendor_endpoint(&self, leaf: &Leaf) -> Result<oer_tools_analysis_blobray_domain::CallEndpoint> {
         if leaf.rom {
             self.session
                 .input_endpoint(crate::chip().rom_input, leaf.vendor)
@@ -824,8 +824,8 @@ impl LeafRun {
     fn review_ordering(
         &mut self,
         leaf: &Leaf,
-        vendor: oer_analysis_blobray_domain::CallEndpoint,
-        production: oer_analysis_blobray_domain::CallEndpoint,
+        vendor: oer_tools_analysis_blobray_domain::CallEndpoint,
+        production: oer_tools_analysis_blobray_domain::CallEndpoint,
         rules: Vec<EffectRule>,
     ) -> Result<ArtifactId> {
         let applicability = "one register transaction over retained radio registers";
@@ -1041,7 +1041,7 @@ impl LeafRun {
                         // address, which one declaration answers.
                         let (address, boundary) = if self.suite.absent.contains(name) {
                             (
-                                oer_analysis_blobray_domain::ABSENT_SYMBOL_ADDRESS,
+                                oer_tools_analysis_blobray_domain::ABSENT_SYMBOL_ADDRESS,
                                 CallBoundary::Unmapped,
                             )
                         } else {
@@ -1249,7 +1249,7 @@ pub fn exercise(ctx: &mut LeafRun) -> Result<()> {
                         .iter()
                         .rev()
                         .find_map(|e| match e {
-                            oer_analysis_blobray_domain::ExecutionEvent::TransferArgument {
+                            oer_tools_analysis_blobray_domain::ExecutionEvent::TransferArgument {
                                 word,
                                 value,
                             } if *word == at => value.value(),
@@ -1267,7 +1267,7 @@ pub fn exercise(ctx: &mut LeafRun) -> Result<()> {
             if let Some(expect) = leaf.expect {
                 let observed = Observed {
                     returned: match crate::evidence::stop(own, case, false) {
-                        oer_analysis_blobray_domain::ExecutionStop::Returned { low, .. } => low,
+                        oer_tools_analysis_blobray_domain::ExecutionStop::Returned { low, .. } => low,
                         _ => None,
                     },
                     effects: crate::evidence::phy_effects(&crate::evidence::events(

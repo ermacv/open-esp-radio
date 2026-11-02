@@ -12,7 +12,7 @@
 //! sequenced through durable P3 replies, and the caller owns the deadline.
 
 #[cfg(feature = "bluetooth-engine")]
-use oer_espressif_bluetooth_engine::port::SchedulerTaskPort;
+use oer_chips_family_bluetooth_engine::port::SchedulerTaskPort;
 
 use crate::bluetooth::registers::{
     BluetoothSchedulerExecutionModifyDisposition, BluetoothSchedulerExecutionModifyPublished,
@@ -27,9 +27,9 @@ use super::engine::scheduler::interrupt::{
     SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf,
 };
 #[cfg(test)]
-use oer_time::settle::Unsettled;
+use oer_portable_time::settle::Unsettled;
 
-use oer_espressif_bluetooth_engine::phase::ExecutionModifyPhase as Phase;
+use oer_chips_family_bluetooth_engine::phase::ExecutionModifyPhase as Phase;
 
 /// One execution-modify request of one hardware list and its progress.
 #[derive(Debug)]

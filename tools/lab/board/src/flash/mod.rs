@@ -26,7 +26,7 @@ use std::{
     time::Duration,
 };
 
-use oer_image_bundle::Snapshot;
+use oer_tools_image_bundle::Snapshot;
 
 /// Where the writer leaves the chip after the last segment.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,10 +39,10 @@ pub enum After {
 
 impl After {
     /// What a write followed by `start` leaves to the start.
-    pub const fn of(start: oer_espressif_facts::Start) -> Self {
+    pub const fn of(start: oer_chips_family_facts::Start) -> Self {
         match start {
-            oer_espressif_facts::Start::Reset => Self::HardReset,
-            oer_espressif_facts::Start::PowerOn => Self::StayInBootloader,
+            oer_chips_family_facts::Start::Reset => Self::HardReset,
+            oer_chips_family_facts::Start::PowerOn => Self::StayInBootloader,
         }
     }
 }

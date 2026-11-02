@@ -1,9 +1,9 @@
 //! Access-category admission of the MAC data service: how admission control
 //! downgrades an access category and which user priority a downgraded frame
-//! takes. The priority and category values are `oer_ieee80211_wire`'s.
+//! takes. The priority and category values are `oer_protocols_ieee80211_wire`'s.
 
-use oer_ieee80211_wire::extensions::wmm::WmmParameterSet;
-use oer_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet;
+use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 
 /// The access categories a station without admissions may not send QoS data
 /// in: those whose admission control is mandatory.

@@ -1,10 +1,10 @@
 use super::*;
 use crate::checks::inventory::{DeclaredField, DeclaredRegister, declared_words};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallTarget, ImageRegion, LibraryFunction, PartialCauses, ReadLimit, ReadLimitKind, ReadSink,
     ReadUse,
 };
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AbstractValue, Error, ErrorCode, ObjectId, ObjectLocation, SymbolId, SymbolTableKind,
 };
 use serde_json::Value;
@@ -892,7 +892,7 @@ fn records_received_one_at_a_time_match_the_same_ordered_list() {
 
 #[test]
 fn signature_conflicts_fail_only_after_complete_reports_are_written() {
-    use oer_analysis_blobray_domain::{SignatureConflict, SignatureOrigin};
+    use oer_tools_analysis_blobray_domain::{SignatureConflict, SignatureOrigin};
     let mut report = run(vec![constant(0)], None, 0);
     assert_eq!(report.violations(), 0);
     report.corpus.summary.signature_conflicts = [10, 11]
@@ -938,7 +938,7 @@ fn signature_conflicts_fail_only_after_complete_reports_are_written() {
 
 #[test]
 fn rom_header_diagnostics_do_not_fail_the_inventory() {
-    use oer_analysis_blobray_domain::RomSignatureDiagnostic;
+    use oer_tools_analysis_blobray_domain::RomSignatureDiagnostic;
     let mut report = run(vec![constant(0)], None, 0);
     report.corpus.summary.rom_signature_diagnostic_count = 1;
     report
@@ -964,14 +964,14 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
         .corpus
         .summary
         .rom_signature_summary_unavailable
-        .push(oer_analysis_blobray_domain::SignatureAuditIncomplete {
+        .push(oer_tools_analysis_blobray_domain::SignatureAuditIncomplete {
             function: LibraryFunction {
                 input: 0,
                 symbol: symbol(b"fixture"),
                 name: Some(b"large_synthetic_rom".to_vec()),
             },
-            reason: oer_analysis_riscv_model::Error::new(
-                oer_analysis_riscv_model::ErrorCode::ResourceLimited,
+            reason: oer_tools_analysis_riscv_model::Error::new(
+                oer_tools_analysis_riscv_model::ErrorCode::ResourceLimited,
                 "synthetic ROM diagnostic limit",
             ),
         });
@@ -995,8 +995,8 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
     assert!(text.contains("UNAVAILABLE ROM SUMMARY large_synthetic_rom"));
 }
 
-fn resources() -> oer_analysis_riscv_model::AnalysisResources {
-    use oer_analysis_riscv_model::{AnalysisProfile, AnalysisResources};
+fn resources() -> oer_tools_analysis_riscv_model::AnalysisResources {
+    use oer_tools_analysis_riscv_model::{AnalysisProfile, AnalysisResources};
     AnalysisResources::new(
         AnalysisProfile::RegisterInventory,
         AnalysisProfile::RegisterInventory.limits(),
@@ -1007,7 +1007,7 @@ fn resources() -> oer_analysis_riscv_model::AnalysisResources {
 
 #[test]
 fn independent_input_limits_are_summed_and_retained_in_inventory_json() {
-    use oer_analysis_riscv_model::{
+    use oer_tools_analysis_riscv_model::{
         AnalysisLimited, FunctionLimits, LimitReason, LocalBudgetExceeded, LocalBudgetScope,
         SummaryOutcome,
     };

@@ -1,4 +1,4 @@
-use oer_espressif_interrupt_table::signal::host;
+use oer_chips_family_interrupt_table::signal::host;
 
 pub fn check() {
     let (signal, raiser) = host::deferred_signal();

@@ -18,19 +18,19 @@ use core::pin::pin;
 
 use embassy_futures::select::{Either, select};
 use embassy_futures::yield_now;
-use oer_espressif::observe;
-use oer_espressif::observe::parts::{PARTS, PartReading};
-use oer_espressif::observe::tracking::TrackingSample;
-use oer_espressif::time::{Instant, Timer};
-use oer_espressif::wifi::embassy_net::TryError;
-use oer_espressif::wifi::embassy_net::udp::UdpSocket;
-use oer_espressif::wifi::embassy_net::wire::{ListenSocketAddr, SocketAddr};
-use oer_espressif::wifi::{IpDevice, Ipv4Status, Net};
-use oer_espressif::{Channel, SecondEnd};
-use oer_hil_protocol::RequestIdentity;
-use oer_services_load::header::Header;
-use oer_services_load::tally::Tally;
-use oer_services_load::{
+use oer::observe;
+use oer::observe::parts::{PARTS, PartReading};
+use oer::observe::tracking::TrackingSample;
+use oer::time::{Instant, Timer};
+use oer::wifi::embassy_net::TryError;
+use oer::wifi::embassy_net::udp::UdpSocket;
+use oer::wifi::embassy_net::wire::{ListenSocketAddr, SocketAddr};
+use oer::wifi::{IpDevice, Ipv4Status, Net};
+use oer::{Channel, SecondEnd};
+use oer_protocols_hil_protocol::RequestIdentity;
+use oer_hil_services_load::header::Header;
+use oer_hil_services_load::tally::Tally;
+use oer_hil_services_load::{
     Collected, Counters, CountersCollected, Link, LinkCollected, Load, LoadError, PartsCollected,
     Report, Request, SamplesCollected, Sent, Start, Started, Tracking, TrackingCollected, Transmit,
 };
@@ -76,7 +76,7 @@ pub(crate) enum Answer {
 impl Answer {
     /// Publish it to the request `identity`.
     pub(crate) fn publish(self, identity: RequestIdentity) {
-        use oer_hil_agent_espressif::answer;
+        use oer_hil_agent::answer;
         match self {
             Self::Started(started) => answer(identity, &started),
             Self::Collected(collected) => answer(identity, &collected),

@@ -30,21 +30,21 @@
 //! [`Access`] only this crate makes, so no other code calls them.
 //!
 //! ```compile_fail,E0599
-//! # use oer_espressif_watchdog::{MainWatchdog, MainWatchdogRegisters};
+//! # use oer_chips_family_watchdog::{MainWatchdog, MainWatchdogRegisters};
 //! fn locked_write<R: MainWatchdogRegisters>(watchdog: &mut MainWatchdog<R>) {
 //!     watchdog.feed(); // only an unlocked watchdog is fed
 //! }
 //! ```
 //!
 //! ```compile_fail,E0499
-//! # use oer_espressif_watchdog::{MainWatchdog, MainWatchdogRegisters};
+//! # use oer_chips_family_watchdog::{MainWatchdog, MainWatchdogRegisters};
 //! fn two_sessions<R: MainWatchdogRegisters>(watchdog: &mut MainWatchdog<R>) {
 //!     watchdog.with_unlocked(|_| watchdog.with_unlocked(|_| ()));
 //! }
 //! ```
 //!
 //! ```compile_fail,E0521
-//! # use oer_espressif_watchdog::{MainSession, MainWatchdog, MainWatchdogRegisters};
+//! # use oer_chips_family_watchdog::{MainSession, MainWatchdog, MainWatchdogRegisters};
 //! fn keep_unlocked<'a, R: MainWatchdogRegisters>(
 //!     watchdog: &'a mut MainWatchdog<R>,
 //!     kept: &mut Option<&'a mut MainSession<'a, R>>,
@@ -54,14 +54,14 @@
 //! ```
 //!
 //! ```compile_fail,E0507
-//! # use oer_espressif_watchdog::{MainWatchdog, MainWatchdogRegisters};
+//! # use oer_chips_family_watchdog::{MainWatchdog, MainWatchdogRegisters};
 //! fn forget_unlocked<R: MainWatchdogRegisters>(watchdog: &mut MainWatchdog<R>) {
 //!     watchdog.with_unlocked(|session| core::mem::forget(*session)); // no session is owned
 //! }
 //! ```
 //!
 //! ```compile_fail,E0624
-//! # use oer_espressif_watchdog::{Access, WRITE_KEY, WriteProtected};
+//! # use oer_chips_family_watchdog::{Access, WRITE_KEY, WriteProtected};
 //! fn raw_key<R: WriteProtected>(registers: &mut R) {
 //!     registers.store_write_key(Access::new(), WRITE_KEY); // only this crate calls the traits
 //! }
@@ -554,14 +554,14 @@ impl<R: RtcWatchdogArm> ArmedRtcWatchdog<R> {
     /// A deadline past the clock's range ends the feeding, never the wait.
     pub async fn feed_every(
         mut self,
-        timer: &impl oer_time::Timer,
-        period: oer_time::Duration,
+        timer: &impl oer_portable_time::Timer,
+        period: oer_portable_time::Duration,
     ) -> ! {
         loop {
             self.feed();
             match timer.deadline_after(period) {
                 Ok(deadline) => timer.wait_until(deadline).await,
-                Err(oer_time::TimeOverflow) => core::future::pending().await,
+                Err(oer_portable_time::TimeOverflow) => core::future::pending().await,
             }
         }
     }

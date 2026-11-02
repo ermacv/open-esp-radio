@@ -28,7 +28,7 @@ use crate::domain::{RadioClient, RadioDomain};
 /// It cannot be copied or constructed elsewhere:
 ///
 /// ```compile_fail
-/// let _forged = oer_esp32s31_hal::bluetooth::BluetoothControllerReset { _private: () };
+/// let _forged = oer_chips_esp32s31_hal::bluetooth::BluetoothControllerReset { _private: () };
 /// ```
 #[must_use = "the reset proof returns the finished epoch's controller memory"]
 pub struct BluetoothControllerReset {

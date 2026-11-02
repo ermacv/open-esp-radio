@@ -23,28 +23,28 @@
 //!   network: the station returns each received frame's buffer at once.
 
 use embassy_futures::select::{Either, select};
-use oer_embassy_net::{
+use oer_portable_embassy_net::{
     NetworkInterfaceId,
     ethernet::LentSlots,
     ip::{self, Configuration, Resources, Service},
 };
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_compose::{Esp32s31, pilot, platform::DeviceIdentity};
-use oer_esp32s31_hal::peripherals::{
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_compose::{Esp32s31, pilot, platform::DeviceIdentity};
+use oer_chips_esp32s31_hal::peripherals::{
     efuse::EfuseRegisters, software_interrupt::FromCpu3Irq, timg0_alarm::Timg0AlarmParts,
 };
-use oer_esp32s31_wifi::{self as wifi, InterruptTypes};
-use oer_espressif_executor::{
+use oer_chips_esp32s31_wifi::{self as wifi, InterruptTypes};
+use oer_chips_family_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };
-use oer_espressif_interrupt_table::signal::{FromHandler, FromOwnTask, IrqSignal};
-use oer_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
+use oer_chips_family_interrupt_table::signal::{FromHandler, FromOwnTask, IrqSignal};
+use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use static_cell::StaticCell;
 
 pub use embassy_net;
-pub use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
-pub use oer_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
-pub use oer_network_port::{LinkSnapshot, LinkState};
+pub use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
+pub use oer_protocols_ieee80211_runtime::station::contract::{CommandRefusal, DisconnectReason};
+pub use oer_protocols_network_port::{LinkSnapshot, LinkState};
 
 use super::{
     AesPeripheral, Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken,
@@ -54,10 +54,10 @@ use crate::net::{NetError, Published, Watchers};
 
 type RadioExecutor = InterruptExecutor<Esp32s31, 2>;
 
-oer_memory::zeroed_static! {
+oer_portable_memory::zeroed_static! {
     static LINE: wifi::Interrupts = zeroed in ".critical.bss.wifi_rx_line";
 }
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     static MAC_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<FromHandler<WifiToken>, WakeToken>(), in critical_data "wifi_station";
     static MAC_RX_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(FromHandler<WifiToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "wifi_station";
     static POWER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<FromHandler<WifiToken>, WakeToken>(), in critical_data "wifi_station";
@@ -73,13 +73,13 @@ pub type WifiPart = <wifi::Interrupts as InterruptTypes>::Part;
 pub(crate) fn on_wifi(part: &mut WifiPart) {
     match LINE.service(part) {
         Ok(_installed) => {}
-        Err(raw) => oer_esp32s31_compose::wifi_fault::reset(raw),
+        Err(raw) => oer_chips_esp32s31_compose::wifi_fault::reset(raw),
     }
 }
 
 /// The SAR/PWDET pilot's interrupt handler.
 pub(crate) fn on_pilot(
-    part: &mut <Esp32s31 as oer_esp32s31_compose::platform::InterruptTypes>::Phy,
+    part: &mut <Esp32s31 as oer_chips_esp32s31_compose::platform::InterruptTypes>::Phy,
 ) {
     PILOT.interrupt(part);
 }
@@ -88,7 +88,7 @@ type Actor = wifi::RadioActor<pilot::Client<PhyToken>, StationObserver>;
 static ACTOR: StaticCell<Actor> = StaticCell::new();
 static NONCES: StaticCell<wifi::NonceSource> = StaticCell::new();
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// The radio executor's tasks (P2).
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
         @observer: super::executor_observer::<1>();
@@ -103,14 +103,14 @@ pub(crate) struct StationStart {
     address: [u8; 6],
     nonces: &'static mut wifi::NonceSource,
     /// The accelerator the station unwraps its EAPOL-Key data with.
-    aes: oer_esp32s31_compose::crypto::AesEngine,
+    aes: oer_chips_esp32s31_compose::crypto::AesEngine,
 }
 
 /// The image keeps no trace observations.
 #[derive(Clone, Copy, Default)]
 pub struct Unobserved;
-impl oer_trace::Observer for Unobserved {
-    fn event<E: oer_trace::Event + Copy + 'static>(&self, _: E) {}
+impl oer_portable_trace::Observer for Unobserved {
+    fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, _: E) {}
 }
 
 /// The observer of the station, its driver and the RF actor: the
@@ -135,7 +135,7 @@ pub struct Callbacks(&'static mut wifi::NonceSource);
 impl wifi::Callbacks for Callbacks {
     fn nonce(&mut self) -> [u8; 32] {
         self.0.next_nonce().unwrap_or_else(|wifi::NonceExhausted| {
-            super::fail(oer_diagnostics::name!("wifi-nonce-exhausted"; 32))
+            super::fail(oer_portable_diagnostics::name!("wifi-nonce-exhausted"; 32))
         })
     }
 }
@@ -151,13 +151,13 @@ impl wifi::Events for ProductEvents {
 fn failure(error: wifi::InitializationError) -> ! {
     match error {
         wifi::InitializationError::Request(request) => {
-            oer_esp32s31_compose::platform::reset_request(request)
+            oer_chips_esp32s31_compose::platform::reset_request(request)
         }
         wifi::InitializationError::Phy(fault) => fault.reset(),
         wifi::InitializationError::MembershipUnavailable => {
-            super::fail(oer_diagnostics::name!("wifi-membership"; 32))
+            super::fail(oer_portable_diagnostics::name!("wifi-membership"; 32))
         }
-        _ => super::fail(oer_diagnostics::name!("wifi-initialization"; 32)),
+        _ => super::fail(oer_portable_diagnostics::name!("wifi-initialization"; 32)),
     }
 }
 
@@ -174,26 +174,26 @@ type Notifies = <binding::Binding as wifi::Binding>::Notifies;
 
 #[cfg(feature = "hart1")]
 type NetworkNotify =
-    &'static oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor>;
+    &'static oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor>;
 #[cfg(feature = "hart1")]
 type StationNotify =
-    &'static oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor>;
+    &'static oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor>;
 #[cfg(feature = "hart1")]
 type DriverNotify =
-    &'static oer_espressif_interrupt_table::signal::PeerNotify<wifi::DriverExecutor>;
+    &'static oer_chips_family_interrupt_table::signal::PeerNotify<wifi::DriverExecutor>;
 
 // One signal wakes one task: the IP service's on hart 1 (every network end
 // and the network's stop), the station runner's on hart 0 (every station
 // end, the stop's answer and the lent buffers' return) and the radio
 // driver's (its request for its lent buffers).
 #[cfg(feature = "hart1")]
-oer_espressif_staged_runtime::placed_static! {
-    static NETWORK_SIGNAL: IrqSignal<super::hart1::Hart1Executor> = IrqSignal::new::<oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::AppExecutor, WakeToken>, super::Hart1WakeToken>(), in critical_data "hart_peers";
-    static STATION_SIGNAL: IrqSignal<super::hart1::AppExecutor> = IrqSignal::new::<oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
-    static DRIVER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(oer_espressif_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "hart_peers";
-    static NETWORK: oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&NETWORK_SIGNAL), in critical_data "hart_peers";
-    static STATION: oer_espressif_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&STATION_SIGNAL), in critical_data "hart_peers";
-    static DRIVER: oer_espressif_interrupt_table::signal::PeerNotify<wifi::DriverExecutor> = oer_espressif_interrupt_table::signal::PeerNotify::new(&DRIVER_SIGNAL), in critical_data "hart_peers";
+oer_chips_family_staged_runtime::placed_static! {
+    static NETWORK_SIGNAL: IrqSignal<super::hart1::Hart1Executor> = IrqSignal::new::<oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::AppExecutor, WakeToken>, super::Hart1WakeToken>(), in critical_data "hart_peers";
+    static STATION_SIGNAL: IrqSignal<super::hart1::AppExecutor> = IrqSignal::new::<oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
+    static DRIVER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "hart_peers";
+    static NETWORK: oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&NETWORK_SIGNAL), in critical_data "hart_peers";
+    static STATION: oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&STATION_SIGNAL), in critical_data "hart_peers";
+    static DRIVER: oer_chips_family_interrupt_table::signal::PeerNotify<wifi::DriverExecutor> = oer_chips_family_interrupt_table::signal::PeerNotify::new(&DRIVER_SIGNAL), in critical_data "hart_peers";
 }
 
 /// Run the shared RF actor until its periodic PHY tracking fails; the PHY
@@ -235,37 +235,37 @@ pub(crate) async fn serve_station(start: StationStart) {
             failure(error)
         }
         wifi::StationExit::Unavailable(wifi::UnavailableCause::Abandoned) => {
-            super::fail(oer_diagnostics::name!("wifi-abandoned"; 32))
+            super::fail(oer_portable_diagnostics::name!("wifi-abandoned"; 32))
         }
-        wifi::StationExit::Failed(_) => super::fail(oer_diagnostics::name!("wifi-failed"; 32)),
-        wifi::StationExit::Poisoned(_) => super::fail(oer_diagnostics::name!("wifi-poisoned"; 32)),
+        wifi::StationExit::Failed(_) => super::fail(oer_portable_diagnostics::name!("wifi-failed"; 32)),
+        wifi::StationExit::Poisoned(_) => super::fail(oer_portable_diagnostics::name!("wifi-poisoned"; 32)),
         wifi::StationExit::Quarantined(_) => {
-            super::fail(oer_diagnostics::name!("wifi-quarantined"; 32))
+            super::fail(oer_portable_diagnostics::name!("wifi-quarantined"; 32))
         }
         wifi::StationExit::RetirementFailed(_) => {
-            super::fail(oer_diagnostics::name!("wifi-retirement"; 32))
+            super::fail(oer_portable_diagnostics::name!("wifi-retirement"; 32))
         }
         wifi::StationExit::ReleaseFailed(_) => {
-            super::fail(oer_diagnostics::name!("wifi-release"; 32))
+            super::fail(oer_portable_diagnostics::name!("wifi-release"; 32))
         }
     }
 }
 
 /// The radio's owners: the station takes them all.
 pub struct WifiPeripheral {
-    pub(crate) radio: oer_esp32s31_hal::root::RadioHardware,
-    pub(crate) clocks: oer_esp32s31_hal::power::ChipClocks,
+    pub(crate) radio: oer_chips_esp32s31_hal::root::RadioHardware,
+    pub(crate) clocks: oer_chips_esp32s31_hal::power::ChipClocks,
     pub(crate) timg0_alarm: Timg0AlarmParts,
-    pub(crate) interrupts: oer_esp32s31_hal::owner::WifiInterruptBanks,
+    pub(crate) interrupts: oer_chips_esp32s31_hal::owner::WifiInterruptBanks,
     pub(crate) efuse: EfuseRegisters,
 }
 
 /// The radio parts of the boot context: the radio executor's and the
 /// doorbell's lines and the radio entries' tokens.
 pub(crate) struct RadioBoot {
-    pub(crate) line2: oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2,
-    pub(crate) irq2: oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq,
-    pub(crate) line3: oer_esp32s31_hal::peripherals::software_interrupt::FromCpu3,
+    pub(crate) line2: oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2,
+    pub(crate) irq2: oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq,
+    pub(crate) line3: oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu3,
     pub(crate) irq3: FromCpu3Irq,
     pub(crate) radio_alarm: RadioAlarmToken,
     pub(crate) phy: PhyToken,
@@ -283,7 +283,7 @@ pub(crate) struct RadioBoot {
 pub struct Config {
     chip: wifi::Config,
     /// The stop deadline `chip` holds, for [`Station::stop`].
-    drain: oer_time::Duration,
+    drain: oer_portable_time::Duration,
 }
 
 /// The default interval of a reconnect after a lost association.
@@ -404,13 +404,13 @@ impl Config {
 fn stop(drain: embassy_time::Duration) -> Result<wifi::StopPolicy, ConfigError> {
     let micros = crate::boot::drain_micros(drain.as_micros()).ok_or(ConfigError::Drain)?;
     Ok(wifi::StopPolicy {
-        drain: oer_time::Duration::from_micros(micros.get()),
+        drain: oer_portable_time::Duration::from_micros(micros.get()),
     })
 }
 
 /// The station's duration of an application's.
-fn oer_duration(duration: embassy_time::Duration) -> oer_time::Duration {
-    oer_time::Duration::from_micros(duration.as_micros())
+fn oer_duration(duration: embassy_time::Duration) -> oer_portable_time::Duration {
+    oer_portable_time::Duration::from_micros(duration.as_micros())
 }
 
 /// A network to join: its SSID and credentials, validated, secrets erased
@@ -466,22 +466,22 @@ pub enum ConnectError {
 
 /// A connect's cause as a diagnostic path, which [`println!`](crate::println)
 /// prints whole: `Failed(Sae(Protocol(Malformed)))`.
-impl oer_diagnostics::DiagnosticPath for ConnectError {
-    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
         match self {
             Self::Refused(refusal) => {
                 path.name("Refused");
-                oer_diagnostics::DiagnosticPath::push_path(refusal, path);
+                oer_portable_diagnostics::DiagnosticPath::push_path(refusal, path);
             }
             Self::Failed(reason) => {
                 path.name("Failed");
-                oer_diagnostics::DiagnosticPath::push_path(reason, path);
+                oer_portable_diagnostics::DiagnosticPath::push_path(reason, path);
             }
             Self::Busy => path.name("Busy"),
             Self::Stopped => path.name("Stopped"),
             Self::Profile(error) => {
                 path.name("Profile");
-                oer_diagnostics::DiagnosticPath::push_path(error, path);
+                oer_portable_diagnostics::DiagnosticPath::push_path(error, path);
             }
         }
     }
@@ -493,7 +493,7 @@ pub struct Station {
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
-    drain: oer_time::Duration,
+    drain: oer_portable_time::Duration,
 }
 
 /// Why a stop did not end with the station stopped.
@@ -554,7 +554,7 @@ impl Station {
         let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
         // The radio executor writes the system timer; the application
         // executor publishes its deadlines to it.
-        let timers = oer_esp32s31_compose::platform::timers(
+        let timers = oer_chips_esp32s31_compose::platform::timers(
             timer,
             boot.router(),
             app_alarm,
@@ -574,8 +574,8 @@ impl Station {
                 wifi::Interrupts::part(wifi.interrupts, radio.irq3, wifi::Lower(lower)),
             )
             .unwrap_or_else(|error| {
-                oer_espressif_staged_runtime::interrupts::reset_binding::<
-                    oer_esp32s31_hal::platform::Port,
+                oer_chips_family_staged_runtime::interrupts::reset_binding::<
+                    oer_chips_esp32s31_hal::platform::Port,
                     _,
                 >(error)
             });
@@ -585,7 +585,7 @@ impl Station {
             .start(hart, router, radio.radio, radio.irq2, urgent)
             .unwrap_or_else(|failure| failure.reset());
         let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
-        let mut rng = oer_esp32s31_compose::platform::Entropy::new(entropy, EmbassyClock);
+        let mut rng = oer_chips_esp32s31_compose::platform::Entropy::new(entropy, EmbassyClock);
         if !rng.is_healthy() {
             return Err(Error::Entropy);
         }
@@ -700,7 +700,7 @@ impl Station {
     /// [`StopError::Failed`]: the station ended by a failure instead.
     pub async fn stop(&mut self) -> Result<(), StopError> {
         let deadline = {
-            use oer_time::Clock as _;
+            use oer_portable_time::Clock as _;
             EmbassyClock.now().saturating_add(self.drain)
         };
         self.control.stop(deadline);
@@ -803,7 +803,7 @@ static LENT: LentSlots<wifi::ReceivedStorage<Notifies>, { wifi::LENT_RX }> = Len
 
 /// The IP stack's device, which sockets name, over pools of `RX` and `TX`.
 pub type IpDevice<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
-    oer_embassy_net::OwnedNetworkDevice<'static, Context, RX, TX>;
+    oer_portable_embassy_net::OwnedNetworkDevice<'static, Context, RX, TX>;
 
 /// The IP stack sockets open on.
 pub type Stack<const RX: usize = { self::RX }, const TX: usize = { self::TX }> =
@@ -851,12 +851,12 @@ impl NetStatus {
 /// Publish the service's status to the application and wake every wait.
 fn publish(status: Status) {
     STATUS.publish(status);
-    oer_memory::QueueNotify::notify(&super::APPLICATION);
+    oer_portable_memory::QueueNotify::notify(&super::APPLICATION);
     WATCHERS.wake_all();
 }
 
 /// How the stack takes its IPv4 configuration.
-pub use oer_embassy_net::ip::Configuration as NetConfig;
+pub use oer_portable_embassy_net::ip::Configuration as NetConfig;
 
 /// The IP service over the station's device, with pools of `RX` receive
 /// slots and `TX` transmit credits; the defaults are the library's.
@@ -954,11 +954,11 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
 use super::observed::{bridge_copied, bridge_received, bridge_refused};
 /// The network bridge's frames: counted with `observe`.
 #[cfg(not(feature = "observe"))]
-fn bridge_received(_: oer_embassy_net::EthernetFrameView<'_>) {}
+fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {}
 #[cfg(not(feature = "observe"))]
-fn bridge_refused(_: oer_embassy_net::RxEnqueueError) {}
+fn bridge_refused(_: oer_portable_embassy_net::RxEnqueueError) {}
 #[cfg(not(feature = "observe"))]
-fn bridge_copied(_: oer_embassy_net::ethernet::LentCopy) {}
+fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {}
 
 /// The IP service's task: every status change wakes the waits. Once the
 /// station asks its network to stop, the service stops and returns every
@@ -987,7 +987,7 @@ async fn serve_ip<const RX: usize, const TX: usize>(start: IpStart<RX, TX>) {
     };
     publish(control.status());
     if result.is_err() {
-        super::fail(oer_diagnostics::name!("net-context"; 32));
+        super::fail(oer_portable_diagnostics::name!("net-context"; 32));
     }
     stopper.stopped();
 }

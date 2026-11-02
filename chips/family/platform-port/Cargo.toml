@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-platform-port"
+name = "oer-chips-family-platform-port"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,8 @@ repository.workspace = true
 publish = false
 description = "The Espressif family's platform contracts, which a chip HAL implements on its own types, and the hart geometry of the chip that HAL selects"
 # The selected chip reaches the build scripts of family crates through this
-# package's metadata (`DEP_OER_ESPRESSIF_PLATFORM_PORT_CHIP`).
-links = "oer_espressif_platform_port"
+# package's metadata (`DEP_OER_CHIPS_FAMILY_PLATFORM_PORT_CHIP`).
+links = "oer_chips_family_platform_port"
 
 [features]
 # The chip HAL selects its chip; a feature enables no dependency. Exactly
@@ -17,11 +17,11 @@ links = "oer_espressif_platform_port"
 esp32s31 = []
 
 [dependencies]
-oer-mmio = { path = "../../../portable/mmio" }
-oer-espressif-staged-layout.workspace = true
+oer-portable-mmio = { path = "../../../portable/mmio" }
+oer-chips-family-staged-layout.workspace = true
 
 [build-dependencies]
-oer-espressif-facts = { path = "../facts" }
+oer-chips-family-facts = { path = "../facts" }
 
 [lints]
 workspace = true

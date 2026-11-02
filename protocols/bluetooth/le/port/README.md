@@ -1,7 +1,7 @@
 # Bluetooth LE port
 
-`oer-bluetooth-le-port` is the portable contract shared by an LE backend and
-its reference model. Lifecycle uses `oer-radio-port`: caller-owned `PortSlot`,
+`oer-protocols-bluetooth-le-port` is the portable contract shared by an LE backend and
+its reference model. Lifecycle uses `oer-protocols-radio-port`: caller-owned `PortSlot`,
 P1 `SlotFrontend`, P2 `SlotRegistration`, consuming `Owner` transitions and
 supervised `run_port`. No hardware, PHY membership, SRAM addresses or HAL
 proofs cross this boundary.
@@ -45,7 +45,7 @@ state. Backends keep BodyLoan conversion authority private.
 
 The port owns the backend vocabulary: capabilities, supported requests,
 radio-clock timing, outcomes and regulatory-capped transmit power. Wire PDUs,
-channels and address bytes are consumed directly from `oer-bluetooth-le-wire`.
+channels and address bytes are consumed directly from `oer-protocols-bluetooth-le-wire`.
 `dtm::next_window` is shared contract mathematics: transmitters retain the
 Core Part F interval grid and skip unreachable slots; receivers retain their
 5 ms windows. Backends progress admitted DTM tests independently of terminal

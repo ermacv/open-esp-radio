@@ -6,8 +6,8 @@
 )]
 use super::*;
 use crate::{EapolKeyFrame, EapolKeyMessage, frames};
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_ieee80211_wire::eapol::EAPOL_KEY_PACKET_LEN;
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_wire::eapol::EAPOL_KEY_PACKET_LEN;
 
 #[test]
 fn derives_known_ieee_pmk() {

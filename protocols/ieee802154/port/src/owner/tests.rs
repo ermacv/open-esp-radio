@@ -4,10 +4,10 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_radio_port::{Permits, branded};
+use oer_protocols_radio_port::{Permits, branded};
 
 use core::cell::RefCell;
-use oer_radio_port::{Permit, PermitPool, PermitSupply, Seat};
+use oer_protocols_radio_port::{Permit, PermitPool, PermitSupply, Seat};
 
 struct TestPool<'id, Kind>(RefCell<Option<Permit<'id, Kind>>>);
 

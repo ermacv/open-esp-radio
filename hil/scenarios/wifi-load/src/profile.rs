@@ -1,12 +1,12 @@
 //! The image's PC samples of a level's window (`OER_WIFI_LOAD_PROFILE_US`):
 //! collected page by page, named with the image's runtime ELF's DWARF
-//! (`oer_analysis_elf::dwarf::Symbolizer`), and reported as function
+//! (`oer_tools_analysis_elf::dwarf::Symbolizer`), and reported as function
 //! histograms beside the raw samples. A sample inside a memory copy entry
 //! (`memcpy`, `memmove`) with its interrupted `ra` is named after the
 //! caller `ra` returns into: `memcpy ← caller`.
 //!
 //! Beside the tables, the copy sites the image build found in the runtime
-//! ELF (`oer_image_checks::copies`, `runtime-copies.json` beside it) are
+//! ELF (`oer_tools_image_checks::copies`, `runtime-copies.json` beside it) are
 //! weighted by the samples: those in a copy entry whose `ra` is the site's
 //! return address, and those in the site's caller.
 
@@ -15,9 +15,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_hil_harness::{Cx, Failure};
-use oer_image_checks::copies::Copies;
-use oer_services_load::{
+use oer_tools_hil_harness::{Cx, Failure};
+use oer_tools_image_checks::copies::Copies;
+use oer_hil_services_load::{
     CollectSamples, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Profile, Sample, Samples,
     SamplesCollected,
 };
@@ -97,7 +97,7 @@ pub(crate) struct Place {
 /// call before the return address of each sample in a copy entry.
 pub(crate) fn symbolize(elf: &Path, samples: &[Sample]) -> Result<HashMap<u32, Place>, String> {
     let symbolizer =
-        oer_analysis_elf::dwarf::Symbolizer::read(elf).map_err(|error| error.to_string())?;
+        oer_tools_analysis_elf::dwarf::Symbolizer::read(elf).map_err(|error| error.to_string())?;
     let mut places = HashMap::new();
     let name = |address: u32, places: &mut HashMap<u32, Place>| -> Result<(), String> {
         if let std::collections::hash_map::Entry::Vacant(entry) = places.entry(address) {
@@ -123,7 +123,7 @@ pub(crate) fn symbolize(elf: &Path, samples: &[Sample]) -> Result<HashMap<u32, P
 /// `ra` returns from: the byte before `ra`, inside the call instruction.
 fn call_of(sample: &Sample, places: &HashMap<u32, Place>) -> Option<u32> {
     let place = places.get(&sample.pc)?;
-    if !oer_image_checks::copies::copy_entry(&place.function) {
+    if !oer_tools_image_checks::copies::copy_entry(&place.function) {
         return None;
     }
     sample.ra?.checked_sub(1)
@@ -131,8 +131,8 @@ fn call_of(sample: &Sample, places: &HashMap<u32, Place>) -> Option<u32> {
 
 /// The frames at one address run from the innermost inlined function out
 /// to the function the code lies in.
-fn place(frames: &[oer_analysis_elf::dwarf::Frame]) -> Place {
-    let name = |frame: Option<&oer_analysis_elf::dwarf::Frame>| {
+fn place(frames: &[oer_tools_analysis_elf::dwarf::Frame]) -> Place {
+    let name = |frame: Option<&oer_tools_analysis_elf::dwarf::Frame>| {
         frame
             .and_then(|frame| frame.function.clone())
             .filter(|name| !name.is_empty())
@@ -203,8 +203,8 @@ pub(crate) fn report(
 /// The copy sites of the build of the runtime ELF `elf`, which it wrote
 /// beside it.
 pub(crate) fn copy_sites(elf: &Path) -> Result<Copies, String> {
-    let path = elf.with_file_name(oer_image_checks::copies::RUNTIME_JSON);
-    oer_image_checks::copies::read(&path).map_err(|error| error.to_string())
+    let path = elf.with_file_name(oer_tools_image_checks::copies::RUNTIME_JSON);
+    oer_tools_image_checks::copies::read(&path).map_err(|error| error.to_string())
 }
 
 /// The copy sites of `sites` weighted by `samples`, the [`TOP`] most
@@ -327,10 +327,10 @@ fn histogram(
 
 /// The runtime ELF of the image the harness built and wrote for this run.
 pub(crate) fn elf(image: &str) -> Result<PathBuf, String> {
-    let root = oer_os_process::Checkout::discover("wifi-load")
+    let root = oer_tools_os_process::Checkout::discover("wifi-load")
         .map_err(|error| format!("the checkout: {error}"))?
         .root;
-    Ok(oer_image_build::images::output(&root, image).join("runtime.elf"))
+    Ok(oer_tools_image_build::images::output(&root, image).join("runtime.elf"))
 }
 
 #[cfg(test)]
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn a_place_names_the_outer_function_and_the_innermost_inlined_one() {
-        use oer_analysis_elf::dwarf::Frame;
+        use oer_tools_analysis_elf::dwarf::Frame;
         let frame = |name: &str| Frame {
             function: Some(name.to_owned()),
             ..Frame::default()
@@ -486,7 +486,7 @@ mod tests {
     /// `poll_action` (0x2000..0x2040) at 0x2010 and 0x2020 and tail-jumped
     /// into from `send` (0x3000..0x3010).
     fn fixture() -> Copies {
-        use oer_image_checks::copies::{Code, CopySite, SCHEMA};
+        use oer_tools_image_checks::copies::{Code, CopySite, SCHEMA};
         let code = |name: &str, address, size| Code {
             name: name.into(),
             address,
@@ -574,7 +574,7 @@ mod tests {
         std::fs::write(
             directory
                 .path()
-                .join(oer_image_checks::copies::RUNTIME_JSON),
+                .join(oer_tools_image_checks::copies::RUNTIME_JSON),
             serde_json::to_vec(&fixture()).unwrap(),
         )
         .unwrap();

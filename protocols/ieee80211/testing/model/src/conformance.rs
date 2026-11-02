@@ -1,10 +1,10 @@
 //! Actual port operations for host comparison with a physical backend.
 use super::*;
 use crate::fixture::{Fixture, Report, run_model};
-use oer_ieee80211_contracts_port::*;
-use oer_ieee80211_testing_conformance::{MpduState, outcomes};
-use oer_ieee80211_wire::{frame::FrameControl, phy::LegacyRate};
-use oer_radio_port::{Disabled, Ended, Owner, PortBody};
+use oer_protocols_ieee80211_contracts_port::*;
+use oer_protocols_ieee80211_testing_conformance::{MpduState, outcomes};
+use oer_protocols_ieee80211_wire::{frame::FrameControl, phy::LegacyRate};
+use oer_protocols_radio_port::{Disabled, Ended, Owner, PortBody};
 
 mod ownership;
 pub use ownership::{OwnershipTrace, ownership};
@@ -141,7 +141,7 @@ async fn exchange<'p, 'id: 'p, Id: SlotIdentity + 'id>(
                 context: (),
                 ticket,
                 source,
-                access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).ok_or("model power")?,
                 coex_operation: TxOperation::Connection(ConnectionFrame::ProbeRequest),

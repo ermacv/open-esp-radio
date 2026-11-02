@@ -1,6 +1,6 @@
 # Radio coexistence contract
 
-`oer-radio-coex` defines the values every protocol and backend shares when
+`oer-protocols-radio-coex` defines the values every protocol and backend shares when
 several radio protocols use one RF path:
 
 - `RadioClient` names the protocol that joins the shared radio (Wi-Fi,
@@ -11,7 +11,7 @@ several radio protocols use one RF path:
   hard deadline.
 
 There is no urgency level. The chip family's coexistence owner, such as
-[`oer-espressif-coex`](../../../chips/family/coex/README.md), maps a client
+[`oer-chips-family-coex`](../../../chips/family/coex/README.md), maps a client
 and an operation to its event numbers, hardware priorities, request kinds and
 status words, which stay below the backend.
 

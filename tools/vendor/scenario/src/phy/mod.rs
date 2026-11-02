@@ -11,12 +11,12 @@ use crate::harness::{Result, invalid, known, region, selection, symbol, words};
 use crate::session::{Session, image_symbol, request};
 use layout::{FILLS, MAX_EVENTS};
 pub use layout::{PhyLayout, layout};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallEndpoint, ComparisonVerdict, DataSelector, DeviceDeclaration, ExecutionCase,
     ExecutionEvidence, ExecutionRegion, ExecutionRequest, ExecutionStop, ExecutionTarget,
     ImageLayout, ImageRegion, Invocation, LinkRequest, MemorySelection, RegionLifetime,
 };
-use oer_analysis_riscv_model::{ArtifactId, ObjectId, ObjectLocation, SymbolId};
+use oer_tools_analysis_riscv_model::{ArtifactId, ObjectId, ObjectLocation, SymbolId};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -108,8 +108,8 @@ pub fn start_session(options: &PhyOptions, extra: &[Input<'_>], purpose: &str) -
 /// Requested-delay ABI at `address`: every call returns zero and records its
 /// first argument as requested microseconds. The call count is evidence, not
 /// a declared budget; scenarios compare the ordered delay values instead.
-pub fn delay_calls(id: &str, address: u32) -> Vec<oer_analysis_blobray_domain::CallDeclaration> {
-    use oer_analysis_blobray_domain::{
+pub fn delay_calls(id: &str, address: u32) -> Vec<oer_tools_analysis_blobray_domain::CallDeclaration> {
+    use oer_tools_analysis_blobray_domain::{
         CallBinding, CallBoundary, CallDeclaration, CallRepetition, CallResponse, CallValue,
     };
     vec![CallDeclaration {
@@ -361,17 +361,17 @@ impl PhyImage {
             let unfinished: Vec<_> = records
                 .iter()
                 .filter_map(|r| match r {
-                    oer_analysis_blobray_domain::ExecutionEvidence::Model {
+                    oer_tools_analysis_blobray_domain::ExecutionEvidence::Model {
                         case,
                         observation,
                         ..
                     } if observation.status != observation.expected_status()
                         || observation.status
-                            == oer_analysis_blobray_domain::ModelStatus::Incomplete =>
+                            == oer_tools_analysis_blobray_domain::ModelStatus::Incomplete =>
                     {
                         Some(format!("{case} {} {:?}", observation.id, observation.issue))
                     }
-                    oer_analysis_blobray_domain::ExecutionEvidence::CallModel {
+                    oer_tools_analysis_blobray_domain::ExecutionEvidence::CallModel {
                         case,
                         observation,
                         ..
@@ -505,7 +505,7 @@ impl PhyImage {
 
     /// Exact image bytes at a linked address, checked against the source identity.
     pub fn image_data(&self, name: &str, address: u32, length: u64) -> Result<Vec<u8>> {
-        let request = oer_analysis_blobray_domain::DataRequest {
+        let request = oer_tools_analysis_blobray_domain::DataRequest {
             object: self.image_object.clone(),
             symbol: None,
             ranges: vec![DataSelector::Image {

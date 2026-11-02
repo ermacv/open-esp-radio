@@ -1,6 +1,6 @@
 use super::*;
 use crate::BootSmokePassed;
-use oer_trace::{Channel, Domain, Kind};
+use oer_portable_trace::{Channel, Domain, Kind};
 use std::{format, vec, vec::Vec};
 
 fn encode(panic: &PreviousPanic<'_>) -> Vec<u8> {

@@ -1,4 +1,4 @@
-use oer_memory::{ContextCell, Entered, ExecutionContext};
+use oer_portable_memory::{ContextCell, Entered, ExecutionContext};
 
 fn share<T: Sync>() {}
 

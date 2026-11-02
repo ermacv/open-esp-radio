@@ -9,7 +9,7 @@
 //! image's and the ROM's bytes, their facts, the value analysis, and every
 //! structure of the stack analysis that grows with the image: the facts it
 //! keeps of each function, the DWARF and type facts, and the resolutions
-//! (`oer-image-stack`). Outside it stay the caches addr2line grows for the
+//! (`oer-tools-image-stack`). Outside it stay the caches addr2line grows for the
 //! inline chains, which the working memory's contract leaves to the
 //! library, and the pre-existing bound scratch and critical-path structures.
 //! First-discovery predecessors are admitted by each bound's caller through
@@ -17,21 +17,21 @@
 //! The runtime and bootstrap stack reports state the original image-analysis
 //! usage; the separate reachability reports include the peak with witnesses.
 //! The interrupt check reads its image facts within the same limits.
-use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, RunPosition};
+use oer_tools_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, RunPosition};
 use std::time::{Duration, Instant};
 
-pub const LIMITS: oer_analysis_riscv_model::OperationLimits =
-    oer_analysis_riscv_model::AnalysisProfile::ImageChecks.limits();
+pub const LIMITS: oer_tools_analysis_riscv_model::OperationLimits =
+    oer_tools_analysis_riscv_model::AnalysisProfile::ImageChecks.limits();
 
 pub fn resources(
     work_units: u64,
     peak_admitted_bytes: u64,
-    limited: oer_analysis_riscv_model::AnalysisLimited,
-) -> oer_analysis_riscv_model::AnalysisResources {
-    oer_analysis_riscv_model::AnalysisResources::new(
-        oer_analysis_riscv_model::AnalysisProfile::ImageChecks,
+    limited: oer_tools_analysis_riscv_model::AnalysisLimited,
+) -> oer_tools_analysis_riscv_model::AnalysisResources {
+    oer_tools_analysis_riscv_model::AnalysisResources::new(
+        oer_tools_analysis_riscv_model::AnalysisProfile::ImageChecks,
         LIMITS,
-        oer_analysis_riscv_model::AnalysisUsage {
+        oer_tools_analysis_riscv_model::AnalysisUsage {
             work_units,
             peak_admitted_bytes,
         },
@@ -39,7 +39,7 @@ pub fn resources(
     )
 }
 
-pub fn header(resources: &oer_analysis_riscv_model::AnalysisResources, memory_peak: u64) -> String {
+pub fn header(resources: &oer_tools_analysis_riscv_model::AnalysisResources, memory_peak: u64) -> String {
     let mut resources = resources.clone();
     resources.usage.peak_admitted_bytes = memory_peak;
     format!(

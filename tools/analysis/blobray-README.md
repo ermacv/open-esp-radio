@@ -19,14 +19,14 @@ Real input needs your own identified vendor artifacts.
 | Task | Interface | Reference |
 | --- | --- | --- |
 | List symbols and strings | `blobray symbols`, `blobray strings` | [Symbols and strings](cli/reference/inventory-linking/README.md#symbols-and-strings) |
-| Inspect inputs | `oer_analysis_blobray_application::captured::inventory` | [Inventory](cli/reference/inventory-linking/README.md#inventory) |
-| Investigate code | `blobray function-records`, `blobray field-accesses`, `blobray callers`, `oer_analysis_blobray_application::library::analyze_library` | [Function analysis](cli/reference/analysis/README.md#function-analysis-contract) |
+| Inspect inputs | `oer_tools_analysis_blobray_application::captured::inventory` | [Inventory](cli/reference/inventory-linking/README.md#inventory) |
+| Investigate code | `blobray function-records`, `blobray field-accesses`, `blobray callers`, `oer_tools_analysis_blobray_application::library::analyze_library` | [Function analysis](cli/reference/analysis/README.md#function-analysis-contract) |
 | Investigate call arguments | `blobray call-arguments` | [Call arguments](cli/reference/analysis/README.md#call-arguments) |
 | Investigate registers | `blobray register-accesses` | [Library register accesses](cli/reference/registers-data/README.md#library-register-accesses) |
 | Check what a change does to the hardware | `blobray mmio-diff` | [MMIO difference between builds](cli/reference/registers-data/README.md#mmio-difference-between-builds) |
-| Recover tables and coefficients | `oer_analysis_blobray_application::data::export` | [Tables and coefficients](cli/reference/registers-data/README.md#captured-data-tables-and-coefficients) |
-| Link an image | `oer_analysis_blobray_application::linking::{link, propose_companions}` | [Linked images](cli/reference/inventory-linking/README.md#synthetic-linked-images), [ROM companions](cli/reference/analysis/README.md#explicit-rom-companions) |
-| Execute and compare | `oer_analysis_blobray_application::in_process::verify` | [Execution and comparison](cli/reference/execution/README.md#concrete-execution-and-comparison), [effect contracts](cli/reference/comparison/README.md#reviewed-effect-comparison) |
+| Recover tables and coefficients | `oer_tools_analysis_blobray_application::data::export` | [Tables and coefficients](cli/reference/registers-data/README.md#captured-data-tables-and-coefficients) |
+| Link an image | `oer_tools_analysis_blobray_application::linking::{link, propose_companions}` | [Linked images](cli/reference/inventory-linking/README.md#synthetic-linked-images), [ROM companions](cli/reference/analysis/README.md#explicit-rom-companions) |
+| Execute and compare | `oer_tools_analysis_blobray_application::in_process::verify` | [Execution and comparison](cli/reference/execution/README.md#concrete-execution-and-comparison), [effect contracts](cli/reference/comparison/README.md#reviewed-effect-comparison) |
 
 | Question | Required input | Inspect in the result | Next action |
 | --- | --- | --- | --- |
@@ -116,7 +116,7 @@ Related tools have different owners: `cargo registers` publishes reviewed
 hardware interfaces; `cargo fw` builds repository images;
 `cargo hil` obtains device observations. Blobray does not decide product readiness.
 
-`cargo blobray` invokes `oer-tool-analysis-cli`; the
+`cargo blobray` invokes `oer-tools-analysis-cli`; the
 [operator index](cli/README.md#reference-navigation) describes that interface.
 CLI and JSON use the same application operations. `--help` is available on the
 top-level command and subcommands. Blobray has no TUI or code generation.
@@ -125,11 +125,11 @@ top-level command and subcommands. Blobray has no TUI or code generation.
 
 The Blobray CLI and typed vendor scenarios are members of the repository's root
 Cargo workspace. They share its `Cargo.lock` and `target` directory. From the
-repository root, `cargo blobray` runs `oer-tool-analysis-cli` with the `tools`
+repository root, `cargo blobray` runs `oer-tools-analysis-cli` with the `tools`
 profile.
 
 Use `cargo blobray` in the checkout: Cargo rebuilds the CLI when its Rust
-inputs or the tracked chip fact layers (`oer-espressif-facts`) change. A
+inputs or the tracked chip fact layers (`oer-chips-family-facts`) change. A
 directly invoked binary checks every layer file of a pinned input's chip
 against the one compiled in and refuses changed or newly added layers with a
 `cargo blobray` rebuild message before resolving the artifact. Both the tools
@@ -142,7 +142,7 @@ limits remain the adapter's policy; the analysis core does not depend on
 subprocess mechanisms. The crate boundary test enforces that split.
 
 ```console
-cargo build --profile tools -p oer-tool-analysis-cli --bin blobray
+cargo build --profile tools -p oer-tools-analysis-cli --bin blobray
 cargo blobray --format json register-accesses --input vendor=/path/to/lib.a --range 0x60000000:0x100000
 ```
 

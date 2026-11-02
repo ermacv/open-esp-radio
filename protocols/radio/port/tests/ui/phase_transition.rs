@@ -1,6 +1,6 @@
 #![no_std]
-use oer_radio_port::{Enabled, Owner, PortBackend};
-pub async fn phase<'p, 'id, Id: oer_radio_port::SlotIdentity, B: PortBackend<Id>>(mut owner: Owner<'p, 'id, Id, B, Enabled>) {
+use oer_protocols_radio_port::{Enabled, Owner, PortBackend};
+pub async fn phase<'p, 'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(mut owner: Owner<'p, 'id, Id, B, Enabled>) {
     let phase = owner.phase();
     #[cfg(not(ui_reject))]
     drop(phase);

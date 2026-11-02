@@ -1,4 +1,4 @@
-//! Blobray analyses over `oer-analysis-riscv-analysis`: execution-coverage closures,
+//! Blobray analyses over `oer-tools-analysis-riscv-analysis`: execution-coverage closures,
 //! register-access navigation. No filesystem,
 //! project or ISA implementation.
 

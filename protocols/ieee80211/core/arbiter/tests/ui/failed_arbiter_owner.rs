@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_core_arbiter::{Arbiter, ArbiterEnd, PendingRetune};
-use oer_ieee80211_contracts_port::Ieee80211Capabilities;
+use oer_protocols_ieee80211_core_arbiter::{Arbiter, ArbiterEnd, PendingRetune};
+use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
 
 pub fn late_retune<'id, K: Ieee80211Capabilities>(
     mut arbiter: Arbiter<'id, K>,

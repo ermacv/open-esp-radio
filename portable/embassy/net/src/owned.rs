@@ -13,10 +13,10 @@ use core::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-use oer_memory::{
+use oer_portable_memory::{
     Entered, ExecutionContext, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
 };
-use oer_sync::PriorityWaker;
+use oer_portable_sync::PriorityWaker;
 use xarxa_driver::{
     Capabilities, ChecksumCapabilities, Driver, HardwareAddress, LinkState as DriverLinkState,
     NotSupported, PacketBuf, PacketBufAllocator, PacketPoolWaiter,
@@ -30,7 +30,7 @@ use tx_budget::TxCredit;
 use tx_queue::TxQueue;
 
 use crate::{FrameLengthError, NetworkInterfaceId, RxEnqueueError};
-use oer_network_wire::ethernet::{EtherType, EthernetHeader, HEADER_LEN as ETHERNET_HEADER_LEN};
+use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader, HEADER_LEN as ETHERNET_HEADER_LEN};
 
 #[derive(Clone, Copy)]
 struct LinkSnapshot {
@@ -164,12 +164,12 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
     /// Create an inactive, empty endpoint with nonzero queue depths.
     ///
     /// ```compile_fail,E0080
-    /// use oer_embassy_net::OwnedEndpointResources;
-    /// let _ = OwnedEndpointResources::<oer_memory::Never, 0, 1>::new();
+    /// use oer_portable_embassy_net::OwnedEndpointResources;
+    /// let _ = OwnedEndpointResources::<oer_portable_memory::Never, 0, 1>::new();
     /// ```
     /// ```compile_fail,E0080
-    /// use oer_embassy_net::OwnedEndpointResources;
-    /// let _ = OwnedEndpointResources::<oer_memory::Never, 1, 0>::new();
+    /// use oer_portable_embassy_net::OwnedEndpointResources;
+    /// let _ = OwnedEndpointResources::<oer_portable_memory::Never, 1, 0>::new();
     /// ```
     pub const fn new() -> Self {
         const {
@@ -256,9 +256,9 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, const TX_QUEUE_DEPTH: usi
 /// The device stays on the constructing thread even for a shared
 /// metadata context; it cannot be sent to another task thread.
 /// ```compile_fail,E0277
-/// use oer_embassy_net::OwnedNetworkDevice;
+/// use oer_portable_embassy_net::OwnedNetworkDevice;
 /// fn require_send<T: Send>() {}
-/// require_send::<OwnedNetworkDevice<'static, oer_memory::Never, 1, 1>>();
+/// require_send::<OwnedNetworkDevice<'static, oer_portable_memory::Never, 1, 1>>();
 /// ```
 pub struct OwnedNetworkDevice<
     'resources,
@@ -391,12 +391,12 @@ pub struct OwnedNetworkTxFrame<'resources> {
 /// Affine RX-only capability for a physical datapath service.
 ///
 /// ```compile_fail,E0277
-/// use oer_embassy_net::OwnedRxPublisher;
+/// use oer_portable_embassy_net::OwnedRxPublisher;
 /// fn require_clone<T: Clone>() {}
 /// require_clone::<OwnedRxPublisher<'static, 1>>();
 /// ```
 /// ```compile_fail,E0277
-/// use oer_embassy_net::OwnedRxPublisher;
+/// use oer_portable_embassy_net::OwnedRxPublisher;
 /// fn require_send<T: Send>() {}
 /// require_send::<OwnedRxPublisher<'static, 1>>();
 /// ```
@@ -554,7 +554,7 @@ impl OwnedNetworkTxFrame<'_> {
 
 /// Affine link-state capability lent exclusively by the radio-side owner.
 /// ```compile_fail,E0277
-/// use oer_embassy_net::OwnedLinkController;
+/// use oer_portable_embassy_net::OwnedLinkController;
 /// fn require_copy<T: Copy>() {}
 /// require_copy::<OwnedLinkController<'static>>();
 /// ```
@@ -580,8 +580,8 @@ impl OwnedLinkController<'_> {
 ///
 /// An RX loan excludes another RX loan, link changes and moving the runner.
 /// ```compile_fail,E0499
-/// use oer_embassy_net::OwnedNetworkRunner;
-/// use oer_memory::ExecutionContext;
+/// use oer_portable_embassy_net::OwnedNetworkRunner;
+/// use oer_portable_memory::ExecutionContext;
 /// fn two<X: ExecutionContext>(runner: &mut OwnedNetworkRunner<'_, X, 1, 1>) {
 ///     let first = runner.rx_publisher();
 ///     let second = runner.rx_publisher();
@@ -590,8 +590,8 @@ impl OwnedLinkController<'_> {
 /// ```
 /// Publication waits also retain the unique runner borrow.
 /// ```compile_fail,E0499
-/// use oer_embassy_net::OwnedNetworkRunner;
-/// use oer_memory::ExecutionContext;
+/// use oer_portable_embassy_net::OwnedNetworkRunner;
+/// use oer_portable_memory::ExecutionContext;
 /// fn two<X: ExecutionContext>(runner: &mut OwnedNetworkRunner<'_, X, 1, 1>) {
 ///     let first = runner.wait_tx_publication();
 ///     let second = runner.wait_tx_publication();

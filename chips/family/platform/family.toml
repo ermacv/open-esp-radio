@@ -35,8 +35,8 @@ observed-functions = [
 # and their guards.
 [interrupts]
 table-symbol = "__OER_INTERRUPT_TABLE"
-# `oer_espressif_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
-# u8 at 3, class u8 at 4 (`oer_espressif_interrupt_table::Class`), hart u8 at 5,
+# `oer_chips_family_interrupt_table::Binding`: source u16 at 0, CPU line u8 at 2, level
+# u8 at 3, class u8 at 4 (`oer_chips_family_interrupt_table::Class`), hart u8 at 5,
 # handler word at 8; fields as [offset, bytes]. An exempt entry's reason is
 # the bytes of the symbol named by the prefix and the entry's handler symbol.
 table-entry-bytes = 12

@@ -1,15 +1,15 @@
 //! Each injected fault owns its own entry, allocation and counter.
-use oer_espressif_interrupt_table::{
+use oer_chips_family_interrupt_table::{
     BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, Router,
 };
-use oer_riscv::clic::{Control, LevelBits, LineState};
+use oer_portable_riscv::clic::{Control, LevelBits, LineState};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 
-oer_espressif_interrupt_table::__fake_parts!();
-oer_espressif_interrupt_table::__fake_controller!();
+oer_chips_family_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_controller!();
 
 pub struct Owned<const SOURCE: u16>(Arc<AtomicUsize>);
 impl<const SOURCE: u16> Drop for Owned<SOURCE> {
@@ -17,18 +17,18 @@ impl<const SOURCE: u16> Drop for Owned<SOURCE> {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
 }
-impl<const SOURCE: u16> oer_espressif_interrupt_table::InterruptSource for Owned<SOURCE> {
+impl<const SOURCE: u16> oer_chips_family_interrupt_table::InterruptSource for Owned<SOURCE> {
     const SOURCE: u16 = SOURCE;
 }
 pub struct Pair {
     _owner: Owned<3>,
 }
-impl oer_espressif_interrupt_table::InterruptSources for Pair {
+impl oer_chips_family_interrupt_table::InterruptSources for Pair {
     const SOURCES: &'static [u16] = &[3, 7];
 }
 fn on_owned<const SOURCE: u16>(_: &mut Owned<SOURCE>) {}
 fn on_pair(_: &mut Pair) {}
-oer_espressif_interrupt_table::interrupt_table! {
+oer_chips_family_interrupt_table::interrupt_table! {
     lines: FAKE_LINES,
     handler_attributes: [];
     contexts { hardware: 1; }
@@ -99,7 +99,7 @@ fn drops() -> Arc<AtomicUsize> {
     Arc::new(AtomicUsize::new(0))
 }
 fn fault<E: Entry>(
-    result: Result<oer_espressif_interrupt_table::Bound<E>, BindError<E>>,
+    result: Result<oer_chips_family_interrupt_table::Bound<E>, BindError<E>>,
 ) -> BindError<E> {
     let error = result.unwrap_err();
     assert!(matches!(error, BindError::Fault(_)), "{error:?}");
@@ -192,13 +192,13 @@ fn diagnostic_keeps_both_line_states_and_full_entry_identity() {
     let state = LineState {
         enabled: true,
         vectored: false,
-        trigger: oer_riscv::clic::Trigger::NegativeEdge,
+        trigger: oer_portable_riscv::clic::Trigger::NegativeEdge,
         control: Control::from_bits(0xfe),
     };
     let expected = LineState {
         enabled: false,
         vectored: true,
-        trigger: oer_riscv::clic::Trigger::NegativeLevel,
+        trigger: oer_portable_riscv::clic::Trigger::NegativeLevel,
         control: Control::from_bits(0xfd),
     };
     let fault = BindFault {

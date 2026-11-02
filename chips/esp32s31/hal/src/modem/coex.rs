@@ -1,13 +1,13 @@
 //! The internal coexistence timer bank, borrowed apart from the PHY.
 #![forbid(unsafe_code)]
 use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     coex::{self, CoexPolicyTimers, PhyGrantProtectTimer},
     instances,
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
-pub const COEX_TIMER_COUNT: u8 = oer_esp32s31_pac::coex::configuration::COUNT as u8;
+pub const COEX_TIMER_COUNT: u8 = oer_chips_esp32s31_pac::coex::configuration::COUNT as u8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum CoexTimerRegister {
@@ -19,7 +19,7 @@ pub enum CoexTimerRegister {
     Timer5,
 }
 impl CoexTimerRegister {
-    pub const ALL: [Self; oer_esp32s31_pac::coex::configuration::COUNT] = [
+    pub const ALL: [Self; oer_chips_esp32s31_pac::coex::configuration::COUNT] = [
         Self::Timer0,
         Self::Timer1,
         Self::Timer2,

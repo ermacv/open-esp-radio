@@ -1,6 +1,6 @@
 //! What a lower-MAC backend supports and what it performs autonomously.
 
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     channel::{Band, Channel, ChannelWidth},
     phy::{FecCoding, HeMcs, HtMcs, PhyRate},
     qos::WmmAccessCategory,

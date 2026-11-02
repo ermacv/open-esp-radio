@@ -11,12 +11,12 @@
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects
 )]
-use oer_esp32s31_hal::boot::{Bits, LpFastSource};
-use oer_espressif_boot::{
+use oer_chips_esp32s31_hal::boot::{Bits, LpFastSource};
+use oer_chips_family_boot::{
     drivers::{brownout, clock, entropy},
     wait::BootWait,
 };
-use oer_time::Duration;
+use oer_portable_time::Duration;
 
 include!(concat!(env!("OUT_DIR"), "/lp-fast-source.rs"));
 
@@ -66,17 +66,17 @@ pub const ENTROPY: entropy::Profile<Bits<5>, Bits<9>> = entropy::Profile {
 };
 
 const _: () = {
-    if !oer_esp32s31_hal::boot::BOOT_BUDGET.admits(LP_FAST.settle)
-        || !oer_esp32s31_hal::boot::BOOT_BUDGET.admits(BROWNOUT.threshold_wait)
+    if !oer_chips_esp32s31_hal::boot::BOOT_BUDGET.admits(LP_FAST.settle)
+        || !oer_chips_esp32s31_hal::boot::BOOT_BUDGET.admits(BROWNOUT.threshold_wait)
     {
         panic!("the unchanged L3 waits fit the unchanged boot budget");
     }
 };
 
 /// Lend the detector and its analog bus together, using the chip profile.
-pub fn apply_brownout<C: oer_time::Clock + ?Sized>(
-    owner: &mut oer_esp32s31_hal::boot::Brownout,
-    deadline: &oer_espressif_boot::wait::BootDeadline<'_, C>,
+pub fn apply_brownout<C: oer_portable_time::Clock + ?Sized>(
+    owner: &mut oer_chips_esp32s31_hal::boot::Brownout,
+    deadline: &oer_chips_family_boot::wait::BootDeadline<'_, C>,
 ) -> Result<(), brownout::BrownoutFailure> {
     let (registers, mut bus) = owner.parts();
     brownout::apply(registers, &mut bus, BROWNOUT, deadline)

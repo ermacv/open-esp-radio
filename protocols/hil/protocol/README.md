@@ -1,6 +1,6 @@
 # HIL protocol
 
-`oer-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission; `lifecycle` owns the optional generic reset exchange; `system` holds the stack watermark values other modules carry.
+`oer-protocols-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission; `lifecycle` owns the optional generic reset exchange; `system` holds the stack watermark values other modules carry.
 
 - [Wire contract](wire.md): framing, version checks, discovery and boot identity.
 - [Platform diagnostics](diagnostics.md): requested reset and stack measurements.

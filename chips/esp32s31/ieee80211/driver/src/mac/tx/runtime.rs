@@ -1,7 +1,7 @@
 //! Hardware EDCA and negotiated HT/HE publication parameters.
 
-use oer_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet, VifRole};
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet, VifRole};
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::mac::{
     edca::{EdcaAccessPolicy, EdcaContentionParameters, EdcaParametersError, EdcaQueues},
@@ -129,7 +129,7 @@ impl WifiTxRuntimePolicy {
     /// Install the six-bit HE BSS color decoded from the peer's BSS Color IE.
     pub fn install_he_bss_color(&mut self, bss_color: u8) {
         self.he_bss_color =
-            oer_ieee80211_wire::signal::BssColorCode::from_bytes([bss_color]).color();
+            oer_protocols_ieee80211_wire::signal::BssColorCode::from_bytes([bss_color]).color();
     }
 
     pub const fn he_bss_color(&self) -> u8 {

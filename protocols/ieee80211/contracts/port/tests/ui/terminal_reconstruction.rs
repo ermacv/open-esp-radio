@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{Completed, InFlight, SingleOutcome};
+use oer_protocols_ieee80211_contracts_port::{Completed, InFlight, SingleOutcome};
 
 pub fn finish<C, T, M>(
     operation: InFlight<C, T, M>,

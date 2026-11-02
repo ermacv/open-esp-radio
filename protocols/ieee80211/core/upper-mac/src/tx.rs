@@ -30,13 +30,13 @@
 
 use crate::protection::{ProtectedPpdu, TxProtectionDecision, TxPsdu, TxReceiver};
 use crate::retry::FrameClass;
-use oer_ieee80211_contracts_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
-use oer_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
+use oer_protocols_ieee80211_contracts_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
+use oer_protocols_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
 
 mod ampdu_status;
 pub use ampdu_status::{MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries};
-use oer_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
-use oer_time::Instant;
+use oer_protocols_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
+use oer_portable_time::Instant;
 
 use crate::{
     ampdu::{
@@ -328,14 +328,14 @@ impl TxExchange {
     /// body held by the current phase.
     ///
     /// ```compile_fail,E0308
-    /// use oer_ieee80211_core_upper_mac::{TxExchange,TxRequest};
+    /// use oer_protocols_ieee80211_core_upper_mac::{TxExchange,TxRequest};
     /// fn borrowed_request(exchange: &TxExchange) -> &TxRequest {
     ///     exchange.request()
     /// }
     /// ```
     ///
     /// ```
-    /// use oer_ieee80211_core_upper_mac::{TxExchange,TxRequest};
+    /// use oer_protocols_ieee80211_core_upper_mac::{TxExchange,TxRequest};
     /// fn request_snapshot(exchange: &TxExchange) -> TxRequest {
     ///     exchange.request()
     /// }
@@ -960,7 +960,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
 
 impl TxAttemptPlan {
     /// The protection exchange of the attempt as the port requests it.
-    pub const fn port_protection(&self) -> oer_ieee80211_contracts_port::Protection {
+    pub const fn port_protection(&self) -> oer_protocols_ieee80211_contracts_port::Protection {
         self.protection.protection
     }
 
@@ -968,7 +968,7 @@ impl TxAttemptPlan {
     pub const fn is_protected(&self) -> bool {
         !matches!(
             self.protection.protection,
-            oer_ieee80211_contracts_port::Protection::None
+            oer_protocols_ieee80211_contracts_port::Protection::None
         )
     }
 }

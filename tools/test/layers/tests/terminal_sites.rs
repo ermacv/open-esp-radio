@@ -246,7 +246,7 @@ fn terminal_path(path: &syn::Path, aliases: &BTreeMap<String, String>) -> bool {
 }
 
 fn reset_module(name: &str) -> bool {
-    ["fatal", "runtime", "staged", "oer_espressif_staged_runtime"].contains(&name)
+    ["fatal", "runtime", "staged", "oer_chips_family_staged_runtime"].contains(&name)
         || name.ends_with("_fault")
 }
 
@@ -285,7 +285,7 @@ fn aliases(tree: &syn::UseTree, prefix: Vec<String>, found: &mut BTreeMap<String
             } else {
                 &name
             };
-            if ["fatal", "oer_espressif_staged_runtime"].contains(&module) {
+            if ["fatal", "oer_chips_family_staged_runtime"].contains(&module) {
                 found.insert(rename.rename.to_string(), module.into());
             }
             if terminal_api(&name)
@@ -999,8 +999,8 @@ fn aliases_macro_expansions_and_new_retained_variants_are_inventoried() {
     let source = r#"
         use runtime::fatal::{reset_recording as reboot, reset as restart};
         use core::panic as fail;
-        use oer_espressif_staged_runtime::{self as rt};
-        use oer_espressif_staged_runtime as platform;
+        use oer_chips_family_staged_runtime::{self as rt};
+        use oer_chips_family_staged_runtime as platform;
         fn run() { reboot::<Port>(|_| ()); restart::<Port>(); fail!("image"); rt::reset::<Port>(); platform::reset::<Port>(); }
         macro_rules! emitted { () => { runtime::fatal::reset::<Port>(); rt::reset::<Port>(); } }
         enum FaultReason { One = 1, Two = 2 }

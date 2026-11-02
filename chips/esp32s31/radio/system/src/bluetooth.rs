@@ -1,6 +1,6 @@
 //! A borrowed Bluetooth attachment; the shared actor keeps its concrete type.
 use super::*;
-use oer_esp32s31_radio_client::bluetooth::{
+use oer_chips_esp32s31_radio_client::bluetooth::{
     Bluetooth, BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation,
 };
 
@@ -36,15 +36,15 @@ pub struct BluetoothActor<'a, S: LpSource, B, T, A> {
     inbox: ClientInbox<Bluetooth>,
     attachment: &'a mut A,
 }
-impl<S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<Wifi, S, B, T> {
+impl<S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSystem<Wifi, S, B, T> {
     /// Lend this actor to one Bluetooth attachment. Refusal returns the actual
     /// inbox; a dropped loan cannot grant a second attachment/reset epoch.
     /// The common actor cannot be borrowed while its attachment is in use:
     /// ```compile_fail,E0499
-    /// use oer_esp32s31_radio_system::{RadioSystem,BluetoothBackend,ClientBackend};
-    /// use oer_esp32s31_radio_client::{LpSource,ClientInbox,wifi::Wifi,bluetooth::Bluetooth};
+    /// use oer_chips_esp32s31_radio_system::{RadioSystem,BluetoothBackend,ClientBackend};
+    /// use oer_chips_esp32s31_radio_client::{LpSource,ClientInbox,wifi::Wifi,bluetooth::Bluetooth};
     /// fn conflict<S,B,T,A>(actor:&mut RadioSystem<Wifi,S,B,T>,inbox:ClientInbox<Bluetooth>,attachment:&mut A)
-    /// where S:LpSource,B:ClientBackend<Wifi,S>,T:oer_time::Timer,A:BluetoothBackend<B,S> {
+    /// where S:LpSource,B:ClientBackend<Wifi,S>,T:oer_portable_time::Timer,A:BluetoothBackend<B,S> {
     ///     let mut loan=actor.attach_bluetooth(inbox,attachment).ok().expect("one attachment");
     ///     let _=actor.backend_mut();
     ///     let _=loan.run();
@@ -67,7 +67,7 @@ impl<S: LpSource, B: PhyDomain, T: oer_time::Timer> RadioSystem<Wifi, S, B, T> {
         })
     }
 }
-impl<S: LpSource, B: PhyDomain, T: oer_time::Timer, A: BluetoothBackend<B, S>>
+impl<S: LpSource, B: PhyDomain, T: oer_portable_time::Timer, A: BluetoothBackend<B, S>>
     BluetoothActor<'_, S, B, T, A>
 {
     /// Access the retained controller only between separate run borrows.
@@ -88,7 +88,7 @@ impl<S, B, T, A> BluetoothActor<'_, S, B, T, A>
 where
     S: LpSource,
     B: ClientBackend<Wifi, S>,
-    T: oer_time::Timer,
+    T: oer_portable_time::Timer,
     A: BluetoothBackend<B, S>,
 {
     /// Serve both clients until the periodic tracking fails.

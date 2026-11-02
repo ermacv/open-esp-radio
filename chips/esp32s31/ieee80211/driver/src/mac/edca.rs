@@ -8,9 +8,9 @@
 pub mod contention;
 
 use contention::EdcaContention;
-use oer_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
-use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
+use oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 use crate::mac::tx::LegacyTxQueue;
 
@@ -22,7 +22,7 @@ pub const MAX_HARDWARE_ECW_EXPONENT: u8 = 10;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EdcaParametersError {
     AifsnOutOfRange(u8),
-    MsduLifetimeOutOfRange(oer_time::Duration),
+    MsduLifetimeOutOfRange(oer_portable_time::Duration),
     MinimumExponentOutOfRange(u8),
     MaximumExponentOutOfRange(u8),
     InvertedExponentRange { minimum: u8, maximum: u8 },
@@ -46,7 +46,7 @@ pub struct EdcaAccessPolicy {
     contention: EdcaContentionParameters,
     admission_control_mandatory: bool,
     txop_limit_units_32_us: u16,
-    msdu_lifetime: oer_time::Duration,
+    msdu_lifetime: oer_portable_time::Duration,
 }
 
 impl EdcaAccessPolicy {
@@ -54,7 +54,7 @@ impl EdcaAccessPolicy {
         contention: EdcaContentionParameters,
         admission_control_mandatory: bool,
         txop_limit_units_32_us: u16,
-        msdu_lifetime: oer_time::Duration,
+        msdu_lifetime: oer_portable_time::Duration,
     ) -> Self {
         Self {
             contention,
@@ -83,7 +83,7 @@ impl EdcaAccessPolicy {
         ))
     }
 
-    pub const fn msdu_lifetime(self) -> oer_time::Duration {
+    pub const fn msdu_lifetime(self) -> oer_portable_time::Duration {
         self.msdu_lifetime
     }
 

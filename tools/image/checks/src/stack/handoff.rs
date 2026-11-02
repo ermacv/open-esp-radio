@@ -16,10 +16,10 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use oer_analysis_elf::Elf;
-use oer_analysis_riscv_decode::{Extensions, Inst, Instruction, decode};
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::{Fact, FunctionSemantics, SemanticOp};
+use oer_tools_analysis_elf::Elf;
+use oer_tools_analysis_riscv_decode::{Extensions, Inst, Instruction, decode};
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::{Fact, FunctionSemantics, SemanticOp};
 
 use super::{Image, Result};
 
@@ -80,7 +80,7 @@ impl Image {
                         constant_jump_target(&own, &facts.function, transfer.site) == Some(entry)
                     }
                 };
-                if transfer.kind == oer_image_stack::TransferKind::Tail && goes_there {
+                if transfer.kind == oer_tools_image_stack::TransferKind::Tail && goes_there {
                     sites.push((transfer.site, self.function_at(transfer.site)));
                 }
             }
@@ -108,7 +108,7 @@ impl Image {
 /// holds all of them.
 pub(super) fn function_code<'a>(
     elf: &Elf<'a>,
-    function: &oer_analysis_elf::Function,
+    function: &oer_tools_analysis_elf::Function,
 ) -> Option<&'a [u8]> {
     let address = u64::from(function.address);
     let section = elf.sections().find(|section| section.contains(address))?;
@@ -124,7 +124,7 @@ pub(super) fn function_code<'a>(
 /// on either the `addi` or the `jr` (the constant is the only way in).
 pub(super) fn constant_jump_target(
     elf: &Elf<'_>,
-    function: &oer_analysis_elf::Function,
+    function: &oer_tools_analysis_elf::Function,
     site: u32,
 ) -> Option<u32> {
     let code = function_code(elf, function)?;
@@ -332,7 +332,7 @@ pub(super) fn installs_stack_pointer(
         };
         // A CSR access (`csrr t0, mhartid`) touches no memory: it may not
         // write `sp`, and the `reads_register` check below covers its reads.
-        if let Instruction::Extension(oer_analysis_riscv_decode::Extension::Csr { .. }) =
+        if let Instruction::Extension(oer_tools_analysis_riscv_decode::Extension::Csr { .. }) =
             instruction
         {
             if matches!(operation, SemanticOp::Opaque { dest: 2 }) {

@@ -66,7 +66,7 @@ fn receive(user: &Socket, report: &mut Check) -> Result<()> {
         DtmVersion::V2 => user.command(LeReceiverTestV2::new(0, 1, 0))?,
     }
     report.rx_started = true;
-    oer_os_process::sleep(Duration::from_millis(100))?;
+    oer_tools_os_process::sleep(Duration::from_millis(100))?;
     Ok(())
 }
 
@@ -82,7 +82,7 @@ fn transmit(user: &Socket, report: &mut Check) -> Result<()> {
         DtmVersion::V2 => user.command(LeTransmitterTestV2::new(0, 37, 0, 1))?,
     }
     report.tx_started = true;
-    oer_os_process::sleep(Duration::from_millis(100))?;
+    oer_tools_os_process::sleep(Duration::from_millis(100))?;
     if user.command(LeTestEnd::new())? != 0 {
         return Err("transmitter Test End returned a nonzero receiver count".into());
     }

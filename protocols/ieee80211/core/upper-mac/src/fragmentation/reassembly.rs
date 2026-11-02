@@ -11,13 +11,13 @@
 )]
 
 use super::FragmentAdmissionEpoch;
-use oer_ieee80211_wire::data::{LLC_SNAP_HEADER_LEN, MsduParts, rfc1042_ether_type};
+use oer_protocols_ieee80211_wire::data::{LLC_SNAP_HEADER_LEN, MsduParts, rfc1042_ether_type};
 
 use super::{
     CcmpPacketNumber, DataFragmentProtection, OpenDataFragment, OpenDataFragmentIdentity,
     OpenDataReassemblyError,
 };
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 /// Borrowed Ethernet view of one fully reassembled and LLC-validated MSDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -356,7 +356,7 @@ pub(crate) fn phy_parts_mut(
 /// Moving the owner transfers its authority rather than copying access:
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_hal::owner::RadioAccess;
+/// use oer_chips_esp32s31_hal::owner::RadioAccess;
 /// fn duplicate(owner: RadioAccess) -> (RadioAccess, RadioAccess) {
 ///     (owner, owner)
 /// }
@@ -365,7 +365,7 @@ pub(crate) fn phy_parts_mut(
 /// A live MAC transaction excludes a second mutable transaction:
 ///
 /// ```compile_fail,E0499
-/// use oer_esp32s31_hal::owner::RadioAccess;
+/// use oer_chips_esp32s31_hal::owner::RadioAccess;
 /// fn overlap(owner: &mut RadioAccess) {
 ///     let first = owner.wifi_mac_hal();
 ///     let second = owner.wifi_mac_hal();
@@ -587,7 +587,7 @@ pub struct WifiInterruptBanks {
 
 impl WifiInterruptBanks {
     /// Take both banks from the root's partition. This performs no MMIO.
-    pub(crate) fn new(partition: oer_esp32s31_pac::ownership::WifiInterruptPeripherals) -> Self {
+    pub(crate) fn new(partition: oer_chips_esp32s31_pac::ownership::WifiInterruptPeripherals) -> Self {
         let (mac, power) = crate::ieee80211::registers::interrupt_banks(partition);
         Self {
             mac: MacInterruptRegisters { inner: mac },
@@ -602,9 +602,9 @@ pub struct MacInterruptRegisters {
     pub(crate) inner: PacMacInterruptRegisters,
 }
 
-impl oer_mmio::InterruptSource for MacInterruptRegisters {
+impl oer_portable_mmio::InterruptSource for MacInterruptRegisters {
     const SOURCE: u16 =
-        <oer_esp32s31_pac::wifi_mac::WifiMacInterrupt as oer_mmio::InterruptSource>::SOURCE;
+        <oer_chips_esp32s31_pac::wifi_mac::WifiMacInterrupt as oer_portable_mmio::InterruptSource>::SOURCE;
 }
 
 impl MacInterruptRegisters {
@@ -676,9 +676,9 @@ pub struct MacPowerInterruptRegisters {
     pub(crate) inner: PacMacPowerInterruptRegisters,
 }
 
-impl oer_mmio::InterruptSource for MacPowerInterruptRegisters {
+impl oer_portable_mmio::InterruptSource for MacPowerInterruptRegisters {
     const SOURCE: u16 =
-        <oer_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt as oer_mmio::InterruptSource>::SOURCE;
+        <oer_chips_esp32s31_pac::modem_pwr::WifiMacPowerInterrupt as oer_portable_mmio::InterruptSource>::SOURCE;
 }
 
 impl MacPowerInterruptRegisters {

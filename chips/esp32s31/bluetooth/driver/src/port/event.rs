@@ -1,6 +1,6 @@
 //! Packet accounting after a natural terminal or a confirmed host stop.
 use super::Fault;
-use oer_esp32s31_hal::bluetooth::engine::DtmSchedulerItemCompletionStatus as Status;
+use oer_chips_esp32s31_hal::bluetooth::engine::DtmSchedulerItemCompletionStatus as Status;
 
 pub(super) enum Finish {
     Natural,

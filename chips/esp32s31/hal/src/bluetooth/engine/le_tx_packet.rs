@@ -12,7 +12,7 @@ use crate::bluetooth::engine::sram_link::ControllerSramLink;
 
 use crate::bluetooth::engine::shared_layout::BufferHeaderImage;
 use crate::layouts::*;
-use oer_memory::VolatileCell;
+use oer_portable_memory::VolatileCell;
 
 /// Bytes in one common controller RX/TX buffer header.
 pub const BLUETOOTH_LE_BUFFER_HEADER_BYTES: usize = BleBufferHeader::SIZE;

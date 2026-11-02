@@ -1,5 +1,5 @@
 [package]
-name = "oer-registers-model"
+name = "oer-tools-registers-model"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ publish = false
 description = "The register model of a chip: block types, the chip root, layouts, the ownership policy and the thin PAC renderer"
 
 [dependencies]
-oer-espressif-facts = { path = "../../../chips/family/facts" }
-oer-registers-contracts = { path = "../contracts" }
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
+oer-tools-registers-contracts = { path = "../contracts" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml_edit = { version = "=0.25.13", features = ["serde"] }
 thiserror = "=2.0.19"

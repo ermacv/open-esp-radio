@@ -3,20 +3,20 @@
 /// Espressif limits over the core's bounded aggregate retry owner.
 #[repr(transparent)]
 pub struct EspressifAmpduRetryState<const CAPACITY: usize>(
-    oer_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState<CAPACITY>,
+    oer_protocols_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState<CAPACITY>,
 );
 impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
     /// Apply hardware facts after the queue has been detached.
     pub fn observe(
         &mut self,
-        completion: impl Into<oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion>,
+        completion: impl Into<oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion>,
         subframes: u8,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<
-        oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision,
-        oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryError,
+        oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision,
+        oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryError,
     > {
         self.0
             .observe(completion, subframes, now, operational, admitted)
@@ -31,12 +31,12 @@ impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
     /// needs the distinct `ppHEAMPDU2Normal` metadata transition, while the
     /// HT path sends one remaining MPDU through its ordinary retry owner.
     pub fn new(
-        first: oer_ieee80211_wire::sequence::SequenceNumber,
+        first: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
         subframes: u8,
-        lifetime: oer_time::Duration,
+        lifetime: oer_portable_time::Duration,
         retain_single_mpdu: bool,
-    ) -> Result<Self, oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryError> {
-        oer_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState::new(
+    ) -> Result<Self, oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryError> {
+        oer_protocols_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState::new(
             first,
             subframes,
             crate::lmac::ampdu_retry_policy(lifetime, retain_single_mpdu),
@@ -45,7 +45,7 @@ impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
     }
 }
 impl<const C: usize> core::ops::Deref for EspressifAmpduRetryState<C> {
-    type Target = oer_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState<C>;
+    type Target = oer_protocols_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState<C>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -55,22 +55,22 @@ impl<const C: usize> core::ops::DerefMut for EspressifAmpduRetryState<C> {
         &mut self.0
     }
 }
-impl<const C: usize> oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduRetry
+impl<const C: usize> oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduRetry
     for EspressifAmpduRetryState<C>
 {
-    fn current_first_sequence(&self) -> oer_ieee80211_wire::sequence::SequenceNumber {
+    fn current_first_sequence(&self) -> oer_protocols_ieee80211_wire::sequence::SequenceNumber {
         self.0.current_first_sequence()
     }
     fn observe(
         &mut self,
-        completion: oer_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion,
+        completion: oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion,
         subframes: u8,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<
-        oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision,
-        oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryError,
+        oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision,
+        oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryError,
     > {
         self.0
             .observe(completion, subframes, now, operational, admitted)

@@ -1,9 +1,9 @@
 use super::*;
-use oer_analysis_riscv_analysis::{
+use oer_tools_analysis_riscv_analysis::{
     FunctionInput, PreparedReferences, research, writes::closes_local_graph,
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
 
 #[test]
 fn trap_encodings_end_only_paths_with_terminal_image_semantics() {

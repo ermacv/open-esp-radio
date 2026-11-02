@@ -182,7 +182,7 @@ with-probe = ["dep:probe-tool"]
 probe-tool = { version = "1", optional = true }
 debug-log = { version = "1", optional = true }
 [target.'cfg(target_os = "none")'.dependencies]
-oer-trace = { workspace = true, optional = true }
+oer-portable-trace = { workspace = true, optional = true }
 [build-dependencies]
 profile-gen = { version = "1", optional = true }
 [dev-dependencies]
@@ -208,7 +208,7 @@ health-fixture = "1"
         found,
         pairs(&[
             "debug-log",
-            "oer-trace",
+            "oer-portable-trace",
             "oer_trace",
             "profile-gen",
             "radio-health",

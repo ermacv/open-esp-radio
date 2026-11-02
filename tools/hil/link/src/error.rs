@@ -1,6 +1,6 @@
 //! Why the link or one exchange on it failed.
 
-use oer_hil_protocol::base::RejectReason;
+use oer_protocols_hil_protocol::base::RejectReason;
 
 /// The link cannot carry the protocol any more: its serial line failed or
 /// closed, or the device broke the wire contract. The first cause is kept.

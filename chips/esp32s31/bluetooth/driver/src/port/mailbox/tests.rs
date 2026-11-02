@@ -1,10 +1,10 @@
 use super::*;
 use core::{future::Future, pin::pin, task::Waker};
-use oer_bluetooth_le_port::{Cause, Receive, TestPhy};
-use oer_bluetooth_le_wire::TestChannel;
-use oer_memory::Doorbell;
-use oer_time::{Clock, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_protocols_bluetooth_le_port::{Cause, Receive, TestPhy};
+use oer_protocols_bluetooth_le_wire::TestChannel;
+use oer_portable_memory::Doorbell;
+use oer_portable_time::{Clock, Instant};
+use oer_portable_time_virtual::VirtualClock;
 use std::{boxed::Box, rc::Rc};
 
 #[test]
@@ -28,9 +28,9 @@ fn frontend_with_a_send_timer_can_cross_from_supervisor_to_p1() {
         }
     }
     fn send<T: Send>() {}
-    type Id = oer_radio_port::StaticId<()>;
+    type Id = oer_protocols_radio_port::StaticId<()>;
     type Backend = super::super::Backend<Id, MailboxDevice<SendTimer>>;
-    send::<oer_radio_port::SlotFrontend<'static, Id, Backend>>();
+    send::<oer_protocols_radio_port::SlotFrontend<'static, Id, Backend>>();
 }
 
 #[derive(Clone)]

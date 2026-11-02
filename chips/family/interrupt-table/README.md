@@ -1,13 +1,13 @@
-# oer-espressif-interrupt-table
+# oer-chips-family-interrupt-table
 
 Espressif interrupt-matrix bindings and vector ABI, including the symbols
 consumed by the staged runtime. Architectural CLIC line values come directly
-from `oer_riscv::clic`; chip facts select geometry and MNLBITS. Chip crates
+from `oer_portable_riscv::clic`; chip facts select geometry and MNLBITS. Chip crates
 and firmware use this crate directly.
 
 Each image's static table of its interrupt bindings, declared once per image
 with `interrupt_table!` (a chip's platform wraps it with its CPU lines, such
-as `oer_espressif_staged_runtime::interrupt_table!`), and the router that
+as `oer_chips_family_staged_runtime::interrupt_table!`), and the router that
 writes the routes and lines by it.
 
 One line, one part, one direct call. Each entry binds one interrupt part
@@ -25,8 +25,8 @@ level on each hart appear from lowest to highest arbitration priority. The macro
 facts' tie-break: on S31 a later, higher-priority peer must have a higher line
 ID. Peers at one level never preempt each other.
 
-The sources come from the part's type (`oer_mmio::InterruptSources`: the one
-source of an `oer_mmio::InterruptSource`, which the PAC generator implements
+The sources come from the part's type (`oer_portable_mmio::InterruptSources`: the one
+source of an `oer_portable_mmio::InterruptSource`, which the PAC generator implements
 for a block's interrupt side, or the several sources of a part one handler
 serves together), never from the entry's text, and the handler is a
 `fn(&mut Part)` or, for an `Executor` entry, a type implementing
@@ -79,7 +79,7 @@ as `__OER_INTERRUPT_TABLE` for the tools that read the image: source `u16` at
 0, line at 2, level at 3, class at 4, hart at 5 (`u8` each), the handler's
 word at 8, 12 bytes on the chip.
 The table, handler and exemption symbols are exported through
-`oer-memory::link_fn!`, which owns the export attributes. This crate's unsafe
+`oer-portable-memory::link_fn!`, which owns the export attributes. This crate's unsafe
 `LinkSlot` declarations reserve the table slice, vector function and exemption
 byte-array types and names. Safe exports must match the declared slot's
 name, kind and complete type, including function ABI. Each handler is a
@@ -108,7 +108,7 @@ entry binds is routed on no bank:
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, writes the entry's line (enabled,
   hardware-vectored, positive-level-triggered, its level in the control
-  byte, `oer_riscv::clic::Control`) and only then routes each of the part's
+  byte, `oer_portable_riscv::clic::Control`) and only then routes each of the part's
   sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
   interrupt; an entry the table lacks comes back with its token and part,
@@ -163,7 +163,7 @@ The composition must keep `raise` calls within those declared contexts;
 `raise` itself does not check the caller. A raise publishes its facts
 (fetch-or, Release) before the executor's pend, whose software-line raise
 fences `w, o`; the receiving handler lowers its line and fences `o, rw`
-before it swaps the facts (`oer-espressif-executor`'s software line, which
+before it swaps the facts (`oer-chips-family-executor`'s software line, which
 states the hardware preconditions of the cross-hart order).
 
 `Doorbell::new`, Wi-Fi request activation and BLE gate exchange assert the
@@ -179,20 +179,20 @@ tests here and in the executor and driver crates. Stable Rust cannot use these
 associated scheduling constants in generic const expressions in a signature.
 
 ```console
-cargo test -p oer-espressif-interrupt-table
+cargo test -p oer-chips-family-interrupt-table
 ```
 
-Signal memory admission belongs to `oer_memory::ExecutionContext`.
+Signal memory admission belongs to `oer_portable_memory::ExecutionContext`.
 `SignalExecutor` is safe and names its context; `Entered<Context>` checks
 both entry and every `ContextCell` access.
-`oer_memory::signal::{SignalCore, SignalList}` own the task cell, atomic facts
+`oer_portable_memory::signal::{SignalCore, SignalList}` own the task cell, atomic facts
 and intrusive links and carry that context type, so one context's token
 cannot access another's state.
 
 With `host-signal`, `host::signal()` and `host::deferred_signal()` return
 `(owner, raiser)`. The owner is a local `&'static IrqSignal` that is !Send
 and !Sync: only its creating thread takes, polls or services payload.
-The `oer_memory::signal::Raiser` is Send + Sync and contains only the atomic
+The `oer_portable_memory::signal::Raiser` is Send + Sync and contains only the atomic
 pending-word reference. Its `raise` coalesces facts without servicing payload or invoking
 a waker; the owner services them explicitly. Raising through the local
 `Host` owner retains immediate local service; `Deferred` waits for a take

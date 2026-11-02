@@ -6,7 +6,7 @@
 //! completion and a collision is its RTS-error status.
 use super::*;
 use crate::lower_mac::ContentionDraw;
-use oer_ieee80211_testing_conformance::edca::{
+use oer_protocols_ieee80211_testing_conformance::edca::{
     self as contract, Case, Draw, Harness, Scenario, Trace,
 };
 
@@ -36,7 +36,7 @@ fn frame<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
         .expect("rate");
     let (control, receiver, transmitter) = match role {
-        VifRole::Station => (oer_ieee80211_wire::frame::DATA_TO_DS, BSSID, STATION),
+        VifRole::Station => (oer_protocols_ieee80211_wire::frame::DATA_TO_DS, BSSID, STATION),
         // From the DS: the AP's own frame to an associated station.
         VifRole::AccessPoint => (0x0208, PEER_STATION, ACCESS_POINT),
     };

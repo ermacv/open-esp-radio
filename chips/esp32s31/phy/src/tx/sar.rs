@@ -1,5 +1,5 @@
 //! One SAR/PWDET conversion, advanced by timer events with short I/O loans.
-use oer_time::{Clock, Duration, Instant};
+use oer_portable_time::{Clock, Duration, Instant};
 
 // MEASUREMENT: s31-a run 1792521908966-002e2465, 21,512 conversions,
 // 100 forced tracking ticks, post-2-us-settle ready observations <= 20 us.
@@ -166,21 +166,21 @@ impl Engine {
 }
 
 #[cfg(target_arch = "riscv32")]
-impl Io for oer_esp32s31_hal::domain::transaction::PhyHardware {
+impl Io for oer_chips_esp32s31_hal::domain::transaction::PhyHardware {
     fn arm_tone(&mut self) {
         crate::hardware::arm_phy_power_detector_tone(self);
     }
     fn trigger(&mut self) {
-        oer_esp32s31_hal::phy::power_detector::trigger_sar(self);
+        oer_chips_esp32s31_hal::phy::power_detector::trigger_sar(self);
     }
     fn ready(&mut self) -> bool {
-        oer_esp32s31_hal::phy::power_detector::sample_ready(self)
+        oer_chips_esp32s31_hal::phy::power_detector::sample_ready(self)
     }
     fn clear_tone(&mut self) {
         crate::hardware::clear_phy_power_detector_tone_arm(self);
     }
     fn sample(&mut self) -> u16 {
-        oer_esp32s31_hal::phy::power_detector::sample_sar(self)
+        oer_chips_esp32s31_hal::phy::power_detector::sample_sar(self)
     }
 }
 #[cfg(test)]

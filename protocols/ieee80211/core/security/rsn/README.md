@@ -1,6 +1,6 @@
 # RSN security
 
-`oer-ieee80211-core-security-rsn` holds the allocation-free, hardware-independent RSN (IEEE 802.11
+`oer-protocols-ieee80211-core-security-rsn` holds the allocation-free, hardware-independent RSN (IEEE 802.11
 robust security network) protocol shared by WPA2 and WPA3 suites. It is
 sans-IO and owns no executor, timer, key slot or transmit path: chip role
 crates lend it a synchronous AES-128 engine for the key-data unwrap and
@@ -8,27 +8,27 @@ execute its typed transmit and key-install requests.
 
 | Module | Responsibility |
 | --- | --- |
-| `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_ieee80211_wire::security::rsn::Akm` |
-| `sae` | SAE commit/confirm cryptography, hunting-and-pecking and hash-to-element password elements, the validity of a peer's scalar and element, anti-clogging tokens; the Commit and Confirm body codecs are `oer_ieee80211_wire::sae` |
-| `bip`, `management_ccmp` | BIP IPN allocation and replay, and the management CCMP receiver over the stateless transforms in `oer-ieee80211-core-security-cipher`; the management receiver's PN frontier is `oer_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier`; their receive errors add `Replay` to the transform's refusals |
-| `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
+| `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_protocols_ieee80211_wire::security::rsn::Akm` |
+| `sae` | SAE commit/confirm cryptography, hunting-and-pecking and hash-to-element password elements, the validity of a peer's scalar and element, anti-clogging tokens; the Commit and Confirm body codecs are `oer_protocols_ieee80211_wire::sae` |
+| `bip`, `management_ccmp` | BIP IPN allocation and replay, and the management CCMP receiver over the stateless transforms in `oer-protocols-ieee80211-core-security-cipher`; the management receiver's PN frontier is `oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier`; their receive errors add `Replay` to the transform's refusals |
+| `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_protocols_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `nonce` | Boot-seeded ChaCha20 owner for fresh supplicant nonces |
-| `eapol` | Message classification and MIC verification of EAPOL-Key packets the codec checked (`oer_ieee80211_wire::eapol::EapolKey`), and their owned copies; an AES-CMAC MIC runs on the caller's engine |
-| `frames` | Which EAPOL-Key fields each handshake message sends, the MIC it computes, which elements and KDEs a Key Data carries, and owned security elements; the EAPOL-Key layout and its MIC field, GTK/IGTK KDEs, Key Data elements and padding, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
+| `eapol` | Message classification and MIC verification of EAPOL-Key packets the codec checked (`oer_protocols_ieee80211_wire::eapol::EapolKey`), and their owned copies; an AES-CMAC MIC runs on the caller's engine |
+| `frames` | Which EAPOL-Key fields each handshake message sends, the MIC it computes, which elements and KDEs a Key Data carries, and owned security elements; the EAPOL-Key layout and its MIC field, GTK/IGTK KDEs, Key Data elements and padding, SAE element IDs and status codes are `oer-protocols-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
-| `supplicant` | Station orchestration: the EAPOL-Key MIC and the RFC 3394 key-data unwrap over the caller's synchronous `oer_crypto::block::Aes128Engine`, lent to each call that needs it, typed key-install requests and their completions, response deadlines |
+| `supplicant` | Station orchestration: the EAPOL-Key MIC and the RFC 3394 key-data unwrap over the caller's synchronous `oer_portable_crypto::block::Aes128Engine`, lent to each call that needs it, typed key-install requests and their completions, response deadlines |
 | `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification on the caller's engine, the binding of the station's security IEs and the Message 3 wrap (software AES) and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
 | `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
-`oer-ieee80211-core-security-cipher` owns CCMP and BIP-CMAC-128 over the
+`oer-protocols-ieee80211-core-security-cipher` owns CCMP and BIP-CMAC-128 over the
 caller's AES-128 engine, and the software AES-128 block primitive with its
 key-unwrap engine; the CCM, AES-CMAC and RFC 3394 algorithms are
-`oer-crypto`'s. `bip`, `management_ccmp` and the EAPOL-Key MIC of PSK-SHA256
+`oer-portable-crypto`'s. `bip`, `management_ccmp` and the EAPOL-Key MIC of PSK-SHA256
 and SAE take the same `Aes128Engine` as the unwrap; its refusal is each
 call's typed `Engine` error, never a software fallback. The AAD, nonce and Management MIC element it authenticates
-are `oer-ieee80211-wire`'s (`ccmp::protected`, `bip`). Key data is bounded by
+are `oer-protocols-ieee80211-wire`'s (`ccmp::protected`, `bip`). Key data is bounded by
 `RSN_KEY_DATA_CAPACITY`. It has no handshake state, replay frontier or clock.
 
 The crate is Apache-2.0: `authenticator/sae.rs` ports the ESP-IDF access
@@ -49,7 +49,7 @@ validated Association element; the supplicant takes it from its own
 Association element. Both reject EAPOL-Key frames whose descriptor version
 differs from that suite.
 
-`oer_ieee80211_contracts_security::Ccmp128Key` owns temporal-key bytes, redacts Debug
+`oer_protocols_ieee80211_contracts_security::Ccmp128Key` owns temporal-key bytes, redacts Debug
 output and zeroizes its storage on drop. RSN copies directly from borrowed,
 zeroizing PTK/GTK storage into this owner; lower-MAC installation moves the
 same type without extracting an intermediate array. PTK derivation writes
@@ -65,7 +65,7 @@ password tokens, derived keys and comeback-token keys zeroize on drop. Their
 owners do not implement `Copy` or `Clone`, and Debug reveals only a redaction.
 Derived keys expose borrowed bytes through accessors.
 
-`oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
+`oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation` authenticates the QoS A-MSDU-present bit in both AAD and
 nonce flags when SPP was negotiated. Without SPP it masks that bit according
 to ordinary CCMP. Management MPDUs retain their subtype in AAD and use the
 management nonce flag, independently of SPP. The model applies this transform
@@ -125,7 +125,7 @@ received IPN at or below the frontier.
 
 The implemented suites are PSK (`00-0F-AC:2`), PSK-SHA256 (`00-0F-AC:6`) and
 SAE (`00-0F-AC:8`). The MAC package names them and the negotiated
-association (`oer_ieee80211_wire::security::AssociationSecurity`); this crate
+association (`oer_protocols_ieee80211_wire::security::AssociationSecurity`); this crate
 owns only their cryptography, each property an exhaustive match over the
 suite.
 

@@ -1,6 +1,6 @@
 # Shared IEEE 802.15.4 MAC values and transactions
 
-`oer-espressif-ieee802154-mac-values` is the semantic vocabulary shared by the
+`oer-chips-family-ieee802154-mac-values` is the semantic vocabulary shared by the
 MAC engine, chip HALs, knowledge and host tools. It contains configuration
 values and commands, events and abort reasons, RX/TX observations, Multi-PAN
 identities, ACK timeouts, diagnostic counters, ETM routes and timer identities.
@@ -24,7 +24,7 @@ CCA and sampling-rate encodings live only in chip register models. A receive
 state retains its diagnostic image and the HAL's comparison to the generated
 `RECEIVE_SFD` value; the dictionary assigns no numeric state codes or bounds.
 Interrupt arming and deactivation execute through the narrow transition port. The driver's LL
-trait and hardware helpers remain in `oer-espressif-ieee802154-engine`.
+trait and hardware helpers remain in `oer-chips-family-ieee802154-engine`.
 
 The engine adapts validated chip power levels into portable MAC capability
 types; this crate has no dependency on the MAC protocol or the engine.

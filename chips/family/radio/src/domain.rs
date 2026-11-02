@@ -1,6 +1,6 @@
 //! Common BTBB and low-power clock lifecycle over chip-owned ports.
 use crate::membership::Clients;
-use oer_radio_coex::RadioClient;
+use oer_protocols_radio_coex::RadioClient;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BtbbError {

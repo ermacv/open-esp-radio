@@ -18,7 +18,7 @@ fn a_reset_counts_only_when_another_boot_answers() {
     );
     // The device runs on, and its link serves the cases that follow.
     assert_eq!(
-        dut.link().and_then(oer_hil_link::Link::running_boot_id),
+        dut.link().and_then(oer_tools_hil_link::Link::running_boot_id),
         Some(100)
     );
 }
@@ -104,7 +104,7 @@ fn a_device_that_did_not_restart_keeps_its_boot_and_link() {
         "{refused:?}"
     );
     assert_eq!(
-        dut.link().and_then(oer_hil_link::Link::running_boot_id),
+        dut.link().and_then(oer_tools_hil_link::Link::running_boot_id),
         Some(100)
     );
     assert_eq!(board.resets.get(), 0);

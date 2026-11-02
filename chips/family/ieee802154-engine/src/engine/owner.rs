@@ -113,7 +113,7 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
         &mut self,
         env: &mut E,
         index: Ieee802154MultipanIndex,
-        mode: oer_ieee802154_port::AutoPendingMode,
+        mode: oer_protocols_ieee802154_port::AutoPendingMode,
     ) -> Result<(), MultipanError> {
         self.engine.set_pending_mode(&mut self.ll, env, index, mode)
     }
@@ -260,7 +260,7 @@ impl<'storage, Ll: Ieee802154LowLevel> Ieee802154EngineOwner<'storage, Ll> {
     /// [`Ieee802154Engine::set_ack_timeout`], using this owner's MAC.
     pub fn set_ack_timeout(
         &mut self,
-        timeout: oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout,
+        timeout: oer_chips_family_ieee802154_mac_values::Ieee802154AckTimeout,
     ) {
         self.engine.set_ack_timeout(&mut self.ll, timeout)
     }

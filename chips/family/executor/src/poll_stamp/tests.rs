@@ -9,12 +9,12 @@ fn poll_stamp_preserves_core_and_guard_survives_counter_wrap() {
 }
 
 fn stamp_preserves_core_and_guard_survives_counter_wrap<const HARTS: usize>() {
-    use oer_time::{Clock, Duration, Instant};
+    use oer_portable_time::{Clock, Duration, Instant};
     let assigned_core = Stamp::<HARTS>::assigned_core;
     let poll_stamp = Stamp::<HARTS>::poll_stamp;
     let poll_elapsed = Stamp::<HARTS>::poll_elapsed;
     let stamp_mask = Stamp::<HARTS>::STAMP_MASK;
-    let clock = oer_time_virtual::VirtualClock::<1>::starting_at(Instant::from_micros(
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::starting_at(Instant::from_micros(
         u64::from(stamp_mask) - 100,
     ));
     for core in 0..HARTS {

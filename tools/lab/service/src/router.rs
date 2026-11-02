@@ -1,5 +1,5 @@
 //! The lab router's operations, run by the service over the router's SSH
-//! with the logic of `oer-lab-router`: the AP profile a run applies, the
+//! with the logic of `oer-tools-lab-router`: the AP profile a run applies, the
 //! station, station link, DHCP and ping views, the WPA2 checks, a deauthentication, the
 //! routed network's check, and the echo and departure observers. Every one
 //! needs a lease that holds the router. The stand file names the router and
@@ -7,9 +7,9 @@
 
 use std::{sync::atomic::Ordering, time::Duration};
 
-use oer_lab_client::protocol::{RouterChannelWidth, RouterOperation};
-use oer_lab_model::Stand;
-use oer_lab_router::{
+use oer_tools_lab_client::protocol::{RouterChannelWidth, RouterOperation};
+use oer_tools_lab_model::Stand;
+use oer_tools_lab_router::{
     mac::Mac,
     router::{ChannelWidth, Profile},
     ssh::{Remote, Ssh},
@@ -104,7 +104,7 @@ pub(crate) fn run(
                 Some(host) => profile.forwarding_host(*host),
                 None => profile,
             };
-            let applied = oer_lab_router::router::apply(&mut router.ssh, &profile)?;
+            let applied = oer_tools_lab_router::router::apply(&mut router.ssh, &profile)?;
             json(applied.describe())
         }
         RouterOperation::VerifyObservationTools => {
@@ -193,11 +193,11 @@ const AP_DOWN: Duration = Duration::from_secs(20);
 pub(crate) fn park(stand: &Stand) -> Result<()> {
     let mut router = fixture(stand)?;
     let section =
-        oer_lab_router::router::quote(&format!("wireless.{}.disabled=1", router.ap_section))?;
+        oer_tools_lab_router::router::quote(&format!("wireless.{}.disabled=1", router.ap_section))?;
     router.ssh.run(&format!(
         "set -e\nuci set {section}\nuci commit wireless\nwifi reload\n"
     ))?;
-    let radio = oer_lab_router::router::quote(&router.radio)?;
+    let radio = oer_tools_lab_router::router::quote(&router.radio)?;
     // The radio's PHY index, then every interface: `iw dev` lists nothing
     // for a PHY without interfaces, so only the script's exit, which `run`
     // checks, tells that from a failure.

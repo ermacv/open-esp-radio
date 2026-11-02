@@ -2,18 +2,18 @@
 //! opens, then the duplex endpoint of the core-0 executor and its interrupt,
 //! which raises the endpoint's static signal.
 
-use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag::{
+use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::{
     ConsoleEndpoint, ConsoleInterrupt, RetireError, UsbPads, retire_early_writer,
 };
-use oer_espressif_executor::Executor;
-use oer_espressif_interrupt_table::{Controller, Router};
-use oer_espressif_usb_serial_jtag::{Endpoint, Interrupt};
+use oer_chips_family_executor::Executor;
+use oer_chips_family_interrupt_table::{Controller, Router};
+use oer_chips_family_usb_serial_jtag::{Endpoint, Interrupt};
 
 /// The console's endpoint, polled by the core-0 executor's task.
 pub(crate) type Console = Endpoint<Executor<Esp32s31, 0>, ConsoleEndpoint>;
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// The console's interrupt: the endpoint's signal.
     static INTERRUPT: Interrupt<Executor<Esp32s31, 0>, ConsoleInterrupt> = Interrupt::new::<crate::ConsoleUsb, crate::WakeToken>(), in critical_data "console_usb";
 }
@@ -39,9 +39,9 @@ pub(crate) enum OpenError {
 
 impl OpenError {
     /// The reason the image's failure names.
-    pub(crate) const fn reason(&self) -> oer_diagnostics::Name<32> {
+    pub(crate) const fn reason(&self) -> oer_portable_diagnostics::Name<32> {
         match self {
-            Self::Retire => oer_diagnostics::name!("console-retire"; 32),
+            Self::Retire => oer_portable_diagnostics::name!("console-retire"; 32),
         }
     }
 }
@@ -57,8 +57,8 @@ pub(crate) fn open<const H: u8, C: Controller>(
         retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
     let bound =
         router.bind(token, interrupt).unwrap_or_else(|error| {
-            oer_espressif_staged_runtime::interrupts::reset_binding::<
-                oer_esp32s31_hal::platform::Port,
+            oer_chips_family_staged_runtime::interrupts::reset_binding::<
+                oer_chips_esp32s31_hal::platform::Port,
                 _,
             >(error)
         });

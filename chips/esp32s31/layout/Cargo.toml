@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-layout"
+name = "oer-chips-esp32s31-layout"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,16 +11,16 @@ description = "Staged-boot address map of ESP32-S31-Function-CoreBoard-1"
 [features]
 # Link a binary with the shared linker scripts from a Cargo build script
 # (requires std).
-build = ["oer-espressif-staged-layout/build"]
+build = ["oer-chips-family-staged-layout/build"]
 
 [dependencies]
-oer-espressif-staged-layout = { path = "../../family/staged-layout" }
+oer-chips-family-staged-layout = { path = "../../family/staged-layout" }
 
 [build-dependencies]
-oer-espressif-facts = { path = "../../family/facts" }
+oer-chips-family-facts = { path = "../../family/facts" }
 
 [dev-dependencies]
-oer-espressif-facts = { path = "../../family/facts" }
+oer-chips-family-facts = { path = "../../family/facts" }
 
 [lints]
 workspace = true

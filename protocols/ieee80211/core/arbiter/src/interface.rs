@@ -5,7 +5,7 @@
 //! required for STA/AP concurrency: two VIFs may share one channel context
 //! even when the hardware cannot tune two channels simultaneously.
 
-use oer_ieee80211_contracts_port::{ChannelContextId, VifRole};
+use oer_protocols_ieee80211_contracts_port::{ChannelContextId, VifRole};
 
 /// Stable identity of one virtual Wi-Fi interface within a radio owner.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

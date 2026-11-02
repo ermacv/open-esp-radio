@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-bluetooth-engine"
+name = "oer-chips-family-bluetooth-engine"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "BLE engine register ports and phase values, independent of chip ownership"
 
 [dependencies]
-oer-time = { path = "../../../portable/time" }
+oer-portable-time = { path = "../../../portable/time" }
 
 [lints]
 workspace = true

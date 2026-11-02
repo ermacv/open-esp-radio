@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 //! A Wi-Fi station of its build profile, on the application entry
-//! (`oer-espressif`). Without `OER_WIFI_STATION_PROFILE` the image reports
+//! (`oer`). Without `OER_WIFI_STATION_PROFILE` the image reports
 //! NotConfigured and starts no RF; a configured image joins its profile's
 //! network with automatic reconnection, takes an IPv4 address by DHCP and
 //! exchanges one line over TCP with the gateway's echo port.

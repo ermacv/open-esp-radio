@@ -10,12 +10,12 @@
 //! the code came from. Codes `0x29` and `0x2a` are the vendor's Long Range
 //! modes, which have no portable rate.
 
-use oer_ieee80211_wire::phy::{
+use oer_protocols_ieee80211_wire::phy::{
     DsssPreamble, FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate,
     PpduBandwidth, SpatialStreams,
 };
 
-use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
 
 /// The non-HT rate of a code.
 pub const fn legacy_rate(code: u8) -> Option<LegacyRate> {

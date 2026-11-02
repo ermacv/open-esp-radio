@@ -1,8 +1,8 @@
 use super::*;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
 };
-use oer_ieee80211_wire::address::IndividualAddressError;
+use oer_protocols_ieee80211_wire::address::IndividualAddressError;
 
 const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabilities {
     MacServiceCapabilities {

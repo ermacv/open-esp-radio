@@ -2,18 +2,18 @@
 //!
 //! This module supplies no hardware model or expected result. Callers select every
 //! input, peripheral assumption, reset and observation relation.
-use oer_analysis_blobray_application::in_process::{Executable, Limits};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tools_analysis_blobray_domain::{
     ArtifactInventory, ComparisonRelation, DataRequest, DataSelector, DeviceDeclaration,
     EventChannels, ExecutionCase, ExecutionGoal, ExecutionRegion, Invocation, MemoryPair,
     MemorySeed, MemorySelection, ObjectInventory, RegionLifetime, ReturnWords, SectionRecord,
     SessionReset, SymbolRecord, TimelineCapture,
 };
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AnalysisLimited, AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, OperationLimits,
     WorkingMemory,
 };
-use oer_probe_codegen::Catalog;
+use oer_tools_probe_codegen::Catalog;
 use std::{collections::BTreeMap, fs, path::Path};
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -60,7 +60,7 @@ pub struct Budget {
 impl Budget {
     /// Retain resources only after a successful operation. Concrete scenario
     /// execution has no typed function-local widening outcomes.
-    pub fn run<T, E: From<oer_analysis_riscv_model::Error>>(
+    pub fn run<T, E: From<oer_tools_analysis_riscv_model::Error>>(
         &self,
         operation: impl FnOnce(&WorkingMemory, &mut Limits) -> std::result::Result<T, E>,
     ) -> std::result::Result<(T, AnalysisResources), E> {
@@ -73,8 +73,8 @@ impl Budget {
                 work_units: self.max_work_units,
                 working_memory_bytes: memory.observation().limit_bytes,
                 timeout_ms: self.timeout_secs.checked_mul(1000).ok_or_else(|| {
-                    oer_analysis_riscv_model::Error::new(
-                        oer_analysis_riscv_model::ErrorCode::InvalidRequest,
+                    oer_tools_analysis_riscv_model::Error::new(
+                        oer_tools_analysis_riscv_model::ErrorCode::InvalidRequest,
                         "timeout milliseconds overflow",
                     )
                 })?,
@@ -88,7 +88,7 @@ impl Budget {
         Ok((result, resources))
     }
     /// Working memory of one operation.
-    pub fn memory(&self) -> oer_analysis_riscv_model::Result<WorkingMemory> {
+    pub fn memory(&self) -> oer_tools_analysis_riscv_model::Result<WorkingMemory> {
         WorkingMemory::new(self.working_memory_mib << 20)
     }
     /// Work and wall-clock limits of one operation.
@@ -113,7 +113,7 @@ pub fn authenticate(inputs: &[Input<'_>]) -> Result<(Vec<String>, Vec<Vec<u8>>)>
                 input.path.display()
             ))
         })?;
-        let actual = oer_os_durable::sha256_bytes(&bytes);
+        let actual = oer_tools_os_durable::sha256_bytes(&bytes);
         if let Some(expected) = input.sha256
             && actual != expected
         {
@@ -456,7 +456,7 @@ pub const RISCV_INTEGER: CallAbi = CallAbi::RiscvInteger;
 /// Resolve declared entries from the same captured ELF as their metadata.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProbeCatalog {
-    entries: BTreeMap<String, (oer_probe_codegen::Entry, u32)>,
+    entries: BTreeMap<String, (oer_tools_probe_codegen::Entry, u32)>,
 }
 
 impl ProbeCatalog {
@@ -517,7 +517,7 @@ impl ProbeCatalog {
             },
         );
         let bytes =
-            oer_analysis_blobray_application::data::export(&request, executables, memory, control)?
+            oer_tools_analysis_blobray_application::data::export(&request, executables, memory, control)?
                 .bytes;
         let catalog: Catalog = serde_json::from_slice(&bytes)?;
         Self::new(catalog, |name| {

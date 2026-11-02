@@ -47,7 +47,7 @@
 pub mod observation;
 
 #[doc(hidden)]
-pub use oer_trace as __trace;
+pub use oer_portable_trace as __trace;
 
 #[cfg(feature = "chip")]
 mod binding;
@@ -112,5 +112,5 @@ pub use urgent_sources::{UrgentSource, UrgentSources};
 #[doc(hidden)]
 pub mod __bind {
     pub use embassy_time_driver::Driver;
-    pub use oer_espressif_staged_runtime::placed_static;
+    pub use oer_chips_family_staged_runtime::placed_static;
 }

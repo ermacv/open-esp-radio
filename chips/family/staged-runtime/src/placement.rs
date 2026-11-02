@@ -7,7 +7,7 @@
 /// (`.isr.rodata.<name>`) or `dma_data` (`.dma.data.<name>`).
 ///
 /// ```ignore
-/// oer_espressif_staged_runtime::placed_static! {
+/// oer_chips_family_staged_runtime::placed_static! {
 ///     /// Handler entries without an installed line.
 ///     pub static UNSERVICED: AtomicU32 = AtomicU32::new(0), in critical_data "w1";
 /// }
@@ -36,12 +36,12 @@ macro_rules! placed_static {
 }
 
 /// A record in reset-retained RTC fast memory (`.rtc_fast.persistent`),
-/// behind an [`oer_memory::retained::RetainedCell`] whose claim is in
+/// behind an [`oer_portable_memory::retained::RetainedCell`] whose claim is in
 /// the SRAM critical BSS, which the runtime entry zeroes: a fatal path reaches
 /// both without a cache. The record's type is `bytemuck::AnyBitPattern`.
 ///
 /// ```ignore
-/// oer_espressif_staged_runtime::retained_static! {
+/// oer_chips_family_staged_runtime::retained_static! {
 ///     static FAULT: Slot;
 /// }
 /// ```

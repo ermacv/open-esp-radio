@@ -60,7 +60,7 @@ impl BuildLog {
         eprintln!("==> {description}");
         self.append(&format!("==> {description}\n"))?;
         command.stderr(Stdio::piped());
-        let mut child = oer_os_process::owned::Child::spawn(command)?;
+        let mut child = oer_tools_os_process::owned::Child::spawn(command)?;
         let stderr = child
             .take_stderr()
             .ok_or("the build step has no standard error")?;

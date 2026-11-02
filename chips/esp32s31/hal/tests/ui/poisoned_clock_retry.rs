@@ -1,9 +1,9 @@
 #![no_std]
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::RadioDomain,
     ieee80211::client::{ClockPoisoned, StoppedInstallation},
 };
-pub fn retain<B: oer_esp32s31_hal::power::PlatformClockBackend, T>(
+pub fn retain<B: oer_chips_esp32s31_hal::power::PlatformClockBackend, T>(
     stopped: StoppedInstallation,
     obligation: ClockPoisoned,
     _lease: &mut RadioDomain<B, T>,

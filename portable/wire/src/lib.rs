@@ -37,7 +37,7 @@ pub enum Error {
 /// Declare a fixed-width wire value, or a wire enum with `Reserved(raw)`.
 ///
 /// ```
-/// oer_wire::bitfield! {
+/// oer_portable_wire::bitfield! {
 ///     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4 (Sequence Control field).
 ///     pub struct SequenceControl[2] (little) {
 ///         pub fragment, with_fragment: u8 = 0..4;
@@ -47,7 +47,7 @@ pub enum Error {
 /// let value = SequenceControl::from_bytes([0; 2]).with_sequence(123)?;
 /// assert_eq!(value.sequence(), 123);
 /// assert!(value.with_fragment(16).is_err());
-/// # Ok::<(), oer_wire::Error>(())
+/// # Ok::<(), oer_portable_wire::Error>(())
 /// ```
 ///
 /// A field's type is an unsigned integer of at most 64 bits, `bool` (one bit),
@@ -326,29 +326,29 @@ mod tests;
 /// Invalid wire declarations fail even when no accessor is called.
 ///
 /// ```compile_fail
-/// oer_wire::bitfield! { struct Beyond[1] (little) { value, with_value: u16 = 0..9; } }
+/// oer_portable_wire::bitfield! { struct Beyond[1] (little) { value, with_value: u16 = 0..9; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! { struct TooNarrow[2] (little) { value, with_value: u8 = 0..9; } }
+/// oer_portable_wire::bitfield! { struct TooNarrow[2] (little) { value, with_value: u8 = 0..9; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! { struct Boolean[1] (little) { value, with_value: bool = 0..2; } }
+/// oer_portable_wire::bitfield! { struct Boolean[1] (little) { value, with_value: bool = 0..2; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! { struct Signed[1] (little) { value, with_value: i8 = 0..7; } }
+/// oer_portable_wire::bitfield! { struct Signed[1] (little) { value, with_value: i8 = 0..7; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! { enum Kind: u8 { Data = 1 } }
-/// oer_wire::bitfield! { struct EnumWidth[2] (little) { kind, with_kind: [Kind] = 0..9; } }
+/// oer_portable_wire::bitfield! { enum Kind: u8 { Data = 1 } }
+/// oer_portable_wire::bitfield! { struct EnumWidth[2] (little) { kind, with_kind: [Kind] = 0..9; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! { struct Order[1] (native) { value, with_value: u8 = 0..8; } }
+/// oer_portable_wire::bitfield! { struct Order[1] (native) { value, with_value: u8 = 0..8; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! { struct EmptyField[1] (little) { value, with_value: u8 = 1..1; } }
+/// oer_portable_wire::bitfield! { struct EmptyField[1] (little) { value, with_value: u8 = 1..1; } }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! {
+/// oer_portable_wire::bitfield! {
 ///     struct Overlap[2] (little) {
 ///         first, with_first: u8 = 0..8;
 ///         second, with_second: u8 = 4..12;
@@ -356,7 +356,7 @@ mod tests;
 /// }
 /// ```
 /// ```compile_fail
-/// oer_wire::bitfield! {
+/// oer_portable_wire::bitfield! {
 ///     struct ViewDoesNotPermitOtherOverlaps[1] (little) {
 ///         combined, with_combined: u8 = 0..8, view;
 ///         first, with_first: u8 = 0..4;
@@ -370,29 +370,29 @@ pub struct InvalidDeclarations;
 /// Width, value and prefix geometry are checked during monomorphization.
 ///
 /// ```compile_fail
-/// let _ = oer_wire::U8::<4>::constant::<16>();
+/// let _ = oer_portable_wire::U8::<4>::constant::<16>();
 /// ```
 /// ```compile_fail
-/// let _ = oer_wire::U8::<0>::new(0);
+/// let _ = oer_portable_wire::U8::<0>::new(0);
 /// ```
 /// ```compile_fail
-/// let _ = oer_wire::U8::<9>::from_low_bits(0);
+/// let _ = oer_portable_wire::U8::<9>::from_low_bits(0);
 /// ```
 /// ```compile_fail
-/// let _ = oer_wire::U16::<12>::ZERO.widen::<8>();
+/// let _ = oer_portable_wire::U16::<12>::ZERO.widen::<8>();
 /// ```
 /// ```compile_fail
-/// let _ = oer_wire::PrefixLength::<4>::constant::<5>();
+/// let _ = oer_portable_wire::PrefixLength::<4>::constant::<5>();
 /// ```
 /// ```compile_fail
-/// let length = oer_wire::PrefixLength::<4>::constant::<3>();
+/// let length = oer_portable_wire::PrefixLength::<4>::constant::<3>();
 /// let _ = length.borrow(&[0; 5]);
 /// ```
 /// ```compile_fail
-/// let _ = oer_wire::Reader::new(&[0]).bits::<0>(0);
+/// let _ = oer_portable_wire::Reader::new(&[0]).bits::<0>(0);
 /// ```
 /// ```compile_fail
-/// let _ = oer_wire::Reader::new(&[0; 9]).bits::<65>(0);
+/// let _ = oer_portable_wire::Reader::new(&[0; 9]).bits::<65>(0);
 /// ```
 #[cfg(doctest)]
 pub struct InvalidProofs;

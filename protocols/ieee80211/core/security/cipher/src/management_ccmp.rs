@@ -10,9 +10,9 @@
 )]
 
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
-use oer_crypto::block::{Aes128Engine, BlockError};
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_wire::{
+use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_wire::{
     address::AddressFlags,
     ccmp::protected::{CCMP_MIC_LEN, ProtectedMpdu, ProtectedMpduError},
     ccmp::{CCMP_HEADER_LEN, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},

@@ -170,10 +170,10 @@ impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> Monotonic<L, TICKS_PER_M
     }
 }
 
-impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> oer_time::Clock
+impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> oer_portable_time::Clock
     for Monotonic<L, TICKS_PER_MICROSECOND>
 {
-    fn now(&self) -> oer_time::Instant {
+    fn now(&self) -> oer_portable_time::Instant {
         let divisor = const {
             match core::num::NonZeroU64::new(TICKS_PER_MICROSECOND) {
                 Some(divisor) => divisor,
@@ -181,6 +181,6 @@ impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> oer_time::Clock
             }
         };
         let ticks = read(&self.0).unwrap_or_else(|unverified| unverified.floor);
-        oer_time::Instant::from_micros(ticks / divisor)
+        oer_portable_time::Instant::from_micros(ticks / divisor)
     }
 }

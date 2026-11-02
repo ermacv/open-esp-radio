@@ -29,12 +29,12 @@
 //! ([`SecondaryHandoff::adopt`]). The image's `main` adopts
 //! the bootstrap's PSRAM mapping through its board and takes its hart's
 //! routes and lines ([`adoption::run`]), binds its interrupts through the
-//! [`Router`](oer_espressif_interrupt_table::Router) it gets back and enables
+//! [`Router`](oer_chips_family_interrupt_table::Router) it gets back and enables
 //! interrupts ([`Adopted::enable_interrupts`]). The chip HAL selects the
-//! chip through the platform port (`oer-espressif-platform-port`), whose
+//! chip through the platform port (`oer-chips-family-platform-port`), whose
 //! metadata names it to the build; the build generates the vector tables,
 //! every hart's line entries, each line's default handler and the interrupt
-//! table's lines from its facts (`oer-espressif-facts`): its harts and CLIC
+//! table's lines from its facts (`oer-chips-family-facts`): its harts and CLIC
 //! lines. The hart geometry is the port's, and the image names its platform
 //! (the HAL's port type) once, in [`entry!`].
 //!
@@ -42,7 +42,7 @@
 //! and the checked exit; the common entry and exit are `vectors.s`), the
 //! image's `critical-section` (`critical`), the panic record ([`panic`]) and
 //! the fatal paths (`fatal`: the end of a hart and the chip's reset, over the
-//! port's [`Platform`](oer_espressif_platform_port::Platform), which lends
+//! port's [`Platform`](oer_chips_family_platform_port::Platform), which lends
 //! the chip HAL's fatal-path proof); the interrupt table's router writes the
 //! routes and the CLIC lines through the chip's controller.
 pub mod adoption;
@@ -74,9 +74,9 @@ pub mod interrupts;
 #[cfg(chip_vectors)]
 pub use hart::{Hart, PreAdmission};
 /// The boot hart, as the parameter of its [`Hart`] token: the port's
-/// [`BOOT_HART`](oer_espressif_platform_port::BOOT_HART), from the chip facts.
+/// [`BOOT_HART`](oer_chips_family_platform_port::BOOT_HART), from the chip facts.
 #[cfg(chip_vectors)]
-pub const BOOT_HART: u8 = oer_espressif_platform_port::BOOT_HART as u8;
+pub const BOOT_HART: u8 = oer_chips_family_platform_port::BOOT_HART as u8;
 /// The chip's CPU lines and vector-table words, which the build generates
 /// from its facts.
 #[cfg(chip_vectors)]
@@ -106,21 +106,21 @@ pub mod stacks;
 pub mod trap;
 
 #[doc(hidden)]
-pub use oer_espressif_interrupt_table as __interrupt_table;
+pub use oer_chips_family_interrupt_table as __interrupt_table;
 
 #[doc(hidden)]
-pub use oer_espressif_platform_port as __port;
+pub use oer_chips_family_platform_port as __port;
 
 /// The image's interrupt table as [`interrupt_table!`] declares it.
-pub type InterruptTable = oer_espressif_interrupt_table::Table;
+pub type InterruptTable = oer_chips_family_interrupt_table::Table;
 
-pub use oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping;
-
-#[doc(hidden)]
-pub use oer_memory as __memory;
+pub use oer_chips_family_staged_layout::handoff::AdoptsBootstrapMapping;
 
 #[doc(hidden)]
-pub use oer_espressif_staged_layout::handoff::StageTwoHandoff as __StageTwoHandoff;
+pub use oer_portable_memory as __memory;
+
+#[doc(hidden)]
+pub use oer_chips_family_staged_layout::handoff::StageTwoHandoff as __StageTwoHandoff;
 
 /// A refused stage-two interrupt installation or enable. The image reports
 /// this through its existing boot-failure path, with interrupts disabled.
@@ -135,39 +135,39 @@ pub enum BootError {
     /// Vector CSRs no longer name the runtime's checked entries.
     ForeignVectors,
     /// Controller geometry, configuration, routes or lines failed verification.
-    InterruptController(oer_espressif_interrupt_table::Error),
+    InterruptController(oer_chips_family_interrupt_table::Error),
 }
 
 impl BootError {
     /// The boot-failure reason carried by the image's diagnostic record.
-    pub const fn name(self) -> oer_diagnostics::Name<32> {
+    pub const fn name(self) -> oer_portable_diagnostics::Name<32> {
         match self {
-            Self::WrongHart { .. } => oer_diagnostics::name!("interrupt-hart"; 32),
-            Self::NoInterruptStack { .. } => oer_diagnostics::name!("interrupt-stack"; 32),
-            Self::InvalidStackGuard { .. } => oer_diagnostics::name!("interrupt-stack-guard"; 32),
-            Self::ForeignVectors => oer_diagnostics::name!("interrupt-vectors"; 32),
-            Self::InterruptController(oer_espressif_interrupt_table::Error::WrongControlBits {
+            Self::WrongHart { .. } => oer_portable_diagnostics::name!("interrupt-hart"; 32),
+            Self::NoInterruptStack { .. } => oer_portable_diagnostics::name!("interrupt-stack"; 32),
+            Self::InvalidStackGuard { .. } => oer_portable_diagnostics::name!("interrupt-stack-guard"; 32),
+            Self::ForeignVectors => oer_portable_diagnostics::name!("interrupt-vectors"; 32),
+            Self::InterruptController(oer_chips_family_interrupt_table::Error::WrongControlBits {
                 ..
-            }) => oer_diagnostics::name!("interrupt-control-bits"; 32),
+            }) => oer_portable_diagnostics::name!("interrupt-control-bits"; 32),
             Self::InterruptController(
-                oer_espressif_interrupt_table::Error::WrongInterruptCount { .. },
-            ) => oer_diagnostics::name!("interrupt-count"; 32),
-            Self::InterruptController(oer_espressif_interrupt_table::Error::WrongLevelBits {
+                oer_chips_family_interrupt_table::Error::WrongInterruptCount { .. },
+            ) => oer_portable_diagnostics::name!("interrupt-count"; 32),
+            Self::InterruptController(oer_chips_family_interrupt_table::Error::WrongLevelBits {
                 ..
-            }) => oer_diagnostics::name!("interrupt-level-bits"; 32),
-            Self::InterruptController(_) => oer_diagnostics::name!("interrupt-table"; 32),
+            }) => oer_portable_diagnostics::name!("interrupt-level-bits"; 32),
+            Self::InterruptController(_) => oer_portable_diagnostics::name!("interrupt-table"; 32),
         }
     }
 }
 
-impl From<oer_espressif_interrupt_table::Error> for BootError {
-    fn from(error: oer_espressif_interrupt_table::Error) -> Self {
+impl From<oer_chips_family_interrupt_table::Error> for BootError {
+    fn from(error: oer_chips_family_interrupt_table::Error) -> Self {
         Self::InterruptController(error)
     }
 }
 
-impl From<oer_espressif_platform_port::ForeignHart> for BootError {
-    fn from(error: oer_espressif_platform_port::ForeignHart) -> Self {
+impl From<oer_chips_family_platform_port::ForeignHart> for BootError {
+    fn from(error: oer_chips_family_platform_port::ForeignHart) -> Self {
         Self::WrongHart {
             actual: error.actual,
             expected: error.expected,
@@ -181,7 +181,7 @@ impl From<oer_espressif_platform_port::ForeignHart> for BootError {
 /// image's platform `P` (the chip HAL's port type).
 #[must_use = "the handoff adopts the bootstrap's mapping"]
 pub struct Handoff<P> {
-    proof: oer_espressif_staged_layout::handoff::StageTwoHandoff,
+    proof: oer_chips_family_staged_layout::handoff::StageTwoHandoff,
     #[cfg(chip_vectors)]
     admission: PreAdmission<BOOT_HART>,
     _platform: core::marker::PhantomData<fn() -> P>,
@@ -190,7 +190,7 @@ pub struct Handoff<P> {
 impl<P> Handoff<P> {
     #[doc(hidden)]
     /// Wrap the proof minted by [`entry!`].
-    pub const fn from_proof(proof: oer_espressif_staged_layout::handoff::StageTwoHandoff) -> Self {
+    pub const fn from_proof(proof: oer_chips_family_staged_layout::handoff::StageTwoHandoff) -> Self {
         Self {
             proof,
             #[cfg(chip_vectors)]
@@ -206,7 +206,7 @@ impl<P> Handoff<P> {
     }
 }
 
-impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
+impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
     /// Adopt the bootstrap's PSRAM mapping through `board` and install the
     /// stage-two interrupt context of the boot hart: its SRAM interrupt stack and
     /// vectors, the task-stack watchpoint, and the hart's routes and lines,
@@ -232,29 +232,29 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
     pub(crate) fn adopt<
         B: AdoptsBootstrapMapping,
         I,
-        C: oer_espressif_interrupt_table::Controller,
+        C: oer_chips_family_interrupt_table::Controller,
     >(
         mut self,
         interrupt_table: &'static InterruptTable,
         interrupts: I,
-        controller: impl FnOnce(I) -> Result<C, oer_espressif_platform_port::ForeignHart>,
+        controller: impl FnOnce(I) -> Result<C, oer_chips_family_platform_port::ForeignHart>,
         board: B,
         previous_records: impl FnOnce(),
     ) -> Result<(B::Mapping, Adopted<C>), BootError> {
         panic::report_previous_fault::<P>();
         previous_records();
-        let mapping = oer_espressif_boot::adoption::adopt_mapping(board, &self.proof);
+        let mapping = oer_chips_family_boot::adoption::adopt_mapping(board, &self.proof);
         let controller = controller(interrupts).map_err(BootError::from)?;
         let actual = usize::from(controller.hart());
-        let expected = oer_espressif_platform_port::BOOT_HART.get();
+        let expected = oer_chips_family_platform_port::BOOT_HART.get();
         if actual != expected {
             return Err(BootError::WrongHart { actual, expected });
         }
         stacks::install_interrupt_stack(&mut self.admission)?;
-        let router = oer_espressif_interrupt_table::Router::install(controller, interrupt_table)?;
+        let router = oer_chips_family_interrupt_table::Router::install(controller, interrupt_table)?;
         // Interrupts are disabled and trigger 0 is the runtime's;
         // the generated table names this checked hart's word-aligned task bottom.
-        let hart = oer_espressif_platform_port::BOOT_HART;
+        let hart = oer_chips_family_platform_port::BOOT_HART;
         stacks::watch_task_stack(hart.at(&layout::stack_symbols()).task.start)?;
         Ok((
             mapping,
@@ -271,8 +271,8 @@ impl<P: oer_espressif_platform_port::EarlyText> Handoff<P> {
 /// boot hart's (from [`Handoff`]) or a secondary hart's (from its
 /// [`SecondaryHandoff`]); each hart has one, over its own controller.
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
-pub struct Adopted<C: oer_espressif_interrupt_table::Controller, const H: u8 = DEFAULT_HART> {
-    router: oer_espressif_interrupt_table::Router<C, H>,
+pub struct Adopted<C: oer_chips_family_interrupt_table::Controller, const H: u8 = DEFAULT_HART> {
+    router: oer_chips_family_interrupt_table::Router<C, H>,
     #[cfg(chip_vectors)]
     admission: PreAdmission<H>,
 }
@@ -283,15 +283,15 @@ const DEFAULT_HART: u8 = BOOT_HART;
 #[cfg(not(chip_vectors))]
 const DEFAULT_HART: u8 = 0;
 
-impl<C: oer_espressif_interrupt_table::Controller, const H: u8> Adopted<C, H> {
+impl<C: oer_chips_family_interrupt_table::Controller, const H: u8> Adopted<C, H> {
     /// Borrow the local execution identity and router together before admission.
     #[cfg(chip_vectors)]
-    pub fn parts(&mut self) -> (&Hart<H>, &mut oer_espressif_interrupt_table::Router<C, H>) {
+    pub fn parts(&mut self) -> (&Hart<H>, &mut oer_chips_family_interrupt_table::Router<C, H>) {
         (self.admission.hart(), &mut self.router)
     }
 
     /// The hart's router: bind entries before interrupts are enabled.
-    pub fn router(&mut self) -> &mut oer_espressif_interrupt_table::Router<C, H> {
+    pub fn router(&mut self) -> &mut oer_chips_family_interrupt_table::Router<C, H> {
         &mut self.router
     }
 
@@ -310,10 +310,10 @@ impl<C: oer_espressif_interrupt_table::Controller, const H: u8> Adopted<C, H> {
     #[cfg(target_arch = "riscv32")]
     pub fn enable_interrupts(
         self,
-    ) -> Result<(oer_espressif_interrupt_table::Router<C, H>, Hart<H>), BootError> {
+    ) -> Result<(oer_chips_family_interrupt_table::Router<C, H>, Hart<H>), BootError> {
         stacks::verify_current_hart_vectors()?;
         self.router.verify()?;
-        oer_riscv::enable_interrupts();
+        oer_portable_riscv::enable_interrupts();
         Ok((self.router, self.admission.into_hart()))
     }
 }
@@ -323,7 +323,7 @@ impl<C: oer_espressif_interrupt_table::Controller, const H: u8> Adopted<C, H> {
 #[cfg(target_arch = "riscv32")]
 pub fn idle() -> ! {
     loop {
-        oer_riscv::wait_for_interrupt();
+        oer_portable_riscv::wait_for_interrupt();
     }
 }
 
@@ -332,13 +332,13 @@ pub fn idle() -> ! {
 /// running.
 #[cfg(target_arch = "riscv32")]
 pub fn halt() -> ! {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     idle()
 }
 
 /// The image's entry and its one panic entry, for the image's platform
 /// `$platform` (the chip HAL's port type, a
-/// [`Platform`](oer_espressif_platform_port::Platform)): `runtime_main`,
+/// [`Platform`](oer_chips_family_platform_port::Platform)): `runtime_main`,
 /// which `_runtime_start` calls once on the boot hart, gives `$main` the one
 /// [`Handoff`], and the panic handler records the panic and resets
 /// ([`panic`]). The same entry binds the common CPU-exception handler.
@@ -354,8 +354,8 @@ pub fn halt() -> ! {
 ///
 /// ```ignore
 /// // `Port`: the chip HAL's implementation of the platform port.
-/// oer_espressif_staged_runtime::entry!(main, Port);
-/// fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! { … }
+/// oer_chips_family_staged_runtime::entry!(main, Port);
+/// fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! { … }
 /// ```
 #[macro_export]
 macro_rules! entry {
@@ -423,7 +423,7 @@ macro_rules! entry {
 /// the hart's one [`SecondaryHandoff`] and the parts; `$main` never returns.
 ///
 /// ```ignore
-/// oer_espressif_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1);
+/// oer_chips_family_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1);
 /// fn hart1(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! { … }
 /// ```
 #[macro_export]

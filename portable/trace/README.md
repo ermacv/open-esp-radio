@@ -1,11 +1,11 @@
 # Trace events and the observer contract
 
-`oer-trace` is a portable `no_std` crate without `unsafe` code, shared by
+`oer-portable-trace` is a portable `no_std` crate without `unsafe` code, shared by
 the target and the host decoder. It holds typed events, their two-word
 encoding and decoding, ordering of caller-owned record slices, and the
 contract through which an owner reports observations. It has no global
 recorder, clock, placement, persistence or boot policy; the platform's
-recorder (`oer-espressif-staged-runtime::trace`) owns those.
+recorder (`oer-chips-family-staged-runtime::trace`) owns those.
 
 ## Events
 
@@ -22,7 +22,7 @@ A chip or platform owner (a driver, executor or PHY owner) holds an `O: Observer
 field, by default `Noop`, and passes `&O` to its children. It reports with
 
 ```rust
-oer_trace::observe!(self.observer, Step { state: self.state, at: clock.now() });
+oer_portable_trace::observe!(self.observer, Step { state: self.state, at: clock.now() });
 ```
 
 - `Observer::event` takes an event value that is `Copy` and `'static` and
@@ -42,7 +42,7 @@ oer_trace::observe!(self.observer, Step { state: self.state, at: clock.now() });
 
 `cfg(oer_trace)` is the image's switch. `cargo fw` sets it only for an image
 that declares the `trace` instrumentation class. Instrumentation is never a
-Cargo feature of a library; `oer-test-layers` checks feature names.
+Cargo feature of a library; `oer-tools-test-layers` checks feature names.
 
 ## Profiles
 

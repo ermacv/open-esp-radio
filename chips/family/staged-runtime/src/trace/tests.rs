@@ -4,7 +4,7 @@ use std::boxed::Box;
 use std::vec::Vec;
 
 use super::{Retained, Trace};
-use oer_trace::{Domain, Kind, Record, oldest_first};
+use oer_portable_trace::{Domain, Kind, Record, oldest_first};
 
 const STEP: Kind = Kind::new(Domain::Phy, 1);
 const LOSS: Kind = Kind::new(Domain::Ieee80211, 7);
@@ -153,7 +153,7 @@ fn a_snapshot_keeps_what_fits_and_detects_being_overwritten() {
 mod recording {
     use super::super as recorder;
     use super::super::{Retained, Trace};
-    use oer_trace::{Channel, Domain, Event, Kind};
+    use oer_portable_trace::{Channel, Domain, Event, Kind};
 
     use super::LOSS;
 

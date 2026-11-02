@@ -44,7 +44,7 @@ fn the_environment_records_the_retained_btbb_transmit_power_table() {
         crate::memory::dma_static::Placed::host(storage),
     );
     let storage = owner.storage.as_ref().get_ref();
-    let levels = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
+    let levels = oer_chips_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 
     assert_eq!(storage.tx_power_levels_dbm, levels);
     assert_eq!(

@@ -5,8 +5,8 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::fe::{PhyPbus, status_clock_force};
-use oer_mmio::{Bits, Placement};
+use oer_chips_esp32s31_pac::fe::{PhyPbus, status_clock_force};
+use oer_portable_mmio::{Bits, Placement};
 
 /// Publish one of the four reviewed force-TX/RX transition phases.
 ///
@@ -34,9 +34,9 @@ pub fn set_force_txrx_mode<P: Placement>(
 pub fn set_work_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     pbus.modify_mode(|w| {
         w.set_work_mode_enable(if enabled {
-            oer_esp32s31_pac::fe::mode::WorkModeEnable::Enabled
+            oer_chips_esp32s31_pac::fe::mode::WorkModeEnable::Enabled
         } else {
-            oer_esp32s31_pac::fe::mode::WorkModeEnable::Disabled
+            oer_chips_esp32s31_pac::fe::mode::WorkModeEnable::Disabled
         });
     });
 }
@@ -47,9 +47,9 @@ pub fn set_work_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
 pub fn set_debug_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     pbus.modify_pbus_command(|w| {
         w.set_debug_mode_enable(if enabled {
-            oer_esp32s31_pac::fe::pbus_command::DebugModeEnable::Enabled
+            oer_chips_esp32s31_pac::fe::pbus_command::DebugModeEnable::Enabled
         } else {
-            oer_esp32s31_pac::fe::pbus_command::DebugModeEnable::Disabled
+            oer_chips_esp32s31_pac::fe::pbus_command::DebugModeEnable::Disabled
         });
     });
 }
@@ -122,14 +122,14 @@ pub fn read_result<P: Placement>(pbus: &PhyPbus<P>, selector: u8, path: u8) -> u
 pub fn set_rx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     pbus.modify_status_clock_force(|w| {
         w.set_bit_14_opaque(if enabled {
-            oer_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled
         } else {
-            oer_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Disabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Disabled
         })
         .set_bit_15_opaque(if enabled {
-            oer_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
         } else {
-            oer_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
         });
     });
 }
@@ -153,17 +153,17 @@ pub fn configure_rxiq_root_status<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
         w.set_bit_14_opaque(if true {
-            oer_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled
         } else {
-            oer_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Disabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Disabled
         });
     });
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
         w.set_bit_15_opaque(if true {
-            oer_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
         } else {
-            oer_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
         });
     });
 }
@@ -173,9 +173,9 @@ pub fn clear_rxiq_root_status_second<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
         w.set_bit_15_opaque(if false {
-            oer_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
         } else {
-            oer_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
+            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
         });
     });
 }

@@ -104,7 +104,7 @@ mod tests {
         let cases = cases();
         assert_eq!(cases.len(), 9);
         for (kek, data) in &cases {
-            assert!(wrap(kek, data).unwrap().len() <= oer_services_aes::MAX_WRAPPED);
+            assert!(wrap(kek, data).unwrap().len() <= oer_hil_services_aes::MAX_WRAPPED);
         }
         assert_ne!(cases[0].0, cases[3].0);
         assert_eq!(cases, super::cases());

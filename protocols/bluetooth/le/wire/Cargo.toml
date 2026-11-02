@@ -1,5 +1,5 @@
 [package]
-name = "oer-bluetooth-le-wire"
+name = "oer-protocols-bluetooth-le-wire"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Stateless Bluetooth LE over-the-air formats and codecs"
 
 [dependencies]
-oer-wire = { path = "../../../../portable/wire" }
+oer-portable-wire = { path = "../../../../portable/wire" }
 
 [lints]
 workspace = true

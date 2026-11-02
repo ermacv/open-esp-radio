@@ -9,8 +9,8 @@ use core::{
 
 use crate::mac::rx::{RxRingError, pool::RxStageTransactionError};
 use atomic_waker::AtomicWaker;
-use oer_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
-use oer_sync::PriorityWaker;
+use oer_portable_memory::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender};
+use oer_portable_sync::PriorityWaker;
 
 use super::frontier::RxFrontierError;
 
@@ -79,7 +79,7 @@ pub struct ReceiveControl {
 impl ReceiveControl {
     /// Initialize the control words and cached exit queue in caller storage.
     pub fn init_in_place(storage: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
-        oer_memory::init_in_place!(storage, Self {
+        oer_portable_memory::init_in_place!(storage, Self {
             stop: AtomicBool::new(false),
             runner: PriorityWaker::new(),
             exit => AffineSpscQueue::init_in_place,

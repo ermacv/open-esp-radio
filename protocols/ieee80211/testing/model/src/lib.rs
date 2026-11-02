@@ -33,7 +33,7 @@
 )]
 
 //! An in-memory lower-MAC backend on the phase shape
-//! (`oer_ieee80211_contracts_port::phase`), for host tests of the shape and of
+//! (`oer_protocols_ieee80211_contracts_port::phase`), for host tests of the shape and of
 //! the code that drives it.
 //!
 //! [`ModelBackend::new`] takes the install's channel, interface addresses
@@ -173,33 +173,33 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
-use oer_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
+use oer_protocols_ieee80211_contracts_port::{
     association,
     association::{
         Association, AssociationPool, AssociationStart, BlockAckSlot, BlockAckSlots, GroupKeySlot,
         KeyBankParts, PairwiseKeySlot, VacantAssociation, VacantKeyBank,
     },
 };
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, GroupKeyId};
-use oer_ieee80211_wire::frame::{sequence_control, set_retry_bit};
-use oer_radio_port::{
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, GroupKeyId};
+use oer_protocols_ieee80211_wire::frame::{sequence_control, set_retry_bit};
+use oer_protocols_radio_port::{
     BodyLoan, LoanedContext, ModelSlotOwner, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire,
     SlotStopped, SlotWakes,
 };
-use oer_radio_port::{ClockRelation, GenerationSource, RelationSample};
-use oer_time::{Clock, Duration, Instant};
+use oer_protocols_radio_port::{ClockRelation, GenerationSource, RelationSample};
+use oer_portable_time::{Clock, Duration, Instant};
 
-use oer_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
-use oer_radio_port::{
+use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
+use oer_protocols_radio_port::{
     Abandon, Call, ClockError, EnableResult, EventEnd, InstallParts, PortBackend, PortPhase,
     Quarantine,
 };
-use oer_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
-use oer_time::RadioInstant;
+use oer_protocols_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
+use oer_portable_time::RadioInstant;
 
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, BufferMemoryUnavailable,
     Channel, CheckedAggregate, CheckedPoolSource, CheckedSubframe, CheckedTxSource,
     ConfigurePermission, ConnectionEpochKind, ExecutionPayload, FreshSource, FreshSubframe,
@@ -213,18 +213,18 @@ use oer_ieee80211_contracts_port::{
     TxBufferMemory, TxBufferPool, TxFrame, TxMpdu, TxOutcome, TxProtection, TxSource, VifRole,
     WidthSet, WithdrawCause,
 };
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckSnr, SingleEnd, SingleOutcome,
     SingleResponse, SnrSample,
 };
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AggregateRefused, AggregateState, AmpduCapabilities, AmpduLengthTable, AmpduPhase, AmpduRate,
     BlockAckReport, ClassSubframe, EmptyAggregate, InterfaceProtection, NonEmptyAggregate,
     PhaseAggregate, SubframeSource, Tid,
 };
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::qos::WmmAccessCategory;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The longest MPDU the model's large buffers hold.
 pub const MODEL_MAX_MPDU: usize = 2304;
@@ -266,7 +266,7 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
 pub struct ModelCaps;
 
 impl Ieee80211Capabilities for ModelCaps {
-    type SppScope = oer_ieee80211_wire::security::spp::Interface;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Interface;
     const CAPS: LowerMacCapabilities = MODEL_CAPABILITIES;
 }
 
@@ -275,7 +275,7 @@ impl Ieee80211Capabilities for ModelCaps {
 pub struct ModelCaps24;
 
 impl Ieee80211Capabilities for ModelCaps24 {
-    type SppScope = oer_ieee80211_wire::security::spp::Interface;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Interface;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         ..MODEL_CAPABILITIES
@@ -403,14 +403,14 @@ impl TxBufferClass for ModelLarge {
 }
 
 /// Paths of the model's fixed installation layout. They add no runtime state.
-pub type ModelPool<Id, const I: u8> = oer_radio_port::Child<oer_radio_port::Root<Id>, I>;
+pub type ModelPool<Id, const I: u8> = oer_protocols_radio_port::Child<oer_protocols_radio_port::Root<Id>, I>;
 
 /// The distinct key pools belonging to each modeled interface role.
-pub trait ModelRole: oer_ieee80211_contracts_port::InterfaceRole {
+pub trait ModelRole: oer_protocols_ieee80211_contracts_port::InterfaceRole {
     /// Component containing the role's pairwise slots.
-    type AssociationPath<Id: SlotIdentity>: oer_radio_port::PoolPath<Identity = Id>;
+    type AssociationPath<Id: SlotIdentity>: oer_protocols_radio_port::PoolPath<Identity = Id>;
     /// Component containing the unique GTK mutation permission.
-    type GroupPermissionPath<Id: SlotIdentity>: oer_radio_port::PoolPath<Identity = Id>;
+    type GroupPermissionPath<Id: SlotIdentity>: oer_protocols_radio_port::PoolPath<Identity = Id>;
 }
 impl ModelRole for Station {
     type AssociationPath<Id: SlotIdentity> = ModelPool<Id, 5>;
@@ -418,7 +418,7 @@ impl ModelRole for Station {
 }
 impl ModelRole for AccessPoint {
     type AssociationPath<Id: SlotIdentity> = ModelPool<Id, 6>;
-    type GroupPermissionPath<Id: SlotIdentity> = oer_radio_port::Child<ModelPool<Id, 9>, 0>;
+    type GroupPermissionPath<Id: SlotIdentity> = oer_protocols_radio_port::Child<ModelPool<Id, 9>, 0>;
 }
 
 /// The kind of the one GTK mutation permission per interface.
@@ -750,7 +750,7 @@ pub struct ModelMpdu<'id, B: ModelComposition> {
     // consuming the terminal moves both into the returned Sent owner.
     body: Option<ModelBodyOf<B>>,
     published: Option<PublishedMpdu>,
-    packet_number: Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
+    packet_number: Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber>,
 }
 
 struct PublishedMpdu {
@@ -967,7 +967,7 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
                     .get()
                     .get(identity.0.role)
                     .seal(
-                        &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
                         &material.key,
                         &mut wire,
                     )
@@ -1059,9 +1059,9 @@ pub struct ModelTypes<B: ModelComposition>(PhantomData<fn() -> B>);
 impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
     const COMMAND_CAPACITY: usize = MODEL_COMMANDS;
     type StationCommandPath =
-        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>;
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>;
     type AccessPointCommandPath =
-        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>;
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>;
     type StationConfigureContext =
         <B::Contexts as ModelContext>::StationConfigureContext<'id, B::Identity>;
     type AccessPointConfigureContext =
@@ -1128,7 +1128,7 @@ impl<'id, B: ModelComposition + 'id, R: ModelRole + 'id> KeyTypes<'id> for Model
     >;
     fn begin_association(
         start: Self::AssociationStart,
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
     ) -> Self::Association {
         ModelAssociation {
             owner: start.begin(spp),
@@ -1199,7 +1199,7 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
 
     fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
         source: CheckedPoolSource<'k, 'p, 'id, Self, C, K, R>,
-    ) -> oer_ieee80211_contracts_port::PoolPreparation<'k, 'p, 'id, Self, C, K, R>
+    ) -> oer_protocols_ieee80211_contracts_port::PoolPreparation<'k, 'p, 'id, Self, C, K, R>
     where
         'id: 'k,
     {
@@ -1207,7 +1207,7 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
     }
 
     fn push_aggregate<'k, 'p, R, K, S>(
-        operation: oer_ieee80211_contracts_port::CheckedPoolAggregate<
+        operation: oer_protocols_ieee80211_contracts_port::CheckedPoolAggregate<
             'k,
             'p,
             'id,
@@ -1217,7 +1217,7 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
             K,
             S,
         >,
-    ) -> oer_ieee80211_contracts_port::AggregatePushResult<'k, 'p, 'id, Self, C, R, K, S>
+    ) -> oer_protocols_ieee80211_contracts_port::AggregatePushResult<'k, 'p, 'id, Self, C, R, K, S>
     where
         R: RoleKeys<'id, Self>,
         K: Ieee80211Capabilities,
@@ -1276,7 +1276,7 @@ impl ModelRxMeta {
     /// The same frame, with what the hardware observed of its decryption.
     pub const fn with_crypto(
         mut self,
-        crypto: RxEvidence<oer_ieee80211_contracts_port::RxCryptoStatus>,
+        crypto: RxEvidence<oer_protocols_ieee80211_contracts_port::RxCryptoStatus>,
     ) -> Self {
         self.common.crypto = crypto;
         self
@@ -1358,14 +1358,14 @@ impl ModelNetwork {
 }
 
 /// A model receive buffer lent to the network
-/// ([`LowerMacPhase::lend`](oer_ieee80211_contracts_port::LowerMacPhase::lend)).
+/// ([`LowerMacPhase::lend`](oer_protocols_ieee80211_contracts_port::LowerMacPhase::lend)).
 pub struct ModelLentRx {
     bytes: Vec<u8>,
     mpdu_len: usize,
     network: alloc::sync::Arc<ModelNetwork>,
 }
 
-impl oer_ieee80211_contracts_port::LentRxBuffer for ModelLentRx {
+impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for ModelLentRx {
     fn storage(&self) -> &[u8] {
         &self.bytes
     }
@@ -1375,8 +1375,8 @@ impl oer_ieee80211_contracts_port::LentRxBuffer for ModelLentRx {
     fn mpdu_len(&self) -> usize {
         self.mpdu_len
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_ieee80211_contracts_port::AdvanceRefused> {
-        let refused = oer_ieee80211_contracts_port::AdvanceRefused {
+    fn advance(&mut self, by: usize) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
+        let refused = oer_protocols_ieee80211_contracts_port::AdvanceRefused {
             by,
             mpdu_len: self.mpdu_len,
         };
@@ -1434,13 +1434,13 @@ pub struct ModelResources<'id, B: ModelComposition> {
     pub station_commands: InterfacePermissions<
         'id,
         Station,
-        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
     >,
     /// Access-point command admission from its own installation component.
     pub access_point_commands: InterfacePermissions<
         'id,
         AccessPoint,
-        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
     >,
     /// The install's single epoch-source slot; Station constructs its source.
     pub connection_epoch:
@@ -1448,7 +1448,7 @@ pub struct ModelResources<'id, B: ModelComposition> {
     /// The transmit tickets.
     pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>>,
     /// Sole permission for the body to unpack TX terminals.
-    pub terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
+    pub terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
         ModelTickets,
         ModelPool<<B as ModelComposition>::Identity, 1>,
@@ -1496,12 +1496,12 @@ pub struct ModelResources<'id, B: ModelComposition> {
     pub access_point_group_permission: Slot<
         'id,
         ModelGroupPermission<AccessPoint>,
-        oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
+        oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
     >,
     /// The receive Block Ack slots both roles share.
     pub block_acks: [ModelBlockAckSlot<'id, B>; MODEL_BLOCK_ACK_SLOTS],
     /// The sole authority to construct this installation's arbiter.
-    pub arbiter_authority: oer_ieee80211_contracts_port::ArbiterAuthority<
+    pub arbiter_authority: oer_protocols_ieee80211_contracts_port::ArbiterAuthority<
         'id,
         ModelPool<<B as ModelComposition>::Identity, 0>,
     >,
@@ -1737,7 +1737,7 @@ impl ModelTime {
             sample: Cell::new(RelationSample {
                 source,
                 target,
-                uncertainty: oer_time::RadioDuration::ZERO,
+                uncertainty: oer_portable_time::RadioDuration::ZERO,
                 generation: GenerationSource::new(0).current(),
             }),
         }
@@ -1781,7 +1781,7 @@ pub struct ModelAir {
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<bool>,
     group_failure: Cell<Option<GroupFaultStage>>,
-    group_rollback: Cell<Option<oer_ieee80211_testing_conformance::group_keys::Rollback>>,
+    group_rollback: Cell<Option<oer_protocols_ieee80211_testing_conformance::group_keys::Rollback>>,
     group_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
@@ -1918,7 +1918,7 @@ impl ModelAir {
 pub enum ModelCryptoOperation {
     Association {
         role: VifRole,
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
     },
     Key {
         role: VifRole,
@@ -1931,7 +1931,7 @@ pub enum ModelCryptoOperation {
 pub enum ModelCcmpError {
     MalformedHeader,
     MissingKey,
-    Authentication(oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpMpduError),
+    Authentication(oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpMpduError),
 }
 
 // ModelCaps declares Interface scope. These are hardware policy records,
@@ -1942,12 +1942,12 @@ pub enum ModelCcmpError {
 // it requires a new owner obtained through the complete returned slot bank.
 #[derive(Clone, Copy)]
 struct InterfaceAssociations {
-    station: oer_ieee80211_wire::security::Spp,
-    access_point: oer_ieee80211_wire::security::Spp,
+    station: oer_protocols_ieee80211_wire::security::Spp,
+    access_point: oer_protocols_ieee80211_wire::security::Spp,
 }
 impl Default for InterfaceAssociations {
     fn default() -> Self {
-        use oer_ieee80211_wire::security::Spp;
+        use oer_protocols_ieee80211_wire::security::Spp;
         Self {
             station: Spp::NotNegotiated,
             access_point: Spp::NotNegotiated,
@@ -1955,13 +1955,13 @@ impl Default for InterfaceAssociations {
     }
 }
 impl InterfaceAssociations {
-    fn get(&self, role: VifRole) -> oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation {
-        oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(match role {
+    fn get(&self, role: VifRole) -> oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation {
+        oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(match role {
             VifRole::Station => self.station,
             VifRole::AccessPoint => self.access_point,
         })
     }
-    fn apply(&mut self, role: VifRole, spp: oer_ieee80211_wire::security::Spp) {
+    fn apply(&mut self, role: VifRole, spp: oer_protocols_ieee80211_wire::security::Spp) {
         let record = match role {
             VifRole::Station => &mut self.station,
             VifRole::AccessPoint => &mut self.access_point,
@@ -1982,7 +1982,7 @@ impl ModelAir {
         });
     }
 
-    fn apply_association(&self, role: VifRole, spp: oer_ieee80211_wire::security::Spp) {
+    fn apply_association(&self, role: VifRole, spp: oer_protocols_ieee80211_wire::security::Spp) {
         self.associations.apply(role, spp);
         self.crypto_operations
             .record(ModelCryptoOperation::Association { role, spp });
@@ -2001,7 +2001,7 @@ impl ModelAir {
         meta: ModelRxMeta,
         role: VifRole,
     ) -> Result<(), ModelCcmpError> {
-        use oer_ieee80211_wire::{ccmp::CcmpHeader, frame::DecodedHeader};
+        use oer_protocols_ieee80211_wire::{ccmp::CcmpHeader, frame::DecodedHeader};
         let header = DecodedHeader::decode(frame).ok_or(ModelCcmpError::MalformedHeader)?;
         let ccmp = header
             .body()
@@ -2011,7 +2011,7 @@ impl ModelAir {
             .map_err(|_| ModelCcmpError::MalformedHeader)?
             .key_id()
             .value();
-        let group = oer_ieee80211_contracts_port::GroupAddress::new(header.receiver()).is_some();
+        let group = oer_protocols_ieee80211_contracts_port::GroupAddress::new(header.receiver()).is_some();
         let installations = self.key_installations.take();
         let result = (|| {
             let material = installations
@@ -2039,7 +2039,7 @@ impl ModelAir {
                 .get()
                 .get(identity.role)
                 .open(
-                    &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                    &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
                     &material.key,
                     &mut plaintext,
                 )
@@ -2054,7 +2054,7 @@ impl ModelAir {
         self.receive(
             plaintext,
             meta.with_crypto(RxEvidence::HardwareObserved(
-                oer_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
+                oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
             )),
         );
         Ok(())
@@ -2090,7 +2090,7 @@ impl ModelAir {
     /// Actual internal rollback observed before poisoned teardown.
     pub fn group_rollback(
         &self,
-    ) -> Option<oer_ieee80211_testing_conformance::group_keys::Rollback> {
+    ) -> Option<oer_protocols_ieee80211_testing_conformance::group_keys::Rollback> {
         self.group_rollback.get()
     }
 
@@ -2193,7 +2193,7 @@ impl ModelAir {
 
     /// Keep the queue of `access_category` busy, or free it: its attempts
     /// wait unpublished meanwhile, as behind a long transmission.
-    pub fn hold(&self, access_category: oer_ieee80211_wire::qos::WmmAccessCategory, held: bool) {
+    pub fn hold(&self, access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory, held: bool) {
         let mut queues = self.held.get();
         *access_category.select_mut(&mut queues) = held;
         self.held.set(queues);
@@ -2204,7 +2204,7 @@ impl ModelAir {
     /// expires. A queued successor cannot pass this publication.
     pub fn hold_completion(
         &self,
-        category: oer_ieee80211_wire::qos::WmmAccessCategory,
+        category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
         held: bool,
     ) {
         let mut results = self.held_results.get();
@@ -2435,7 +2435,7 @@ enum Command<'id, B: ModelComposition> {
     Submit(Box<Prepared<'id, B>>),
     SubmitAmpdu(PreparedAggregate<'id, B>),
     InstallKey {
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
         key: RawKeyIdentity,
         material: Ccmp128Key,
         /// The installed owner its terminal returns.
@@ -2457,7 +2457,7 @@ type StationGroupPermission<'id, B> =
     Slot<'id, ModelGroupPermission<Station>, ModelPool<<B as ModelComposition>::Identity, 8>>;
 
 struct PendingGroupInstall<'id, B: ModelComposition, R: ModelRole> {
-    spp: oer_ieee80211_wire::security::Spp,
+    spp: oer_protocols_ieee80211_wire::security::Spp,
     slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
     permission: Slot<'id, ModelGroupPermission<R>, R::GroupPermissionPath<B::Identity>>,
     key_id: GroupKeyId,
@@ -2510,7 +2510,7 @@ impl GroupInstallationRole for AccessPoint {
         permission: Slot<
             'o,
             ModelGroupPermission<Self>,
-            oer_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
+            oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
         >,
     ) -> OwnedInstalledGroup<'o, B> {
         OwnedInstalledGroup::AccessPoint { key, permission }
@@ -2650,7 +2650,7 @@ struct PreparedAggregate<'id, B: ModelComposition> {
     operation: ModelInFlight<'id, B, ModelSubframes<'id, B>>,
     role: VifRole,
     start_sequence: SequenceNumber,
-    queue: oer_ieee80211_wire::qos::WmmAccessCategory,
+    queue: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
     rate: PhyRate,
     key: Option<PreparedKey>,
 }
@@ -2659,8 +2659,8 @@ struct PreparedAggregate<'id, B: ModelComposition> {
 struct Prepared<'id, B: ModelComposition> {
     operation: ModelInFlight<'id, B, ModelMpdu<'id, B>>,
     role: VifRole,
-    queue: oer_ieee80211_wire::qos::WmmAccessCategory,
-    plan: oer_ieee80211_contracts_port::RetryPlan<PhyRate>,
+    queue: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
+    plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
 }
 
@@ -3127,7 +3127,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                         .group_writes
                         .set(held.air.group_writes.get().saturating_add(1));
                     held.air.group_rollback.set(Some(
-                        oer_ieee80211_testing_conformance::group_keys::Rollback {
+                        oer_protocols_ieee80211_testing_conformance::group_keys::Rollback {
                             previous_key_id: installed.identity.0.key_id,
                             attempted_key_id: key_id.get(),
                             restored: table.iter().any(|entry| {
@@ -3340,9 +3340,9 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
 
 /// Synthetic model latency, in model time; hardware backends declare their
 /// own PPDU + response/timeout bound. It does not scale with retry-plan length.
-pub const MODEL_PUBLICATION_BOUND: oer_time::Duration = oer_time::Duration::from_millis(1);
+pub const MODEL_PUBLICATION_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(1);
 /// Synthetic admission-to-GTK-terminal bound, driven by the supplied clock's owner.
-pub const MODEL_GROUP_COMMAND_BOUND: oer_time::Duration = oer_time::Duration::from_millis(2);
+pub const MODEL_GROUP_COMMAND_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(2);
 
 struct TxQueue<'id, B: ModelComposition> {
     waiting: VecDeque<Work<'id, B>>,
@@ -3808,7 +3808,7 @@ impl<'id, C, B: ModelComposition + 'id> ModelPhase<'_, 'id, C, B> {
     /// owners, for consumer contract regressions outside the conformance suite.
     pub fn inject_terminal(
         &mut self,
-        terminal: oer_ieee80211_contracts_port::LowerMacTerminal<'id, ModelTypes<B>>,
+        terminal: oer_protocols_ieee80211_contracts_port::LowerMacTerminal<'id, ModelTypes<B>>,
     ) {
         self.held
             .post(OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::retain(
@@ -3842,12 +3842,12 @@ where
         .install_pairwise_key(association, slot, peer, key);
     loop {
         match phase.next_event().await {
-            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Terminal(
-                oer_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
-                    oer_ieee80211_contracts_port::InstalledPairwise::Station(key),
+            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Terminal(
+                oer_protocols_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
+                    oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
                 ),
             ))) => return Ok(key),
-            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
+            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
                 phase.recycle(frame)
             }
             _ => return Err("the station PTK installation terminal"),
@@ -3879,12 +3879,12 @@ where
         .install_pairwise_key(association, slot, peer, key);
     loop {
         match phase.next_event().await {
-            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Terminal(
-                oer_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
-                    oer_ieee80211_contracts_port::InstalledPairwise::AccessPoint(key),
+            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Terminal(
+                oer_protocols_ieee80211_contracts_port::LowerMacTerminal::PairwiseKeyInstalled(
+                    oer_protocols_ieee80211_contracts_port::InstalledPairwise::AccessPoint(key),
                 ),
             ))) => return Ok(key),
-            Ok(Ok(oer_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
+            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
                 phase.recycle(frame)
             }
             _ => return Err("the access point PTK installation terminal"),
@@ -3893,7 +3893,7 @@ where
 }
 
 impl<'id, C, B: ModelComposition + 'id> PortPhase for ModelPhase<'_, 'id, C, B> {
-    type Event = oer_ieee80211_contracts_port::LowerMacEvent<'id, ModelTypes<B>>;
+    type Event = oer_protocols_ieee80211_contracts_port::LowerMacEvent<'id, ModelTypes<B>>;
     type Fault = ModelFault;
 
     fn next_event(
@@ -3990,9 +3990,9 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
         buffer: ModelRxBuffer<'id, B::Identity>,
     ) -> Result<
         ModelLentRx,
-        oer_ieee80211_contracts_port::LendRefused<ModelRxBuffer<'id, B::Identity>>,
+        oer_protocols_ieee80211_contracts_port::LendRefused<ModelRxBuffer<'id, B::Identity>>,
     > {
-        use oer_ieee80211_contracts_port::{LendRefusal, LendRefused};
+        use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused};
         let reason = if self.held.air.failed() {
             Some(LendRefusal::Stopping)
         } else if self.held.network.held() >= MODEL_RX_EVENTS {
@@ -4118,7 +4118,7 @@ pub struct ModelBlockAck<'id, B: ModelComposition> {
 /// A retry plan's stages, as the model's hardware takes them.
 fn stages<C: Ieee80211Capabilities>(
     frame: &TxFrame<'_, '_, C>,
-) -> oer_ieee80211_contracts_port::RetryPlan<PhyRate> {
+) -> oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate> {
     match frame {
         TxFrame::Individual { plan, .. } => plan.map(|rate| rate.get()),
         TxFrame::IndividualNoAck { rate, .. } => one_stage(rate.rate().get()),
@@ -4126,18 +4126,18 @@ fn stages<C: Ieee80211Capabilities>(
         TxFrame::BlockAckRequest { plan, .. } => plan.map(|rate| rate.rate().get()),
     }
 }
-fn one_stage(rate: PhyRate) -> oer_ieee80211_contracts_port::RetryPlan<PhyRate> {
-    oer_ieee80211_contracts_port::RetryPlan::new(oer_ieee80211_contracts_port::RetryStage {
+fn one_stage(rate: PhyRate) -> oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate> {
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(oer_protocols_ieee80211_contracts_port::RetryStage {
         rate,
         transmissions: core::num::NonZeroU8::MIN,
-        protection: oer_ieee80211_contracts_port::Protection::None,
+        protection: oer_protocols_ieee80211_contracts_port::Protection::None,
     })
 }
 
 fn retry_stages<K>(
     layout: &MpduLayout,
     plan: &RetransmissionPlan<'_, '_, K>,
-) -> Result<oer_ieee80211_contracts_port::RetryPlan<PhyRate>, PreparationError> {
+) -> Result<oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>, PreparationError> {
     match (layout.kind(), plan) {
         (MpduKind::Individual, RetransmissionPlan::Individual(plan)) => {
             Ok(plan.map(|rate| rate.get()))
@@ -4155,7 +4155,7 @@ type TypeProof<T> = PhantomData<fn() -> T>;
 type ModelSource<'k, 'p, 'id, C, K, R, B> = TxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
-    oer_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>,
+    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>,
     ModelBodyOf<B>,
     <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
     RetransmissionPlan<'p, 'id, K>,
@@ -4163,7 +4163,7 @@ type ModelSource<'k, 'p, 'id, C, K, R, B> = TxSource<
 type ModelCheckedSource<'k, 'p, 'id, C, K, R, B> = CheckedTxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
-    oer_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>,
+    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>,
     ModelBodyOf<B>,
     <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
     RetransmissionPlan<'p, 'id, K>,
@@ -4179,14 +4179,14 @@ type ModelPreparation<'k, 'p, 'id, R, K, B, C> = Result<
 pub struct ModelPrepared<'k, 'p, 'id, R, K, B: ModelComposition> {
     loan: BodyLoan<'id, B::Identity, B>,
     mpdu: ModelMpdu<'id, B>,
-    plan: oer_ieee80211_contracts_port::RetryPlan<PhyRate>,
+    plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
     key_borrow: PhantomData<&'k ()>,
     proof: PhaseProof<'p, (R, K, B)>,
 }
 /// Metadata lowered before single-MPDU admission; it owns no payload.
 pub struct ModelTxExecution {
-    plan: oer_ieee80211_contracts_port::RetryPlan<PhyRate>,
+    plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
 }
 impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_, '_, 'id, R, K, B> {
@@ -4199,15 +4199,15 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
         self,
         context: <Self::Types as PhaseTypes<'id>>::Context,
         ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
-        _: oer_ieee80211_contracts_port::Admission<Self>,
-    ) -> oer_ieee80211_contracts_port::AdmissionOwners<
+        _: oer_protocols_ieee80211_contracts_port::Admission<Self>,
+    ) -> oer_protocols_ieee80211_contracts_port::AdmissionOwners<
         Self::OwnedContext,
         Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
         Self::OwnedPayload,
         Self::Execution,
     > {
         let loan = self.loan;
-        oer_ieee80211_contracts_port::AdmissionOwners {
+        oer_protocols_ieee80211_contracts_port::AdmissionOwners {
             context: context.enclose().into_owned(&loan),
             ticket: loan.reclaim_slot(ticket),
             payload: self.mpdu.into_owned(&loan),
@@ -4225,7 +4225,7 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
 /// A model buffer class and its unique pool within the installation layout.
 pub trait ModelClass: TxBufferClass + Sized {
     /// Nominal component of the backing memory slots.
-    type Path<Id: SlotIdentity>: oer_radio_port::PoolPath<Identity = Id>;
+    type Path<Id: SlotIdentity>: oer_protocols_radio_port::PoolPath<Identity = Id>;
     /// Return fresh memory through the terminal's exhaustive buffer enum.
     fn erase<'id, B: ModelComposition>(buffer: ModelBuffer<'id, B, Self>)
     -> ModelAnyBuffer<'id, B>;
@@ -4444,7 +4444,7 @@ where
 
     fn submit<'k>(
         &mut self,
-        attempt: oer_ieee80211_contracts_port::InterfaceSubmission<'k, 'p, 'id, Self>,
+        attempt: oer_protocols_ieee80211_contracts_port::InterfaceSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>> {
         let mut attempt = attempt.into_parts(&self.loan);
         attempt
@@ -4609,29 +4609,29 @@ pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = AmpduLengthTable::uniform(65_
 /// Role, phase, nominal identity and body loan stay in the builder:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_testing_model::{ModelAggregate, ModelComposition};
-/// use oer_ieee80211_contracts_port::{Station, AccessPoint};
+/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
+/// use oer_protocols_ieee80211_contracts_port::{Station, AccessPoint};
 /// fn role<'k, 'phase, 'p, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'p, Station, K, B>) -> ModelAggregate<'k, 'phase, 'p, AccessPoint, K, B> { a }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_ieee80211_testing_model::{ModelAggregate, ModelComposition};
+/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
 /// fn phase<'k, 'old, 'new, 'p, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'old, 'p, R, K, B>) -> ModelAggregate<'k, 'new, 'p, R, K, B> { a }
 /// ```
 ///
 /// ```compile_fail
-/// use oer_ieee80211_testing_model::{ModelAggregate, ModelComposition};
+/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
 /// fn body<'k, 'phase, 'old, 'new, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'old, R, K, B>) -> ModelAggregate<'k, 'phase, 'new, R, K, B> { a }
 /// ```
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_testing_model::{ModelAggregate, ModelBackend};
-/// use oer_radio_port::SlotIdentity;
+/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelBackend};
+/// use oer_protocols_radio_port::SlotIdentity;
 /// fn identity<'k, 'phase, 'p, R, K, Old: SlotIdentity, New: SlotIdentity>(a: ModelAggregate<'k, 'phase, 'p, R, K, ModelBackend<Old>>) -> ModelAggregate<'k, 'phase, 'p, R, K, ModelBackend<New>> { a }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_testing_model::{ModelAggregate, ModelComposition};
+/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
 /// fn same<'k, 'phase, 'p, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'p, R, K, B>) -> ModelAggregate<'k, 'phase, 'p, R, K, B> { a }
 /// ```
 pub struct ModelAggregate<
@@ -4687,17 +4687,17 @@ impl<'id, R, K, B: ModelComposition + 'id, S: AggregateState> PhaseAggregate<'id
         self,
         context: <Self::Types as PhaseTypes<'id>>::Context,
         ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
-        _: oer_ieee80211_contracts_port::Admission<Self>,
-    ) -> oer_ieee80211_contracts_port::AdmissionOwners<
+        _: oer_protocols_ieee80211_contracts_port::Admission<Self>,
+    ) -> oer_protocols_ieee80211_contracts_port::AdmissionOwners<
         Self::OwnedContext,
         Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
         Self::OwnedPayload,
         Self::Execution,
     >
     where
-        S: oer_ieee80211_contracts_port::NonEmptyState,
+        S: oer_protocols_ieee80211_contracts_port::NonEmptyState,
     {
-        oer_ieee80211_contracts_port::AdmissionOwners {
+        oer_protocols_ieee80211_contracts_port::AdmissionOwners {
             context: context.enclose().into_owned(&self.loan),
             ticket: self.loan.reclaim_slot(ticket),
             payload: ModelSubframes(self.subframes).into_owned(&self.loan),
@@ -4716,10 +4716,10 @@ impl<'id, R, K, B: ModelComposition + 'id, S: AggregateState> PhaseAggregate<'id
     fn tid(&self) -> Tid {
         self.tid
     }
-    fn protection(&self) -> oer_ieee80211_contracts_port::MpduProtection {
+    fn protection(&self) -> oer_protocols_ieee80211_contracts_port::MpduProtection {
         match &self.key {
-            None => oer_ieee80211_contracts_port::MpduProtection::Open,
-            Some(_) => oer_ieee80211_contracts_port::MpduProtection::Ccmp,
+            None => oer_protocols_ieee80211_contracts_port::MpduProtection::Open,
+            Some(_) => oer_protocols_ieee80211_contracts_port::MpduProtection::Ccmp,
         }
     }
     fn subframes(&self) -> usize {
@@ -4758,7 +4758,7 @@ fn push_model<
     'k,
     'p,
     'id,
-    R: oer_ieee80211_contracts_port::InterfaceRole,
+    R: oer_protocols_ieee80211_contracts_port::InterfaceRole,
     K: Ieee80211Capabilities,
     B: ModelComposition,
     S: AggregateState,
@@ -4909,7 +4909,7 @@ where
     }
     fn submit_ampdu<'k>(
         &mut self,
-        attempt: oer_ieee80211_contracts_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
+        attempt: oer_protocols_ieee80211_contracts_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<ModelFault>>
     where
         'id: 'k,
@@ -4925,9 +4925,9 @@ where
             rate,
             key,
         } = attempt.execution;
-        let queue = match oer_ieee80211_wire::qos::WmmUserPriority::new(tid.get()) {
+        let queue = match oer_protocols_ieee80211_wire::qos::WmmUserPriority::new(tid.get()) {
             Some(priority) => priority.access_category(),
-            None => oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+            None => oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
         };
         self.held.command(Command::SubmitAmpdu(PreparedAggregate {
             operation: attempt.operation,
@@ -4985,7 +4985,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> Stati
         permission: ConfigurePermission<
             'id,
             Station,
-            oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
+            oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
             <B::Contexts as ModelContext>::StationConfigureContext<'id, B::Identity>,
         >,
         _: StationReceive<C>,
@@ -5010,7 +5010,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> Acces
         permission: ConfigurePermission<
             'id,
             AccessPoint,
-            oer_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
+            oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 2>,
             <B::Contexts as ModelContext>::AccessPointConfigureContext<'id, B::Identity>,
         >,
         _: SupportedFilter<C, AccessPoint>,

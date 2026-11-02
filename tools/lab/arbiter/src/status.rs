@@ -96,7 +96,7 @@ impl Arbiter {
         scheduler: &Scheduler,
         attached: &[(String, String)],
     ) -> crate::Result<Status> {
-        let now = oer_os_durable::unix_seconds();
+        let now = oer_tools_os_durable::unix_seconds();
         let state = scheduler.state().clone();
         let mut starts = queue::expected_starts(&state, now, STOP_GRACE);
         let order = |id: u64| state.queue.iter().find(|ticket| ticket.id == id);

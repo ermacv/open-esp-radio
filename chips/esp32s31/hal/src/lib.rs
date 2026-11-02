@@ -62,7 +62,7 @@ pub mod ieee802154;
 
 /// The memory layouts the radio hardware reads and writes in RAM, from the
 /// PAC: the protocol layers above reach them through these types only.
-pub use oer_esp32s31_pac::layouts;
+pub use oer_chips_esp32s31_pac::layouts;
 pub mod memory;
 pub mod peripherals;
 pub mod phy;

@@ -1,5 +1,5 @@
 //! CCMP-128 CCM: eight-byte MIC, thirteen-byte nonce, two-byte body length,
-//! over the caller's AES-128 engine (`oer_crypto::ccm`). The temporal key is
+//! over the caller's AES-128 engine (`oer_portable_crypto::ccm`). The temporal key is
 //! loaded for one frame and erased from the engine when the frame is done.
 #![deny(
     clippy::indexing_slicing,
@@ -9,11 +9,11 @@
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
-use oer_crypto::{Aes128Key, block::Aes128Engine, ccm::CcmError};
-use oer_ieee80211_wire::ccmp::protected::CcmpAad as Aad;
+use oer_portable_crypto::{Aes128Key, block::Aes128Engine, ccm::CcmError};
+use oer_protocols_ieee80211_wire::ccmp::protected::CcmpAad as Aad;
 
 pub(crate) const MIC_LEN: usize = 8;
-pub(crate) const NONCE_LEN: usize = oer_crypto::ccm::NONCE_LEN;
+pub(crate) const NONCE_LEN: usize = oer_portable_crypto::ccm::NONCE_LEN;
 
 pub(crate) fn seal<E: Aes128Engine>(
     engine: &mut E,
@@ -25,7 +25,7 @@ pub(crate) fn seal<E: Aes128Engine>(
     let key = Aes128Key::copy_from(key);
     let mut keyed = engine.load(&key).map_err(CcmError::Engine)?;
     drop(key);
-    oer_crypto::ccm::seal(&mut keyed, nonce, aad.as_bytes(), body)
+    oer_portable_crypto::ccm::seal(&mut keyed, nonce, aad.as_bytes(), body)
 }
 
 pub(crate) fn open<E: Aes128Engine>(
@@ -39,5 +39,5 @@ pub(crate) fn open<E: Aes128Engine>(
     let key = Aes128Key::copy_from(key);
     let mut keyed = engine.load(&key).map_err(CcmError::Engine)?;
     drop(key);
-    oer_crypto::ccm::open(&mut keyed, nonce, aad.as_bytes(), body, mic)
+    oer_portable_crypto::ccm::open(&mut keyed, nonce, aad.as_bytes(), body, mic)
 }

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{AccessPoint, ConfigurePermission, Station};
+use oer_protocols_ieee80211_contracts_port::{AccessPoint, ConfigurePermission, Station};
 pub fn station<'id>(
     permission: ConfigurePermission<'id, Station>,
 ) -> ConfigurePermission<'id, Station> {

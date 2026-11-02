@@ -78,7 +78,7 @@ fn all_entries_cross_poll_boundaries_in_source_order_with_one_base_read() {
     assert_eq!(io.channel_base_reads, 1);
     let expected: Vec<_> = (0_u8..32)
         .map(|i| {
-            oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+            oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
                 0xf3_u8.wrapping_add(i),
                 1000 + u16::from(i),
                 0,

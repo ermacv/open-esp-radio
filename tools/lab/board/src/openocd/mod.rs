@@ -30,7 +30,7 @@ impl Openocd {
     /// The newest OpenOCD of the ESP-IDF tools in the shared cache, which any
     /// ESP-IDF catalog build installs.
     pub fn locate() -> crate::Result<Self> {
-        Self::locate_in(&oer_os_durable::xdg::esp_idf_cache()?.join("idf-tools"))
+        Self::locate_in(&oer_tools_os_durable::xdg::esp_idf_cache()?.join("idf-tools"))
     }
 
     fn locate_in(idf_tools: &Path) -> crate::Result<Self> {
@@ -116,9 +116,9 @@ impl Openocd {
         registers: &[&str],
         timeout: Duration,
     ) -> crate::Result<Vec<(String, u32)>> {
-        let mut command = oer_os_process::command(&self.program);
+        let mut command = oer_tools_os_process::command(&self.program);
         command.args(self.register_arguments(chip, mac, registers));
-        let output = oer_os_process::output(&mut command, Some(timeout))?;
+        let output = oer_tools_os_process::output(&mut command, Some(timeout))?;
         let log = String::from_utf8_lossy(&output.stderr).into_owned()
             + &String::from_utf8_lossy(&output.stdout);
         let values = parse_registers(&log, registers);
@@ -158,9 +158,9 @@ impl Openocd {
         address: u32,
         timeout: Duration,
     ) -> crate::Result<u32> {
-        let mut command = oer_os_process::command(&self.program);
+        let mut command = oer_tools_os_process::command(&self.program);
         command.args(self.word_arguments(chip, mac, address));
-        let output = oer_os_process::output(&mut command, Some(timeout))?;
+        let output = oer_tools_os_process::output(&mut command, Some(timeout))?;
         let log = String::from_utf8_lossy(&output.stderr).into_owned()
             + &String::from_utf8_lossy(&output.stdout);
         parse_word(&log, address).ok_or_else(|| {
@@ -207,10 +207,10 @@ impl Openocd {
     /// session on a wedged target can block forever, even against `SIGTERM`.
     /// Its log is shown only when it fails.
     fn run(&self, arguments: &[String], timeout: Duration) -> crate::Result<std::process::Output> {
-        let mut command = oer_os_process::command(&self.program);
+        let mut command = oer_tools_os_process::command(&self.program);
         command.args(arguments);
-        let output = oer_os_process::output(&mut command, Some(timeout)).map_err(|error| {
-            if error.is::<oer_os_process::owned::DeadlineExceeded>() {
+        let output = oer_tools_os_process::output(&mut command, Some(timeout)).map_err(|error| {
+            if error.is::<oer_tools_os_process::owned::DeadlineExceeded>() {
                 format!(
                     "OpenOCD did not finish within {}s and was stopped",
                     timeout.as_secs()

@@ -7,9 +7,9 @@
 //! acyclic local graph. Unknown conditions fork; missing semantics, unknown
 //! local jumps, cycles and the local resource limits leave recursion unknown.
 use crate::{Function, Transfer, TransferKind, image};
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 
 const MAX_INSTRUCTIONS: usize = 1024;
 const MAX_PENDING: usize = 128;

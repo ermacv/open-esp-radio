@@ -1,5 +1,5 @@
 [package]
-name = "oer-radio-port"
+name = "oer-protocols-radio-port"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,16 +14,16 @@ readme = "README.md"
 test-support = []
 
 [dependencies]
-oer-sync = { path = "../../../portable/sync" }
+oer-portable-sync = { path = "../../../portable/sync" }
 atomic-waker = { version = "1.1.2", default-features = false }
 scopeguard = { version = "1.2.0", default-features = false }
 pin-project-lite = "0.2.17"
-oer-time = { path = "../../../portable/time" }
+oer-portable-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
-oer-memory = { path = "../../../portable/memory" }
-oer-time-virtual = { path = "../../../portable/time-virtual" }
-oer-test-ui-cases = { path = "../../../tools/test/ui-cases" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+oer-tools-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

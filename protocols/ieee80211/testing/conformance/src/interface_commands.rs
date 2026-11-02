@@ -4,7 +4,7 @@
 //! terminal, including terminals drained during disable. A fixture must also
 //! poll the event stream after both returns to detect an extra terminal.
 
-use oer_ieee80211_contracts_port::VifRole;
+use oer_protocols_ieee80211_contracts_port::VifRole;
 
 use super::{Environment, Execution, Report};
 

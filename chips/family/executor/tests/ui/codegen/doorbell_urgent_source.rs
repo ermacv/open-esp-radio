@@ -1,5 +1,5 @@
-use oer_espressif_interrupt_table::{Bound, InterruptSource, signal::host::Deferred};
-oer_espressif_interrupt_table::__fake_parts!();
+use oer_chips_family_interrupt_table::{Bound, InterruptSource, signal::host::Deferred};
+oer_chips_family_interrupt_table::__fake_parts!();
 include!("support/doorbell.rs");
 
 pub struct FromCpu1Irq;
@@ -12,7 +12,7 @@ impl InterruptSource for FromCpu3Irq {
 }
 pub fn on_doorbell(_: &mut FromCpu3Irq) {}
 
-oer_espressif_interrupt_table::interrupt_table! {
+oer_chips_family_interrupt_table::interrupt_table! {
     lines: FAKE_LINES,
     handler_attributes: [];
     contexts { executor: 2; radio: 3; }

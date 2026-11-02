@@ -1,5 +1,5 @@
 //! The human form of an `mmio-diff` report.
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     MmioAccess, MmioDiff, MmioLocation, MmioOperation, MmioStoredBits, MmioStoredSource,
     RegisterMaskKind,
 };
@@ -102,10 +102,10 @@ pub fn render(diff: &MmioDiff) -> String {
         for gap in gaps {
             let object = match &gap.object {
                 Some(object) => match object.location {
-                    oer_analysis_riscv_model::ObjectLocation::ArchiveMember { ordinal } => {
+                    oer_tools_analysis_riscv_model::ObjectLocation::ArchiveMember { ordinal } => {
                         format!(" member {ordinal}")
                     }
-                    oer_analysis_riscv_model::ObjectLocation::Standalone => String::new(),
+                    oer_tools_analysis_riscv_model::ObjectLocation::Standalone => String::new(),
                 },
                 None => String::new(),
             };
@@ -117,7 +117,7 @@ pub fn render(diff: &MmioDiff) -> String {
         }
     }
     for change in &diff.changes {
-        use oer_analysis_blobray_domain::MmioFunctionState::{Absent, Analyzed, Blocked};
+        use oer_tools_analysis_blobray_domain::MmioFunctionState::{Absent, Analyzed, Blocked};
         let presence = match change.state {
             [Analyzed, Absent] => " (old only)",
             [Absent, Analyzed] => " (new only)",
@@ -151,8 +151,8 @@ pub fn render(diff: &MmioDiff) -> String {
 }
 
 /// Bit classes of one load, with every sink and stopping reason retained.
-pub fn reads(reads: &oer_analysis_blobray_domain::ReadUses) -> String {
-    use oer_analysis_blobray_domain::{ReadLimitKind, ReadPrecision, ReadSink};
+pub fn reads(reads: &oer_tools_analysis_blobray_domain::ReadUses) -> String {
+    use oer_tools_analysis_blobray_domain::{ReadLimitKind, ReadPrecision, ReadSink};
     let mut parts = Vec::new();
     for usage in &reads.uses {
         let sink = match &usage.sink {

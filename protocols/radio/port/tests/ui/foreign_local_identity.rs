@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Child, LocalId, Root, Slot};
+use oer_protocols_radio_port::{Child, LocalId, Root, Slot};
 
 pub enum Kind {}
 

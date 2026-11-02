@@ -1,6 +1,6 @@
 # Portable Wi-Fi access point
 
-`oer-ieee80211-core-roles-ap`: executor- and chip-independent Wi-Fi access-point MLME.
+`oer-protocols-ieee80211-core-roles-ap`: executor- and chip-independent Wi-Fi access-point MLME.
 No other crate uses it yet; its public calls are reached only from its own
 tests.
 
@@ -14,15 +14,15 @@ its typed length error if the stored invariant is broken.
 
 The security an access point offers (`security_policy.rs::ApSecurityPolicy`)
 is this crate's policy: its link and management protection and the RSN
-element and RSNXE it advertises, which `oer-ieee80211-wire` encodes into
+element and RSNXE it advertises, which `oer-protocols-ieee80211-wire` encodes into
 beacons and responses as `BssSecurityElements`. The TBTT schedule
 (`tbtt.rs::next_tbtt`) and the beacon's channel-switch announcements, edited
 in the template through the wire's beacon element edits, are its own too.
 Status codes and SAE body fields are the wire's. The four-way handshake of
-each peer is an `oer_ieee80211_core_security_rsn::authenticator::RsnAuthenticator`, which
+each peer is an `oer_protocols_ieee80211_core_security_rsn::authenticator::RsnAuthenticator`, which
 this crate drives with the association's PMK and Message 3's key data; the SAE
-responder and the PMKSA cache are `oer-ieee80211-core-security-rsn`'s too. Transmit sequence
-spaces and the management replay frontier are `oer-ieee80211-core-upper-mac`'s.
+responder and the PMKSA cache are `oer-protocols-ieee80211-core-security-rsn`'s too. Transmit sequence
+spaces and the management replay frontier are `oer-protocols-ieee80211-core-upper-mac`'s.
 
 An access point uses 40 MHz in 2.4 GHz only under the 20/40 coexistence rules;
 a station reports 20/40 OBSS as the standard requires.

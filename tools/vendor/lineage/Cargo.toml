@@ -1,5 +1,5 @@
 [package]
-name = "oer-vendor-lineage"
+name = "oer-tools-vendor-lineage"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,12 +11,12 @@ readme = "README.md"
 
 [dependencies]
 hex = "=0.4.3"
-oer-vendor-provenance = { path = "../provenance" }
+oer-tools-vendor-provenance = { path = "../provenance" }
 serde = { version = "=1.0.229", features = ["derive"] }
 sha2 = "=0.10.9"
 
 [dev-dependencies]
-oer-analysis-elf = { path = "../../analysis/elf" }
+oer-tools-analysis-elf = { path = "../../analysis/elf" }
 object = { version = "=0.39.1", default-features = false, features = ["archive", "elf", "read_core", "std", "write"] }
 
 [lints]

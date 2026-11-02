@@ -1,11 +1,11 @@
 //! `cargo fw idf`: list and build the catalog of tracked ESP-IDF firmware
-//! ([`oer_image_build::esp_idf::catalog`], which builds it).
+//! ([`oer_tools_image_build::esp_idf::catalog`], which builds it).
 
 use std::path::Path;
 
-use oer_image_build::Result;
-use oer_image_build::esp_idf::catalog::{self, entries, entry};
-use oer_image_esp_idf as idf;
+use oer_tools_image_build::Result;
+use oer_tools_image_build::esp_idf::catalog::{self, entries, entry};
+use oer_tools_image_esp_idf as idf;
 
 /// `cargo fw idf list`: image, chip, project and last build.
 pub fn list(root: &Path) -> Result<()> {

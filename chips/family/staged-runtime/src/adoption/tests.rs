@@ -2,16 +2,16 @@
 use super::*;
 #[path = "../../../boot/tests/support/adoption.rs"]
 mod support;
-use oer_espressif_boot::adoption::InitError;
-use oer_espressif_interrupt_table::Router;
-use oer_time::Duration;
+use oer_chips_family_boot::adoption::InitError;
+use oer_chips_family_interrupt_table::Router;
+use oer_portable_time::Duration;
 use support::{Fake, Hardware, Log, Op};
 
-oer_espressif_interrupt_table::__fake_controller!();
+oer_chips_family_interrupt_table::__fake_controller!();
 
 struct Chip<'a>(core::marker::PhantomData<&'a ()>);
 struct Platform;
-impl oer_espressif_platform_port::EarlyText for Platform {
+impl oer_chips_family_platform_port::EarlyText for Platform {
     fn text(_: &[u8]) -> bool {
         true
     }
@@ -27,7 +27,7 @@ impl<'a> Binding for Chip<'a> {
     }
     fn controller(
         interrupts: FakeController,
-    ) -> Result<FakeController, oer_espressif_platform_port::ForeignHart> {
+    ) -> Result<FakeController, oer_chips_family_platform_port::ForeignHart> {
         Ok(interrupts)
     }
 }
@@ -86,9 +86,9 @@ fn runtime_is_published_after_driver_arming_image_preparation_and_mapping() {
     assert_eq!(
         log.operations(),
         [
-            Op::Key(2, oer_espressif_watchdog::WRITE_KEY),
+            Op::Key(2, oer_chips_family_watchdog::WRITE_KEY),
             Op::Feed,
-            Op::Key(2, oer_espressif_watchdog::LOCK)
+            Op::Key(2, oer_chips_family_watchdog::LOCK)
         ]
     );
 }
@@ -142,7 +142,7 @@ fn context_failure_returns_the_original_observation_without_replaying_initializa
 #[test]
 fn early_reset_and_retained_output_survives_context_admission_failure() {
     use core::cell::RefCell;
-    use oer_diagnostics::fault::{Class, Domain, Record};
+    use oer_portable_diagnostics::fault::{Class, Domain, Record};
 
     let log = Log::new(None);
     let output = RefCell::new(Vec::new());

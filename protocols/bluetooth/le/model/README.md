@@ -1,6 +1,6 @@
 # Bluetooth LE reference model
 
-`oer-bluetooth-le-model` implements the LE port's DTM 1M profile on virtual
+`oer-protocols-bluetooth-le-model` implements the LE port's DTM 1M profile on virtual
 time. It is a host reference backend, with allocating storage and no executor
 or real-time waits. Each installation registers one P2 owner and separate
 queue backing through the common radio lifecycle.

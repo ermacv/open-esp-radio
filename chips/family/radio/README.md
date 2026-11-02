@@ -1,6 +1,6 @@
 # Shared radio domain drivers
 
-`oer-espressif-radio` executes common power prerequisites, checks the semantic
+`oer-chips-family-radio` executes common power prerequisites, checks the semantic
 readback, restores the cold-power baseline in three verified stages, and
 counts platform clock references above a retained permanent memory owner.
 It is generic over register and reference-storage ports and contains no chip,
@@ -25,7 +25,7 @@ The family also selects Wi-Fi XTAL32K only for that RTC source; every other
 RTC selector, including invalid values, retains the existing RC_SLOW selection.
 
 The S31 modem tables live in `knowledge::modem_clock`; its HAL newtype binds
-them to `oer-espressif-modem-clock`. That family's `execution` module orders
+them to `oer-chips-family-modem-clock`. That family's `execution` module orders
 upstream and device edges and retains the planner's poison/lease semantics.
 The family's `membership` driver owns first/last common-power membership,
 retained baseline commit, retry order, one-time Wi-Fi reset and coexistence
@@ -43,6 +43,6 @@ guards. The family obtains no register handle or reset authority. Exact affine
 reunion, both quarantine guards and the cancellation reporter ABI remain HAL
 custody obligations. Chip PHY and radio-system lifecycle run above this binding.
 
-Recording fake ports use `oer-time-virtual` to check effect order, elapsed atom
+Recording fake ports use `oer-portable-time-virtual` to check effect order, elapsed atom
 time, partial failures, first/last clock edges and permanent-owner retention.
 HAL tests separately check register atoms and ownership/UI constraints.

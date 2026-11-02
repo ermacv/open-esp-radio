@@ -1,7 +1,7 @@
 //! BSS protection fields of the ERP and HT Operation elements.
 //!
 //! These are the values a BSS advertises; the transmitter's per-PPDU choice
-//! of RTS/CTS or CTS-to-self is `oer-ieee80211-core-upper-mac`'s protection
+//! of RTS/CTS or CTS-to-self is `oer-protocols-ieee80211-core-upper-mac`'s protection
 //! policy.
 
 /// ERP element identifier.
@@ -133,7 +133,7 @@ impl ApBssProtection {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.13 (ERP Information element).
     pub struct ErpInformation[1] (little) {
         pub non_erp, with_non_erp: bool = 0..1;
@@ -141,7 +141,7 @@ oer_wire::bitfield! {
         pub barker, with_barker: bool = 2..3;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
     pub struct HtProtectionInformation[1] (little) {
         pub mode, with_mode: u8 = 0..2;

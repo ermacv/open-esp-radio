@@ -545,50 +545,50 @@ impl Line {
 /// when the line compiles.
 ///
 /// ```
-/// let note = oer_diagnostics::typed_line!("ipv4 {}/{}", oer_diagnostics::Ipv4([10, 0, 0, 2]), 24_u8).note();
+/// let note = oer_portable_diagnostics::typed_line!("ipv4 {}/{}", oer_portable_diagnostics::Ipv4([10, 0, 0, 2]), 24_u8).note();
 /// assert_eq!(note.names(), ["ipv4 ", "/"]);
 /// ```
 ///
 /// A brace that is not `{}`:
 ///
 /// ```compile_fail,E0080
-/// let _ = oer_diagnostics::typed_line!("connect-failed {:?}", 1_u8);
+/// let _ = oer_portable_diagnostics::typed_line!("connect-failed {:?}", 1_u8);
 /// ```
 ///
 /// A value for no hole:
 ///
 /// ```compile_fail,E0080
-/// let _ = oer_diagnostics::typed_line!("channel=", 6_u8);
+/// let _ = oer_portable_diagnostics::typed_line!("channel=", 6_u8);
 /// ```
 ///
 /// More words than the note holds:
 ///
 /// ```compile_fail,E0080
-/// let _ = oer_diagnostics::typed_line!("{}{}{}{}", 1_u64, 2_u64, 3_u64, 4_u64);
+/// let _ = oer_portable_diagnostics::typed_line!("{}{}{}{}", 1_u64, 2_u64, 3_u64, 4_u64);
 /// ```
 ///
 /// An error's path before another value:
 ///
 /// ```compile_fail,E0080
 /// struct Failed;
-/// impl oer_diagnostics::DiagnosticPath for Failed {
-///     fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+/// impl oer_portable_diagnostics::DiagnosticPath for Failed {
+///     fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
 ///         path.name("Failed");
 ///     }
 /// }
-/// let _ = oer_diagnostics::typed_line!("tcp {} {}", Failed, 1_u8);
+/// let _ = oer_portable_diagnostics::typed_line!("tcp {} {}", Failed, 1_u8);
 /// ```
 ///
 /// Text after an error's path:
 ///
 /// ```compile_fail,E0080
 /// struct Failed;
-/// impl oer_diagnostics::DiagnosticPath for Failed {
-///     fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+/// impl oer_portable_diagnostics::DiagnosticPath for Failed {
+///     fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
 ///         path.name("Failed");
 ///     }
 /// }
-/// let _ = oer_diagnostics::typed_line!("tcp {} again", Failed);
+/// let _ = oer_portable_diagnostics::typed_line!("tcp {} again", Failed);
 /// ```
 #[macro_export]
 macro_rules! typed_line {

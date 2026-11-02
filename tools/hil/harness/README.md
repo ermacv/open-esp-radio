@@ -1,7 +1,7 @@
 # HIL harness
 
-`oer-hil-harness` is the life cycle of a HIL scenario program. A scenario
-(`Scenario::new`) names its image (`oer_image_build::images`) and the keys
+`oer-tools-hil-harness` is the life cycle of a HIL scenario program. A scenario
+(`Scenario::new`) names its image (`oer_tools_image_build::images`) and the keys
 of the services that image must serve, and lists its cases; `main` then:
 
 1. builds the image through the image pipeline, before it waits for the stand;
@@ -55,10 +55,10 @@ and exits 0 when every case passed, 1 when one failed and 2 when one could
 not finish and none failed. A passing scenario whose cleanup was not clean
 exits 2; a recovery never turns a failure into a pass. It stores nothing.
 
-A program killed outright leaves no child running (the `oer-os-process`
+A program killed outright leaves no child running (the `oer-tools-os-process`
 guardian), the arbiter powers the board's hub port back for the next holder,
 and the next session resets the board and checks its image before any case.
 
 ```console
-cargo test -p oer-hil-harness
+cargo test -p oer-tools-hil-harness
 ```

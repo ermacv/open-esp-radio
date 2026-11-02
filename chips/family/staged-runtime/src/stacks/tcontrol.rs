@@ -9,7 +9,7 @@
 //! at 0x7a5)"; ESP-IDF 4d59230d `riscv/include/riscv/rv_utils.h`
 //! (`rv_utils_set_watchpoint` programs MTE and MPTE).
 
-use oer_riscv::trigger::{TCONTROL_MPTE, TCONTROL_MTE};
+use oer_portable_riscv::trigger::{TCONTROL_MPTE, TCONTROL_MTE};
 
 /// The bits from MPTE down to MTE: the entry's shift of the trap's
 /// `tcontrol` before it keeps MTE alone.

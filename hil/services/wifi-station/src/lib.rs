@@ -42,7 +42,7 @@ pub const MAX_SSID: usize = 32;
 /// The longest WPA2 passphrase (IEEE 802.11-2020 J.4.1).
 pub const MAX_PASSPHRASE: usize = 63;
 
-oer_hil_protocol::messages! {
+oer_protocols_hil_protocol::messages! {
     endpoint Join = "wifi-station/join" => Joined;
     topic Joined = "wifi-station/joined";
     endpoint GetStatus = "wifi-station/status" => Status;
@@ -128,7 +128,7 @@ pub enum StationError {
     Unavailable,
 }
 
-oer_hil_agent::service! {
+oer_protocols_hil_agent::service! {
     /// The Wi-Fi station service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         Join(Join) => join,

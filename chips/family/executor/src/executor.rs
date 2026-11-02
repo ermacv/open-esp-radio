@@ -1,16 +1,16 @@
 use crate::SoftwareInterrupt;
 use core::{marker::PhantomData, task::Context};
-use oer_espressif_platform_port::ExecutorPlatform;
-use oer_memory::signal::SignalList;
+use oer_chips_family_platform_port::ExecutorPlatform;
+use oer_portable_memory::signal::SignalList;
 
 use crate::urgent_sources::UrgentSources;
 use crate::{Failure, Fault};
-use oer_espressif_interrupt_table::{
+use oer_chips_family_interrupt_table::{
     Entry,
     signal::{ContextToken, ForeignTask, IrqSignal, SignalExecutor},
 };
-use oer_espressif_staged_runtime::Hart;
-use oer_memory::{ExecutionContext, OnceValue};
+use oer_chips_family_staged_runtime::Hart;
+use oer_portable_memory::{ExecutionContext, OnceValue};
 use portable_atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
 use crate::binding::Binding;
@@ -23,7 +23,7 @@ use crate::context::Running;
 use crate::poll_stamp::ChipStamp;
 use crate::task::{Current, Interrupt as InterruptMode, Ready, Spawner, TaskId, Tasks, Thread};
 
-use oer_espressif_platform_port::HARTS;
+use oer_chips_family_platform_port::HARTS;
 const UNASSIGNED_CORE: usize = usize::MAX;
 
 /// Each thread-mode executor's wake flag: work other than a ready task (an
@@ -36,7 +36,7 @@ struct WorkPending([AtomicU8; SOFTWARE_INTERRUPT_COUNT]);
 // `u8` (its documented guarantee). Zero means a clear wake flag.
 unsafe impl bytemuck::Zeroable for WorkPending {}
 
-oer_memory::zeroed_static! {
+oer_portable_memory::zeroed_static! {
     /// Placement: the board linker owns this exported wake-state section.
     #[used]
     static WORK_PENDING: WorkPending = zeroed in ".critical.bss.executor";
@@ -76,7 +76,7 @@ static READY: [Ready; SOFTWARE_INTERRUPT_COUNT] =
 #[unsafe(link_section = ".critical.data.executor")]
 static RUNNING: [Running; HARTS] = [const { Running::new() }; HARTS];
 
-oer_memory::zeroed_static! {
+oer_portable_memory::zeroed_static! {
     /// Composition-owned urgent sources, published before an executor can poll.
     /// Placement: interrupt executors read this list reference from critical SRAM.
     #[used]
@@ -84,7 +84,7 @@ oer_memory::zeroed_static! {
         zeroed in ".critical.bss.executor";
 }
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// The task each executor polls now; only that executor's context reads
     /// it, to name a polling task for its signals. Executors of different
     /// harts write neighbouring entries.
@@ -92,7 +92,7 @@ oer_espressif_staged_runtime::placed_static! {
         [const { Current::new() }; SOFTWARE_INTERRUPT_COUNT], in critical_data "executor";
 }
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// Whether each software interrupt serves a started interrupt-mode
     /// executor; a pend reads it on any hart.
     static INTERRUPT_MODE: [AtomicBool; SOFTWARE_INTERRUPT_COUNT] =
@@ -174,7 +174,7 @@ pub(crate) fn should_yield<B: Binding>() -> bool {
         }
 }
 fn signal_pending<B: Binding>(swi: SoftwareInterrupt) -> bool {
-    use oer_espressif_interrupt_table::signal::has_pending;
+    use oer_chips_family_interrupt_table::signal::has_pending;
     let interrupt_mode = swi.at(&INTERRUPT_MODE).load(Ordering::Acquire);
     let pending = match (interrupt_mode, swi) {
         (true, SoftwareInterrupt::Zero) => has_pending::<InterruptExecutor<B, 0>>(),
@@ -204,7 +204,7 @@ fn as_running<B: Binding, T: Tasks<Binding = B>>(swi: u8, poll: impl FnOnce()) {
     #[cfg(oer_trace)]
     let observer = T::observer();
     #[cfg(oer_trace)]
-    oer_trace::observe!(
+    oer_portable_trace::observe!(
         observer,
         crate::observation::Activity::new(
             crate::chip::now::<B>() as u32,
@@ -216,7 +216,7 @@ fn as_running<B: Binding, T: Tasks<Binding = B>>(swi: u8, poll: impl FnOnce()) {
     );
     hart.at(&RUNNING).enter(swi, interrupt_level(), poll);
     #[cfg(oer_trace)]
-    oer_trace::observe!(
+    oer_portable_trace::observe!(
         observer,
         crate::observation::Activity::new(
             crate::chip::now::<B>() as u32,
@@ -289,7 +289,7 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
     pub fn run<T, R: crate::task::Roots, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_espressif_interrupt_table::Router<C, H>,
+        router: &mut oer_chips_family_interrupt_table::Router<C, H>,
         wake: W,
         part: W::Part,
         _urgent: U,
@@ -297,17 +297,17 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
         init: impl FnOnce(&Spawner<T>),
     ) -> Result<
         core::convert::Infallible,
-        Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<W>>,
+        Failure<PortOf<B>, oer_chips_family_interrupt_table::BindError<W>>,
     >
     where
         Self: SignalExecutor,
         T: Tasks<Binding = B, Mode = Thread>,
         W: Entry,
-        W::Part: oer_espressif_interrupt_table::InterruptSource,
-        C: oer_espressif_interrupt_table::Controller,
+        W::Part: oer_chips_family_interrupt_table::InterruptSource,
+        C: oer_chips_family_interrupt_table::Controller,
     {
         const {
-            if <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
+            if <W::Part as oer_chips_family_interrupt_table::InterruptSource>::SOURCE
                 != software_interrupt_source::<PortOf<B>>(SoftwareInterrupt::constant::<SWI>())
             {
                 panic!("the token is not this executor's software interrupt");
@@ -336,7 +336,7 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
                 crate::time_driver::service::<B, T>(const { SoftwareInterrupt::constant::<SWI>() });
                 // Raised signals wake their tasks before the round; a signal
                 // raised meanwhile marks the work flag again.
-                oer_espressif_interrupt_table::signal::service::<Self>();
+                oer_chips_family_interrupt_table::signal::service::<Self>();
                 let _ = poll_tasks::<B, T, R>(&mut roots);
             });
             wait_for_work::<B, T, SWI>();
@@ -421,19 +421,19 @@ impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     pub fn start<T, W, C, const H: u8, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_espressif_interrupt_table::Router<C, H>,
+        router: &mut oer_chips_family_interrupt_table::Router<C, H>,
         wake: W,
         part: W::Part,
         _urgent: U,
-    ) -> Result<Spawner<T>, Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<W>>>
+    ) -> Result<Spawner<T>, Failure<PortOf<B>, oer_chips_family_interrupt_table::BindError<W>>>
     where
         T: Tasks<Binding = B, Mode = InterruptMode>,
-        W: oer_espressif_interrupt_table::ExecutorEntry<Handler = Round<T>>,
-        W::Part: oer_espressif_interrupt_table::InterruptSource,
-        C: oer_espressif_interrupt_table::Controller,
+        W: oer_chips_family_interrupt_table::ExecutorEntry<Handler = Round<T>>,
+        W::Part: oer_chips_family_interrupt_table::InterruptSource,
+        C: oer_chips_family_interrupt_table::Controller,
     {
         const {
-            if <W::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE
+            if <W::Part as oer_chips_family_interrupt_table::InterruptSource>::SOURCE
                 != software_interrupt_source::<PortOf<B>>(SoftwareInterrupt::constant::<SWI>())
             {
                 panic!("the token is not this executor's software interrupt");
@@ -546,7 +546,7 @@ impl_executor_constructors!(3, Line3, own_line_3);
 pub fn wake_handler<
     B: Binding,
     const SWI: u8,
-    P: oer_espressif_interrupt_table::InterruptSource,
+    P: oer_chips_family_interrupt_table::InterruptSource,
 >(
     _: &mut P,
 ) {
@@ -563,17 +563,17 @@ pub fn wake_handler<
 /// of the tasks `T` names (its software interrupt, `FROM_CPU_INTR<N>`, whose
 /// line's interrupt part the entry holds): each run serves the executor's
 /// timers and signals and polls one round of its ready tasks. The entry's
-/// token states it ([`oer_espressif_interrupt_table::ExecutorEntry`]), and
+/// token states it ([`oer_chips_family_interrupt_table::ExecutorEntry`]), and
 /// [`InterruptExecutor::start`] binds only the entry whose handler is
 /// `Round<T>` for the tasks `T` it starts, checked at compile time. It is a
 /// type, never constructed.
 pub struct Round<T>(PhantomData<fn() -> T>);
 
-impl<T, P> oer_espressif_interrupt_table::ExecutorHandler<P> for Round<T>
+impl<T, P> oer_chips_family_interrupt_table::ExecutorHandler<P> for Round<T>
 where
     T: Tasks<Mode = InterruptMode>,
     T::Binding: Binding,
-    P: oer_espressif_interrupt_table::InterruptSource,
+    P: oer_chips_family_interrupt_table::InterruptSource,
 {
     fn handle(part: &mut P) {
         interrupt_handler::<T, P>(part);
@@ -583,7 +583,7 @@ where
 /// One run of the handler of the interrupt-mode executor of the tasks `T`.
 fn interrupt_handler<
     T: Tasks<Mode = InterruptMode>,
-    P: oer_espressif_interrupt_table::InterruptSource,
+    P: oer_chips_family_interrupt_table::InterruptSource,
 >(
     _: &mut P,
 ) where
@@ -602,7 +602,7 @@ fn interrupt_handler<
 
 /// One round of the interrupt-mode executor `swi`.
 fn round<B: Binding, T: Tasks<Binding = B, Mode = InterruptMode>>(swi: SoftwareInterrupt) {
-    use oer_espressif_interrupt_table::signal::service;
+    use oer_chips_family_interrupt_table::signal::service;
     if !swi.at(&INTERRUPT_MODE).load(Ordering::Acquire) {
         return;
     }
@@ -660,7 +660,7 @@ pub(crate) fn pend_task<B: Binding>(swi: SoftwareInterrupt) {
 }
 
 fn wait_for_work<B: Binding, T: Tasks<Binding = B>, const SWI: u8>() {
-    oer_riscv::interrupt_free(|| {
+    oer_portable_riscv::interrupt_free(|| {
         if WORK_PENDING.0[usize::from(SWI)].load(Ordering::Acquire) == 0
             && !READY[usize::from(SWI)].any()
         {

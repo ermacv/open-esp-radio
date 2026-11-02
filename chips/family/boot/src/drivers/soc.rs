@@ -1,7 +1,7 @@
 //! The existing SoC-init boundary, before watchdog takeover and brownout.
 use super::{access_control, cores, entropy};
 use crate::wait::{BootDeadline, WaitFailure};
-use oer_time::{Clock, Duration};
+use oer_portable_time::{Clock, Duration};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SocFailure {

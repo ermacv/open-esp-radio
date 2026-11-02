@@ -2,8 +2,8 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
-use oer_esp32s31_hal::types::MacTxQueueIndex;
+use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::types::MacTxQueueIndex;
 
 pub use crate::mac::tx_cost::TxContention;
 
@@ -17,10 +17,10 @@ extern crate alloc;
 #[cfg(any(test, feature = "test-support"))]
 use alloc::boxed::Box;
 
-pub use oer_esp32s31_hal::types::MacLegacyTxResponse;
-pub use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
+pub use oer_chips_esp32s31_hal::types::MacLegacyTxResponse;
+pub use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::types::{
     MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs, MacHeRate, MacHeTbTidLimit, MacHeTid,
     MacHeTxFormat, MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation,
     MacHtChannelWidth, MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate,
@@ -29,33 +29,33 @@ use oer_esp32s31_hal::types::{
     MacTxDetachOutcome, MacTxDetachReason, MacTxProtection, MacTxQueueDetached,
 };
 
-pub use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState;
+pub use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaState;
 #[cfg(any(test, feature = "test-support"))]
-use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage;
+use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorage;
 
-use oer_esp32s31_hal::ieee80211::dma::tx_storage::{
+use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::{
     PinnedTxDmaStorage, TxDmaAccess, TxDmaStorageError,
 };
-use oer_esp32s31_hal::memory::dma_static::PlacedTxLease;
-use oer_memory::PinnedDmaTxRadioLease;
+use oer_chips_esp32s31_hal::memory::dma_static::PlacedTxLease;
+use oer_portable_memory::PinnedDmaTxRadioLease;
 
 /// The buffer one TX descriptor publishes: a buffer of `B` bytes of a
 /// transmit pool placed in the DMA window, held by the radio.
 pub type TxBacking<const B: usize> = PlacedTxLease<PinnedDmaTxRadioLease<'static, B, 0, 0>>;
 
-use oer_ieee80211_contracts_port::TxStatus;
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_contracts_port::TxStatus;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
-pub use oer_ieee80211_wire::trigger::HeResourceUnit;
+pub use oer_protocols_ieee80211_wire::trigger::HeResourceUnit;
 
 use crate::mac::rate::low::{
     MacLowRateGateProbe, MacLowRateTransitionError, probe_phy_low_rate_gate,
 };
-use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
 
-use oer_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
+use oer_chips_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess};
 
-use oer_ieee80211_wire::{he::HeDcmConstellation, ht::HtDuplicateMcs32};
+use oer_protocols_ieee80211_wire::{he::HeDcmConstellation, ht::HtDuplicateMcs32};
 
 mod completion;
 mod cost;
@@ -237,7 +237,7 @@ pub trait TxHardware {
     fn ordinary_tx_queue_snapshot(
         &mut self,
         _queue: MacTxQueueIndex,
-    ) -> Option<oer_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
+    ) -> Option<oer_chips_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
         None
     }
     fn take_tx_completion(&mut self, queue: MacTxQueueIndex) -> Option<MacTxCompletionObservation>;
@@ -320,7 +320,7 @@ impl TxHardware for WifiMacHal<'_> {
     fn ordinary_tx_queue_snapshot(
         &mut self,
         queue: MacTxQueueIndex,
-    ) -> Option<oer_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
+    ) -> Option<oer_chips_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
         Some(WifiMacHal::ordinary_tx_queue_snapshot(self, queue))
     }
 
@@ -411,7 +411,7 @@ impl TxHardware for RadioAccess {
     fn ordinary_tx_queue_snapshot(
         &mut self,
         queue: MacTxQueueIndex,
-    ) -> Option<oer_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
+    ) -> Option<oer_chips_esp32s31_hal::types::MacOrdinaryTxQueueSnapshot> {
         Some(self.wifi_mac_hal().ordinary_tx_queue_snapshot(queue))
     }
 
@@ -462,9 +462,9 @@ pub struct TxCookie(pub u32);
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// # use oer_esp32s31_ieee80211_driver::mac::tx::{TxCompletion, TxCookie};
-/// # use oer_esp32s31_hal::types::MacTxCompletionObservation;
-/// # use oer_ieee80211_contracts_port::TxStatus;
+/// # use oer_chips_esp32s31_ieee80211_driver::mac::tx::{TxCompletion, TxCookie};
+/// # use oer_chips_esp32s31_hal::types::MacTxCompletionObservation;
+/// # use oer_protocols_ieee80211_contracts_port::TxStatus;
 /// fn forge(raw: MacTxCompletionObservation) -> TxCompletion {
 ///     TxCompletion { cookie: TxCookie(1), observation: raw, tx_status: TxStatus::Success }
 /// }
@@ -819,7 +819,7 @@ impl HtAmpduDensity {
     /// Decode bits 4:2 of the complete HT A-MPDU Parameters byte.
     pub const fn from_ampdu_parameters(parameters: u8) -> Self {
         Self::from_spacing_code(
-            oer_ieee80211_wire::ht::HtAmpduParameters::from_bytes([parameters])
+            oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([parameters])
                 .spacing()
                 .get(),
         )
@@ -827,7 +827,7 @@ impl HtAmpduDensity {
 
     /// Decode the three-bit Minimum MPDU Start Spacing code.
     pub const fn from_spacing_code(code: u8) -> Self {
-        match oer_ieee80211_wire::ht::HtAmpduSpacingCode::from_bytes([code])
+        match oer_protocols_ieee80211_wire::ht::HtAmpduSpacingCode::from_bytes([code])
             .spacing()
             .get()
         {
@@ -887,7 +887,7 @@ impl HtPeerAmpduParameters {
     pub const fn from_capability_byte(parameters: u8) -> Self {
         let density = HtAmpduDensity::from_ampdu_parameters(parameters);
         let maximum_aggregate_bytes =
-            match oer_ieee80211_wire::ht::HtAmpduParameters::from_bytes([parameters])
+            match oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([parameters])
                 .exponent()
                 .get()
             {
@@ -2043,7 +2043,7 @@ impl HeRate {
         }
         let minimum = self.minimum_ampdu_subframe_bytes(density) as u32;
         let Some(delimiters) =
-            oer_ieee80211_wire::ampdu::empty_delimiters(psdu_length as u32, minimum)
+            oer_protocols_ieee80211_wire::ampdu::empty_delimiters(psdu_length as u32, minimum)
         else {
             return None;
         };
@@ -2983,7 +2983,7 @@ Production builds cannot synthesize a DMA owner, on either host or chip:
 # fn panic(_: &core::panic::PanicInfo) -> ! {
 #     loop {}
 # }
-use oer_esp32s31_ieee80211_driver::mac::tx::TxSlot;
+use oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlot;
 let slot = TxSlot::<512>::new_model();
 ```
 
@@ -2997,8 +2997,8 @@ The production constructor consumes a pinned DMA allocation:
 # fn panic(_: &core::panic::PanicInfo) -> ! {
 #     loop {}
 # }
-use oer_esp32s31_hal::ieee80211::dma::tx_storage::PinnedTxDmaStorage;
-use oer_esp32s31_ieee80211_driver::mac::tx::{TxBacking, TxSlot};
+use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::PinnedTxDmaStorage;
+use oer_chips_esp32s31_ieee80211_driver::mac::tx::{TxBacking, TxSlot};
 fn slot(dma: PinnedTxDmaStorage<TxBacking<512>>) -> TxSlot<512> {
     TxSlot::from_dma(dma)
 }
@@ -3109,9 +3109,9 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// buffer extent returns the DMA binding error.
     ///
     /// ```
-    /// use oer_esp32s31_ieee80211_driver::mac::tx::TxSlot;
+    /// use oer_chips_esp32s31_ieee80211_driver::mac::tx::TxSlot;
     /// let slot = TxSlot::<512>::new_model()?;
-    /// # Ok::<(), oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorageError>(())
+    /// # Ok::<(), oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaStorageError>(())
     /// ```
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_model() -> Result<Self, TxDmaStorageError> {
@@ -3128,8 +3128,8 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_model_descriptor() -> Result<Self, TxDmaStorageError> {
         let storage = Box::leak(Box::new(TxDmaStorage::new()));
-        let dma = TxDmaStorage::pin::<oer_esp32s31_hal::ieee80211::dma::space::HostDma, _>(
-            oer_esp32s31_hal::memory::dma_static::Placed::host(storage),
+        let dma = TxDmaStorage::pin::<oer_chips_esp32s31_hal::ieee80211::dma::space::HostDma, _>(
+            oer_chips_esp32s31_hal::memory::dma_static::Placed::host(storage),
         )?;
         Ok(Self::from_dma(dma))
     }
@@ -3174,7 +3174,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     }
 
     /// Current descriptor ownership word for bounded diagnostics.
-    pub fn descriptor_word0(&self) -> oer_esp32s31_hal::layouts::WifiTxDmaDescriptorControl {
+    pub fn descriptor_word0(&self) -> oer_chips_esp32s31_hal::layouts::WifiTxDmaDescriptorControl {
         self.dma.descriptor_word0()
     }
 
@@ -3419,7 +3419,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
                         tx,
                         block_ack: ampdu::HtBlockAckObservation::new(
                             registers.block_ack_control(),
-                            oer_ieee80211_wire::sequence::SequenceNumber::from_low_bits(
+                            oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(
                                 registers.block_ack_starting_sequence(),
                             ),
                             registers.block_ack_bitmap(),

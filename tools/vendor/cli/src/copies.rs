@@ -12,13 +12,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use oer_analysis_blobray_application::in_process::{Executable, Limits};
-use oer_analysis_blobray_application::library::Assumptions;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_application::in_process::{Executable, Limits};
+use oer_tools_analysis_blobray_application::library::Assumptions;
+use oer_tools_analysis_blobray_domain::{
     ImageRegion, MmioAccess, MmioDiff, MmioFunctionChange, MmioFunctionState, MmioGap,
     MmioOperation, MmioStoredSource, MmioUncertainFunction,
 };
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AnalysisLimited, AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, OperationLimits,
     ReadOnlyWindow, WorkingMemory,
 };
@@ -121,7 +121,7 @@ fn copies(inputs: &[Input]) -> Result<BTreeMap<String, Vec<String>>> {
     let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for input in inputs {
         let (functions, _) =
-            oer_vendor_provenance::fingerprint::functions_and_symbols(&input.bytes)?;
+            oer_tools_vendor_provenance::fingerprint::functions_and_symbols(&input.bytes)?;
         for function in functions {
             let copy = format!("{}[{}]::{}", input.id, function.member, function.name);
             by_name.entry(function.name).or_default().push(copy);
@@ -158,10 +158,10 @@ fn members(
     input: &Input,
     budget: &Budget,
     resources: &std::cell::RefCell<Vec<OperationResources>>,
-) -> Result<BTreeMap<oer_analysis_riscv_model::ObjectId, String>> {
+) -> Result<BTreeMap<oer_tools_analysis_riscv_model::ObjectId, String>> {
     let memory = budget.memory()?;
     let mut control = budget.control();
-    let inventory = oer_analysis_blobray_application::captured::inventory(
+    let inventory = oer_tools_analysis_blobray_application::captured::inventory(
         &Executable::new(input.bytes.clone()),
         &memory,
         &mut control,
@@ -266,7 +266,7 @@ pub fn compare(
 ) -> Result<Report> {
     let resources = std::cell::RefCell::new(Vec::new());
     let library_copies = copies(libraries)?;
-    let decoder = oer_analysis_riscv_lift::RiscvDecoder;
+    let decoder = oer_tools_analysis_riscv_lift::RiscvDecoder;
     let named_gaps =
         |inputs: &[&Input], gaps: Vec<MmioGap>| -> Result<BTreeSet<(String, Option<String>)>> {
             let mut named = BTreeSet::new();
@@ -290,7 +290,7 @@ pub fn compare(
         let memory = budget.memory()?;
         let mut control = budget.control();
         let (diff, limited): (MmioDiff, _) =
-            oer_analysis_blobray_application::mmio_diff::mmio_diff(
+            oer_tools_analysis_blobray_application::mmio_diff::mmio_diff(
                 &[Executable::new(old.bytes.clone())],
                 &new.iter()
                     .map(|i| Executable::new(i.bytes.clone()))
@@ -338,7 +338,7 @@ pub fn compare(
     let mut image_copies = Vec::new();
     for image in images {
         let (functions, _) =
-            oer_vendor_provenance::fingerprint::functions_and_symbols(&image.bytes)?;
+            oer_tools_vendor_provenance::fingerprint::functions_and_symbols(&image.bytes)?;
         let mut names: BTreeMap<String, usize> = BTreeMap::new();
         for function in functions {
             *names.entry(function.name).or_default() += 1;
@@ -421,10 +421,10 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
     let mut roms = Vec::new();
     let mut libraries = Vec::new();
     let mut images = Vec::new();
-    for artifact in oer_pins_artifacts::artifacts::pinned(root, chip)? {
+    for artifact in oer_tools_pins_artifacts::artifacts::pinned(root, chip)? {
         let bytes = std::fs::read(&artifact.path)
             .map_err(|e| format!("{}: {e}", artifact.path.display()))?;
-        if !oer_analysis_elf::is_binary(&bytes) {
+        if !oer_tools_analysis_elf::is_binary(&bytes) {
             continue;
         }
         let input = Input {
@@ -434,7 +434,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         // A linked executable is a firmware image or the ROM; an archive,
         // fetched or built with a firmware, is a library.
         match (
-            oer_analysis_elf::Elf::executable(&input.bytes).is_ok(),
+            oer_tools_analysis_elf::Elf::executable(&input.bytes).is_ok(),
             artifact.firmware,
         ) {
             (true, true) => images.push(input),
@@ -442,9 +442,9 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
             (false, _) => libraries.push(input),
         }
     }
-    let unbuilt_images = oer_pins_artifacts::artifacts::unbuilt_firmware(root, chip)?;
+    let unbuilt_images = oer_tools_pins_artifacts::artifacts::unbuilt_firmware(root, chip)?;
     // The MMIO windows: every instance of the chip root.
-    let model = oer_registers_model::Chip::load(root, chip)?.model;
+    let model = oer_tools_registers_model::Chip::load(root, chip)?.model;
     let windows = model
         .instances()
         .iter()
@@ -457,7 +457,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     // The flash a linked image's rodata sits in is read-only at run time,
     // whatever its section flags say.
-    let read_only = match oer_chip_profile::Profile::load(root, chip)?.facts.memory {
+    let read_only = match oer_tools_chip_profile::Profile::load(root, chip)?.facts.memory {
         Some(memory) => vec![ReadOnlyWindow {
             start: memory.flash_xip.origin(),
             length: u64::from(memory.flash_xip.length()),
@@ -472,7 +472,7 @@ pub fn run(root: &Path, chip: &str, budget: &Budget) -> Result<()> {
         }
     };
     let mut cited: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for entry in oer_pins_artifacts::provenance::registered(root, chip)? {
+    for entry in oer_tools_pins_artifacts::provenance::registered(root, chip)? {
         cited.entry(entry.symbol.clone()).or_default().push(format!(
             "{}[{}]::{}",
             entry.artifact, entry.member, entry.symbol

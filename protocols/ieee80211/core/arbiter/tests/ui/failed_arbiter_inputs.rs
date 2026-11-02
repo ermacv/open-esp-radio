@@ -1,9 +1,9 @@
 #![no_std]
-use oer_ieee80211_core_arbiter::{
+use oer_protocols_ieee80211_core_arbiter::{
     Arbiter, ArbiterEnd, ChannelRequest, FailedArbiter, LeaseId, LeasePlace, PendingRetune, UpstreamFact,
 };
-use oer_ieee80211_contracts_port::Ieee80211Capabilities;
-use oer_time::Instant;
+use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+use oer_portable_time::Instant;
 
 pub fn start<'id, K: Ieee80211Capabilities>(mut arbiter: Arbiter<'id, K>) {
     let mut failed = arbiter.finish(ArbiterEnd::PortFailed);
@@ -54,7 +54,7 @@ pub fn ready<'id, K: Ieee80211Capabilities>(
 
 pub fn restart<'id, K: Ieee80211Capabilities>(
     mut failed: FailedArbiter<'id, K>,
-    channel: oer_ieee80211_contracts_port::SupportedChannel<K>,
+    channel: oer_protocols_ieee80211_contracts_port::SupportedChannel<K>,
 ) {
     #[cfg(ui_reject)]
     drop(failed.restart(channel)); // ui-error: E0599

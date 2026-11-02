@@ -2,7 +2,7 @@
 use core::mem::ManuallyDrop;
 
 use crate::{Entry, Error};
-use oer_riscv::clic::LineState;
+use oer_portable_riscv::clic::LineState;
 
 /// Numeric operation identity, safe to capture without reading cached text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

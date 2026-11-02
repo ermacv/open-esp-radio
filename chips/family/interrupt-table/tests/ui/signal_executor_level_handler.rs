@@ -1,4 +1,4 @@
-use oer_espressif_interrupt_table::signal::{
+use oer_chips_family_interrupt_table::signal::{
     FromExecutorLevel, FromHandler, FromTask, IrqSignal,
     host::{Deferred, Foreign},
 };

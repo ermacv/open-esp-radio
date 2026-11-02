@@ -11,7 +11,7 @@
 //! the queue ([`Console::publish`] drops it when the queue is full,
 //! [`Console::publish_reliably`] waits), and the one [`Console::run`] task
 //! frames and writes messages and notes in queue order. A note is a typed
-//! [`oer_diagnostics::Note`]; the console numbers it when it writes it, so
+//! [`oer_portable_diagnostics::Note`]; the console numbers it when it writes it, so
 //! the host sees a lost one and never a reordered one. The console formats
 //! no text.
 
@@ -26,9 +26,9 @@ use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex as AsyncMutex;
 use embedded_io_async::{Read, Write};
-use oer_diagnostics::{MAX_NOTE_LINE, Note, Written, emit_note};
-use oer_hil_protocol::base::{ImageKeySet, LinkHealth, Rejected};
-use oer_hil_protocol::{DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity};
+use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, Written, emit_note};
+use oer_protocols_hil_protocol::base::{ImageKeySet, LinkHealth, Rejected};
+use oer_protocols_hil_protocol::{DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity};
 
 use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
 
@@ -367,7 +367,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         };
         if tx.write_all(frame).await.is_ok() && tx.write_all(b"\r\n").await.is_ok() {
             self.sent_frames.fetch_add(1, Ordering::Relaxed);
-            if message.key == oer_hil_protocol::base::BootEvidence::KEY {
+            if message.key == oer_protocols_hil_protocol::base::BootEvidence::KEY {
                 platform.boot_evidence_written();
             }
             self.written

@@ -1,5 +1,5 @@
 #![no_std]
-use {oer_ieee80211_wire::ccmp::CcmpHeader, oer_ieee80211_core_upper_mac::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch}};
+use {oer_protocols_ieee80211_wire::ccmp::CcmpHeader, oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch}};
 
 pub fn publish(old: &mut CcmpRxReplayEpoch, current: &mut CcmpRxReplayEpoch, header: CcmpHeader) {
     let candidate = old

@@ -11,19 +11,19 @@ pub(crate) fn move_within(
     storage: &mut [u8],
     source: core::ops::Range<usize>,
     destination: usize,
-) -> Result<(), oer_wire::Error> {
+) -> Result<(), oer_portable_wire::Error> {
     let length = source
         .end
         .checked_sub(source.start)
-        .ok_or(oer_wire::Error::ValueOutOfRange)?;
+        .ok_or(oer_portable_wire::Error::ValueOutOfRange)?;
     let destination_end = destination
         .checked_add(length)
-        .ok_or(oer_wire::Error::LengthOverflow)?;
+        .ok_or(oer_portable_wire::Error::LengthOverflow)?;
     let required = source.end.max(destination_end);
     let remaining = storage.len();
     let mut region = storage
         .get_mut(source.start.min(destination)..required)
-        .ok_or(oer_wire::Error::Truncated {
+        .ok_or(oer_portable_wire::Error::Truncated {
             required,
             remaining,
         })?;
@@ -33,7 +33,7 @@ pub(crate) fn move_within(
         let gap = destination
             .abs_diff(source.start)
             .checked_sub(1)
-            .ok_or(oer_wire::Error::ValueOutOfRange)?;
+            .ok_or(oer_portable_wire::Error::ValueOutOfRange)?;
         while let Some((output, rest)) = region.split_last_mut() {
             let Some(&input) = rest.iter().rev().nth(gap) else {
                 break;
@@ -45,7 +45,7 @@ pub(crate) fn move_within(
         let gap = destination
             .abs_diff(source.start)
             .checked_sub(1)
-            .ok_or(oer_wire::Error::ValueOutOfRange)?;
+            .ok_or(oer_portable_wire::Error::ValueOutOfRange)?;
         while let Some((output, rest)) = region.split_first_mut() {
             let Some(&input) = rest.get(gap) else { break };
             *output = input;
@@ -110,7 +110,7 @@ impl<'a, I: Clone + Iterator<Item = Fragment<'a>>> FragmentPlan<I> {
     fn write(self, output: &mut [u8]) -> Result<usize, usize> {
         let required = self.length()?;
         let frame = output.get_mut(..required).ok_or(required)?;
-        let mut writer = oer_wire::Writer::new(frame);
+        let mut writer = oer_portable_wire::Writer::new(frame);
         for part in self.0 {
             writer.write(part.bytes()).map_err(|_| required)?;
         }
@@ -231,22 +231,22 @@ mod tests {
         let mut storage = original;
         assert_eq!(
             move_within(&mut storage, 0..1, usize::MAX),
-            Err(oer_wire::Error::LengthOverflow)
+            Err(oer_portable_wire::Error::LengthOverflow)
         );
         assert_eq!(
             move_within(&mut storage, core::ops::Range { start: 5, end: 3 }, 0),
-            Err(oer_wire::Error::ValueOutOfRange)
+            Err(oer_portable_wire::Error::ValueOutOfRange)
         );
         assert_eq!(
             move_within(&mut storage, 0..9, 0),
-            Err(oer_wire::Error::Truncated {
+            Err(oer_portable_wire::Error::Truncated {
                 required: 9,
                 remaining: 8
             })
         );
         assert_eq!(
             move_within(&mut storage, 0..2, 7),
-            Err(oer_wire::Error::Truncated {
+            Err(oer_portable_wire::Error::Truncated {
                 required: 9,
                 remaining: 8
             })

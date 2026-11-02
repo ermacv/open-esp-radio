@@ -1,6 +1,6 @@
 # ESP32-S31-Function-CoreBoard-1
 
-`oer-esp32s31-board` supplies the board's PSRAM window from generated
+`oer-chips-esp32s31-board` supplies the board's PSRAM window from generated
 `LAYOUT`, its antenna-gain setting and conducted-power limits.
 `BootstrapPsram` implements `AdoptsBootstrapMapping`: stage two records the
 bootstrap's mapping without writing PSRAM, cache or MMU registers.

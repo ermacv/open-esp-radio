@@ -1,7 +1,7 @@
 //! The boundary between a backend's aggregate publication and the core's
 //! retry owner: the completion facts a backend detaches, the decision it
 //! executes and the trait through which it asks.
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// Number of subframe positions carried by the port's `u32` retry/aging masks.
 pub const AMPDU_SUBFRAME_MASK_BITS: usize = u32::BITS as usize;
@@ -153,8 +153,8 @@ pub trait BackendAmpduRetry {
         &mut self,
         completion: BackendAmpduCompletion,
         subframes: u8,
-        now: oer_time::Instant,
+        now: oer_portable_time::Instant,
         operational: bool,
-        admitted: impl Fn(u8) -> Option<oer_time::Instant>,
+        admitted: impl Fn(u8) -> Option<oer_portable_time::Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError>;
 }

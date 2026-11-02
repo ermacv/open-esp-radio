@@ -5,13 +5,13 @@
 //! publication; WPA2 derivation and long-lived secret ownership remain in the
 //! protocol crate.
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
     owner::RadioAccess,
     types::{MacCcmpKeyIdentity, MacKeyInstallOutcome},
 };
 
-use oer_ieee80211_wire::ccmp::GroupKeyId;
+use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 
 use subtle::ConstantTimeEq;
 
@@ -32,8 +32,8 @@ pub trait CcmpKeyHardware {
     /// Apply the immutable interface association decision before key publication.
     fn configure_ccmp_association(
         &mut self,
-        interface: oer_esp32s31_hal::types::MacInterface,
-        mode: oer_esp32s31_hal::types::MacSppMode,
+        interface: oer_chips_esp32s31_hal::types::MacInterface,
+        mode: oer_chips_esp32s31_hal::types::MacSppMode,
     );
     fn install_sta_ccmp_entry(
         &mut self,
@@ -73,8 +73,8 @@ pub fn erase_lower_mac_keys(hardware: &mut impl CcmpKeyHardware) {
 impl CcmpKeyHardware for WifiMacHal<'_> {
     fn configure_ccmp_association(
         &mut self,
-        interface: oer_esp32s31_hal::types::MacInterface,
-        mode: oer_esp32s31_hal::types::MacSppMode,
+        interface: oer_chips_esp32s31_hal::types::MacInterface,
+        mode: oer_chips_esp32s31_hal::types::MacSppMode,
     ) {
         WifiMacHal::configure_ccmp_association(self, interface, mode);
     }
@@ -108,8 +108,8 @@ impl CcmpKeyHardware for WifiMacHal<'_> {
 impl CcmpKeyHardware for RadioAccess {
     fn configure_ccmp_association(
         &mut self,
-        interface: oer_esp32s31_hal::types::MacInterface,
-        mode: oer_esp32s31_hal::types::MacSppMode,
+        interface: oer_chips_esp32s31_hal::types::MacInterface,
+        mode: oer_chips_esp32s31_hal::types::MacSppMode,
     ) {
         self.wifi_mac_hal()
             .configure_ccmp_association(interface, mode);
@@ -250,7 +250,7 @@ pub struct ApPairwiseCcmpSlot {
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::mac::crypto::ApGroupKeyId;
+/// use oer_chips_esp32s31_ieee80211_driver::mac::crypto::ApGroupKeyId;
 /// assert!(ApGroupKeyId::new(0).is_none());
 /// assert_eq!(ApGroupKeyId::new(1).map(ApGroupKeyId::get), Some(1));
 /// assert_eq!(ApGroupKeyId::new(3).map(ApGroupKeyId::get), Some(3));
@@ -428,7 +428,7 @@ pub fn install_sta_pairwise_ccmp<H: CcmpKeyHardware>(
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::mac::crypto::{CcmpKeyHardware, install_sta_group_ccmp};
+/// use oer_chips_esp32s31_ieee80211_driver::mac::crypto::{CcmpKeyHardware, install_sta_group_ccmp};
 /// fn install<H: CcmpKeyHardware>(hardware: &mut H) {
 ///     let _ = install_sta_group_ccmp(hardware, 4_u8, &[0; 16]);
 /// }
@@ -442,8 +442,8 @@ pub fn install_sta_pairwise_ccmp<H: CcmpKeyHardware>(
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::mac::crypto::{CcmpKeyHardware, install_sta_group_ccmp};
-/// use oer_ieee80211_wire::ccmp::GroupKeyId;
+/// use oer_chips_esp32s31_ieee80211_driver::mac::crypto::{CcmpKeyHardware, install_sta_group_ccmp};
+/// use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// fn install<H: CcmpKeyHardware>(hardware: &mut H, key_id: GroupKeyId) {
 ///     let _ = install_sta_group_ccmp(hardware, key_id, &[0; 16]);
 /// }
@@ -521,8 +521,8 @@ pub fn install_ap_pairwise_ccmp<H: CcmpKeyHardware>(
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::mac::crypto::{CcmpKeyHardware, install_ap_group_ccmp};
-/// use oer_ieee80211_wire::ccmp::GroupKeyId;
+/// use oer_chips_esp32s31_ieee80211_driver::mac::crypto::{CcmpKeyHardware, install_ap_group_ccmp};
+/// use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// fn install<H: CcmpKeyHardware>(hardware: &mut H, key_id: GroupKeyId) {
 ///     let _ = install_ap_group_ccmp(hardware, key_id, &[0; 16]);
 /// }
@@ -536,7 +536,7 @@ pub fn install_ap_pairwise_ccmp<H: CcmpKeyHardware>(
 /// # fn panic(_: &core::panic::PanicInfo) -> ! {
 /// #     loop {}
 /// # }
-/// use oer_esp32s31_ieee80211_driver::mac::crypto::{ApGroupKeyId, CcmpKeyHardware, install_ap_group_ccmp};
+/// use oer_chips_esp32s31_ieee80211_driver::mac::crypto::{ApGroupKeyId, CcmpKeyHardware, install_ap_group_ccmp};
 /// fn install<H: CcmpKeyHardware>(hardware: &mut H, key_id: ApGroupKeyId) {
 ///     let _ = install_ap_group_ccmp(hardware, key_id, &[0; 16]);
 /// }

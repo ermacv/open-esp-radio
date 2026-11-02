@@ -1,7 +1,7 @@
 #![no_std]
-use oer_espressif_executor::{Binding, InterruptExecutor, Round, Tasks, task::Interrupt};
-use oer_espressif_interrupt_table::{Controller, ExecutorEntry, InterruptSource, Router};
-use oer_espressif_staged_runtime::Hart;
+use oer_chips_family_executor::{Binding, InterruptExecutor, Round, Tasks, task::Interrupt};
+use oer_chips_family_interrupt_table::{Controller, ExecutorEntry, InterruptSource, Router};
+use oer_chips_family_staged_runtime::Hart;
 
 /// An interrupt-mode executor starts only the task set whose round its
 /// entry's handler is: the entry of `Polled`'s round starts `Polled`, never

@@ -311,7 +311,7 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
         ];
         let original = arguments.clone();
         let status = link(&mut arguments, &[], Some(&specification), |arguments| {
-            let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+            let result = std::process::Command::new(oer_tools_os_toolchain::lld().unwrap())
                 .args(arguments)
                 .output()
                 .unwrap();
@@ -327,7 +327,7 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
         assert_eq!(arguments, original);
         let bytes = fs::read(&output).unwrap();
         assert_eq!(
-            oer_analysis_elf::Elf::parse(&bytes)
+            oer_tools_analysis_elf::Elf::parse(&bytes)
                 .unwrap()
                 .address("_start"),
             Some(0x20000000)
@@ -342,7 +342,7 @@ fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
     for (chip, expected) in [("esp32s31", vec![(0, 4096), (1, 1024)])] {
         let directory = tempdir();
         let root = directory.path();
-        for (path, text) in oer_espressif_facts::tracked::FILES {
+        for (path, text) in oer_chips_family_facts::tracked::FILES {
             let path = root.join(path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, text).unwrap();

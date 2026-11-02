@@ -22,7 +22,7 @@
 //! before it enables the peripheral's interrupt.
 //!
 //! ```compile_fail,E0308
-//! # oer_espressif_interrupt_table::__fake_table!();
+//! # oer_chips_family_interrupt_table::__fake_table!();
 //! # let mut router = fake_router::<0>();
 //! let tokens = Interrupts::take().unwrap();
 //! // The timer's entry binds the timer's part, not the radio's.
@@ -30,7 +30,7 @@
 //! ```
 //!
 //! ```compile_fail,E0382
-//! # oer_espressif_interrupt_table::__fake_table!();
+//! # oer_chips_family_interrupt_table::__fake_table!();
 //! # let mut router = fake_router::<0>();
 //! # let tokens = Interrupts::take().unwrap();
 //! // A part moves into its one binding.
@@ -40,14 +40,14 @@
 //! ```
 //!
 //! ```compile_fail,E0423
-//! # oer_espressif_interrupt_table::__fake_table!();
-//! fn enable_timer_interrupt(_bound: &oer_espressif_interrupt_table::Bound<TimerToken>) {}
+//! # oer_chips_family_interrupt_table::__fake_table!();
+//! fn enable_timer_interrupt(_bound: &oer_chips_family_interrupt_table::Bound<TimerToken>) {}
 //! // Only a binding makes the proof the interrupt's enable takes.
-//! enable_timer_interrupt(&oer_espressif_interrupt_table::Bound { _part: core::marker::PhantomData });
+//! enable_timer_interrupt(&oer_chips_family_interrupt_table::Bound { _part: core::marker::PhantomData });
 //! ```
 //!
 //! ```compile_fail,E0382
-//! # oer_espressif_interrupt_table::__fake_table!();
+//! # oer_chips_family_interrupt_table::__fake_table!();
 //! // A token is unique: it is neither `Copy` nor `Clone`.
 //! let tokens = Interrupts::take().unwrap();
 //! let first = tokens.timer;
@@ -57,11 +57,11 @@
 //! The same fake binds its own part with its own token:
 //!
 //! ```
-//! # oer_espressif_interrupt_table::__fake_table!();
+//! # oer_chips_family_interrupt_table::__fake_table!();
 //! # let mut router = fake_router::<0>();
 //! let tokens = Interrupts::take().unwrap();
 //! let bound = router.bind(tokens.timer, TimerIrq::default()).unwrap();
-//! fn enable_timer_interrupt(_bound: &oer_espressif_interrupt_table::Bound<TimerToken>) {}
+//! fn enable_timer_interrupt(_bound: &oer_chips_family_interrupt_table::Bound<TimerToken>) {}
 //! enable_timer_interrupt(&bound);
 //! ```
 #![no_std]
@@ -74,7 +74,7 @@ pub use router::{Bound, Controller, Error, EventAuthority, Router, Silent};
 
 pub mod signal;
 
-pub use oer_mmio::{InterruptSource, InterruptSources};
+pub use oer_portable_mmio::{InterruptSource, InterruptSources};
 
 /// What an entry's handler may do. The image gate checks each interrupt
 /// context's code by the classes of its entries; [`interrupt_table!`] checks
@@ -166,7 +166,7 @@ pub trait Entry: Sized {
     fn storage() -> &'static static_cell::StaticCell<Self::Part>;
     /// The cell the entry's handler borrows the part from.
     #[doc(hidden)]
-    fn cell() -> &'static oer_memory::HandlerCell<Self::Part>;
+    fn cell() -> &'static oer_portable_memory::HandlerCell<Self::Part>;
 }
 
 /// The handler of a [`Class::Executor`] entry, named by type: one round of
@@ -182,22 +182,22 @@ pub trait ExecutorHandler<P> {
 /// implements it with the handler type the entry names.
 ///
 /// ```
-/// # oer_espressif_interrupt_table::__fake_table!();
-/// fn polls<W: oer_espressif_interrupt_table::ExecutorEntry<Handler = OnExecutor>>() {}
+/// # oer_chips_family_interrupt_table::__fake_table!();
+/// fn polls<W: oer_chips_family_interrupt_table::ExecutorEntry<Handler = OnExecutor>>() {}
 /// polls::<RadioToken>();
 /// ```
 ///
 /// ```compile_fail,E0277
-/// # oer_espressif_interrupt_table::__fake_table!();
-/// fn polls<W: oer_espressif_interrupt_table::ExecutorEntry>() {}
+/// # oer_chips_family_interrupt_table::__fake_table!();
+/// fn polls<W: oer_chips_family_interrupt_table::ExecutorEntry>() {}
 /// // A hardware entry runs no executor.
 /// polls::<TimerToken>();
 /// ```
 ///
 /// ```compile_fail,E0573
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_radio(_: &mut RadioIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
@@ -277,10 +277,10 @@ pub struct Lines {
 /// token, handler symbol, reason and table entry.
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_radio(_: &mut RadioIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
@@ -291,10 +291,10 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_radio(_: &mut RadioIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
@@ -305,9 +305,9 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
@@ -317,10 +317,10 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_radio(_: &mut RadioIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; }
@@ -331,10 +331,10 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_radio(_: &mut RadioIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -345,10 +345,10 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_again(_: &mut TimerIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -363,14 +363,14 @@ pub struct Lines {
 /// names one of them:
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_pair(_: &mut PairIrq) {}
 /// # pub fn on_seven(_: &mut SevenIrq) {}
 /// pub struct SevenIrq;
-/// impl oer_espressif_interrupt_table::InterruptSource for SevenIrq {
+/// impl oer_chips_family_interrupt_table::InterruptSource for SevenIrq {
 ///     const SOURCE: u16 = 7;
 /// }
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -381,13 +381,13 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_twice(_: &mut TwiceIrq) {}
 /// pub struct TwiceIrq;
-/// impl oer_espressif_interrupt_table::InterruptSources for TwiceIrq {
+/// impl oer_chips_family_interrupt_table::InterruptSources for TwiceIrq {
 ///     const SOURCES: &'static [u16] = &[4, 4];
 /// }
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -397,9 +397,9 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -409,9 +409,9 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; unused: 9; }
@@ -421,9 +421,9 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -433,9 +433,9 @@ pub struct Lines {
 /// ```
 ///
 /// ```compile_fail,E0308
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_radio(_: &mut RadioIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio: 3; }
@@ -448,12 +448,12 @@ pub struct Lines {
 /// beside the executor, compile:
 ///
 /// ```
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// # pub fn on_timer(_: &mut TimerIrq) {}
 /// # pub fn on_radio(_: &mut RadioIrq) {}
 /// # pub fn on_absent(_: &mut AbsentIrq) {}
 /// # pub fn on_pair(_: &mut PairIrq) {}
-/// oer_espressif_interrupt_table::interrupt_table! {
+/// oer_chips_family_interrupt_table::interrupt_table! {
 ///     lines: FAKE_LINES,
 ///     handler_attributes: [];
 ///     contexts { radio_executor: 2; radio: 3; }
@@ -606,27 +606,27 @@ macro_rules! interrupt_table {
 /// or one member lists twice, fails to compile.
 ///
 /// ```
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// /// One handler's timer and radio banks together.
 /// pub struct RadioAndTimer {
 ///     pub timer: TimerIrq,
 ///     pub radio: RadioIrq,
 /// }
-/// impl oer_espressif_interrupt_table::InterruptSources for RadioAndTimer {
+/// impl oer_chips_family_interrupt_table::InterruptSources for RadioAndTimer {
 ///     const SOURCES: &'static [u16] =
-///         oer_espressif_interrupt_table::interrupt_sources![TimerIrq, RadioIrq, PairIrq];
+///         oer_chips_family_interrupt_table::interrupt_sources![TimerIrq, RadioIrq, PairIrq];
 /// }
-/// assert_eq!(<RadioAndTimer as oer_espressif_interrupt_table::InterruptSources>::SOURCES, [3, 5, 4, 7]);
+/// assert_eq!(<RadioAndTimer as oer_chips_family_interrupt_table::InterruptSources>::SOURCES, [3, 5, 4, 7]);
 /// ```
 ///
 /// ```compile_fail,E0080
-/// # oer_espressif_interrupt_table::__fake_parts!();
+/// # oer_chips_family_interrupt_table::__fake_parts!();
 /// pub struct Twice;
-/// impl oer_espressif_interrupt_table::InterruptSources for Twice {
+/// impl oer_chips_family_interrupt_table::InterruptSources for Twice {
 ///     // The timer's source twice.
-///     const SOURCES: &'static [u16] = oer_espressif_interrupt_table::interrupt_sources![TimerIrq, TimerIrq];
+///     const SOURCES: &'static [u16] = oer_chips_family_interrupt_table::interrupt_sources![TimerIrq, TimerIrq];
 /// }
-/// # let _ = <Twice as oer_espressif_interrupt_table::InterruptSources>::SOURCES;
+/// # let _ = <Twice as oer_chips_family_interrupt_table::InterruptSources>::SOURCES;
 /// ```
 #[macro_export]
 macro_rules! interrupt_sources {
@@ -722,8 +722,8 @@ macro_rules! __class {
 pub mod __private {
     use crate::{Binding, Class, Lines};
 
-    pub use oer_memory::{HandlerCell, link_fn};
-    pub use oer_riscv::clic;
+    pub use oer_portable_memory::{HandlerCell, link_fn};
+    pub use oer_portable_riscv::clic;
     pub use static_cell::StaticCell;
 
     /// A type-specific handler/cell mapping. No conversion between entries.
@@ -756,11 +756,11 @@ pub mod __private {
     )]
     // SAFETY: the sole table symbol is an immutable slice of Binding with
     // the repr(C) layout checked above; its export checks this exact type.
-    unsafe impl oer_memory::LinkSlot for InterruptTableSlot {
+    unsafe impl oer_portable_memory::LinkSlot for InterruptTableSlot {
         type Value = &'static [Binding];
-        const NAME: oer_memory::SlotName =
-            oer_memory::SlotName(&[oer_memory::NamePart::Text("__OER_INTERRUPT_TABLE")]);
-        const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Static;
+        const NAME: oer_portable_memory::SlotName =
+            oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text("__OER_INTERRUPT_TABLE")]);
+        const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Static;
     }
     pub enum InterruptHandlerSlot<const H: u8, const L: u8> {}
     #[allow(
@@ -769,15 +769,15 @@ pub mod __private {
     )]
     // SAFETY: each hart/line names one safe C fn() vector handler. The table
     // macro emits it once, and the export checks both indices and signature.
-    unsafe impl<const H: u8, const L: u8> oer_memory::LinkSlot for InterruptHandlerSlot<H, L> {
+    unsafe impl<const H: u8, const L: u8> oer_portable_memory::LinkSlot for InterruptHandlerSlot<H, L> {
         type Value = extern "C" fn();
-        const NAME: oer_memory::SlotName = oer_memory::SlotName(&[
-            oer_memory::NamePart::Text("__oer_interrupt_h"),
-            oer_memory::NamePart::Decimal(H),
-            oer_memory::NamePart::Text("_l"),
-            oer_memory::NamePart::Decimal(L),
+        const NAME: oer_portable_memory::SlotName = oer_portable_memory::SlotName(&[
+            oer_portable_memory::NamePart::Text("__oer_interrupt_h"),
+            oer_portable_memory::NamePart::Decimal(H),
+            oer_portable_memory::NamePart::Text("_l"),
+            oer_portable_memory::NamePart::Decimal(L),
         ]);
-        const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Function;
+        const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Function;
     }
     pub enum ExemptionSlot<const H: u8, const L: u8, const N: usize> {}
     #[allow(
@@ -786,17 +786,17 @@ pub mod __private {
     )]
     // SAFETY: each reason symbol is immutable bytes for its hart/line, of
     // exactly N bytes. Its export checks the complete name and array type.
-    unsafe impl<const H: u8, const L: u8, const N: usize> oer_memory::LinkSlot
+    unsafe impl<const H: u8, const L: u8, const N: usize> oer_portable_memory::LinkSlot
         for ExemptionSlot<H, L, N>
     {
         type Value = [u8; N];
-        const NAME: oer_memory::SlotName = oer_memory::SlotName(&[
-            oer_memory::NamePart::Text("__OER_INTERRUPT_EXEMPT___oer_interrupt_h"),
-            oer_memory::NamePart::Decimal(H),
-            oer_memory::NamePart::Text("_l"),
-            oer_memory::NamePart::Decimal(L),
+        const NAME: oer_portable_memory::SlotName = oer_portable_memory::SlotName(&[
+            oer_portable_memory::NamePart::Text("__OER_INTERRUPT_EXEMPT___oer_interrupt_h"),
+            oer_portable_memory::NamePart::Decimal(H),
+            oer_portable_memory::NamePart::Text("_l"),
+            oer_portable_memory::NamePart::Decimal(L),
         ]);
-        const KIND: oer_memory::SlotKind = oer_memory::SlotKind::Static;
+        const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Static;
     }
 
     /// One entry as the table's rules and its image layout see it.

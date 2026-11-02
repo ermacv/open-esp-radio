@@ -1,15 +1,15 @@
 # IEEE 802.11 backend conformance
 
-`oer-ieee80211-testing-conformance`: the shared conformance suite of the
+`oer-protocols-ieee80211-testing-conformance`: the shared conformance suite of the
 [IEEE 802.11 lower-MAC port](../../contracts/port/README.md). It is a testing
 package: a backend takes it as a test dependency, the reference model
-(`oer-ieee80211-testing-model`, itself a testing package) as a normal one, and
-no product package depends on it (`oer-test-layers`). It takes the port, the
+(`oer-protocols-ieee80211-testing-model`, itself a testing package) as a normal one, and
+no product package depends on it (`oer-tools-test-layers`). It takes the port, the
 wire formats and portable support alone.
 
 Backend tests implement its ownership, publication-barrier, configuration, GTK and outcome
-harness traits; they need no dependency on `oer-ieee80211-runtime`. The model
-in `oer-ieee80211-testing-model` runs the same runners with virtual time. Traces contain observations
+harness traits; they need no dependency on `oer-protocols-ieee80211-runtime`. The model
+in `oer-protocols-ieee80211-testing-model` runs the same runners with virtual time. Traces contain observations
 from actual submitted/returned owners, publication observers and event streams;
 expected identities cannot substitute for observations.
 
@@ -41,7 +41,7 @@ backend progression and observation at the specified boundaries.
 The suite adds no allocator or executor dependency. Harness associated types
 select trace storage through `AsRef<[T]>`: host fixtures use `Vec`, and an image
 can use arrays or bounded collections. `BarrierHarness` also selects frame and
-retry storage. GTK checks take an independent `oer_time::Timer` to bound the
+retry storage. GTK checks take an independent `oer_portable_time::Timer` to bound the
 whole fixture, including a backend that never delivers its terminal; model
 fixtures pass a virtual timer. A standalone consumer in `tests/conformance.rs`
 exercises runner selection and negative verifiers with arrays and `heapless`.

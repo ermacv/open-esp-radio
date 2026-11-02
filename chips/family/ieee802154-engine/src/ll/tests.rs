@@ -1,7 +1,7 @@
 //! Accessor sequences are independent expectations read from the pinned
 //! ESP-IDF driver sources, not snapshots of this module's output.
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
     Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
@@ -9,7 +9,7 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
-use oer_ieee802154_port::RadioOperation;
+use oer_protocols_ieee802154_port::RadioOperation;
 use std::{vec, vec::Vec};
 
 use crate::{
@@ -373,5 +373,5 @@ fn sec_clear_disables_transmit_security() {
 /// The priorities the vendor table resolves for the driver's default
 /// operations (idle 1, TX/RX 3, timed TX/RX 8, ACK 8).
 fn vendor_priorities() -> Ieee802154CoexPriorities {
-    Ieee802154CoexPriorities::resolve(&oer_espressif_coex::CoexPtiTable::VENDOR)
+    Ieee802154CoexPriorities::resolve(&oer_chips_family_coex::CoexPtiTable::VENDOR)
 }

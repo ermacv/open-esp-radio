@@ -1,18 +1,18 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_core_security_rsn::{
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_core_security_rsn::{
     bip::BipReceiver, frames::RsnIgtk, management_ccmp::ManagementCcmpReceiver,
 };
-use oer_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_protocols_ieee80211_wire::{
     address::{Bssid, OwnAddress},
     frame::{DecodedHeader, FrameControlFields, ManagementSubtype},
     management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
     management_protection::SaQuery,
     sequence::SequenceControl,
 };
-use oer_time::Instant;
+use oer_portable_time::Instant;
 
 use crate::sa_query::{SaQueryStep, StationSaQuery};
 
@@ -20,7 +20,7 @@ use crate::sa_query::{SaQueryStep, StationSaQuery};
 pub(super) enum ManagementEvent {
     Disconnect(u16),
     Query(SaQuery),
-    BlockAck(oer_ieee80211_wire::block_ack::frame::BlockAckAction),
+    BlockAck(oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction),
 }
 
 pub(super) struct ManagementProtection {
@@ -52,7 +52,7 @@ impl ManagementProtection {
 
     /// Metadata claiming integrity never bypasses CCMP/BIP verification,
     /// which runs on `engine`; a refusal drops the frame like a MIC failure.
-    pub(super) fn receive<E: oer_crypto::block::Aes128Engine>(
+    pub(super) fn receive<E: oer_portable_crypto::block::Aes128Engine>(
         &mut self,
         engine: &mut E,
         frame: &[u8],
@@ -106,7 +106,7 @@ impl ManagementProtection {
             (_, true) if !group => SaQuery::parse(body)
                 .map(ManagementEvent::Query)
                 .or_else(|| {
-                    oer_ieee80211_wire::block_ack::frame::parse_block_ack_action(body)
+                    oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(body)
                         .map(ManagementEvent::BlockAck)
                 }),
             _ => None,

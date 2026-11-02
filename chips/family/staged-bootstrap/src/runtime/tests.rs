@@ -1,5 +1,5 @@
 use super::*;
-use oer_espressif_staged_layout::{Region, stage_two};
+use oer_chips_family_staged_layout::{Region, stage_two};
 use std::vec::Vec;
 
 const LAYOUT: Layout = Layout {
@@ -161,7 +161,7 @@ fn a_short_or_unaligned_psram_region_is_rejected_without_writing() {
 }
 #[test]
 fn boot_failure_records_retain_the_typed_density_in_bytes() {
-    use oer_espressif_boot::{BootFailure, psram::PsramFailure};
+    use oer_chips_family_boot::{BootFailure, psram::PsramFailure};
 
     assert_eq!(
         boot_failure_record(BootFailure::Psram(PsramFailure::DensityMismatch {
@@ -177,7 +177,7 @@ fn boot_failure_records_retain_the_typed_density_in_bytes() {
 
 #[test]
 fn boot_failure_records_preserve_the_named_wait() {
-    use oer_espressif_boot::{BootFailure, WaitFailure};
+    use oer_chips_family_boot::{BootFailure, WaitFailure};
 
     assert_eq!(
         boot_failure_record(BootFailure::Wait(WaitFailure::TimedOut("spi-command"))),
@@ -187,7 +187,7 @@ fn boot_failure_records_preserve_the_named_wait() {
 
 #[test]
 fn lp_fast_readback_failure_records_keep_both_selector_codes() {
-    use oer_espressif_boot::ClockFailure;
+    use oer_chips_family_boot::ClockFailure;
 
     for observed in [0, 2, 3] {
         assert_eq!(
@@ -205,7 +205,7 @@ fn lp_fast_readback_failure_records_keep_both_selector_codes() {
     }
 }
 
-fn boot_failure_record(error: oer_espressif_boot::BootFailure) -> std::string::String {
+fn boot_failure_record(error: oer_chips_family_boot::BootFailure) -> std::string::String {
     let mut bytes = Vec::new();
     super::BootFailureRecord(error).write(|chunk| bytes.extend_from_slice(chunk));
     std::string::String::from_utf8(bytes).expect("ASCII boot failure")
@@ -213,7 +213,7 @@ fn boot_failure_record(error: oer_espressif_boot::BootFailure) -> std::string::S
 
 #[test]
 fn xip_and_scratch_failures_keep_their_typed_reason_and_full_width_bounds() {
-    use oer_espressif_boot::{BootFailure, FlashFailure};
+    use oer_chips_family_boot::{BootFailure, FlashFailure};
     assert_eq!(
         boot_failure_record(BootFailure::Flash(FlashFailure::XipOutside {
             index: usize::MAX,

@@ -1,8 +1,8 @@
 //! P2-owned driver and caller-backed local model registration.
 
 use super::*;
-use oer_ieee80211_contracts_port::{LowerMacEvent, LowerMacTerminal};
-use oer_radio_port::{DisableEnd, StopDeadline};
+use oer_protocols_ieee80211_contracts_port::{LowerMacEvent, LowerMacTerminal};
+use oer_protocols_radio_port::{DisableEnd, StopDeadline};
 
 type CompositionIdentity<Id, C, X> = PhantomData<fn(Id, C, X) -> (Id, C, X)>;
 
@@ -121,17 +121,17 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
 {
     type Vacant = ModelVacant<Id, C, X>;
     type Pools = (
-        oer_ieee80211_contracts_port::ArbiterPool,
-        oer_ieee80211_contracts_port::TransmitPool<ModelTickets, MODEL_TICKETS>,
-        oer_radio_port::Slots<ModelSmall, MODEL_SMALL_BUFFERS>,
-        oer_radio_port::Slots<ModelLarge, MODEL_LARGE_BUFFERS>,
-        oer_radio_port::Slots<ConnectionEpochKind, 1>,
+        oer_protocols_ieee80211_contracts_port::ArbiterPool,
+        oer_protocols_ieee80211_contracts_port::TransmitPool<ModelTickets, MODEL_TICKETS>,
+        oer_protocols_radio_port::Slots<ModelSmall, MODEL_SMALL_BUFFERS>,
+        oer_protocols_radio_port::Slots<ModelLarge, MODEL_LARGE_BUFFERS>,
+        oer_protocols_radio_port::Slots<ConnectionEpochKind, 1>,
         ModelAssociationPool<Station>,
         ModelAssociationPool<AccessPoint>,
         ModelBlockAckPool,
-        oer_radio_port::Slots<ModelGroupPermission<Station>, 1>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
         (
-            oer_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
             InterfaceCommandPool<Station>,
             InterfaceCommandPool<AccessPoint>,
         ),
@@ -236,7 +236,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -313,7 +313,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             || held.rx_out.get() != 0
             || held.network.held() != 0
         {
-            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         self.channel = invocation.channel.get();
@@ -338,7 +338,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
 }
 #[cfg(any(test, feature = "test-support"))]
 impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext>
-    oer_radio_port::conformance::registration::MockCleanup<Id> for ModelBackend<Id, C, X>
+    oer_protocols_radio_port::conformance::registration::MockCleanup<Id> for ModelBackend<Id, C, X>
 {
     fn abandon<'s>(
         &mut self,
@@ -370,7 +370,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotBodyOwner<
     fn lend<'p, 's>(
         frontend: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+    ) -> Result<Self::Body<'p>, oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -604,8 +604,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> LowerMacBacken
 {
     type Caps = C;
     const TX_QUEUE_DEPTH: core::num::NonZeroU8 = MODEL_TX_QUEUE_DEPTH;
-    const PUBLICATION_BOUND: oer_time::Duration = MODEL_PUBLICATION_BOUND;
-    const GROUP_COMMAND_BOUND: oer_time::Duration = MODEL_GROUP_COMMAND_BOUND;
+    const PUBLICATION_BOUND: oer_portable_time::Duration = MODEL_PUBLICATION_BOUND;
+    const GROUP_COMMAND_BOUND: oer_portable_time::Duration = MODEL_GROUP_COMMAND_BOUND;
 }
 
 impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> ModelSlotOwner<Id>
@@ -625,17 +625,17 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> ModelSlotOwner
 }
 
 impl<B: ModelComposition> ModelQueues<B> {
-    fn prepared(backing: &mut Option<Self>) -> Result<&mut Self, oer_radio_port::SlotInitError> {
+    fn prepared(backing: &mut Option<Self>) -> Result<&mut Self, oer_protocols_radio_port::SlotInitError> {
         backing
             .as_mut()
-            .ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)
+            .ok_or(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)
     }
 }
 impl<B: ModelComposition> ModelResources<'static, B> {
-    fn take_from(backing: &mut Option<Self>) -> Result<Self, oer_radio_port::SlotInitError> {
+    fn take_from(backing: &mut Option<Self>) -> Result<Self, oer_protocols_radio_port::SlotInitError> {
         backing
             .take()
-            .ok_or(oer_radio_port::SlotInitError::MissingResource(
+            .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
                 "model resources",
             ))
     }
@@ -644,13 +644,13 @@ impl<B: ModelComposition> ModelResources<'static, B> {
 mod construction_tests {
     use super::*;
     enum Declaration {}
-    type Backend = ModelBackend<oer_radio_port::StaticId<Declaration>>;
+    type Backend = ModelBackend<oer_protocols_radio_port::StaticId<Declaration>>;
     #[test]
     fn unprepared_backing_returns_a_typed_error_without_minting_endpoints() {
         let mut backing: Option<ModelQueues<Backend>> = None;
         assert!(matches!(
             ModelQueues::prepared(&mut backing),
-            Err(oer_radio_port::SlotInitError::QueuesUnprepared)
+            Err(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)
         ));
         assert!(backing.is_none());
     }
@@ -659,7 +659,7 @@ mod construction_tests {
         let mut backing: Option<ModelResources<'static, Backend>> = None;
         assert!(matches!(
             ModelResources::take_from(&mut backing),
-            Err(oer_radio_port::SlotInitError::MissingResource(
+            Err(oer_protocols_radio_port::SlotInitError::MissingResource(
                 "model resources"
             ))
         ));

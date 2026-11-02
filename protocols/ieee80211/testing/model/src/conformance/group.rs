@@ -1,10 +1,10 @@
 //! Healthy GTK progress observed through actual terminals and disable drain.
 use super::*;
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_testing_conformance::group_keys::{
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_testing_conformance::group_keys::{
     Completion, Mutation, Owners, ProgressCase, ProgressTrace, Timing,
 };
-use oer_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
+use oer_protocols_ieee80211_wire::{ccmp::GroupKeyId, security::Spp};
 pub type GroupTrace = ProgressTrace<Vec<Completion>, Vec<Owners>>;
 mod published;
 

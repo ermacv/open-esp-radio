@@ -11,8 +11,8 @@ error[E0308]: mismatched types
   |                   |
   |                   arguments to this method are incorrect
   |
-  = note: expected reference `&Session<'_, Root<A>, oer_bluetooth_le_port::Idle>`
-             found reference `&Session<'_, Root<B>, oer_bluetooth_le_port::Idle>`
+  = note: expected reference `&Session<'_, Root<A>, oer_protocols_bluetooth_le_port::Idle>`
+             found reference `&Session<'_, Root<B>, oer_protocols_bluetooth_le_port::Idle>`
   = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
   = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
 note: method defined here

@@ -1,8 +1,8 @@
 use core::cell::{Cell, RefCell};
 use std::{vec, vec::Vec};
 
-use oer_time::{Clock, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Instant};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 

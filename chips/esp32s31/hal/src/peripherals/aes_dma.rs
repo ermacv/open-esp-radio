@@ -12,9 +12,9 @@
 //! reached through the L1 cache, so the placed storage needs no cache
 //! maintenance.
 
-use oer_esp32s31_pac::{axi_dma, hp_sys_clkrst, ownership::AxiDmaPeripherals};
-use oer_memory::DmaBytes;
-use oer_mmio::Bits;
+use oer_chips_esp32s31_pac::{axi_dma, hp_sys_clkrst, ownership::AxiDmaPeripherals};
+use oer_portable_memory::DmaBytes;
+use oer_portable_mmio::Bits;
 
 use crate::layouts::{
     AxiDmaDescriptor, AxiDmaDescriptorBuffer, AxiDmaDescriptorControl, AxiDmaDescriptorNext,
@@ -321,7 +321,7 @@ impl AesDma {
         self.storage.input_descriptor.control().write(input);
         self.storage.output_descriptor.control().write(output);
         // The descriptor and buffer stores precede the channel's start.
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         Some(bytes)
     }
 

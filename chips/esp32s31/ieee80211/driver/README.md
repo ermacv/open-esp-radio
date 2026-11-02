@@ -1,4 +1,4 @@
-# oer-esp32s31-ieee80211-driver
+# oer-chips-esp32s31-ieee80211-driver
 
 The ESP32-S31 Wi-Fi driver: device composition, the lower-MAC port backend,
 DMA rings, keys and the path from the P3 interrupt to the driver task. System context: [architecture](../../../../docs/architecture.md).
@@ -7,17 +7,17 @@ The driver's MAC building blocks cover initialization and receive policy,
 EDCA and channel state, DMA ownership, aggregate formatting, local/TSF time
 relations, transmission costs and work receipts. Hardware rate codes come
 from the HAL's register-model domains. `mac` groups these primitives beside
-the driver's RX/TX/IRQ orchestration; callers use `oer-esp32s31-hal::types`
+the driver's RX/TX/IRQ orchestration; callers use `oer-chips-esp32s31-hal::types`
 for HAL values, including `MacLegacyRate`. Portable rate conversions live
 in `mac::portable`.
 
 The explicit `test-support` feature enables synthetic completion evidence
 and DMA models. Portable peer airtime fairness belongs to
-[`oer-ieee80211-core-upper-mac::airtime`](../../../../protocols/ieee80211/core/upper-mac/README.md).
+[`oer-protocols-ieee80211-core-upper-mac::airtime`](../../../../protocols/ieee80211/core/upper-mac/README.md).
 The MAC exposes `mac::tx_cost` and `mac::tx_work`; it does not select peers
 or own the fairness ledger. Tests under `src/mac/airtime_tests` combine the
 upper-MAC scheduler with work receipts and network TX queues, using only
-development dependencies on the upper MAC and `oer-embassy-net`.
+development dependencies on the upper MAC and `oer-portable-embassy-net`.
 
 ## Rules
 
@@ -25,7 +25,7 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   caller-selected single attempt and a fixed-rate `ManagementTxPlan`. The
   caller supplies RTS/CTS or CTS-to-self and its legacy control rate; the
   driver retains no BSS protection or retry ladder. ESP-NOW protocol state
-  stays in `oer-ieee80211-core-extensions-esp-now`, with no dedicated driver TX entry point. A protected
+  stays in `oer-protocols-ieee80211-core-extensions-esp-now`, with no dedicated driver TX entry point. A protected
   MPDU is numbered at its first launch; DMA
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
@@ -96,7 +96,7 @@ development dependencies on the upper MAC and `oer-embassy-net`.
   InstallBeside and SelectRetained (one station GTK slot).
 - **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
   the driver task's observation receiver (`port::Observations`, an
-  `oer_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
+  `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
   stored once in the driver from preparation to retirement, returns with the
   stopped port and is lent to each contention draw, where the driver selects
   the head's VIF record. `ContentionDraw` holds values only: role, access
@@ -155,7 +155,7 @@ remains in RAW; detection waits for a later handler entry, which that masked
 cause alone does not guarantee.
 
 Staged Wi-Fi images select the `wifi-fault` feature of the chip composition
-(`oer-esp32s31-compose`) and pass the RAW sample to its `wifi_fault::reset`, retaining their interrupt and preempted DMA
+(`oer-chips-esp32s31-compose`) and pass the RAW sample to its `wifi_fault::reset`, retaining their interrupt and preempted DMA
 owners. That shared module owns one twelve-byte retained record and calls
 `fatal::reset_recording`; after the family adoption driver installs the early console,
 its `report_previous` consumes and prints the reason and complete RAW word.
@@ -241,7 +241,7 @@ One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The radio handler masks RX delivery, acknowledges and raises
    the RX fact in the image's static receive `IrqSignal` of the station's
-   executor (`oer_espressif_interrupt_table::signal`), which pends it and
+   executor (`oer_chips_family_interrupt_table::signal`), which pends it and
    touches no waker; the buffer is the DMA engine's.
 2. **Station.** The executor's next round wakes the station, the signal's
    one waiter; the station's receive pull runs the

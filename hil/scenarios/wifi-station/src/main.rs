@@ -11,14 +11,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
-use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
+use oer_protocols_hil_agent::base::Service as _;
+use oer_tools_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
+use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
 const SCENARIO: Scenario = Scenario::new(
     "wifi-station",
     "esp32s31-sdk-station",
-    &[oer_services_wifi_station::Request::KEYS],
+    &[oer_hil_services_wifi_station::Request::KEYS],
 )
 .using_router();
 
@@ -57,7 +57,7 @@ const PINGS: u16 = 10;
 const REPLIES: u64 = 9;
 
 fn main() -> ExitCode {
-    oer_hil_harness::main(&SCENARIO, &CASES)
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
 /// The network the run generates: its SSID and passphrase.
@@ -75,8 +75,8 @@ fn network() -> (String, String) {
 
 /// The channel the stand file's router allows first.
 fn channel() -> Result<u8, Failure> {
-    let stand = oer_lab_model::path()
-        .and_then(|path| oer_lab_model::Stand::load(&path))
+    let stand = oer_tools_lab_model::path()
+        .and_then(|path| oer_tools_lab_model::Stand::load(&path))
         .map_err(|error| Failure::Incomplete(format!("the stand file: {error}")))?;
     stand
         .router
@@ -243,9 +243,9 @@ mod tests {
     #[test]
     fn a_generated_network_fits_the_service_and_differs_by_run() {
         let (ssid, passphrase) = network();
-        assert!(ssid.len() <= oer_services_wifi_station::MAX_SSID, "{ssid}");
+        assert!(ssid.len() <= oer_hil_services_wifi_station::MAX_SSID, "{ssid}");
         assert!(
-            (8..=oer_services_wifi_station::MAX_PASSPHRASE).contains(&passphrase.len()),
+            (8..=oer_hil_services_wifi_station::MAX_PASSPHRASE).contains(&passphrase.len()),
             "{passphrase}"
         );
         std::thread::sleep(Duration::from_millis(1));

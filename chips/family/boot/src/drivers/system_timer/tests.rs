@@ -8,8 +8,8 @@
 )]
 
 use core::cell::Cell;
-use oer_time::{Clock, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::{CounterLatch, LATCH_SETTLE_POLLS, LatchStuck, READ_ROUNDS, Unverified, check, read};
 

@@ -35,7 +35,7 @@ pub(in crate::image) fn overflow_ack(s: &mut Session<'_>) {
     emit(0xa23f, n0.bits(), n1.bits(), 0);
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_0(n0);
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_1(n1);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0xa240);
     let primary = s.ble.bank.sample_bluetooth_primary_interrupt_bank_1();
     emit(0xa24f, primary.bits(), 0, 0);
@@ -43,7 +43,7 @@ pub(in crate::image) fn overflow_ack(s: &mut Session<'_>) {
     s.ble
         .bank
         .acknowledge_bluetooth_primary_interrupt_bank_1(primary);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0xa250);
     window(4096);
     state(s, 0xa260);
@@ -51,9 +51,9 @@ pub(in crate::image) fn overflow_ack(s: &mut Session<'_>) {
 }
 
 fn timed(s: &mut Session<'_>, tag: u32) -> Option<u32> {
-    let before = oer_riscv::cycle32();
+    let before = oer_portable_riscv::cycle32();
     let value = sample(s);
-    let after = oer_riscv::cycle32();
+    let after = oer_portable_riscv::cycle32();
     emit(tag, before, after, value.unwrap_or(0));
     emit(tag + 1, u32::from(value.is_some()), 0, 0);
     value
@@ -120,12 +120,12 @@ pub(in crate::image) fn overflow_rate(s: &mut Session<'_>) {
         return;
     }
     state(s, 0xa340);
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut crossed = false;
-    while oer_riscv::cycle32().wrapping_sub(start) < LIMIT {
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {
         let Some(now) = sample(s) else { break };
         if now < origin {
-            emit(0xa350, origin, now, oer_riscv::cycle32());
+            emit(0xa350, origin, now, oer_portable_riscv::cycle32());
             crossed = true;
             break;
         }
@@ -204,7 +204,7 @@ pub(in crate::image) fn overflow_reset(s: &mut Session<'_>) {
         .modify_modem_rst_conf(|w| {
             w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     boundary(s, 0xa430);
     s.sar
         .radio
@@ -218,7 +218,7 @@ pub(in crate::image) fn overflow_reset(s: &mut Session<'_>) {
         .modify_modem_rst_conf(|w| {
             w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     boundary(s, 0xa450);
     // Re-enable before any clear/reseed: a retained pending cause would become
     // visible again if reset merely hid it behind zero enable registers.

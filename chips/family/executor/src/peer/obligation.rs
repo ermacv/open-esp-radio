@@ -14,7 +14,7 @@
 //!
 //! Executor locality is checked, not assumed: every write takes the proof
 //! that the caller runs in executor `C`'s context
-//! ([`signal::enter`](oer_espressif_interrupt_table::signal::enter)), and
+//! ([`signal::enter`](oer_chips_family_interrupt_table::signal::enter)), and
 //! the supervisor registers its task only after proving that one of `C`'s
 //! tasks polls ([`signal::enter_task`]). So writer and reader never run at
 //! once (the executor polls one task at a time, and a context is one
@@ -24,16 +24,16 @@
 //! hart and needs no waker cell. The deadline's two words still go through a
 //! [`DeadlineCell`]: a torn read is skipped, never waited for.
 //!
-//! [`signal::enter_task`]: oer_espressif_interrupt_table::signal::enter_task
+//! [`signal::enter_task`]: oer_chips_family_interrupt_table::signal::enter_task
 
 use core::{
     sync::atomic::{AtomicBool, AtomicU32, Ordering},
     task::Context,
 };
 
-use oer_espressif_interrupt_table::signal::{ContextToken, SignalExecutor};
-use oer_memory::{ContextCell, Entered};
-use oer_time::Instant;
+use oer_chips_family_interrupt_table::signal::{ContextToken, SignalExecutor};
+use oer_portable_memory::{ContextCell, Entered};
+use oer_portable_time::Instant;
 
 use crate::deadline_cell::DeadlineCell;
 

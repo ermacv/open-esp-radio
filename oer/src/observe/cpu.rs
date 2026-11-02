@@ -1,5 +1,5 @@
 //! An executor's CPU since boot, from its activity boundaries
-//! (`oer_espressif_executor::observation::Activity`).
+//! (`oer_chips_family_executor::observation::Activity`).
 //!
 //! Work spans include the executor's preemption, so the spans of two
 //! executors overlap and do not add up. A thread-mode executor's idle spans

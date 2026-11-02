@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_security_rsn::sae::SaeKeys;
+use oer_protocols_ieee80211_core_security_rsn::sae::SaeKeys;
 pub fn transfer(key: SaeKeys) {
     let installed = key;
     #[cfg(ui_reject)]

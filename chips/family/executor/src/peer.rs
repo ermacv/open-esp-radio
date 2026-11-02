@@ -1,6 +1,6 @@
 //! A request from a task of one executor to a task of an executor on another
 //! hart, and its answer: one in-place request slot
-//! ([`oer_memory::RequestSlot`] in [`InPlace`] mode, which stores no waker)
+//! ([`oer_portable_memory::RequestSlot`] in [`InPlace`] mode, which stores no waker)
 //! and the two executors' signals, which carry only readiness.
 //!
 //! The client posts a request with its deadline into the idle slot
@@ -39,9 +39,9 @@ use core::{
     task::Poll,
 };
 
-use oer_espressif_interrupt_table::signal::{self, ForeignContext, IrqSignal, SignalExecutor};
-use oer_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
-use oer_time::{Instant, Timer};
+use oer_chips_family_interrupt_table::signal::{self, ForeignContext, IrqSignal, SignalExecutor};
+use oer_portable_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
+use oer_portable_time::{Instant, Timer};
 
 /// The fact a raise of the server's signal carries: a request was posted.
 pub const POSTED: u32 = 1;

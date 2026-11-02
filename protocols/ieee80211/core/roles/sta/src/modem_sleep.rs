@@ -21,9 +21,9 @@
 //! espressif/esp32-wifi-lib `f856b5db`; each method names the function it
 //! follows.
 
-use oer_ieee80211_contracts_port::tsf::TsfInstant;
-use oer_ieee80211_wire::tsf::time_units_micros;
-use oer_time::{Duration, Instant};
+use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_protocols_ieee80211_wire::tsf::time_units_micros;
+use oer_portable_time::{Duration, Instant};
 
 /// Beacon receive window requested at each TBTT (`g_pm_cfg[20]`).
 pub const BEACON_WINDOW_MICROS: u32 = 25_000;
@@ -281,8 +281,8 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 /// places are skipped without changing the order of the occupied places.
 ///
 /// ```
-/// use oer_ieee80211_core_roles_sta::modem_sleep::{CoexView, ModemSleep, PmBeacon, SleepType};
-/// use oer_ieee80211_contracts_port::tsf::TsfInstant;
+/// use oer_protocols_ieee80211_core_roles_sta::modem_sleep::{CoexView, ModemSleep, PmBeacon, SleepType};
+/// use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
 /// let start = pm.start(beacon, CoexView::INACTIVE).unwrap();
@@ -295,8 +295,8 @@ pub const PM_ACTION_CAPACITY: usize = 24;
 /// Callers cannot accumulate several inputs in one batch:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_sta::modem_sleep::{CoexView, ModemSleep, PmActions, PmBeacon, SleepType};
-/// use oer_ieee80211_contracts_port::tsf::TsfInstant;
+/// use oer_protocols_ieee80211_core_roles_sta::modem_sleep::{CoexView, ModemSleep, PmActions, PmBeacon, SleepType};
+/// use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 /// let mut pm = ModemSleep::new(SleepType::None);
 /// let beacon = PmBeacon { timestamp_tsf: TsfInstant::from_micros(0), interval_tu: 100, tim: None };
 /// let mut actions = PmActions::new();

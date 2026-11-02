@@ -2,7 +2,7 @@ error[E0080]: evaluation panicked: a block's words lie inside the address space
  --> $RUST/core/src/panic.rs
   |
   |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_mmio::Block::<oer_mmio::Host<'_>, Overflow>::host::{constant#0}` failed here
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_portable_mmio::Block::<oer_portable_mmio::Host<'_>, Overflow>::host::{constant#0}` failed here
   |
  ::: src/lib.rs
   |

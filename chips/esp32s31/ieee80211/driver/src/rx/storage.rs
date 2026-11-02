@@ -1,6 +1,6 @@
 //! Qualified storage geometry and aliases over the affine DMA arena.
 
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     rx_storage::{RxDmaBuffer, RxDmaStorage},
     space::ChipDma,
 };
@@ -11,7 +11,7 @@ pub const ESP32S31_RX_DESCRIPTOR_COUNT: usize = 96;
 pub const ESP32S31_RX_BUFFER_SIZE: usize = 4_608;
 pub const ESP32S31_RX_BUFFER_STORAGE_SIZE: usize = ESP32S31_RX_BUFFER_SIZE;
 const _: () = assert!(
-    oer_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(
+    oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(
         ESP32S31_RX_DESCRIPTOR_COUNT,
         ESP32S31_RX_BUFFER_SIZE,
     ),
@@ -22,12 +22,12 @@ pub const ESP32S31_RX_WALKER_ENABLE_SETTLE_US: u32 = 5;
 
 /// Wait the walker-enable settle on `timer`. A settle past the timer's range
 /// never ends, so the walker is never started early.
-pub async fn walker_enable_settle(timer: &impl oer_time::Timer) {
-    match timer.deadline_after(oer_time::Duration::from_micros(u64::from(
+pub async fn walker_enable_settle(timer: &impl oer_portable_time::Timer) {
+    match timer.deadline_after(oer_portable_time::Duration::from_micros(u64::from(
         ESP32S31_RX_WALKER_ENABLE_SETTLE_US,
     ))) {
         Ok(deadline) => timer.wait_until(deadline).await,
-        Err(oer_time::TimeOverflow) => core::future::pending().await,
+        Err(oer_portable_time::TimeOverflow) => core::future::pending().await,
     }
 }
 

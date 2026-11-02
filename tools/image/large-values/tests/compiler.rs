@@ -4,7 +4,7 @@ use std::{collections::HashSet, path::Path, process::Command};
 use serde_json::Value;
 
 const TARGET: &str = "riscv32imafc-unknown-none-elf";
-const DRIVER: &str = env!("CARGO_BIN_EXE_oer-tool-image-large-values");
+const DRIVER: &str = env!("CARGO_BIN_EXE_oer-tools-image-large-values");
 
 fn compile(directory: &Path, source: &str, name: &str, extra: &[&str]) -> Value {
     let source_path = directory.join(format!("{name}.rs"));

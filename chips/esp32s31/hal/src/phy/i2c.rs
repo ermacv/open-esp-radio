@@ -7,7 +7,7 @@
 //! calibration configuration and Bluetooth TX-power phase machines and the
 //! Bluetooth restore obligation; parallel-host waits belong to the family PHY.
 
-pub use oer_esp32s31_pac::analog_i2c::{
+pub use oer_chips_esp32s31_pac::analog_i2c::{
     self as analog_i2c, Address, CAPTURE, Field, Host, Profile, Route, route,
 };
 
@@ -19,7 +19,7 @@ pub use commands::{
     PhyI2cConfigurationCommand, PhyI2cConfigurationOperation, PhyI2cInitializationStageOneInputs,
 };
 use master::{ConfigurationBus, MasterPort};
-use oer_espressif_phy::serial::AnalogBus;
+use oer_chips_family_phy::serial::AnalogBus;
 
 pub use crate::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
@@ -29,7 +29,7 @@ use crate::{
     phy::restore::PhyRouteState,
     phy_blocks, phy_blocks_mut,
 };
-use oer_mmio::Placement;
+use oer_portable_mmio::Placement;
 
 /// Current externally driven edge of a PHY-I²C configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -60,11 +60,11 @@ pub enum PhyI2cConfigurationError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OperationCommands(PhyI2cConfigurationOperation);
 
-impl oer_espressif_analog::ConfigurationCommands for OperationCommands {
+impl oer_chips_family_analog::ConfigurationCommands for OperationCommands {
     type Address = Address;
 
-    fn command(&self, index: usize) -> Option<oer_espressif_analog::ConfigurationCommand<Address>> {
-        use oer_espressif_analog::ConfigurationCommand;
+    fn command(&self, index: usize) -> Option<oer_chips_family_analog::ConfigurationCommand<Address>> {
+        use oer_chips_family_analog::ConfigurationCommand;
         let index = u8::try_from(index).ok()?;
         Some(match self.0.command(index)? {
             PhyI2cConfigurationCommand::Read(address) => ConfigurationCommand::Read(address),
@@ -81,19 +81,19 @@ impl oer_espressif_analog::ConfigurationCommands for OperationCommands {
 /// Non-cloneable owner of one complete recovered PHY-I²C write plan.
 ///
 /// [`commands`] supplies the operation's commands with opaque analog identities;
-/// the portable [`oer_espressif_analog::ConfigurationTransition`] owns the
+/// the portable [`oer_chips_family_analog::ConfigurationTransition`] owns the
 /// command order and read-modify-write value, and this transaction owns the
 /// start and completion edges of each byte command.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyI2cConfigurationTransaction {
-    transition: oer_espressif_analog::ConfigurationTransition<OperationCommands, Address>,
+    transition: oer_chips_family_analog::ConfigurationTransition<OperationCommands, Address>,
     started: bool,
 }
 
 impl PhyI2cConfigurationTransaction {
     pub fn new(operation: PhyI2cConfigurationOperation) -> Self {
         Self {
-            transition: oer_espressif_analog::ConfigurationTransition::new(OperationCommands(
+            transition: oer_chips_family_analog::ConfigurationTransition::new(OperationCommands(
                 operation,
             )),
             started: false,
@@ -101,9 +101,9 @@ impl PhyI2cConfigurationTransaction {
     }
 
     pub fn action(&self) -> PhyI2cConfigurationAction {
-        use oer_espressif_analog::ByteTransition;
+        use oer_chips_family_analog::ByteTransition;
         match self.transition.action() {
-            oer_espressif_analog::Action::Complete(_) => PhyI2cConfigurationAction::Complete,
+            oer_chips_family_analog::Action::Complete(_) => PhyI2cConfigurationAction::Complete,
             _ if self.started => PhyI2cConfigurationAction::AwaitCompletionEdge,
             _ => PhyI2cConfigurationAction::StartCommand,
         }
@@ -111,9 +111,9 @@ impl PhyI2cConfigurationTransaction {
 
     fn start_with(
         &mut self,
-        bus: &mut impl oer_espressif_analog::AnalogRegisterBus<Address = Address>,
+        bus: &mut impl oer_chips_family_analog::AnalogRegisterBus<Address = Address>,
     ) -> Result<(), PhyI2cConfigurationError> {
-        use oer_espressif_analog::{Action, ByteTransition};
+        use oer_chips_family_analog::{Action, ByteTransition};
         if self.started {
             return Err(PhyI2cConfigurationError::WrongAction);
         }
@@ -123,16 +123,16 @@ impl PhyI2cConfigurationTransaction {
             Action::Complete(Ok(())) => return Err(PhyI2cConfigurationError::AlreadyComplete),
             Action::Complete(Err(_)) => return Err(PhyI2cConfigurationError::InvalidCommand),
         };
-        started.map_err(|oer_espressif_analog::Busy| PhyI2cConfigurationError::BusyAtStart)?;
+        started.map_err(|oer_chips_family_analog::Busy| PhyI2cConfigurationError::BusyAtStart)?;
         self.started = true;
         Ok(())
     }
 
     fn observe_with(
         &mut self,
-        bus: &impl oer_espressif_analog::AnalogRegisterBus<Address = Address>,
+        bus: &impl oer_chips_family_analog::AnalogRegisterBus<Address = Address>,
     ) -> Result<PhyI2cConfigurationObservation, PhyI2cConfigurationError> {
-        use oer_espressif_analog::{Action, ByteTransition, Completion};
+        use oer_chips_family_analog::{Action, ByteTransition, Completion};
         if !self.started {
             return Err(match self.transition.action() {
                 Action::Complete(_) => PhyI2cConfigurationError::AlreadyComplete,
@@ -142,13 +142,13 @@ impl PhyI2cConfigurationTransaction {
         let completion = match self.transition.action() {
             Action::Read { address } => match bus.try_finish_read(address) {
                 Ok(value) => Completion::Read { address, value },
-                Err(oer_espressif_analog::Busy) => {
+                Err(oer_chips_family_analog::Busy) => {
                     return Ok(PhyI2cConfigurationObservation::StillPending);
                 }
             },
             Action::Write { address, .. } => match bus.try_finish_write(address) {
                 Ok(()) => Completion::Written { address },
-                Err(oer_espressif_analog::Busy) => {
+                Err(oer_chips_family_analog::Busy) => {
                     return Ok(PhyI2cConfigurationObservation::StillPending);
                 }
             },
@@ -646,8 +646,8 @@ mod tests;
 /// Lend the owned master atoms for the retained-wake family driver.
 pub fn parallel_port(
     registers: &mut impl SharedPhyAccess,
-) -> impl oer_espressif_phy::i2c::PhyI2cParallelAccess<
-    Pair = oer_espressif_phy::i2c::PhyI2cParallelWrite<Address>,
+) -> impl oer_chips_family_phy::i2c::PhyI2cParallelAccess<
+    Pair = oer_chips_family_phy::i2c::PhyI2cParallelWrite<Address>,
 > + '_ {
     MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
 }
@@ -655,13 +655,13 @@ pub fn parallel_port(
 /// Lend the exclusive byte-command atoms to the family transport.
 pub fn serial_port(
     registers: &mut impl SharedPhyAccess,
-) -> impl oer_espressif_phy::serial::Port + '_ {
+) -> impl oer_chips_family_phy::serial::Port + '_ {
     MasterPort::new(&mut phy_blocks_mut(registers).i2c_ana_mst)
 }
 
 /// Borrow observations without granting command publication.
 pub fn serial_sample(
     registers: &impl SharedPhyAccess,
-) -> impl oer_espressif_phy::serial::SamplePort + '_ {
+) -> impl oer_chips_family_phy::serial::SamplePort + '_ {
     master::MasterSample::new(&phy_blocks(registers).i2c_ana_mst)
 }

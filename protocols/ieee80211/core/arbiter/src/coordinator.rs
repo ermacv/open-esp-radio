@@ -33,10 +33,10 @@
 
 use core::num::{NonZeroU8, NonZeroU64};
 
-use oer_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
-use oer_ieee80211_wire::channel::{Band, Channel};
-use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
-use oer_time::{Duration, Instant};
+use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
+use oer_protocols_ieee80211_wire::channel::{Band, Channel};
+use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitchMode;
+use oer_portable_time::{Duration, Instant};
 
 use crate::channel::requires_radar_detection;
 
@@ -85,7 +85,7 @@ pub struct ApFollowPolicy {
     /// where a lost upstream was found, or where the station joins).
     /// Zero is rejected when the policy is built, before any move:
     /// ```compile_fail,E0308
-    /// use oer_ieee80211_core_arbiter::coordinator::ApFollowPolicy;
+    /// use oer_protocols_ieee80211_core_arbiter::coordinator::ApFollowPolicy;
     /// let policy = ApFollowPolicy {
     ///     announce_count: 0,
     ///     ..ApFollowPolicy::DEFAULT
@@ -94,7 +94,7 @@ pub struct ApFollowPolicy {
     /// A nonzero count is carried unchanged into the announcement:
     /// ```
     /// use core::num::{NonZeroU8, NonZeroU64};
-    /// use oer_ieee80211_core_arbiter::coordinator::ApFollowPolicy;
+    /// use oer_protocols_ieee80211_core_arbiter::coordinator::ApFollowPolicy;
     /// let policy = ApFollowPolicy {
     ///     announce_count: NonZeroU8::MIN,
     ///     ..ApFollowPolicy::DEFAULT
@@ -137,14 +137,14 @@ impl ApFollowPolicy {
 ///
 /// Channel traversal belongs to the station, so this policy has no channel list:
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_arbiter::coordinator::ApSearchPolicy;
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ApSearchPolicy;
 /// let policy = ApSearchPolicy::new(&[]);
 /// ```
 /// Timing is a value independent of the station's channel storage:
 /// ```
-/// use oer_ieee80211_core_arbiter::coordinator::ApSearchPolicy;
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ApSearchPolicy;
 /// let policy = ApSearchPolicy::DEFAULT;
-/// assert!(policy.sparse_interval > oer_time::Duration::ZERO);
+/// assert!(policy.sparse_interval > oer_portable_time::Duration::ZERO);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApSearchPolicy {
@@ -273,8 +273,8 @@ pub enum JoinAway {
 /// A strictly positive AP beacon interval, in microseconds.
 ///
 /// ```
-/// use oer_ieee80211_core_arbiter::coordinator::BeaconInterval;
-/// use oer_time::Duration;
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval;
+/// use oer_portable_time::Duration;
 /// assert!(BeaconInterval::new(Duration::ZERO).is_none());
 /// assert_eq!(BeaconInterval::new(Duration::from_millis(100)).unwrap().as_micros(), 100_000);
 /// ```
@@ -306,37 +306,37 @@ impl BeaconInterval {
 /// Raw durations cannot construct a schedule; zero must be rejected before
 /// publishing an AP fact:
 /// ```compile_fail,E0308
-/// use oer_ieee80211_core_arbiter::coordinator::ApSchedule;
-/// use oer_ieee80211_contracts_port::SupportedChannel;
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ApSchedule;
+/// use oer_protocols_ieee80211_contracts_port::SupportedChannel;
 /// fn raw_interval<K>(channel: SupportedChannel<K>) -> ApSchedule<K> {
-///     ApSchedule { channel, next_tbtt: oer_time::Instant::from_micros(0),
-///         beacon_interval: oer_time::Duration::ZERO }
+///     ApSchedule { channel, next_tbtt: oer_portable_time::Instant::from_micros(0),
+///         beacon_interval: oer_portable_time::Duration::ZERO }
 /// }
 /// ```
 ///
 /// The channel must already be accepted by the backend:
 /// ```compile_fail,E0308
-/// use oer_ieee80211_core_arbiter::coordinator::ApSchedule;
-/// use oer_ieee80211_wire::channel::Channel;
-/// use oer_time::{Duration, Instant};
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ApSchedule;
+/// use oer_protocols_ieee80211_wire::channel::Channel;
+/// use oer_portable_time::{Duration, Instant};
 /// fn raw_schedule<K>(channel: Channel) -> ApSchedule<K> {
 ///     ApSchedule {
 ///         channel,
 ///         next_tbtt: Instant::from_micros(100),
-///         beacon_interval: oer_ieee80211_core_arbiter::coordinator::BeaconInterval::new(Duration::from_millis(100)).unwrap(),
+///         beacon_interval: oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(Duration::from_millis(100)).unwrap(),
 ///     }
 /// }
 /// ```
 /// A checked channel is carried unchanged into the schedule:
 /// ```
-/// use oer_ieee80211_core_arbiter::coordinator::ApSchedule;
-/// use oer_ieee80211_contracts_port::SupportedChannel;
-/// use oer_time::{Duration, Instant};
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ApSchedule;
+/// use oer_protocols_ieee80211_contracts_port::SupportedChannel;
+/// use oer_portable_time::{Duration, Instant};
 /// fn checked_schedule<K>(channel: SupportedChannel<K>) -> ApSchedule<K> {
 ///     ApSchedule {
 ///         channel,
 ///         next_tbtt: Instant::from_micros(100),
-///         beacon_interval: oer_ieee80211_core_arbiter::coordinator::BeaconInterval::new(Duration::from_millis(100)).unwrap(),
+///         beacon_interval: oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(Duration::from_millis(100)).unwrap(),
 ///     }
 /// }
 /// ```
@@ -415,9 +415,9 @@ enum AccessPoint<K> {
 ///
 /// Facts cannot introduce an unchecked channel:
 /// ```compile_fail,E0308
-/// use oer_ieee80211_core_arbiter::coordinator::ChannelCoordinator;
-/// use oer_ieee80211_wire::channel::Channel;
-/// fn raw_fact<K: oer_ieee80211_contracts_port::Ieee80211Capabilities>(
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ChannelCoordinator;
+/// use oer_protocols_ieee80211_wire::channel::Channel;
+/// fn raw_fact<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities>(
 ///     coordinator: &mut ChannelCoordinator<K>, channel: Channel,
 /// ) {
 ///     let _ = coordinator.station_connected(channel);
@@ -426,9 +426,9 @@ enum AccessPoint<K> {
 ///
 /// The arbiter owns search timing; the coordinator has no independent poll loop:
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_arbiter::coordinator::ChannelCoordinator;
-/// use oer_time::Instant;
-/// fn separate_loop<K: oer_ieee80211_contracts_port::Ieee80211Capabilities>(
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ChannelCoordinator;
+/// use oer_portable_time::Instant;
+/// fn separate_loop<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities>(
 ///     coordinator: &mut ChannelCoordinator<K>, now: Instant,
 /// ) {
 ///     coordinator.poll(now);
@@ -437,7 +437,7 @@ enum AccessPoint<K> {
 ///
 /// Its protocol state cannot be copied into a second owner:
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_arbiter::coordinator::ChannelCoordinator;
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::ChannelCoordinator;
 /// fn duplicate<K>(coordinator: ChannelCoordinator<K>) {
 ///     let first = coordinator;
 ///     let second = coordinator;
@@ -445,8 +445,8 @@ enum AccessPoint<K> {
 /// ```
 /// One owner can consume facts and move its coordinator:
 /// ```
-/// use oer_ieee80211_core_arbiter::coordinator::{ApFollowPolicy, ChannelCoordinator};
-/// use oer_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
+/// use oer_protocols_ieee80211_core_arbiter::coordinator::{ApFollowPolicy, ChannelCoordinator};
+/// use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
 /// fn accept<K: Ieee80211Capabilities>(channel: SupportedChannel<K>) {
 ///     let mut coordinator = ChannelCoordinator::new(ApFollowPolicy::DEFAULT);
 ///     let actions = coordinator.station_connected(channel);

@@ -32,7 +32,7 @@ fn role() {
     let directory = Path::new(&std::env::var_os(DIRECTORY).unwrap()).to_owned();
     match role.to_str().unwrap() {
         "parent" => {
-            let _signals = oer_os_process::install_signal_handlers().unwrap();
+            let _signals = oer_tools_os_process::install_signal_handlers().unwrap();
             let _ = super::owned(
                 &mut this_binary("scenario", &directory),
                 Duration::from_secs(1),

@@ -1,10 +1,10 @@
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothControllerTimeLatchBeginError, BluetoothControllerTimeLatchStep,
     BluetoothControllerTimeLatchStepError,
 };
-use oer_espressif_bluetooth_engine::port::ControllerTimePort;
+use oer_chips_family_bluetooth_engine::port::ControllerTimePort;
 
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothControllerHalInitConfig, BluetoothControllerLatchedTime, BluetoothHalInitPeriod,
     BluetoothHalInitScale,
 };
@@ -727,7 +727,7 @@ fn post_enable_projection_retains_the_existing_scheduler_epoch() {
 #[test]
 fn physical_duration_admission_enforces_the_retained_scales_half_range() {
     use super::ControllerDurationError;
-    use oer_time::RadioDuration;
+    use oer_portable_time::RadioDuration;
     for (period, minimum, maximum, ticks) in [
         (
             BluetoothHalInitPeriod::Image500,
@@ -784,9 +784,9 @@ fn physical_duration_admission_enforces_the_retained_scales_half_range() {
 #[test]
 fn counted_time_survives_n_overflows_without_live_samples_or_p2_dequeues() {
     use crate::interrupt::{PrimaryInterruptCapture, SchedulerWakeCell};
-    use oer_espressif_interrupt_table::signal::host;
-    use oer_time::{Clock, Duration, Instant};
-    use oer_time_virtual::VirtualClock;
+    use oer_chips_family_interrupt_table::signal::host;
+    use oer_portable_time::{Clock, Duration, Instant};
+    use oer_portable_time_virtual::VirtualClock;
     let clock = VirtualClock::<1>::starting_at(Instant::EPOCH);
     let wake = SchedulerWakeCell::new(host::deferred_signal().0);
     let scale = BluetoothControllerHalInitConfig::reviewed_standalone().controller_time_scale();

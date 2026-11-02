@@ -1,10 +1,10 @@
 disallowed-methods = [
-    { path = "oer_espressif_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
+    { path = "oer_chips_family_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     # Clippy uses the nearest config; retain every common workspace ban.
-    { path = "oer_espressif_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
-    { path = "oer_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
-    { path = "oer_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
-    { path = "oer_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
+    { path = "oer_chips_family_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
+    { path = "oer_portable_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_portable_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_portable_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
     { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
     { path = "core::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
     { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
@@ -421,5 +421,5 @@ disallowed-macros = [
     { path = "core::debug_assert_eq", reason = "retain invariants in closed types; dynamic refusals return their owners" },
     { path = "core::debug_assert_ne", reason = "retain invariants in closed types; dynamic refusals return their owners" },
     # Canonical sans-IO catalogue (tools/test/layers/sans-io-lints.toml).
-    "oer_espressif_ieee802154_engine::engine::vendor_assert",
+    "oer_chips_family_ieee802154_engine::engine::vendor_assert",
 ]

@@ -4,11 +4,11 @@
 
 use super::{Environment, Execution, ModelOnlyReason, MpduState, Report};
 use core::num::NonZeroU16;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, IndeterminateCause, PhyRate, SingleEnd, SingleOutcome,
     SingleResponse, TxOutcome,
 };
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// Form of the admitted operation and its terminal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -155,7 +155,7 @@ pub fn verify<A, B, D>(case: Case, trace: Trace<A, B, D>) -> Result<(), Violatio
     if trace.publications != usize::from(!matches!(case, Case::AirDenied(_))) {
         return Err(Violation::Publication);
     }
-    let correct_air = |air: oer_ieee80211_contracts_port::Air| {
+    let correct_air = |air: oer_protocols_ieee80211_contracts_port::Air| {
         air.transmissions == NonZeroU16::MIN && air.rate == trace.rate
     };
     let correct = match (case, trace.outcome) {

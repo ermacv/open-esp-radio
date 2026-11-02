@@ -2,7 +2,7 @@
 //! the terminal status of one logical MPDU exchange.
 
 use crate::{HardwareServices, RxCryptoStatus, RxEvidence, TxStatus};
-use oer_ieee80211_wire::{channel::Channel, phy::PhyRate};
+use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Owner that must perform one indivisible MAC operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

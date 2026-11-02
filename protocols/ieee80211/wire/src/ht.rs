@@ -236,7 +236,7 @@ impl HtPeerCapabilities {
 
 /// Parse a complete information-element stream into one-stream HT facts.
 pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
-    let mut remaining = oer_wire::Reader::new(bytes);
+    let mut remaining = oer_portable_wire::Reader::new(bytes);
     while let [_, length, ..] = *remaining.remaining() {
         let record = remaining.take(usize::from(length).checked_add(2)?).ok()?;
         if let Ok(record) = <&[u8; HT_CAPABILITY_IE_LEN]>::try_from(record)
@@ -257,7 +257,7 @@ pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
     None
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field).
     pub struct HtCapabilityInfo[2] (little) {
         pub width40, with_width40: bool = 1..2;
@@ -273,10 +273,10 @@ impl HtCapabilityInfo {
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field,
     /// SM Power Save subfield: 0 static, 1 dynamic, 3 disabled).
-    pub const SM_POWER_SAVE_DISABLED: oer_wire::U8<2> = oer_wire::U8::constant::<3>();
+    pub const SM_POWER_SAVE_DISABLED: oer_portable_wire::U8<2> = oer_portable_wire::U8::constant::<3>();
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
     pub struct HtAmpduParameters[1] (little) {
         pub exponent, with_exponent: (u8) = 0..2;
@@ -288,12 +288,12 @@ impl HtAmpduParameters {
     /// octets.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
-    pub const EXPONENT_65535_OCTETS: oer_wire::U8<2> = oer_wire::U8::constant::<3>();
+    pub const EXPONENT_65535_OCTETS: oer_portable_wire::U8<2> = oer_portable_wire::U8::constant::<3>();
     /// The Minimum MPDU Start Spacing code of 4 us.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing
     /// subfield: 5 is 4 us).
-    pub const SPACING_4_US: oer_wire::U8<3> = oer_wire::U8::constant::<5>();
+    pub const SPACING_4_US: oer_portable_wire::U8<3> = oer_portable_wire::U8::constant::<5>();
 
     /// The Maximum A-MPDU Length the exponent names: `2^(13 + exponent) - 1`
     /// octets.
@@ -309,14 +309,14 @@ impl HtAmpduParameters {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.56 (HT Operation element).
     pub struct HtOperationInfo[1] (little) {
         pub secondary, with_secondary: u8 = 0..2;
         pub width40, with_width40: bool = 2..3;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set field).
     pub struct HtTxMcs[1] (little) {
         pub defined, with_defined: bool = 0..1;
@@ -324,7 +324,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.4 (Supported MCS Set, RX MCS bitmap octet 4).
     pub struct HtMcs32Octet[1] (little) {
         pub supported, with_supported: bool = 0..1;
@@ -334,7 +334,7 @@ oer_wire::bitfield! {
 #[cfg(test)]
 mod tests;
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing code).
     pub struct HtAmpduSpacingCode[1] (little) {
         pub spacing, with_spacing: (u8) = 0..3;

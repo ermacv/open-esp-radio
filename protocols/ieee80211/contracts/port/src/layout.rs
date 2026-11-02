@@ -2,7 +2,7 @@
 
 use crate::owner::{FrameHeader, ResponseHeader};
 use crate::{ClassSubframe, Ieee80211Capabilities, Tid, TxBufferClass, TxFrame};
-use oer_ieee80211_wire::{address::IndividualAddress, block_ack::BLOCK_ACK_REQUEST_LEN};
+use oer_protocols_ieee80211_wire::{address::IndividualAddress, block_ack::BLOCK_ACK_REQUEST_LEN};
 
 /// Portable refusals before the backend receives a prepared source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49,14 +49,14 @@ pub enum MpduProtection {
 /// portable layout checks. PN allocation belongs to the caller, before handoff.
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_contracts_port::{Ieee80211Capabilities, MpduLayout, TxFrame};
+/// use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, MpduLayout, TxFrame};
 /// fn flag<K: Ieee80211Capabilities>(frame: &TxFrame<'_, '_, K>) {
 ///     drop(MpduLayout::new(frame, 0, true));
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{
+/// use oer_protocols_ieee80211_contracts_port::{
 ///     Ieee80211Capabilities, LayoutError, MpduLayout, MpduProtection, TxFrame,
 /// };
 /// fn open<K: Ieee80211Capabilities>(frame: &TxFrame<'_, '_, K>) -> Result<(), LayoutError> {
@@ -69,12 +69,12 @@ pub enum MpduProtection {
 /// The checked layout always contains a MAC header:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_contracts_port::MpduLayout;
+/// use oer_protocols_ieee80211_contracts_port::MpduLayout;
 /// fn empty(layout: MpduLayout) { let _empty = layout.is_empty(); }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::MpduLayout;
+/// use oer_protocols_ieee80211_contracts_port::MpduLayout;
 /// fn lengths(layout: MpduLayout) {
 ///     assert!(layout.mpdu_len() >= layout.header_len());
 /// }
@@ -150,7 +150,7 @@ impl MpduLayout {
         let prefix_len = match protection {
             MpduProtection::Open => header_len,
             MpduProtection::Ccmp => header_len
-                .checked_add(oer_ieee80211_wire::ccmp::CCMP_HEADER_LEN)
+                .checked_add(oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN)
                 .filter(|end| *end <= len)
                 .ok_or(LayoutError::CcmpHeaderTooShort)?,
         };
@@ -392,7 +392,7 @@ impl MpduLayout {
                 let (header, _) = prefix
                     .split_first_chunk_mut::<BLOCK_ACK_REQUEST_LEN>()
                     .ok_or(LayoutError::StorageTooShort)?;
-                *header = oer_ieee80211_wire::block_ack::encode_block_ack_request(
+                *header = oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
                     receiver.get(),
                     *transmitter,
                     tid.get(),

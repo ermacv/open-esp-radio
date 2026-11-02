@@ -1,8 +1,8 @@
 //! The software AES-128 block primitive and the RSN key-data bound over the
-//! RFC 3394 algorithm of `oer-crypto`.
+//! RFC 3394 algorithm of `oer-portable-crypto`.
 //!
-//! [`SoftwareAes128`] implements `oer_crypto::block::Aes128Blocks` with the
-//! RustCrypto cipher, so `oer_crypto::block::unwrap_now` runs the shared
+//! [`SoftwareAes128`] implements `oer_portable_crypto::block::Aes128Blocks` with the
+//! RustCrypto cipher, so `oer_portable_crypto::block::unwrap_now` runs the shared
 //! RFC 3394 unwrap over it. WPA2 key data is bounded by [`RSN_KEY_DATA_CAPACITY`].
 #![deny(
     clippy::indexing_slicing,
@@ -17,7 +17,7 @@ use ::aes::{
     Aes128,
     cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray},
 };
-use oer_crypto::{
+use oer_portable_crypto::{
     Aes128Key, KeyData,
     block::{Aes128Blocks, Block, BlockCipher},
     rfc3394::KeyWrapError,
@@ -72,7 +72,7 @@ pub fn software_aes128_key_wrap(
     let key = Aes128Key::copy_from(kek);
     let mut cipher = SoftwareAes128.load_key(&key);
     drop(key);
-    oer_crypto::rfc3394::wrap(&mut cipher, plaintext)
+    oer_portable_crypto::rfc3394::wrap(&mut cipher, plaintext)
 }
 
 #[cfg(test)]

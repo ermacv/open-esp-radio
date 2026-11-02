@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_espressif_radio::clocks::{RtcSlowClockSource, WifiLowPowerClockSource};
+use oer_chips_family_radio::clocks::{RtcSlowClockSource, WifiLowPowerClockSource};
 
 use crate::{modem::values::ModemLowPowerClockDivider, phy::RadioPhyRegisters};
 
@@ -265,7 +265,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 }
 
-impl<P: crate::phy::registers::RadioPlacement> oer_espressif_radio::clocks::LowPowerClockPort
+impl<P: crate::phy::registers::RadioPlacement> oer_chips_family_radio::clocks::LowPowerClockPort
     for RadioPhyRegisters<P>
 {
     fn rtc_slow_clock_source(&self) -> RtcSlowClockSource {

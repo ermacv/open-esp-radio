@@ -1,15 +1,15 @@
 use super::*;
-use oer_radio_regulatory::{Country, RegulatoryDomain};
+use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 
 fn germany() -> RegulatoryDomain {
     RegulatoryDomain::of(Country::new(*b"DE").unwrap()).unwrap()
 }
 
 fn open() -> RegulatoryDomain {
-    oer_radio_regulatory::TEST_DOMAIN
+    oer_protocols_radio_regulatory::TEST_DOMAIN
 }
 
-use oer_ieee80211_wire::management::MAX_SSID_LEN;
+use oer_protocols_ieee80211_wire::management::MAX_SSID_LEN;
 
 #[test]
 fn ssid_is_binary_and_length_checked() {
@@ -136,7 +136,7 @@ fn the_domain_decides_the_scan_set() {
 
 #[test]
 fn a_listen_only_channel_is_scanned_without_probe_requests() {
-    use oer_radio_regulatory::{FrequencySpan, Rule, RuleFlags};
+    use oer_protocols_radio_regulatory::{FrequencySpan, Rule, RuleFlags};
     static RULES: [Rule; 2] = [
         Rule::new(
             FrequencySpan::new(2_400_000, 2_450_000).unwrap(),

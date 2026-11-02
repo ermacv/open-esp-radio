@@ -3,8 +3,8 @@
 
 use std::{collections::BTreeSet, fmt, time::Duration};
 
-use oer_hil_link::{Boot, CallError, Link};
-use oer_hil_protocol::{
+use oer_tools_hil_link::{Boot, CallError, Link};
+use oer_protocols_hil_protocol::{
     Key,
     base::{GetImageKeys, ImageKeysCheck, ImageKeysError},
 };

@@ -1,9 +1,9 @@
 //! What the checks read from the chip profile: the `[memory]` map and the
 //! `[interrupts]` contract.
 
-use oer_chip_profile::Profile;
+use oer_tools_chip_profile::Profile;
 
-use oer_espressif_facts::{InterruptContract, Memory};
+use oer_chips_family_facts::{InterruptContract, Memory};
 
 /// The chip's address map and interrupt contract.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -23,7 +23,7 @@ impl Contract {
     }
 
     /// The bytes an interrupt stack may use: below them lies the guard.
-    pub fn irq_stack_usable_bytes(&self, hart: u32) -> oer_espressif_facts::Result<u32> {
+    pub fn irq_stack_usable_bytes(&self, hart: u32) -> oer_chips_family_facts::Result<u32> {
         self.interrupts.irq_stack_usable_bytes(hart)
     }
 }

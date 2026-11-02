@@ -3,7 +3,7 @@
 The image of the [SDK station](../../scenarios/sdk-station/README.md),
 [Wi-Fi station](../../scenarios/wifi-station/README.md) and
 [Wi-Fi load](../../scenarios/wifi-load/README.md) scenarios: an
-application of the entry `oer-espressif` (`oer`, features
+application of the entry `oer` (`oer`, features
 `esp32s31`, `wifi`, `console`, `hart1`, `observe` and `udp`). Its boot takes the Wi-Fi
 station (on the AES accelerator) and its IP service with the library's defaults and the USB
 Serial/JTAG console; the library places their interrupts, executors and
@@ -20,19 +20,19 @@ place of the library's 8, 8 and 8. Like the example, its second boot
 (`entry!(boot, hart1 = network)`) starts the IP service and runs the line
 exchanges and the load server on its sockets; the worker reaches them over
 a `Channel` each, and the load server reaches the boot hart's counters and
-sampler over a third. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-test-layers` checks only that
+sampler over a third. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-tools-test-layers` checks only that
 the image takes nothing the SDK places.
 
 | Service | Handler |
 | --- | --- |
 | HIL base module | The [agent on the entry](../../agent/README.md); the boot evidence is the library's (`Boot::evidence`): hart 0's reset cause, the previous boot's panic, and its CPU exception as the post-mortem (`Fault::Exception`), which the library already printed and cleared |
 | [SDK station](../../services/sdk-station/src/lib.rs) | One worker on the application executor answers the requests in order; a request while one waits is refused as `Busy` |
-| [Wi-Fi station](../../services/wifi-station/src/lib.rs) | The same worker, after the service's phases (`oer_services_wifi_station::phase`): one join per boot, a leave of the joined station once |
+| [Wi-Fi station](../../services/wifi-station/src/lib.rs) | The same worker, after the service's phases (`oer_hil_services_wifi_station::phase`): one join per boot, a leave of the joined station once |
 | [Fault](../../services/fault/src/lib.rs) | The same worker answers `RaiseException`, waits until the console wrote the answer and traps on an illegal instruction (`answer_then_trap`); a write the console cannot confirm ends the application with `sdk-console`, recorded and reset, without the trap |
 | [Load](../../services/load/src/lib.rs) | The same worker hands each request to the load server in the second boot and publishes its answer (`src/load`) |
 
 The application is the agent's `serve`: the console and the worker side by
-side. The boot identity is the library's (`oer_espressif::boot_id`).
+side. The boot identity is the library's (`oer::boot_id`).
 
 - **Connect** builds a WPA2-Personal profile and awaits the station's
   `connect`: `Linked`, or `Failed` with the code the
@@ -122,7 +122,7 @@ sends nothing more and ends at its time.
 
 ## Regulatory configuration
 
-Country `DE` (`oer-radio-regulatory`): the station scans every 2.4 GHz
+Country `DE` (`oer-protocols-radio-regulatory`): the station scans every 2.4 GHz
 channel the domain permits at each connect (`wifi::Config::all_channels`),
 joins at 40 MHz where the access point offers a permitted secondary channel
 (`with_ht40`), otherwise at 20 MHz, with an owner transmit cap of 10 dBm.

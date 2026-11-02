@@ -1,11 +1,11 @@
 use super::*;
-use oer_esp32s31_radio_client::bluetooth::{
+use oer_chips_esp32s31_radio_client::bluetooth::{
     self, Bluetooth, BluetoothJoin, BluetoothJoined, BluetoothLeft, Installation, Permission,
 };
 
 const fn ble_poison(request: RequestKind, cause: PoisonCause) -> Poison {
     Poison::request(
-        oer_esp32s31_hal::domain::RadioClient::Bluetooth,
+        oer_chips_esp32s31_hal::domain::RadioClient::Bluetooth,
         request,
         cause,
     )
@@ -95,10 +95,10 @@ impl BluetoothBackend<Model, RcSlow> for ModelAttachment {
 fn join() -> BluetoothJoin {
     BluetoothJoin::new(
         Permission::new(
-            oer_radio_regulatory::TEST_DOMAIN
-                .permit(oer_bluetooth_le_port::LeBand)
+            oer_protocols_radio_regulatory::TEST_DOMAIN
+                .permit(oer_protocols_bluetooth_le_port::LeBand)
                 .expect("LE test band"),
-            oer_radio_regulatory::PowerLimits {
+            oer_protocols_radio_regulatory::PowerLimits {
                 antenna_gain_mbm: 0,
                 chip_maximum_mbm: 2100,
                 owner_cap_mbm: Some(1000),
@@ -112,7 +112,7 @@ fn join() -> BluetoothJoin {
 
 fn multi<F: Future<Output = ()>>(
     model: &Model,
-    client: impl FnOnce(ClientCells, oer_esp32s31_radio_client::MembershipCell<Bluetooth>) -> F,
+    client: impl FnOnce(ClientCells, oer_chips_esp32s31_radio_client::MembershipCell<Bluetooth>) -> F,
 ) {
     let (end, cells) = claim_for_host_test().expect("fresh radio client cells");
     let (inbox, ble) =
@@ -575,9 +575,9 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
 fn a_tracking_deadline_the_clock_cannot_hold_ends_the_attached_run() {
     use core::pin::pin;
     let overflow =
-        PoisonCause::TrackingRefused(oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-            oer_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
-                class: oer_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
+        PoisonCause::TrackingRefused(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+            oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
+                class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
             },
         ));
     let model = model(Script {

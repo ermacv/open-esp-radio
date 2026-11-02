@@ -1,8 +1,8 @@
 use super::*;
 use core::cell::{Cell, RefCell};
-use oer_espressif_analog::model::Route;
-use oer_time::{Clock, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_chips_family_analog::model::Route;
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
 use std::vec::Vec;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

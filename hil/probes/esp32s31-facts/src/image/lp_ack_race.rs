@@ -15,8 +15,8 @@ fn byte(s: &Session<'_>) -> u8 {
     s.ble.timer.read_word_0024_opaque().low_byte()
 }
 fn window() {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 fn state(s: &Session<'_>, tag: u32) {
     emit(
@@ -44,10 +44,10 @@ fn park(s: &mut Session<'_>) {
         w.set_control_0(true).set_control_4(false);
     });
     s.ble.timer.trigger_word_0058_opaque_control_1();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn init(s: &mut Session<'_>) {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     ble::init_lp(s);
     let cpu = s.sar.boot.hp_sys_clkrst_boot_clock.read_cpu_freq_ctrl0();
     let pll = s.sar.boot.lp_aon_clkrst_cpll.read_cpll_div();
@@ -75,7 +75,7 @@ fn stop(s: &mut Session<'_>) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn arm(s: &mut Session<'_>, target: u32, tag: u32) {
     s.ble.timer.modify_word_006c_opaque(|w| {
@@ -85,12 +85,12 @@ fn arm(s: &mut Session<'_>, target: u32, tag: u32) {
     s.ble.timer.write_word_0010_opaque(|w| {
         w.set_compare_software_delivery_set(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     emit(tag, target, before, counter(s));
 }
 fn wait_latch(s: &Session<'_>) -> bool {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < SHORT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < SHORT {
         if latch(s) {
             return true;
         }
@@ -119,12 +119,12 @@ pub(super) fn compare(s: &mut Session<'_>) {
         let latch_at_sample = latch(s);
         let arrived = phase != 2 && wait_latch(s);
         let before = counter(s);
-        let stamp = oer_riscv::cycle32();
+        let stamp = oer_portable_riscv::cycle32();
         if old != 0 {
             s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
         }
-        oer_riscv::fence();
-        let elapsed = oer_riscv::cycle32().wrapping_sub(stamp);
+        oer_portable_riscv::fence();
+        let elapsed = oer_portable_riscv::cycle32().wrapping_sub(stamp);
         let after = counter(s);
         emit(tag + 3, old.into(), sampled_at, u32::from(latch_at_sample));
         emit(tag + 4, u32::from(arrived), before, after);
@@ -144,11 +144,11 @@ pub(super) fn wraps(s: &mut Session<'_>) {
     // at the observed 40MHz CPU, with each wait capped at40M cycles.
     for phase in 0..2 {
         let old = s.ble.timer.read_word_002c_opaque().low_byte();
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let mut prior = counter(s);
         let mut wrapped = false;
         let mut now = prior;
-        while oer_riscv::cycle32().wrapping_sub(start) < WRAP {
+        while oer_portable_riscv::cycle32().wrapping_sub(start) < WRAP {
             now = counter(s);
             if now < prior {
                 wrapped = true;
@@ -156,14 +156,14 @@ pub(super) fn wraps(s: &mut Session<'_>) {
             }
             prior = now;
         }
-        let elapsed = oer_riscv::cycle32().wrapping_sub(start);
+        let elapsed = oer_portable_riscv::cycle32().wrapping_sub(start);
         state(s, 0x18300 + phase * 0x10);
         // Actual nonzero conditional path, with the second natural crossing
         // after its retained first-wrap sample. No ack between the wraps.
         if phase == 1 && old != 0 {
             s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
         }
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         emit(0x18340 + phase, old.into(), u32::from(wrapped), elapsed);
         emit(0x18350 + phase, prior, now, counter(s));
         if !wrapped {
@@ -191,14 +191,14 @@ pub(super) fn rearm(s: &mut Session<'_>) {
         if old != 0 {
             s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
         }
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         state(s, tag);
         let origin = counter(s);
         let target = origin.wrapping_add(offset) & MAX;
         arm(s, target, tag + 2);
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let mut crossed = false;
-        while oer_riscv::cycle32().wrapping_sub(start) < SHORT {
+        while oer_portable_riscv::cycle32().wrapping_sub(start) < SHORT {
             if counter(s).wrapping_sub(origin) & MAX >= 4096 {
                 crossed = true;
                 break;
@@ -209,7 +209,7 @@ pub(super) fn rearm(s: &mut Session<'_>) {
             tag + 4,
             u32::from(crossed),
             counter(s),
-            oer_riscv::cycle32().wrapping_sub(start),
+            oer_portable_riscv::cycle32().wrapping_sub(start),
         );
         state(s, tag + 0x10);
     }
@@ -240,7 +240,7 @@ pub(super) fn compare_width(s: &mut Session<'_>) {
             s.ble.timer.modify_word_0058_opaque(|w| {
                 w.set_control_0(mode != 0);
             });
-            oer_riscv::fence();
+            oer_portable_riscv::fence();
             let old = byte(s);
             let old_latch = latch(s);
             let upper = if trial == 0 {
@@ -264,17 +264,17 @@ pub(super) fn compare_width(s: &mut Session<'_>) {
             s.ble.timer.write_word_0010_opaque(|w| {
                 w.set_compare_software_delivery_set(true);
             });
-            oer_riscv::fence();
+            oer_portable_riscv::fence();
             let after = counter(s);
-            let start = oer_riscv::cycle32();
+            let start = oer_portable_riscv::cycle32();
             let mut crossed = false;
-            while oer_riscv::cycle32().wrapping_sub(start) < SHORT {
+            while oer_portable_riscv::cycle32().wrapping_sub(start) < SHORT {
                 if counter(s).wrapping_sub(origin) & MAX >= 4096 {
                     crossed = true;
                     break;
                 }
             }
-            let elapsed = oer_riscv::cycle32().wrapping_sub(start);
+            let elapsed = oer_portable_riscv::cycle32().wrapping_sub(start);
             emit(tag, image, readback, origin);
             emit(tag + 1, before, after, u32::from(crossed));
             state(s, tag + 2);

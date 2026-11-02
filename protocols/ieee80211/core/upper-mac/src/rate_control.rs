@@ -6,15 +6,15 @@
 //! station; each asks its controller for the rate of a single MPDU and of an
 //! A-MPDU and reports every exchange's outcome to it. The controller is an
 //! integrator's policy: the Espressif controller of
-//! `oer-espressif-ieee80211-policy::rate_control` adapts as the vendor does.
+//! `oer-chips-family-ieee80211-policy::rate_control` adapts as the vendor does.
 
 use core::num::NonZeroU16;
 
-use oer_ieee80211_contracts_port::{BlockAckSnr, LinkMetric};
-use oer_time::Instant;
+use oer_protocols_ieee80211_contracts_port::{BlockAckSnr, LinkMetric};
+use oer_portable_time::Instant;
 use {
     crate::phy_mode::PhyMode,
-    oer_ieee80211_wire::{
+    oer_protocols_ieee80211_wire::{
         he::{He20Capabilities, He20PeerState},
         ht::HtPeerCapabilities,
         phy::PhyRate,
@@ -106,10 +106,10 @@ pub struct AmpduUnavailable;
 /// A zero-count observation cannot reach a controller:
 ///
 /// ```compile_fail,E0061
-/// use oer_ieee80211_core_upper_mac::rate_control::RateControl;
-/// fn empty<C: RateControl, B: oer_ieee80211_contracts_port::BlockAckSnr>(
+/// use oer_protocols_ieee80211_core_upper_mac::rate_control::RateControl;
+/// fn empty<C: RateControl, B: oer_protocols_ieee80211_contracts_port::BlockAckSnr>(
 ///     control: &mut C,
-///     now: oer_time::Instant,
+///     now: oer_portable_time::Instant,
 ///     ack: &B,
 /// ) {
 ///     control.observe_ampdu(now, 0, 0, ack);
@@ -119,7 +119,7 @@ pub struct AmpduUnavailable;
 /// Single-frame observations also require a nonzero transmission count:
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_core_upper_mac::rate_control::RateControl;
+/// use oer_protocols_ieee80211_core_upper_mac::rate_control::RateControl;
 /// fn empty<C: RateControl>(control: &mut C) {
 ///     control.observe_mpdu(0, false, None);
 /// }
@@ -129,8 +129,8 @@ pub struct AmpduUnavailable;
 ///
 /// ```
 /// use core::num::NonZeroU16;
-/// use oer_ieee80211_contracts_port::{BlockAckSnr, SnrSample};
-/// use oer_ieee80211_core_upper_mac::rate_control::{
+/// use oer_protocols_ieee80211_contracts_port::{BlockAckSnr, SnrSample};
+/// use oer_protocols_ieee80211_core_upper_mac::rate_control::{
 ///     AmpduUnavailable, BlockAckTally, MpduOutcome, RateControl,
 /// };
 /// struct Measured(i8);
@@ -139,7 +139,7 @@ pub struct AmpduUnavailable;
 ///         SnrSample::Measured(self.0)
 ///     }
 /// }
-/// fn observe<C: RateControl>(control: &mut C, now: oer_time::Instant)
+/// fn observe<C: RateControl>(control: &mut C, now: oer_portable_time::Instant)
 ///     -> Result<(), AmpduUnavailable>
 /// {
 ///     control.observe_mpdu(NonZeroU16::MIN, MpduOutcome::Acknowledged, Some(30));

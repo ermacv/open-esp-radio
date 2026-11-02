@@ -1,10 +1,10 @@
 #![no_std]
-use oer_ieee80211_contracts_port::Ieee80211Capabilities;
-use oer_ieee80211_core_roles_sta::machine::{StaRequest, StaTokens, Station};
+use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+use oer_protocols_ieee80211_core_roles_sta::machine::{StaRequest, StaTokens, Station};
 
-pub fn submit<'id, T: StaTokens, K: Ieee80211Capabilities, C: oer_ieee80211_core_roles_sta::machine::StaCallbacks>(
+pub fn submit<'id, T: StaTokens, K: Ieee80211Capabilities, C: oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks>(
     station: &mut Station<'id, T, K, C>,
-    now: oer_time::Instant,
+    now: oer_portable_time::Instant,
     request: StaRequest<'id, T::ConfigurationPath>,
 ) {
     let result = station.command(now, request);

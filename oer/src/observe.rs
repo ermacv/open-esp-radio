@@ -5,7 +5,7 @@
 //! counters and a PC sampler.
 //!
 //! The executors, the station and the RF actor report through
-//! `oer_trace::observe!`, which only an `oer_trace` build compiles: an image
+//! `oer_portable_trace::observe!`, which only an `oer_trace` build compiles: an image
 //! with this feature declares `instrumentation = ["trace"]`.
 //!
 //! Each counter has one writer, the context that observes it; a counter a
@@ -65,8 +65,8 @@ impl BridgeCounter {
     }
 
     /// The stack refused a frame for `reason`.
-    pub fn refused(&self, reason: oer_embassy_net::RxEnqueueError) {
-        use oer_embassy_net::RxEnqueueError;
+    pub fn refused(&self, reason: oer_portable_embassy_net::RxEnqueueError) {
+        use oer_portable_embassy_net::RxEnqueueError;
         self.bump(match reason {
             RxEnqueueError::PoolExhausted => 1,
             RxEnqueueError::QueueFull => 2,

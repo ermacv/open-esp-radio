@@ -12,12 +12,12 @@
 #![deny(missing_docs)]
 
 use crate::lifecycle::Ieee802154ReadbackError;
-use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::COEX_DISABLED_PTI;
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
     Ieee802154MultipanIndex, Ieee802154PanIdentity,
 };
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154FoundationSnapshot, Ieee802154MacPolicyBackend, Ieee802154MacPolicySnapshot,
     Ieee802154MacPolicyWrites,
 };

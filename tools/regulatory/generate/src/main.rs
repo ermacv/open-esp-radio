@@ -1,5 +1,5 @@
 //! `cargo regdb <db.txt> <revision> <out.rs>`: writes the regulatory tables of
-//! `oer-radio-regulatory` from a wireless-regdb `db.txt`.
+//! `oer-protocols-radio-regulatory` from a wireless-regdb `db.txt`.
 
 #![forbid(unsafe_code)]
 

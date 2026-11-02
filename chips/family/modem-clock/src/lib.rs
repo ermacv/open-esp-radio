@@ -85,7 +85,7 @@ impl DependencyIndex {
     /// A fixed position checked when this constructor is monomorphized.
     ///
     /// ```compile_fail
-    /// use oer_espressif_modem_clock::DependencyIndex;
+    /// use oer_chips_family_modem_clock::DependencyIndex;
     /// let _ = DependencyIndex::constant::<32>();
     /// ```
     pub const fn constant<const INDEX: u8>() -> Self {
@@ -200,7 +200,7 @@ fn bit<D: ModemClockDependency>(dependency: D) -> u32 {
 /// Unique accounting identity transferred by value into one planner epoch.
 ///
 /// ```compile_fail,E0382
-/// use oer_espressif_modem_clock::{ModemClockDependency, ModemClockPlanner, ModemClockPlannerIdentity};
+/// use oer_chips_family_modem_clock::{ModemClockDependency, ModemClockPlanner, ModemClockPlannerIdentity};
 /// fn duplicate<D: ModemClockDependency>(identity: ModemClockPlannerIdentity) {
 ///     let first = ModemClockPlanner::<D>::managed(identity);
 ///     let second = ModemClockPlanner::<D>::managed(identity);

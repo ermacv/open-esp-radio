@@ -121,8 +121,8 @@ pub trait Tasks: Sized + 'static {
     const COUNT: u8;
     /// Image-selected observer of this executor; the default keeps nothing.
     #[cfg(oer_trace)]
-    fn observer() -> impl oer_trace::Observer {
-        oer_trace::Noop
+    fn observer() -> impl oer_portable_trace::Observer {
+        oer_portable_trace::Noop
     }
     /// Poll the task at `index` once, if it has started and not finished.
     fn poll(index: u8, token: &PollToken<Self>, cx: &mut Context<'_>);
@@ -356,7 +356,7 @@ impl<M: MakeFuture, T> Claim<M, T> {
 /// task's future type.
 ///
 /// The image checks read the boundaries from the image's DWARF by this
-/// type's path, `oer_espressif_executor::task::PollBoundary`, not from a
+/// type's path, `oer_chips_family_executor::task::PollBoundary`, not from a
 /// function name or a kept record: every direct call of a boundary is a
 /// task poll and the boundary is the task's root; a boundary without a
 /// direct call, an inlined copy of one, or an image with the executor's
@@ -539,17 +539,17 @@ impl Current {
     }
 }
 
-/// The signal side of an executor (`oer_espressif_interrupt_table::signal`): the task
+/// The signal side of an executor (`oer_chips_family_interrupt_table::signal`): the task
 /// its `current` names, when `cx`'s waker is the waker of the task
 /// executor `executor` polls now.
 pub(crate) fn signal_current<W: Wakes>(
     current: &Current,
     executor: u8,
     cx: &Context<'_>,
-) -> Result<TaskId, oer_espressif_interrupt_table::signal::ForeignTask> {
+) -> Result<TaskId, oer_chips_family_interrupt_table::signal::ForeignTask> {
     current
         .matching::<W>(executor, cx.waker())
-        .ok_or(oer_espressif_interrupt_table::signal::ForeignTask)
+        .ok_or(oer_chips_family_interrupt_table::signal::ForeignTask)
 }
 
 /// The signal side's `wake`, in the executor's context before its poll
@@ -719,7 +719,7 @@ use tests::ready;
 /// so the crate enables `type_alias_impl_trait`.
 ///
 /// ```ignore
-/// oer_espressif_executor::tasks! {
+/// oer_chips_family_executor::tasks! {
 ///     /// The radio executor's tasks (P2).
 ///     pub(crate) RadioTasks: InterruptExecutor<Esp32s31, 2> {
 ///         /// The radio system's actor.

@@ -1,7 +1,7 @@
 //! Impossible hardware inputs returned as values, retaining source observations.
 
 use super::Ieee802154State;
-use oer_espressif_ieee802154_mac_values::*;
+use oer_chips_family_ieee802154_mac_values::*;
 
 /// Impossible service input, with source observations and the completed service prefix.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

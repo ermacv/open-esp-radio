@@ -1,13 +1,13 @@
 //! Stage-two adoption, over the same driver API isolated verifiers use.
 use crate::{Adopted, BootError};
-use oer_espressif_boot::adoption::{self as driver, Port};
-use oer_espressif_interrupt_table::Controller;
+use oer_chips_family_boot::adoption::{self as driver, Port};
+use oer_chips_family_interrupt_table::Controller;
 
 /// Chip composition of the driver's hardware output and the boot hart's
 /// interrupt grant, which only the boot hart's handoff makes into the
 /// runtime's controller.
 pub trait Binding {
-    type Platform: oer_espressif_platform_port::EarlyText;
+    type Platform: oer_chips_family_platform_port::EarlyText;
     type Driver: Port;
     type Hardware;
     /// The boot hart's interrupt grant: its route bank and its own local
@@ -21,11 +21,11 @@ pub trait Binding {
     ///
     /// # Errors
     ///
-    /// [`ForeignHart`](oer_espressif_platform_port::ForeignHart) on another
+    /// [`ForeignHart`](oer_chips_family_platform_port::ForeignHart) on another
     /// hart; nothing is written.
     fn controller(
         interrupts: Self::Interrupts,
-    ) -> Result<Self::Controller, oer_espressif_platform_port::ForeignHart>;
+    ) -> Result<Self::Controller, oer_chips_family_platform_port::ForeignHart>;
 }
 
 /// Initialized hardware held before mapping/context adoption. Images can
@@ -100,13 +100,13 @@ pub enum Error {
 }
 
 impl Error {
-    pub const fn name(self) -> oer_diagnostics::Name<32> {
+    pub const fn name(self) -> oer_portable_diagnostics::Name<32> {
         match self {
             Self::Initialization(driver::InitError::ConsoleInstalled) => {
-                oer_diagnostics::name!("console-installed"; 32)
+                oer_portable_diagnostics::name!("console-installed"; 32)
             }
             Self::Initialization(driver::InitError::CoreControlInstalled) => {
-                oer_diagnostics::name!("core-control-installed"; 32)
+                oer_portable_diagnostics::name!("core-control-installed"; 32)
             }
             Self::Context(error) => error.name(),
         }

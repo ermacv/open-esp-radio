@@ -1,6 +1,6 @@
 //! Which requests the load server answers by itself, idle or running.
 
-use oer_services_load::{
+use oer_hil_services_load::{
     Collect, CollectCounters, CollectLink, CollectParts, CollectSamples, CollectTracking,
     LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US,
     MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
@@ -126,7 +126,7 @@ fn validate(start: &Start) -> Result<(), LoadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_services_load::{GetCpu, Profile, Transmit};
+    use oer_hil_services_load::{GetCpu, Profile, Transmit};
 
     const IDLE: Phase = Phase::Idle { kept: None };
     const RUNNING: Phase = Phase::Running { run: 7 };

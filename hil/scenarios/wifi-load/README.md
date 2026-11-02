@@ -164,10 +164,10 @@ function) of the call `ra` returns from. Ticks are due every period on the
 timer's own schedule; one due while the hart's interrupts were masked
 samples where they open. The functions are named from the DWARF of the
 runtime ELF the harness built (`target/fw/esp32s31-sdk-station/runtime.elf`,
-`oer_analysis_elf::dwarf::Symbolizer`); without it the profile records why
+`oer_tools_analysis_elf::dwarf::Symbolizer`); without it the profile records why
 and keeps the raw samples. The profile's `copies` weights the memory copy
 call sites the image build found in that ELF (`runtime-copies.json` beside
-it, read with `oer_image_checks::copies::read`; without it `copies` records
+it, read with `oer_tools_image_checks::copies::read`; without it `copies` records
 why): the samples in a copy entry, those whose `ra` is a site's return
 address (attributed), those without an `ra` and the rest; and the 40 sites
 with the most weight, each with its size where constant, caller, source

@@ -47,8 +47,8 @@ pub mod rate;
 #[cfg(test)]
 pub(crate) fn clock_generation(
     jumps: u32,
-) -> oer_ieee80211_contracts_port::Ieee80211ClockGeneration {
-    let mut source = oer_ieee80211_contracts_port::GenerationSource::new(0);
+) -> oer_protocols_ieee80211_contracts_port::Ieee80211ClockGeneration {
+    let mut source = oer_protocols_ieee80211_contracts_port::GenerationSource::new(0);
     for _ in 0..jumps {
         source.jump();
     }

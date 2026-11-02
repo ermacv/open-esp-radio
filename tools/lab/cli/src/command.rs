@@ -4,8 +4,8 @@
 use std::{ffi::OsString, path::Path};
 
 use crate::Result;
-use oer_lab_client::protocol::Request;
-use oer_os_process::Checkout;
+use oer_tools_lab_client::protocol::Request;
+use oer_tools_os_process::Checkout;
 
 #[derive(clap::Args)]
 pub(crate) struct OwnerCli {
@@ -22,12 +22,12 @@ enum OwnerCommand {
 
 /// `cargo stand owner [set NAME | merge OLD NEW | forget NAME]`.
 pub(crate) fn owner(ctx: &Checkout, cli: OwnerCli) -> Result<std::process::ExitCode> {
-    let owners = oer_lab_arbiter::owner::Owners::open()?;
-    let parse = |name: &str| oer_lab_arbiter::owner::Owner::new(name);
+    let owners = oer_tools_lab_arbiter::owner::Owners::open()?;
+    let parse = |name: &str| oer_tools_lab_arbiter::owner::Owner::new(name);
     match cli.command {
         None => match owners.of(&ctx.root)? {
             Some(owner) => println!("{owner}"),
-            None => return Err(oer_lab_arbiter::owner::NoOwner(ctx.root.clone()).into()),
+            None => return Err(oer_tools_lab_arbiter::owner::NoOwner(ctx.root.clone()).into()),
         },
         Some(OwnerCommand::Set { name }) => {
             let owner = parse(&name)?;
@@ -109,7 +109,7 @@ pub(crate) struct WaitCli {
 /// boards (every board when none is named) or the stand out of service and
 /// none of them is unavailable.
 pub(crate) fn wait_for_service(cli: WaitCli) -> Result<std::process::ExitCode> {
-    let stand = oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)?;
+    let stand = oer_tools_lab_model::Stand::load(&oer_tools_lab_model::paths::stand_file()?)?;
     let macs = cli
         .boards
         .iter()
@@ -124,13 +124,13 @@ pub(crate) fn wait_for_service(cli: WaitCli) -> Result<std::process::ExitCode> {
             .iter()
             .filter(|entry| {
                 macs.is_empty()
-                    || entry.mac == oer_lab_arbiter::STAND_SERVICE
+                    || entry.mac == oer_tools_lab_arbiter::STAND_SERVICE
                     || macs.contains(&entry.mac)
             })
             .map(|entry| {
                 format!(
                     "{} is under maintenance by {}: {}",
-                    if entry.mac == oer_lab_arbiter::STAND_SERVICE {
+                    if entry.mac == oer_tools_lab_arbiter::STAND_SERVICE {
                         "the stand"
                     } else {
                         entry.mac.as_str()
@@ -142,7 +142,7 @@ pub(crate) fn wait_for_service(cli: WaitCli) -> Result<std::process::ExitCode> {
             .collect::<Vec<_>>();
         out.extend(status.resources.iter().filter_map(|(resource, readiness)| {
             let mac = resource.strip_prefix("board:")?;
-            let oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. } = readiness
+            let oer_tools_lab_arbiter::readiness::Readiness::Unavailable { reason, .. } = readiness
             else {
                 return None;
             };
@@ -157,7 +157,7 @@ pub(crate) fn wait_for_service(cli: WaitCli) -> Result<std::process::ExitCode> {
             eprintln!("stand: waiting: {report}");
             reported = report;
         }
-        oer_os_process::sleep(SERVICE_POLL)?;
+        oer_tools_os_process::sleep(SERVICE_POLL)?;
     }
     println!("in service");
     Ok(std::process::ExitCode::SUCCESS)
@@ -168,12 +168,12 @@ const SERVICE_POLL: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How a lease command uses the radio environment; `None` claims no air.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct AirArg(Option<oer_lab_arbiter::claims::Mode>);
+struct AirArg(Option<oer_tools_lab_arbiter::claims::Mode>);
 
 fn parse_air(text: &str) -> std::result::Result<AirArg, String> {
     match text {
-        "shared" => Ok(AirArg(Some(oer_lab_arbiter::claims::Mode::Shared))),
-        "exclusive" => Ok(AirArg(Some(oer_lab_arbiter::claims::Mode::Exclusive))),
+        "shared" => Ok(AirArg(Some(oer_tools_lab_arbiter::claims::Mode::Shared))),
+        "exclusive" => Ok(AirArg(Some(oer_tools_lab_arbiter::claims::Mode::Exclusive))),
         "none" => Ok(AirArg(None)),
         _ => Err(String::from("use `shared`, `exclusive` or `none`")),
     }
@@ -185,10 +185,10 @@ fn lease_claims(
     boards: &[String],
     air: Option<AirArg>,
     stand: bool,
-    file: &oer_lab_model::Stand,
-) -> Result<Vec<oer_lab_arbiter::claims::Claim>> {
+    file: &oer_tools_lab_model::Stand,
+) -> Result<Vec<oer_tools_lab_arbiter::claims::Claim>> {
     match (stand, boards.is_empty() && air.is_none()) {
-        (true, true) => return Ok(vec![oer_lab_arbiter::claims::Claim::stand()]),
+        (true, true) => return Ok(vec![oer_tools_lab_arbiter::claims::Claim::stand()]),
         (true, false) => return Err("--stand claims everything; drop --board and --air".into()),
         // A whole-stand lease blocks every other owner, so it is never the
         // accidental result of naming nothing.
@@ -204,18 +204,18 @@ fn lease_claims(
     let mut claims = boards
         .iter()
         .map(|board| {
-            Ok(oer_lab_arbiter::claims::Claim::board(
+            Ok(oer_tools_lab_arbiter::claims::Claim::board(
                 &file.resolve(board)?.device_id()?,
             ))
         })
         .collect::<Result<Vec<_>>>()?;
     // Boards use the air shared unless told otherwise.
     if let Some(mode) = air.map_or(
-        Some(oer_lab_arbiter::claims::Mode::Shared),
+        Some(oer_tools_lab_arbiter::claims::Mode::Shared),
         |AirArg(mode)| mode,
     ) {
-        claims.push(oer_lab_arbiter::claims::Claim {
-            resource: oer_lab_arbiter::claims::AIR.to_owned(),
+        claims.push(oer_tools_lab_arbiter::claims::Claim {
+            resource: oer_tools_lab_arbiter::claims::AIR.to_owned(),
             mode,
         });
     }
@@ -226,7 +226,7 @@ fn lease_claims(
 }
 
 /// The `cargo stand` arguments of a leased command that is itself a stand
-/// command, through `cargo stand` or the installed `oer-tool-lab-cli`.
+/// command, through `cargo stand` or the installed `oer-tools-lab-cli`.
 fn nested_stand(program: &OsString, arguments: &[OsString]) -> Option<Vec<OsString>> {
     let name = Path::new(program).file_name()?.to_str()?;
     match (
@@ -234,7 +234,7 @@ fn nested_stand(program: &OsString, arguments: &[OsString]) -> Option<Vec<OsStri
         arguments.first().and_then(|argument| argument.to_str()),
     ) {
         ("cargo", Some("stand")) => Some(arguments[1..].to_vec()),
-        ("oer-tool-lab-cli", _) => Some(arguments.to_vec()),
+        ("oer-tools-lab-cli", _) => Some(arguments.to_vec()),
         _ => None,
     }
 }
@@ -295,8 +295,8 @@ struct FlashedArgs {
 impl FlashedArgs {
     fn record(
         &self,
-        client: &mut oer_lab_client::client::Client,
-        stand: &oer_lab_model::Stand,
+        client: &mut oer_tools_lab_client::client::Client,
+        stand: &oer_tools_lab_model::Stand,
         owner: String,
         origin: String,
     ) -> Result<()> {
@@ -313,7 +313,7 @@ impl FlashedArgs {
     /// The service's journal request for the flash, when one is described.
     fn request(
         &self,
-        stand: &oer_lab_model::Stand,
+        stand: &oer_tools_lab_model::Stand,
         owner: String,
         origin: String,
     ) -> Result<Option<Request>> {
@@ -321,7 +321,7 @@ impl FlashedArgs {
             return Ok(None);
         };
         let sha256 = match (&self.application, &self.sha256) {
-            (Some(application), None) => oer_os_durable::sha256_file(application)?,
+            (Some(application), None) => oer_tools_os_durable::sha256_file(application)?,
             (None, Some(hash)) => hash.clone(),
             _ => return Err("a recorded flash needs --application or --sha256".into()),
         };
@@ -333,7 +333,7 @@ impl FlashedArgs {
         Ok(Some(Request::RecordFlash {
             owner,
             mac: mac.to_string(),
-            image: oer_lab_arbiter::journal::ImageIdentity {
+            image: oer_tools_lab_arbiter::journal::ImageIdentity {
                 name: image.clone(),
                 sha256,
                 commit: self.commit.clone(),
@@ -417,7 +417,7 @@ pub(crate) fn lease(
         .collect::<Vec<_>>()
         .join(" ");
     let owner = options.owner(ctx)?;
-    let stand = oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)?;
+    let stand = oer_tools_lab_model::Stand::load(&oer_tools_lab_model::paths::stand_file()?)?;
     let mut client = crate::service::lease(
         owner.clone(),
         work.clone(),
@@ -476,8 +476,8 @@ pub(crate) fn devices(
     options: &crate::Options,
     cli: DevicesCli,
 ) -> Result<std::process::ExitCode> {
-    let stand = || -> Result<oer_lab_model::Stand> {
-        oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)
+    let stand = || -> Result<oer_tools_lab_model::Stand> {
+        oer_tools_lab_model::Stand::load(&oer_tools_lab_model::paths::stand_file()?)
     };
     let mut client = crate::service::client()?;
     match cli.command {
@@ -489,7 +489,7 @@ pub(crate) fn devices(
             let (board, mac) = match (board, whole) {
                 (_, true) => (
                     String::from("the stand"),
-                    String::from(oer_lab_arbiter::STAND_SERVICE),
+                    String::from(oer_tools_lab_arbiter::STAND_SERVICE),
                 ),
                 (Some(board), false) => {
                     let mac = stand()?.resolve(&board)?.device_id()?.to_string();
@@ -504,12 +504,12 @@ pub(crate) fn devices(
                 reason,
             })?;
             println!("{board} ({mac}) is under maintenance by {owner}");
-            let claim = if mac == oer_lab_arbiter::STAND_SERVICE {
-                oer_lab_arbiter::claims::Claim::stand()
+            let claim = if mac == oer_tools_lab_arbiter::STAND_SERVICE {
+                oer_tools_lab_arbiter::claims::Claim::stand()
             } else {
-                oer_lab_arbiter::claims::Claim::board(&mac)
+                oer_tools_lab_arbiter::claims::Claim::board(&mac)
             };
-            let claims = oer_lab_arbiter::describe_claims(&[claim]);
+            let claims = oer_tools_lab_arbiter::describe_claims(&[claim]);
             for holder in client.report()?.holders {
                 if holder.claims == claims || claims == "the whole stand" {
                     println!(
@@ -526,7 +526,7 @@ pub(crate) fn devices(
             ..
         }) => {
             if client.administer(Request::EndMaintenance {
-                mac: oer_lab_arbiter::STAND_SERVICE.to_owned(),
+                mac: oer_tools_lab_arbiter::STAND_SERVICE.to_owned(),
             })? {
                 println!("the stand is back in service");
             } else {
@@ -546,7 +546,7 @@ pub(crate) fn devices(
                     name == resource
                         && matches!(
                             readiness,
-                            oer_lab_arbiter::readiness::Readiness::Unavailable { .. }
+                            oer_tools_lab_arbiter::readiness::Readiness::Unavailable { .. }
                         )
                 });
             if unavailable {
@@ -554,9 +554,9 @@ pub(crate) fn devices(
                     "the board is unavailable: reset or power-cycle it, then pass --confirm \
                      reset|power-cycle; --confirm rom-answers tries the stand's own reset first",
                 )? {
-                    ConfirmArg::Reset => oer_lab_arbiter::journal::Confirmation::Reset,
-                    ConfirmArg::PowerCycle => oer_lab_arbiter::journal::Confirmation::PowerCycle,
-                    ConfirmArg::RomAnswers => oer_lab_arbiter::journal::Confirmation::RomAnswers,
+                    ConfirmArg::Reset => oer_tools_lab_arbiter::journal::Confirmation::Reset,
+                    ConfirmArg::PowerCycle => oer_tools_lab_arbiter::journal::Confirmation::PowerCycle,
+                    ConfirmArg::RomAnswers => oer_tools_lab_arbiter::journal::Confirmation::RomAnswers,
                 };
                 client.return_resource(&resource)?;
                 let readiness = loop {
@@ -568,17 +568,17 @@ pub(crate) fn devices(
                         .map(|(_, readiness)| readiness);
                     if !matches!(
                         readiness,
-                        Some(oer_lab_arbiter::readiness::Readiness::Recovering { .. })
+                        Some(oer_tools_lab_arbiter::readiness::Readiness::Recovering { .. })
                     ) {
                         break readiness;
                     }
-                    oer_os_process::sleep(std::time::Duration::from_secs(1))?;
+                    oer_tools_os_process::sleep(std::time::Duration::from_secs(1))?;
                 };
                 let check = match &readiness {
-                    Some(oer_lab_arbiter::readiness::Readiness::Ready { .. }) => {
+                    Some(oer_tools_lab_arbiter::readiness::Readiness::Ready { .. }) => {
                         String::from("the LAB service confirmed its end state")
                     }
-                    Some(oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }) => {
+                    Some(oer_tools_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }) => {
                         return Err(
                             format!("{board} ({mac}) is still unavailable: {reason}").into()
                         );
@@ -588,7 +588,7 @@ pub(crate) fn devices(
                 client.administer(Request::Record {
                     owner: options.owner(ctx)?,
                     device: Some(mac.clone()),
-                    event: oer_lab_arbiter::journal::BoardEventKind::QuarantineReleased {
+                    event: oer_tools_lab_arbiter::journal::BoardEventKind::QuarantineReleased {
                         confirmation,
                         check: check.clone(),
                     },
@@ -751,7 +751,7 @@ mod tests {
             LeaseCli::try_parse_from(["--sha256", "ab", "--", "x"]).is_err(),
             "flash details need --flashed"
         );
-        let stand = oer_lab_model::Stand::parse(TEST_STAND).unwrap();
+        let stand = oer_tools_lab_model::Stand::parse(TEST_STAND).unwrap();
         let Some(Request::RecordFlash { owner, mac, image }) = cli
             .flashed
             .request(&stand, "802154".into(), "test".into())
@@ -776,8 +776,8 @@ mod tests {
 
     #[test]
     fn a_lease_claims_its_boards_and_the_air_or_explicitly_the_whole_stand() {
-        use oer_lab_arbiter::claims::{AIR, Claim, Mode};
-        let devices = oer_lab_model::Stand::parse(TEST_STAND).unwrap();
+        use oer_tools_lab_arbiter::claims::{AIR, Claim, Mode};
+        let devices = oer_tools_lab_model::Stand::parse(TEST_STAND).unwrap();
         assert_eq!(
             lease_claims(&[], None, true, &devices).unwrap(),
             [Claim::stand()]

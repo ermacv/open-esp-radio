@@ -4,10 +4,10 @@
 //! and wakes it (`wifi_rf_phy_enable`) while the MAC stays up. The client
 //! lends the proof that its clocks are on.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocksOn};
-use oer_esp32s31_phy::{
+use oer_chips_esp32s31_hal::{domain::RadioDomain, ieee80211::client::WifiClocksOn};
+use oer_chips_esp32s31_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, ConcurrentPhyError, phy_ready},
     wifi_client::{WifiPhyMembership, WifiPhySuspended, resume_wifi, set_wifi_rx, suspend_wifi},
 };
@@ -52,7 +52,7 @@ pub(crate) fn resume_wifi_rf<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     clocks: &WifiClocksOn,
     suspended: WifiPhySuspended,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), (WifiPhySuspended, ConcurrentPhyError)> {
     let ready = match phy_ready(radio) {
         Ok(ready) => ready,

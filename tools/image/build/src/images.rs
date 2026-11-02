@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::{Application, Gates, ImageSpec, Result};
-use oer_image_bundle::{ImageBundle, Purpose};
-use oer_image_checks::{Enforced, interrupts::Required};
+use oer_tools_image_bundle::{ImageBundle, Purpose};
+use oer_tools_image_checks::{Enforced, interrupts::Required};
 
 /// The chip every image is built for.
 pub const CHIP: &str = "esp32s31";
@@ -66,7 +66,7 @@ pub fn package(root: &Path, image: &str) -> Result<String> {
 
 /// The pipeline's spec of `image`, with the caller's enforcement policy. Every check runs.
 pub fn spec(root: &Path, image: &str, enforced: Enforced) -> Result<ImageSpec> {
-    let profile = oer_chip_profile::Profile::load(root, CHIP)?;
+    let profile = oer_tools_chip_profile::Profile::load(root, CHIP)?;
     let package = package(root, image)?;
     Ok(ImageSpec {
         purpose: Purpose::Flash,
@@ -106,12 +106,12 @@ pub fn bundle(root: &Path, image: &str) -> Result<ImageBundle> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_image_checks::Check;
+    use oer_tools_image_checks::Check;
 
     /// A repository with the chip facts and image manifests at `images`.
     fn repository(images: &[&str]) -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
-        for (path, text) in oer_espressif_facts::tracked::FILES {
+        for (path, text) in oer_chips_family_facts::tracked::FILES {
             let path = directory.path().join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
@@ -129,18 +129,18 @@ mod tests {
     fn applications_scenario_images_and_probes_keep_the_pipeline_checks_and_configuration() {
         let directory = repository(&[
             "hil/probes/boot-smoke",
-            "hil/images/esp32s31-aes",
+            "hil/images/aes",
             "hil/probes/esp32s31-radio",
         ]);
         for (image, package) in [
-            ("boot-smoke", "oer-firmware-apps-boot-smoke"),
+            ("boot-smoke", "oer-hil-probes-boot-smoke"),
             (
                 "esp32s31-sdk-rpc",
-                "oer-hil-scenarios-images-esp32s31-sdk-rpc",
+                "oer-hil-images-aes",
             ),
             (
                 "../probes/esp32s31-radio",
-                "oer-firmware-probes-esp32s31-radio",
+                "oer-hil-probes-esp32s31-radio",
             ),
         ] {
             for enforced in [
@@ -176,11 +176,11 @@ mod tests {
     #[test]
     fn a_saved_bundle_cannot_flash_a_removed_application() {
         let directory = repository(&[]);
-        let profile = oer_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
+        let profile = oer_tools_chip_profile::Profile::load(directory.path(), CHIP).unwrap();
         for image in ["retired-wifi-station", "retired-bluetooth-controller"] {
             assert!(package(directory.path(), image).is_err());
             let output = output(directory.path(), image);
-            let staging = oer_image_bundle::staging_directory(&output).unwrap();
+            let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
             std::fs::create_dir_all(&staging).unwrap();
             let built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
             for segment in built.segments() {

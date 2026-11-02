@@ -1,7 +1,7 @@
 //! Encryption control body codecs (Core Vol 6 Part B 2.4.2).
 //!
 //! Key ownership, AES-CCM transforms and procedure state live above wire.
-use oer_wire::PrefixLength;
+use oer_portable_wire::PrefixLength;
 
 /// Rand and EDIV copied from one admitted Central `LL_ENC_REQ`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -2,33 +2,33 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::Poll;
 
-use oer_embassy_time::{EmbassyClock, WaitUntil};
-use oer_esp32s31_board as board;
-use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::cores::Cores;
-use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
-use oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag;
-use oer_esp32s31_hal::peripherals::watchdog::{
+use oer_portable_embassy_time::{EmbassyClock, WaitUntil};
+use oer_chips_esp32s31_board as board;
+use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_hal::cores::Cores;
+use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
+use oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
+use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_chips_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
-use oer_esp32s31_hal::platform::Port;
-use oer_esp32s31_hal::root::Root;
-use oer_espressif_executor::Executor;
-use oer_espressif_staged_runtime::SecondaryHandoff;
-use oer_time::{Clock as _, Duration, Timer as _};
+use oer_chips_esp32s31_hal::platform::Port;
+use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_family_executor::Executor;
+use oer_chips_family_staged_runtime::SecondaryHandoff;
+use oer_portable_time::{Clock as _, Duration, Timer as _};
 
 use crate::calc::{Line, offset, per_10ms};
 
-oer_espressif_staged_runtime::interrupt_table! {
+oer_chips_family_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; }
     /// The boot hart's executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The boot hart's executor's timer alarm; it only acknowledges and pends.
-    alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: AlarmToken = SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
 }
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
@@ -57,7 +57,7 @@ const HART1_ANSWER: u64 = 10_000;
 /// The request that ends hart 1's sampling.
 const STOP: u32 = u32::MAX;
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// The boot hart's latest sample request: written by the boot hart.
     static REQUEST: AtomicU32 = AtomicU32::new(0), in critical_data "hart_exchange";
     /// The request hart 1 answered last: written by hart 1.
@@ -75,22 +75,22 @@ oer_espressif_staged_runtime::placed_static! {
 /// What hart 1 takes at its launch: nothing beyond its handoff.
 struct Hart1Parts;
 
-oer_espressif_staged_runtime::entry!(main, Port);
-oer_espressif_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1_main);
+oer_chips_family_staged_runtime::entry!(main, Port);
+oer_chips_family_staged_runtime::secondary_entry!(1, HART1: Port, Hart1Parts => hart1_main);
 
-fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
+fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Some(root) = Root::take() else {
-        fail(oer_diagnostics::name!("root-taken"; 32));
+        fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, reset_causes, hart1), _psram, mut adopted) =
-        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_compose::phy_fault::report_previous,
             |hardware| {
-                let reset_causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                let reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
                 (
                     hardware.system_timer,
                     hardware.software_interrupts,
@@ -104,10 +104,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             Err(error) => fail(error.name()),
         };
     let Some(interrupts) = Interrupts::take() else {
-        fail(oer_diagnostics::name!("interrupt-table"; 32));
+        fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
-    let timers = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
+    let timers = oer_chips_family_executor::init::<Esp32s31, 0, _, _, _>(
+        oer_chips_family_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -117,9 +117,9 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
     )
     .unwrap_or_else(|failure| failure.reset());
     let Ok(Some(mut cores)) = Cores::take() else {
-        fail(oer_diagnostics::name!("cores-taken"; 32));
+        fail(oer_portable_diagnostics::name!("cores-taken"; 32));
     };
-    let _hart1 = oer_esp32s31_compose::secondary::launch_hart1(
+    let _hart1 = oer_chips_esp32s31_compose::secondary::launch_hart1(
         &mut cores,
         hart1,
         reset_causes,
@@ -138,7 +138,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
     match executor
         .run(&hart, &mut router, interrupts.wake, software.irq0, (), (), move |spawner| {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err() || Tasks::measure(spawner).is_err() {
-                fail(oer_diagnostics::name!("task-start"; 32));
+                fail(oer_portable_diagnostics::name!("task-start"; 32));
             }
         })
         .unwrap_or_else(|failure| failure.reset())
@@ -169,7 +169,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, _parts: Hart1Parts) -> ! {
         }
     }
     match adopted.enable_interrupts() {
-        Ok(_router_and_hart) => oer_espressif_staged_runtime::idle(),
+        Ok(_router_and_hart) => oer_chips_family_staged_runtime::idle(),
         Err(error) => fail(error.name()),
     }
 }
@@ -178,14 +178,14 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, _parts: Hart1Parts) -> ! {
 async fn measure() {
     // Hart 1 measures its rate while the boot hart waits.
     if EmbassyClock.wait_for(Duration::from_millis(100)).await.is_err() {
-        fail(oer_diagnostics::name!("settle-time"; 32));
+        fail(oer_portable_diagnostics::name!("settle-time"; 32));
     }
     let mut complete = true;
     read_costs();
     complete &= busy_rate();
     complete &= hart1_rate();
-    let debugger = <Port as oer_espressif_platform_port::ExecutorPlatform>::debugger_connected(
-        oer_espressif_platform_port::BOOT_HART,
+    let debugger = <Port as oer_chips_family_platform_port::ExecutorPlatform>::debugger_connected(
+        oer_chips_family_platform_port::BOOT_HART,
     );
     text(
         Line::new()
@@ -213,25 +213,25 @@ async fn measure() {
 /// bound has no indirect call.
 fn read_costs() {
     let mcycle = {
-        let start = oer_riscv::cycle64();
+        let start = oer_portable_riscv::cycle64();
         for _ in 0..READS {
-            core::hint::black_box(oer_riscv::cycle64());
+            core::hint::black_box(oer_portable_riscv::cycle64());
         }
-        oer_riscv::cycle64().wrapping_sub(start)
+        oer_portable_riscv::cycle64().wrapping_sub(start)
     };
     let now = {
-        let start = oer_riscv::cycle64();
+        let start = oer_portable_riscv::cycle64();
         for _ in 0..READS {
             core::hint::black_box(EmbassyClock.now());
         }
-        oer_riscv::cycle64().wrapping_sub(start)
+        oer_portable_riscv::cycle64().wrapping_sub(start)
     };
     let empty = {
-        let start = oer_riscv::cycle64();
+        let start = oer_portable_riscv::cycle64();
         for index in 0..READS {
             core::hint::black_box(index);
         }
-        oer_riscv::cycle64().wrapping_sub(start)
+        oer_portable_riscv::cycle64().wrapping_sub(start)
     };
     for (name, cycles) in [("mcycle64", mcycle), ("now", now), ("empty", empty)] {
         text(
@@ -309,7 +309,7 @@ async fn direct_wfi() -> Option<Span> {
     let deadline = EmbassyClock.deadline_after(WFI_SPAN).ok()?;
     let mut wait = WaitUntil::new(deadline);
     let (t0, c0) = edge_sample()?;
-    let i0 = oer_riscv::instret64();
+    let i0 = oer_portable_riscv::instret64();
     let mut waits = 0_u32;
     // One wait per poll, then back to the executor: its other tasks (the
     // watchdog's feed) run between the waits.
@@ -317,13 +317,13 @@ async fn direct_wfi() -> Option<Span> {
         Poll::Ready(()) => Poll::Ready(()),
         Poll::Pending if waits >= WFI_WAKES => Poll::Ready(()),
         Poll::Pending => {
-            oer_riscv::wait_for_interrupt();
+            oer_portable_riscv::wait_for_interrupt();
             waits = waits.saturating_add(1);
             Poll::Pending
         }
     })
     .await;
-    let i1 = oer_riscv::instret64();
+    let i1 = oer_portable_riscv::instret64();
     let (t1, c1) = edge_sample()?;
     Some(Span {
         micros: t1.wrapping_sub(t0),
@@ -336,9 +336,9 @@ async fn direct_wfi() -> Option<Span> {
 /// A 1 ms timer wait of the boot hart's task, while the executor idles.
 async fn executor_idle() -> Option<Span> {
     let (t0, c0) = edge_sample()?;
-    let i0 = oer_riscv::instret64();
+    let i0 = oer_portable_riscv::instret64();
     EmbassyClock.wait_for(WFI_SPAN).await.ok()?;
-    let i1 = oer_riscv::instret64();
+    let i1 = oer_portable_riscv::instret64();
     let (t1, c1) = edge_sample()?;
     Some(Span {
         micros: t1.wrapping_sub(t0),
@@ -389,7 +389,7 @@ async fn cross_hart() -> bool {
         return false;
     };
     if EmbassyClock.wait_for(CROSS_SPAN).await.is_err() {
-        fail(oer_diagnostics::name!("cross-time"; 32));
+        fail(oer_portable_diagnostics::name!("cross-time"; 32));
     }
     let Some(second) = cross_sample(2, "b", rate) else {
         return false;
@@ -461,7 +461,7 @@ fn edge_sample() -> Option<(u64, u64)> {
     for _ in 0..EDGE_POLLS {
         let now = now_us();
         if now != start {
-            return Some((now, oer_riscv::cycle64()));
+            return Some((now, oer_portable_riscv::cycle64()));
         }
     }
     None
@@ -500,10 +500,10 @@ fn text(bytes: &[u8]) {
 }
 
 /// Retain and report a failed boot step before explicitly resetting the image.
-fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
-        let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
+fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
+    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
+        let _note = usb_serial_jtag::fatal_note(&oer_portable_diagnostics::Note::runtime_fail(reason));
     })
 }
 
-oer_espressif_executor::time_driver!(Esp32s31);
+oer_chips_family_executor::time_driver!(Esp32s31);

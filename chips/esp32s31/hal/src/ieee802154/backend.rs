@@ -11,14 +11,14 @@
 // later dataplane transition.
 #![cfg_attr(not(test), allow(dead_code))]
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154EdSampleMode,
     Ieee802154MacControl, Ieee802154PanIdentity, Ieee802154StateSnapshot,
 };
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154FoundationSnapshot, Ieee802154MacPolicySnapshot,
 };
-use oer_mmio::Placement;
+use oer_portable_mmio::Placement;
 
 use crate::ieee802154::mac::{
     EtmPlacement, Ieee802154InterruptSetupOwner, Ieee802154Pti, Ieee802154TaskOwner, MacPlacement,

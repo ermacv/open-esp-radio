@@ -2,9 +2,9 @@
 
 use core::future::Future;
 
-use oer_espressif::{AppResult, Error, Evidence, ExceptionEvidence, ResetCause, UsbConsole};
-use oer_hil_agent::base::{Intake, Requests};
-use oer_hil_protocol::{
+use oer::{AppResult, Error, Evidence, ExceptionEvidence, ResetCause, UsbConsole};
+use oer_protocols_hil_agent::base::{Intake, Requests};
+use oer_protocols_hil_protocol::{
     Message, RequestIdentity,
     base::{
         BootEvidence, ExceptionFault, Fault, ImageKeySet, PlatformPanic, PostMortemCheckpoints,
@@ -22,20 +22,20 @@ const MESSAGES: usize = 8;
 /// Writes a note through the early USB writer, until the console opens.
 struct EarlyUsb;
 
-impl oer_hil_agent::console::Immediate for EarlyUsb {
-    fn note(note: &oer_diagnostics::Note<'_>) -> oer_diagnostics::Written {
-        oer_esp32s31_compose::console::early(note)
+impl oer_protocols_hil_agent::console::Immediate for EarlyUsb {
+    fn note(note: &oer_portable_diagnostics::Note<'_>) -> oer_portable_diagnostics::Written {
+        oer_chips_esp32s31_compose::console::early(note)
     }
 
     fn take_lost() -> u32 {
-        oer_esp32s31_compose::console::take_early_lost()
+        oer_chips_esp32s31_compose::console::take_early_lost()
     }
 }
 
-type HilConsole = oer_hil_agent::console::Console<NOTES, MESSAGES, EarlyUsb>;
+type HilConsole = oer_protocols_hil_agent::console::Console<NOTES, MESSAGES, EarlyUsb>;
 
-oer_espressif_staged_runtime::placed_static! {
-    static CONSOLE: HilConsole = oer_hil_agent::console::Console::new(), in critical_data "logging";
+oer_chips_family_staged_runtime::placed_static! {
+    static CONSOLE: HilConsole = oer_protocols_hil_agent::console::Console::new(), in critical_data "logging";
 }
 
 /// What the image announces in its Hello: the keys of its services and the
@@ -58,7 +58,7 @@ pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
 ///
 /// # Errors
 /// [`Error::Console`] when the console could not confirm the write: its
-/// barrier's fan-out ([`oer_hil_agent::console::progress::ReceiverLimit`])
+/// barrier's fan-out ([`oer_protocols_hil_agent::console::progress::ReceiverLimit`])
 /// is exhausted, which its contract makes a terminal fault. The image does
 /// not trap; the application ends with the error, which the library records
 /// before it resets.
@@ -67,7 +67,7 @@ pub async fn answer_then_trap<M: Message>(identity: RequestIdentity, body: &M) -
         .publish_reliably(identity.session_id, identity.request_id, body)
         .await;
     match CONSOLE.written(sequence).await {
-        Ok(()) => oer_riscv::illegal_instruction(),
+        Ok(()) => oer_portable_riscv::illegal_instruction(),
         Err(_limit) => Err(Error::Console),
     }
 }
@@ -89,13 +89,13 @@ pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
     outbox: Outbox<'_, R>,
     start: impl FnOnce() -> W,
 ) -> AppResult {
-    let boot = oer_espressif::boot_id();
+    let boot = oer::boot_id();
     CONSOLE.start(boot);
     let intake = Intake::new(
         boot,
         image.keys,
         image.maximum_payload_bytes,
-        oer_espressif_staged_runtime::layout::payload_crc32(),
+        oer_chips_family_staged_runtime::layout::payload_crc32(),
     );
     let platform = Platform(evidence);
     let serve = CONSOLE.run(console, intake, &platform, |identity, request: R| {
@@ -112,7 +112,7 @@ pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
 /// The boot evidence the base module serves, as the library read it.
 struct Platform(Evidence);
 
-impl oer_hil_agent::base::Platform for Platform {
+impl oer_protocols_hil_agent::base::Platform for Platform {
     fn boot_evidence(&self) -> BootEvidence {
         let cause = self.0.reset_cause;
         BootEvidence {

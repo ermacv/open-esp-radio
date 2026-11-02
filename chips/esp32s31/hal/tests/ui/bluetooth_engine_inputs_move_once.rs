@@ -1,6 +1,6 @@
 #![no_std]
 // ui-requires: bluetooth-engine
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::{ClockedOwner, engine::*},
     memory::dma_static::Placed,
 };

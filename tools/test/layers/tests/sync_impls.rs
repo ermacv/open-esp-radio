@@ -7,7 +7,7 @@ use std::{
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 
 // Exact lexical counts, including tests: remove or reduce an entry when its
-// implementations move to oer-memory. No new exceptions belong here.
+// implementations move to oer-portable-memory. No new exceptions belong here.
 const EXCEPTIONS: &[(&str, usize)] = &[
     ("chips/esp32s31/hal/src/ieee80211/dma/rx_storage.rs", 1),
     (

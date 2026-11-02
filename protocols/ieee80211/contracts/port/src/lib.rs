@@ -37,7 +37,7 @@
 //!
 //! The port is the contract between portable Wi-Fi MAC logic and the
 //! backend that puts frames on the air, whether a chip, a family driver or
-//! a host model, on the owner shape of `oer-radio-port`: a
+//! a host model, on the owner shape of `oer-protocols-radio-port`: a
 //! [`LowerMacBackend`] runs under its owner and lends a [`LowerMacPhase`]
 //! with one event stream and role-specific interface phases. Disabled-only
 //! settings are a [`LowerMacSetup`]. One submitted operation owns its context,
@@ -54,7 +54,7 @@
 //! models live in the layers that own them.
 //!
 //! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
-//! are the portable ones of `oer-ieee80211-wire`. This package only declares
+//! are the portable ones of `oer-protocols-ieee80211-wire`. This package only declares
 //! the port and its values; it never waits on it.
 
 mod in_flight;
@@ -86,9 +86,9 @@ pub use management::ManagementTxPlan;
 
 // Vocabulary the port's signatures carry, so a runtime over the port names
 // it without depending on the air formats.
-pub use oer_ieee80211_wire::ccmp::GroupKeyId;
-pub use oer_ieee80211_wire::channel::{Band, Channel, ChannelError, ChannelWidth, WifiChannel};
-pub use oer_ieee80211_wire::phy::PhyRate;
+pub use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
+pub use oer_protocols_ieee80211_wire::channel::{Band, Channel, ChannelError, ChannelWidth, WifiChannel};
+pub use oer_protocols_ieee80211_wire::phy::PhyRate;
 
 /// The clock domain of the IEEE 802.11 lower-MAC port: its instants never
 /// mix with another port's.
@@ -100,21 +100,21 @@ pub enum Ieee80211Radio {}
 pub enum ConnectionEpochKind {}
 
 /// An instant on the IEEE 802.11 lower-MAC port's clock.
-pub type Ieee80211Instant = oer_time::RadioInstant<Ieee80211Radio>;
+pub type Ieee80211Instant = oer_portable_time::RadioInstant<Ieee80211Radio>;
 
 /// A span of the port's radio clock.
-pub type Ieee80211Duration = oer_time::RadioDuration<Ieee80211Radio>;
+pub type Ieee80211Duration = oer_portable_time::RadioDuration<Ieee80211Radio>;
 
 /// An instant on the IEEE 802.11 lower-MAC port's clock with the generation
 /// of its relation to the monotonic clock.
-pub type Ieee80211Stamp = oer_radio_port::RadioStamp<Ieee80211Radio>;
+pub type Ieee80211Stamp = oer_protocols_radio_port::RadioStamp<Ieee80211Radio>;
 
 /// A generation of the port's radio-clock relation to monotonic time.
-pub type Ieee80211ClockGeneration = oer_radio_port::Generation<Ieee80211Instant, oer_time::Instant>;
+pub type Ieee80211ClockGeneration = oer_protocols_radio_port::Generation<Ieee80211Instant, oer_portable_time::Instant>;
 
 /// A paired reading of the IEEE 802.11 lower-MAC port's clock and the
 /// monotonic clock.
-pub type Ieee80211ClockSample = oer_radio_port::ClockSample<Ieee80211Radio>;
+pub type Ieee80211ClockSample = oer_protocols_radio_port::ClockSample<Ieee80211Radio>;
 
 pub use capabilities::{
     BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport, WidthSet,
@@ -125,7 +125,7 @@ pub use extensions::{
     MonitorCapabilities, TSF_DRIFT_PPM, TSF_RELATION, TbttEvent, TsfArithmeticError, TsfGeneration,
     TsfProjectionError, TsfSample, TsfVifMismatch, VifTsf,
 };
-pub use oer_radio_port::{
+pub use oer_protocols_radio_port::{
     ClockInfo, ClockRelation, EventsLost, Generation, GenerationSource, Poisoned, PortResult,
     Projected, ProjectionError, RelationRate,
 };

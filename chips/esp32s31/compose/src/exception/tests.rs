@@ -1,6 +1,6 @@
 use std::vec::Vec;
 
-use oer_diagnostics::note::Topic;
+use oer_portable_diagnostics::note::Topic;
 
 use super::*;
 
@@ -102,8 +102,8 @@ fn previous(
     hart: u32,
     trap: TrapIdentity,
     terminal: u32,
-) -> oer_espressif_staged_runtime::trap::PreviousException {
-    oer_espressif_staged_runtime::trap::PreviousException {
+) -> oer_chips_family_staged_runtime::trap::PreviousException {
+    oer_chips_family_staged_runtime::trap::PreviousException {
         hart,
         mcause: trap.mcause,
         mepc: trap.mepc,
@@ -202,7 +202,7 @@ fn a_refused_note_keeps_the_record_until_a_whole_report() {
 #[test]
 fn an_empty_foreign_or_unknown_record_is_neither_reported_nor_cleared() {
     // A corrupt envelope fails `Record::peek` before any decoding
-    // (`oer-diagnostics`' own tests); these pass it and fail here.
+    // (`oer-portable-diagnostics`' own tests); these pass it and fail here.
     let foreign = Record::encode(
         Class::UnexpectedHardware,
         Domain::Wifi,

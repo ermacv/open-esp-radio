@@ -65,7 +65,7 @@ impl SecondaryEntry {
     /// entry: naming it fails at monomorphization.
     ///
     /// ```compile_fail,E0080
-    /// use oer_espressif_staged_layout::{boot::BOOT_HART, handoff::SecondaryEntry};
+    /// use oer_chips_family_staged_layout::{boot::BOOT_HART, handoff::SecondaryEntry};
     /// const ENTRY: SecondaryEntry = unsafe { SecondaryEntry::new::<{ BOOT_HART as u8 }>(0x2f00_0000) };
     /// ```
     ///

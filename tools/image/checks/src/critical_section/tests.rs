@@ -1,6 +1,6 @@
 use super::*;
 use crate::stack::tests::{Code, LOAD_RA, RET, SAVE_RA, SP_DOWN_16, SP_UP_16, TEXT, call, image};
-use oer_image_stack::{Class, HartStack, LevelStack, TableEntry};
+use oer_tools_image_stack::{Class, HartStack, LevelStack, TableEntry};
 
 const BOOT: u32 = 3;
 const OTHER: u32 = 7;
@@ -149,13 +149,13 @@ fn a_task_poll_or_start_payload_reached_from_another_hart_is_refused() {
     let mut image = graph(0x0007_80e7, ENTRIES[0]);
     image
         .resolutions
-        .add(SECONDARY + 8, oer_image_stack::Fact::FieldType, [SHORT]);
+        .add(SECONDARY + 8, oer_tools_image_stack::Fact::FieldType, [SHORT]);
     assert!(audit_roots(&image, &entries(), BOOT).is_err());
 }
 
 #[test]
 fn an_inlined_section_shim_is_detected_in_its_containing_function() {
-    use oer_os_toolchain::{Tool, command, lld};
+    use oer_tools_os_toolchain::{Tool, command, lld};
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("section.rs");
     let object = directory.path().join("section.o");
@@ -178,7 +178,7 @@ pub fn entry(value: u32) -> u32 { critical::hart::_critical_section_1_0_acquire(
         .args([
             "--edition=2024",
             "--crate-type=lib",
-            "--crate-name=oer_espressif_staged_runtime",
+            "--crate-name=oer_chips_family_staged_runtime",
             "--target=riscv32imafc-unknown-none-elf",
             "--emit=obj",
             "-Copt-level=3",
@@ -216,7 +216,7 @@ pub fn entry(value: u32) -> u32 { critical::hart::_critical_section_1_0_acquire(
     assert!(image.symbol(ENTRIES[0]).is_none());
     let owners = callers(&image);
     assert!(!owners.is_empty());
-    let root = image.address_of("oer_espressif_staged_runtime::entry")[0];
+    let root = image.address_of("oer_chips_family_staged_runtime::entry")[0];
     assert!(owners.contains(&root));
     let roots = BTreeMap::from([((OTHER, root), "foreign inlined section".into())]);
     let error = audit_roots(&image, &roots, BOOT).unwrap_err().to_string();

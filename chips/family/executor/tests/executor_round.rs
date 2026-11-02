@@ -7,13 +7,13 @@ fn an_interrupt_executor_starts_only_the_task_set_its_entry_polls() {
         .prefix("executor-round-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .expect("own executor round build directory");
-    oer_test_ui_cases::run_chip(
+    oer_tools_test_ui_cases::run_chip(
         &root,
         scratch.path(),
         "riscv32imafc-unknown-none-elf",
         &[
-            ("oer-espressif-executor", "chip"),
-            ("oer-espressif-platform-port", "esp32s31"),
+            ("oer-chips-family-executor", "chip"),
+            ("oer-chips-family-platform-port", "esp32s31"),
         ],
         &["chips/family/executor/tests/chip-ui/executor_round.rs"],
     );

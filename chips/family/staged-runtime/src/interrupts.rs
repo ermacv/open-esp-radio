@@ -1,18 +1,18 @@
 //! The image's interrupt table: [`interrupt_table!`](crate::interrupt_table)
-//! declares it; the hart's [`Router`](oer_espressif_interrupt_table::Router) binds its
+//! declares it; the hart's [`Router`](oer_chips_family_interrupt_table::Router) binds its
 //! entries, and the runtime's vectors call each entry's handler directly.
 
 /// The CPU lines of the chip's CLIC and its harts, generated from the chip
 /// facts' interrupt contract (`[interrupts] lines`, `first-source-line`,
 /// `control-bits`, `level-bits` and `harts`).
 #[cfg(chip_vectors)]
-pub const LINES: oer_espressif_interrupt_table::Lines = crate::vectors::LINES;
+pub const LINES: oer_chips_family_interrupt_table::Lines = crate::vectors::LINES;
 
 /// Declare the image's interrupt table, once per image, and hand its
 /// `INTERRUPT_TABLE` to [`adoption::run`](crate::adoption::run):
 ///
 /// ```ignore
-/// oer_espressif_staged_runtime::interrupt_table! {
+/// oer_chips_family_staged_runtime::interrupt_table! {
 ///     contexts { radio: 3; }
 ///     /// The IEEE 802.15.4 MAC's events.
 ///     ieee802154: Ieee802154Token = Ieee802154MacIrq => crate::radio::on_event,
@@ -22,9 +22,9 @@ pub const LINES: oer_espressif_interrupt_table::Lines = crate::vectors::LINES;
 ///
 /// Each entry names the token field, the token type, the interrupt part its
 /// handler holds (its type names the source:
-/// [`oer_mmio::InterruptSource`]), the handler (`fn(&mut Part)`), the CPU
+/// [`oer_portable_mmio::InterruptSource`]), the handler (`fn(&mut Part)`), the CPU
 /// line ([`LINES`]: 16 to 47), a named context, the hart and the handler's class
-/// (`oer_espressif_interrupt_table::Class`: `Hardware`, `Executor` or
+/// (`oer_chips_family_interrupt_table::Class`: `Hardware`, `Executor` or
 /// `Exempt(VIOLATION, "reason")`), which the image gate checks. The macro
 /// checks the declared low-to-high line order at each level against the
 /// facts' tie-break rule and defines the line's handler symbol, which the line's vector calls, the
@@ -45,10 +45,10 @@ macro_rules! interrupt_table {
 /// owner recovery or retry is issued.
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub fn reset_binding<
-    P: oer_espressif_platform_port::Platform,
-    E: oer_espressif_interrupt_table::Entry,
+    P: oer_chips_family_platform_port::Platform,
+    E: oer_chips_family_interrupt_table::Entry,
 >(
-    error: oer_espressif_interrupt_table::BindError<E>,
+    error: oer_chips_family_interrupt_table::BindError<E>,
 ) -> ! {
     let held = core::mem::ManuallyDrop::new(error);
     let (code, observations) = held.diagnostic();

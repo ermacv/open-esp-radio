@@ -36,9 +36,9 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
-use oer_espressif_boot::wait::BootDeadline;
-use oer_espressif_boot::wait::{BootWait, WaitFailure};
-use oer_time::Clock;
+use oer_chips_family_boot::wait::BootDeadline;
+use oer_chips_family_boot::wait::{BootWait, WaitFailure};
+use oer_portable_time::Clock;
 
 /// The entry reached the handshake: its interrupts are masked and its fault
 /// stub installed.
@@ -246,7 +246,7 @@ impl<E: Copy> LaunchFailure<E> {
     /// cannot continue.
     pub fn reset<P>(self) -> !
     where
-        P: oer_espressif_platform_port::SecondaryStart<StartError = E>,
+        P: oer_chips_family_platform_port::SecondaryStart<StartError = E>,
     {
         let (reason, observations) = self.diagnostic(P::observations);
         crate::panic::reset_fault::<P>(reason, observations)
@@ -257,13 +257,13 @@ impl<E: Copy> LaunchFailure<E> {
 /// owners for later parts, and the stack pointer it reported ready on.
 #[cfg(chip_vectors)]
 #[must_use = "dropping the running hart loses its retained owners"]
-pub struct Running<P: oer_espressif_platform_port::SecondaryStart, const H: u8> {
+pub struct Running<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> {
     released: P::Released,
     ready_sp: u32,
 }
 
 #[cfg(chip_vectors)]
-impl<P: oer_espressif_platform_port::SecondaryStart, const H: u8> Running<P, H> {
+impl<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> Running<P, H> {
     /// The started hart.
     pub const fn hart(&self) -> u8 {
         H
@@ -287,7 +287,7 @@ impl<P: oer_espressif_platform_port::SecondaryStart, const H: u8> Running<P, H> 
 /// [`secondary_entry!`](crate::secondary_entry); the launch fills it once
 /// before its acknowledgement and the hart's root takes it once after.
 pub struct Mailbox<I, T> {
-    cell: oer_memory::ClaimCell<(I, T)>,
+    cell: oer_portable_memory::ClaimCell<(I, T)>,
 }
 
 impl<I, T> Mailbox<I, T> {
@@ -298,7 +298,7 @@ impl<I, T> Mailbox<I, T> {
     )]
     pub const fn new() -> Self {
         Self {
-            cell: oer_memory::ClaimCell::new(),
+            cell: oer_portable_memory::ClaimCell::new(),
         }
     }
 }
@@ -324,7 +324,7 @@ pub fn launch<P, C, const H: u8, T>(
     parts: T,
 ) -> Result<Running<P, H>, LaunchFailure<P::StartError>>
 where
-    P: oer_espressif_platform_port::SecondaryStart,
+    P: oer_chips_family_platform_port::SecondaryStart,
     C: Clock + ?Sized,
     T: Send,
 {
@@ -332,7 +332,7 @@ where
         if H as usize == crate::BOOT_HART as usize {
             panic!("the boot hart is not launched");
         }
-        if H as usize >= oer_espressif_platform_port::HARTS {
+        if H as usize >= oer_chips_family_platform_port::HARTS {
             panic!("the hart lies inside the chip geometry");
         }
     }
@@ -352,7 +352,7 @@ where
         |cores| P::release(cores, permit, preconditions, entry),
         |cores, released| P::retire_boot_word(cores, released),
         |released| hand_over(mailbox, P::interrupts(released), parts),
-        oer_riscv::fence,
+        oer_portable_riscv::fence,
     )?;
     Ok(Running { released, ready_sp })
 }
@@ -379,7 +379,7 @@ struct Stacks {
 #[allow(clippy::too_many_arguments, reason = "the launch's ordered steps")]
 fn run<V, C, X, R, E>(
     view: &V,
-    deadline: &oer_espressif_boot::wait::BootDeadline<'_, C>,
+    deadline: &oer_chips_family_boot::wait::BootDeadline<'_, C>,
     waits: LaunchWaits,
     stacks: Stacks,
     cores: &mut X,
@@ -444,18 +444,18 @@ where
 /// mailbox the launch filled.
 ///
 /// ```compile_fail
-/// use oer_espressif_staged_runtime::SecondaryHandoff;
+/// use oer_chips_family_staged_runtime::SecondaryHandoff;
 /// let handoff = SecondaryHandoff::<(), 1>::new();
 /// ```
 #[cfg(chip_vectors)]
 #[must_use = "the handoff holds the hart's interrupt grant"]
-pub struct SecondaryHandoff<P: oer_espressif_platform_port::SecondaryStart, const H: u8> {
+pub struct SecondaryHandoff<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> {
     admission: crate::PreAdmission<H>,
     interrupts: P::Interrupts,
 }
 
 #[cfg(chip_vectors)]
-impl<P: oer_espressif_platform_port::SecondaryStart, const H: u8> SecondaryHandoff<P, H> {
+impl<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> SecondaryHandoff<P, H> {
     /// Make the hart's own interrupt context, interrupts still masked: its
     /// grant becomes its controller here, on the hart, and the router over
     /// it silences every route of the hart's bank and disables every line of
@@ -474,22 +474,22 @@ impl<P: oer_espressif_platform_port::SecondaryStart, const H: u8> SecondaryHando
         table: &'static crate::InterruptTable,
     ) -> Result<crate::Adopted<P::Controller, H>, crate::BootError>
     where
-        P::Controller: oer_espressif_interrupt_table::Controller,
+        P::Controller: oer_chips_family_interrupt_table::Controller,
     {
         let controller = P::controller(self.interrupts)?;
-        let actual = usize::from(oer_espressif_interrupt_table::Controller::hart(&controller));
+        let actual = usize::from(oer_chips_family_interrupt_table::Controller::hart(&controller));
         if actual != usize::from(H) {
             return Err(crate::BootError::WrongHart {
                 actual,
                 expected: usize::from(H),
             });
         }
-        let router = oer_espressif_interrupt_table::Router::install(controller, table)?;
+        let router = oer_chips_family_interrupt_table::Router::install(controller, table)?;
         // The hart's CLIC threshold admits every level from here: the ROM's
         // secondary path leaves it unestablished, and interrupts stay masked
         // (`mstatus.MIE`) until `enable_interrupts`.
         #[cfg(target_arch = "riscv32")]
-        oer_riscv::restore_interrupt_threshold(0);
+        oer_portable_riscv::restore_interrupt_threshold(0);
         Ok(crate::Adopted {
             router,
             admission: self.admission,
@@ -518,9 +518,9 @@ pub fn __root<P, const H: u8, T, R>(
     main: impl FnOnce(SecondaryHandoff<P, H>, T) -> R,
 ) -> !
 where
-    P: oer_espressif_platform_port::SecondaryStart,
+    P: oer_chips_family_platform_port::SecondaryStart,
 {
-    let current = oer_riscv::hart_id();
+    let current = oer_portable_riscv::hart_id();
     if current != usize::from(H) {
         HANDSHAKE.report_fault(KIND_HANDOVER, 1, 0, current as u32);
         crate::halt()
@@ -554,7 +554,7 @@ where
     }
     HANDSHAKE
         .ready_sp
-        .store(oer_riscv::stack_pointer() as u32, Ordering::Relaxed);
+        .store(oer_portable_riscv::stack_pointer() as u32, Ordering::Relaxed);
     HANDSHAKE.ready.store(READY, Ordering::Release);
     // The image's main never returns (`-> !`); a main that does idles masked.
     let _never = main(

@@ -2,13 +2,13 @@
 //! timer groups (MWDT0, MWDT1), both groups' clock and reset words, the
 //! RTC watchdog (RWDT) and the super watchdog (SWD).
 //!
-//! Each owner implements the `oer-espressif-watchdog` ports with one
+//! Each owner implements the `oer-chips-family-watchdog` ports with one
 //! read-modify-write of its generated fields per call, keeping every other
 //! bit, and strobes only through the generated triggers.
 //!
 //! ```compile_fail,E0061
-//! # use oer_esp32s31_hal::peripherals::watchdog::Mwdt1Registers;
-//! # use oer_espressif_watchdog::{WRITE_KEY, WriteProtected};
+//! # use oer_chips_esp32s31_hal::peripherals::watchdog::Mwdt1Registers;
+//! # use oer_chips_family_watchdog::{WRITE_KEY, WriteProtected};
 //! fn raw_key(mut mwdt1: Mwdt1Registers) {
 //!     mwdt1.store_write_key(WRITE_KEY); // the key is stored only inside a session
 //! }
@@ -18,20 +18,20 @@
 //! only stopped, never armed:
 //!
 //! ```compile_fail,E0277
-//! # use oer_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
-//! # use oer_espressif_watchdog::{MainWatchdog, MicrosecondTick};
+//! # use oer_chips_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
+//! # use oer_chips_family_watchdog::{MainWatchdog, MicrosecondTick};
 //! fn arm(mwdt0: Mwdt0Registers, tick: MicrosecondTick) {
 //!     let _armable = MainWatchdog::new(mwdt0, tick);
 //! }
 //! ```
 
-use oer_espressif_watchdog::{
+use oer_chips_family_watchdog::{
     Access, MainConfig, MainStageAction, MainWatchdogEnable, MainWatchdogRegisters, ResetLength,
     RtcStageAction, RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::{HpSysClkrstTimg0, HpSysClkrstTimg1},
     instances,
     rtc_wdt::{LpWdt, LpWdtSwd},
@@ -47,7 +47,7 @@ mod tests;
 /// can reset the group and restore the watchdog's flash-boot enable.
 ///
 /// ```compile_fail,E0616
-/// # use oer_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
+/// # use oer_chips_esp32s31_hal::peripherals::watchdog::Mwdt0Registers;
 /// fn reset(mut watchdog: Mwdt0Registers) {
 ///     watchdog.clock.modify_timergrp0_ctrl0(|w| {
 ///         w.set_reg_timergrp0_rst_en(true);
@@ -98,7 +98,7 @@ impl<P: Placement, Q: Placement> Mwdt0Registers<P, Q> {
         self.clock.modify_timergrp0_ctrl0(|w| {
             w.set_reg_timergrp0_t0_src_sel(Bits::constant::<
                 {
-                    oer_esp32s31_pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal
+                    oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal
                         .bits()
                 },
             >())
@@ -140,7 +140,7 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
                 .set_reg_timergrp1_wdt_clk_en(true)
                 .set_reg_timergrp1_t0_src_sel(Bits::constant::<
                     {
-                        oer_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T0SrcSel::Xtal
+                        oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T0SrcSel::Xtal
                             .bits()
                     },
                 >())
@@ -149,7 +149,7 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
     }
 }
 
-impl<P: Placement, Q: Placement> oer_espressif_boot::adoption::Timer0Clock
+impl<P: Placement, Q: Placement> oer_chips_family_boot::adoption::Timer0Clock
     for Mwdt0Registers<P, Q>
 {
     fn start_timer0_clock(&mut self) {
@@ -157,7 +157,7 @@ impl<P: Placement, Q: Placement> oer_espressif_boot::adoption::Timer0Clock
     }
 }
 
-impl<P: Placement, Q: Placement> oer_espressif_boot::adoption::Main1Clock for Mwdt1Registers<P, Q> {
+impl<P: Placement, Q: Placement> oer_chips_family_boot::adoption::Main1Clock for Mwdt1Registers<P, Q> {
     fn start_clock(&mut self) {
         Self::start_clock(self);
     }
@@ -325,10 +325,10 @@ impl<P: Placement> SuperWatchdogRegisters for SwdRegisters<P> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a, 'b> Mwdt0Registers<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
+impl<'a, 'b> Mwdt0Registers<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// Timer group 0's watchdog and clock words over host memory from each
     /// instance's base.
-    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             wdt: Timg0Wdt::host(wdt)?,
             clock: HpSysClkrstTimg0::host(clock)?,
@@ -337,10 +337,10 @@ impl<'a, 'b> Mwdt0Registers<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a, 'b> Mwdt1Registers<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
+impl<'a, 'b> Mwdt1Registers<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// Timer group 1's watchdog and clock words over host memory from each
     /// instance's base.
-    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             wdt: Timg1Wdt::host(wdt)?,
             clock: HpSysClkrstTimg1::host(clock)?,
@@ -349,17 +349,17 @@ impl<'a, 'b> Mwdt1Registers<oer_mmio::Host<'a>, oer_mmio::Host<'b>> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> RwdtRegisters<oer_mmio::Host<'a>> {
+impl<'a> RwdtRegisters<oer_portable_mmio::Host<'a>> {
     /// The RTC watchdog's words over host memory from its instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         LpWdt::host(words).map(Self)
     }
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> SwdRegisters<oer_mmio::Host<'a>> {
+impl<'a> SwdRegisters<oer_portable_mmio::Host<'a>> {
     /// The super watchdog's words over host memory from its instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         LpWdtSwd::host(words).map(Self)
     }
 }

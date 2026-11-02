@@ -1,7 +1,7 @@
 use super::*;
 #[test]
 fn completion_status_and_receive_credit_observations_survive_the_boundary() {
-    use oer_esp32s31_ieee80211_driver::{
+    use oer_chips_esp32s31_ieee80211_driver::{
         lower_mac::LowerMacFault as Core,
         mac::rx::pool::RxStageTransactionError as Stage,
         mac::tx::{CompletionFault as Completion, TxError as Mac},
@@ -36,14 +36,14 @@ fn completion_status_and_receive_credit_observations_survive_the_boundary() {
 }
 #[test]
 fn radio_origin_and_tracking_class_keep_their_original_clock_values() {
-    use oer_esp32s31_phy::{
+    use oer_chips_esp32s31_phy::{
         concurrent::ConcurrentPhyError,
         state::client::{PhyPllTrackClass as Class, PhyTrackTimeError as Time},
     };
-    use oer_esp32s31_radio_client::{Poison, PoisonCause, PoisonOrigin, RequestKind};
+    use oer_chips_esp32s31_radio_client::{Poison, PoisonCause, PoisonOrigin, RequestKind};
     let value = Poison {
         origin: PoisonOrigin::Request {
-            client: oer_esp32s31_hal::domain::RadioClient::Wifi,
+            client: oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
             request: RequestKind::Retune,
         },
         cause: PoisonCause::Domain(ConcurrentPhyError::Time(Time::TimeReversed {
@@ -71,7 +71,7 @@ fn radio_origin_and_tracking_class_keep_their_original_clock_values() {
 }
 #[test]
 fn a_failed_retirement_keeps_the_station_failure_and_every_lifecycle_observation() {
-    use oer_radio_port::{LifecycleError as Source, SlotObservation as Observed, SlotStorageState};
+    use oer_protocols_radio_port::{LifecycleError as Source, SlotObservation as Observed, SlotStorageState};
     let observed = Observed {
         phase: 7,
         storage: SlotStorageState::Vacant,
@@ -122,7 +122,7 @@ fn a_failed_retirement_keeps_the_station_failure_and_every_lifecycle_observation
 }
 #[test]
 fn a_failed_network_drain_is_the_retirement_cause_beside_the_station_failure() {
-    use oer_radio_port::LifecycleError as Source;
+    use oer_protocols_radio_port::LifecycleError as Source;
     let drain = NetworkDrain {
         cause: NetworkDrainCause::Deadline,
         held: 3,
@@ -152,8 +152,8 @@ fn a_failed_network_drain_is_the_retirement_cause_beside_the_station_failure() {
         held: 1,
     };
     assert_eq!(
-        super::convert::network_drain(oer_ieee80211_runtime::station::NetworkDrainFailure {
-            cause: oer_ieee80211_runtime::station::NetworkDrainCause::ParticipantLost,
+        super::convert::network_drain(oer_protocols_ieee80211_runtime::station::NetworkDrainFailure {
+            cause: oer_protocols_ieee80211_runtime::station::NetworkDrainCause::ParticipantLost,
             held: 1,
         }),
         lost
@@ -161,15 +161,15 @@ fn a_failed_network_drain_is_the_retirement_cause_beside_the_station_failure() {
 }
 #[test]
 fn a_release_into_a_poisoned_domain_or_with_an_active_mac_is_not_a_stop() {
-    use oer_esp32s31_hal::owner::maintenance::Error as Maintenance;
-    use oer_esp32s31_radio_client::DomainHealth;
-    use oer_esp32s31_radio_client::{Poison, PoisonCause, PoisonOrigin};
+    use oer_chips_esp32s31_hal::owner::maintenance::Error as Maintenance;
+    use oer_chips_esp32s31_radio_client::DomainHealth;
+    use oer_chips_esp32s31_radio_client::{Poison, PoisonCause, PoisonOrigin};
     assert_eq!(super::convert::released(DomainHealth::Healthy), Ok(()));
     let poison = Poison {
         origin: PoisonOrigin::CloseRf,
-        cause: PoisonCause::Domain(oer_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
-            oer_esp32s31_phy::state::client::PhyTrackTimeError::TimeReversed {
-                class: oer_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
+        cause: PoisonCause::Domain(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+            oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::TimeReversed {
+                class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
                 previous_micros: 9,
                 now_micros: 2,
             },

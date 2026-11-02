@@ -6,8 +6,8 @@
 #![forbid(unsafe_code)]
 
 use crate::phy::registers::{ClockRegisters, PhyPlacement};
-use oer_esp32s31_pac::{fe, modem_syscon::ModemSysconRadio, wifi_bb};
-use oer_mmio::{Bits, Placement};
+use oer_chips_esp32s31_pac::{fe, modem_syscon::ModemSysconRadio, wifi_bb};
+use oer_portable_mmio::{Bits, Placement};
 
 /// Clear the Wi-Fi enable bit, the only baseband-control bit complete
 /// `phy_xpd_rf_new` changes.
@@ -18,9 +18,9 @@ use oer_mmio::{Bits, Placement};
 pub fn clear_rf_baseband_control<P: Placement>(syscon: &mut ModemSysconRadio<P>) {
     syscon.modify_wifi_bb_cfg(|w| {
         w.set_wifi_enable(if false {
-            oer_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
         });
     });
 }

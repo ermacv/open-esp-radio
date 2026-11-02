@@ -1,6 +1,6 @@
 //! Separate affine body/driver endpoints over permanent queue backing.
 use super::*;
-use oer_memory::{
+use oer_portable_memory::{
     AffineSpscReceiver, AffineSpscSender, CompactSpscCursor, LocalSpscReceiver, LocalSpscSender,
 };
 
@@ -15,16 +15,16 @@ pub(super) enum ClockUse {
 type Cmd<'id, Id, D, const B: usize, O: Observations> = driver::Command<'id, Id, D, B, O>;
 type Msg<'id, Id, D, const B: usize> = owned::OwnedEvent<'id, Id, D, B>;
 type FailedCommand<'id, Id, D, const B: usize, O: Observations> =
-    oer_memory::OnceValue<Cmd<'id, Id, D, B, O>>;
+    oer_portable_memory::OnceValue<Cmd<'id, Id, D, B, O>>;
 type FailedTerminal<'id, Id, D, const B: usize, O: Observations> =
-    oer_memory::OnceValue<owned::Retained<'id, Id, D, B, O>>;
+    oer_portable_memory::OnceValue<owned::Retained<'id, Id, D, B, O>>;
 
 /// The transmissions' terminals, each at its ticket's place from the driver's
 /// completion until the body takes it, so only the place travels through the
 /// event queue. A ticket names one operation at a time: a place holds at
 /// most one terminal.
 pub(super) type Completions<'id, Id, D, const B: usize, O> =
-    oer_memory::ReturnBank<Option<owned::OwnedTxCompleted<'id, Id, D, B, O>>, TX_TICKETS>;
+    oer_portable_memory::ReturnBank<Option<owned::OwnedTxCompleted<'id, Id, D, B, O>>, TX_TICKETS>;
 
 /// The place of one parked transmission terminal. Only the driver makes one, when
 /// it parks the terminal; the body consumes it once.
@@ -122,24 +122,24 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
     /// Absent until an installation is prepared; `split` reaches the
     /// installation's views only through it.
     pub(super) attached: Option<Attached<'id, Id, D, B>>,
-    pub(super) commands: oer_memory::AffineSpscQueue<
+    pub(super) commands: oer_portable_memory::AffineSpscQueue<
         driver::Command<'id, Id, D, B, O>,
         COMMANDS,
-        oer_memory::CompactSpscCursor,
+        oer_portable_memory::CompactSpscCursor,
     >,
-    pub(super) events: oer_memory::AffineSpscQueue<
+    pub(super) events: oer_portable_memory::AffineSpscQueue<
         owned::OwnedEvent<'id, Id, D, B>,
         { TERMINAL_CAPACITY + RX_HELD },
-        oer_memory::CompactSpscCursor,
+        oer_portable_memory::CompactSpscCursor,
     >,
     /// The received units the body holds: admitted to it and not yet
     /// returned to the ring or lent to the network.
     pub(super) rx_out: Cell<usize>,
-    pub(super) failed_command: oer_memory::OnceValue<driver::Command<'id, Id, D, B, O>>,
+    pub(super) failed_command: oer_portable_memory::OnceValue<driver::Command<'id, Id, D, B, O>>,
     pub(super) failed_terminal: FailedTerminal<'id, Id, D, B, O>,
     pub(super) completions: Completions<'id, Id, D, B, O>,
     pub(super) frontend_identity: Cell<u64>,
-    pub(super) clock_replies: oer_memory::AffineSpscQueue<ClockAnswer, 1, CompactSpscCursor>,
+    pub(super) clock_replies: oer_portable_memory::AffineSpscQueue<ClockAnswer, 1, CompactSpscCursor>,
     pub(super) clock_use: Cell<ClockUse>,
 }
 impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
@@ -148,14 +148,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) const fn vacant() -> Self {
         Self {
             attached: None,
-            commands: oer_memory::AffineSpscQueue::new(),
-            events: oer_memory::AffineSpscQueue::new(),
+            commands: oer_portable_memory::AffineSpscQueue::new(),
+            events: oer_portable_memory::AffineSpscQueue::new(),
             rx_out: Cell::new(0),
-            failed_command: oer_memory::OnceValue::new(),
-            failed_terminal: oer_memory::OnceValue::new(),
-            completions: oer_memory::ReturnBank::new(),
+            failed_command: oer_portable_memory::OnceValue::new(),
+            failed_terminal: oer_portable_memory::OnceValue::new(),
+            completions: oer_portable_memory::ReturnBank::new(),
             frontend_identity: Cell::new(1),
-            clock_replies: oer_memory::AffineSpscQueue::new(),
+            clock_replies: oer_portable_memory::AffineSpscQueue::new(),
             clock_use: Cell::new(ClockUse::Idle),
         }
     }
@@ -269,7 +269,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             self.storage.poison(Fault::Capacity);
         } else {
             #[cfg(all(oer_trace, oer_debug_control))]
-            oer_espressif_staged_runtime::trace::emit(&trace::TerminalPosted);
+            oer_chips_family_staged_runtime::trace::emit(&trace::TerminalPosted);
         }
         self.storage.shared.wake_body();
     }
@@ -307,7 +307,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         if posted {
             #[cfg(all(oer_trace, oer_debug_control))]
-            oer_espressif_staged_runtime::trace::emit(&trace::TerminalPosted);
+            oer_chips_family_staged_runtime::trace::emit(&trace::TerminalPosted);
         } else {
             self.storage.poison(Fault::Capacity);
         }

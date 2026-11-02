@@ -1,6 +1,6 @@
 //! Complete policy accounting precedes alignment; excluded raw effects remain evidence.
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 
 pub(super) struct Report {
     pub claim: Option<EffectClaimCeiling>,

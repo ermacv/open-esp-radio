@@ -62,22 +62,22 @@ pub(crate) mod hart {
     impl super::Mask for Csrs {
         #[inline(always)]
         fn swap_threshold(&mut self, threshold: u8) -> u8 {
-            oer_riscv::swap_interrupt_threshold(threshold)
+            oer_portable_riscv::swap_interrupt_threshold(threshold)
         }
 
         #[inline(always)]
         fn take_interrupts(&mut self) -> bool {
-            oer_riscv::take_interrupts()
+            oer_portable_riscv::take_interrupts()
         }
 
         #[inline(always)]
         fn give_interrupts(&mut self) {
-            oer_riscv::enable_interrupts();
+            oer_portable_riscv::enable_interrupts();
         }
 
         #[inline(always)]
         fn restore_threshold(&mut self, threshold: u8) {
-            oer_riscv::restore_interrupt_threshold(threshold);
+            oer_portable_riscv::restore_interrupt_threshold(threshold);
         }
     }
 

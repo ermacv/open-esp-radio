@@ -8,13 +8,13 @@
 //! images that do not boot staged. The manifest names the image (its name in
 //! the board journal), the target chip and the chip whose `artifacts.toml`
 //! pins the ESP-IDF; every entry builds against that one pin through
-//! `oer_image_esp_idf`.
+//! `oer_tools_image_esp_idf`.
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
 use crate::Result;
-use oer_image_esp_idf as idf;
+use oer_tools_image_esp_idf as idf;
 
 /// Manifest file of a catalog entry.
 const MANIFEST: &str = "firmware.toml";
@@ -158,7 +158,7 @@ pub fn bundle(
     entry: &Entry,
     build: &idf::Build,
     output: &Path,
-) -> Result<oer_image_bundle::ImageBundle> {
+) -> Result<oer_tools_image_bundle::ImageBundle> {
     let directory = idf::output(root, &entry.project(root)).join("build");
     only_boot_files(&directory)?;
     let chip = Chip::of(root, &entry.chip)?;
@@ -192,14 +192,14 @@ struct PeerFlash {
     /// `rust-target` the bundle records.
     isa: String,
     espflash_chip: String,
-    flash: oer_espressif_facts::FlashMap,
+    flash: oer_chips_family_facts::FlashMap,
 }
 
 /// The identity and flash map the bundle of a catalog image's chip records.
 struct Chip {
     rust_target: String,
     espflash_chip: String,
-    flash: oer_espressif_facts::FlashMap,
+    flash: oer_chips_family_facts::FlashMap,
 }
 
 impl Chip {
@@ -208,7 +208,7 @@ impl Chip {
     /// refused, so one chip has one source.
     fn of(root: &Path, chip: &str) -> Result<Self> {
         let file = root.join(peer_flash_file(chip));
-        let profiled = oer_chip_profile::supported(root)?
+        let profiled = oer_tools_chip_profile::supported(root)?
             .iter()
             .any(|supported| supported == chip);
         if profiled {
@@ -406,7 +406,7 @@ mod tests {
         let repository = crate::tests::repository();
         let root = repository.path();
         assert!(
-            !oer_chip_profile::supported(root)
+            !oer_tools_chip_profile::supported(root)
                 .unwrap()
                 .contains(&"esp32c5".to_owned())
         );
@@ -416,7 +416,7 @@ mod tests {
         assert_eq!(bundle.chip, "esp32c5");
         assert_eq!(bundle.boot, crate::Boot::EspIdfBootloader);
         assert_eq!(bundle.rust_target, "riscv32imac-unknown-none-elf");
-        assert_eq!(bundle.flash.start, oer_espressif_facts::Start::PowerOn);
+        assert_eq!(bundle.flash.start, oer_chips_family_facts::Start::PowerOn);
         assert_eq!(
             bundle
                 .segments()
@@ -426,7 +426,7 @@ mod tests {
             [0x2000, 0x8000, 0x1_0000]
         );
         assert_eq!(
-            oer_image_bundle::ImageBundle::load(&output.path().join("bundle")).unwrap(),
+            oer_tools_image_bundle::ImageBundle::load(&output.path().join("bundle")).unwrap(),
             bundle
         );
     }

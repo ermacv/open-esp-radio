@@ -19,8 +19,8 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_cooperate::CooperativeTimer as Timer;
-use oer_time::{Clock, Duration, Instant};
+use oer_portable_cooperate::CooperativeTimer as Timer;
+use oer_portable_time::{Clock, Duration, Instant};
 
 pub(crate) trait Hardware {
     fn control<D: PhyShortDelay>(&mut self, command: ControlCommand) -> Result<(), RxError>;
@@ -349,7 +349,7 @@ impl<
                 Ok(Atom::Runnable) => {
                     if !this.timer.should_yield()
                         && clock.now().saturating_duration_since(started).as_micros()
-                            < u64::from(oer_cooperate::POLL_ADMISSION_MICROS)
+                            < u64::from(oer_portable_cooperate::POLL_ADMISSION_MICROS)
                     {
                         continue;
                     }

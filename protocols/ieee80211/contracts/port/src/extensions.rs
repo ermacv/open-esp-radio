@@ -5,7 +5,7 @@
 
 use core::num::NonZeroU32;
 
-use oer_ieee80211_wire::phy::{HeGiLtf, PhyRate, PpduBandwidth};
+use oer_protocols_ieee80211_wire::phy::{HeGiLtf, PhyRate, PpduBandwidth};
 
 use crate::tsf::{TsfDuration, TsfInstant};
 
@@ -207,13 +207,13 @@ pub struct TsfSample {
 /// jumps since. Two owners never share an epoch, so a generation names one
 /// stretch of one relation. Only the owner of the interface's TSF writes
 /// makes one.
-pub type TsfGeneration = oer_radio_port::Generation<TsfInstant, crate::Ieee80211Instant>;
+pub type TsfGeneration = oer_protocols_radio_port::Generation<TsfInstant, crate::Ieee80211Instant>;
 
 /// How an interface's TSF advances against the port's radio clock: at its
 /// rate within [`TSF_DRIFT_PPM`] (the access point's timer and the
 /// station's crystal).
-pub const TSF_RELATION: oer_radio_port::ClockRelation<TsfInstant, crate::Ieee80211Instant> =
-    oer_radio_port::ClockRelation::affine(TSF_DRIFT_PPM);
+pub const TSF_RELATION: oer_protocols_radio_port::ClockRelation<TsfInstant, crate::Ieee80211Instant> =
+    oer_protocols_radio_port::ClockRelation::affine(TSF_DRIFT_PPM);
 
 /// Why a TSF projection has no value.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -232,8 +232,8 @@ pub enum TsfProjectionError {
 /// own generation checked on top.
 impl TsfSample {
     /// The relation sample of this reading, without its interface.
-    fn relation(&self) -> oer_radio_port::RelationSample<TsfInstant, crate::Ieee80211Instant> {
-        oer_radio_port::RelationSample {
+    fn relation(&self) -> oer_protocols_radio_port::RelationSample<TsfInstant, crate::Ieee80211Instant> {
+        oer_protocols_radio_port::RelationSample {
             source: self.tsf.at,
             target: self.local.at,
             uncertainty: self.uncertainty,
@@ -248,13 +248,13 @@ impl TsfSample {
         &self,
         local: crate::Ieee80211Stamp,
         current: TsfGeneration,
-    ) -> Result<oer_radio_port::Projected<VifTsf, TsfDuration>, TsfProjectionError> {
+    ) -> Result<oer_protocols_radio_port::Projected<VifTsf, TsfDuration>, TsfProjectionError> {
         self.check(current)?;
         if local.generation != self.local.generation {
             return Err(TsfProjectionError::StaleStamp);
         }
         let projected = TSF_RELATION.project_back(local.at, &self.relation())?;
-        Ok(oer_radio_port::Projected {
+        Ok(oer_protocols_radio_port::Projected {
             at: VifTsf::new(self.tsf.vif, projected.at.at),
             uncertainty: projected.uncertainty,
         })
@@ -269,7 +269,7 @@ impl TsfSample {
         current: TsfGeneration,
     ) -> Result<
         Result<
-            oer_radio_port::Projected<crate::Ieee80211Stamp, crate::Ieee80211Duration>,
+            oer_protocols_radio_port::Projected<crate::Ieee80211Stamp, crate::Ieee80211Duration>,
             TsfProjectionError,
         >,
         TsfVifMismatch,
@@ -283,7 +283,7 @@ impl TsfSample {
         Ok((|| {
             self.check(current)?;
             let projected = TSF_RELATION.project(tsf.at, current, &self.relation())?;
-            Ok(oer_radio_port::Projected {
+            Ok(oer_protocols_radio_port::Projected {
                 at: crate::Ieee80211Stamp {
                     at: projected.at,
                     generation: self.local.generation,
@@ -303,11 +303,11 @@ impl TsfSample {
     }
 }
 
-impl From<oer_radio_port::ProjectionError> for TsfProjectionError {
-    fn from(error: oer_radio_port::ProjectionError) -> Self {
+impl From<oer_protocols_radio_port::ProjectionError> for TsfProjectionError {
+    fn from(error: oer_protocols_radio_port::ProjectionError) -> Self {
         match error {
-            oer_radio_port::ProjectionError::StaleSample => Self::StaleSample,
-            oer_radio_port::ProjectionError::OutOfRange => Self::OutOfRange,
+            oer_protocols_radio_port::ProjectionError::StaleSample => Self::StaleSample,
+            oer_protocols_radio_port::ProjectionError::OutOfRange => Self::OutOfRange,
         }
     }
 }
@@ -336,7 +336,7 @@ pub struct MonitorCapabilities {
 
 #[cfg(test)]
 mod tests {
-    use oer_ieee80211_wire::phy::{
+    use oer_protocols_ieee80211_wire::phy::{
         FecCoding, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, SpatialStreams,
     };
 

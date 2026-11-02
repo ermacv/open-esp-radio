@@ -1,8 +1,8 @@
 # Blobray CLI: in-process operations over captured executables
 
-`oer-tool-analysis-cli` is the `blobray` command line and the JSON wire types in
-`oer_tool_analysis_cli::wire`; the Linux linker adapters live in
-[`oer-analysis-blobray-linker`](../blobray-linker/src/lib.rs). Every operation runs
+`oer-tools-analysis-cli` is the `blobray` command line and the JSON wire types in
+`oer_tools_analysis_cli::wire`; the Linux linker adapters live in
+[`oer-tools-analysis-blobray-linker`](../blobray-linker/src/lib.rs). Every operation runs
 in the calling process over executables given as bytes and identified by
 content: inventory, whole-library analysis and register accesses, synthetic
 linking with explicit ROM companions, exact data export, final-image target
@@ -14,7 +14,7 @@ Whole-library field, call-argument and reference queries, inventory symbol
 and string queries, and register-access filtering/grouping belong to
 [`blobray-application`](../blobray-application/README.md). Their result types
 are serialized directly inside the CLI envelopes. Raw ELF classification
-belongs to [`oer-analysis-elf::classify`](../elf/src/classify.rs); listing
+belongs to [`oer-tools-analysis-elf::classify`](../elf/src/classify.rs); listing
 rendering stays here.
 
 The [architecture](../blobray-docs/design/architecture.md) owns module authority;
@@ -36,7 +36,7 @@ and each command's `--help`.
 
 `blobray __command-tree` prints every visible command with its long flags as
 JSON, tracked in [`command-tree.json`](command-tree.json) so documentation
-checks need not build Blobray. `cargo test -p oer-tool-analysis-cli` fails when the
+checks need not build Blobray. `cargo test -p oer-tools-analysis-cli` fails when the
 tracked tree differs from the command line; run it with
 `BLOBRAY_COMMAND_TREE_UPDATE=1` to rewrite the file.
 

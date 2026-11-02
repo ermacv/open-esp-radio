@@ -178,7 +178,7 @@ impl PhyBluetoothTxGainPublication {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target(self, registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess) {
+    pub fn execute_target(self, registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess) {
         crate::hardware::publish_bluetooth_tx_gain_memory(registers, &self.image);
     }
 }
@@ -330,7 +330,7 @@ pub enum PhyBluetoothTxPowerFailure {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyBluetoothTxPowerAction {
-    I2cControl(oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation),
+    I2cControl(oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation),
     Prepare(crate::tx::calibration::PhyTxCalibrationEnvironmentAction),
     ForcePbus(crate::analog::pbus::PhyPbusForceTest),
     ReadPbus { selector: u8, path: u8 },
@@ -342,7 +342,7 @@ pub enum PhyBluetoothTxPowerAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyBluetoothTxPowerCompletion {
-    I2cControl(oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion),
+    I2cControl(oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion),
     Prepare(crate::tx::calibration::PhyTxCalibrationEnvironmentCompletion),
     PbusCompleted(crate::analog::pbus::PhyPbusForceTest),
     PbusTimedOut(crate::analog::pbus::PhyPbusForceTest),
@@ -437,11 +437,11 @@ impl PhyBluetoothTxPowerTransition {
         match self.step {
             PhyBluetoothTxPowerStep::PrepareI2cControlRestore => {
                 PhyBluetoothTxPowerAction::I2cControl(
-                    oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::PrepareRestore,
+                    oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::PrepareRestore,
                 )
             }
             PhyBluetoothTxPowerStep::ConfigureI2cControl => PhyBluetoothTxPowerAction::I2cControl(
-                oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::ConfigureCalibration,
+                oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::ConfigureCalibration,
             ),
             PhyBluetoothTxPowerStep::Prepare(transition) => {
                 PhyBluetoothTxPowerAction::Prepare(transition.action())
@@ -481,7 +481,7 @@ impl PhyBluetoothTxPowerTransition {
                 PhyBluetoothTxPowerAction::Calibration(transition.action())
             }
             PhyBluetoothTxPowerStep::RestoreI2cControl(_) => PhyBluetoothTxPowerAction::I2cControl(
-                oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::Restore,
+                oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation::Restore,
             ),
             PhyBluetoothTxPowerStep::Cleanup { transition, .. } => {
                 PhyBluetoothTxPowerAction::Cleanup(transition.action())
@@ -501,13 +501,13 @@ impl PhyBluetoothTxPowerTransition {
             (
                 PhyBluetoothTxPowerStep::PrepareI2cControlRestore,
                 PhyBluetoothTxPowerCompletion::I2cControl(
-                    oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion::RestorePrepared,
+                    oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion::RestorePrepared,
                 ),
             ) => PhyBluetoothTxPowerStep::ConfigureI2cControl,
             (
                 PhyBluetoothTxPowerStep::ConfigureI2cControl,
                 PhyBluetoothTxPowerCompletion::I2cControl(
-                    oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion::CalibrationConfigured,
+                    oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion::CalibrationConfigured,
                 ),
             ) => PhyBluetoothTxPowerStep::Prepare(
                 crate::tx::calibration::PhyTxCalibrationEnvironmentTransition::enter(
@@ -610,7 +610,7 @@ impl PhyBluetoothTxPowerTransition {
             (
                 PhyBluetoothTxPowerStep::RestoreI2cControl(terminal),
                 PhyBluetoothTxPowerCompletion::I2cControl(
-                    oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion::Restored,
+                    oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlCompletion::Restored,
                 ),
             ) => PhyBluetoothTxPowerStep::Cleanup {
                 terminal,
@@ -1111,15 +1111,15 @@ pub enum PhyBluetoothI2cAction {
 /// Non-cloneable owner of one PAC-owned Bluetooth TX-power I²C transaction.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyBluetoothI2cBinding {
-    transaction: oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlTransaction,
+    transaction: oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlTransaction,
 }
 
 impl PhyBluetoothI2cBinding {
     pub const fn new(
-        operation: oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation,
+        operation: oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlOperation,
     ) -> Self {
         Self {
-            transaction: oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlTransaction::new(
+            transaction: oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlTransaction::new(
                 operation,
             ),
         }
@@ -1127,13 +1127,13 @@ impl PhyBluetoothI2cBinding {
 
     pub const fn action(&self) -> PhyBluetoothI2cAction {
         match self.transaction.action() {
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::StartCommand => {
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::StartCommand => {
                 PhyBluetoothI2cAction::StartCommand
             }
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::AwaitCompletionEdge => {
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::AwaitCompletionEdge => {
                 PhyBluetoothI2cAction::AwaitCompletionEdge
             }
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::Complete(_) => {
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::Complete(_) => {
                 PhyBluetoothI2cAction::Complete
             }
         }
@@ -1142,14 +1142,14 @@ impl PhyBluetoothI2cBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        platform: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        platform: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
-        oer_esp32s31_hal::phy::i2c::start_bluetooth_tx_power_control(
+        oer_chips_esp32s31_hal::phy::i2c::start_bluetooth_tx_power_control(
             &mut self.transaction,
             platform,
         )
         .map_err(|error| match error {
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlError::BusyAtStart => {
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlError::BusyAtStart => {
                 crate::calibration::cold::PhyColdI2cError::BusyAtStart
             }
             _ => crate::calibration::cold::PhyColdI2cError::WrongEdge,
@@ -1159,20 +1159,20 @@ impl PhyBluetoothI2cBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        platform: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        platform: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::calibration::cold::PhyColdI2cObservation,
         crate::calibration::cold::PhyColdI2cError,
     > {
-        oer_esp32s31_hal::phy::i2c::observe_bluetooth_tx_power_control(
+        oer_chips_esp32s31_hal::phy::i2c::observe_bluetooth_tx_power_control(
             &mut self.transaction,
             platform,
         )
         .map(|observation| match observation {
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlObservation::StillPending => {
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlObservation::StillPending => {
                 crate::calibration::cold::PhyColdI2cObservation::StillPending
             }
-            oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlObservation::EdgeConsumed => {
+            oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlObservation::EdgeConsumed => {
                 crate::calibration::cold::PhyColdI2cObservation::EdgeConsumed
             }
         })
@@ -1182,7 +1182,7 @@ impl PhyBluetoothI2cBinding {
     pub fn into_completion(
         self,
     ) -> Result<PhyBluetoothTxPowerCompletion, PhyBluetoothExternalBindingError> {
-        let oer_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::Complete(completion) =
+        let oer_chips_esp32s31_hal::phy::i2c::BluetoothTxPowerControlAction::Complete(completion) =
             self.transaction.action()
         else {
             return Err(PhyBluetoothExternalBindingError::IncompleteTransaction);
@@ -1207,7 +1207,7 @@ impl PhyBluetoothPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.inner.start_target(registers)
     }
@@ -1215,7 +1215,7 @@ impl PhyBluetoothPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,
@@ -1251,9 +1251,9 @@ impl PhyBluetoothPbusReadBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyBluetoothTxPowerCompletion {
-        let value = oer_esp32s31_hal::phy::pbus::read_result(registers, self.selector, self.path);
+        let value = oer_chips_esp32s31_hal::phy::pbus::read_result(registers, self.selector, self.path);
         debug_assert!(
             value.is_some(),
             "Bluetooth parent emitted an unknown PBus selector"
@@ -1325,7 +1325,7 @@ impl PhyBluetoothTxGainPublicationBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyBluetoothTxGainInitCompletion {
         self.publication.execute_target(registers);
         PhyBluetoothTxGainInitCompletion::Published(self.publication)

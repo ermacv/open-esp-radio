@@ -8,7 +8,7 @@
 use core::pin::pin;
 
 use embassy_futures::select::{Either as Raced, select};
-use oer_espressif::{
+use oer::{
     AppResult, ApplicationEnd, Boot, Channel, Console, Error, Hart1Boot, Hart1Peripherals,
     Hart1Started, Peripherals, SecondEnd, Started, observe,
     time::{Duration, with_timeout},
@@ -17,14 +17,14 @@ use oer_espressif::{
         Station, StopError, embassy_net,
     },
 };
-use oer_hil_agent::base::Either;
-use oer_hil_agent_espressif::{Inbox, Mailbox, answer, answer_then_trap};
-use oer_hil_protocol::RequestIdentity;
-use oer_services_sdk_station::{
+use oer_protocols_hil_agent::base::Either;
+use oer_hil_agent::{Inbox, Mailbox, answer, answer_then_trap};
+use oer_protocols_hil_protocol::RequestIdentity;
+use oer_hil_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, Ipv4, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
 };
-use oer_services_wifi_station::{
+use oer_hil_services_wifi_station::{
     self as wifi_station, Joined, Left, StationError,
     phase::{Action, Answer, Phase},
     runtime as codes,
@@ -40,8 +40,8 @@ const TX_CAP_DBM: i8 = 10;
 /// A request of the SDK station service, of the Wi-Fi station service, of
 /// the fault service or of the load service.
 type Requests = Either<
-    Either<Either<Request, wifi_station::Request>, oer_services_fault::Request>,
-    oer_services_load::Request,
+    Either<Either<Request, wifi_station::Request>, oer_hil_services_fault::Request>,
+    oer_hil_services_load::Request,
 >;
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
@@ -56,7 +56,7 @@ static POOLS: wifi::Pools<RX, TX, 32> = wifi::Pools::new();
 /// hears how it ended.
 static EXCHANGES: Channel<Exchange, Exchanged, 1> = Channel::new();
 
-oer_espressif::entry!(boot, hart1 = network);
+oer::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     // The load scenario measures the station at HT 40 MHz where the stand's
@@ -80,7 +80,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         requests: inbox,
     };
     Ok(boot.run(move || {
-        oer_hil_agent_espressif::serve(
+        oer_hil_agent::serve(
         console,
         evidence,
         services::IMAGE,
@@ -157,7 +157,7 @@ struct Worker {
     net: NetStatus,
     exchanges: ApplicationEnd<Exchange, Exchanged, 1>,
     /// The load server's requests and answers.
-    load: ApplicationEnd<(RequestIdentity, oer_services_load::Request), load::serve::Answer, 1>,
+    load: ApplicationEnd<(RequestIdentity, oer_hil_services_load::Request), load::serve::Answer, 1>,
     /// Where the Wi-Fi station service's one join per boot is.
     phase: Phase,
     requests: Inbox<'static, Requests>,
@@ -188,8 +188,8 @@ impl Worker {
                 }
                 // Traps once the answer is written; a write the console
                 // cannot confirm ends the application, which records it.
-                Either::First(Either::Second(oer_services_fault::Request::RaiseException(_))) => {
-                    match answer_then_trap(identity, &oer_services_fault::Raising).await? {}
+                Either::First(Either::Second(oer_hil_services_fault::Request::RaiseException(_))) => {
+                    match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {}
                 }
                 // The load server in the second boot answers it.
                 Either::Second(request) => {
@@ -370,7 +370,7 @@ async fn echo(net: &Net<RX, TX>, exchange: &Exchange) -> Exchanged {
             Ok(count) => sent = sent.saturating_add(count),
         }
     }
-    let mut echo = [0; oer_services_sdk_station::MAX_LINE];
+    let mut echo = [0; oer_hil_services_sdk_station::MAX_LINE];
     let Some(echo) = echo.get_mut(..line.len()) else {
         return Exchanged::Mismatch;
     };

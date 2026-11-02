@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{LocalId, SlotOwner, with_local_slot};
+use oer_protocols_radio_port::{LocalId, SlotOwner, with_local_slot};
 
 pub async fn slots<S>()
 where

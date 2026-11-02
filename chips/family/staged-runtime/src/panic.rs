@@ -5,7 +5,7 @@ use crate::retained_fault;
 use crate::retained_fault::Claim;
 pub use fault::FaultReason;
 const INVALID_HART: u32 = 2;
-use oer_diagnostics::fault::{Class, Domain, Record};
+use oer_portable_diagnostics::fault::{Class, Domain, Record};
 /// Bytes of the location's file path kept: its end, which names the file.
 pub const FILE_BYTES: usize = 48;
 /// Bytes of a static panic message kept: its start.
@@ -202,21 +202,21 @@ pub fn clear_previous(record: &PanicRecord) {
 }
 
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn report_previous_fault<P: oer_espressif_platform_port::EarlyText>() {
+pub(crate) fn report_previous_fault<P: oer_chips_family_platform_port::EarlyText>() {
     if let Some(mut slot) = retained_fault::peek(&SLOT) {
         report_fault_early::<P>(&mut slot);
     }
 }
-fn report_fault_early<P: oer_espressif_platform_port::EarlyText>(slot: &mut Record) {
+fn report_fault_early<P: oer_chips_family_platform_port::EarlyText>(slot: &mut Record) {
     let _reported = slot.report(|view| {
         if view.domain == Domain::InvalidHart as u32 {
             if view.reason != INVALID_HART || !view.payload.is_empty() {
                 return Err(());
             }
-            return oer_diagnostics::emit_note(
-                &oer_diagnostics::Note::fatal_fail(
+            return oer_portable_diagnostics::emit_note(
+                &oer_portable_diagnostics::Note::fatal_fail(
                     view.hart,
-                    oer_diagnostics::name!("InvalidHart"),
+                    oer_portable_diagnostics::name!("InvalidHart"),
                 ),
                 |bytes| P::text(bytes).then_some(()).ok_or(()),
             )
@@ -257,7 +257,7 @@ pub(crate) fn with_invalid_hart_record<R>(
     reset()
 }
 
-fn encode_invalid_hart(raw: u32) -> Result<Record, oer_diagnostics::fault::Error> {
+fn encode_invalid_hart(raw: u32) -> Result<Record, oer_portable_diagnostics::fault::Error> {
     Record::encode(
         Class::HardwareImpossible,
         Domain::InvalidHart,
@@ -269,7 +269,7 @@ fn encode_invalid_hart(raw: u32) -> Result<Record, oer_diagnostics::fault::Error
 }
 
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
-pub fn reset_fault<P: oer_espressif_platform_port::Platform>(
+pub fn reset_fault<P: oer_chips_family_platform_port::Platform>(
     reason: FaultReason,
     observations: [u32; 4],
 ) -> ! {
@@ -278,7 +278,7 @@ pub fn reset_fault<P: oer_espressif_platform_port::Platform>(
             reason.class(),
             Domain::Runtime,
             reason as u32,
-            oer_riscv::hart_id() as u32,
+            oer_portable_riscv::hart_id() as u32,
             0,
             &observations,
         ) {
@@ -288,8 +288,8 @@ pub fn reset_fault<P: oer_espressif_platform_port::Platform>(
 }
 
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
-pub fn reset_request<P: oer_espressif_platform_port::Platform, T>(
-    error: impl Into<oer_memory::RequestError>,
+pub fn reset_request<P: oer_chips_family_platform_port::Platform, T>(
+    error: impl Into<oer_portable_memory::RequestError>,
 ) -> T {
     let error = error.into();
     reset_fault::<P>(FaultReason::RequestUnanswered, error.observations())
@@ -325,7 +325,7 @@ fn encode_panic(
     in_interrupt: bool,
     mepc: u32,
     details: &PanicDetails<'_>,
-) -> Result<Record, oer_diagnostics::fault::Error> {
+) -> Result<Record, oer_portable_diagnostics::fault::Error> {
     let (file, file_length) = file_tail(details.file);
     let (message, message_length) = match details.message {
         Some(message) => {
@@ -357,19 +357,19 @@ fn encode_panic(
 
 #[doc(hidden)]
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
-pub fn handle<'i, P: oer_espressif_platform_port::Platform>(
+pub fn handle<'i, P: oer_chips_family_platform_port::Platform>(
     info: &'i core::panic::PanicInfo<'_>,
     hook: impl for<'a, 'b> FnOnce(&Claim<'_>, &PanicDetails<'i>, Result<&'b P::Stop<'a>, P::StopError>),
 ) -> ! {
     let recorded = with_panic_mask(
         || {
-            let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
+            let _ = oer_portable_riscv::swap_interrupt_threshold(u8::MAX);
         },
-        oer_riscv::disable_interrupts,
+        oer_portable_riscv::disable_interrupts,
         || {
             let claim = retained_fault::claim().ok()?;
-            let hart = oer_riscv::hart_id();
-            if oer_espressif_platform_port::Hart::new(hart as u32).is_err() {
+            let hart = oer_portable_riscv::hart_id();
+            if oer_chips_family_platform_port::Hart::new(hart as u32).is_err() {
                 return Some((
                     claim,
                     PanicDetails {
@@ -380,7 +380,7 @@ pub fn handle<'i, P: oer_espressif_platform_port::Platform>(
                     },
                 ));
             }
-            let in_interrupt = crate::stacks::on_interrupt_stack(hart, oer_riscv::stack_pointer());
+            let in_interrupt = crate::stacks::on_interrupt_stack(hart, oer_portable_riscv::stack_pointer());
             let details = if in_interrupt {
                 PanicDetails {
                     file: "",
@@ -402,7 +402,7 @@ pub fn handle<'i, P: oer_espressif_platform_port::Platform>(
             if let Ok(record) = encode_panic(
                 hart as u32,
                 in_interrupt,
-                oer_riscv::read_mepc() as u32,
+                oer_portable_riscv::read_mepc() as u32,
                 &details,
             ) {
                 let _committed = claim.commit(&SLOT, record);
@@ -459,7 +459,7 @@ mod tests {
     /// parts are installed, while another record holds it, or after a
     /// dropped tail.
     struct Refusing;
-    impl oer_espressif_platform_port::EarlyText for Refusing {
+    impl oer_chips_family_platform_port::EarlyText for Refusing {
         fn text(_: &[u8]) -> bool {
             false
         }
@@ -467,7 +467,7 @@ mod tests {
 
     /// An early writer whose every record went out whole.
     struct Whole;
-    impl oer_espressif_platform_port::EarlyText for Whole {
+    impl oer_chips_family_platform_port::EarlyText for Whole {
         fn text(_: &[u8]) -> bool {
             true
         }

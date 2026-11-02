@@ -6,9 +6,9 @@ error[E0271]: type mismatch resolving `<O as Entry>::Part == UsbInterrupt<Fixed<
    |                     |
    |                     required by a bound introduced by this call
    |
-   = note: expected struct `UsbInterrupt<oer_mmio::Fixed<540610560>>`
-              found struct `SystimerAlarm0<oer_mmio::Fixed<540643328>>`
-note: required by a bound in `oer_espressif_usb_serial_jtag::Endpoint::<E, R>::new`
+   = note: expected struct `UsbInterrupt<oer_portable_mmio::Fixed<540610560>>`
+              found struct `SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>`
+note: required by a bound in `oer_chips_family_usb_serial_jtag::Endpoint::<E, R>::new`
   --> $WORKSPACE/chips/espressif/usb-serial-jtag/src/endpoint.rs
    |
    |     pub fn new(
@@ -17,7 +17,7 @@ note: required by a bound in `oer_espressif_usb_serial_jtag::Endpoint::<E, R>::n
    |         authority: &impl EventAuthority<R::Interrupt>,
    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Endpoint::<E, R>::new`
 
-error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>>: EventAuthority<UsbInterrupt<oer_mmio::Fixed<540610560>>>` is not satisfied
+error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>>: EventAuthority<UsbInterrupt<oer_portable_mmio::Fixed<540610560>>>` is not satisfied
   --> tests/ui/usb_events_require_matching_authority.rs:26:29
    |
 26 |     registers.enable_events(other); // ui-error: E0277
@@ -25,18 +25,18 @@ error[E0277]: the trait bound `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>
    |               |
    |               required by a bound introduced by this call
    |
-help: the trait `EventAuthority<UsbInterrupt<oer_mmio::Fixed<540610560>>>` is not implemented for `Silent<SystimerAlarm0<oer_mmio::Fixed<540643328>>>`
-      but trait `EventAuthority<SystimerAlarm0<oer_mmio::Fixed<540643328>>>` is implemented for it
+help: the trait `EventAuthority<UsbInterrupt<oer_portable_mmio::Fixed<540610560>>>` is not implemented for `Silent<SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>>`
+      but trait `EventAuthority<SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>>` is implemented for it
   --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
    |
    | impl<P: InterruptSources> EventAuthority<P> for Silent<P> {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = help: for that trait implementation, expected `SystimerAlarm0<oer_mmio::Fixed<540643328>>`, found `UsbInterrupt<oer_mmio::Fixed<540610560>>`
+   = help: for that trait implementation, expected `SystimerAlarm0<oer_portable_mmio::Fixed<540643328>>`, found `UsbInterrupt<oer_portable_mmio::Fixed<540610560>>`
 note: required by a bound in `enable_events`
   --> $WORKSPACE/chips/espressif/usb-serial-jtag/src/lib.rs
    |
    |     fn enable_events(
    |        ------------- required by a bound in this associated function
    |         &mut self,
-   |         authority: &impl oer_espressif_interrupt_table::EventAuthority<Self::Interrupt>,
+   |         authority: &impl oer_chips_family_interrupt_table::EventAuthority<Self::Interrupt>,
    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `EndpointRegisters::enable_events`

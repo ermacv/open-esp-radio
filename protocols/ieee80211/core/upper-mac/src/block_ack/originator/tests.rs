@@ -1,10 +1,10 @@
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 use super::*;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use {
     crate::block_ack::{OperationalTxBlockAck, TxBlockAckResponse},
-    oer_ieee80211_wire::block_ack::BlockAckAction,
+    oer_protocols_ieee80211_wire::block_ack::BlockAckAction,
 };
 
 /// Three TIDs and a modulo-63 token sequence, as the Espressif station's.
@@ -287,7 +287,7 @@ fn responses(count: usize) {
         ]);
     }
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(|seed| seed.as_slice()).collect();
-    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 32, |bytes| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 32, |bytes| {
         let mut originator = originator(32, 1);
         let at = Instant::from_micros(0);
         for tid in [0, 7, 5] {
@@ -301,13 +301,13 @@ fn responses(count: usize) {
 
 #[test]
 fn response_routing_never_panics() {
-    responses(oer_ieee80211_wire::fuzz::QUICK);
+    responses(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn response_routing_never_panics_full() {
-    responses(oer_ieee80211_wire::fuzz::FULL);
+    responses(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 fn active_originator(start: u16) -> TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS> {
@@ -320,8 +320,8 @@ fn active_originator(start: u16) -> TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS> 
 
 const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
-fn bar(start: u16) -> [u8; oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN] {
-    oer_ieee80211_wire::block_ack::encode_block_ack_request(PEER, LOCAL, 0, sequence(start))
+fn bar(start: u16) -> [u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN] {
+    oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(PEER, LOCAL, 0, sequence(start))
 }
 
 #[test]

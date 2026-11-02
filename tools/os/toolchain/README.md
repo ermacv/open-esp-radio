@@ -1,6 +1,6 @@
 # Host toolchain
 
-`oer-os-toolchain` is the one place repository tools locate the host programs
+`oer-tools-os-toolchain` is the one place repository tools locate the host programs
 builds run and record which ones ran.
 
 - `program(Tool)` / `command(Tool)`: a non-empty override variable names the
@@ -12,14 +12,14 @@ builds run and record which ones ran.
 - `require(Tool)` fails unless the tool runs; `versions()` lists every tool
   with the program and the version it reports (`llvm-objdump` included).
 - The image compiler setup is the image pipeline's
-  (`oer_image_build::compiler`).
+  (`oer_tools_image_build::compiler`).
 - `host_target()` names the host's target triple, for a workspace whose
   Cargo configuration defaults to a chip target.
 - `workspace::{binary, build}`: locate a host binary in this workspace's
   `target/tools` directory, or build its package with the tools profile.
 
-It depends only on `oer-os-process`.
+It depends only on `oer-tools-os-process`.
 
 ```console
-cargo test -p oer-os-toolchain
+cargo test -p oer-tools-os-toolchain
 ```

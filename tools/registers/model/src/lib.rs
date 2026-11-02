@@ -166,15 +166,15 @@ pub struct ReviewAnnotation {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provenance: Option<oer_registers_contracts::FactProvenance>,
+    pub provenance: Option<oer_tools_registers_contracts::FactProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accuracy: Option<oer_registers_contracts::FactAccuracy>,
+    pub accuracy: Option<oer_tools_registers_contracts::FactAccuracy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completeness: Option<oer_registers_contracts::FactCompleteness>,
+    pub completeness: Option<oer_tools_registers_contracts::FactCompleteness>,
     /// Origin of a register or field name. An opaque name, and only an opaque
     /// name, ends in [`OPAQUE_SUFFIX`]; a vendor name cites its source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub naming: Option<oer_registers_contracts::NameOrigin>,
+    pub naming: Option<oer_tools_registers_contracts::NameOrigin>,
 }
 
 /// Suffix that marks a register or field whose meaning is not established.
@@ -258,7 +258,7 @@ fn validate_naming(
     annotation: Option<&ReviewAnnotation>,
     opaque_name: &str,
 ) -> Result<()> {
-    use oer_registers_contracts::NameOrigin;
+    use oer_tools_registers_contracts::NameOrigin;
 
     let leaf = entity.rsplit('.').next().unwrap_or(entity);
     if let Some(word) = UNESTABLISHED_WORDS
@@ -313,9 +313,9 @@ fn validate_naming(
 
 fn mark_description(
     description: &mut Option<String>,
-    naming: Option<&oer_registers_contracts::NameOrigin>,
+    naming: Option<&oer_tools_registers_contracts::NameOrigin>,
 ) {
-    use oer_registers_contracts::NameOrigin;
+    use oer_tools_registers_contracts::NameOrigin;
 
     let marker = match naming {
         Some(NameOrigin::Opaque) => "Opaque: meaning not established.",
@@ -332,7 +332,7 @@ fn review_annotation_is_assertion(annotation: &ReviewAnnotation) -> bool {
     !annotation.sources.is_empty()
         && annotation
             .provenance
-            .is_some_and(|provenance| provenance != oer_registers_contracts::FactProvenance::Hint)
+            .is_some_and(|provenance| provenance != oer_tools_registers_contracts::FactProvenance::Hint)
         && annotation.accuracy.is_some()
         && annotation.completeness.is_some()
 }

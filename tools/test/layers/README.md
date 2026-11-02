@@ -1,6 +1,6 @@
 # Layer tests
 
-`oer-test-layers` checks the structure rules of
+`oer-tools-test-layers` checks the structure rules of
 [architecture](../../../docs/architecture.md) and
 [repository layout](../../../docs/repository-layout.md) from the workspace
 manifests and sources: package names, the unsafe boundary, the sans-IO lint
@@ -69,10 +69,10 @@ is gone both fail, so every list only shrinks:
 
 `ieee80211_protocol_packages_take_no_trace_serialization_or_hil` rejects a
 direct normal edge from any package under `protocols/ieee80211/` to
-`oer-trace`, `serde`, `postcard`, `postcard-schema` or an `oer-hil-*`
+`oer-portable-trace`, `serde`, `postcard`, `postcard-schema` or an `oer-hil-*`
 package, resolving `package =` and including optional and target-specific
 entries. Development and build edges are outside the rule. Protocol owners
-report to a caller-lent `oer-events` sink instead.
+report to a caller-lent `oer-portable-events` sink instead.
 
 ## External async crates
 
@@ -181,7 +181,7 @@ regenerate classifications without checking their cause and owner.
 ## HAL atoms
 
 `hal_production_code_gains_no_waits_or_sequences` scans the production
-modules of `oer-esp32s31-hal` from its crate root and counts, per file, the
+modules of `oer-chips-esp32s31-hal` from its crate root and counts, per file, the
 identifiers `async`, `await`, `Poll`, `Waker`, `poll_fn`, `loop`,
 `spin_loop`, `Instant`, `BootWait` and any identifier containing
 `deadline`. Each file with markers is listed with its exact count:

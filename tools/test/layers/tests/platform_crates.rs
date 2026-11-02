@@ -122,7 +122,7 @@ fn host_espflash_and_our_packages_are_allowed() {
         r#"
 [dependencies]
 espflash = "4"
-oer-espressif-boot = { path = "boot" }
+oer-chips-family-boot = { path = "boot" }
 "#,
     )
     .expect("manifest");

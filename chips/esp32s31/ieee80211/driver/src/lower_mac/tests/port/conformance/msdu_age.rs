@@ -6,7 +6,7 @@
 //! originator, so those cases are not exercised here. The port's own
 //! aggregate expiry by subframe position is `port::aggregate`'s case.
 use super::*;
-use oer_ieee80211_testing_conformance::msdu_age::{Case, End, Trace, verify};
+use oer_protocols_ieee80211_testing_conformance::msdu_age::{Case, End, Trace, verify};
 
 /// The cases the ordinary S31 port serves.
 const CASES: [Case; 3] = [

@@ -1,7 +1,7 @@
 use super::*;
 use core::pin::pin;
-use oer_bluetooth_le_wire::TestChannel;
-use oer_time_virtual::VirtualClock;
+use oer_protocols_bluetooth_le_wire::TestChannel;
+use oer_portable_time_virtual::VirtualClock;
 use std::{rc::Rc, task::Waker};
 
 #[derive(Clone)]
@@ -41,8 +41,8 @@ impl ClockClient for TestClock {
         }
         Ok(())
     }
-    async fn now(&mut self) -> PortResult<oer_time::RadioInstant<LeRadio>, ClockError, Fault> {
-        Ok(Ok(oer_time::RadioInstant::from_micros(
+    async fn now(&mut self) -> PortResult<oer_portable_time::RadioInstant<LeRadio>, ClockError, Fault> {
+        Ok(Ok(oer_portable_time::RadioInstant::from_micros(
             self.0.now().as_micros(),
         )))
     }
@@ -277,7 +277,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, TestDevice, Tracked>> for Body {
         }
         if matches!(self.mode, Mode::SinkReject) {
             let result = owner.disable(None, &mut ControlFlow::Break).await;
-            let Err(oer_radio_port::DisableFailed::Poisoned(owner)) = result else {
+            let Err(oer_protocols_radio_port::DisableFailed::Poisoned(owner)) = result else {
                 panic!("rejecting terminal cannot disable normally")
             };
             Ended::fail_stop(owner.fail_stop(), ())
@@ -286,7 +286,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id, TestDevice, Tracked>> for Body {
             let result = owner
                 .disable(deadline, &mut |_| ControlFlow::Continue(()))
                 .await;
-            let Err(oer_radio_port::DisableFailed::Expired(request)) = result else {
+            let Err(oer_protocols_radio_port::DisableFailed::Expired(request)) = result else {
                 panic!("a retirement past the deadline issues no disabled owner")
             };
             self.calls.expired.set(true);
@@ -431,7 +431,7 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
         let returned = pool.take(s1).await;
         pool.release(returned);
         // The production credit pool meets the shared permit pool rule.
-        oer_radio_port::conformance::permits_serve_takers_in_arrival_order(pool, &mut seats, []);
+        oer_protocols_radio_port::conformance::permits_serve_takers_in_arrival_order(pool, &mut seats, []);
         *p.resources = Some((seats, session));
         drop(front);
         drop(registration);

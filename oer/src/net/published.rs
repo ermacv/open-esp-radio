@@ -7,8 +7,8 @@
 
 use core::sync::atomic::{AtomicU32, Ordering, fence};
 
-use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
-use oer_network_port::{LinkSnapshot, LinkState};
+use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
+use oer_protocols_network_port::{LinkSnapshot, LinkState};
 
 use super::ServiceError;
 

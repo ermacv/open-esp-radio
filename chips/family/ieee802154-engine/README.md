@@ -1,6 +1,6 @@
 # IEEE 802.15.4 MAC engine
 
-`oer-espressif-ieee802154-engine` is the MAC state machine and public API layer of the
+`oer-chips-family-ieee802154-engine` is the MAC state machine and public API layer of the
 public ESP-IDF IEEE 802.15.4 driver (`esp_ieee802154_dev.c` and its
 helpers), ported once for every supported chip.
 
@@ -24,7 +24,7 @@ the whole operational epoch, so a fresh clocked owner cannot resume a prior
 foundation and a return proof cannot be reused or fabricated.
 
 All MAC semantic values come directly from
-`oer-espressif-ieee802154-mac-values`: commands, timers, channel and power
+`oer-chips-family-ieee802154-mac-values`: commands, timers, channel and power
 values, ACK timeout, RX status, diagnostic counters, ETM, events, abort reasons
 and Multi-PAN. Frame storage, its dimensions and opaque DMA address tables also belong to
 mac-values. The engine does not re-export that vocabulary. Unnamed event
@@ -35,7 +35,7 @@ completion types, PIB, coexistence policy and storage/owner contracts.
 
 Each chip's driver implements `Ieee802154LowLevel`; HAL converts semantic
 values into its own PAC register types. The ESP32-S31 implementation is
-`oer_esp32s31_ieee802154_driver::ll::S31Mac`. What differs between
+`oer_chips_esp32s31_ieee802154_driver::ll::S31Mac`. What differs between
 chips stays with the chip: register geometry, transmit-on delay atoms,
 module-clock/partition owners, the transmit-power level set, the coexistence
 table and the diagnostic counters a chip's LL adds. Each HAL places its frame
@@ -191,11 +191,11 @@ and a generator keeps these rules:
 - At the transmit SFD (`ot_radio_transmit_sfd_done`), with a nonzero CSL
   period, the CSL IE of the frame or enhanced ACK going out gets the period
   and the phase from the radio clock at that moment to the next sample time
-  (the core computes `csl_phase`, `oer_ieee802154_wire::write_csl_ie` writes
+  (the core computes `csl_phase`, `oer_protocols_ieee802154_wire::write_csl_ie` writes
   ready values); with a zero period nothing is written. A
   transmitted frame's Time IE gets the time-sync sequence and the network
   time (the radio clock plus the network time offset,
-  computed by the core; `oer_ieee802154_wire::write_time_ie` writes the
+  computed by the core; `oer_protocols_ieee802154_wire::write_time_ie` writes the
   ready value); an enhanced ACK never carries one.
 - A retransmission keeps its frame counter and key index, except that a CSL
   receiver takes a new frame counter on every retry: the CSL IE changes

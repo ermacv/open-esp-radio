@@ -1,5 +1,5 @@
 //! Shared-power membership and the reversible cold baseline.
-use oer_radio_coex::RadioClient;
+use oer_protocols_radio_coex::RadioClient;
 
 /// Platform references released around the cold-baseline restore.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

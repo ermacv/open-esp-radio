@@ -1,7 +1,7 @@
 //! Fixed root relations use synthetic types, addresses and evidence only.
 
 use super::*;
-use oer_registers_model::chip_model::ControlKind;
+use oer_tools_registers_model::chip_model::ControlKind;
 
 const CLOCK_TYPE: &str = r#"
 schema = 3

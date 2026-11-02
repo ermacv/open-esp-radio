@@ -10,9 +10,9 @@
     clippy::indexing_slicing
 )]
 //! The ESP32-S31 side of an image's platform over the Espressif staged
-//! runtime (`oer-espressif-staged-runtime`) and executor
-//! (`oer-espressif-executor`), whose fatal paths and owned blocks are the
-//! HAL's port ([`oer_esp32s31_hal::platform::Port`]).
+//! runtime (`oer-chips-family-staged-runtime`) and executor
+//! (`oer-chips-family-executor`), whose fatal paths and owned blocks are the
+//! HAL's port ([`oer_chips_esp32s31_hal::platform::Port`]).
 //!
 //! - `Esp32s31`: the executor's chip binding (chip target only), whose statics `bind!`
 //!   declares here once: the storage of the port's owned blocks, the one
@@ -52,23 +52,23 @@ pub struct Esp32s31 {
     _private: (),
 }
 #[cfg(target_arch = "riscv32")]
-oer_espressif_executor::bind!(Esp32s31, oer_esp32s31_hal::platform::Port);
+oer_chips_family_executor::bind!(Esp32s31, oer_chips_esp32s31_hal::platform::Port);
 
 #[cfg(target_arch = "riscv32")]
-impl oer_espressif_staged_runtime::adoption::Binding for Esp32s31 {
-    type Platform = oer_esp32s31_hal::platform::Port;
-    type Driver = oer_esp32s31_hal::root::RuntimePort;
-    type Hardware = oer_esp32s31_hal::root::Hardware;
-    type Interrupts = oer_esp32s31_hal::platform::Hart0Grant;
-    type Controller = oer_esp32s31_hal::platform::InterruptController;
+impl oer_chips_family_staged_runtime::adoption::Binding for Esp32s31 {
+    type Platform = oer_chips_esp32s31_hal::platform::Port;
+    type Driver = oer_chips_esp32s31_hal::root::RuntimePort;
+    type Hardware = oer_chips_esp32s31_hal::root::Hardware;
+    type Interrupts = oer_chips_esp32s31_hal::platform::Hart0Grant;
+    type Controller = oer_chips_esp32s31_hal::platform::InterruptController;
 
-    fn split(parts: oer_esp32s31_hal::root::PlatformParts) -> (Self::Hardware, Self::Interrupts) {
+    fn split(parts: oer_chips_esp32s31_hal::root::PlatformParts) -> (Self::Hardware, Self::Interrupts) {
         (parts.hardware, parts.interrupts.grant)
     }
 
     fn controller(
         interrupts: Self::Interrupts,
-    ) -> Result<Self::Controller, oer_espressif_platform_port::ForeignHart> {
+    ) -> Result<Self::Controller, oer_chips_family_platform_port::ForeignHart> {
         interrupts.into_controller()
     }
 }

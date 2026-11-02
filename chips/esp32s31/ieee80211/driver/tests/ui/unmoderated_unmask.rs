@@ -1,5 +1,5 @@
 #![no_std]
-use oer_esp32s31_ieee80211_driver::mac::irq::epoch::{InterruptEpoch, Moderated, Unmoderated};
+use oer_chips_esp32s31_ieee80211_driver::mac::irq::epoch::{InterruptEpoch, Moderated, Unmoderated};
 pub fn unmask(moderated: &mut InterruptEpoch<Moderated>, unmoderated: &mut InterruptEpoch<Unmoderated>) {
     #[cfg(not(ui_reject))]
     let _restored = moderated.unmask_rx_after_drain();

@@ -2,7 +2,7 @@
 //! polling is ignored plumbing, and every other MMIO, fence and delay effect
 //! compares exactly, in order and value.
 use super::layout::layout;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallEndpoint, EffectClaimCeiling, EffectContract, EffectDisposition, EffectPattern, EffectRule,
     EffectSelector, EffectValue, UnclassifiedEffects,
 };

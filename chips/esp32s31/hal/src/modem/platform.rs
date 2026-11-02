@@ -1,9 +1,9 @@
 //! Route-owned PMU and upstream radio clock transactions.
 
 use core::num::NonZeroU32;
-use oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio;
+use oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio;
 
-use oer_mmio::Placement;
+use oer_portable_mmio::Placement;
 
 use crate::{
     modem::syscon::ModemSysconPowerBaseline, modem::values::ModemSysconClockGateState,
@@ -165,7 +165,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn select_hp_active_modem_icg(&mut self) {
         // SOURCE: ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
-        use oer_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
+        use oer_chips_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
         self.peripherals.pmu_radio.modify_hp_active_icg_modem(|w| {
             w.set_hp_active_dig_icg_modem_code(HpActiveDigIcgModemCode::Active);
         });
@@ -206,7 +206,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         PlatformClockPowerObservation {
             hp_active_icg_selected: hp_active_icg_code
                 == Some(
-                    oer_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode::Active,
+                    oer_chips_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode::Active,
                 ),
             modem_register_bus_clock_enabled,
             modem_source_clocks_configured: modem_source_clocks_configured(
@@ -281,7 +281,7 @@ impl<P: crate::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 }
 
-impl<P: crate::phy::registers::RadioPlacement> oer_espressif_radio::baseline::PowerBaselinePort
+impl<P: crate::phy::registers::RadioPlacement> oer_chips_family_radio::baseline::PowerBaselinePort
     for RadioPhyRegisters<P>
 {
     type Baseline = WifiPowerBaseline;
@@ -330,12 +330,12 @@ fn modem_source_clocks_configured<P: Placement>(registers: &HpSysClkrstRadio<P>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadioWords;
-    use oer_mmio::Registers;
+    use oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadioWords;
+    use oer_portable_mmio::Registers;
 
     #[test]
     fn active_icg_selection_preserves_inherited_bits_and_other_pmu_words() {
-        use oer_esp32s31_pac::pmu::{PmuRadio, hp_active_icg_modem};
+        use oer_chips_esp32s31_pac::pmu::{PmuRadio, hp_active_icg_modem};
 
         for (inherited, selected) in [
             (0x0000_0000, 0x8000_0000),
@@ -355,7 +355,7 @@ mod tests {
                     Some(hp_active_icg_modem::HpActiveDigIcgModemCode::Active),
                 );
                 for (index, &offset) in
-                    PmuRadio::<oer_mmio::Host<'_>>::RADIO_PHY_REGISTER_IMAGE_OFFSETS
+                    PmuRadio::<oer_portable_mmio::Host<'_>>::RADIO_PHY_REGISTER_IMAGE_OFFSETS
                         .iter()
                         .enumerate()
                 {

@@ -23,7 +23,7 @@
 use crate::SoftwareInterrupt;
 use core::marker::PhantomData;
 
-use oer_espressif_interrupt_table::{
+use oer_chips_family_interrupt_table::{
     Bound, Context, Entry, InterruptSource, InterruptSources, request_direction,
     signal::{SignalExecutor, executor_context},
 };

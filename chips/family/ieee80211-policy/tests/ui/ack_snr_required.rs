@@ -1,7 +1,7 @@
 #![no_std]
-use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_ieee80211_contracts_port::{AckSnr, Ieee80211Capabilities, SignalMetadata};
-use oer_ieee80211_core_upper_mac::rate_selection::RateSelection;
+use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_protocols_ieee80211_contracts_port::{AckSnr, Ieee80211Capabilities, SignalMetadata};
+use oer_protocols_ieee80211_core_upper_mac::rate_selection::RateSelection;
 
 fn for_port<M: SignalMetadata, A>(_: impl RateSelection<M, A>) {}
 
@@ -27,14 +27,14 @@ pub fn select<K: Ieee80211Capabilities, M: SignalMetadata>() {
 }
 
 // Both evidences also serve as BlockAck evidence: only the ACK SNR differs.
-impl oer_ieee80211_contracts_port::BlockAckSnr for Snr {
-    fn snr_sample(&self) -> oer_ieee80211_contracts_port::SnrSample {
-        oer_ieee80211_contracts_port::SnrSample::Measured(self.0)
+impl oer_protocols_ieee80211_contracts_port::BlockAckSnr for Snr {
+    fn snr_sample(&self) -> oer_protocols_ieee80211_contracts_port::SnrSample {
+        oer_protocols_ieee80211_contracts_port::SnrSample::Measured(self.0)
     }
 }
 
-impl oer_ieee80211_contracts_port::BlockAckSnr for Unmeasured {
-    fn snr_sample(&self) -> oer_ieee80211_contracts_port::SnrSample {
-        oer_ieee80211_contracts_port::SnrSample::Unmeasured
+impl oer_protocols_ieee80211_contracts_port::BlockAckSnr for Unmeasured {
+    fn snr_sample(&self) -> oer_protocols_ieee80211_contracts_port::SnrSample {
+        oer_protocols_ieee80211_contracts_port::SnrSample::Unmeasured
     }
 }

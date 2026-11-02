@@ -6,12 +6,12 @@ mod checked_stack;
 mod cli;
 mod support;
 use clap::Parser;
-use oer_analysis_riscv_analysis::{FunctionInput, PreparedReferences, writes::*};
-use oer_analysis_riscv_lift::StructuralRiscvDecoder;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::ProgramView;
-use oer_analysis_riscv_program::facts::ImageFacts;
-use oer_image_stack::{DebugMetadata, analyze, parse_summaries, read_debug};
+use oer_tools_analysis_riscv_analysis::{FunctionInput, PreparedReferences, writes::*};
+use oer_tools_analysis_riscv_lift::StructuralRiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::ProgramView;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_image_stack::{DebugMetadata, analyze, parse_summaries, read_debug};
 use std::{collections::BTreeSet, rc::Rc};
 
 #[derive(Debug, Parser)]
@@ -90,7 +90,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!(
         "caller\t{:#010x}\t{}",
         caller.address,
-        oer_analysis_elf::demangle(&caller.label())
+        oer_tools_analysis_elf::demangle(&caller.label())
     );
     println!(
         "target\t{site:#010x}\t{:?}",
@@ -268,7 +268,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     .get(start..start + function.size as usize)
                     .ok_or("function exceeds its section")?;
                 let input = FunctionInput {
-                    traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+                    traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
                     image: Some(&view),
                     section: function.section as u32,
                     extent: CodeRange {

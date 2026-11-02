@@ -11,13 +11,13 @@
 //! the recipient ends an agreement without an answer; a TID it refused, or
 //! whose attempts ran out, is offered no more in that association.
 
-use oer_ieee80211_core_upper_mac::block_ack::{
+use oer_protocols_ieee80211_core_upper_mac::block_ack::{
     DialogTokenSequence, OperationalTxBlockAck, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckConfig,
     TxBlockAckOriginator, TxBlockAckOriginatorConfig, TxBlockAckOriginatorError,
     TxBlockAckOriginatorPolicy, TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry,
 };
-use oer_ieee80211_wire::block_ack::frame::BlockAckAction;
-use oer_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction;
+use oer_portable_time::{Duration, Instant};
 
 /// Every QoS TID, in the order their negotiations go out.
 const ALL_TIDS: [u8; TX_BLOCK_ACK_MAX_TIDS] = [0, 1, 2, 3, 4, 5, 6, 7];
@@ -61,7 +61,7 @@ pub(crate) enum TxBlockAckOwed {
     /// A BlockAckReq moving the recipient's window of `tid` to `start`.
     Request {
         tid: u8,
-        start: oer_ieee80211_wire::sequence::SequenceNumber,
+        start: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     },
 }
 
@@ -76,7 +76,7 @@ pub struct StaTxBlockAck {
     /// TIDs whose ended agreement owes the access point a DELBA, one bit each.
     delba: u8,
     /// Where each TID's owed BlockAckReq moves the recipient's window.
-    request: [Option<oer_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
+    request: [Option<oer_protocols_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
     /// The current association admits agreements: an HT access point of a QoS BSS.
     admitted: bool,
     /// The earliest instant the agreements' timing (a response deadline, an
@@ -340,9 +340,9 @@ impl StaTxBlockAck {
     pub(crate) fn begin(
         &mut self,
         tid: u8,
-        starting_sequence: oer_ieee80211_wire::sequence::SequenceNumber,
+        starting_sequence: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
         now: Instant,
-    ) -> Result<oer_ieee80211_core_upper_mac::block_ack::AddbaRequest, TxBlockAckOriginatorError>
+    ) -> Result<oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaRequest, TxBlockAckOriginatorError>
     {
         let request = self.originator.begin(tid, starting_sequence, now);
         self.retime();

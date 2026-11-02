@@ -3,9 +3,9 @@
 //! Dropping/recreating a station cannot mint another source in that install.
 
 use core::marker::PhantomData;
-use oer_ieee80211_contracts_port::ConnectionEpochKind;
-use oer_radio_port::{ContextLoan, ContextProjection, PortContext};
-use oer_radio_port::{PoolPath, Root, Slot};
+use oer_protocols_ieee80211_contracts_port::ConnectionEpochKind;
+use oer_protocols_radio_port::{ContextLoan, ContextProjection, PortContext};
+use oer_protocols_radio_port::{PoolPath, Root, Slot};
 
 /// Queue representation of an epoch and its operation data. The epoch is
 /// private; public projections always restore the consumer's body loan.
@@ -79,11 +79,11 @@ impl<Path: PoolPath, D> ContextProjection<Path::Identity> for EpochContext<Path,
 /// station's source issues one; neither callers nor Data reconstruct it.
 ///
 /// ```compile_fail
-/// use oer_ieee80211_core_roles_sta::epoch::LinkEpoch;
+/// use oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpoch;
 /// fn cross_install<'old, 'new>(old: LinkEpoch<'old>) -> LinkEpoch<'new> { old }
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LinkEpoch<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct LinkEpoch<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     sequence: u64,
     brand: PhantomData<fn(&'id (), Path) -> &'id ()>,
 }
@@ -91,7 +91,7 @@ pub struct LinkEpoch<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
 /// The station's sole, non-cloneable source. A new source consumes the
 /// install's unique slot. It has no reset and never gives that slot back;
 /// reset requires ending the install, which also ends its branded contexts.
-pub struct LinkEpochSource<'id, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>> {
+pub struct LinkEpochSource<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     brand: PhantomData<fn(&'id (), Path) -> &'id ()>,
     last: u64,
 }
@@ -134,7 +134,7 @@ impl<'id, Path: PoolPath> LinkEpoch<'id, Path> {
 }
 
 #[cfg(test)]
-impl<'id> LinkEpochSource<'id, Root<oer_radio_port::LocalId<'id>>> {
+impl<'id> LinkEpochSource<'id, Root<oer_protocols_radio_port::LocalId<'id>>> {
     pub(crate) const fn for_test(last: u64) -> Self {
         Self {
             brand: PhantomData,
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn opaque_epoch_context_preserves_a_non_send_owner_and_the_consumers_epoch_loan() {
-        use oer_radio_port::{ContextChoice, Root, StaticId};
+        use oer_protocols_radio_port::{ContextChoice, Root, StaticId};
         use std::rc::Rc;
         enum Declaration {}
         type Path = Root<StaticId<Declaration>>;

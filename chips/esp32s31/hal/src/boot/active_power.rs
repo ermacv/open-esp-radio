@@ -5,9 +5,9 @@
 //! SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/register/soc/pmu_reg.h`
 //! (`HP_ACTIVE_HP_CK_POWER`: CPLL and MPLL power and their analog-I2C power).
 
-use oer_esp32s31_pac::{instances, pmu::PmuRadio};
-use oer_espressif_boot::{Access, clock::ActivePllPower};
-use oer_mmio::{Fixed, Placement};
+use oer_chips_esp32s31_pac::{instances, pmu::PmuRadio};
+use oer_chips_family_boot::{Access, clock::ActivePllPower};
+use oer_portable_mmio::{Fixed, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -79,9 +79,9 @@ impl<P: Placement> ActivePllPower for ActivePower<P> {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> ActivePower<oer_mmio::Host<'a>> {
+impl<'a> ActivePower<oer_portable_mmio::Host<'a>> {
     /// The owner over host memory from the PMU's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         PmuRadio::host(words).map(Self)
     }
 }

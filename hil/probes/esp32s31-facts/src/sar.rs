@@ -92,7 +92,7 @@ impl Sar {
     #[inline(always)]
     pub(super) fn until(&self, start: u32, us: u32) {
         let bound = self.cycles(us);
-        while oer_riscv::cycle32().wrapping_sub(start) < bound {}
+        while oer_portable_riscv::cycle32().wrapping_sub(start) < bound {}
     }
     fn prerequisites(&mut self) -> bool {
         let p = &mut self.radio;
@@ -106,7 +106,7 @@ impl Sar {
 
         p.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
             w.set_reg_modem_clk_en(
-                oer_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled,
+                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled,
             );
         });
 
@@ -144,38 +144,38 @@ impl Sar {
 
         p.modem_syscon_clock_reset.modify_clk_conf1(|w| {
             w.set_clk_wifibb_22m_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
             );
             w.set_clk_wifibb_40m_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
             );
             w.set_clk_wifibb_44m_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
             );
             w.set_clk_wifibb_80m_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
             );
             w.set_clk_wifibb_40x_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
             );
             w.set_clk_wifibb_80x_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
             );
             w.set_clk_wifibb_40x1_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
             );
             w.set_clk_wifibb_80x1_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled,
             );
             w.set_clk_wifibb_160x1_en(
-                oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
             );
-            w.set_clk_wifi_apb_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled);
+            w.set_clk_wifi_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled);
             w.set_clk_fe_80m_en(true);
             w.set_clk_fe_160m_en(true);
             w.set_clk_fe_apb_en(true);
-            w.set_clk_bt_apb_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
-            w.set_clk_btbb_en(oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
+            w.set_clk_bt_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
+            w.set_clk_btbb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
             w.set_clk_fe_pwdet_adc_en(true);
             w.set_clk_fe_adc_en(true);
             w.set_clk_fe_dac_en(true);
@@ -183,7 +183,7 @@ impl Sar {
 
         p.modem_syscon_clock_reset.modify_clk_conf(|w| {
             w.set_clk_i2c_mst_sel_160m(
-                oer_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled,
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled,
             );
         });
 
@@ -249,7 +249,7 @@ impl Sar {
                     .set_start_or_reset(true);
             }),
         }
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         loop {
             let (busy, data) = match route.host {
                 pac::analog_i2c::Host::Host0 => {
@@ -264,7 +264,7 @@ impl Sar {
             if !busy {
                 return Some(data);
             }
-            if oer_riscv::cycle32().wrapping_sub(start) >= bound {
+            if oer_portable_riscv::cycle32().wrapping_sub(start) >= bound {
                 return None;
             }
         }
@@ -316,13 +316,13 @@ impl Sar {
                 w.set_sar_trigger(false);
             });
         // The actual 0->1 PAC store lies between these cycle reads.
-        let before = oer_riscv::cycle32();
+        let before = oer_portable_riscv::cycle32();
         self.radio
             .phy_baseband_config_oracle_fe
             .modify_power_detector_control(|w| {
                 w.set_sar_trigger(true);
             });
-        let after = oer_riscv::cycle32();
+        let after = oer_portable_riscv::cycle32();
         // Defer publication until after the timing-critical observations.
         self.trigger_window = [before, after];
         after
@@ -330,7 +330,7 @@ impl Sar {
     fn begin(&mut self) -> Option<u32> {
         self.observations.fill((0, 0));
         self.arm(true);
-        let arm = oer_riscv::cycle32();
+        let arm = oer_portable_riscv::cycle32();
         self.until(arm, 1);
         let trigger = self.trigger();
         // One due observation per cycle-counter boundary, including the
@@ -338,9 +338,9 @@ impl Sar {
         let mut ready_at = None;
         for (index, us) in (2..=100).enumerate() {
             self.until(trigger, us);
-            let before = oer_riscv::cycle32();
+            let before = oer_portable_riscv::cycle32();
             let ready = self.ready();
-            let after = oer_riscv::cycle32();
+            let after = oer_portable_riscv::cycle32();
             if let Some(slot) = self.observations.get_mut(index) {
                 *slot = (after.wrapping_sub(trigger), ready);
             }
@@ -532,7 +532,7 @@ impl Sar {
                 continue;
             }
             self.until(ready_at, us);
-            let before = oer_riscv::cycle32().wrapping_sub(ready_at);
+            let before = oer_portable_riscv::cycle32().wrapping_sub(ready_at);
             let r0 = self.ready();
             let sample = self.sample();
             let r1 = self.ready();
@@ -541,7 +541,7 @@ impl Sar {
                 r0,
                 sample,
                 r1,
-                oer_riscv::cycle32().wrapping_sub(ready_at),
+                oer_portable_riscv::cycle32().wrapping_sub(ready_at),
             ];
         }
         self.publish_poll(0x1410);
@@ -567,7 +567,7 @@ impl Sar {
             let ready_after_reference = self.ready();
             let mut observations = [[0_u32; 5]; 8];
             self.arm(true);
-            self.until(oer_riscv::cycle32(), 1);
+            self.until(oer_portable_riscv::cycle32(), 1);
             let ready_after_arm = self.ready();
             let trigger = self.trigger();
             for (us, out) in [0, 1, 2, 3, 5, 10, 20, 100]
@@ -575,7 +575,7 @@ impl Sar {
                 .zip(observations.iter_mut())
             {
                 self.until(trigger, us);
-                let begin = oer_riscv::cycle32().wrapping_sub(trigger);
+                let begin = oer_portable_riscv::cycle32().wrapping_sub(trigger);
                 let ready = self.ready();
                 let sample = if !delayed || us == 100 {
                     self.sample()
@@ -587,7 +587,7 @@ impl Sar {
                     begin,
                     ready,
                     sample,
-                    oer_riscv::cycle32().wrapping_sub(trigger),
+                    oer_portable_riscv::cycle32().wrapping_sub(trigger),
                 ];
             }
             emit(0x1450, reference.into(), before, after);

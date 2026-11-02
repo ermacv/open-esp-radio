@@ -3,17 +3,17 @@
 //! port's phase types `Ty` define them.
 
 use core::marker::PhantomData;
-use oer_ieee80211_contracts_port::association::{KEY_BANK_CAPACITY, KeyPool};
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::association::{KEY_BANK_CAPACITY, KeyPool};
+use oer_protocols_ieee80211_contracts_port::{
     InterfaceKeys, InterfacePhase, KeyTypes, NumberedKey, PhaseTypes, TxBufferClass, TxBufferPool,
 };
-use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_core_upper_mac::ccmp::{
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, ForeignCcmpTxKey, InstalledCcmpTxKey, PendingCcmpTxKey,
     request_ccmp_pairwise_key,
 };
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_radio_port::Slot;
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_radio_port::Slot;
 
 use crate::data::StaDataTokens;
 use crate::machine::StaTokens;
@@ -147,19 +147,19 @@ where
     type VacantAssociation = <Ty::StationKeys as KeyTypes<'id>>::VacantAssociation;
     fn begin_association(
         start: Self::AssociationStart,
-        spp: oer_ieee80211_wire::security::Spp,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
     ) -> Self::Association {
         Ty::StationKeys::begin_association(start, spp)
     }
     fn collect_key_bank(
-        parts: oer_ieee80211_contracts_port::association::KeyBankParts<
+        parts: oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
         >,
     ) -> Result<
         Self::VacantKeyBank,
-        oer_ieee80211_contracts_port::association::KeyBankParts<
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -172,7 +172,7 @@ where
     ) -> (
         Self::AssociationStart,
         Self::PairwiseSlot,
-        oer_ieee80211_contracts_port::association::KeyBankParts<
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,
@@ -186,7 +186,7 @@ where
     ) -> (
         Self::AssociationStart,
         Self::PairwiseSlot,
-        oer_ieee80211_contracts_port::association::KeyBankParts<
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
             Self::PairwiseSlot,
             Self::GroupSlot,
             KEY_BANK_CAPACITY,

@@ -7,7 +7,7 @@ use crate::{
     ScannerConfiguration, ScannerId, Supported, TestPhy, TestReceive, TestTransmit, TxPower,
     Unplaced,
 };
-use oer_bluetooth_le_wire::{
+use oer_protocols_bluetooth_le_wire::{
     AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, DataChannel, DataPdu, DataPduKind,
     TestChannel, TestPayloadType,
 };
@@ -46,10 +46,10 @@ impl LeCapabilities for Peripheral {
 
 /// A power under the open test domain's ceiling.
 fn power(dbm: i8) -> TxPower {
-    let band = oer_radio_regulatory::TEST_DOMAIN
+    let band = oer_protocols_radio_regulatory::TEST_DOMAIN
         .permit(crate::LeBand)
         .unwrap();
-    let ceiling = band.tx_ceiling(oer_radio_regulatory::PowerLimits {
+    let ceiling = band.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: None,
@@ -379,10 +379,10 @@ fn a_test_payload_is_at_most_255_octets() {
 
 #[test]
 fn a_power_above_the_regulatory_ceiling_is_not_requestable() {
-    let band = oer_radio_regulatory::TEST_DOMAIN
+    let band = oer_protocols_radio_regulatory::TEST_DOMAIN
         .permit(crate::LeBand)
         .unwrap();
-    let ceiling = band.tx_ceiling(oer_radio_regulatory::PowerLimits {
+    let ceiling = band.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: Some(500),

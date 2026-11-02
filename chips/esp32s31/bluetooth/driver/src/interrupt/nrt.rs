@@ -7,7 +7,7 @@
 //! This module retains only an acknowledged token without assigning Link-Layer
 //! names or publishing synthetic work.
 
-use oer_esp32s31_hal::bluetooth::{
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothNrtInterruptAcknowledged, BluetoothNrtInterruptFault, InterruptRegistersOwner,
 };
 

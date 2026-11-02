@@ -5,30 +5,30 @@ use crate::chip::{
 };
 use crate::radio::{self, Backend, Caps, Device, Family};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_ieee80211_driver::port::{self, device::Composition};
-use oer_espressif_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_ieee80211_contracts_port::*;
-use oer_ieee80211_runtime::station::*;
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_ieee80211_driver::port::{self, device::Composition};
+use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_protocols_ieee80211_contracts_port::*;
+use oer_protocols_ieee80211_runtime::station::*;
 
-use oer_ieee80211_core_roles_sta::{
+use oer_protocols_ieee80211_core_roles_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
     machine::{self, Station, StationResources},
 };
-use oer_ieee80211_core_upper_mac::{
+use oer_protocols_ieee80211_core_upper_mac::{
     rate_control::RatePeer,
     rate_selection::{FrameRates, RateSelection},
 };
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
-use oer_memory::{Placed, StaticPlace};
-use oer_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
+use oer_portable_memory::{Placed, StaticPlace};
+use oer_protocols_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
 #[cfg(oer_trace)]
-use oer_time::Clock;
-use oer_time::{Duration, Instant};
+use oer_portable_time::Clock;
+use oer_portable_time::{Duration, Instant};
 
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition<W: Binding>(PhantomData<W>);
@@ -53,8 +53,8 @@ const MANAGEMENT: u8 = 4;
 /// management frames do not take, within its queue (`PortData`'s capacity).
 const DATA_BUFFERS: usize = port::TX_BUFFERS - MANAGEMENT as usize;
 #[cfg(oer_trace)]
-pub(crate) static TARGET: oer_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
-    oer_memory::OnceValue::new();
+pub(crate) static TARGET: oer_portable_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
+    oer_portable_memory::OnceValue::new();
 #[cfg(oer_trace)]
 fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
     terminal: &LowerMacTerminal<'id, Family<Id, W>>,
@@ -63,18 +63,18 @@ fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
         && matches!(completed.outcome(), TxOutcome::Indeterminate(_))
     {
         let observer = W::DriverObserver::default();
-        oer_trace::observe!(observer, crate::observation::TxIndeterminate);
+        oer_portable_trace::observe!(observer, crate::observation::TxIndeterminate);
     }
 }
 /// Report a data MPDU addressed to `local`: its PPDU's rate and whether it
 /// came in an A-MPDU, as `meta` tells.
 #[cfg(oer_trace)]
 fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]) {
-    if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+    if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
         .is_some_and(|header| header.control().is_data() && header.receiver() == local)
     {
         let observer = W::DriverObserver::default();
-        oer_trace::observe!(
+        oer_portable_trace::observe!(
             observer,
             crate::observation::RxData {
                 rate: crate::observation::RateClass::of(match meta.rate {
@@ -158,7 +158,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                 observe_received_data::<W>(bytes, meta.common(), local);
             }
             if let Some((local, Some(target))) = TARGET.get() {
-                if oer_ieee80211_wire::station::parse_open_authentication_response(
+                if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
                     bytes, local, target,
                 )
                 .is_some_and(|r| r.status_code == 0)
@@ -166,18 +166,18 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                     #[cfg(oer_trace)]
                     {
                         let observer = W::DriverObserver::default();
-                        oer_trace::observe!(observer, crate::observation::StationAuthenticated);
+                        oer_portable_trace::observe!(observer, crate::observation::StationAuthenticated);
                     }
                 }
-                if oer_ieee80211_wire::frame::DecodedHeader::decode(bytes)
+                if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
                     .is_some_and(|h| h.control().subtype() == 8)
-                    && oer_ieee80211_wire::scan::parse_management(bytes)
+                    && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
                         .is_some_and(|r| r.bssid.get() == target)
                 {
                     #[cfg(oer_trace)]
                     {
                         let observer = W::DriverObserver::default();
-                        oer_trace::observe!(
+                        oer_portable_trace::observe!(
                             observer,
                             crate::observation::StationBeacon {
                                 at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
@@ -195,7 +195,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     )]
     fn span(span: ServiceSpan, end: bool) {
         let observer = W::DriverObserver::default();
-        oer_trace::observe!(observer, crate::observation::ServiceSpan { span, end });
+        oer_portable_trace::observe!(observer, crate::observation::ServiceSpan { span, end });
     }
     fn tx_buffer<'id>(
         buffer: port::AnyBuffer<'id, Id, Device<W>, TX, ()>,
@@ -224,26 +224,26 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
 
 pub struct Rates<W: Binding>(EspressifRateSelection<Caps>, W::Observer);
 impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAnswer> for Rates<W> {
-    fn packet_number_step(&self) -> oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(&self) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::packet_number_step(&self.0)
     }
     fn plan<R>(
         &self,
         frame: FrameRates,
-        carried: impl Fn(oer_ieee80211_wire::phy::PhyRate) -> Option<R>,
+        carried: impl Fn(oer_protocols_ieee80211_wire::phy::PhyRate) -> Option<R>,
     ) -> Option<RetryPlan<R>> {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::plan(
             &self.0, frame, carried,
         )
     }
     fn associated(&mut self, peer: &RatePeer, response: &M) {
-        oer_trace::observe!(self.1, crate::observation::StationAssociated);
+        oer_portable_trace::observe!(self.1, crate::observation::StationAssociated);
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::associated(
             &mut self.0,
             peer,
             response,
         );
-        oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
+        oer_portable_trace::observe!(self.1, selected_rate::<M>(&self.0));
     }
     fn disconnected(&mut self) {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::disconnected(&mut self.0);
@@ -258,18 +258,18 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAn
         if frame == FrameRates::Control
             && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
         {
-            oer_trace::observe!(self.1, crate::observation::ControlDelivered);
+            oer_portable_trace::observe!(self.1, crate::observation::ControlDelivered);
         }
         #[cfg(oer_trace)]
         if matches!(
             completion,
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
         ) {
-            oer_trace::observe!(self.1, crate::observation::TxHardwareTimeout);
+            oer_portable_trace::observe!(self.1, crate::observation::TxHardwareTimeout);
         }
         #[cfg(oer_trace)]
         if frame == FrameRates::Data {
-            oer_trace::observe!(self.1, crate::observation::TxData::of(completion));
+            oer_portable_trace::observe!(self.1, crate::observation::TxData::of(completion));
         }
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::completed(
             &mut self.0,
@@ -279,14 +279,14 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAn
         );
         #[cfg(oer_trace)]
         if frame == FrameRates::Data {
-            oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
+            oer_portable_trace::observe!(self.1, selected_rate::<M>(&self.0));
         }
     }
     fn completed_aggregate<D>(
         &mut self,
         now: Instant,
-        tally: oer_ieee80211_core_upper_mac::rate_control::BlockAckTally,
-        completion: &oer_ieee80211_contracts_port::AggregateOutcome<port::BlockAckAnswer, D>,
+        tally: oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally,
+        completion: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<port::BlockAckAnswer, D>,
     ) {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::completed_aggregate(
             &mut self.0,
@@ -295,7 +295,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAn
             completion,
         );
         #[cfg(oer_trace)]
-        oer_trace::observe!(self.1, selected_rate::<M>(&self.0));
+        oer_portable_trace::observe!(self.1, selected_rate::<M>(&self.0));
     }
 }
 
@@ -303,7 +303,7 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAn
 fn selected_rate<M: SignalMetadata>(
     selection: &EspressifRateSelection<Caps>,
 ) -> crate::observation::TxRateSelected {
-    use oer_ieee80211_wire::phy::PhyRate;
+    use oer_protocols_ieee80211_wire::phy::PhyRate;
     crate::observation::TxRateSelected {
         kbps: <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::plan(
             selection,
@@ -318,7 +318,7 @@ fn selected_rate<M: SignalMetadata>(
 // WMM Information: QoS station, U-APSD disabled (IEEE 802.11 WMM OUI type 2).
 const HT20: [u8; 28] = ht_capability_ie(
     HtLocalCapabilities::new(0, 0, 0xff, 1),
-    match Channel::ghz2_4(1, oer_ieee80211_wire::channel::WifiChannelWidth::Mhz20) {
+    match Channel::ghz2_4(1, oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz20) {
         Ok(channel) => channel,
         Err(_) => panic!("HT20 advertisement geometry"),
     },
@@ -355,7 +355,7 @@ const HT40: [u8; 28] = ht_capability_ie(
     ),
     match Channel::ghz2_4(
         13,
-        oer_ieee80211_wire::channel::WifiChannelWidth::Mhz40Below,
+        oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz40Below,
     ) {
         Ok(channel) => channel,
         Err(_) => panic!("HT40 advertisement geometry"),
@@ -467,7 +467,7 @@ fn initialize_service<'id, W: Binding>(
     let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
     let [b0, b1, b2, b3, data @ ..] = resources.buffers;
     const {
-        if MANAGEMENT != 4 || DATA_BUFFERS > oer_ieee80211_runtime::station::DATA_BUFFERS {
+        if MANAGEMENT != 4 || DATA_BUFFERS > oer_protocols_ieee80211_runtime::station::DATA_BUFFERS {
             panic!("four management buffers, and the data machine's queue holds the rest");
         }
     }
@@ -569,7 +569,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         let done = running
             .future(|| running_future::<W>(service, completed.uninit(), owner, &mut io))
             .await;
-        let (end, _retired, network) = oer_memory::unpack_placed!(
+        let (end, _retired, network) = oer_portable_memory::unpack_placed!(
             done,
             ServiceCompleted {
                 end,
@@ -582,7 +582,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             failure: crate::failure::convert::service::<StationComposition<W, W::Id>>(fault),
             network,
         };
-        oer_memory::match_placed!(end,ServiceEnd{
+        oer_portable_memory::match_placed!(end,ServiceEnd{
         Stopped(owner)=>rp::Ended::uninstall(owner.read(),(),StationExit::Stopped),
         Failed{owner,fault,custody}=>{drop(custody);owner.read().uninstall((),StationExit::Failed(failed(fault.read())))},
         Poisoned{owner,fault,custody}=>{drop(custody);rp::Ended::fail_stop(owner.read().fail_stop(),StationExit::Poisoned(failed(fault.read())))},
@@ -653,7 +653,7 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
 /// ([`crate::release::within`]): an answer after it is never read, the
 /// release reports `Deadline`, and the spent poster is never reused.
 async fn release_answer<W: Binding>(
-    pending: &mut oer_memory::Awaiting<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    pending: &mut oer_portable_memory::Awaiting<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
     deadline: rp::StopDeadline,
 ) -> Result<(), crate::failure::ReleaseCause> {
     use crate::failure::ReleaseCause;

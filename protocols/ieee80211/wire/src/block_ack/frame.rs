@@ -105,7 +105,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
     };
     match *action {
         ADDBA_REQUEST_ACTION => {
-            let mut reader = oer_wire::Reader::new(fields);
+            let mut reader = oer_portable_wire::Reader::new(fields);
             let &[dialog_token, p0, p1, t0, t1, s0, s1] = reader.array().ok()?;
             let parameters = AddbaParameters::from_bytes([p0, p1]);
             Some(BlockAckAction::AddbaRequest {
@@ -121,7 +121,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
             })
         }
         ADDBA_RESPONSE_ACTION => {
-            let mut reader = oer_wire::Reader::new(fields);
+            let mut reader = oer_portable_wire::Reader::new(fields);
             let &[dialog_token, s0, s1, p0, p1, t0, t1] = reader.array().ok()?;
             let parameters = AddbaParameters::from_bytes([p0, p1]);
             Some(BlockAckAction::AddbaResponse {
@@ -135,7 +135,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
             })
         }
         DELBA_ACTION => {
-            let mut reader = oer_wire::Reader::new(fields);
+            let mut reader = oer_portable_wire::Reader::new(fields);
             let &[p0, p1, r0, r1] = reader.array().ok()?;
             let parameters = DelbaParameters::from_bytes([p0, p1]);
             Some(BlockAckAction::Delba {
@@ -380,7 +380,7 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
     })
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
     pub struct AddbaParameters[2] (little) {
         pub amsdu, with_amsdu: bool = 0..1;
@@ -389,7 +389,7 @@ oer_wire::bitfield! {
         pub window, with_window: u16 = 6..16;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
     pub struct DelbaParameters[2] (little) {
         pub initiator, with_initiator: bool = 11..12;

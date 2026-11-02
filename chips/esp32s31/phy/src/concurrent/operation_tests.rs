@@ -11,13 +11,13 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::transaction::{Fault, FaultReason, Operation, RadioTransaction, TransactionSeat},
     domain::{PlatformClockProvider, RadioDomain},
     power::{PlatformClock, PlatformClockBackend, PlatformClockError, PlatformClockGuard},
     root::RadioHardware,
 };
-use oer_time::{Clock, Duration, Timer};
+use oer_portable_time::{Clock, Duration, Timer};
 use std::{
     boxed::Box,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -52,7 +52,7 @@ impl PlatformClockProvider for Clocks {
     }
 }
 async fn wait<B: PlatformClockBackend>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
 ) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ()>) {
     timer
@@ -61,7 +61,7 @@ async fn wait<B: PlatformClockBackend>(
     (initial.reunite(), Ok(()))
 }
 async fn execute_register<B: PlatformClockBackend, P, D, O>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
     _: &mut P,
     _: &impl PlatformClockProvider<Backend = B>,
@@ -72,7 +72,7 @@ async fn execute_register<B: PlatformClockBackend, P, D, O>(
     wait(timer, initial).await
 }
 async fn execute_close<B: PlatformClockBackend, P, D>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
     _: &mut P,
 ) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ()>) {
@@ -80,7 +80,7 @@ async fn execute_close<B: PlatformClockBackend, P, D>(
     wait(timer, initial).await
 }
 async fn execute_wake<B: PlatformClockBackend, D>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
     _: &impl PlatformClockProvider<Backend = B>,
 ) -> (RadioDomain<B, ConcurrentPhy>, Result<(), ()>) {
@@ -88,7 +88,7 @@ async fn execute_wake<B: PlatformClockBackend, D>(
     wait(timer, initial).await
 }
 async fn execute_maintain<B: PlatformClockBackend, P, D, O>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     initial: RadioTransaction<B, ConcurrentPhy>,
     _: &mut P,
     _: O,
@@ -105,10 +105,10 @@ struct Pilot;
 impl crate::sar_pilot::Service for Pilot {
     async fn sample(
         &mut self,
-        phy: oer_esp32s31_hal::domain::transaction::PhyTransaction,
+        phy: oer_chips_esp32s31_hal::domain::transaction::PhyTransaction,
         _: bool,
     ) -> (
-        oer_esp32s31_hal::domain::transaction::PhyTransaction,
+        oer_chips_esp32s31_hal::domain::transaction::PhyTransaction,
         Result<crate::sar_pilot::Sample, crate::sar_pilot::Error>,
     ) {
         (phy, Err(crate::sar_pilot::Error::DeadlineOverflow))

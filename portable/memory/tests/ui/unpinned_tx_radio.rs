@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::{PinnedDmaTxPool, PinnedDmaTxRadioLease};
+use oer_portable_memory::{PinnedDmaTxPool, PinnedDmaTxRadioLease};
 
 type Pool = PinnedDmaTxPool<32, 8, 4, 1>;
 
@@ -9,7 +9,7 @@ pub fn claim(storage: &'static mut Pool) -> PinnedDmaTxRadioLease<'static, 32, 8
         let pool = Pool::pin_static(storage);
         pool.claim_network(0)
             .unwrap()
-            .publish(oer_memory::FrameLen::constant::<0>(), |_| ());
+            .publish(oer_portable_memory::FrameLen::constant::<0>(), |_| ());
         pool
     };
     #[cfg(ui_reject)]

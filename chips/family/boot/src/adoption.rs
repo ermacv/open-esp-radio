@@ -1,7 +1,7 @@
 //! Adoption of an already initialized platform, without cold boot or a
 //! staged-runtime dependency. Isolated verifier sessions use this same API.
 
-use oer_espressif_watchdog::{
+use oer_chips_family_watchdog::{
     ArmedRtcWatchdog, MainWatchdog, MainWatchdogEnable, MainWatchdogRegisters, MicrosecondTick,
     RtcWatchdog, RtcWatchdogArm, StoppedMainWatchdog, SuperWatchdog, SuperWatchdogRegisters,
 };
@@ -9,9 +9,9 @@ use oer_espressif_watchdog::{
 /// Accept only the mapping the staged entry proves is already in use.
 /// The board implementation performs no reset, remap or clock programming.
 /// This contract belongs to staged-layout, not to the staged runtime.
-pub fn adopt_mapping<B: oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping>(
+pub fn adopt_mapping<B: oer_chips_family_staged_layout::handoff::AdoptsBootstrapMapping>(
     board: B,
-    proof: &oer_espressif_staged_layout::handoff::StageTwoHandoff,
+    proof: &oer_chips_family_staged_layout::handoff::StageTwoHandoff,
 ) -> B::Mapping {
     board.adopt(proof)
 }

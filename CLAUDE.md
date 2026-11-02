@@ -43,17 +43,17 @@ system these rules serve.
   const, never assertion macros. Compile-time panics and test assertions
   are allowed. Unsafe contracts cover memory safety; operation order and
   lifecycle are enforced by `&mut` ownership and typestate. Moving existing
-  unsafe sites into their narrow home (`oer-riscv` for architectural
-  instructions, `oer-memory` for cells, placement, DMA proofs and typed symbol exports, the HAL's
+  unsafe sites into their narrow home (`oer-portable-riscv` for architectural
+  instructions, `oer-portable-memory` for cells, placement, DMA proofs and typed symbol exports, the HAL's
   PSRAM owner for slice creation) may increase the home's count only by the
   moved sites, when the touched crates' total decreases and no calling crate's
   count increases; each site retains its narrow
   contract and `// SAFETY:` proof.
   The PHY-fault slot's ABI declaration belongs to the HAL, with one narrow
   `LinkSlot` unsafe implementation; its one-site caller-count increase is
-  permitted. The trace clock slot belongs to `oer-memory`, and trace retains
+  permitted. The trace clock slot belongs to `oer-portable-memory`, and trace retains
   `forbid(unsafe_code)`. Other callers retain the no-growth rule.
-  Context-local mutable payloads use `oer-memory::ContextCell` with a private
+  Context-local mutable payloads use `oer-portable-memory::ContextCell` with a private
   `ContextProof`; nested access is refused without consuming the payload.
   A hardware state is impossible only with a `SOURCE:` proof naming the
   model, revision, preconditions, event order and limits; a cited value alone
@@ -80,7 +80,7 @@ system these rules serve.
   sessions. A task never borrows its handler cell. Runtime acknowledgements
   consume affine samples;
   polling requires `Silent` after the same pre-bind discard.
-  Transmit security validates PHR-bounded MAC fields through `oer-wire`
+  Transmit security validates PHR-bounded MAC fields through `oer-portable-wire`
   before every security setter. A malformed generated secured ACK is handled
   API input: STOP, report its typed security error to the environment, deliver
   the received frame without an ACK and select the next operation. It neither
@@ -183,7 +183,7 @@ system these rules serve.
   `portable/memory`, the PAC's one root claim, probe images,
   the placement constructor and the HAL's protocol core, narrow and with `// SAFETY:`
   ([docs/unsafe.md](docs/unsafe.md)); crates above the HAL forbid it.
-  Only `oer-riscv` contains `asm!` for architectural operations. Entry/trap
+  Only `oer-portable-riscv` contains `asm!` for architectural operations. Entry/trap
   ABI assembly uses `global_asm!` or `naked_asm!` only in staged entry/trap
   code, bootstrap and probes; host compiler fixtures are test inputs.
 - **Hardware dictionaries and geometry.** Field codes and opcodes are named
@@ -193,12 +193,12 @@ system these rules serve.
   Sequence settings remain HAL constants with `SOURCE:`. An observed image
   without an established code meaning stays cited configuration, not a model
   dictionary entry.
-- **Air formats** use the `oer-wire` field macro and its bounded cursor; each
+- **Air formats** use the `oer-portable-wire` field macro and its bounded cursor; each
   field names its clause of the standard. No hand-written masks or shifts.
 - **Tests.** Every behavioral change gets a focused regression test beside its
   module (`#[cfg(test)]`) or in the crate's `tests/`. Tests check behavior and
   ownership, never generated register addresses, masks, shifts or layout
-  constants; time comes from `oer-time-virtual`. A test is hermetic and safe
+  constants; time comes from `oer-portable-time-virtual`. A test is hermetic and safe
   in parallel: its own memory and its own temporary directory (`tempfile`);
   no external program, process-wide state, fixed path, network port or real
   time. The one exception is the pinned toolchain (`cargo`, `rustc`, `lld`)
@@ -225,7 +225,7 @@ system these rules serve.
   `tools/<domain>/` the developer's machine. Executables only in
   `firmware/`, `hil-scenarios/` and `tools/`. A library is `oer-` plus its
   path below the root; an executable keeps its root
-  (`oer-firmware-apps-boot-smoke`). A crate never sits inside another; a new crate
+  (`oer-hil-probes-boot-smoke`). A crate never sits inside another; a new crate
   needs a reason (dependency direction, license, target, independent
   consumer). Only the image pipeline builds images: `cargo fw`, and the HIL
   harness for a scenario's image. Every package builds.
@@ -233,7 +233,7 @@ system these rules serve.
   data and commands between the host and the device under test; it stores
   nothing and knows no scenario, service or stand equipment. A scenario's
   host program holds its cases and verdict; the image it runs serves
-  services whose every endpoint has a handler (`oer_hil_agent::service!`);
+  services whose every endpoint has a handler (`oer_protocols_hil_agent::service!`);
   several scenarios share one image. Stand equipment and its drivers belong
   to `tools/lab`.
 
@@ -251,7 +251,7 @@ system these rules serve.
   that can be rebuilt.
 - **Checks on the host:** `cargo test -p <pkg>`, `cargo clippy -p <pkg>
   --all-targets` and `cargo fmt --check` for what you changed, plus `cargo
-  test -p oer-test-layers`. Images, image checks and sizes are built by CI.
+  test -p oer-tools-test-layers`. Images, image checks and sizes are built by CI.
   Changed chip packages may also run `cargo check` and `cargo clippy` with
   `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks only,
   without images or linking. A targeted image build measures one concrete

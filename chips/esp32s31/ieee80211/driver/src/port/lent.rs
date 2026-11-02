@@ -13,10 +13,10 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     task::{Context, Poll},
 };
-use oer_ieee80211_contracts_port::{AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer};
-use oer_memory::QueueNotify;
-use oer_radio_port::SlotIdentity;
-use oer_sync::PriorityWaker;
+use oer_protocols_ieee80211_contracts_port::{AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer};
+use oer_portable_memory::QueueNotify;
+use oer_protocols_radio_port::SlotIdentity;
+use oer_portable_sync::PriorityWaker;
 
 /// How a lent unit's return tells the task waiting for every return (the
 /// station's stop) and the driver when it asked for its units. Every call
@@ -299,7 +299,7 @@ mod tests {
         }
     }
 
-    impl oer_memory::QueueNotify for Counted {
+    impl oer_portable_memory::QueueNotify for Counted {
         fn register(&self, _: &mut Context<'_>) {
             self.registered.fetch_add(1, Ordering::Relaxed);
         }

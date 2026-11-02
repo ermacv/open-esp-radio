@@ -11,7 +11,7 @@ use std::{fs, path::Path, process::Command};
 /// and blanked (keeping line numbers) for the reference build.
 const OWNER: &str = r#"#![no_std]
 use core::sync::atomic::{AtomicU32, Ordering};
-use oer_trace::{Channel, Domain, Event, Kind, Noop, Observer};
+use oer_portable_trace::{Channel, Domain, Event, Kind, Noop, Observer};
 
 /// Stands for a clock or register read: a call with a side effect.
 pub static READS: AtomicU32 = AtomicU32::new(0);
@@ -51,11 +51,11 @@ impl<O: Observer> Core<O> {
     #[inline]
     fn advance(&mut self, input: u32) -> u32 {
         self.state = self.state.rotate_left(5) ^ input;
-//POINT oer_trace::observe!(self.observer, Step { state: self.state, at: read_clock() });
+//POINT oer_portable_trace::observe!(self.observer, Step { state: self.state, at: read_clock() });
         if self.state & 1 == 1 {
             self.state = self.state.wrapping_mul(3);
         }
-//POINT oer_trace::observe!(self.observer, Step { state: self.state, at: read_clock() });
+//POINT oer_portable_trace::observe!(self.observer, Step { state: self.state, at: read_clock() });
         self.state
     }
 }

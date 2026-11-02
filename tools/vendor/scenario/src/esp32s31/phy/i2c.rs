@@ -13,12 +13,12 @@ use crate::esp32s31::harness::{
 use crate::esp32s31::layout::*;
 use crate::esp32s31::phy::image_layout;
 use crate::esp32s31::session::{Artifact, Session, image_symbol, request};
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallEndpoint, ComparisonVerdict, DataSelector, DeviceBehavior, DeviceDeclaration, EffectRule,
     ExecutionCase, ExecutionEvent, ExecutionEvidence, ExecutionGap, ExecutionStop, ExecutionTarget,
     LinkRequest, MemoryAccess, ModelStatus, RegionLifetime, RegisterCell, SessionReset,
 };
-use oer_analysis_riscv_model::{ArtifactId, ObjectId, ObjectLocation};
+use oer_tools_analysis_riscv_model::{ArtifactId, ObjectId, ObjectLocation};
 use std::{collections::BTreeMap, path::PathBuf};
 
 /// Production destination of the initialized 400-byte parameter prefix.
@@ -180,7 +180,7 @@ impl I2c {
         let exported = session.data("table", &request)?;
         let table = exported.bytes;
         if exported.payload.as_str() != OBJECT_SHA
-            || oer_os_durable::sha256_bytes(&table) != TABLE_SHA
+            || oer_tools_os_durable::sha256_bytes(&table) != TABLE_SHA
         {
             return Err(invalid("I2C object or table identity mismatch"));
         }
@@ -194,7 +194,7 @@ impl I2c {
                 "phy_reg_update_new",
             ]);
         }
-        let select = |input: usize, name: &str| -> Result<oer_analysis_riscv_model::SymbolId> {
+        let select = |input: usize, name: &str| -> Result<oer_tools_analysis_riscv_model::SymbolId> {
             Ok(symbol(inventory, input, name)?.id.clone())
         };
         // ROM first; the SDK firmware supplies the crystal-clock symbols
@@ -564,7 +564,7 @@ pub fn models(
     records: &[ExecutionEvidence],
     case: u32,
     side: bool,
-) -> Vec<&oer_analysis_blobray_domain::ModelObservation> {
+) -> Vec<&oer_tools_analysis_blobray_domain::ModelObservation> {
     records
         .iter()
         .filter_map(|r| match r {

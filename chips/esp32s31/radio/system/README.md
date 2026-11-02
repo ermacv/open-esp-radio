@@ -1,8 +1,8 @@
-# oer-esp32s31-radio-system
+# oer-chips-esp32s31-radio-system
 
 The ESP32-S31 radio system: one actor future, tied to no executor, that owns
 the shared RF front-end and serves its clients' cells
-(`oer-esp32s31-radio-client`). It serves Wi-Fi and, with the `bluetooth` feature, one Bluetooth client for
+(`oer-chips-esp32s31-radio-client`). It serves Wi-Fi and, with the `bluetooth` feature, one Bluetooth client for
 all roles and connections. `attach_bluetooth` lends the same actor to a separately retained Bluetooth
 attachment and inbox. Shared prepare, tracking, Wi-Fi service and RF close
 keep their original backend type; the attachment never wraps that backend. Wi-Fi-only compositions

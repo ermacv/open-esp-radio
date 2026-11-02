@@ -8,8 +8,8 @@
 //! transfer. Transfers to declared boundaries stop the closure; indirect
 //! transfers with neither a static nor an observed target stay unresolved,
 //! and those followed only to observed targets are reported as followed.
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Executable captured code the walker may decode.

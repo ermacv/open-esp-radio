@@ -14,8 +14,8 @@
 
 use crate::InterfaceRole;
 use core::marker::PhantomData;
-use oer_ieee80211_wire::security::Spp;
-use oer_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
+use oer_protocols_ieee80211_wire::security::Spp;
+use oer_protocols_radio_port::{Child, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots};
 
 mod loan;
 
@@ -52,13 +52,13 @@ impl<R, const P: usize, const G: usize> KeyPool for AssociationPool<R, P, G> {
 /// actually come from: a declaration of another size does not compile.
 ///
 /// ```compile_fail,E0271
-/// use oer_ieee80211_contracts_port::{Station, association::*};
+/// use oer_protocols_ieee80211_contracts_port::{Station, association::*};
 /// fn declared<S: AssociationSlot<Pool = AssociationPool<Station, 1, 4>>>() {}
 /// declared::<PairwiseKeySlot<'static, Station, 2, 2>>();
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{Station, association::*};
+/// use oer_protocols_ieee80211_contracts_port::{Station, association::*};
 /// fn declared<S: AssociationSlot<Pool = AssociationPool<Station, 2, 2>>>() {}
 /// declared::<PairwiseKeySlot<'static, Station, 2, 2>>();
 /// declared::<GroupKeySlot<'static, Station, 2, 2>>();
@@ -104,7 +104,7 @@ impl<K, const N: usize> PoolSet for BlockAckSlots<K, N> {
 /// One receive Block Ack slot of a pool of `N`: an agreement holds it.
 /// Only [`BlockAckSlots`] mints it.
 #[must_use = "a Block Ack slot is capacity; dropping it loses it until the next install"]
-pub struct BlockAckSlot<'id, K, const N: usize, Path: PoolPath = Root<oer_radio_port::LocalId<'id>>>
+pub struct BlockAckSlot<'id, K, const N: usize, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>
 {
     slot: Slot<'id, K, Path>,
 }
@@ -124,18 +124,18 @@ impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'_, K, N, Path> {
 /// type.
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_contracts_port::association::*;
+/// use oer_protocols_ieee80211_contracts_port::association::*;
 /// type Declared = BlockAckSlots<u8, 4>;
-/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_radio_port::Root<oer_radio_port::LocalId<'id>>>) {}
+/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>>) {}
 /// fn give<'id>(minted: BlockAckSlot<'id, u8, 2>) {
 ///     take(minted)
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::association::*;
+/// use oer_protocols_ieee80211_contracts_port::association::*;
 /// type Declared = BlockAckSlots<u8, 2>;
-/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_radio_port::Root<oer_radio_port::LocalId<'id>>>) {}
+/// fn take<'id>(_: <Declared as RxBlockAckPool>::Slot<'id, oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>>) {}
 /// fn give<'id>(minted: BlockAckSlot<'id, u8, 2>) {
 ///     take(minted)
 /// }
@@ -190,7 +190,7 @@ pub struct AssociationStart<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     _owner: Slot<'id, OwnerKind<R, P, G>, Child<Path, 0>>,
 }
@@ -202,7 +202,7 @@ pub struct Association<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     start: AssociationStart<'id, R, P, G, Path>,
     spp: Spp,
@@ -215,7 +215,7 @@ pub struct VacantAssociation<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     start: AssociationStart<'id, R, P, G, Path>,
     bank: VacantKeyBank<'id, R, P, G, Path>,
@@ -228,7 +228,7 @@ pub struct PairwiseKeySlot<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     slot: Slot<'id, PairwiseKind<R, P, G>, Child<Path, 1>>,
 }
@@ -239,7 +239,7 @@ pub struct GroupKeySlot<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     slot: Slot<'id, GroupKind<R, P, G>, Child<Path, 2>>,
 }
@@ -251,7 +251,7 @@ pub struct VacantKeyBank<
     R: InterfaceRole,
     const P: usize,
     const G: usize,
-    Path: PoolPath = Root<oer_radio_port::LocalId<'id>>,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     pairwise: [PairwiseKeySlot<'id, R, P, G, Path>; P],
     group: [GroupKeySlot<'id, R, P, G, Path>; G],
@@ -275,7 +275,7 @@ pub type KeyBankArrays<
     R,
     const P: usize,
     const G: usize,
-    Path = Root<oer_radio_port::LocalId<'id>>,
+    Path = Root<oer_protocols_radio_port::LocalId<'id>>,
 > = (
     [PairwiseKeySlot<'id, R, P, G, Path>; P],
     [GroupKeySlot<'id, R, P, G, Path>; G],

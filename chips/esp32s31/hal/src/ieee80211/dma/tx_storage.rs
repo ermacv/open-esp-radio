@@ -14,7 +14,7 @@ use crate::memory::dma_static::{Placed, PlacedBacking};
 use core::{marker::PhantomPinned, mem::ManuallyDrop, pin::Pin};
 
 use crate::types::MacTxQueueDetached;
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
 
 use crate::ieee80211::dma::space::DmaSpace;
@@ -179,8 +179,8 @@ pub enum TxDmaAccess<'owner, L> {
 /// Exclusive software authority over one free TX descriptor and its buffer.
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaFree;
-/// use oer_esp32s31_hal::memory::dma_static::PlacedBacking;
+/// use oer_chips_esp32s31_hal::ieee80211::dma::tx_storage::TxDmaFree;
+/// use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
 /// fn reserve_twice<L: PlacedBacking>(free: TxDmaFree<'_, L>) {
 ///     let _ = free.reserve(64, 8);
 ///     let _ = free.reserve(64, 8);

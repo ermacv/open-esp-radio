@@ -1,5 +1,5 @@
 //! Runs a [`Scenario`] against the production engine
-//! (`oer_espressif_ieee802154_engine::engine`) and records the same boundary
+//! (`oer_chips_family_ieee802154_engine::engine`) and records the same boundary
 //! vocabulary as the compiled vendor driver.
 //!
 //! The adapter below is the only place that knows the vendor encodings: it
@@ -8,8 +8,8 @@
 //! [`LlModel`], so both sides see the same inputs. Modem ETM accesses are
 //! rendered as the vendor's direct register reads and writes.
 
-use oer_espressif_ieee802154_mac_values::{FRAME_SIZE, Ieee802154EngineBuffers};
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{FRAME_SIZE, Ieee802154EngineBuffers};
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter,
     Ieee802154EdSampleMode, Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event,
     Ieee802154EventMask, Ieee802154EventObservation, Ieee802154MacCommand,
@@ -21,17 +21,17 @@ use oer_espressif_ieee802154_mac_values::{
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(feature = "sw-coex")]
-use oer_espressif_coex::{CoexEventId, CoexPtiTable};
+use oer_chips_family_coex::{CoexEventId, CoexPtiTable};
 #[cfg(feature = "sw-coex")]
-use oer_espressif_ieee802154_engine::coex::{Ieee802154CoexPriorities, Ieee802154Coexistence};
-use oer_espressif_ieee802154_engine::engine::{
+use oer_chips_family_ieee802154_engine::coex::{Ieee802154CoexPriorities, Ieee802154Coexistence};
+use oer_chips_family_ieee802154_engine::engine::{
     Ieee802154Engine, Ieee802154EnhancedAck, Ieee802154Environment, Ieee802154FrameInfo,
     Ieee802154ReceivedAck, Ieee802154RxSlot, Ieee802154SecurityFrameError, Ieee802154TxError,
 };
-use oer_espressif_ieee802154_engine::pib::Ieee802154PibDefaults;
-use oer_espressif_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
-use oer_ieee802154_port::AutoPendingMode;
-use oer_ieee802154_wire::FrameAddress;
+use oer_chips_family_ieee802154_engine::pib::Ieee802154PibDefaults;
+use oer_chips_family_ieee802154_engine::{coex::CoexPti, ll::Ieee802154LowLevel};
+use oer_protocols_ieee802154_port::AutoPendingMode;
+use oer_protocols_ieee802154_wire::FrameAddress;
 
 use crate::{
     record::{Argument, LlModel, Record},
@@ -409,7 +409,7 @@ impl Ieee802154LowLevel for PortLl {
         self.ll("ieee802154_ll_get_freq", &[]) as u8
     }
     fn rssi_compensation_dbm(&self) -> i8 {
-        oer_esp32s31_knowledge::ieee802154::RSSI_COMPENSATION_DBM
+        oer_chips_esp32s31_knowledge::ieee802154::RSSI_COMPENSATION_DBM
     }
     fn ed_rss(&mut self) -> i8 {
         self.ll("ieee802154_ll_get_ed_rss", &[]) as i8
@@ -812,16 +812,16 @@ fn level_table() -> CoexPtiTable {
 /// country, and the ceiling is the open domain's EIRP.
 fn permit(
     number: u8,
-    levels: oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels<'_>,
-) -> Option<oer_espressif_ieee802154_engine::pib::Ieee802154Permit> {
+    levels: oer_chips_family_ieee802154_mac_values::Ieee802154TxPowerLevels<'_>,
+) -> Option<oer_chips_family_ieee802154_engine::pib::Ieee802154Permit> {
     let channel = Ieee802154Channel::new(number).ok()?;
-    let permitted = oer_radio_regulatory::TEST_DOMAIN.permit(channel).ok()?;
-    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+    let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN.permit(channel).ok()?;
+    let ceiling = permitted.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: None,
     });
-    oer_espressif_ieee802154_engine::pib::Ieee802154Permit::new(permitted, ceiling, levels).ok()
+    oer_chips_family_ieee802154_engine::pib::Ieee802154Permit::new(permitted, ceiling, levels).ok()
 }
 
 /// Run `scenario` against the production engine.
@@ -835,7 +835,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     // The recovered ESP32-S31 BTBB level set, which the vendor side reads
     // through `bt_bb_get_tx_pwr_table` (`crate::record`).
     const LEVELS: Ieee802154TxPowerLevels<'static> = match Ieee802154TxPowerLevels::new(
-        &oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM,
+        &oer_chips_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM,
     ) {
         Ok(levels) => levels,
         Err(_) => panic!("the reviewed ESP32-S31 provider levels are valid"),
@@ -843,7 +843,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
     let levels = LEVELS;
     let defaults = Ieee802154PibDefaults::default();
     let start = permit(11, levels).expect("channel 11 under the open domain");
-    let addresses = oer_espressif_ieee802154_mac_values::Ieee802154DmaAddresses {
+    let addresses = oer_chips_family_ieee802154_mac_values::Ieee802154DmaAddresses {
         rx: core::array::from_fn(|slot| PortDmaAddress(slot as u32 + 1)),
         tx: PortDmaAddress(100),
         enhanced_ack: PortDmaAddress(101),
@@ -857,7 +857,7 @@ pub fn run(scenario: &Scenario) -> Result<Vec<Record>, String> {
         addresses,
         levels,
         defaults,
-        oer_espressif_ieee802154_engine::engine::Ieee802154Interfaces::new(2)
+        oer_chips_family_ieee802154_engine::engine::Ieee802154Interfaces::new(2)
             .expect("two interfaces"),
         start,
     );

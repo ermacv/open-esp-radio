@@ -3,7 +3,7 @@
 //! `WatchdogPeripherals`.
 //!
 //! The bootstrap takes the RTC, super and timer group 0's main watchdogs
-//! over from the bootloader (`oer_espressif_boot::watchdog`) and disables
+//! over from the bootloader (`oer_chips_family_boot::watchdog`) and disables
 //! the RTC watchdog right before its jump; stage two owns all four
 //! through the family adoption driver, which arms the RTC backstop: stage 0 resets the chip
 //! [`RTC_WATCHDOG_BUDGET_MS`] after the last feed. The image's executor
@@ -13,14 +13,14 @@
 //! main watchdog serves the system deadline.
 
 mod registers;
-pub use oer_espressif_watchdog::{
+pub use oer_chips_family_watchdog::{
     ArmedRtcWatchdog, MainSession, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog,
     StoppedMainWatchdog, SuperWatchdog,
     deadline::{DeadlineBudget, DeadlineError},
 };
 pub use registers::{Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters};
 
-use oer_esp32s31_pac::ownership::WatchdogPeripherals;
+use oer_chips_esp32s31_pac::ownership::WatchdogPeripherals;
 
 /// The main watchdogs' microsecond tick on the chip's 40 MHz XTAL, their
 /// clock source.
@@ -101,7 +101,7 @@ impl WatchdogRegisters {
 
 /// The system deadline on timer group 1's main watchdog, measured on `C`.
 pub type DeadlineWatchdog<C> =
-    oer_espressif_watchdog::deadline::DeadlineWatchdog<Mwdt1Registers, C>;
+    oer_chips_family_watchdog::deadline::DeadlineWatchdog<Mwdt1Registers, C>;
 
 /// An armed system deadline on timer group 1's main watchdog.
-pub type DeadlineLease<C> = oer_espressif_watchdog::deadline::DeadlineLease<Mwdt1Registers, C>;
+pub type DeadlineLease<C> = oer_chips_family_watchdog::deadline::DeadlineLease<Mwdt1Registers, C>;

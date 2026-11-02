@@ -28,7 +28,7 @@ pub type Pools<'id, P, Path = Root<crate::LocalId<'id>>> = <P as PoolSet>::Pools
 /// set; the backend then moves each pool to its held state or body resources.
 ///
 /// ```compile_fail,E0382
-/// use oer_radio_port::{Mint, Slots};
+/// use oer_protocols_radio_port::{Mint, Slots};
 /// enum Keys {}
 /// fn duplicate<'id>(mint: Mint<'id, Slots<Keys, 2>>) {
 ///     let first = mint.into_pools();
@@ -38,7 +38,7 @@ pub type Pools<'id, P, Path = Root<crate::LocalId<'id>>> = <P as PoolSet>::Pools
 /// ```
 ///
 /// ```
-/// use oer_radio_port::{Mint, Slot, Slots};
+/// use oer_protocols_radio_port::{Mint, Slot, Slots};
 /// enum Keys {}
 /// fn once<'id>(mint: Mint<'id, Slots<Keys, 2>>) -> [Slot<'id, Keys>; 2] {
 ///     mint.into_pools()
@@ -48,7 +48,7 @@ pub type Pools<'id, P, Path = Root<crate::LocalId<'id>>> = <P as PoolSet>::Pools
 /// An entire pool set retains the same invariant installation brand:
 ///
 /// ```compile_fail
-/// use oer_radio_port::{Pools, Slots};
+/// use oer_protocols_radio_port::{Pools, Slots};
 /// enum Keys {}
 /// fn foreign<'a: 'b, 'b>(pools: Pools<'a, Slots<Keys, 2>>) -> Pools<'b, Slots<Keys, 2>> {
 ///     pools
@@ -56,7 +56,7 @@ pub type Pools<'id, P, Path = Root<crate::LocalId<'id>>> = <P as PoolSet>::Pools
 /// ```
 ///
 /// ```
-/// use oer_radio_port::{Pools, Slots};
+/// use oer_protocols_radio_port::{Pools, Slots};
 /// enum Keys {}
 /// fn same<'id>(pools: Pools<'id, Slots<Keys, 2>>) -> Pools<'id, Slots<Keys, 2>> {
 ///     pools
@@ -108,7 +108,7 @@ pub(crate) fn prepare_brand<P: PoolSet, R>(
 /// crate can divide this authority among its declared components.
 ///
 /// ```compile_fail,E0382
-/// use oer_radio_port::{PoolBuilder, Slots};
+/// use oer_protocols_radio_port::{PoolBuilder, Slots};
 /// enum Keys {}
 /// fn duplicate<'id>(builder: PoolBuilder<'id>) {
 ///     let first = builder.into_pools::<Slots<Keys, 1>>();
@@ -133,7 +133,7 @@ impl<'id, Path: PoolPath> PoolBuilder<'id, Path> {
 /// Slot indices fit in one byte; larger layouts fail at instantiation:
 ///
 /// ```compile_fail,E0080
-/// use oer_radio_port::{Mint, Slots};
+/// use oer_protocols_radio_port::{Mint, Slots};
 /// fn oversized(mint: Mint<'static, Slots<(), 257>>) {
 ///     let _ = mint.into_pools();
 /// }

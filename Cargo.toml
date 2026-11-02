@@ -43,8 +43,8 @@ members = [
     "tools/lab/service",
     "tools/lab/fixture",
     "tools/lab/fixture-install",
-    "hil/images/esp32s31-aes",
-    "hil/images/esp32s31-station",
+    "hil/images/aes",
+    "hil/images/station",
     "tools/image/build",
     "tools/image/bundle",
     "tools/image/large-values",
@@ -336,16 +336,16 @@ publish = false
 [workspace.dependencies]
 # The firmware packages' shared dependencies.
 static_cell = "2.1.1"
-oer-espressif-staged-layout = { path = "chips/family/staged-layout" }
-oer-espressif-usb-serial-jtag = { path = "chips/family/usb-serial-jtag" }
-oer-esp32s31-layout = { path = "chips/esp32s31/layout" }
+oer-chips-family-staged-layout = { path = "chips/family/staged-layout" }
+oer-chips-family-usb-serial-jtag = { path = "chips/family/usb-serial-jtag" }
+oer-chips-esp32s31-layout = { path = "chips/esp32s31/layout" }
 # The HIL agent images' shared dependencies.
 embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
-oer-espressif-executor = { path = "chips/family/executor" }
-oer-hil-protocol = { path = "protocols/hil/protocol", default-features = false }
-oer-hil-agent = { path = "protocols/hil/agent", default-features = false }
-oer-espressif-staged-runtime = { path = "chips/family/staged-runtime" }
+oer-chips-family-executor = { path = "chips/family/executor" }
+oer-protocols-hil-protocol = { path = "protocols/hil/protocol", default-features = false }
+oer-protocols-hil-agent = { path = "protocols/hil/agent", default-features = false }
+oer-chips-family-staged-runtime = { path = "chips/family/staged-runtime" }
 critical-section = "1.2.0"
 
 [workspace.lints.rust]

@@ -5,14 +5,14 @@
     clippy::unreachable
 )]
 use super::*;
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
-use oer_ieee80211_wire::{ccmp::CCMP_HEADER_LEN, security::Spp};
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
+use oer_protocols_ieee80211_wire::{ccmp::CCMP_HEADER_LEN, security::Spp};
 
 const HEADER_LEN: usize = 24;
 const MIC_LEN: usize = 8;
 
-use oer_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire as frame};
+use oer_protocols_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire as frame};
 
 fn receiver() -> ManagementCcmpReceiver {
     ManagementCcmpReceiver::new(key())
@@ -155,13 +155,13 @@ fn mode(spp: bool) -> CcmpAssociation {
         Spp::NotNegotiated
     })
 }
-fn key() -> oer_ieee80211_contracts_security::Ccmp128Key {
-    oer_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
+fn key() -> oer_protocols_ieee80211_contracts_security::Ccmp128Key {
+    oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
 }
 
 #[test]
 fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
-    use oer_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire};
+    use oer_protocols_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire};
     for spp in [false, true] {
         let wire = management_wire();
         let mut mpdu = wire.clone();

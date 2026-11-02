@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-usb-serial-jtag"
+name = "oer-chips-family-usb-serial-jtag"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,12 +10,12 @@ description = "The USB Serial/JTAG console of Espressif chips over the chip HAL'
 
 [dependencies]
 embedded-io-async = "0.7.0"
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-espressif-interrupt-table = { path = "../interrupt-table" }
-oer-memory = { path = "../../../portable/memory" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-family-interrupt-table = { path = "../interrupt-table" }
+oer-portable-memory = { path = "../../../portable/memory" }
 
 [dev-dependencies]
-oer-espressif-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
+oer-chips-family-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
 
 [lints]
 workspace = true

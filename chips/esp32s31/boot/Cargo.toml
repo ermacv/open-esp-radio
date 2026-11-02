@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-boot"
+name = "oer-chips-esp32s31-boot"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,13 +9,13 @@ publish = false
 description = "ESP32-S31 cold-start composition binding owned HAL atoms and boot profiles to the family runner"
 
 [dependencies]
-oer-espressif-staged-bootstrap = { path = "../../family/staged-bootstrap" }
-oer-esp32s31-hal = { path = "../hal" }
-oer-espressif-boot = { path = "../../family/boot" }
-oer-time = { path = "../../../portable/time" }
+oer-chips-family-staged-bootstrap = { path = "../../family/staged-bootstrap" }
+oer-chips-esp32s31-hal = { path = "../hal" }
+oer-chips-family-boot = { path = "../../family/boot" }
+oer-portable-time = { path = "../../../portable/time" }
 
 [build-dependencies]
-oer-espressif-facts = { path = "../../family/facts" }
+oer-chips-family-facts = { path = "../../family/facts" }
 
 [lints]
 workspace = true

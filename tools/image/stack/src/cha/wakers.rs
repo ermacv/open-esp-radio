@@ -1,8 +1,8 @@
 //! Exact core Waker identities and pointer-sized vtable projections.
 use super::{TypeFacts, WakerType};
 use crate::dwarf::locations::Place;
-use oer_analysis_elf::dwarf::gimli;
-use oer_analysis_riscv_model::{Result, RunControl};
+use oer_tools_analysis_elf::dwarf::gimli;
+use oer_tools_analysis_riscv_model::{Result, RunControl};
 
 impl TypeFacts {
     pub(crate) fn identify_waker(&mut self, id: usize, qualified: &str) {

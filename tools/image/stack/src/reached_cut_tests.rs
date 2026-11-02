@@ -110,7 +110,7 @@ fn predecessor_storage_is_refused_before_exceeding_working_memory() {
     let error = analysis.bound(TEXT, &mut keep, &mut || Ok(())).unwrap_err();
     assert_eq!(
         error.code,
-        oer_analysis_riscv_model::ErrorCode::ResourceLimited
+        oer_tools_analysis_riscv_model::ErrorCode::ResourceLimited
     );
     assert!(error.memory.is_some());
     assert_eq!(memory.peak(), 0);

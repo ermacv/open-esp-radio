@@ -24,7 +24,7 @@
         clippy::disallowed_methods
     )
 )]
-//! The HIL SDK station service: the host has an image's `oer-espressif`
+//! The HIL SDK station service: the host has an image's `oer`
 //! Wi-Fi station connect to a WPA2-Personal network, wait for its DHCP
 //! address or its link loss, exchange a line over TCP with a peer, and
 //! report its status. Every wait is bounded by the request.
@@ -43,7 +43,7 @@ pub const MAX_PASSPHRASE: usize = 63;
 /// The longest line an exchange sends.
 pub const MAX_LINE: usize = 64;
 
-oer_hil_protocol::messages! {
+oer_protocols_hil_protocol::messages! {
     endpoint Connect = "sdk-station/connect" => Connection;
     topic Connection = "sdk-station/connection";
     endpoint WaitIpv4 = "sdk-station/wait-ipv4" => Address;
@@ -70,7 +70,7 @@ pub enum Connection {
     /// Associated and authorized: the 4-way handshake completed.
     Linked { bssid: [u8; 6], channel: u8 },
     /// The station refused the connect or the attempt failed; `code` is
-    /// numbered as `oer_services_wifi_station::runtime` numbers its classes
+    /// numbered as `oer_hil_services_wifi_station::runtime` numbers its classes
     /// 1 to 3 (connect failed with its disconnect reason, refused, not
     /// admitted).
     Failed { code: u32 },
@@ -157,7 +157,7 @@ pub struct Ipv4 {
     pub gateway: Option<[u8; 4]>,
 }
 
-oer_hil_agent::service! {
+oer_protocols_hil_agent::service! {
     /// The SDK station service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         Connect(Connect) => connect,

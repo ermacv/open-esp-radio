@@ -2,8 +2,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use oer_chip_profile::policy::StackPolicy;
-use oer_image_stack::Bound;
+use oer_tools_chip_profile::policy::StackPolicy;
+use oer_tools_image_stack::Bound;
 
 use super::Image;
 
@@ -15,7 +15,7 @@ pub const INTERRUPT_REPORT: &str = "interrupt-reachability.txt";
 /// boot entry (deduplicating aliases), without introducing a build verdict.
 pub fn probe(
     root: &std::path::Path,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     policy: &StackPolicy,
     elf: &std::path::Path,
     output: &std::path::Path,
@@ -145,7 +145,7 @@ impl<'a> Report<'a> {
                     .function
                     .names
                     .iter()
-                    .map(|name| oer_analysis_elf::demangle(name))
+                    .map(|name| oer_tools_analysis_elf::demangle(name))
                     .filter(|name| matches(pattern, name))
                     .collect();
                 if !names.is_empty() {

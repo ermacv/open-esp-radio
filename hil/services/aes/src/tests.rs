@@ -1,8 +1,8 @@
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
-use oer_crypto::block::{Aes128Blocks, Block, BlockCipher, BlockEngine};
+use oer_portable_crypto::block::{Aes128Blocks, Block, BlockCipher, BlockEngine};
 
 use super::*;
-use oer_hil_protocol::Message;
+use oer_protocols_hil_protocol::Message;
 
 /// RustCrypto's AES-128 as the engine's block primitive.
 struct Software;
@@ -121,7 +121,7 @@ fn refusals_are_typed_answers() {
 
 #[test]
 fn the_service_serves_exactly_its_endpoint() {
-    use oer_hil_agent::base::Service;
+    use oer_protocols_hil_agent::base::Service;
     assert_eq!(Request::REQUESTS, [UnwrapKey::KEY]);
     assert_eq!(Request::KEYS, [UnwrapKey::KEY, Unwrapped::KEY]);
 }

@@ -18,12 +18,12 @@
 //! the same order. The interrupt enables (`LP_ANA.INT_ENA`) are left as
 //! found: no handler is installed.
 
-use oer_esp32s31_pac::{analog_i2c, instances, lp_ana::LpAnaBrownout};
-use oer_espressif_boot::{
+use oer_chips_esp32s31_pac::{analog_i2c, instances, lp_ana::LpAnaBrownout};
+use oer_chips_family_boot::{
     Access,
     drivers::brownout::{Mode0, Registers, Settings},
 };
-use oer_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
 /// The brownout detector's control words.
 #[must_use = "dropping a register owner permanently loses its register authority"]
@@ -103,14 +103,14 @@ impl<P: Placement> Registers for BrownoutRegisters<P> {
     fn mode1_reset(&self, _: Access<'_>) -> bool {
         self.0.read_bod_mode1_cntl().bod_mode1_reset_ena()
     }
-    fn threshold_field() -> oer_espressif_analog::AnalogField<Self::Address> {
+    fn threshold_field() -> oer_chips_family_analog::AnalogField<Self::Address> {
         analog_i2c::ulp_bod::i2c_bod_threshold::I2C_BOD_THRESHOLD
     }
 }
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> BrownoutRegisters<oer_mmio::Host<'a>> {
+impl<'a> BrownoutRegisters<oer_portable_mmio::Host<'a>> {
     /// The detector's words over host memory from the instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         LpAnaBrownout::host(words).map(Self)
     }
 }

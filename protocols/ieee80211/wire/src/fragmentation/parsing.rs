@@ -144,7 +144,7 @@ fn parse_data_header(
     mpdu: &[u8],
     protection: DataFragmentProtection,
 ) -> Result<ParsedOpenDataHeader<'_>, OpenDataFragmentError> {
-    let mut reader = oer_wire::Reader::new(mpdu);
+    let mut reader = oer_portable_wire::Reader::new(mpdu);
     let header = reader
         .array::<IEEE80211_LEGACY_DATA_HEADER_LEN>()
         .map_err(|_| OpenDataFragmentError::Truncated)?;
@@ -208,7 +208,7 @@ fn parse_data_header(
     }
 
     let (qos_control, payload) = if subtype == 34 {
-        let mut reader = oer_wire::Reader::new(remainder);
+        let mut reader = oer_portable_wire::Reader::new(remainder);
         let qos = reader
             .u16_le()
             .map_err(|_| OpenDataFragmentError::Truncated)?;

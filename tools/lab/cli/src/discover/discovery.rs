@@ -7,8 +7,8 @@
 
 use std::time::Duration;
 
-use oer_lab_model::hubs::HubStatus;
-use oer_lab_model::{Hub, Stand};
+use oer_tools_lab_model::hubs::HubStatus;
+use oer_tools_lab_model::{Hub, Stand};
 
 pub(crate) type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -25,7 +25,7 @@ pub fn report(stand: &Stand) -> Result<Vec<Finding>> {
 
 /// `uhubctl`'s report, from the LAB service.
 pub fn hubs() -> Result<Vec<HubStatus>> {
-    Ok(oer_lab_model::hubs::parse(
+    Ok(oer_tools_lab_model::hubs::parse(
         &crate::service::client()?.hubs()?,
     ))
 }

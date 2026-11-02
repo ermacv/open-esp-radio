@@ -2,8 +2,8 @@
 
 use super::Box;
 use super::{CompletionObservation, TxBacking, TxCompletion, TxCookie};
-use oer_esp32s31_hal::memory::dma_static::{Placed, PlacedTxPool};
-use oer_memory::PinnedDmaTxPool;
+use oer_chips_esp32s31_hal::memory::dma_static::{Placed, PlacedTxPool};
+use oer_portable_memory::PinnedDmaTxPool;
 
 /// A host-placed transmit pool of `N` buffers of `B` bytes, as a facade
 /// places one in the DMA window; the model allocation is never freed.
@@ -20,7 +20,7 @@ pub fn pool_backing<const B: usize, const N: usize>(
 ) -> Option<TxBacking<B>> {
     pool.claim_network(index)
         .ok()?
-        .publish(oer_memory::FrameLen::constant::<0>(), |_| {});
+        .publish(oer_portable_memory::FrameLen::constant::<0>(), |_| {});
     pool.claim_radio(index).ok()
 }
 

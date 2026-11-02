@@ -5,8 +5,8 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_ieee802154_model::OwnedModel;
-use oer_radio_port::{conformance::registration::guarded, with_local_slot};
+use oer_protocols_ieee802154_model::OwnedModel;
+use oer_protocols_radio_port::{conformance::registration::guarded, with_local_slot};
 use std::{sync::Arc, task::Wake};
 
 // Exercise feature-enabled cleanup through the normally compiled library,

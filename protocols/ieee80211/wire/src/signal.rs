@@ -1,6 +1,6 @@
 //! PHY signal fields carried by HT and HE PPDUs.
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE-SIG-A field).
     pub struct HeSuSigA1[4] (little) {
         pub format, with_format: bool = 0..1;
@@ -16,7 +16,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE-SIG-A field).
     pub struct HeSuSigA2[2] (little) {
         pub txop, with_txop: u8 = 0..7;
@@ -30,7 +30,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE-SIG-A field).
     pub struct HeMuSigA1[4] (little) {
         pub uplink, with_uplink: bool = 0..1;
@@ -46,7 +46,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE-SIG-A field).
     pub struct HeMuSigA2[2] (little) {
         pub txop, with_txop: u8 = 0..7;
@@ -58,7 +58,7 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE-SIG-A field).
     pub struct HeTriggerBasedSigA1[4] (little) {
         pub format, with_format: bool = 0..1;
@@ -71,14 +71,14 @@ oer_wire::bitfield! {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE-SIG-A field).
     pub struct HeTriggerBasedSigA2[2] (little) {
         pub txop, with_txop: u8 = 0..7;
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 19.3.9.4 (HT-SIG field).
     pub struct HtSig[4] (little) {
         pub mcs, with_mcs: u8 = 0..7;
@@ -87,14 +87,14 @@ oer_wire::bitfield! {
         pub short_gi, with_short_gi: bool = 31..32;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (HE MU bandwidth code).
     pub struct HeMuBandwidthCode[1] (little) {
         pub code, with_code: u8 = 0..3;
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11 (BSS Color code).
     pub struct BssColorCode[1] (little) {
         pub color, with_color: u8 = 0..6;

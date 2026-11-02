@@ -10,8 +10,8 @@ fn counter(s: &Session<'_>) -> u32 {
     s.ble.timer.read_word_0048_opaque().counter_low().get()
 }
 fn window() {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 fn state(s: &Session<'_>, tag: u32) {
     let t = &s.ble.timer;
@@ -101,14 +101,14 @@ fn mode(s: &mut Session<'_>, image: u32) {
         w.set_control_0(image == 1 || image == 3)
             .set_control_4(image == 2 || image == 3);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn enable(s: &mut Session<'_>, rollover: bool, compare: bool) {
     s.ble.timer.write_word_0010_opaque(|w| {
         w.set_rollover_delivery_set(rollover)
             .set_compare_software_delivery_set(compare);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn quiet(s: &mut Session<'_>) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
@@ -117,7 +117,7 @@ fn quiet(s: &mut Session<'_>) {
     s.ble.timer.disable_bluetooth_lp_sleep_17();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn init(s: &mut Session<'_>) {
     ble::init_lp(s);
@@ -132,14 +132,14 @@ fn init(s: &mut Session<'_>) {
     enable(s, true, true);
 }
 fn crossed(s: &Session<'_>, origin: u32, distance: u32, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < CAUSE_LIMIT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < CAUSE_LIMIT {
         if counter(s).wrapping_sub(origin) & LOW_MAX >= distance {
-            emit(tag, 1, counter(s), oer_riscv::cycle32().wrapping_sub(start));
+            emit(tag, 1, counter(s), oer_portable_riscv::cycle32().wrapping_sub(start));
             return true;
         }
     }
-    emit(tag, 0, counter(s), oer_riscv::cycle32().wrapping_sub(start));
+    emit(tag, 0, counter(s), oer_portable_riscv::cycle32().wrapping_sub(start));
     false
 }
 
@@ -188,10 +188,10 @@ pub(super) fn sleep16(s: &mut Session<'_>) {
 pub(super) fn delivery(s: &mut Session<'_>) {
     init(s);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut prior = counter(s);
     let mut wrapped = false;
-    while oer_riscv::cycle32().wrapping_sub(start) < WRAP_LIMIT {
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < WRAP_LIMIT {
         let now = counter(s);
         if now < prior {
             wrapped = true;
@@ -203,7 +203,7 @@ pub(super) fn delivery(s: &mut Session<'_>) {
         0xdff0,
         u32::from(wrapped),
         counter(s),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
     );
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
     s.ble

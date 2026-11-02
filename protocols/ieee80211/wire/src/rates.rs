@@ -7,7 +7,7 @@
 
 use crate::phy::{DsssPreamble, LegacyRate};
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.3 (Supported Rates and BSS
     /// Membership Selectors element): the rate in 500-kb/s units in bits 0
     /// to 6 and the basic flag in bit 7.

@@ -15,7 +15,7 @@
 
 use std::fmt::Write as _;
 
-use oer_chip_profile::{Profile, policy::StackPolicy};
+use oer_tools_chip_profile::{Profile, policy::StackPolicy};
 
 use super::{Image, Result, reachability::matches};
 
@@ -68,8 +68,8 @@ fn linked_ipc(image: &Image, profile: &Profile) -> Result<()> {
 /// The linked size of the range `bottom..top`, `None` when the image links
 /// neither symbol.
 fn linked_bytes(image: &Image, bottom: &str, top: &str) -> Result<Option<u64>> {
-    let file = oer_analysis_elf::Elf::parse(&image.elf)?;
-    Ok(oer_analysis_elf::StorageBounds::range(&file, bottom, top)?.map(|range| range.capacity))
+    let file = oer_tools_analysis_elf::Elf::parse(&image.elf)?;
+    Ok(oer_tools_analysis_elf::StorageBounds::range(&file, bottom, top)?.map(|range| range.capacity))
 }
 
 /// Prove the runtime `image`'s unused cores and return the report: every
@@ -154,7 +154,7 @@ pub fn audit_runtime(image: &Image, policy: &StackPolicy, profile: &Profile) -> 
 
 /// The header's used-hart word names exactly the policy's used task stacks.
 fn used_harts(image: &Image, policy: &StackPolicy) -> Result<()> {
-    let file = oer_analysis_elf::Elf::parse(&image.elf)?;
+    let file = oer_tools_analysis_elf::Elf::parse(&image.elf)?;
     let Some(linked) = file.address("__runtime_used_harts") else {
         return Err("the runtime links no `__runtime_used_harts` header word".into());
     };

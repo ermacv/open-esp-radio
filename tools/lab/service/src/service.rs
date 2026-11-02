@@ -22,7 +22,7 @@ use std::{
     },
 };
 
-use oer_lab_arbiter::{
+use oer_tools_lab_arbiter::{
     HARD_LIMIT, LeaseOutcome, Priority,
     balance::MIN_SLICE,
     claims::{Claim, covers, normalize},
@@ -31,7 +31,7 @@ use oer_lab_arbiter::{
     scheduler::{Due, Queued, Scheduler},
 };
 
-use oer_lab_client::protocol::{
+use oer_tools_lab_client::protocol::{
     Frame, HolderStatus, LeaseRequest, Operation, PROTOCOL, Reply, Request, Status,
 };
 
@@ -42,7 +42,7 @@ const OUTPUT_BUDGET: usize = 1 << 20;
 /// operations.
 const PREPARATION: u64 = u64::MAX;
 /// Input frames an operation may have pending: the client's window.
-const INPUT_DEPTH: usize = oer_lab_client::protocol::INPUT_WINDOW;
+const INPUT_DEPTH: usize = oer_tools_lab_client::protocol::INPUT_WINDOW;
 /// How long a driver has to confirm a recovery: the longest reset ladder,
 /// a hub power cycle with the board's return to USB included.
 const RECOVERY_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
@@ -61,7 +61,7 @@ pub trait Drivers: Send + Sync + 'static {
     /// The boards attached to the host now, each by its port and MAC.
     fn attached(&self) -> Vec<(String, String)>;
     /// The boards attached to the host, with their hub ports.
-    fn inventory(&self) -> Vec<oer_lab_client::protocol::AttachedBoard>;
+    fn inventory(&self) -> Vec<oer_tools_lab_client::protocol::AttachedBoard>;
     /// `uhubctl`'s report of the stand's hubs.
     fn hubs(&self) -> Result<String, String>;
     /// The stand's stateful resources as its stand file names them now.
@@ -142,7 +142,7 @@ impl Output {
     /// Queue `bytes` for the client; when the client reads too slowly they
     /// are dropped and counted, never waited for.
     pub fn write(&self, bytes: &[u8]) {
-        for chunk in bytes.chunks(oer_lab_client::protocol::MAX_FRAME / 2) {
+        for chunk in bytes.chunks(oer_tools_lab_client::protocol::MAX_FRAME / 2) {
             let frame = Frame::Data {
                 operation: self.operation,
                 bytes: chunk.to_vec(),
@@ -268,7 +268,7 @@ struct Shared {
     /// The lease history.
     history_path: PathBuf,
     /// The directory of the stand's records, and its stand file.
-    arbiter: oer_lab_arbiter::Arbiter,
+    arbiter: oer_tools_lab_arbiter::Arbiter,
     recovery_deadline: std::time::Duration,
 }
 
@@ -336,27 +336,27 @@ impl Service {
     /// abandoned, and every resource left without a confirmed end state is
     /// recovered before it is granted.
     pub fn open(
-        arbiter: oer_lab_arbiter::Arbiter,
+        arbiter: oer_tools_lab_arbiter::Arbiter,
         stand: Vec<String>,
         drivers: Arc<dyn Drivers>,
         clock: Clock,
-    ) -> oer_lab_arbiter::Result<Self> {
+    ) -> oer_tools_lab_arbiter::Result<Self> {
         Self::open_with(arbiter, stand, drivers, clock, RECOVERY_DEADLINE)
     }
 
     fn open_with(
-        arbiter: oer_lab_arbiter::Arbiter,
+        arbiter: oer_tools_lab_arbiter::Arbiter,
         stand: Vec<String>,
         drivers: Arc<dyn Drivers>,
         clock: Clock,
         recovery_deadline: std::time::Duration,
-    ) -> oer_lab_arbiter::Result<Self> {
+    ) -> oer_tools_lab_arbiter::Result<Self> {
         let state_path = arbiter.state_path();
         let history_path = arbiter.history_path();
         let (scheduler, resumed) = Scheduler::open(&state_path, stand, clock())?;
         scheduler.save(&state_path)?;
         for record in &resumed.abandoned {
-            oer_lab_arbiter::history::append(&history_path, record)?;
+            oer_tools_lab_arbiter::history::append(&history_path, record)?;
         }
         let service = Self {
             shared: Arc::new(Shared {
@@ -598,7 +598,7 @@ impl Service {
                 let mut inner = lock(&self.shared.inner);
                 inner
                     .scheduler
-                    .set_maintenance(oer_lab_arbiter::Maintenance {
+                    .set_maintenance(oer_tools_lab_arbiter::Maintenance {
                         mac,
                         owner,
                         reason,
@@ -619,7 +619,7 @@ impl Service {
                 let mut inner = lock(&self.shared.inner);
                 inner.scheduler.merge_owner(&old, &new);
                 self.persist(&inner);
-                match oer_lab_arbiter::history::rename_owner(&self.shared.history_path, &old, &new)
+                match oer_tools_lab_arbiter::history::rename_owner(&self.shared.history_path, &old, &new)
                 {
                     Ok(()) => outbox.push(&Reply::Done { changed: true }),
                     Err(error) => outbox.push(&Reply::Refused {
@@ -634,7 +634,7 @@ impl Service {
                 outbox.push(&Reply::Done { changed });
             }
             Request::RecordFlash { owner, mac, image } => {
-                let recorded = oer_lab_model::device_id::DeviceId::parse(&mac)
+                let recorded = oer_tools_lab_model::device_id::DeviceId::parse(&mac)
                     .map_err(|error| error.to_string())
                     .and_then(|mac| {
                         self.shared
@@ -731,10 +731,10 @@ impl Service {
         // A tool that acts on a board now is told at once; a run waits.
         if request.scenarios.is_empty()
             && request.maintenance.is_none()
-            && let Some(refusal) = oer_lab_arbiter::maintenance::refusal(
+            && let Some(refusal) = oer_tools_lab_arbiter::maintenance::refusal(
                 inner.scheduler.maintenance(),
                 &request.owner,
-                &oer_lab_arbiter::claims::normalize(&request.claims),
+                &oer_tools_lab_arbiter::claims::normalize(&request.claims),
             )
         {
             outbox.push(&Reply::Refused { reason: refusal });
@@ -745,8 +745,8 @@ impl Service {
             .clone()
             .map(|reason| (request.owner.clone(), reason));
         let divisible = request.divisible;
-        let history = oer_lab_arbiter::history::read(&self.shared.history_path).unwrap_or_default();
-        let estimate_secs = oer_lab_arbiter::estimate(&request.work, &request.scenarios, &history)
+        let history = oer_tools_lab_arbiter::history::read(&self.shared.history_path).unwrap_or_default();
+        let estimate_secs = oer_tools_lab_arbiter::estimate(&request.work, &request.scenarios, &history)
             .0
             .as_secs();
         let client = inner
@@ -992,7 +992,7 @@ impl Service {
         };
         self.persist(inner);
         if let Err(error) =
-            oer_lab_arbiter::history::append(&self.shared.history_path, &ended.record)
+            oer_tools_lab_arbiter::history::append(&self.shared.history_path, &ended.record)
         {
             eprintln!("lab-service: cannot record lease #{lease}: {error}");
         }
@@ -1078,9 +1078,9 @@ impl Service {
                 .unwrap_or_else(|_| Confirmation::Unavailable {
                     reason: format!(
                         "its recovery did not finish within {}",
-                        oer_lab_arbiter::format_duration(service.shared.recovery_deadline)
+                        oer_tools_lab_arbiter::format_duration(service.shared.recovery_deadline)
                     ),
-                    emission: oer_lab_arbiter::readiness::Emission::Unknown,
+                    emission: oer_tools_lab_arbiter::readiness::Emission::Unknown,
                 });
             let unavailable = match &confirmation {
                 Confirmation::Ready => None,
@@ -1270,7 +1270,7 @@ impl Service {
                     LeaseOutcome::HardLimit,
                     Some(format!(
                         "the lease reached the hard limit of {}",
-                        oer_lab_arbiter::format_duration(HARD_LIMIT)
+                        oer_tools_lab_arbiter::format_duration(HARD_LIMIT)
                     )),
                 ),
                 Due::Yield { waiter, balance_ms } => {

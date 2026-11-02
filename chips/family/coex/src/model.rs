@@ -1,4 +1,4 @@
-use oer_radio_coex::RadioClient;
+use oer_protocols_radio_coex::RadioClient;
 
 use crate::CoexEventId;
 

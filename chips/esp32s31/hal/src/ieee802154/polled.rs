@@ -6,9 +6,9 @@
 //! transaction. The accessor order is the engine's; nothing here adds,
 //! merges or reorders register transactions.
 
-use oer_esp32s31_pac::ieee802154::command::Opcode;
-use oer_espressif_coex::CoexPti;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_esp32s31_pac::ieee802154::command::Opcode;
+use oer_chips_family_coex::CoexPti;
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154DebugCounter, Ieee802154EdSampleMode,
     Ieee802154EtmChannel, Ieee802154EtmRoute, Ieee802154Event, Ieee802154EventMask,
     Ieee802154EventObservation, Ieee802154MacCommand, Ieee802154MultipanEnableState,
@@ -16,8 +16,8 @@ use oer_espressif_ieee802154_mac_values::{
     Ieee802154RxAbortReasonObservation, Ieee802154RxStatus, Ieee802154Timer,
     Ieee802154TxAbortEnableSet, Ieee802154TxAbortReasonObservation,
 };
-use oer_espressif_interrupt_table::Silent;
-use oer_mmio::Placement;
+use oer_chips_family_interrupt_table::Silent;
+use oer_portable_mmio::Placement;
 
 use crate::ieee802154::mac::{
     EtmPlacement, Ieee802154ArmedTaskOwner, Ieee802154InterruptOwner, Ieee802154PowerSequence,
@@ -87,7 +87,7 @@ pub type Ieee802154MacParts<P = MacPlacement, E = EtmPlacement, B = RxInfoPlacem
 impl<P: Placement, E: Placement, B: Placement> Ieee802154MacOwners<P, E, B> {
     /// Hold the task owner with the interrupt owner it armed and the proof
     /// that no line receives the MAC's source
-    /// (`oer_espressif_interrupt_table::Router::silent`).
+    /// (`oer_chips_family_interrupt_table::Router::silent`).
     ///
     /// Startup discard completed before the IRQ owner became bindable.
     pub fn new(

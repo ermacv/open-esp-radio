@@ -41,7 +41,7 @@ use core::{
     pin::pin,
     task::Poll,
 };
-use oer_espressif_interrupt_table::signal::SignalExecutor;
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
 
 use crate::mac::{
     init::{
@@ -51,12 +51,12 @@ use crate::mac::{
     irq::consumer::{ForeignContext, IrqConsumer, PowerIrqConsumer},
     rx::{RxBufferFullCounter, RxDma, RxRingLive, pool::RxStagePool},
 };
-use oer_esp32s31_hal::ieee80211::dma::{
+use oer_chips_esp32s31_hal::ieee80211::dma::{
     descriptor::RxDescriptor, rx_storage::RxDmaStorage, space::DmaSpace,
 };
-use oer_memory::HandlerCell;
-use oer_time::settle::{Settle, SettleLimit};
-use oer_time::{Duration, Instant, Timer};
+use oer_portable_memory::HandlerCell;
+use oer_portable_time::settle::{Settle, SettleLimit};
+use oer_portable_time::{Duration, Instant, Timer};
 
 use super::{
     arena::WifiRxParts,
@@ -99,7 +99,7 @@ pub const DRAIN_POLL: Duration = Duration::from_micros(100);
 /// the chip) and `rx_dma` its RX DMA engine (`WifiRxDmaEngine`), the two
 /// halves `RadioAccess::split_rx_dma` lends.
 /// `bound` is the router's proof that the image's interrupt table binds the
-/// radio handler's part ([`Bound`](oer_espressif_interrupt_table::Bound) of a
+/// radio handler's part ([`Bound`](oer_chips_family_interrupt_table::Bound) of a
 /// [`WifiIrqPart`](crate::irq::WifiIrqPart)); the activation takes it. `cell` is the image's static cell that handler runs
 /// the line through. `publisher` and
 /// `admission` take the staged units ([`QueueSink`](super::upper::QueueSink)
@@ -520,7 +520,7 @@ where
                 Ok(deadline) => self.timer.wait_until(deadline).await,
                 // As the walker settle: a wait past the timer's range never
                 // ends, so the pass is never rerun early.
-                Err(oer_time::TimeOverflow) => pending().await,
+                Err(oer_portable_time::TimeOverflow) => pending().await,
             }
         }
     }
@@ -634,7 +634,7 @@ where
                     *polls = polls.saturating_add(1);
                     self.timer.wait_until(next).await;
                 }
-                Err(oer_time::TimeOverflow) => return false,
+                Err(oer_portable_time::TimeOverflow) => return false,
             }
         }
     }

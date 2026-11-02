@@ -9,12 +9,12 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_crypto::{
+use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, BlockError},
     cmac::Cmac,
 };
-use oer_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
+use oer_protocols_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
 use zeroize::Zeroize;
 
 const RSN_IGTK_LEN: usize = 16;
@@ -48,12 +48,12 @@ pub enum BipProtectError {
 
 /// A parsed BIP frame of the expected IGTK; replay admission remains with
 /// the caller.
-pub struct BipFrame<'a>(oer_ieee80211_wire::bip::BipFrame<'a>);
+pub struct BipFrame<'a>(oer_protocols_ieee80211_wire::bip::BipFrame<'a>);
 
 impl<'a> BipFrame<'a> {
     pub fn parse(frame: &'a [u8], key_id: u8) -> Result<Self, BipError> {
         let frame =
-            oer_ieee80211_wire::bip::BipFrame::parse(frame).map_err(|error| match error {
+            oer_protocols_ieee80211_wire::bip::BipFrame::parse(frame).map_err(|error| match error {
                 BipFormatError::MissingManagementMic => BipError::MissingManagementMic,
                 BipFormatError::NotManagement => BipError::NotManagement,
                 BipFormatError::Truncated | BipFormatError::PacketNumberOutOfRange => {

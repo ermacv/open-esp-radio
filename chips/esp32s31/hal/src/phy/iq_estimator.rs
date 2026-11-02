@@ -12,8 +12,8 @@ pub mod ops;
 /// Saved software configuration; restoring it preserves all other lanes.
 #[derive(Debug)]
 pub struct Configuration {
-    config: oer_esp32s31_pac::fe::estimator_config::R,
-    control: oer_esp32s31_pac::fe::estimator_control::R,
+    config: oer_chips_esp32s31_pac::fe::estimator_config::R,
+    control: oer_chips_esp32s31_pac::fe::estimator_control::R,
 }
 
 /// The named software fields of an estimator configuration observation.

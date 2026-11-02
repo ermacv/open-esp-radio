@@ -4,7 +4,7 @@
 /// Discard every pre-bind event through consuming HAL phases, then release the IRQ owner.
 /// No sample is taken and no event is enabled. Issued stops do not prove producer drain.
 /// SOURCE: HW8_S31_IEEE_MASKED_STATUS_20261026; HW26_S31_IEEE_ABORT_20261027.
-pub fn arm<P: oer_espressif_ieee802154_mac_values::Ieee802154InterruptStartup>(
+pub fn arm<P: oer_chips_family_ieee802154_mac_values::Ieee802154InterruptStartup>(
     setup: P::Setup,
     task: P::Task,
 ) -> P::Output {
@@ -22,7 +22,7 @@ pub fn arm<P: oer_espressif_ieee802154_mac_values::Ieee802154InterruptStartup>(
 
 /// Stop, sample before masking, then consume the saved W1C sample before returning setup ownership.
 /// SOURCE: hw8-20261026-radio-local-05, ieee-timers.json, PR #689.
-pub fn deactivate<P: oer_espressif_ieee802154_mac_values::Ieee802154InterruptTeardown>(
+pub fn deactivate<P: oer_chips_family_ieee802154_mac_values::Ieee802154InterruptTeardown>(
     interrupt: P::Interrupt,
     task: P::Task,
 ) -> P::Output {
@@ -39,8 +39,8 @@ pub fn deactivate<P: oer_espressif_ieee802154_mac_values::Ieee802154InterruptTea
 }
 
 /// The same ten runtime events used for first activation and later sessions.
-pub const RUNTIME_EVENTS: oer_espressif_ieee802154_mac_values::Ieee802154EventMask =
-    oer_espressif_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0;
+pub const RUNTIME_EVENTS: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask =
+    oer_chips_family_ieee802154_mac_values::Ieee802154EventMask::HANDLED_BASELINE_NO_TIMER0;
 
 #[cfg(test)]
 #[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]

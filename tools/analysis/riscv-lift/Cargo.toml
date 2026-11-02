@@ -1,5 +1,5 @@
 [package]
-name = "oer-analysis-riscv-lift"
+name = "oer-tools-analysis-riscv-lift"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,9 @@ publish = false
 description = "RV32 function decoding, relocation interpretation and lifting to the program model's operations"
 
 [dependencies]
-oer-analysis-elf = { path = "../elf" }
-oer-analysis-riscv-decode = { path = "../riscv-decode" }
-oer-analysis-riscv-model = { path = "../riscv-model" }
+oer-tools-analysis-elf = { path = "../elf" }
+oer-tools-analysis-riscv-decode = { path = "../riscv-decode" }
+oer-tools-analysis-riscv-model = { path = "../riscv-model" }
 
 [lints]
 workspace = true

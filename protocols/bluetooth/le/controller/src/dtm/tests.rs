@@ -7,10 +7,10 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
-use oer_bluetooth_le_port::LePhase;
-use oer_radio_port::conformance::registration::guarded;
-use oer_radio_port::*;
+use oer_protocols_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
+use oer_protocols_bluetooth_le_port::LePhase;
+use oer_protocols_radio_port::conformance::registration::guarded;
+use oer_protocols_radio_port::*;
 use std::rc::Rc;
 
 struct Random(Result<[u8; 8], EntropyUnavailable>);

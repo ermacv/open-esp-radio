@@ -1,5 +1,5 @@
 [package]
-name = "oer-espressif-efuse"
+name = "oer-chips-family-efuse"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -8,7 +8,7 @@ use std::{
 
 use crate::history::{self, LeaseRecord};
 
-use oer_lab_model::paths::ARBITER_ENV;
+use oer_tools_lab_model::paths::ARBITER_ENV;
 
 /// One stand per host: the service keeps its records in this directory.
 #[derive(Clone, Debug)]
@@ -41,8 +41,8 @@ impl Arbiter {
             )
             .into());
         }
-        Ok(Self::at(oer_lab_model::paths::arbiter()?)?
-            .with_stand_file(oer_lab_model::paths::stand_file()?))
+        Ok(Self::at(oer_tools_lab_model::paths::arbiter()?)?
+            .with_stand_file(oer_tools_lab_model::paths::stand_file()?))
     }
 
     /// An arbiter in `directory`, which reads the stand's boards from the
@@ -67,8 +67,8 @@ impl Arbiter {
     }
 
     /// The stand's boards, from the stand file.
-    pub fn stand(&self) -> crate::Result<oer_lab_model::Stand> {
-        Ok(oer_lab_model::Stand::load(&self.stand_file)?)
+    pub fn stand(&self) -> crate::Result<oer_tools_lab_model::Stand> {
+        Ok(oer_tools_lab_model::Stand::load(&self.stand_file)?)
     }
 
     pub fn directory(&self) -> &Path {

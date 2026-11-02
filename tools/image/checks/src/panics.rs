@@ -22,10 +22,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use oer_image_stack::Analysis;
+use oer_tools_image_stack::Analysis;
 
 use crate::Result;
-use oer_image_bundle::CheckedElf;
+use oer_tools_image_bundle::CheckedElf;
 
 /// The runtime ELF's panic report.
 pub const RUNTIME_REPORT: &str = "runtime-panics.txt";
@@ -126,7 +126,7 @@ impl std::fmt::Display for Layer {
     }
 }
 
-/// The layer of each workspace crate, by its Rust name (`oer_esp32s31_hal`).
+/// The layer of each workspace crate, by its Rust name (`oer_chips_esp32s31_hal`).
 #[derive(Clone, Debug, Default)]
 pub struct Layers {
     crates: BTreeMap<String, Layer>,
@@ -295,7 +295,7 @@ pub(crate) fn interrupt_roots(
 pub(crate) fn stack_roots(
     image: &crate::stack::Image,
     audit: &crate::stack::StackAudit,
-    policy: &oer_chip_profile::policy::StackPolicy,
+    policy: &oer_tools_chip_profile::policy::StackPolicy,
 ) -> Vec<Root> {
     audit
         .roots(policy)

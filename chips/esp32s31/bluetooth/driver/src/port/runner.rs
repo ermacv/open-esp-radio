@@ -18,19 +18,19 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 
-use oer_bluetooth_le_port::dtm::{DtmTest, next_window};
-use oer_bluetooth_le_port::{LeInstant, LeWindow, RadioDuration, RadioTiming, TestPhy};
-use oer_bluetooth_le_wire::dtm::DtmPayloadPattern;
-use oer_esp32s31_hal::bluetooth::{
+use oer_protocols_bluetooth_le_port::dtm::{DtmTest, next_window};
+use oer_protocols_bluetooth_le_port::{LeInstant, LeWindow, RadioDuration, RadioTiming, TestPhy};
+use oer_protocols_bluetooth_le_wire::dtm::DtmPayloadPattern;
+use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothSchedulerStop,
     engine::{
         ArenaMemory, DtmSchedulerFrequency, LeTxPower, SchedulerRoleInstance,
         scheduler::{SchedulerNext, SchedulerRawWindow, interrupt::SchedulerDoorbell},
     },
 };
-use oer_esp32s31_radio_client::bluetooth::{Operation, Permission};
-use oer_espressif_interrupt_table::signal::SignalExecutor;
-use oer_time::{Duration, Instant, Timer};
+use oer_chips_esp32s31_radio_client::bluetooth::{Operation, Permission};
+use oer_chips_family_interrupt_table::signal::SignalExecutor;
+use oer_portable_time::{Duration, Instant, Timer};
 
 /// An independent clock request channel serviced even while a physical DTM
 /// event is waiting for its IRQ. Its answer never waits for terminal dequeue.
@@ -88,7 +88,7 @@ pub struct Runner<'pool, 'epoch, X: SignalExecutor, D, T, C> {
     permission: Permission,
     limits: Limits,
     cancel: &'static AtomicBool,
-    etm: Option<oer_esp32s31_hal::bluetooth::BlePhyEtmRouteDisabled>,
+    etm: Option<oer_chips_esp32s31_hal::bluetooth::BlePhyEtmRouteDisabled>,
     instance: Option<SchedulerRoleInstance<'pool, 'epoch>>,
     config: Option<Start>,
     phase: DtmEventPhase,

@@ -1,6 +1,6 @@
 //! The image's fatal paths: a hart that ends ([`fatal_halt`]) and the chip's
 //! reset ([`reset`]), over the image's platform `P`
-//! ([`Platform`](oer_espressif_platform_port::Platform): the chip HAL's port).
+//! ([`Platform`](oer_chips_family_platform_port::Platform): the chip HAL's port).
 //!
 //! The platform masks the hart's interrupts (the CLIC threshold at its
 //! maximum, then `mstatus.MIE` clear) before lending its proof
@@ -10,7 +10,7 @@
 //! (`Platform::software_reset`).
 
 #[cfg(target_arch = "riscv32")]
-use oer_espressif_platform_port::{AwaitWatchdog, InvalidHart, Platform};
+use oer_chips_family_platform_port::{AwaitWatchdog, InvalidHart, Platform};
 
 /// End this hart in a fatal path: mask its interrupts for good, lend
 /// `fatal_path` the proof, then wait for good. Boot failures use
@@ -120,7 +120,7 @@ pub fn boot_failure<P: Platform>(reason: &str, report: impl FnOnce()) -> ! {
             reset_platform_once::<P>(fatal);
             return;
         };
-        if let Ok(record) = encode_boot_failure(reason, oer_riscv::hart_id() as u32) {
+        if let Ok(record) = encode_boot_failure(reason, oer_portable_riscv::hart_id() as u32) {
             let _committed = claim.commit(&crate::panic::SLOT, record);
         }
         report();
@@ -133,8 +133,8 @@ const BOOT_FAILURE: u32 = 1;
 fn encode_boot_failure(
     reason: &str,
     hart: u32,
-) -> Result<oer_diagnostics::fault::Record, oer_diagnostics::fault::Error> {
-    use oer_diagnostics::fault::{Class, Domain, Record};
+) -> Result<oer_portable_diagnostics::fault::Record, oer_portable_diagnostics::fault::Error> {
+    use oer_portable_diagnostics::fault::{Class, Domain, Record};
     Record::new(
         Class::ConfigurationBoot,
         Domain::Boot,
@@ -151,7 +151,7 @@ mod tests {
     fn boot_failure_keeps_the_reason_without_a_retry_counter() {
         let record = super::encode_boot_failure("interrupt-vectors", 0).unwrap();
         let view = record.peek().unwrap();
-        assert_eq!(view.class, oer_diagnostics::fault::Class::ConfigurationBoot);
+        assert_eq!(view.class, oer_portable_diagnostics::fault::Class::ConfigurationBoot);
         assert_eq!(view.payload, b"interrupt-vectors");
     }
 }

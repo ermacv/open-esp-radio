@@ -5,7 +5,7 @@ const B: [u8; 6] = [2, 0, 0, 0, 0, 2];
 
 fn qos() -> QosControl {
     QosControl::new(
-        oer_wire::U8::constant::<9>(),
+        oer_portable_wire::U8::constant::<9>(),
         true,
         QosAckPolicy::NoAck,
         true,
@@ -107,7 +107,7 @@ fn a_short_buffer_is_refused_unwritten_and_a_short_frame_undecoded() {
 #[test]
 fn the_qos_field_places_each_subfield() {
     let field = QosControl::new(
-        oer_wire::U8::constant::<6>(),
+        oer_portable_wire::U8::constant::<6>(),
         false,
         QosAckPolicy::Normal,
         false,

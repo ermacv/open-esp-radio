@@ -2,7 +2,7 @@
 
 use std::vec;
 
-use oer_esp32s31_pac::{self as pac, instances};
+use oer_chips_esp32s31_pac::{self as pac, instances};
 
 use super::{
     AgcRegisters, BasebandRegisters, ClockRegisters, FrequencyRegisters, HostPlacement,

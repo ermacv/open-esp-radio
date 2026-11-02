@@ -1,7 +1,7 @@
 //! Poll an owned PHY operation into retained output storage, then return custody.
 use core::{future::Future, mem::MaybeUninit, pin::Pin};
-use oer_esp32s31_hal::{domain::RadioDomain, power::PlatformClockBackend};
-use oer_memory::Placed;
+use oer_chips_esp32s31_hal::{domain::RadioDomain, power::PlatformClockBackend};
+use oer_portable_memory::Placed;
 
 #[inline(always)]
 pub(super) fn run<B: PlatformClockBackend, A, R, E, U, F>(
@@ -17,7 +17,7 @@ where
 {
     async move {
         let mut completion = MaybeUninit::uninit();
-        let returned = oer_memory::poll_placed(operation, &mut completion).await;
+        let returned = oer_portable_memory::poll_placed(operation, &mut completion).await;
         finish(destination, returned)
     }
 }
@@ -42,7 +42,7 @@ mod tests {
         future::pending,
         task::{Context, Poll, Waker},
     };
-    use oer_esp32s31_hal::{
+    use oer_chips_esp32s31_hal::{
         domain::transaction::{Fault, FaultReason, Operation, TransactionSeat},
         root::RadioHardware,
     };

@@ -1,6 +1,6 @@
 use super::*;
-use oer_time::Clock;
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::Clock;
+use oer_portable_time_virtual::VirtualClock;
 fn clock() -> VirtualClock {
     VirtualClock::starting_at(Instant::from_micros(0))
 }

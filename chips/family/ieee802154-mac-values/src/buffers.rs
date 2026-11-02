@@ -7,7 +7,7 @@
 //! a complete image in or out with volatile accesses, so no reference ever
 //! aliases memory the DMA may write.
 
-use oer_memory::DmaBytes;
+use oer_portable_memory::DmaBytes;
 
 /// Bytes in one `[PHR, PSDU...]` DMA frame image.
 pub const FRAME_SIZE: usize = 128;

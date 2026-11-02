@@ -4,7 +4,7 @@
 //! Celsius conversion is established) and the ticks' durations. Only a
 //! trace image counts them; `available` says whether it did.
 
-use oer_services_load::Tracking;
+use oer_hil_services_load::Tracking;
 use serde_json::{Value, json};
 
 /// The window's record.

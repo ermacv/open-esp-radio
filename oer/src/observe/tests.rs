@@ -1,5 +1,5 @@
 use super::*;
-use oer_embassy_net::RxEnqueueError;
+use oer_portable_embassy_net::RxEnqueueError;
 
 #[test]
 fn the_bridge_counts_each_outcome_apart() {

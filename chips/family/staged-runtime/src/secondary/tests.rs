@@ -4,9 +4,9 @@
 use core::cell::{Cell, RefCell};
 use std::{vec, vec::Vec};
 
-use oer_espressif_boot::wait::{BootBudget, BootDeadline, BootWait, WaitFailure};
-use oer_time::{Clock, Duration, Instant};
-use oer_time_virtual::VirtualClock;
+use oer_chips_family_boot::wait::{BootBudget, BootDeadline, BootWait, WaitFailure};
+use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 
@@ -403,11 +403,11 @@ fn each_failure_keeps_its_stage_and_observations_in_the_retained_words() {
     }
     assert_eq!(
         FaultReason::SecondaryEarlyFault.class(),
-        oer_diagnostics::fault::Class::UnexpectedHardware
+        oer_portable_diagnostics::fault::Class::UnexpectedHardware
     );
     assert_eq!(
         FaultReason::SecondaryLaunch.class(),
-        oer_diagnostics::fault::Class::ConfigurationBoot
+        oer_portable_diagnostics::fault::Class::ConfigurationBoot
     );
 }
 

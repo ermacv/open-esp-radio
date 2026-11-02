@@ -1,8 +1,8 @@
 //! Reanalyse saved ELF bundles; input directories remain read-only.
 use super::{FILE, Provenance, SCHEMA, Summary};
 use crate::Result;
-use oer_image_bundle::files;
-use oer_image_checks::sizes::{Measurements, TYPE_MIN_BYTES};
+use oer_tools_image_bundle::files;
+use oer_tools_image_checks::sizes::{Measurements, TYPE_MIN_BYTES};
 use std::{collections::BTreeMap, path::Path};
 
 /// Regenerate summaries in a separate output tree, retaining original build
@@ -39,7 +39,7 @@ fn visit(input: &Path, output: &Path, root: &Path) -> Result<usize> {
         one(input, output, root)?;
         return Ok(1);
     }
-    if input.join(oer_image_bundle::MANIFEST).is_file() {
+    if input.join(oer_tools_image_bundle::MANIFEST).is_file() {
         return Err(format!(
             "sizes-refresh: missing build provenance in {}",
             input.display()
@@ -66,12 +66,12 @@ fn one(input: &Path, output: &Path, root: &Path) -> Result<()> {
     }
     let provenance: Provenance = serde_json::from_value(old["provenance"].clone())?;
     for (name, hash) in &provenance.stack_policy_sources {
-        if oer_os_durable::sha256_file(&root.join(name))? != *hash {
+        if oer_tools_os_durable::sha256_file(&root.join(name))? != *hash {
             return Err(format!("sizes-refresh: configuration {name} differs; --source-root must supply the original image configuration").into());
         }
     }
-    let policy = oer_chip_profile::policy::StackPolicy::load(&root.join(&provenance.stack_policy))?;
-    let profile = oer_chip_profile::Profile::load(root, &provenance.chip)?;
+    let policy = oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&provenance.stack_policy))?;
+    let profile = oer_tools_chip_profile::Profile::load(root, &provenance.chip)?;
     if profile.facts.rust_target != provenance.target {
         return Err("sizes-refresh: configuration target differs from original build".into());
     }
@@ -104,7 +104,7 @@ fn one(input: &Path, output: &Path, root: &Path) -> Result<()> {
     };
     summary.contents(input)?;
     std::fs::create_dir_all(output)?;
-    oer_os_durable::atomic_json(&output.join(FILE), &summary)?;
+    oer_tools_os_durable::atomic_json(&output.join(FILE), &summary)?;
     eprintln!("sizes-refresh: {} → {}", input.display(), output.display());
     Ok(())
 }

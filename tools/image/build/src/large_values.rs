@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::{Result, build_log::BuildLog};
 
-const BINARY: &str = "oer-tool-image-large-values";
+const BINARY: &str = "oer-tools-image-large-values";
 const SUFFIX: &str = ".large-values.json";
 
 #[derive(Clone, Deserialize)]
@@ -96,7 +96,7 @@ pub(crate) fn configure(
         .env("OER_LARGE_VALUES_LIMIT", limit.to_string())
         .env(
             "OER_LARGE_VALUES_DRIVER_ID",
-            oer_os_durable::sha256_file(&binary)?,
+            oer_tools_os_durable::sha256_file(&binary)?,
         );
     Ok(())
 }
@@ -312,7 +312,7 @@ impl Collector {
             format!("lib{name}-")
         };
         let mut copies = Vec::new();
-        let selected_digest = oer_os_durable::sha256_file(selected)?;
+        let selected_digest = oer_tools_os_durable::sha256_file(selected)?;
         for entry in fs::read_dir(&deps)? {
             let path = entry?.path();
             let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
@@ -327,7 +327,7 @@ impl Collector {
                 {
                     return Ok(path);
                 }
-                if selected_digest == oer_os_durable::sha256_file(&path)? {
+                if selected_digest == oer_tools_os_durable::sha256_file(&path)? {
                     copies.push(path);
                 }
             }
@@ -371,7 +371,7 @@ impl Collector {
         }
         let report = self.validate(&sidecar, manifest)?;
         if let Some(binary) = &artifact.executable
-            && report["binary_sha256"] != oer_os_durable::sha256_file(binary)?
+            && report["binary_sha256"] != oer_tools_os_durable::sha256_file(binary)?
         {
             return Err("binary compiler facts do not match the ELF".into());
         }

@@ -170,7 +170,7 @@ fn old_descriptor_policy(input: DescriptorPolicyInput) -> Option<DescriptorPolic
 
 #[test]
 fn modeled_ordinary_descriptor_words_match_the_old_policy() {
-    use oer_esp32s31_hal::layouts::{
+    use oer_chips_esp32s31_hal::layouts::{
         WifiTxDescriptorPrefix, WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixMut,
         WifiTxDescriptorPrefixPriority, WifiTxDescriptorPrefixSecurity,
     };

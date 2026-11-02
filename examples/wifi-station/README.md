@@ -1,7 +1,7 @@
 # wifi-station
 
-`oer-firmware-apps-wifi-station`: a Wi-Fi station of its build profile, on
-the application entry `oer-espressif` (`oer`): it joins the
+`oer-examples-wifi-station`: a Wi-Fi station of its build profile, on
+the application entry `oer` (`oer`): it joins the
 profile's network, takes an IPv4 address by DHCP and exchanges one line
 over TCP with the gateway's echo port, again after every reconnection. It
 declares no interrupt, DMA or service task of its own.
@@ -28,7 +28,7 @@ echo_port = 7              # the gateway's TCP echo port, 1 to 65535
 Every field is required and nothing has a default: a missing or invalid field
 fails the build with the field's name, never its value, and no profile falls
 back to Open. The build makes the image's own configuration checks: the
-country needs a regulatory domain in `oer-radio-regulatory`, and that domain
+country needs a regulatory domain in `oer-protocols-radio-regulatory`, and that domain
 must permit the channel. The SSID and passphrase reach only the build's generated
 constant. `profiles/open-ci.toml` is a neutral Open profile without
 credentials; it checks the Open path only, and WPA2 needs a profile that

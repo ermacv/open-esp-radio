@@ -1,6 +1,6 @@
 #![no_std]
-use oer_espressif_executor::{AlarmGrant, Binding, TimeDriverReady};
-use oer_espressif_interrupt_table::Entry;
+use oer_chips_family_executor::{AlarmGrant, Binding, TimeDriverReady};
+use oer_chips_family_interrupt_table::Entry;
 
 /// What a launch mailbox requires of the parts it carries to another hart.
 fn to_another_hart<T: Send>(_: T) {}

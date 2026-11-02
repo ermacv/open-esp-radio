@@ -1,16 +1,16 @@
 //! Exhaustive conversion at the facade's target boundary.
 use super::*;
 #[cfg(target_arch = "riscv32")]
-use oer_ieee80211_runtime::station::{ServiceFault, StationPort};
+use oer_protocols_ieee80211_runtime::station::{ServiceFault, StationPort};
 #[cfg(target_arch = "riscv32")]
-use oer_radio_port::PortBackend;
+use oer_protocols_radio_port::PortBackend;
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn service<B: StationPort>(value: ServiceFault<B>) -> StationFailure
 where
     B::Backend: PortBackend<
             B::SlotId,
-            Fault = oer_esp32s31_ieee80211_driver::port::Fault,
-            Refusal = oer_esp32s31_ieee80211_driver::port::Fault,
+            Fault = oer_chips_esp32s31_ieee80211_driver::port::Fault,
+            Refusal = oer_chips_esp32s31_ieee80211_driver::port::Fault,
         >,
 {
     match value {
@@ -33,8 +33,8 @@ where
     }
 }
 
-pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -> BackendFault {
-    use oer_esp32s31_ieee80211_driver::port::Fault as Source;
+pub(super) fn backend_fault(value: oer_chips_esp32s31_ieee80211_driver::port::Fault) -> BackendFault {
+    use oer_chips_esp32s31_ieee80211_driver::port::Fault as Source;
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
         Source::Receive(v0) => BackendFault::Receive(receive_fault(v0)),
@@ -52,9 +52,9 @@ pub(super) fn backend_fault(value: oer_esp32s31_ieee80211_driver::port::Fault) -
 }
 
 pub(super) fn aggregate_tx_error(
-    value: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError,
 ) -> AggregateTxError {
-    use oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxError as Source;
     match value {
         Source::NotFree(v0) => AggregateTxError::NotFree(tx_dma_state(v0)),
         Source::SlotCapacity => AggregateTxError::SlotCapacity,
@@ -99,9 +99,9 @@ pub(super) fn aggregate_tx_error(
 }
 
 pub(super) fn tx_dma_state(
-    value: oer_esp32s31_ieee80211_driver::mac::tx::TxDmaState,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::tx::TxDmaState,
 ) -> TxDmaState {
-    use oer_esp32s31_ieee80211_driver::mac::tx::TxDmaState as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::TxDmaState as Source;
     match value {
         Source::Free => TxDmaState::Free,
         Source::Reserved => TxDmaState::Reserved,
@@ -112,9 +112,9 @@ pub(super) fn tx_dma_state(
 }
 
 pub(super) fn aggregate_format(
-    value: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat,
 ) -> AggregateFormat {
-    use oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduTxFormat as Source;
     match value {
         Source::HtAmpdu => AggregateFormat::Ht,
         Source::HeAmpdu => AggregateFormat::He,
@@ -122,9 +122,9 @@ pub(super) fn aggregate_format(
 }
 
 pub(super) fn aggregate_length_error(
-    value: oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError,
 ) -> AggregateLengthError {
-    use oer_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::HtAmpduLengthError as Source;
     match value {
         Source::InvalidLimits => AggregateLengthError::InvalidLimits,
         Source::Empty => AggregateLengthError::Empty,
@@ -135,9 +135,9 @@ pub(super) fn aggregate_length_error(
 }
 
 pub(super) fn trigger_program_error(
-    value: oer_esp32s31_hal::types::MacHeTbProgramError,
+    value: oer_chips_esp32s31_hal::types::MacHeTbProgramError,
 ) -> TriggerProgramError {
-    use oer_esp32s31_hal::types::MacHeTbProgramError as Source;
+    use oer_chips_esp32s31_hal::types::MacHeTbProgramError as Source;
     match value {
         Source::TidNotEligible => TriggerProgramError::TidNotEligible,
         Source::LengthCountMismatch => TriggerProgramError::LengthCountMismatch,
@@ -147,9 +147,9 @@ pub(super) fn trigger_program_error(
 }
 
 pub(super) fn chain_storage_error(
-    value: oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError,
+    value: oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError,
 ) -> ChainStorageError {
-    use oer_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError as Source;
+    use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorageError as Source;
     match value {
         Source::Address => ChainStorageError::Address,
         Source::Count => ChainStorageError::Count,
@@ -162,9 +162,9 @@ pub(super) fn chain_storage_error(
 }
 
 pub(super) fn aggregate_refusal(
-    value: oer_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal,
+    value: oer_chips_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal,
 ) -> AggregateRefusal {
-    use oer_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal as Source;
+    use oer_chips_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal as Source;
     match value {
         Source::Empty => AggregateRefusal::Empty,
         Source::TooManySubframes => AggregateRefusal::TooManySubframes,
@@ -178,9 +178,9 @@ pub(super) fn aggregate_refusal(
 }
 
 pub(super) fn setting_fault(
-    value: oer_esp32s31_ieee80211_driver::port::SettingFault,
+    value: oer_chips_esp32s31_ieee80211_driver::port::SettingFault,
 ) -> SettingFault {
-    use oer_esp32s31_ieee80211_driver::port::SettingFault as Source;
+    use oer_chips_esp32s31_ieee80211_driver::port::SettingFault as Source;
     match value {
         Source::UnsupportedChannel => SettingFault::UnsupportedChannel,
         Source::ChannelUnset => SettingFault::ChannelUnset,
@@ -190,9 +190,9 @@ pub(super) fn setting_fault(
 }
 
 pub(super) fn lower_mac_fault(
-    value: oer_esp32s31_ieee80211_driver::lower_mac::LowerMacFault,
+    value: oer_chips_esp32s31_ieee80211_driver::lower_mac::LowerMacFault,
 ) -> LowerMacFault {
-    use oer_esp32s31_ieee80211_driver::lower_mac::LowerMacFault as Source;
+    use oer_chips_esp32s31_ieee80211_driver::lower_mac::LowerMacFault as Source;
     match value {
         Source::Tx(v0) => LowerMacFault::Tx(ordinary_tx_error(v0)),
         Source::RxBlockAckReadback => LowerMacFault::RxBlockAckReadback,
@@ -206,9 +206,9 @@ pub(super) fn lower_mac_fault(
 }
 
 pub(super) fn ordinary_tx_error(
-    value: oer_esp32s31_ieee80211_driver::ordinary_tx::OrdinaryTxError,
+    value: oer_chips_esp32s31_ieee80211_driver::ordinary_tx::OrdinaryTxError,
 ) -> OrdinaryTxError {
-    use oer_esp32s31_ieee80211_driver::ordinary_tx::OrdinaryTxError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::ordinary_tx::OrdinaryTxError as Source;
     match value {
         Source::BufferSizeOverflow => OrdinaryTxError::BufferSizeOverflow,
         Source::UnsupportedPhyRate => OrdinaryTxError::UnsupportedPhyRate,
@@ -220,8 +220,8 @@ pub(super) fn ordinary_tx_error(
     }
 }
 
-pub(super) fn tx_error(value: oer_esp32s31_ieee80211_driver::mac::tx::TxError) -> TxError {
-    use oer_esp32s31_ieee80211_driver::mac::tx::TxError as Source;
+pub(super) fn tx_error(value: oer_chips_esp32s31_ieee80211_driver::mac::tx::TxError) -> TxError {
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::TxError as Source;
     match value {
         Source::Invalid => TxError::Invalid,
         Source::QueueActive => TxError::QueueActive,
@@ -234,9 +234,9 @@ pub(super) fn tx_error(value: oer_esp32s31_ieee80211_driver::mac::tx::TxError) -
 }
 
 pub(super) fn completion_fault(
-    value: oer_esp32s31_ieee80211_driver::mac::tx::CompletionFault,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::tx::CompletionFault,
 ) -> CompletionFault {
-    use oer_esp32s31_ieee80211_driver::mac::tx::CompletionFault as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::tx::CompletionFault as Source;
     match value {
         Source::SecurityKeyError => CompletionFault::SecurityKeyError,
         Source::InvalidStatus { status } => CompletionFault::InvalidStatus { status },
@@ -244,9 +244,9 @@ pub(super) fn completion_fault(
 }
 
 pub(super) fn tx_reset_reason(
-    value: oer_esp32s31_ieee80211_driver::ordinary_tx::TxResetReason,
+    value: oer_chips_esp32s31_ieee80211_driver::ordinary_tx::TxResetReason,
 ) -> TxResetReason {
-    use oer_esp32s31_ieee80211_driver::ordinary_tx::TxResetReason as Source;
+    use oer_chips_esp32s31_ieee80211_driver::ordinary_tx::TxResetReason as Source;
     match value {
         Source::CompletionInterruptWithoutState => TxResetReason::CompletionInterruptWithoutState,
         Source::TimeoutInterruptWithoutState => TxResetReason::TimeoutInterruptWithoutState,
@@ -256,9 +256,9 @@ pub(super) fn tx_reset_reason(
 }
 
 pub(super) fn crypto_key_error(
-    value: oer_esp32s31_ieee80211_driver::mac::crypto::CryptoKeyError,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::crypto::CryptoKeyError,
 ) -> CryptoKeyError {
-    use oer_esp32s31_ieee80211_driver::mac::crypto::CryptoKeyError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::crypto::CryptoKeyError as Source;
     match value {
         Source::InvalidGroupKeyId => CryptoKeyError::InvalidGroupKeyId,
         Source::InvalidAccessPointAssociationId => CryptoKeyError::InvalidAccessPointAssociationId,
@@ -268,9 +268,9 @@ pub(super) fn crypto_key_error(
 }
 
 pub(super) fn receive_fault(
-    value: oer_esp32s31_ieee80211_driver::rx::control::WifiRxCause,
+    value: oer_chips_esp32s31_ieee80211_driver::rx::control::WifiRxCause,
 ) -> ReceiveFault {
-    use oer_esp32s31_ieee80211_driver::rx::control::WifiRxCause as Source;
+    use oer_chips_esp32s31_ieee80211_driver::rx::control::WifiRxCause as Source;
     match value {
         Source::StopRequested => ReceiveFault::StopRequested,
         Source::Prepare(v0) => ReceiveFault::Prepare(rx_ring_error(v0)),
@@ -282,9 +282,9 @@ pub(super) fn receive_fault(
 }
 
 pub(super) fn rx_ring_error(
-    value: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingError,
+    value: oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingError,
 ) -> RxRingError {
-    use oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingError as Source;
+    use oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingError as Source;
     match value {
         Source::Empty => RxRingError::Empty,
         Source::Count => RxRingError::Count,
@@ -303,9 +303,9 @@ pub(super) fn rx_ring_error(
 }
 
 pub(super) fn rx_frontier_error(
-    value: oer_esp32s31_ieee80211_driver::rx::frontier::RxFrontierError,
+    value: oer_chips_esp32s31_ieee80211_driver::rx::frontier::RxFrontierError,
 ) -> RxFrontierError {
-    use oer_esp32s31_ieee80211_driver::rx::frontier::RxFrontierError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::rx::frontier::RxFrontierError as Source;
     match value {
         Source::AlreadyStarted => RxFrontierError::AlreadyStarted,
         Source::OwnerUnavailable => RxFrontierError::OwnerUnavailable,
@@ -314,9 +314,9 @@ pub(super) fn rx_frontier_error(
 }
 
 pub(super) fn rx_stage_error(
-    value: oer_esp32s31_ieee80211_driver::mac::rx::pool::RxStageError,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::RxStageError,
 ) -> RxStageError {
-    use oer_esp32s31_ieee80211_driver::mac::rx::pool::RxStageError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::RxStageError as Source;
     match value {
         Source::Exhausted => RxStageError::Exhausted,
         Source::Empty => RxStageError::Empty,
@@ -326,9 +326,9 @@ pub(super) fn rx_stage_error(
 }
 
 pub(super) fn retune_error(
-    value: oer_esp32s31_ieee80211_driver::port::WifiRetuneError,
+    value: oer_chips_esp32s31_ieee80211_driver::port::WifiRetuneError,
 ) -> RetuneError {
-    use oer_esp32s31_ieee80211_driver::port::WifiRetuneError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::port::WifiRetuneError as Source;
     match value {
         Source::NotStopped(v0) => RetuneError::NotStopped(maintenance_error(v0)),
         Source::Radio(v0) => RetuneError::Radio(radio_failure(v0)),
@@ -336,17 +336,17 @@ pub(super) fn retune_error(
 }
 
 pub(super) fn maintenance_error(
-    value: oer_esp32s31_hal::owner::maintenance::Error,
+    value: oer_chips_esp32s31_hal::owner::maintenance::Error,
 ) -> MaintenanceError {
-    use oer_esp32s31_hal::owner::maintenance::Error as Source;
+    use oer_chips_esp32s31_hal::owner::maintenance::Error as Source;
     match value {
         Source::MacActive { state } => MaintenanceError::MacActive { state },
         Source::RxWalkerEnabled => MaintenanceError::RxWalkerEnabled,
     }
 }
 
-pub(super) fn radio_failure(value: oer_esp32s31_radio_client::Failure) -> RadioFailure {
-    use oer_esp32s31_radio_client::Failure as Source;
+pub(super) fn radio_failure(value: oer_chips_esp32s31_radio_client::Failure) -> RadioFailure {
+    use oer_chips_esp32s31_radio_client::Failure as Source;
     match value {
         Source::Refused => RadioFailure::Refused,
         Source::ClientFailed => RadioFailure::ClientFailed,
@@ -354,16 +354,16 @@ pub(super) fn radio_failure(value: oer_esp32s31_radio_client::Failure) -> RadioF
     }
 }
 
-pub(super) fn radio_poison(value: oer_esp32s31_radio_client::Poison) -> RadioPoison {
-    let oer_esp32s31_radio_client::Poison { origin, cause } = value;
+pub(super) fn radio_poison(value: oer_chips_esp32s31_radio_client::Poison) -> RadioPoison {
+    let oer_chips_esp32s31_radio_client::Poison { origin, cause } = value;
     RadioPoison {
         origin: radio_operation(origin),
         cause: radio_poison_cause(cause),
     }
 }
 
-pub(super) fn radio_operation(value: oer_esp32s31_radio_client::PoisonOrigin) -> RadioOperation {
-    use oer_esp32s31_radio_client::PoisonOrigin as Source;
+pub(super) fn radio_operation(value: oer_chips_esp32s31_radio_client::PoisonOrigin) -> RadioOperation {
+    use oer_chips_esp32s31_radio_client::PoisonOrigin as Source;
     match value {
         Source::TrackingTick => RadioOperation::TrackingTick,
         Source::Prepare => RadioOperation::Prepare,
@@ -375,8 +375,8 @@ pub(super) fn radio_operation(value: oer_esp32s31_radio_client::PoisonOrigin) ->
     }
 }
 
-pub(super) fn radio_request(value: oer_esp32s31_radio_client::RequestKind) -> RadioRequest {
-    use oer_esp32s31_radio_client::RequestKind as Source;
+pub(super) fn radio_request(value: oer_chips_esp32s31_radio_client::RequestKind) -> RadioRequest {
+    use oer_chips_esp32s31_radio_client::RequestKind as Source;
     match value {
         Source::Join => RadioRequest::Join,
         Source::Track => RadioRequest::Track,
@@ -385,8 +385,8 @@ pub(super) fn radio_request(value: oer_esp32s31_radio_client::RequestKind) -> Ra
     }
 }
 
-pub(super) fn radio_client(value: oer_esp32s31_hal::domain::RadioClient) -> RadioClient {
-    use oer_esp32s31_hal::domain::RadioClient as Source;
+pub(super) fn radio_client(value: oer_chips_esp32s31_hal::domain::RadioClient) -> RadioClient {
+    use oer_chips_esp32s31_hal::domain::RadioClient as Source;
     match value {
         Source::Wifi => RadioClient::Wifi,
         Source::Bluetooth => RadioClient::Bluetooth,
@@ -395,9 +395,9 @@ pub(super) fn radio_client(value: oer_esp32s31_hal::domain::RadioClient) -> Radi
 }
 
 pub(super) fn radio_poison_cause(
-    value: oer_esp32s31_radio_client::PoisonCause,
+    value: oer_chips_esp32s31_radio_client::PoisonCause,
 ) -> RadioPoisonCause {
-    use oer_esp32s31_radio_client::PoisonCause as Source;
+    use oer_chips_esp32s31_radio_client::PoisonCause as Source;
     match value {
         Source::TrackingRefused(v0) => RadioPoisonCause::TrackingRefused(phy_domain_error(v0)),
         Source::Tracking(v0) => RadioPoisonCause::Tracking(phy_fault(v0)),
@@ -416,8 +416,8 @@ pub(super) fn radio_poison_cause(
     }
 }
 
-pub(super) fn phy_fault(value: oer_esp32s31_radio_client::PhyFault) -> PhyFault {
-    use oer_esp32s31_radio_client::PhyFault as Source;
+pub(super) fn phy_fault(value: oer_chips_esp32s31_radio_client::PhyFault) -> PhyFault {
+    use oer_chips_esp32s31_radio_client::PhyFault as Source;
     match value {
         Source::EdgeTimedOut => PhyFault::EdgeTimedOut,
         Source::CapabilityUnavailable => PhyFault::CapabilityUnavailable,
@@ -431,9 +431,9 @@ pub(super) fn phy_fault(value: oer_esp32s31_radio_client::PhyFault) -> PhyFault 
 }
 
 pub(super) fn calibration_tracking_fault(
-    value: oer_esp32s31_radio_client::CalibrationTrackingFault,
+    value: oer_chips_esp32s31_radio_client::CalibrationTrackingFault,
 ) -> CalibrationTrackingFault {
-    use oer_esp32s31_radio_client::CalibrationTrackingFault as Source;
+    use oer_chips_esp32s31_radio_client::CalibrationTrackingFault as Source;
     match value {
         Source::Step(v0) => CalibrationTrackingFault::Step(phy_fault(v0)),
         Source::Radio(v0) => CalibrationTrackingFault::Radio(calibration_tracking_failure(v0)),
@@ -441,9 +441,9 @@ pub(super) fn calibration_tracking_fault(
 }
 
 pub(super) fn calibration_tracking_failure(
-    value: oer_esp32s31_radio_client::CalibrationTrackingFailure,
+    value: oer_chips_esp32s31_radio_client::CalibrationTrackingFailure,
 ) -> CalibrationTrackingFailure {
-    use oer_esp32s31_radio_client::CalibrationTrackingFailure as Source;
+    use oer_chips_esp32s31_radio_client::CalibrationTrackingFailure as Source;
     match value {
         Source::PbusClearTimedOut => CalibrationTrackingFailure::PbusClearTimedOut,
         Source::Dcode => CalibrationTrackingFailure::Dcode,
@@ -454,9 +454,9 @@ pub(super) fn calibration_tracking_failure(
 }
 
 pub(super) fn registration_fault(
-    value: oer_esp32s31_radio_client::RegistrationFault,
+    value: oer_chips_esp32s31_radio_client::RegistrationFault,
 ) -> RegistrationFault {
-    use oer_esp32s31_radio_client::RegistrationFault as Source;
+    use oer_chips_esp32s31_radio_client::RegistrationFault as Source;
     match value {
         Source::Step(v0) => RegistrationFault::Step(phy_fault(v0)),
         Source::Lowering { stage, error } => RegistrationFault::Lowering {
@@ -468,9 +468,9 @@ pub(super) fn registration_fault(
 }
 
 pub(super) fn registration_failure(
-    value: oer_esp32s31_radio_client::RegistrationFailure,
+    value: oer_chips_esp32s31_radio_client::RegistrationFailure,
 ) -> RegistrationFailure {
-    use oer_esp32s31_radio_client::RegistrationFailure as Source;
+    use oer_chips_esp32s31_radio_client::RegistrationFailure as Source;
     match value {
         Source::I2cMasterResetTimedOut { index, samples } => {
             RegistrationFailure::I2cMasterResetTimedOut { index, samples }
@@ -482,8 +482,8 @@ pub(super) fn registration_failure(
     }
 }
 
-pub(super) fn phy_register_stage(value: oer_esp32s31_phy::PhyRegisterStage) -> PhyRegisterStage {
-    use oer_esp32s31_phy::PhyRegisterStage as Source;
+pub(super) fn phy_register_stage(value: oer_chips_esp32s31_phy::PhyRegisterStage) -> PhyRegisterStage {
+    use oer_chips_esp32s31_phy::PhyRegisterStage as Source;
     match value {
         Source::Mmio => PhyRegisterStage::Mmio,
         Source::Delay => PhyRegisterStage::Delay,
@@ -496,9 +496,9 @@ pub(super) fn phy_register_stage(value: oer_esp32s31_phy::PhyRegisterStage) -> P
 }
 
 pub(super) fn phy_register_binding_error(
-    value: oer_esp32s31_phy::PhyRegisterBindingError,
+    value: oer_chips_esp32s31_phy::PhyRegisterBindingError,
 ) -> PhyRegisterBindingError {
-    use oer_esp32s31_phy::PhyRegisterBindingError as Source;
+    use oer_chips_esp32s31_phy::PhyRegisterBindingError as Source;
     match value {
         Source::UnsupportedAction => PhyRegisterBindingError::UnsupportedAction,
         Source::IncompleteTransaction => PhyRegisterBindingError::IncompleteTransaction,
@@ -507,9 +507,9 @@ pub(super) fn phy_register_binding_error(
 }
 
 pub(super) fn phy_domain_error(
-    value: oer_esp32s31_phy::concurrent::ConcurrentPhyError,
+    value: oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError,
 ) -> PhyDomainError {
-    use oer_esp32s31_phy::concurrent::ConcurrentPhyError as Source;
+    use oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError as Source;
     match value {
         Source::NotRegistered => PhyDomainError::NotRegistered,
         Source::AlreadyRegistered => PhyDomainError::AlreadyRegistered,
@@ -528,9 +528,9 @@ pub(super) fn phy_domain_error(
 }
 
 pub(super) fn phy_track_time_error(
-    value: oer_esp32s31_phy::state::client::PhyTrackTimeError,
+    value: oer_chips_esp32s31_phy::state::client::PhyTrackTimeError,
 ) -> PhyTrackTimeError {
-    use oer_esp32s31_phy::state::client::PhyTrackTimeError as Source;
+    use oer_chips_esp32s31_phy::state::client::PhyTrackTimeError as Source;
     match value {
         Source::DeadlineOverflow { class } => PhyTrackTimeError::DeadlineOverflow {
             class: phy_pll_track_class(class),
@@ -548,18 +548,18 @@ pub(super) fn phy_track_time_error(
 }
 
 pub(super) fn phy_client_acquire_error(
-    value: oer_esp32s31_phy::state::client::PhyClientAcquireError,
+    value: oer_chips_esp32s31_phy::state::client::PhyClientAcquireError,
 ) -> PhyClientAcquireError {
-    use oer_esp32s31_phy::state::client::PhyClientAcquireError as Source;
+    use oer_chips_esp32s31_phy::state::client::PhyClientAcquireError as Source;
     match value {
         Source::TrackingTime(v0) => PhyClientAcquireError::TrackingTime(phy_track_time_error(v0)),
     }
 }
 
 pub(super) fn phy_pll_track_class(
-    value: oer_esp32s31_phy::state::client::PhyPllTrackClass,
+    value: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass,
 ) -> PhyPllTrackClass {
-    use oer_esp32s31_phy::state::client::PhyPllTrackClass as Source;
+    use oer_chips_esp32s31_phy::state::client::PhyPllTrackClass as Source;
     match value {
         Source::Wifi => PhyPllTrackClass::Wifi,
         Source::BluetoothIeee802154 => PhyPllTrackClass::BluetoothIeee802154,
@@ -567,9 +567,9 @@ pub(super) fn phy_pll_track_class(
 }
 
 pub(super) fn common_radio_power_error(
-    value: oer_esp32s31_hal::domain::CommonRadioPowerError,
+    value: oer_chips_esp32s31_hal::domain::CommonRadioPowerError,
 ) -> CommonRadioPowerError {
-    use oer_esp32s31_hal::domain::CommonRadioPowerError as Source;
+    use oer_chips_esp32s31_hal::domain::CommonRadioPowerError as Source;
     match value {
         Source::AlreadyEntered => CommonRadioPowerError::AlreadyEntered,
         Source::Power(v0) => CommonRadioPowerError::Power(power_error(v0)),
@@ -579,9 +579,9 @@ pub(super) fn common_radio_power_error(
 }
 
 pub(super) fn modem_clock_error(
-    value: oer_esp32s31_hal::domain::ModemClockError,
+    value: oer_chips_esp32s31_hal::domain::ModemClockError,
 ) -> ModemClockError {
-    use oer_esp32s31_hal::domain::ModemClockError as Source;
+    use oer_chips_esp32s31_hal::domain::ModemClockError as Source;
     match value {
         Source::AlreadyEnabled => ModemClockError::AlreadyEnabled,
         Source::NotEnabled => ModemClockError::NotEnabled,
@@ -590,8 +590,8 @@ pub(super) fn modem_clock_error(
     }
 }
 
-pub(super) fn power_error(value: oer_espressif_radio::power::PowerError) -> PowerError {
-    let oer_espressif_radio::power::PowerError {
+pub(super) fn power_error(value: oer_chips_family_radio::power::PowerError) -> PowerError {
+    let oer_chips_family_radio::power::PowerError {
         checkpoint,
         expected,
         observed,
@@ -604,9 +604,9 @@ pub(super) fn power_error(value: oer_espressif_radio::power::PowerError) -> Powe
 }
 
 pub(super) fn power_checkpoint(
-    value: oer_espressif_radio::power::PowerCheckpoint,
+    value: oer_chips_family_radio::power::PowerCheckpoint,
 ) -> PowerCheckpoint {
-    use oer_espressif_radio::power::PowerCheckpoint as Source;
+    use oer_chips_family_radio::power::PowerCheckpoint as Source;
     match value {
         Source::Mpll => PowerCheckpoint::Mpll,
         Source::ResetReleased => PowerCheckpoint::ResetReleased,
@@ -623,9 +623,9 @@ pub(super) fn power_checkpoint(
 }
 
 pub(super) fn power_restore_checkpoint(
-    value: oer_esp32s31_hal::root::WifiPowerRestoreCheckpoint,
+    value: oer_chips_esp32s31_hal::root::WifiPowerRestoreCheckpoint,
 ) -> PowerRestoreCheckpoint {
-    use oer_esp32s31_hal::root::WifiPowerRestoreCheckpoint as Source;
+    use oer_chips_esp32s31_hal::root::WifiPowerRestoreCheckpoint as Source;
     match value {
         Source::ModemSyscon => PowerRestoreCheckpoint::ModemSyscon,
         Source::ModemSourceClocks => PowerRestoreCheckpoint::ModemSourceClocks,
@@ -633,8 +633,8 @@ pub(super) fn power_restore_checkpoint(
     }
 }
 
-pub(super) fn platform_clock(value: oer_esp32s31_hal::power::PlatformClock) -> PlatformClock {
-    use oer_esp32s31_hal::power::PlatformClock as Source;
+pub(super) fn platform_clock(value: oer_chips_esp32s31_hal::power::PlatformClock) -> PlatformClock {
+    use oer_chips_esp32s31_hal::power::PlatformClock as Source;
     match value {
         Source::Pll160m => PlatformClock::Pll160m,
         Source::AnalogI2cMaster => PlatformClock::AnalogI2cMaster,
@@ -644,9 +644,9 @@ pub(super) fn platform_clock(value: oer_esp32s31_hal::power::PlatformClock) -> P
     }
 }
 pub(super) fn rx_block_ack_error(
-    value: oer_esp32s31_ieee80211_driver::mac::rx::hardware::S31RxBlockAckAgreementError,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::rx::hardware::S31RxBlockAckAgreementError,
 ) -> RxBlockAckError {
-    use oer_esp32s31_ieee80211_driver::mac::rx::hardware::S31RxBlockAckAgreementError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::rx::hardware::S31RxBlockAckAgreementError as Source;
     match value {
         Source::HardwareIndex(v) => RxBlockAckError::HardwareIndex(v),
         Source::MulticastPeer => RxBlockAckError::MulticastPeer,
@@ -656,9 +656,9 @@ pub(super) fn rx_block_ack_error(
     }
 }
 pub(super) fn rx_stage_transaction_error(
-    value: oer_esp32s31_ieee80211_driver::mac::rx::pool::RxStageTransactionError,
+    value: oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::RxStageTransactionError,
 ) -> RxStageTransactionError {
-    use oer_esp32s31_ieee80211_driver::mac::rx::pool::RxStageTransactionError as Source;
+    use oer_chips_esp32s31_ieee80211_driver::mac::rx::pool::RxStageTransactionError as Source;
     match value {
         Source::Stage(v) => RxStageTransactionError::Stage(rx_stage_error(v)),
         Source::Ring(v) => RxStageTransactionError::Ring(rx_ring_error(v)),
@@ -675,10 +675,10 @@ pub(super) fn rx_stage_transaction_error(
 }
 
 pub(crate) fn network_drain(
-    value: oer_ieee80211_runtime::station::NetworkDrainFailure,
+    value: oer_protocols_ieee80211_runtime::station::NetworkDrainFailure,
 ) -> crate::failure::NetworkDrain {
     use crate::failure::{NetworkDrain, NetworkDrainCause};
-    use oer_ieee80211_runtime::station::NetworkDrainCause as Source;
+    use oer_protocols_ieee80211_runtime::station::NetworkDrainCause as Source;
     NetworkDrain {
         cause: match value.cause {
             Source::Deadline => NetworkDrainCause::Deadline,
@@ -690,7 +690,7 @@ pub(crate) fn network_drain(
 
 pub(crate) fn retirement(
     failed: Option<crate::failure::FailedStation>,
-    cause: oer_radio_port::LifecycleError,
+    cause: oer_protocols_radio_port::LifecycleError,
     hardware_stopped: bool,
 ) -> RetirementFailure {
     let failure = failed.map(|failed| failed.failure);
@@ -709,8 +709,8 @@ pub(crate) fn retirement(
     }
 }
 
-pub(crate) fn retirement_cause(cause: oer_radio_port::LifecycleError) -> RetirementCause {
-    use oer_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
+pub(crate) fn retirement_cause(cause: oer_protocols_radio_port::LifecycleError) -> RetirementCause {
+    use oer_protocols_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
     match cause {
         Source::Cancelled => RetirementCause::Cancelled,
         Source::FailStopRequested => RetirementCause::FailStopRequested,
@@ -733,16 +733,16 @@ pub(crate) fn retirement_cause(cause: oer_radio_port::LifecycleError) -> Retirem
 
 /// The answer of a release that left the actor and its domain as named.
 pub(crate) fn released(
-    domain: oer_esp32s31_radio_client::DomainHealth,
+    domain: oer_chips_esp32s31_radio_client::DomainHealth,
 ) -> Result<(), ReleaseCause> {
     match domain {
-        oer_esp32s31_radio_client::DomainHealth::Healthy => Ok(()),
-        oer_esp32s31_radio_client::DomainHealth::Poisoned(poison) => {
+        oer_chips_esp32s31_radio_client::DomainHealth::Healthy => Ok(()),
+        oer_chips_esp32s31_radio_client::DomainHealth::Poisoned(poison) => {
             Err(ReleaseCause::DomainPoisoned(radio_poison(poison)))
         }
     }
 }
 
-pub(crate) fn still_active(error: oer_esp32s31_hal::owner::maintenance::Error) -> ReleaseCause {
+pub(crate) fn still_active(error: oer_chips_esp32s31_hal::owner::maintenance::Error) -> ReleaseCause {
     ReleaseCause::StillActive(maintenance_error(error))
 }

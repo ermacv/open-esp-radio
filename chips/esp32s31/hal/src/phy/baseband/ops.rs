@@ -8,12 +8,12 @@
 #![forbid(unsafe_code)]
 
 use crate::phy::registers::{BasebandRegisters, ClockRegisters, PhyPlacement};
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     fe,
     fe::{PhyFedataRecovered, PhyPbus},
     wifi_bb,
 };
-use oer_mmio::{Bits, Placement};
+use oer_portable_mmio::{Bits, Placement};
 
 use crate::phy::i2c::PhyAdcRate;
 
@@ -81,9 +81,9 @@ impl TxIqToneControlFields {
                 .set_bits_8_9_opaque(self.low_reserved_clear_opaque)
                 .set_negated_step_or_attenuation(self.negated_step_or_attenuation)
                 .set_tone_enable_or_arm(if self.tone_enable_or_arm {
-                    oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
+                    oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
                 } else {
-                    oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
+                    oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
                 })
                 .set_bits_19_21_opaque(self.txiq_mismatch_mode_opaque)
                 .set_bits_22_23_opaque(self.middle_reserved_clear_opaque)
@@ -155,9 +155,9 @@ pub(crate) fn configure_tone_path_0<P: PhyPlacement>(
             .set_bits_8_9_opaque(Bits::constant::<0>())
             .set_negated_step_or_attenuation(path.negated_step)
             .set_tone_enable_or_arm(if path.enabled {
-                oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
+                oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
             } else {
-                oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
+                oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
             })
             .set_bits_19_21_opaque(path.mismatch_mode)
             .set_bits_22_23_opaque(Bits::constant::<0>())
@@ -241,9 +241,9 @@ pub fn configure_rxiq_root_correction<P: PhyPlacement>(
 pub fn configure_tx_power_tracking<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, enabled: bool) {
     bb.wifi_bb.modify_tx_power_track_control_0(|w| {
         w.set_track_enable(if enabled {
-            oer_esp32s31_pac::wifi_bb::tx_power_track_control_0::TrackEnable::Enabled
+            oer_chips_esp32s31_pac::wifi_bb::tx_power_track_control_0::TrackEnable::Enabled
         } else {
-            oer_esp32s31_pac::wifi_bb::tx_power_track_control_0::TrackEnable::Disabled
+            oer_chips_esp32s31_pac::wifi_bb::tx_power_track_control_0::TrackEnable::Disabled
         });
     });
     // SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG, S31_ESP_PACS_SVD.
@@ -801,9 +801,9 @@ pub fn configure_txiq_mismatch_power<P: PhyPlacement>(
 pub fn set_power_detector_tone_armed<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, armed: bool) {
     bb.fe.modify_tone_path_0_control(|w| {
         w.set_tone_enable_or_arm(if armed {
-            oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
+            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
         } else {
-            oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
+            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
         });
     });
 }
@@ -830,9 +830,9 @@ pub fn stop_calibration_tone_paths<P: PhyPlacement>(bb: &mut BasebandRegisters<P
     // SOURCE: BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW, ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
     bb.fe.modify_tone_path_0_control(|w| {
         w.set_tone_enable_or_arm(if false {
-            oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
+            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
         } else {
-            oer_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
+            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
         });
     });
     // SOURCE: BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW, ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
@@ -965,16 +965,16 @@ pub fn configure_adc_rate<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, rate: 
     let high = matches!(rate, PhyAdcRate::High);
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_1_opaque(if high {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
         });
     });
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_0_opaque(if high {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
         });
     });
 }
@@ -1030,17 +1030,17 @@ pub fn initialize_front_end_suffix<P: PhyPlacement>(bb: &mut BasebandRegisters<P
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_1_opaque(if true {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
         });
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_0_opaque(if true {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
         });
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
@@ -1050,17 +1050,17 @@ pub fn initialize_front_end_suffix<P: PhyPlacement>(bb: &mut BasebandRegisters<P
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_0_opaque(if true {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
         });
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_1_opaque(if true {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
         });
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
@@ -1093,14 +1093,14 @@ pub fn update_front_end<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_FE_REG_UPDATE, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
         w.set_bit_0_opaque(if true {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
         })
         .set_bit_1_opaque(if true {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
         } else {
-            oer_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
         });
     });
 }
@@ -1164,9 +1164,9 @@ pub fn configure_forced_iccfr<P: PhyPlacement>(
     use wifi_bb::iccfr_force_control::ForceEnable;
     bb.wifi_bb.modify_iccfr_force_control(|w| {
         w.set_force_mode_high(if mode {
-            oer_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeHigh::High
+            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeHigh::High
         } else {
-            oer_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeHigh::Low
+            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeHigh::Low
         });
     });
     bb.wifi_bb.modify_iccfr_force_control(|w| {
@@ -1182,9 +1182,9 @@ pub fn configure_forced_iccfr<P: PhyPlacement>(
     });
     bb.wifi_bb.modify_iccfr_force_control(|w| {
         w.set_force_mode_low(if mode {
-            oer_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeLow::High
+            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeLow::High
         } else {
-            oer_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeLow::Low
+            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeLow::Low
         });
     });
     bb.wifi_bb.modify_iccfr_force_control(|w| {

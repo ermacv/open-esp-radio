@@ -7,7 +7,7 @@ Bound an operation's work, time and working memory, and read its failures.
 ## Cooperative control and failure diagnostics
 
 Every operation runs in its caller's process and charges one `RunControl` the
-caller supplies. `oer_analysis_blobray_application::in_process::Limits::new(max_work_units,
+caller supplies. `oer_tools_analysis_blobray_application::in_process::Limits::new(max_work_units,
 timeout)` is the control the CLI and the vendor scenarios use: it counts work
 units against their limit on every checkpoint, checks the wall-clock deadline
 every 256 checkpoints, and keeps the run position a failure reports. The CLI
@@ -15,7 +15,7 @@ exposes `--working-memory-mib` (default 256), `--timeout-secs` (default 900) and
 `--max-work-units` (default 1,000,000,000). `--analysis-profile` selects
 `blobray-cli` (the default) or `signature-corpus` (256 MiB, 1,000,000,000 work
 units, 3600 seconds). Defaults come from `AnalysisProfile::limits` in
-`oer-analysis-riscv-model`; each explicit limit flag overrides that profile.
+`oer-tools-analysis-riscv-model`; each explicit limit flag overrides that profile.
 JSON records the selected profile and effective values in `analysis_resources`. Reaching a limit fails the operation with
 `resource-limited`; no automatic limit increase or reduced scope occurs.
 

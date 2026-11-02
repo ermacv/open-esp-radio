@@ -1,7 +1,7 @@
 //! The executor's cooperative admission attached to an image's timer.
 use core::marker::PhantomData;
 
-use oer_time::{Clock, Instant, Timer};
+use oer_portable_time::{Clock, Instant, Timer};
 
 use crate::binding::Binding;
 
@@ -47,7 +47,7 @@ impl<B, T: Timer> Timer for Cooperative<B, T> {
         self.timer.wait_until(at)
     }
 }
-impl<B: Binding, T: Timer> oer_cooperate::CooperativeTimer for Cooperative<B, T> {
+impl<B: Binding, T: Timer> oer_portable_cooperate::CooperativeTimer for Cooperative<B, T> {
     fn should_yield(&self) -> bool {
         crate::executor::should_yield::<B>()
     }

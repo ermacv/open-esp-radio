@@ -18,7 +18,7 @@
 
 /// One software interrupt line, shared by every context that raises it: the
 /// platform port's contract.
-pub(crate) use oer_espressif_platform_port::SoftwareLine;
+pub(crate) use oer_chips_family_platform_port::SoftwareLine;
 
 /// Raise `line` after the caller's published facts: `fence w, o`, then the
 /// raise.
@@ -28,7 +28,7 @@ pub(crate) use oer_espressif_platform_port::SoftwareLine;
 )]
 #[inline(always)]
 pub(crate) fn raise(line: &impl SoftwareLine) {
-    raise_with(line, oer_riscv::fence_w_o);
+    raise_with(line, oer_portable_riscv::fence_w_o);
 }
 
 /// [`raise`] with its fence as a parameter, so a test records the order.
@@ -43,7 +43,7 @@ pub(crate) fn raise_with(line: &impl SoftwareLine, fence: impl FnOnce()) {
 /// round.
 #[inline(always)]
 pub(crate) fn serve<R>(line: &impl SoftwareLine, drain: impl FnOnce() -> R) -> R {
-    serve_with(line, oer_riscv::fence_o_rw, drain)
+    serve_with(line, oer_portable_riscv::fence_o_rw, drain)
 }
 
 /// [`serve`] with its fence as a parameter, so a test records the order.
@@ -83,7 +83,7 @@ impl SoftwareInterrupt {
     /// A fixed source, checked during monomorphization.
     ///
     /// ```compile_fail
-    /// use oer_espressif_executor::SoftwareInterrupt;
+    /// use oer_chips_family_executor::SoftwareInterrupt;
     /// const INVALID: SoftwareInterrupt = SoftwareInterrupt::constant::<4>();
     /// ```
     pub const fn constant<const SWI: u8>() -> Self {

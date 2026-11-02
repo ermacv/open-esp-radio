@@ -2,8 +2,8 @@
 //! keep their contention window and draw their backoff below the lower-MAC
 //! port.
 
-use oer_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::extensions::wmm::{WmmAcParameters, WmmParameterSet};
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 /// An AC's advertised contention and locally configured MSDU lifetime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -11,7 +11,7 @@ pub struct EdcaAcParameters {
     /// Contention, admission-control and TXOP fields advertised on air.
     pub wmm: WmmAcParameters,
     /// Maximum retention from software admission.
-    pub msdu_lifetime: oer_time::Duration,
+    pub msdu_lifetime: oer_portable_time::Duration,
 }
 
 /// A VIF's complete EDCA table. Lifetimes are local MIB attributes, not
@@ -19,14 +19,14 @@ pub struct EdcaAcParameters {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EdcaParameterSet {
     wmm: WmmParameterSet,
-    msdu_lifetimes: [oer_time::Duration; 4],
+    msdu_lifetimes: [oer_portable_time::Duration; 4],
 }
 
 impl EdcaParameterSet {
     /// Default and largest standard MSDU retention time (500 TUs).
     // SOURCE: IEEE 802.11-2020 Annex C, dot11EDCATableMSDULifetime.
-    pub const DEFAULT_MSDU_LIFETIME: oer_time::Duration =
-        oer_time::Duration::from_micros(500 * 1024);
+    pub const DEFAULT_MSDU_LIFETIME: oer_portable_time::Duration =
+        oer_portable_time::Duration::from_micros(500 * 1024);
 
     /// Non-AP defaults before a BSS is known.
     // SOURCE: IEEE 802.11-2020 9.4.2.28, Table 9-155 (OFDM/ERP/HT/HE).
@@ -34,7 +34,7 @@ impl EdcaParameterSet {
 
     /// Lifetimes in ACI order: BE, BK, VI, VO. SupportedEdca validates
     /// the whole table before it can be installed.
-    pub const fn new(wmm: WmmParameterSet, msdu_lifetimes: [oer_time::Duration; 4]) -> Self {
+    pub const fn new(wmm: WmmParameterSet, msdu_lifetimes: [oer_portable_time::Duration; 4]) -> Self {
         Self {
             wmm,
             msdu_lifetimes,
@@ -44,8 +44,8 @@ impl EdcaParameterSet {
     /// Convert MIB lifetime values in TUs at the record boundary.
     pub const fn from_tu(wmm: WmmParameterSet, lifetimes_tu: [u16; 4]) -> Self {
         let [be, bk, vi, vo] = lifetimes_tu;
-        const fn duration(tu: u16) -> oer_time::Duration {
-            oer_time::Duration::from_micros((tu as u64) << 10)
+        const fn duration(tu: u16) -> oer_portable_time::Duration {
+            oer_portable_time::Duration::from_micros((tu as u64) << 10)
         }
         Self::new(
             wmm,

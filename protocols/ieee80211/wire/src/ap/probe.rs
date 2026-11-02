@@ -27,10 +27,10 @@ pub enum ResponseError {
 pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
     let mut found = None;
     while !elements.is_empty() {
-        let mut reader = oer_wire::Reader::new(elements);
+        let mut reader = oer_portable_wire::Reader::new(elements);
         let &[id, length] = reader.array::<2>().ok()?;
         let rest = reader.remaining();
-        let mut reader = oer_wire::Reader::new(rest);
+        let mut reader = oer_portable_wire::Reader::new(rest);
         let value = reader.take(usize::from(length)).ok()?;
         let rest = reader.remaining();
         if id == 0 {
@@ -55,7 +55,7 @@ pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
     clippy::arithmetic_side_effects
 )]
 pub fn matches_ssid(beacon: &[u8], requested: &[u8]) -> bool {
-    let mut reader = oer_wire::Reader::new(beacon);
+    let mut reader = oer_portable_wire::Reader::new(beacon);
     if reader.array::<36>().is_err() {
         return false;
     }
@@ -73,7 +73,7 @@ pub fn write_response(
     output: &mut [u8],
 ) -> Result<usize, ResponseError> {
     let invalid = |_| ResponseError::InvalidAdvertisement;
-    let mut reader = oer_wire::Reader::new(beacon);
+    let mut reader = oer_portable_wire::Reader::new(beacon);
     let fixed = reader.array::<36>().map_err(invalid)?;
     let elements = reader.remaining();
     if fixed[..2] != [0x80, 0] || ssid(elements).is_none() {
@@ -103,10 +103,10 @@ pub fn write_response(
         &sequence.sequence_control().to_le_bytes(),
     );
     crate::encoding::write_array::<24, _, _>(&mut fixed, &timestamp_micros.to_le_bytes());
-    let mut writer = oer_wire::Writer::new(output);
+    let mut writer = oer_portable_wire::Writer::new(output);
     let too_small = |_| ResponseError::OutputTooSmall { required };
     writer.write(&fixed).map_err(too_small)?;
-    let mut reader = oer_wire::Reader::new(elements);
+    let mut reader = oer_portable_wire::Reader::new(elements);
     while !reader.is_empty() {
         let header @ [id, length] = reader.read::<2>().map_err(invalid)?;
         let value = reader.take(usize::from(length)).map_err(invalid)?;

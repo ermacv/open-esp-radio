@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use oer_chip_profile::Profile;
+use oer_tools_chip_profile::Profile;
 use serde_json::Value;
 
 use crate::Result;
@@ -135,7 +135,7 @@ mod tests {
         }]});
         let profile = Profile::tracked("esp32s31").unwrap();
         assert_eq!(
-            of_metadata(&metadata, "oer-firmware-apps-boot-smoke", &profile).unwrap(),
+            of_metadata(&metadata, "oer-hil-probes-boot-smoke", &profile).unwrap(),
             [0, 1]
         );
     }

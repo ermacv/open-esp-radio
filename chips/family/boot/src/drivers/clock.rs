@@ -3,7 +3,7 @@ use crate::{
     Access, BootFailure, ClockFailure,
     wait::{BootDeadline, BootWait},
 };
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 /// The chip-selected source and the vendor's switch settle.
 pub struct LpFastProfile<S> {

@@ -3,8 +3,8 @@
 //! Raw ESF, descriptor, and node layouts remain in the target adapter. This
 //! module contains only finite decisions which can be verified on the host.
 
-use oer_ieee80211_wire::ethertype;
-use oer_network_wire::{
+use oer_protocols_ieee80211_wire::ethertype;
+use oer_protocols_network_wire::{
     ethernet::EtherType,
     ip::{DsField, Ipv6HeaderPrefix},
 };

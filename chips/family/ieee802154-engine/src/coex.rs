@@ -16,10 +16,10 @@
 
 /// One four-bit coexistence priority, the shared-table domain every
 /// supported chip's MAC PTI field accepts.
-pub use oer_espressif_coex::CoexPti;
+pub use oer_chips_family_coex::CoexPti;
 
-use oer_espressif_coex::CoexPtiTable;
-use oer_ieee802154_port::RadioOperation;
+use oer_chips_family_coex::CoexPtiTable;
+use oer_protocols_ieee802154_port::RadioOperation;
 
 /// The priorities of every operation, resolved from one snapshot of the
 /// shared table: the idle scene, immediate and timed transmission and
@@ -35,7 +35,7 @@ pub struct Ieee802154CoexPriorities {
 
 impl Ieee802154CoexPriorities {
     /// The priorities of every operation of `table`, through the rows of
-    /// [`oer_espressif_coex::ieee802154_event`].
+    /// [`oer_chips_family_coex::ieee802154_event`].
     pub const fn resolve(table: &CoexPtiTable) -> Self {
         Self {
             idle: table.ieee802154_pti(RadioOperation::Idle),

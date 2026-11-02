@@ -10,7 +10,7 @@ error: lifetime may not live long enough
    |             ^^^^^^^^^^ argument requires that `'old` must outlive `'next`
    |
    = help: consider adding the following bound: `'old: 'next`
-   = note: requirement occurs because of a mutable reference to `oer_esp32s31_hal::bluetooth::engine::Engine<oer_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 1, 2, 1, 4, 4, 8>>`
+   = note: requirement occurs because of a mutable reference to `oer_chips_esp32s31_hal::bluetooth::engine::Engine<oer_chips_esp32s31_hal::bluetooth::engine::ArenaMemory<'_, '_, 0, 1, 2, 1, 4, 4, 8>>`
    = note: mutable references are invariant over their type parameter
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
@@ -26,8 +26,8 @@ error: lifetime may not live long enough
    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'next` must outlive `'old`
    |
    = help: consider adding the following bound: `'next: 'old`
-   = note: requirement occurs because of the type `oer_esp32s31_hal::bluetooth::engine::SchedulerRoleInstance<'_, '_>`, which makes the generic argument `'_` invariant
-   = note: the struct `oer_esp32s31_hal::bluetooth::engine::SchedulerRoleInstance<'pool, 'epoch>` is invariant over the parameter `'pool`
+   = note: requirement occurs because of the type `oer_chips_esp32s31_hal::bluetooth::engine::SchedulerRoleInstance<'_, '_>`, which makes the generic argument `'_` invariant
+   = note: the struct `oer_chips_esp32s31_hal::bluetooth::engine::SchedulerRoleInstance<'pool, 'epoch>` is invariant over the parameter `'pool`
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 help: `'old` and `'next` must be the same: replace one with the other

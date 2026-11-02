@@ -1,9 +1,9 @@
 //! Executor failures retain their observations and quarantine every owner.
 
 use core::{marker::PhantomData, mem::ManuallyDrop};
-use oer_espressif_interrupt_table::Error;
-use oer_espressif_staged_runtime::panic::FaultReason;
-use oer_riscv::clic::LineState;
+use oer_chips_family_interrupt_table::Error;
+use oer_chips_family_staged_runtime::panic::FaultReason;
+use oer_portable_riscv::clic::LineState;
 
 /// Source observations of an executor or time-driver invariant failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,7 +43,7 @@ pub enum Fault {
         executor: u8,
         comparator: u8,
     },
-    Binding(oer_espressif_interrupt_table::BindFault),
+    Binding(oer_chips_family_interrupt_table::BindFault),
     Route {
         executor: u8,
         error: Error,
@@ -71,16 +71,16 @@ impl Fault {
     }
 
     #[cfg(feature = "chip")]
-    pub(crate) fn binding<E: oer_espressif_interrupt_table::Entry>(
+    pub(crate) fn binding<E: oer_chips_family_interrupt_table::Entry>(
         executor: u8,
-        error: &oer_espressif_interrupt_table::BindError<E>,
+        error: &oer_chips_family_interrupt_table::BindError<E>,
     ) -> Self {
         match error {
-            oer_espressif_interrupt_table::BindError::Refused { error, .. } => Self::Route {
+            oer_chips_family_interrupt_table::BindError::Refused { error, .. } => Self::Route {
                 executor,
                 error: *error,
             },
-            oer_espressif_interrupt_table::BindError::Fault(held) => Self::Binding(held.fault),
+            oer_chips_family_interrupt_table::BindError::Fault(held) => Self::Binding(held.fault),
         }
     }
 
@@ -149,11 +149,11 @@ impl Fault {
     /// this reason and reset through platform `P`'s fatal path. The next
     /// staged boot reports the same words.
     #[cfg(feature = "chip")]
-    pub fn reset<P: oer_espressif_platform_port::Platform>(self) -> ! {
+    pub fn reset<P: oer_chips_family_platform_port::Platform>(self) -> ! {
         #[cfg(target_arch = "riscv32")]
         {
             let (reason, observations) = self.diagnostic();
-            oer_espressif_staged_runtime::panic::reset_fault::<P>(reason, observations)
+            oer_chips_family_staged_runtime::panic::reset_fault::<P>(reason, observations)
         }
         // Host type checks have no reset hardware or retained boot record.
         #[cfg(not(target_arch = "riscv32"))]
@@ -185,7 +185,7 @@ impl<P, T> Failure<P, T> {
 }
 
 #[cfg(feature = "chip")]
-impl<P: oer_espressif_platform_port::Platform, T> Failure<P, T> {
+impl<P: oer_chips_family_platform_port::Platform, T> Failure<P, T> {
     /// The image terminates setup while retaining every refused input.
     pub fn reset(self) -> ! {
         self.fault.reset::<P>()
@@ -334,8 +334,8 @@ mod tests {
                 3,
                 Error::WrongClass {
                     source: 5,
-                    table: oer_espressif_interrupt_table::Class::Hardware,
-                    entry: oer_espressif_interrupt_table::Class::Executor,
+                    table: oer_chips_family_interrupt_table::Class::Hardware,
+                    entry: oer_chips_family_interrupt_table::Class::Executor,
                 }
             ),
             (FaultReason::RouteWrongClass, [3, 5, 0, 1])

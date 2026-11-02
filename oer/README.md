@@ -1,4 +1,4 @@
-# oer-espressif
+# oer
 
 The Espressif family's application entry. An image selects its chip by
 feature (`esp32s31`, exactly one) and the capabilities it uses (`wifi`,
@@ -8,7 +8,7 @@ defaults. The library places their interrupts, executors and service tasks
 and applies record and reset on the image's behalf.
 
 ```rust
-oer_espressif::entry!(boot, hart1 = network);
+oer::entry!(boot, hart1 = network);
 
 static LINK: Channel<Request, Reply, 1> = Channel::new();
 
@@ -131,10 +131,10 @@ runs the radio actor.
 ## Services
 
 `AesPeripheral::engine` makes the accelerator the image's synchronous
-AES-128 engine (`AesEngine`, an `oer_crypto::block::Aes128Engine`), owned by
+AES-128 engine (`AesEngine`, an `oer_portable_crypto::block::Aes128Engine`), owned by
 whoever holds it: each block waits on its `STATE` flag within its settle,
 and an operation borrows the engine for the length of its call
-(`oer_crypto::block::unwrap_now`), so no operation outlives it and nothing
+(`oer_portable_crypto::block::unwrap_now`), so no operation outlives it and nothing
 waits on another holder. The AES interrupt stays silent.
 
 `wifi::Station::start` takes the radio, the entropy source and the AES
@@ -158,7 +158,7 @@ a failure instead, and a later connect answers `ConnectError::Stopped`.
 `Station::start` returns the station and the IP service's status for the
 application (`NetStatus`), and keeps the station's network device for the
 second boot. `wifi::Net::start`, in the second boot,
-runs the existing IP service (`oer-embassy-net`) over that device;
+runs the existing IP service (`oer-portable-embassy-net`) over that device;
 `wait_ipv4` ends with the configuration over an up link and keeps waiting
 across a link loss, `wait_link_down` ends on a loss or a new link epoch,
 and both end with `NetError::Stopped` or `Failed` when the service ends.
@@ -189,8 +189,8 @@ returns `false`; a fatal note still reaches the host.
 | The entropy source fails its health check when the library draws the boot's identity | all owners stay where they are | record and reset |
 | The station runner exits other than an ordinary stop (failed, poisoned, quarantined, retirement or release failure, abandoned, initialization) | the runner keeps every owner | record and reset |
 | A fatal MAC assertion, a PHY transaction fault, nonce exhaustion | owners quarantined by their fault owner | record and reset |
-| The radio actor's periodic PHY tracking fails, or its deadline is one the clock cannot hold | the actor keeps every owner | the fault's class and variant path (`oer-esp32s31-compose::radio_fault`) recorded, reset; the next boot prints it |
-| A CPU exception | all owners stay where they are | the runtime records the trap frame before it stops the other hart, the library's hook (`oer-esp32s31-compose::exception`) what the interrupt controller showed after the stop; reset. The next boot prints both and serves them in `Boot::evidence` (`previous_exception`) |
+| The radio actor's periodic PHY tracking fails, or its deadline is one the clock cannot hold | the actor keeps every owner | the fault's class and variant path (`oer-chips-esp32s31-compose::radio_fault`) recorded, reset; the next boot prints it |
+| A CPU exception | all owners stay where they are | the runtime records the trap frame before it stops the other hart, the library's hook (`oer-chips-esp32s31-compose::exception`) what the interrupt controller showed after the stop; reset. The next boot prints both and serves them in `Boot::evidence` (`previous_exception`) |
 | The IP service is refused its context | the service keeps its owners | record and reset |
 | `connect` refused or failed, `wait_ipv4` timed out by the caller, a TCP error | unchanged | handled `Result` |
 
@@ -220,7 +220,7 @@ polls it (`!Send`).
 An image that measures the library's work enables `observe` and declares
 `instrumentation = ["trace"]` (without it the build fails). The library's
 executors, station, RF actor and IP service then report to its own
-counters, which `oer_espressif::observe` reads in the library's types; an
+counters, which `oer::observe` reads in the library's types; an
 image translates them into whatever reports them:
 
 | Reader | What |
@@ -242,16 +242,16 @@ The application runs on hart 0. The AES engine runs the accelerator in
 Typical mode without DMA, one synchronous block at a time; the station
 computes RFC 3394 key unwrap on it. One station and one IP service per
 image. `println!("ipv4 {}/{}", Ipv4(address), prefix)` writes a typed line
-(`oer_diagnostics::typed_line!`): the format's static pieces and the
+(`oer_portable_diagnostics::typed_line!`): the format's static pieces and the
 values, which the host prints; the target formats nothing. A hole is a bare
 `{}`; `Hex` and `Ipv4` choose a value's text, and an error that describes
 itself as a diagnostic path is the last value.
 It uses the early writer, which waits for room within its budget per line.
 
 ```console
-cargo test -p oer-espressif
-cargo clippy -p oer-espressif --all-targets
-cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,udp
-RUSTFLAGS="--cfg oer_trace" CARGO_TARGET_DIR=target/instrumented/oer-espressif \
-  cargo clippy -p oer-espressif --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,observe,udp
+cargo test -p oer
+cargo clippy -p oer --all-targets
+cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,udp
+RUSTFLAGS="--cfg oer_trace" CARGO_TARGET_DIR=target/instrumented/oer \
+  cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,observe,udp
 ```

@@ -9,7 +9,7 @@
 use crate::modem::values::{
     ExternalCoexFlag, ExternalCoexGrantDelay, ExternalCoexNibble, ExternalCoexSync,
 };
-use oer_esp32s31_pac::coex::pti::WorkMode;
+use oer_chips_esp32s31_pac::coex::pti::WorkMode;
 
 /// Signal wires between the chip and the external radio
 /// (`external_coex_wire_t`).
@@ -58,11 +58,11 @@ fn flag(value: bool) -> ExternalCoexFlag {
 }
 
 /// One finite external-coexistence transaction over its exclusive part.
-pub struct ExternalCoexControl<'a, P: oer_mmio::Placement> {
-    block: &'a mut oer_esp32s31_pac::coex::CoexExternal<P>,
+pub struct ExternalCoexControl<'a, P: oer_portable_mmio::Placement> {
+    block: &'a mut oer_chips_esp32s31_pac::coex::CoexExternal<P>,
 }
-impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
-    pub(crate) fn new(block: &'a mut oer_esp32s31_pac::coex::CoexExternal<P>) -> Self {
+impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
+    pub(crate) fn new(block: &'a mut oer_chips_esp32s31_pac::coex::CoexExternal<P>) -> Self {
         Self { block }
     }
     /// `hal_set_extern_pti_mode(role)` with the wire count of
@@ -76,34 +76,34 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
-            w.set_sync(oer_mmio::Bits::truncate((sync(0)).get()));
+            w.set_sync(oer_portable_mmio::Bits::truncate((sync(0)).get()));
         });
         block.modify_pti(|w| {
             w.set_work_mode(match role {
                 ExternalCoexRole::Leader => {
-                    oer_mmio::Bits::constant::<{ WorkMode::Leader.bits() }>()
+                    oer_portable_mmio::Bits::constant::<{ WorkMode::Leader.bits() }>()
                 }
                 ExternalCoexRole::Follower => {
-                    oer_mmio::Bits::constant::<{ WorkMode::Follower.bits() }>()
+                    oer_portable_mmio::Bits::constant::<{ WorkMode::Follower.bits() }>()
                 }
             });
         });
         match role {
             ExternalCoexRole::Leader => block.modify_control(|w| {
-                w.set_sync(oer_mmio::Bits::truncate((sync(0x14)).get()));
+                w.set_sync(oer_portable_mmio::Bits::truncate((sync(0x14)).get()));
             }),
             ExternalCoexRole::Follower => {
                 let one_wire = wires == ExternalCoexWires::One;
                 block.modify_pti(|w| {
-                    w.set_bits_24_27_opaque(oer_mmio::Bits::truncate((nibble(1)).get()));
+                    w.set_bits_24_27_opaque(oer_portable_mmio::Bits::truncate((nibble(1)).get()));
                 });
                 block.modify_pti(|w| {
-                    w.set_bits_20_23_opaque(oer_mmio::Bits::truncate(
+                    w.set_bits_20_23_opaque(oer_portable_mmio::Bits::truncate(
                         (nibble(if one_wire { 1 } else { 8 })).get(),
                     ));
                 });
                 block.modify_pti(|w| {
-                    w.set_bits_16_19_opaque(oer_mmio::Bits::truncate(
+                    w.set_bits_16_19_opaque(oer_portable_mmio::Bits::truncate(
                         (nibble(if one_wire { 1 } else { 0xc })).get(),
                     ));
                 });
@@ -121,8 +121,8 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
-            w.set_grant_delay_low(oer_mmio::Bits::truncate(0));
-            w.set_grant_delay(oer_mmio::Bits::truncate(delay.get()));
+            w.set_grant_delay_low(oer_portable_mmio::Bits::truncate(0));
+            w.set_grant_delay(oer_portable_mmio::Bits::truncate(delay.get()));
         });
         block.modify_control(|w| {
             w.set_validate_high((flag(validate_high)).get() != 0);
@@ -142,33 +142,33 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
             ExternalCoexRole::Follower => {
                 let full = !matches!(wires, ExternalCoexWires::One | ExternalCoexWires::Four);
                 block.modify_pti(|w| {
-                    w.set_advanced_priority(oer_mmio::Bits::truncate(
+                    w.set_advanced_priority(oer_portable_mmio::Bits::truncate(
                         (nibble(if full { 0xf } else { 0 })).get(),
                     ));
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_2(oer_mmio::Bits::truncate((nibble(0)).get()));
+                    w.set_priority_2(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_1(oer_mmio::Bits::truncate((nibble(0xf)).get()));
+                    w.set_priority_1(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_0(oer_mmio::Bits::truncate((nibble(0)).get()));
+                    w.set_priority_0(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
                 });
             }
             ExternalCoexRole::Leader => {
                 let [first, second, third] = priorities;
                 block.modify_pti(|w| {
-                    w.set_advanced_priority(oer_mmio::Bits::truncate((nibble(0)).get()));
+                    w.set_advanced_priority(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_2(oer_mmio::Bits::truncate((first.0).get()));
+                    w.set_priority_2(oer_portable_mmio::Bits::truncate((first.0).get()));
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_1(oer_mmio::Bits::truncate((second.0).get()));
+                    w.set_priority_1(oer_portable_mmio::Bits::truncate((second.0).get()));
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_0(oer_mmio::Bits::truncate((third.0).get()));
+                    w.set_priority_0(oer_portable_mmio::Bits::truncate((third.0).get()));
                 });
             }
         }
@@ -180,26 +180,26 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
         let block = &mut *self.block;
         if role == ExternalCoexRole::Follower {
             block.modify_pti(|w| {
-                w.set_bits_24_27_opaque(oer_mmio::Bits::truncate((nibble(0xf)).get()));
+                w.set_bits_24_27_opaque(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
             });
             block.modify_pti(|w| {
-                w.set_bits_20_23_opaque(oer_mmio::Bits::truncate((nibble(0xf)).get()));
+                w.set_bits_20_23_opaque(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
             });
             block.modify_pti(|w| {
-                w.set_bits_16_19_opaque(oer_mmio::Bits::truncate((nibble(0xf)).get()));
+                w.set_bits_16_19_opaque(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
             });
         }
         block.modify_pti(|w| {
-            w.set_advanced_priority(oer_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_advanced_priority(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
         });
         block.modify_pti(|w| {
-            w.set_priority_2(oer_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_priority_2(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
         });
         block.modify_pti(|w| {
-            w.set_priority_1(oer_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_priority_1(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
         });
         block.modify_pti(|w| {
-            w.set_priority_0(oer_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_priority_0(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
         });
     }
 
@@ -210,10 +210,10 @@ impl<'a, P: oer_mmio::Placement> ExternalCoexControl<'a, P> {
         let block = &mut *self.block;
         let mask = nibble(if enabled { 0xf } else { 0 });
         block.modify_enable_mask_0(|w| {
-            w.set_mask(oer_mmio::Bits::truncate((mask).get()));
+            w.set_mask(oer_portable_mmio::Bits::truncate((mask).get()));
         });
         block.modify_enable_mask_1(|w| {
-            w.set_mask(oer_mmio::Bits::truncate((mask).get()));
+            w.set_mask(oer_portable_mmio::Bits::truncate((mask).get()));
         });
         block.modify_enable_1(|w| {
             w.set_enable((flag(enabled)).get() != 0);
@@ -263,7 +263,7 @@ impl super::SharedRadioRegisters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_pac::{coex::CoexExternal, instances};
+    use oer_chips_esp32s31_pac::{coex::CoexExternal, instances};
     use std::vec;
     #[test]
     fn grant_delay_replaces_the_entire_vendor_byte_and_keeps_all_other_words() {

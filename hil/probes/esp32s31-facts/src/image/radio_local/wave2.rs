@@ -8,7 +8,7 @@ fn wifi_enable(s: &mut Session<'_>, lane: u32, enabled: bool) {
             .set_tsf_timer_3(lane == 3 && enabled)
             .set_tbtt_0(lane == 4 && enabled);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn wifi_observe(s: &Session<'_>, tag: u32) -> u32 {
     let r = s.radio.power.read_raw();
@@ -56,7 +56,7 @@ fn wifi_pending(s: &mut Session<'_>, lane: u32) {
     wifi_enable(s, lane, false);
     wifi_observe(s, 0x22030);
     s.radio.power.acknowledge_mac_power_interrupt(sample);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     wifi_observe(s, 0x22040);
     wifi_enable(s, lane, true);
     window();
@@ -127,17 +127,17 @@ fn timer(s: &mut Session<'_>, n: u32) {
         control.target_high().get(),
         u32::from(control.timer_enable()) + 2 * u32::from(control.wakeup_enable()),
     );
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut r = s.radio.power.read_raw();
     while !(if n == 2 {
         r.tsf_timer_2()
     } else {
         r.tsf_timer_3()
-    }) && oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
+    }) && oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
     {
         r = s.radio.power.read_raw();
     }
-    emit(0x22010, n, oer_riscv::cycle32().wrapping_sub(start), 0);
+    emit(0x22010, n, oer_portable_riscv::cycle32().wrapping_sub(start), 0);
     timer_counter(s, n, 0x22014);
     s.radio.timer.modify_control(i, |w| {
         w.set_timer_enable(false);
@@ -191,11 +191,11 @@ pub(in crate::image) fn tbtt(s: &mut Session<'_>) {
     });
     wifi_enable(s, 4, true);
     wifi_observe(s, 0x22000);
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while !s.radio.power.read_raw().tbtt_0()
-        && oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
     {}
-    emit(0x22010, 4, oer_riscv::cycle32().wrapping_sub(start), 0);
+    emit(0x22010, 4, oer_portable_riscv::cycle32().wrapping_sub(start), 0);
     station(s, 0x22014);
     s.radio.rtc.modify_sta_tsf_control(|w| {
         w.set_sta_tbtt_enable(false);
@@ -213,7 +213,7 @@ fn zb_enable(s: &mut Session<'_>, enabled: bool) {
     s.radio.zb.ieee802154_mac_task.modify_event_enable(|w| {
         w.set_rx_abort(enabled).set_ed_done(enabled);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn zb_observe(s: &Session<'_>, tag: u32) -> u32 {
     let r = s.radio.zb.ieee802154_mac_irq.read_event_status();
@@ -282,8 +282,8 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
             .ieee802154_mac_task
             .write_command(Opcode::Stop, |_| {});
     }
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
         let r = s.radio.zb.ieee802154_mac_irq.read_event_status();
         if r.ed_done() || r.rx_abort() {
             break;
@@ -292,7 +292,7 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
     emit(
         0x22318,
         u32::from(stop),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     let positive = zb_observe(s, 0x22320);
@@ -312,7 +312,7 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
             .zb
             .ieee802154_mac_irq
             .acknowledge_event_status(sample);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         zb_observe(s, 0x22350);
         zb_enable(s, true);
         zb_observe(s, 0x22360);
@@ -329,8 +329,8 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
             .ieee802154_mac_task
             .write_command(Opcode::Stop, |_| {});
     }
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
         let r = s.radio.zb.ieee802154_mac_irq.read_event_status();
         if r.ed_done() || r.rx_abort() {
             break;
@@ -342,7 +342,7 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
         .ieee802154_mac_task
         .write_command(Opcode::Stop, |_| {});
     zb_clear(s);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     zb_observe(s, 0x22380);
     zb_clear(s);
     zb_enable(s, false);

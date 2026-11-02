@@ -1,25 +1,25 @@
 # LAB service
 
-`oer-tool-lab-service` is the one owner of the stand: one process per host
+`oer-tools-lab-service` is the one owner of the stand: one process per host
 holds its queue, its leases and every access to its hardware. `cargo stand`,
 `cargo fw` and `cargo hil` are its clients; they build images, run
 scenarios and their own commands, judge results, and ask the service for
 every lease and every operation on a board, a hub port or the router. They
-build against its protocol and client ([`oer-lab-client`](../client/README.md))
+build against its protocol and client ([`oer-tools-lab-client`](../client/README.md))
 only: the service, the board drivers and the router's SSH stay out of their
-builds (`oer-test-layers` checks the lock). The tools are trusted: nothing
+builds (`oer-tools-test-layers` checks the lock). The tools are trusted: nothing
 keeps a process from opening a port or the router's SSH itself, and nothing
 needs to.
 
 ## Running it
 
-`cargo stand install` builds `oer-tool-lab-service` from `main` and installs
+`cargo stand install` builds `oer-tools-lab-service` from `main` and installs
 two systemd user units:
 
 - `oer-lab.socket` holds the stand model's socket,
   `$XDG_RUNTIME_DIR/open-esp-radio/lab.sock`, and hands it to the service: a
   client that connects while the service restarts waits for it.
-- `oer-lab.service` runs `oer-tool-lab-service --root CLONE` from the time
+- `oer-lab.service` runs `oer-tools-lab-service --root CLONE` from the time
   the user logs in.
 
 Started by hand without a socket handed over, the service binds the socket
@@ -33,7 +33,7 @@ service of another protocol cannot be asked: the update stops with the
 installation unchanged.
 
 The service's state lives in `$XDG_STATE_HOME/open-esp-radio/arbiter`
-([`oer-lab-arbiter`](../arbiter/README.md)): the restrictions on the stand
+([`oer-tools-lab-arbiter`](../arbiter/README.md)): the restrictions on the stand
 must survive what a cache may lose. Before the stand file exists (`cargo
 stand init` writes it) the stand has no resource; `Request::Reload` reads it
 once it does.
@@ -88,8 +88,8 @@ held as abandoned and recovers its resources before granting them again.
 
 ## Drivers
 
-[`stand`](src/stand.rs) drives the real stand through `oer-lab-board` and
-`oer-lab-router`. A board's radio works only on its image's command, so a
+[`stand`](src/stand.rs) drives the real stand through `oer-tools-lab-board` and
+`oer-tools-lab-router`. A board's radio works only on its image's command, so a
 board has no end state to prove, and an operation on a board (a flash, a
 reset, a console, a power cycle) needs only the board: the air is claimed
 by the run that commands a radio (a HIL scenario declares it). A router
@@ -125,7 +125,7 @@ the air, shared at least.
   (`iwinfo nl80211 phyname`). Both views must answer; one that fails
   leaves the router unavailable, never parked. A run's profile enables the
   section again. Its operations are the logic of
-  `oer-lab-router`: the AP profile on a channel the stand file allows (its
+  `oer-tools-lab-router`: the AP profile on a channel the stand file allows (its
   isolated network forwarding UDP and TCP with one host when the run names
   it), the station, DHCP and ping views, the station network's DHCP server
   stopped or serving, the WPA2 checks, a deauthentication, the
@@ -137,7 +137,7 @@ the air, shared at least.
 ## Checks
 
 ```console
-cargo test -p oer-tool-lab-service
+cargo test -p oer-tools-lab-service
 ```
 
 The tests run the service in the test process with fake drivers and talk to

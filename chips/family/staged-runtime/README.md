@@ -1,6 +1,6 @@
 # Espressif staged runtime
 
-`oer-espressif-staged-runtime` owns stage-two entry, SRAM initialization,
+`oer-chips-family-staged-runtime` owns stage-two entry, SRAM initialization,
 traps, vector tables, hart-local critical sections, interrupt stacks and
 retained panic/fatal reporting. Chip access uses the platform port selected
 by the image's `entry!` parameter. Build-time chip facts generate each hart's
@@ -42,7 +42,7 @@ leaves a hart masked with its grant unused.
 CPU-exception handler. The image
 passes the HAL reset root's unstarted runtime partition to `adoption::run`,
 with its composition binding, interrupt table, board mapping adapter and
-previous-fault reporter. The runner calls `oer-espressif-boot::adoption::initialize`
+previous-fault reporter. The runner calls `oer-chips-family-boot::adoption::initialize`
 for CPU-rate/clock adoption, console/core/debug installation, runtime watchdog
 arming and interrupt-owner publication. Isolated verifiers call that same driver
 without linking the runtime. The HAL split performs no startup effects.
@@ -112,7 +112,7 @@ claim and every slot it commits remain held until reset. The same terminal
 may commit supplemental hook observations in separate slots of the same format.
 A losing terminal requests reset without invoking another recorder.
 
-Every staged fault slot uses `oer-diagnostics::fault::Record`, layout version 1:
+Every staged fault slot uses `oer-portable-diagnostics::fault::Record`, layout version 1:
 eight numeric header words (completion, version, payload length, registry class,
 domain, reason, captured hart or an unavailable sentinel, and context), 280
 payload bytes and a checksum, 316 bytes in total. The largest payload is the existing HIL postmortem snapshot. Commit
@@ -124,7 +124,7 @@ clears nothing. Every other retained fault is reported by `adoption::run`
 after the console's parts are installed. The diagnostics renderers clear an
 ordinary panic only after whole output of its exact snapshot; named faults and
 image reporters likewise clear only after their complete output went out whole
-(`oer_diagnostics::Written::Whole`: the FIFO took every byte and sending
+(`oer_portable_diagnostics::Written::Whole`: the FIFO took every byte and sending
 started, the host's receipt is not observed). A dropped, refused or partly
 written report keeps the record for a later boot.
 HIL acknowledges its platform panic and postmortem after the full boot-evidence
@@ -132,7 +132,7 @@ frame and CRLF are written. Output refusal retains diagnostic bytes. A new boot'
 first terminal may replace an unreported older record. Retention is best effort;
 checksums are not a power-loss or `ResetRtc` retention guarantee.
 
-Chip composition owns PHY and Wi-Fi fault records (`oer-esp32s31-compose`).
+Chip composition owns PHY and Wi-Fi fault records (`oer-chips-esp32s31-compose`).
 The runtime's generic `fatal::reset_recording` performs their final reset;
 protocol cores do not acquire that policy. The
 [bootstrap](../staged-bootstrap/README.md) owns cold initialization and

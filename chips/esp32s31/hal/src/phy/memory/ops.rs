@@ -4,8 +4,8 @@
 #![forbid(unsafe_code)]
 
 use crate::phy::registers::{ClockRegisters, PhyPlacement};
-use oer_esp32s31_pac::fe::PhyMemory;
-use oer_mmio::{Bits, Index, Placement};
+use oer_chips_esp32s31_pac::fe::PhyMemory;
+use oer_portable_mmio::{Bits, Index, Placement};
 
 /// Parameter-dependent first PBUS table word (`phy_set_pbus_mem`).
 ///

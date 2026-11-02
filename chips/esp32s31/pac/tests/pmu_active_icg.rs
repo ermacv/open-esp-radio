@@ -1,5 +1,5 @@
 //! Active modem selection changes its field and preserves the inherited word.
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     instances,
     pmu::{PmuRadio, hp_active_icg_modem},
 };

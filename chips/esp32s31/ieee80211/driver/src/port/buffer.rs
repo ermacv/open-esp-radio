@@ -1,7 +1,7 @@
 use super::keys::RawKeyIdentity;
 use super::*;
 use crate::mac::tx::TxBacking;
-use oer_memory::StableDmaBacking as _;
+use oer_portable_memory::StableDmaBacking as _;
 
 pub struct BufferClass<const B: usize>;
 impl<const B: usize> TxBufferClass for BufferClass<B> {
@@ -15,7 +15,7 @@ pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observ
     pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
 }
-type ReturnRight<const B: usize> = oer_memory::ReturnToken<'static, TxBacking<B>>;
+type ReturnRight<const B: usize> = oer_portable_memory::ReturnToken<'static, TxBacking<B>>;
 
 /// One buffer place's pool buffer and its sole right of return, held
 /// together: memory never exists here without its right.
@@ -128,7 +128,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, I
     pub fn index(&self) -> u8 {
         self.mpdu.buffer.index()
     }
-    pub fn packet_number(&self) -> Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber> {
+    pub fn packet_number(&self) -> Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber> {
         self.mpdu.pn
     }
     pub fn body(&self) -> Option<&D::Body> {
@@ -161,7 +161,7 @@ pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observat
     pub(super) layout: MpduLayout,
     pub(super) body: Option<D::Body>,
     pub(super) key: Option<RawKeyIdentity>,
-    pub(super) pn: Option<oer_ieee80211_wire::ccmp::CcmpPacketNumber>,
+    pub(super) pn: Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber>,
     pub(super) role: VifRole,
     pub(super) published: bool,
 }
@@ -455,7 +455,7 @@ mod tests {
     use super::*;
     use std::boxed::Box;
 
-    type Bank = oer_memory::ReturnBank<TxBacking<512>, 1>;
+    type Bank = oer_portable_memory::ReturnBank<TxBacking<512>, 1>;
 
     /// A bank whose one place holds a free model buffer.
     fn bank() -> &'static Bank {

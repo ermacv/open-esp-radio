@@ -28,7 +28,7 @@ pub const BLUETOOTH_BLE_PHY_ENVIRONMENT_BYTES: usize = BlePhyEnvironment::SIZE;
 /// Bytes in one recovered resolving-list hardware allocation.
 pub const BLUETOOTH_BLE_PHY_RESOLVING_LIST_BYTES: usize = BleResolvingList::SIZE;
 
-const TX_POWER_LEVELS: [i8; 16] = oer_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
+const TX_POWER_LEVELS: [i8; 16] = oer_chips_esp32s31_knowledge::tx_power::TX_POWER_LEVELS_DBM;
 const TX_POWER_LEVELS_BYTES: usize = TX_POWER_LEVELS.len();
 /// SOURCE: pinned BLE PHY allocation, resolving-list initial opaque head.
 const RESOLVING_LIST_INITIAL_HEAD: BleResolvingListWord0000Opaque =

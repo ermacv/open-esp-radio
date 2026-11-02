@@ -6,7 +6,7 @@
 
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicU8, Ordering};
-use oer_time::settle::Settle;
+use oer_portable_time::settle::Settle;
 
 use crate::ieee80211::dma::ring_index::RingIndex;
 
@@ -122,8 +122,8 @@ pub enum RxRingError {
     ResetRequired,
 }
 
-impl oer_diagnostics::DiagnosticPath for RxRingError {
-    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+impl oer_portable_diagnostics::DiagnosticPath for RxRingError {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
         path.name(match self {
             Self::Empty => "Empty",
             Self::Count => "Count",
@@ -481,7 +481,7 @@ impl RxObservedMask {
 /// generation authorizes nothing.
 ///
 /// ```compile_fail,E0451
-/// let _forged = oer_esp32s31_hal::ieee80211::dma::rx_ring::RxFrozenCursor {
+/// let _forged = oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxFrozenCursor {
 ///     last_descriptor_low: 0,
 ///     next_descriptor_low: 0,
 ///     descriptor_base: 0,
@@ -756,7 +756,7 @@ enum ReservedCursor {
 /// The token stays on its core: it is not `Sync`.
 /// ```compile_fail,E0277
 /// fn shared<T: Sync>() {}
-/// shared::<oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingLive<'static, 2>>();
+/// shared::<oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingLive<'static, 2>>();
 /// ```
 pub struct RxRingLive<'a, const COUNT: usize> {
     descriptors: &'a [RxDescriptor; COUNT],
@@ -2510,19 +2510,19 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// records its observation count in [`RxReloadEvidence::max_reload_attempts`].
     /// A settle rings the doorbell at most once more per appended tail, so
     /// this waits for at most two doorbells.
-    pub fn complete_pending_reload<M: RxDma, C: oer_time::Clock + ?Sized>(
+    pub fn complete_pending_reload<M: RxDma, C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         mmio: &mut M,
         settle: Settle<'_, C>,
     ) -> Result<(), RxRingError> {
         while self.pending_tail().is_some() {
             let mut attempts = 0_u32;
-            let settled = oer_time::settle::settle(settle, || {
+            let settled = oer_portable_time::settle::settle(settle, || {
                 attempts = attempts.saturating_add(1);
                 mmio.try_with_reload_settled(|_settled| ())
             });
             record_maximum(&self.arena.max_reload_attempts, attempts);
-            settled.map_err(|oer_time::settle::Unsettled| RxRingError::ReloadPending)?;
+            settled.map_err(|oer_portable_time::settle::Unsettled| RxRingError::ReloadPending)?;
             self.settle_reload(mmio)?;
         }
         Ok(())

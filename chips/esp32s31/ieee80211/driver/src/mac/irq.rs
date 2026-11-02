@@ -6,7 +6,7 @@ pub mod epoch;
 #[cfg(any(test, feature = "test-support"))]
 pub mod model;
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
     types::{
         MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,

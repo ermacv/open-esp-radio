@@ -5,13 +5,13 @@ use object::{
     SymbolScope,
     write::{Object, Relocation, Symbol, SymbolSection},
 };
-use oer_analysis_elf::{Code, Reference, Site};
-use oer_vendor_lineage::{
+use oer_tools_analysis_elf::{Code, Reference, Site};
+use oer_tools_vendor_lineage::{
     archive::{Revision, read_archive},
     correspond::{Evidence, Policy, correlate},
     lineage::{NameClass, trace},
 };
-use oer_vendor_provenance::fingerprint::Function;
+use oer_tools_vendor_provenance::fingerprint::Function;
 
 const R_RISCV_CALL: u32 = 18;
 const RET: [u8; 2] = [0x82, 0x80];

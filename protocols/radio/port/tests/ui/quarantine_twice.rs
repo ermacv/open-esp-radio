@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{HardwareStopped, Quarantine};
+use oer_protocols_radio_port::{HardwareStopped, Quarantine};
 pub fn stop(call: Quarantine) -> HardwareStopped {
     let stopped = call.stopped();
     #[cfg(ui_reject)]

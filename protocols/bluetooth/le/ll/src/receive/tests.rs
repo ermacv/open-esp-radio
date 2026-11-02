@@ -6,7 +6,7 @@ use crate::security::{
     LePeripheralEncryptionProcedure as Procedure, LePeripheralEncryptionRandom,
     LePeripheralEncryptionReceiveMode as Mode, LePeripheralEncryptionTermination as Termination,
 };
-use oer_bluetooth_le_cipher::LeLongTermKey;
+use oer_protocols_bluetooth_le_cipher::LeLongTermKey;
 
 use super::{PDU_CAPACITY, decode};
 

@@ -7,8 +7,8 @@
 //! without `CSMA_CA` and `TRANSMIT_RETRIES`, which belong above the port. No
 //! port backend in this repository publishes them.
 
-use oer_espressif_ieee802154_mac_values::Ieee802154MultipanIndex;
-use oer_ieee802154_port::{
+use oer_chips_family_ieee802154_mac_values::Ieee802154MultipanIndex;
+use oer_protocols_ieee802154_port::{
     CcaThresholdCapability, CslCapability, Ieee802154Capabilities, RadioCapabilities,
     TransmitPowerCapability, TransmitPowerLevels,
 };
@@ -17,8 +17,8 @@ use crate::pib::CCA_THRESHOLD_RANGE_DBM;
 
 /// Convert a validated chip level set into the portable port's vocabulary.
 pub const fn portable_tx_power_levels(
-    levels: oer_espressif_ieee802154_mac_values::Ieee802154TxPowerLevels<'static>,
-) -> Result<TransmitPowerLevels, oer_ieee802154_port::TransmitPowerLevelsError> {
+    levels: oer_chips_family_ieee802154_mac_values::Ieee802154TxPowerLevels<'static>,
+) -> Result<TransmitPowerLevels, oer_protocols_ieee802154_port::TransmitPowerLevelsError> {
     TransmitPowerLevels::new(levels.levels_dbm())
 }
 

@@ -253,7 +253,7 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
                 StationFrameError::TooManySupportedRates,
             ))?;
         copy_rates(self.access_point, rates);
-        let mut reader = oer_wire::Reader::new(rates);
+        let mut reader = oer_portable_wire::Reader::new(rates);
         let first_rates = reader.take(first_rates_len).map_err(|_| {
             AssociationRequestError::Frame(StationFrameError::TooManySupportedRates)
         })?;
@@ -379,7 +379,7 @@ pub fn parse_association_response(
     let mut remaining = information_elements;
     while let [id, length, ..] = *remaining {
         let length = usize::from(length);
-        let mut reader = oer_wire::Reader::new(remaining);
+        let mut reader = oer_portable_wire::Reader::new(remaining);
         let element = reader.take(length.checked_add(2)?).ok()?;
         let tail = reader.remaining();
         ht_capability |= id == 45 && length == 26;

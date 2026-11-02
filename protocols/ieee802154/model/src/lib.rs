@@ -23,15 +23,15 @@
     )
 )]
 
-//! An in-memory IEEE 802.15.4 backend on the owner shape ([`oer_ieee802154_port::owner`]),
+//! An in-memory IEEE 802.15.4 backend on the owner shape ([`oer_protocols_ieee802154_port::owner`]),
 //! for deterministic host tests and simulation.
 //!
 //! [`OwnedModel::new`] returns the backend, which a test hands to
-//! [`run_port`](oer_radio_port::run_port), and a [`ModelHandle`] that plays
+//! [`run_port`](oer_protocols_radio_port::run_port), and a [`ModelHandle`] that plays
 //! the air and the world: it ends operations and receive windows, delivers
 //! received frames, refuses the next enable or poisons the backend. Its held
 //! part of the install keeps the operation permit in a
-//! [`FifoPermitPool`](oer_radio_port::FifoPermitPool), and the body's resources give each
+//! [`FifoPermitPool`](oer_protocols_radio_port::FifoPermitPool), and the body's resources give each
 //! interface its seat in the pool's line.
 //!
 //! Its tokens have no value outside it: no caller mints a configured
@@ -52,23 +52,23 @@ use core::{
     task::{Poll, Waker},
 };
 
-use oer_ieee802154_port::{CancelError, RadioPortClient, RadioWork, Work};
-use oer_radio_port::{
+use oer_protocols_ieee802154_port::{CancelError, RadioPortClient, RadioWork, Work};
+use oer_protocols_radio_port::{
     BodyLoan, Call, ClockError, EnableResult, InstallParts, ModelSlotOwner, PhaseParts,
     PortBackend, PortPhase, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire, SlotStopped,
     SlotWakes,
 };
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     Child, DisableEnd, EventsLost, FifoPermitPool, Mint, Poisoned, PortResult, Root, Seat, Slot,
     StopDeadline,
 };
 
-use oer_ieee802154_wire::{Channel, Frame, FrameError};
+use oer_protocols_ieee802154_wire::{Channel, Frame, FrameError};
 
 mod storage;
 use storage::Local;
 
-use oer_ieee802154_port::{
+use oer_protocols_ieee802154_port::{
     CcaMode, CcaThresholdCapability, CslCapability, CslReceiver, EnhancedAckGeneration, FcsStatus,
     FrameCounterUpdate, FramePending, Ieee802154Capabilities, Ieee802154Instant, Ieee802154Radio,
     Interface, ProbingInitiator, RadioCapabilities, ReceivedFrame, RequestId, RxMetadata,
@@ -156,7 +156,7 @@ pub enum ModelFault {
         last: u32,
     },
     /// A terminal could not release its admitted capacity.
-    Completion(oer_ieee802154_port::owner::CompletionError),
+    Completion(oer_protocols_ieee802154_port::owner::CompletionError),
     /// Accounting refused admission; the request was not published.
     Admission {
         /// Refused interface.
@@ -330,7 +330,7 @@ struct State {
     interfaces: [InterfaceState; MODEL_INTERFACES],
     radio: RadioWide,
     operation: Option<(Interface, RequestId, Kind)>,
-    tx_security: Option<oer_ieee802154_port::TxSecurity>,
+    tx_security: Option<oer_protocols_ieee802154_port::TxSecurity>,
     events: VecDeque<Result<ModelEvent, EventsLost>>,
     /// A loss marker is queued and not yet taken.
     lost: bool,
@@ -637,7 +637,7 @@ pub struct ModelHeld<Id: SlotIdentity> {
     permits: OperationPermits<'static, OperationPool<Id>, Child<Root<Id>, 2>>,
 }
 
-type LentPermits<'p, Id> = oer_ieee802154_port::owner::LentWorkPermits<
+type LentPermits<'p, Id> = oer_protocols_ieee802154_port::owner::LentWorkPermits<
     'p,
     Operation,
     OperationPool<Id>,
@@ -814,7 +814,7 @@ impl<'id, Id: SlotIdentity> Ieee802154Control<'id> for ModelControl<'_, 'id, Id>
 pub struct ModelEvents<'a, 'id, Id: SlotIdentity> {
     shared: &'a Shared,
     held: &'a LentPermits<'id, Id>,
-    end: &'a mut Option<oer_radio_port::EventEnd<ModelFault>>,
+    end: &'a mut Option<oer_protocols_radio_port::EventEnd<ModelFault>>,
 }
 
 impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
@@ -824,7 +824,7 @@ impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
     fn next_event(
         &mut self,
     ) -> impl Future<
-        Output = Result<Result<ModelEvent, EventsLost>, oer_radio_port::EventEnd<ModelFault>>,
+        Output = Result<Result<ModelEvent, EventsLost>, oer_protocols_radio_port::EventEnd<ModelFault>>,
     > + '_ {
         poll_fn(|context| {
             if let Some(end) = *self.end {
@@ -841,7 +841,7 @@ impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
                     return Poll::Ready(Ok(event));
                 }
                 if let Some(cause) = state.poisoned {
-                    return Poll::Ready(Err(oer_radio_port::EventEnd::Drained { cause }));
+                    return Poll::Ready(Err(oer_protocols_radio_port::EventEnd::Drained { cause }));
                 }
                 state.register_consumer(waker.clone());
                 Poll::Pending
@@ -856,7 +856,7 @@ impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
                             state.events.push_front(Ok(event));
                             state.poisoned = Some(cause);
                         });
-                        let end = oer_radio_port::EventEnd::Quarantined { cause };
+                        let end = oer_protocols_radio_port::EventEnd::Quarantined { cause };
                         *self.end = Some(end);
                         return Poll::Ready(Err(end));
                     }
@@ -1304,14 +1304,14 @@ pub struct ModelFrontend<'p, Id: SlotIdentity> {
     held: LentPermits<'p, Id>,
     pool: &'p OperationPool<Id>,
     loan: BodyLoan<'p, Id, OwnedModel<Id>>,
-    end: Option<oer_radio_port::EventEnd<ModelFault>>,
+    end: Option<oer_protocols_radio_port::EventEnd<ModelFault>>,
 }
 
 impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     type Pools = (
-        oer_ieee802154_port::owner::InterfacePool<ModelCaps, 0, MODEL_PENDING_SLOTS>,
-        oer_ieee802154_port::owner::InterfacePool<ModelCaps, 1, MODEL_PENDING_SLOTS>,
-        oer_radio_port::Permits<Operation, 1, MODEL_INTERFACES>,
+        oer_protocols_ieee802154_port::owner::InterfacePool<ModelCaps, 0, MODEL_PENDING_SLOTS>,
+        oer_protocols_ieee802154_port::owner::InterfacePool<ModelCaps, 1, MODEL_PENDING_SLOTS>,
+        oer_protocols_radio_port::Permits<Operation, 1, MODEL_INTERFACES>,
     );
     type Queues = Option<ModelQueues<Id>>;
     const VACANT_QUEUES: Self::Queues = None;
@@ -1353,14 +1353,14 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     fn split<'s>(
         queues: &'s mut Self::Queues,
         _: SlotWakes<'s, Id>,
-    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_radio_port::SlotInitError>
+    ) -> Result<(Self::Frontend<'s>, Self::Invocation<'s>), oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
     {
         let queues = queues
             .as_mut()
-            .ok_or(oer_radio_port::SlotInitError::QueuesUnprepared)?;
+            .ok_or(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)?;
         Ok((
             ModelFrontendRaw {
                 shared: queues.shared.clone(),
@@ -1383,7 +1383,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
         retire.wait().await;
         if !matches!(held.permits.in_flight(), Ok(None)) {
             // An undelivered admitted owner cannot authorize a fresh mint.
-            retire.request_failure(oer_radio_port::LifecycleError::StopUnconfirmed);
+            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
             core::future::pending::<()>().await;
         }
         end_world(&self.shared);
@@ -1401,14 +1401,14 @@ impl<Id: SlotIdentity> SlotOwner<Id> for OwnedModel<Id> {
     }
 }
 #[cfg(any(test, feature = "test-support"))]
-impl<Id: SlotIdentity> oer_radio_port::conformance::registration::MockCleanup<Id>
+impl<Id: SlotIdentity> oer_protocols_radio_port::conformance::registration::MockCleanup<Id>
     for OwnedModel<Id>
 {
     fn abandon<'s>(
         &mut self,
         _: Option<&mut Self::Invocation<'s>>,
-        authority: oer_radio_port::Quarantine,
-    ) -> oer_radio_port::Abandon
+        authority: oer_protocols_radio_port::Quarantine,
+    ) -> oer_protocols_radio_port::Abandon
     where
         Self: 's,
         Id: 's,
@@ -1421,7 +1421,7 @@ impl<Id: SlotIdentity> oer_radio_port::conformance::registration::MockCleanup<Id
             state.wake_consumer();
             state.clear_wakers();
         });
-        oer_radio_port::Abandon::Stopped(authority.stopped())
+        oer_protocols_radio_port::Abandon::Stopped(authority.stopped())
     }
 }
 
@@ -1451,7 +1451,7 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
     fn lend<'p, 's>(
         raw: &'p mut Self::Frontend<'s>,
         loan: BodyLoan<'p, Id, Self>,
-    ) -> Result<Self::Body<'p>, oer_radio_port::SlotInitError>
+    ) -> Result<Self::Body<'p>, oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,
@@ -1460,7 +1460,7 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
         let resources =
             raw.resources
                 .take()
-                .ok_or(oer_radio_port::SlotInitError::MissingResource(
+                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
                     "802.15.4 resources",
                 ))?;
         let lend_interface =

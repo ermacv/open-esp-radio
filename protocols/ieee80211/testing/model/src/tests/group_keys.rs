@@ -1,8 +1,8 @@
 use super::*;
-use oer_ieee80211_testing_conformance::group_keys as contract;
+use oer_protocols_ieee80211_testing_conformance::group_keys as contract;
 #[cfg(feature = "test-support")]
-use oer_time::{Clock, Timer};
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::{Clock, Timer};
+use oer_portable_time_virtual::VirtualClock;
 
 mod ingress;
 #[cfg(feature = "test-support")]
@@ -27,7 +27,7 @@ impl CoreGroupNumbers {
             self.0.push((
                 key.identity.clone(),
                 TestPacketNumbers::new(
-                    oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
+                    oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
                 ),
             ));
             self.0.len() - 1
@@ -40,8 +40,8 @@ impl CoreGroupNumbers {
         last: u64,
     ) {
         let counter = TestPacketNumbers::continuing_after(
-            oer_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
-            oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
+            oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE,
+            oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(last).unwrap(),
         );
         let _ = self.counter(key);
         let i = self
@@ -102,7 +102,7 @@ impl Work for Boundary<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         use contract::Case;
@@ -169,7 +169,7 @@ impl Work for Boundary<'_> {
                 phase.station().select_group_key(permission, a)
             }
         }
-        let admitted_at = oer_time::Instant::from_micros(self.air.monotonic_now().as_micros());
+        let admitted_at = oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros());
         self.finish(
             phase,
             (original, submitted_slot),
@@ -189,7 +189,7 @@ impl Boundary<'_> {
         self,
         phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
         (original, submitted_slot): (contract::Installation, u8),
-        (writes, admitted_at): (usize, oer_time::Instant),
+        (writes, admitted_at): (usize, oer_portable_time::Instant),
         old: [u8; 16],
         new: [u8; 16],
         retained: Option<ModelGroupKey<'id, ModelBackend<Id>, Station>>,
@@ -223,7 +223,7 @@ impl Boundary<'_> {
         }
         self.air.receive_continuously(&[0], meta());
         self.clock
-            .wait_for(oer_time::Duration::from_micros(100))
+            .wait_for(oer_portable_time::Duration::from_micros(100))
             .await
             .unwrap();
         self.air.hold_group_commands(false);
@@ -255,7 +255,7 @@ impl Boundary<'_> {
             }
         };
         events.push(Event::Terminal(numbers.snapshot(&key)));
-        let completed_at = oer_time::Instant::from_micros(self.air.monotonic_now().as_micros());
+        let completed_at = oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros());
         let continuous_rx_at_terminal = self.air.rx_stream.inspect().is_some();
         self.air.stop_continuous_receive();
         let inactive = if self.case == contract::Case::SelectCurrent {
@@ -313,8 +313,8 @@ impl contract::Harness for Harness<'_> {
     type Events = Vec<contract::Event>;
     type Completions = Vec<contract::Completion>;
     type Retained = Vec<contract::Owners>;
-    const GROUP_COMMAND_BOUND: oer_time::Duration = MODEL_GROUP_COMMAND_BOUND;
-    const SCENARIO_BOUND: oer_time::Duration = oer_time::Duration::from_millis(20);
+    const GROUP_COMMAND_BOUND: oer_portable_time::Duration = MODEL_GROUP_COMMAND_BOUND;
+    const SCENARIO_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(20);
     async fn exercise(&mut self, case: contract::Case) -> contract::Trace<Self::Events> {
         let (backend, air) = backend_on(self.0.clone());
         let trace = RefCell::new(None);
@@ -344,7 +344,7 @@ fn common_gtk_boundary_suite_covers_delayed_ingress_and_retained_selection() {
         contract::check(
             &mut Harness(&clock),
             &*clock,
-            oer_ieee80211_testing_conformance::Environment::Model,
+            oer_protocols_ieee80211_testing_conformance::Environment::Model,
         ),
         &clock,
     )
@@ -488,7 +488,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Interrupted<'_> {
     {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -553,7 +553,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Interrupted<'_> {
             .await;
         if self.fault.is_some() {
             assert!(terminals.is_empty());
-            let Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) = disabled else {
+            let Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) = disabled else {
                 panic!("hardware uncertainty cannot return an ordinary owner")
             };
             Ended::fail_stop(poisoned.fail_stop(), ())
@@ -607,7 +607,7 @@ impl Work for Deadline<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [slot, _] = resources.station_group;
@@ -673,7 +673,7 @@ impl Work for IndependentIds<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [a, b] = resources.station_group;
@@ -775,7 +775,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Teardown<'_> {
     {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -816,7 +816,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Teardown<'_> {
                 (),
             ),
             EndInstallation::PoisonedUninstall => {
-                let Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) = owner
+                let Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) = owner
                     .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
                     .await
                 else {
@@ -889,7 +889,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReenableGroup<'_> {
     {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -962,7 +962,7 @@ impl Work for Admission<'_> {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let [slot, _] = resources.station_group;

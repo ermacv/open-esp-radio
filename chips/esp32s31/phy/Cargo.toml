@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-phy"
+name = "oer-chips-esp32s31-phy"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,21 +11,21 @@ description = "Allocation-free Rust ESP32-S31 PHY state machines"
 radio-health = []
 
 [dependencies]
-oer-espressif-phy = { path = "../../family/phy" }
-oer-espressif-ieee802154-engine = { path = "../../family/ieee802154-engine" }
-oer-espressif-analog = { path = "../../family/analog" }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-time = { path = "../../../portable/time" }
-oer-cooperate = { path = "../../../portable/cooperate" }
-oer-memory = { path = "../../../portable/memory" }
-oer-espressif-interrupt-table = { path = "../../family/interrupt-table" }
+oer-chips-family-phy = { path = "../../family/phy" }
+oer-chips-family-ieee802154-engine = { path = "../../family/ieee802154-engine" }
+oer-chips-family-analog = { path = "../../family/analog" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-cooperate = { path = "../../../portable/cooperate" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-chips-family-interrupt-table = { path = "../../family/interrupt-table" }
 pin-project-lite = "0.2.17"
-oer-esp32s31-hal = { path = "../hal" }
+oer-chips-esp32s31-hal = { path = "../hal" }
 
 [dev-dependencies]
-oer-espressif-interrupt-table = { path = "../../family/interrupt-table", features = ["host-signal"] }
-oer-time-virtual = { path = "../../../portable/time-virtual" }
-oer-esp32s31-hal = { path = "../hal", features = ["test-support"] }
+oer-chips-family-interrupt-table = { path = "../../family/interrupt-table", features = ["host-signal"] }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
+oer-chips-esp32s31-hal = { path = "../hal", features = ["test-support"] }
 
 [lints]
 workspace = true

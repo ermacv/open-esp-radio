@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::association::{BlockAckSlot, BlockAckSlots, RxBlockAckPool};
-use oer_radio_port::PoolPath;
+use oer_protocols_ieee80211_contracts_port::association::{BlockAckSlot, BlockAckSlots, RxBlockAckPool};
+use oer_protocols_radio_port::PoolPath;
 
 /// A pool a backend would declare to claim a capacity it does not mint.
 pub struct Declared;

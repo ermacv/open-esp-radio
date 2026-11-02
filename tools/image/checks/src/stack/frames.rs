@@ -4,10 +4,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
-use oer_chip_profile::policy::{FrameException, StackPolicy};
+use oer_tools_chip_profile::policy::{FrameException, StackPolicy};
 
 use super::{Image, Result};
-use oer_image_bundle::CheckedElf;
+use oer_tools_image_bundle::CheckedElf;
 
 pub const RUNTIME_REPORT: &str = "runtime-frames.txt";
 pub const BOOTSTRAP_REPORT: &str = "bootstrap-frames.txt";
@@ -31,7 +31,7 @@ impl<'a> FrameAudit<'a> {
         for function in &image.functions {
             for alias in &function.names {
                 names
-                    .entry(oer_analysis_elf::demangle(alias))
+                    .entry(oer_tools_analysis_elf::demangle(alias))
                     .or_default()
                     .insert(function.address);
             }

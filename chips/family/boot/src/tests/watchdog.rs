@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use std::vec::Vec;
 
-use oer_espressif_watchdog::{
+use oer_chips_family_watchdog::{
     Access, LOCK, MainWatchdogEnable, RtcWatchdogRegisters, SuperWatchdogRegisters, WRITE_KEY,
     WriteProtected,
 };

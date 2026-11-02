@@ -10,7 +10,7 @@
 //!
 
 use crate::ll::Ieee802154LowLevel;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154DebugCounter, Ieee802154Event, Ieee802154EventMask,
 };
 

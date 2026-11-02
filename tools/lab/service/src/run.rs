@@ -8,8 +8,8 @@
 
 use std::{os::unix::net::UnixListener, path::PathBuf, sync::Arc};
 
-use oer_lab_arbiter::Arbiter;
-use oer_os_process::{
+use oer_tools_lab_arbiter::Arbiter;
+use oer_tools_os_process::{
     launch_handoff::LaunchHandoff,
     lock::{FileLock, Mode},
 };
@@ -44,12 +44,12 @@ fn activated() -> Result<Option<UnixListener>> {
 /// handed over.
 pub fn serve(root: PathBuf) -> Result<()> {
     let handed = activated()?;
-    let _signals = oer_os_process::install_signal_handlers()?;
+    let _signals = oer_tools_os_process::install_signal_handlers()?;
     let arbiter = Arbiter::open()?;
     let _instance =
         FileLock::try_acquire(&arbiter.directory().join("service.lock"), Mode::Exclusive)?
             .ok_or("another LAB service runs for this stand")?;
-    let socket = oer_lab_model::paths::socket()?;
+    let socket = oer_tools_lab_model::paths::socket()?;
     let listener = match handed {
         Some(listener) => listener,
         None => {
@@ -79,13 +79,13 @@ pub fn serve(root: PathBuf) -> Result<()> {
         arbiter,
         resources,
         drivers,
-        Box::new(oer_os_durable::unix_millis),
+        Box::new(oer_tools_os_durable::unix_millis),
     )?;
     eprintln!("lab-service: serving {}", socket.display());
     // A stop (SIGTERM from systemd) ends the service at once: its state is
     // persisted with every change, and the unit stops what it started.
     std::thread::spawn(|| {
-        while !oer_os_process::cancellation_requested() {
+        while !oer_tools_os_process::cancellation_requested() {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
         eprintln!("lab-service: stopping");

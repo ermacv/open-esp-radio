@@ -1,5 +1,5 @@
 [package]
-name = "oer-analysis-riscv-decode"
+name = "oer-tools-analysis-riscv-decode"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,7 +13,7 @@ rv-asm = "=0.2.1"
 
 [dev-dependencies]
 tempfile = "=3.27.0"
-oer-os-toolchain = { path = "../../os/toolchain" }
+oer-tools-os-toolchain = { path = "../../os/toolchain" }
 
 [lints]
 workspace = true

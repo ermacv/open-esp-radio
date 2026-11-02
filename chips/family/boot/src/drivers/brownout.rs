@@ -4,10 +4,10 @@ use crate::{
     Access,
     wait::{BootDeadline, BootWait, WaitFailure},
 };
-use oer_espressif_analog::{
+use oer_chips_family_analog::{
     AnalogField, AnalogRegisterBus, FieldWrite, Step, TransitionError, ValueTooWide,
 };
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 /// The chip's detector cycles, actions and analog threshold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

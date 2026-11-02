@@ -4,16 +4,16 @@ use crate::{
     analog::pbus::{PhyPbusHardwareBinding, PhyPbusHardwareObservation},
     calibration::cold::{PhyColdI2cError, PhyColdI2cObservation, PhyColdI2cTransaction},
 };
-use oer_time::Instant;
+use oer_portable_time::Instant;
 
 pub(crate) trait Registers {
-    fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
         now: Instant,
     ) -> Step;
-    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         _child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         _gain: &mut super::power::Cursor,
@@ -24,7 +24,7 @@ pub(crate) trait Registers {
         Step::Failure(Failure::Binding)
     }
     #[cfg(target_arch = "riscv32")]
-    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -33,13 +33,13 @@ pub(crate) trait Registers {
 }
 pub(super) enum Io<'a> {
     #[cfg(target_arch = "riscv32")]
-    Shared(&'a mut oer_esp32s31_hal::domain::transaction::PhyHardware),
+    Shared(&'a mut oer_chips_esp32s31_hal::domain::transaction::PhyHardware),
     #[cfg(test)]
     Test(&'a mut super::tests::Io),
 }
 #[cfg(target_arch = "riscv32")]
-impl Registers for oer_esp32s31_hal::domain::transaction::PhyHardware {
-    fn advance<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+impl Registers for oer_chips_esp32s31_hal::domain::transaction::PhyHardware {
+    fn advance<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
@@ -47,7 +47,7 @@ impl Registers for oer_esp32s31_hal::domain::transaction::PhyHardware {
     ) -> Step {
         job.advance_one::<D, _>(Io::Shared(self), clock, now)
     }
-    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
@@ -58,7 +58,7 @@ impl Registers for oer_esp32s31_hal::domain::transaction::PhyHardware {
         super::power::advance::<D, _>(&mut Io::Shared(self), child, gain, action, clock, measured)
             .unwrap_or_else(Step::Failure)
     }
-    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -73,7 +73,7 @@ impl Registers for oer_esp32s31_hal::domain::transaction::PhyHardware {
 impl Io<'_> {
     /// Keep channel's large command/completion values out of the shared dispatcher.
     #[inline(never)]
-    pub(super) fn channel<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    pub(super) fn channel<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         clock: &C,
         binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
@@ -94,7 +94,7 @@ impl Io<'_> {
 
     /// The original channel command/completion body keeps its own poll frame.
     #[inline(never)]
-    fn channel_direct<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    fn channel_direct<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         clock: &C,
         binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
@@ -102,9 +102,9 @@ impl Io<'_> {
     ) -> Result<bool, Failure> {
         let binding = binding.take().ok_or(Failure::Binding)?;
         #[cfg(target_arch = "riscv32")]
-        fn apply<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+        fn apply<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
             clock: &C,
-            registers: &mut (impl oer_esp32s31_hal::owner::SharedPhyAccess + Registers),
+            registers: &mut (impl oer_chips_esp32s31_hal::owner::SharedPhyAccess + Registers),
             binding: crate::channel::PhyChipChannelExternalBinding,
         ) -> Result<crate::channel::PhyChipChannelCompletion, Failure> {
             crate::target_port::calibration::complete_channel_direct::<D, _, _, _>(
@@ -131,7 +131,7 @@ impl Io<'_> {
         *completion = Some(result);
         Ok(waiting)
     }
-    pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -166,7 +166,7 @@ impl Io<'_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(
-                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
+                oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
             ),
             #[cfg(test)]
             Self::Test(io) => io.power_gain_base(action),
@@ -177,7 +177,7 @@ impl Io<'_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(
-                oer_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
+                oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
             ),
             #[cfg(test)]
             Self::Test(io) => io.channel_gain_base(),
@@ -186,12 +186,12 @@ impl Io<'_> {
 
     pub(super) fn gain_entry(
         &mut self,
-        entry: oer_esp32s31_hal::types::PhyGainMemoryEntry,
+        entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry,
     ) -> Result<(), Failure> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => {
-                oer_esp32s31_hal::phy::memory::program_gain_memory_entry(*registers, entry);
+                oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(*registers, entry);
                 Ok(())
             }
             #[cfg(test)]
@@ -213,7 +213,7 @@ impl Io<'_> {
 
     #[cfg(target_arch = "riscv32")]
     #[inline(always)]
-    fn rfpll_frequency<D: super::super::wait::PhyShortDelay, C: oer_time::Clock + ?Sized>(
+    fn rfpll_frequency<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -258,7 +258,7 @@ impl Io<'_> {
     /// Execute at most one bus command, retaining partial helper/transaction
     /// state across the waker checkpoint. Memory entries remain whole.
     #[inline(never)]
-    pub(super) fn advance_rfpll<D: super::super::wait::PhyShortDelay, C: oer_time::Clock>(
+    pub(super) fn advance_rfpll<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
         &mut self,
         clock: &C,
         run: &mut super::rfpll::Run<'_>,
@@ -446,7 +446,7 @@ impl Io<'_> {
             (written_at, run.cursor.action())
         {
             *settle_at = at
-                .checked_add(oer_time::Duration::from_micros(u64::from(micros)))
+                .checked_add(oer_portable_time::Duration::from_micros(u64::from(micros)))
                 .ok_or(Failure::DeadlineOverflow)?;
         }
         Ok(Step::Rfpll(sample))
@@ -478,8 +478,8 @@ impl Io<'_> {
 
     fn i2c_status(&mut self) -> u8 {
         #[cfg(target_arch = "riscv32")]
-        fn sample(registers: &impl oer_esp32s31_hal::owner::SharedPhyAccess) -> u8 {
-            use oer_esp32s31_hal::phy::i2c::{Host, sample_master_reset_busy};
+        fn sample(registers: &impl oer_chips_esp32s31_hal::owner::SharedPhyAccess) -> u8 {
+            use oer_chips_esp32s31_hal::phy::i2c::{Host, sample_master_reset_busy};
             u8::from(sample_master_reset_busy(registers, Host::Host0))
                 | (u8::from(sample_master_reset_busy(registers, Host::Host1)) << 1)
         }
@@ -498,7 +498,7 @@ impl Io<'_> {
     ) -> Result<PhyColdI2cObservation, Failure> {
         #[cfg(target_arch = "riscv32")]
         fn apply(
-            registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+            registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
             transaction: &mut PhyColdI2cTransaction,
             start: bool,
         ) -> Result<PhyColdI2cObservation, Failure> {
@@ -540,7 +540,7 @@ impl Io<'_> {
     ) -> Result<PhyPbusHardwareObservation, Failure> {
         #[cfg(target_arch = "riscv32")]
         fn apply(
-            registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+            registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
             binding: &mut PhyPbusHardwareBinding,
             start: bool,
         ) -> Result<PhyPbusHardwareObservation, Failure> {
@@ -572,7 +572,7 @@ impl Io<'_> {
     pub(super) fn temperature_code(&mut self) -> u8 {
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => oer_esp32s31_hal::phy::temperature::read_code(*registers),
+            Self::Shared(registers) => oer_chips_esp32s31_hal::phy::temperature::read_code(*registers),
             #[cfg(test)]
             Self::Test(io) => io.temperature_code(),
         }
@@ -580,19 +580,19 @@ impl Io<'_> {
     pub(super) fn pbus_control(&mut self, work_mode: bool) -> Result<bool, Failure> {
         #[cfg(target_arch = "riscv32")]
         fn apply(
-            registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+            registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
             work_mode: bool,
         ) -> Result<bool, Failure> {
             use crate::RomShortDelay;
-            use oer_esp32s31_hal::phy::agc;
+            use oer_chips_esp32s31_hal::phy::agc;
             if !work_mode {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 return Ok(false);
             }
-            let settled = oer_espressif_phy::pbus::configure_work_mode(
-                &mut oer_esp32s31_hal::phy::pbus::port(registers),
+            let settled = oer_chips_family_phy::pbus::configure_work_mode(
+                &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
             );
             if settled {
                 if !RomShortDelay::settle_micros(1) {

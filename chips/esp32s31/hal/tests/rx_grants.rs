@@ -137,7 +137,7 @@ fn private_grants_follow_the_actual_ring_boundaries() {
             .args([
                 "--edition=2024",
                 "--crate-type=lib",
-                "--crate-name=oer_esp32s31_hal",
+                "--crate-name=oer_chips_esp32s31_hal",
                 "--emit=metadata",
                 "-A",
                 "warnings",

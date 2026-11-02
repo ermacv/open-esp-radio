@@ -1,6 +1,6 @@
 # Image pipeline
 
-`oer-image-build` is the one image pipeline of the repository: `build(ImageSpec)
+`oer-tools-image-build` is the one image pipeline of the repository: `build(ImageSpec)
 -> ImageBundle`. `cargo fw` ([tools/image/cli](../cli/README.md)) and the HIL harness
 (`tools/hil/harness`, for a scenario's image) build every image here; nothing
 else compiles, checks or encodes one. `images` resolves an image by its
@@ -32,7 +32,7 @@ setup reads the effective input, appends the required flags, validates the
 whole argument list, and passes it as `CARGO_ENCODED_RUSTFLAGS`; probe cfgs
 extend the same list. Argument boundaries are retained, including spaces in
 LLVM options and linker paths. Conflicting settings return a typed
-`oer_image_checks::codegen::CodegenPrecondition`, even if a later flag would
+`oer_tools_image_checks::codegen::CodegenPrecondition`, even if a later flag would
 override them. Explicit passes that re-enable merging or outlining are also
 refused. The [image linker](../linker/README.md) checks the actual expanded
 link command, including build-script options and nested response files.
@@ -47,7 +47,7 @@ chip, the application crate (package, binary, features), the stack
 policy, the layout seed, the variables the runtime's build sets or removes
 (runtime configuration), the caller's builder packages and
 extra policy files, the bundle directory (every build compiles in the checkout's
-`compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-image-checks`): which
+`compile_cache()` of its instrumentation classes) and the checks (`Gates` of `oer-tools-image-checks`): which
 run, what the interrupt checks require (`Required::Product`, or
 `Diagnostic` for diagnostic images), an optional audit of the runtime ELF (HIL's
 observer placement), and which requested checks must pass (`Enforced`).
@@ -135,7 +135,7 @@ runtime and the bootstrap with the classes' cfgs (`oer_trace`,
 crate has a probe feature, and production has no item only a probe uses.
 
 An image build fills an `ImageBundle` (format and contents:
-[`oer-image-bundle`](../bundle/README.md)) with the files below the bundle's
+[`oer-tools-image-bundle`](../bundle/README.md)) with the files below the bundle's
 own, and records `purpose: Flash` or `Analysis`.
 
 Every link using the staged runtime script (`-Truntime/link.x` from
@@ -183,7 +183,7 @@ same way.
 ## Flash map
 
 Each chip's `chips/<chip>/platform/chip.toml` `[flash]` table
-([`oer-espressif-facts`](../../../chips/family/facts/README.md)' `FlashMap`,
+([`oer-chips-family-facts`](../../../chips/family/facts/README.md)' `FlashMap`,
 with the flash size of the chip's module) holds the
 bootloader, partition-table, application and OTA-data offsets and the
 partition-table CSV path (`chips/<chip>/platform/partitions/`). The S31
@@ -206,7 +206,7 @@ The partition-table module supports the pipeline's app/data CSV tables with
 explicit offsets and sizes, decimal/hex numbers and K/M size suffixes. Named
 subtypes are `factory`, `ota_0` through `ota_15`, `nvs`, `ota` and `phy`;
 numeric byte subtypes are retained. Flags are `encrypted` and `readonly`.
-Binary entries use bounded `oer-wire` cursors and typed fields. The writer emits
+Binary entries use bounded `oer-portable-wire` cursors and typed fields. The writer emits
 an MD5 record and erased padding; the reader accepts the format's optional MD5,
 verifies any MD5 present, and requires an erased end marker. Unknown flag bits
 and all label bytes survive a binary round trip. Invalid input returns typed
@@ -218,11 +218,11 @@ The application must fit its partition; at 90 % the build warns.
 
 ## Gates
 
-The image build pipeline invokes the gates in `oer-image-checks`.
-[`oer_image_checks::stack`](../checks/src/stack.rs) implements the runtime
+The image build pipeline invokes the gates in `oer-tools-image-checks`.
+[`oer_tools_image_checks::stack`](../checks/src/stack.rs) implements the runtime
 task-stack gate (`audit_runtime_stacks`) and the bootstrap stack gate
 (`audit_bootstrap_stack`). The checks analyze each ELF once with
-`oer-image-stack`, the pinned ROM and its summaries, and resolve
+`oer-tools-image-stack`, the pinned ROM and its summaries, and resolve
 indirect sites with the same facts (waker vtables, function-pointer field
 types). The runtime's task and interrupt gates share that analysis.
 The `frames` report shares it too, and the bootstrap's frame and stack checks
@@ -264,11 +264,11 @@ them to the firmware as `OPEN_RADIO_*_STACK_MINIMUM_FREE_BYTES`), checks the
 exercised call chains. Secondary task roots require complete bounds; unused
 harts link zero bytes for both stack kinds.
 The gate also fails an ELF without `.stack_sizes`
-records and every function of `oer-image-stack`'s inventory without a record
+records and every function of `oer-tools-image-stack`'s inventory without a record
 that `stack-coverage.toml` does not review exactly once (assembly, vector data,
 compiler runtime or a linker script's section label; a review supplies no
 frame). The analysis of one image runs within
-`oer_image_checks::stack::budget`: 10^9 work units, 512 MiB of working memory
+`oer_tools_image_checks::stack::budget`: 10^9 work units, 512 MiB of working memory
 (everything the analysis of the image and its ROM holds, as the budget's
 rustdoc lists it) and 5 minutes, chosen from the measured
 analysis of every image class; running out fails the gate
@@ -278,7 +278,7 @@ work units and working memory, coverage, then per stack its bound (proven,
 conditional or partial), budget, headroom, deepest path and unresolved
 sites.
 
-[`oer_image_checks::interrupts`](../checks/src/interrupts.rs) implements the
+[`oer_tools_image_checks::interrupts`](../checks/src/interrupts.rs) implements the
 runtime's interrupt gate. It bounds each hart's interrupt stack from the
 shared runtime analysis, using the chip profile's `[rom]` ELF and reviewed
 summaries and its `[memory]` map and `[interrupts]` contract. The ROM comes
@@ -330,7 +330,7 @@ at every level and the exception. Both `Required::Product` and
 negative spare remains visible in the table.
 Its placement summary lines separate strict code in cached memory by hart/level
 from executor task code in PSRAM and name the task roots. A level's class is
-its table entries' (`oer_espressif_interrupt_table::Class`): the level of an `Executor`
+its table entries' (`oer_chips_family_interrupt_table::Class`): the level of an `Executor`
 entry is the executor's, every other level is hardware. Only an executor's
 level has a task boundary; it comes from
 the executor's task poll sites (`task_poll_sites`) through `Analysis::reached_cut`; each level
@@ -431,8 +431,8 @@ name their stacks and pin their ROM inputs.
 ## Comparing images
 
 `compare::compare_elf` compares two linked RISC-V images function by
-function modulo placement, over the `oer-analysis-elf` symbols and the decoded
-listings of `oer_analysis_riscv_lift::listing`: every address an instruction forms
+function modulo placement, over the `oer-tools-analysis-elf` symbols and the decoded
+listings of `oer_tools_analysis_riscv_lift::listing`: every address an instruction forms
 becomes symbol+offset, legacy mangling hashes and LLVM clone numbers are
 dropped, identical-code-folded names pair by body, and a `Review` applies
 reviewed aliases and scheduling ties.
@@ -440,7 +440,7 @@ reviewed aliases and scheduling ties.
 ## Exclusion
 
 Build exclusion has one mechanism, the foundation's file lock
-(`oer_os_process::lock::FileLock`, shared or exclusive): one build at a
+(`oer_tools_os_process::lock::FileLock`, shared or exclusive): one build at a
 time in the shared compile cache (`exclusion::compile_cache`, `<cache>/build.lock`,
 waiting, held from the Cargo run until the ELF is copied out), one
 build per output (`exclusion::Staging`, refusing), the host's image build
@@ -448,7 +448,7 @@ slots (`exclusion::slot` under `host_build_root()/tokens`: half the cores, at
 2 GB each), and the ESP-IDF cache (exclusive while its tree and tools change,
 then converted to shared for the builds).
 
-Run host regressions with `cargo test -p oer-image-build`.
+Run host regressions with `cargo test -p oer-tools-image-build`.
 
 ## Size summaries and verdicts
 

@@ -1,7 +1,7 @@
 //! Separate management/non-QoS and per-TID transmit sequence owners, shared
 //! by the station, the access point and ESP-NOW.
 
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The modulo-4096 arithmetic of the sequence space.
 ///

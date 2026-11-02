@@ -1,5 +1,5 @@
 //! Checker policy for named diagnostic calls; Blobray supplies the bit flow.
-use oer_analysis_blobray_domain::{CallTarget, ReadSink, ReadUses};
+use oer_tools_analysis_blobray_domain::{CallTarget, ReadSink, ReadUses};
 use serde::Serialize;
 use std::collections::BTreeMap;
 

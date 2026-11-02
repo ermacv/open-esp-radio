@@ -1,5 +1,5 @@
 //! Where the stand keeps its state, after the XDG base directories
-//! (`oer-os-durable`'s `xdg`): every checkout of the user shares them.
+//! (`oer-tools-os-durable`'s `xdg`): every checkout of the user shares them.
 //!
 //! - the stand file: [`crate::path`];
 //! - the arbiter's state (queue, holders, history, board journal):
@@ -10,7 +10,7 @@
 
 use std::{ffi::OsString, path::PathBuf};
 
-use oer_os_durable::xdg::{Base, overridable_in};
+use oer_tools_os_durable::xdg::{Base, overridable_in};
 
 pub use crate::STAND_FILE_ENV;
 

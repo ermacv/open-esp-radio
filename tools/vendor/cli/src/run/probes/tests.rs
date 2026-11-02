@@ -17,7 +17,7 @@ fn repository() -> tempfile::TempDir {
         ),
         ("chip-b", "imac", &[("rust-artifact", "radio")][..]),
     ] {
-        let profile = directory.path().join(oer_chip_profile::platform_dir(chip));
+        let profile = directory.path().join(oer_tools_chip_profile::platform_dir(chip));
         std::fs::create_dir_all(&profile).unwrap();
         let mut text = format!(
             "schema = 2\nid = \"{chip}\"\nfamily = \"f\"\nisa = \"rv32{isa}\"\n\

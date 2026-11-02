@@ -8,10 +8,10 @@ use core::{
 };
 use std::{boxed::Box, sync::Arc, task::Wake};
 
-use oer_espressif_interrupt_table::signal::host;
-use oer_memory::{InPlace, RequestSlot};
-use oer_time::{Clock as _, Duration};
-use oer_time_virtual::VirtualClock;
+use oer_chips_family_interrupt_table::signal::host;
+use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_time::{Clock as _, Duration};
+use oer_portable_time_virtual::VirtualClock;
 
 use super::{PeerError, PostError, pair};
 
@@ -27,7 +27,7 @@ fn slot() -> &'static RequestSlot<Square, (), InPlace> {
 }
 
 /// A seat of a fresh obligation table, for a client of executor `C`.
-fn watch<C: oer_espressif_interrupt_table::signal::SignalExecutor>() -> super::Watch<C> {
+fn watch<C: oer_chips_family_interrupt_table::signal::SignalExecutor>() -> super::Watch<C> {
     let table: &'static super::Obligations<C, 1> = Box::leak(Box::new(super::Obligations::new()));
     table.issue().expect("a fresh table has a seat")
 }
@@ -237,7 +237,7 @@ fn the_largest_deadline_is_watched_unchanged() {
         Box::leak(Box::new(super::Obligations::new()));
     let seat = table.issue().expect("a fresh table has a seat");
     let (mut client, _server) = pair(slot(), request, reply, seat).expect("a fresh slot");
-    let last = oer_time::Instant::from_micros(u64::MAX);
+    let last = oer_portable_time::Instant::from_micros(u64::MAX);
     assert_eq!(
         client.post(
             Square {
@@ -248,7 +248,7 @@ fn the_largest_deadline_is_watched_unchanged() {
         ),
         Ok(())
     );
-    let before = oer_time::Instant::from_micros(u64::MAX - 1);
+    let before = oer_portable_time::Instant::from_micros(u64::MAX - 1);
     assert_eq!(
         table.scan(before),
         super::obligation::Scan::Pending(Some(last)),
@@ -313,7 +313,7 @@ fn posted(
 ) -> (
     super::PeerClient<Square, host::Deferred, host::Host>,
     super::PeerServer<Square, host::Deferred, host::Host>,
-    oer_time::Instant,
+    oer_portable_time::Instant,
 ) {
     let (request, _) = host::deferred_signal();
     let (reply, _) = host::signal();

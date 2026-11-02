@@ -56,7 +56,7 @@ fn read(
     memory: &WorkingMemory,
     control: &mut dyn RunControl,
 ) -> Result<DataExport> {
-    oer_analysis_blobray_artifacts::with_prepared_object(
+    oer_tools_analysis_blobray_artifacts::with_prepared_object(
         source,
         &payload,
         &[],

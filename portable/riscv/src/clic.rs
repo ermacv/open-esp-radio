@@ -72,7 +72,7 @@ impl LevelBits {
     /// Validate fixed chip facts at compile time.
     ///
     /// ```compile_fail,E0080
-    /// let _ = oer_riscv::clic::LevelBits::constant::<9>();
+    /// let _ = oer_portable_riscv::clic::LevelBits::constant::<9>();
     /// ```
     pub const fn constant<const BITS: u8>() -> Self {
         const {
@@ -131,10 +131,10 @@ impl Control {
     /// Encode a fixed one-based level and NLBITS at compile time.
     ///
     /// ```compile_fail,E0080
-    /// let _ = oer_riscv::clic::Control::level::<0, 3>();
+    /// let _ = oer_portable_riscv::clic::Control::level::<0, 3>();
     /// ```
     /// ```compile_fail,E0080
-    /// let _ = oer_riscv::clic::Control::level::<9, 3>();
+    /// let _ = oer_portable_riscv::clic::Control::level::<9, 3>();
     /// ```
     pub const fn level<const LEVEL: u16, const BITS: u8>() -> Self {
         const {

@@ -4,8 +4,8 @@ use crate::{
     analog::i2c::analog_i2c,
     calibration::cold::{PhyColdI2cRequest, PhyColdI2cTransaction},
 };
-use oer_time::Duration;
-use oer_time_virtual::VirtualClock;
+use oer_portable_time::Duration;
+use oer_portable_time_virtual::VirtualClock;
 
 #[test]
 fn final_read_or_write_edge_succeeds_at_the_settle_boundary() {

@@ -18,7 +18,7 @@
 
 use super::*;
 use crate::{Akm, EapolKeyFrame, EapolKeyMessage, PtkContext};
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 
 pub(crate) const MESSAGE3: [u8; 187] = [
     0x02, 0x03, 0x00, 0xb7, 0x02, 0x13, 0xcb, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -93,7 +93,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
         assert_eq!(
             install.kind(),
             crate::keys::RsnKeyKind::Group {
-                key_id: oer_ieee80211_wire::ccmp::GroupKeyId::new(raw_id).unwrap(),
+                key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(raw_id).unwrap(),
                 transmit: false,
             }
         );

@@ -16,7 +16,7 @@
     reason = "probe entries use the closed transport engine routes"
 )]
 
-use oer_esp32s31_hal::owner::SharedPhyAccess;
+use oer_chips_esp32s31_hal::owner::SharedPhyAccess;
 
 use crate::{
     analog::frequency::PhyFrequencyCapMemoryExternalBinding,
@@ -29,7 +29,7 @@ use crate::{
 /// A hardware failure leaves that borrow with the caller for fault containment;
 /// this entry does not imply that normal RF operation may resume.
 #[cfg(test)]
-pub async fn search<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
+pub async fn search<D: PhyShortDelay, C: oer_portable_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
 ) -> Result<rfpll::search::Outcome, PhyTargetPortError> {
@@ -51,7 +51,7 @@ pub async fn search<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
 /// Search, update every frequency-memory entry when the measured delta is
 /// nonzero, and restore the current channel index before returning success.
 #[cfg(test)]
-pub async fn correct<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
+pub async fn correct<D: PhyShortDelay, C: oer_portable_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     current_channel: u16,
@@ -85,7 +85,7 @@ pub async fn correct<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
 /// disable bit; the existing typed baseband-mode accessor implements the new
 /// operations without duplicating the physical register's identity.
 #[cfg(test)]
-pub async fn maintain<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
+pub async fn maintain<D: PhyShortDelay, C: oer_portable_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     current_channel: u16,
@@ -124,7 +124,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
     grant: &mut impl super::PhyGrantProtectPort,
     observer: &mut impl super::PhyTargetObserver,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::frequency;
+    use oer_chips_esp32s31_hal::phy::frequency;
     use rfpll::thermal::{Action, Completion};
     loop {
         let action = child.action();
@@ -166,7 +166,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
 /// all waits. Success is available only after restoration (or a hardware-free
 /// skip). Error or cancellation requires the caller to contain the failed epoch.
 #[cfg(test)]
-pub async fn track<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
+pub async fn track<D: PhyShortDelay, C: oer_portable_cooperate::CooperativeTimer>(
     clock: &C,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     request: rfpll::thermal::Request,
@@ -209,7 +209,7 @@ pub async fn track<D: PhyShortDelay, C: oer_cooperate::CooperativeTimer>(
 /// failure; the inner one is the transition's own fail-closed outcome.
 #[cfg(test)]
 pub async fn program<D: PhyShortDelay>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     registers: &mut (impl SharedPhyAccess + crate::executor::step::Registers),
     request: crate::analog::rfpll::RfpllFrequencyRequest,
 ) -> Result<

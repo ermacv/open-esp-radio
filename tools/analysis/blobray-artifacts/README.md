@@ -1,6 +1,6 @@
 # Blobray artifacts
 
-`oer-analysis-blobray-artifacts` owns structural ELF/AR inventory over borrowed, already
+`oer-tools-analysis-blobray-artifacts` owns structural ELF/AR inventory over borrowed, already
 captured bytes. Its only internal dependency is
 [domain](../blobray-domain/README.md). It never resolves a filesystem path, acquires a
 writer, decodes instructions or selects a linker definition.
@@ -61,7 +61,7 @@ Static relocation metadata is retained without reapplying edits to linked bytes.
 
 Static RV32 image views, `execution_segments`, code
 symbols and the `$d`/`$x` mapping-symbol validation belong to
-[`oer-analysis-riscv-program`](../riscv-program/README.md); function views and
+[`oer-tools-analysis-riscv-program`](../riscv-program/README.md); function views and
 image validation use them.
 
 `with_prepared_object` owns one captured buffer, ELF/program view and lazily prepared sections. Callback-borrowed function views share target names and section metadata; object scope releases their admitted capacity. `MemberIndex` traverses an archive once and preserves ordinal payload identity, including thin-member markers.

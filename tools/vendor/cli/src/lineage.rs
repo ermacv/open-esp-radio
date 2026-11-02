@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_vendor_lineage::{
+use oer_tools_vendor_lineage::{
     archive::{Error, Revision, read_archive},
     correspond::{Evidence, Policy},
     lineage::{Lineage, NameClass, trace},
@@ -105,7 +105,7 @@ pub fn run(arguments: Arguments) -> Result<(), Error> {
 
 fn from_git(repo: &Path, library: &str, selected: &[String]) -> Result<Vec<Revision>, Error> {
     let revisions = if selected.is_empty() {
-        let log = oer_os_process::git::output(
+        let log = oer_tools_os_process::git::output(
             repo,
             [
                 "log",
@@ -125,12 +125,12 @@ fn from_git(repo: &Path, library: &str, selected: &[String]) -> Result<Vec<Revis
     };
     let mut archives: Vec<Revision> = Vec::new();
     for revision in revisions {
-        let commit = oer_os_process::git::output(
+        let commit = oer_tools_os_process::git::output(
             repo,
             ["rev-parse", "--verify", &format!("{revision}^{{commit}}")],
         )?;
         let revision = String::from_utf8(commit)?.trim().to_owned();
-        let bytes = oer_os_process::git::output(repo, ["show", &format!("{revision}:{library}")])?;
+        let bytes = oer_tools_os_process::git::output(repo, ["show", &format!("{revision}:{library}")])?;
         let archive = read_archive(&revision, &bytes)?;
         // A commit that does not change the bytes adds no evidence.
         if archives

@@ -85,16 +85,16 @@ pub fn parse(text: &str) -> Result<String, String> {
         .ok_or("`channel` is a 2.4 GHz channel from 1 to 13")?;
     // The checks `wifi::Config::new` makes before any radio owner starts:
     // a regulatory domain for the country, which permits the channel.
-    let domain = oer_radio_regulatory::Country::new(country)
+    let domain = oer_protocols_radio_regulatory::Country::new(country)
         .ok()
-        .and_then(oer_radio_regulatory::RegulatoryDomain::of)
+        .and_then(oer_protocols_radio_regulatory::RegulatoryDomain::of)
         .ok_or("`country` has no supported regulatory domain")?;
-    let width = oer_ieee80211_contracts_port::ChannelWidth::Mhz20;
-    oer_ieee80211_contracts_port::Channel::ghz2_4(channel, width)
+    let width = oer_protocols_ieee80211_contracts_port::ChannelWidth::Mhz20;
+    oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(channel, width)
         .ok()
         .and_then(|channel| {
             domain
-                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
                     channel,
                 ))
                 .ok()

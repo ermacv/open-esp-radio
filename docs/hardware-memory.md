@@ -217,7 +217,7 @@ The root's `[[ram-regions]]` hold the RAM regions the layouts name
 The generator emits, in the chip's PAC (`generated.rs`):
 
 - a `#[repr(C, align(N))]` type of the layout's words, `Zeroable` by derive
-  over `oer-memory`'s volatile cells, with compile-time size and alignment
+  over `oer-portable-memory`'s volatile cells, with compile-time size and alignment
   checks;
 - for each `shared` word, a cell with volatile `read() -> Value` and
   `write(Value)` only; for each word a `Value` type with typed getters and
@@ -304,7 +304,7 @@ the loan is made, with the first such buffer.
 
 ## Bluetooth controller memory
 
-`oer_esp32s31_hal::bluetooth::engine` retains the component codecs and
+`oer_chips_esp32s31_hal::bluetooth::engine` retains the component codecs and
 CPU/controller ownership protocol. The BLE driver enables the HAL's
 `bluetooth-engine` feature; Wi-Fi images retain their dependency graph.
 One engine retains the register token and the entire placed arena through
@@ -376,5 +376,5 @@ route removal before reset and channel reuse.
 
 S31 layouts live in `chips/esp32s31/registers/layouts/` and are included by
 `chip.toml`. Host tools load the same register model through
-`oer_registers_model::Chip::load`; generated layout accessors live in the
+`oer_tools_registers_model::Chip::load`; generated layout accessors live in the
 PAC's `generated.rs`.

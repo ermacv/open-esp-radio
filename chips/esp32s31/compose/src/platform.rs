@@ -1,10 +1,10 @@
 //! S31 owners and platform operations used by image compositions.
 //! The image selects entries, priorities, tasks and terminal policy.
 use crate::Esp32s31;
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::{peripherals as hw, root};
-use oer_espressif_interrupt_table::{Controller, Entry, InterruptSource, Router};
-use oer_espressif_platform_port::AlarmPart;
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_hal::{peripherals as hw, root};
+use oer_chips_family_interrupt_table::{Controller, Entry, InterruptSource, Router};
+use oer_chips_family_platform_port::AlarmPart;
 
 /// Associated interrupt parts are supplied by the same platform that owns
 /// their construction and service, rather than named by an image's HAL edge.
@@ -30,17 +30,17 @@ impl InterruptTypes for Esp32s31 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrepareError {
     Claimed,
-    Initialization(oer_espressif_staged_runtime::adoption::Error),
+    Initialization(oer_chips_family_staged_runtime::adoption::Error),
 }
 /// Claim once and execute the shared runtime adoption driver. No image
 /// sequence is copied here; mapping and image boot evidence remain explicit.
-pub fn prepare() -> Result<oer_espressif_staged_runtime::adoption::Prepared<Esp32s31>, PrepareError>
+pub fn prepare() -> Result<oer_chips_family_staged_runtime::adoption::Prepared<Esp32s31>, PrepareError>
 {
     let root = root::Root::take().ok_or(PrepareError::Claimed)?;
-    oer_espressif_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime()).map_err(
+    oer_chips_family_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime()).map_err(
         |error| {
             PrepareError::Initialization(
-                oer_espressif_staged_runtime::adoption::Error::Initialization(error),
+                oer_chips_family_staged_runtime::adoption::Error::Initialization(error),
             )
         },
     )
@@ -85,22 +85,22 @@ impl Entropy {
 
 /// Install the existing P2 writer and P1 comparator without changing routes,
 /// and return the time driver's authority with the comparator left for an
-/// executor of another hart (`oer_espressif_executor::grant`).
+/// executor of another hart (`oer_chips_family_executor::grant`).
 pub fn timers<const H: u8, A, R>(
     timer: hw::system_timer::SystemTimer,
     router: &mut Router<impl Controller, H>,
     app: A,
     radio: R,
 ) -> (
-    oer_espressif_executor::TimeDriverReady<Esp32s31>,
+    oer_chips_family_executor::TimeDriverReady<Esp32s31>,
     hw::system_timer::SystimerAlarm2,
 )
 where
     A: Entry<Part = hw::system_timer::SystimerAlarm1>,
     R: Entry<Part = hw::system_timer::SystimerAlarm0>,
 {
-    let mut timer_ready = oer_espressif_executor::init::<Esp32s31, 2, _, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
+    let mut timer_ready = oer_chips_family_executor::init::<Esp32s31, 2, _, _, _>(
+        oer_chips_family_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -109,7 +109,7 @@ where
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_espressif_executor::bind::<Esp32s31, 0, _, _, _>(
+    oer_chips_family_executor::bind::<Esp32s31, 0, _, _, _>(
         &mut timer_ready,
         router,
         app,
@@ -123,10 +123,10 @@ where
 /// that declares the trace class. This function owns no recorder or counter.
 #[cfg(oer_trace)]
 pub fn trace_now() -> u64 {
-    use oer_time::Clock;
+    use oer_portable_time::Clock;
     EmbassyClock.now().as_micros()
 }
 /// The image chooses this terminal path for an unanswered owned request.
-pub fn reset_request<T>(error: oer_memory::RequestError) -> T {
-    oer_espressif_staged_runtime::panic::reset_request::<oer_esp32s31_hal::platform::Port, T>(error)
+pub fn reset_request<T>(error: oer_portable_memory::RequestError) -> T {
+    oer_chips_family_staged_runtime::panic::reset_request::<oer_chips_esp32s31_hal::platform::Port, T>(error)
 }

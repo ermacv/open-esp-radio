@@ -934,7 +934,7 @@ impl PhyChipChannelMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_channel_hal<P>(
         self,
-        channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+        channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
     ) -> PhyChipChannelCompletion {
         match self.action {
             PhyChipChannelAction::SetAgc { enabled } => {
@@ -942,7 +942,7 @@ impl PhyChipChannelMmioBinding {
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
             PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
-                oer_esp32s31_hal::phy::pbus::configure_force_txrx(channel, enabled, phase);
+                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(channel, enabled, phase);
                 PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
             }
             PhyChipChannelAction::SetBbpllCalibration { enabled } => {
@@ -1004,7 +1004,7 @@ impl PhyChipChannelMmioBinding {
     pub fn execute_target<P>(
         self,
         _platform: &mut P,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyChipChannelCompletion {
         match self.action {
             PhyChipChannelAction::SetAgc { enabled } => {
@@ -1012,45 +1012,45 @@ impl PhyChipChannelMmioBinding {
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
             PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
-                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
+                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
                 PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
             }
             PhyChipChannelAction::SetBbpllCalibration { enabled } => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
                 PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
             }
             PhyChipChannelAction::StartFrequencySwitch {
                 frequency_index,
                 crystal_selector,
             } => {
-                oer_esp32s31_hal::phy::frequency::start_channel_switch(registers, frequency_index);
+                oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(registers, frequency_index);
                 PhyChipChannelCompletion::FrequencySwitchStarted {
                     frequency_index,
                     crystal_selector,
                 }
             }
             PhyChipChannelAction::ClearFrequencySwitch => {
-                oer_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
+                oer_chips_esp32s31_hal::phy::frequency::clear_channel_switch(registers);
                 PhyChipChannelCompletion::FrequencySwitchCleared
             }
             PhyChipChannelAction::AwaitFrequencyReadyEdge { .. } => {
                 PhyChipChannelCompletion::FrequencyReadyObserved {
-                    ready: oer_esp32s31_hal::phy::frequency::sample_frequency_ready(registers),
+                    ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(registers),
                 }
             }
             PhyChipChannelAction::ConfigureNrx { frequency_mhz } => {
-                oer_esp32s31_hal::phy::frequency::configure_nrx_frequency(
+                oer_chips_esp32s31_hal::phy::frequency::configure_nrx_frequency(
                     registers,
                     u32::from(frequency_mhz),
                 );
                 PhyChipChannelCompletion::NrxConfigured { frequency_mhz }
             }
             PhyChipChannelAction::ConfigureBssCbw { cbw } => {
-                oer_esp32s31_hal::phy::frequency::configure_bss_cbw(registers, cbw);
+                oer_chips_esp32s31_hal::phy::frequency::configure_bss_cbw(registers, cbw);
                 PhyChipChannelCompletion::BssCbwConfigured { cbw }
             }
             PhyChipChannelAction::ConfigureRxCompensation => {
-                oer_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_rx_compensation(registers);
                 PhyChipChannelCompletion::RxCompensationConfigured
             }
             PhyChipChannelAction::PublishTxGain(ref image) => {
@@ -1058,15 +1058,15 @@ impl PhyChipChannelMmioBinding {
                 PhyChipChannelCompletion::TxGainPublished
             }
             PhyChipChannelAction::PublishTxCapCommandMemory { value } => {
-                oer_esp32s31_hal::phy::frequency::publish_tx_cap(registers, value);
+                oer_chips_esp32s31_hal::phy::frequency::publish_tx_cap(registers, value);
                 PhyChipChannelCompletion::TxCapCommandMemoryPublished { value }
             }
             PhyChipChannelAction::ConfigureChannelCbw { cbw } => {
-                oer_esp32s31_hal::phy::frequency::configure_channel_cbw(registers, u32::from(cbw));
+                oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(registers, u32::from(cbw));
                 PhyChipChannelCompletion::ChannelCbwConfigured { cbw }
             }
             PhyChipChannelAction::ClearDcMemory => {
-                oer_esp32s31_hal::phy::agc::clear_dc_memory(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_dc_memory(registers);
                 PhyChipChannelCompletion::DcMemoryCleared
             }
             _ => unreachable!(),
@@ -1193,7 +1193,7 @@ impl PhyChipChannelI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -1201,7 +1201,7 @@ impl PhyChipChannelI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<

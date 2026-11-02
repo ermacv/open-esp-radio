@@ -1,6 +1,6 @@
 //! The receive-interface address publication over host memory.
 
-use oer_esp32s31_pac::wifi_mac::{address_high, address_low};
+use oer_chips_esp32s31_pac::wifi_mac::{address_high, address_low};
 
 use crate::ieee80211::registers::{HostWords, MacInterface};
 

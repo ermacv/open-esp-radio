@@ -11,19 +11,19 @@
 
 use core::marker::PhantomData;
 
-use oer_bluetooth_hci::{
+use oer_protocols_bluetooth_hci::{
     self as hci, Cmd, Error as HciError, HciCommandPacket, HciControllerResponse, LeDtmCommand,
     LeDtmCommandCompleteEvent, LeDtmCommandKind, LeDtmPhy, LeRand, LeRandCommandCompleteEvent,
     LeReceiverTestCommand, LeTestEndCommand, LeTransmitterTestCommand, Opcode, PacketKind,
     Reset as HciReset,
 };
-use oer_bluetooth_le_port::{
+use oer_protocols_bluetooth_le_port::{
     self as port, Admitted, Command, Completion, DtmCommand, Event, EventResult, Idle,
     LeCapabilities, LeOperationId, Receive, Request, ReturnedSession, Running, Session, Supported,
     TestPhy, Transmit, TxPower,
 };
-use oer_bluetooth_le_wire::{TestChannel, TestPayloadType};
-use oer_radio_port::{Child, CorrelationIds, Permit, PoolPath, PortContext, Seat};
+use oer_protocols_bluetooth_le_wire::{TestChannel, TestPayloadType};
+use oer_protocols_radio_port::{Child, CorrelationIds, Permit, PoolPath, PortContext, Seat};
 
 /// Entropy supplied by the composition, never synthesized from a timer.
 pub trait Entropy {
@@ -152,7 +152,7 @@ pub enum SubmitError<F> {
     /// An earlier fault stopped the service; no further request was submitted.
     Poisoned,
     /// The backend retained the request in quarantine.
-    Backend(oer_radio_port::Poisoned<F>),
+    Backend(oer_protocols_radio_port::Poisoned<F>),
     /// The receipt did not name the submitted operation and installation.
     Receipt,
     /// The retained command, configuration and session cannot form a request.
@@ -503,8 +503,8 @@ impl<'p, P: PoolPath, C: LeCapabilities> Service<'p, P, C> {
     pub fn complete_with<F>(
         &mut self,
         event: Result<
-            Result<Event<'p, P, ()>, oer_radio_port::EventsLost>,
-            oer_radio_port::EventEnd<F>,
+            Result<Event<'p, P, ()>, oer_protocols_radio_port::EventsLost>,
+            oer_protocols_radio_port::EventEnd<F>,
         >,
     ) -> Result<(), Fault> {
         let receipt = self.completion()?;

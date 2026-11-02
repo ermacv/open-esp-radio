@@ -2,11 +2,11 @@
 //!
 //! The recovered PHY transitions describe what must happen, while this module
 //! owns the common polling contract for the target. Time is the caller's
-//! [`oer_cooperate::CooperativeTimer`], so neither Embassy nor an RTOS becomes a dependency of
+//! [`oer_portable_cooperate::CooperativeTimer`], so neither Embassy nor an RTOS becomes a dependency of
 //! the PHY crate; short settles are a [`PhyShortDelay`].
 
 use crate::executor::wait::{Kind, PhyShortDelay, delay};
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 use core::future::Future;
 
@@ -56,19 +56,19 @@ use crate::{
     },
 };
 
-use oer_esp32s31_hal::owner::SharedPhyAccess;
+use oer_chips_esp32s31_hal::owner::SharedPhyAccess;
 
 /// Execute one complete rev0 PBus force command with the vendor's direct
 /// status polling shape. A named 20 µs settle on the caller's clock
 /// bounds completion; no executor edge exists inside this transaction.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn force_pbus_direct<C: oer_time::Clock + ?Sized>(
+pub(crate) fn force_pbus_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     transaction: crate::analog::pbus::PhyPbusForceTest,
 ) -> bool {
-    oer_esp32s31_hal::phy::pbus::start_force_test(
+    oer_chips_esp32s31_hal::phy::pbus::start_force_test(
         registers,
         transaction.selector(),
         transaction.path(),
@@ -76,7 +76,7 @@ pub(crate) fn force_pbus_direct<C: oer_time::Clock + ?Sized>(
     );
     crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
         Ok(
-            oer_espressif_phy::pbus::try_finish_force_test(&mut oer_esp32s31_hal::phy::pbus::port(
+            oer_chips_family_phy::pbus::try_finish_force_test(&mut oer_chips_esp32s31_hal::phy::pbus::port(
                 registers,
             ))
             .is_ok(),
@@ -89,10 +89,10 @@ pub(crate) fn force_pbus_direct<C: oer_time::Clock + ?Sized>(
 /// transition or an async completion for each busy observation.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn read_i2c_direct<C: oer_time::Clock + ?Sized>(
+pub(crate) fn read_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    address: oer_esp32s31_hal::phy::i2c::Address,
+    address: oer_chips_esp32s31_hal::phy::i2c::Address,
 ) -> Result<u8, PhyTargetPortError> {
     let started =
         crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
@@ -112,10 +112,10 @@ pub(crate) fn read_i2c_direct<C: oer_time::Clock + ?Sized>(
 /// direct busy polling as the vendor leaf.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
+pub(crate) fn write_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    address: oer_esp32s31_hal::phy::i2c::Address,
+    address: oer_chips_esp32s31_hal::phy::i2c::Address,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
     let started =
@@ -142,10 +142,10 @@ pub(crate) fn write_i2c_direct<C: oer_time::Clock + ?Sized>(
 /// vendor-shaped operation.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn write_i2c_field_direct<C: oer_time::Clock + ?Sized>(
+pub(crate) fn write_i2c_field_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    field: oer_esp32s31_hal::phy::i2c::Field,
+    field: oer_chips_esp32s31_hal::phy::i2c::Field,
     value: u8,
 ) -> Result<(), PhyTargetPortError> {
     let current = read_i2c_direct(clock, registers, field.address())?;
@@ -160,11 +160,11 @@ pub(crate) fn write_i2c_field_direct<C: oer_time::Clock + ?Sized>(
 /// Execute the four masked analog-I²C writes of complete ROM
 /// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn reset_clock_generator_direct<C: oer_time::Clock + ?Sized>(
+pub(crate) fn reset_clock_generator_direct<C: oer_portable_time::Clock + ?Sized>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
-    use oer_esp32s31_hal::phy::i2c::analog_i2c;
+    use oer_chips_esp32s31_hal::phy::i2c::analog_i2c;
 
     for (field, value) in [
         (
@@ -217,11 +217,11 @@ impl DirectOperationBudget {
 pub struct RomShortDelay;
 
 impl RomShortDelay {
-    pub const MAX_MICROS: u32 = oer_espressif_phy::settle::MAX_MICROS;
+    pub const MAX_MICROS: u32 = oer_chips_family_phy::settle::MAX_MICROS;
 
     pub fn settle_micros(micros: u32) -> bool {
-        oer_espressif_phy::settle::settle_micros(
-            &mut oer_esp32s31_hal::phy::settle_clock::SettleClock,
+        oer_chips_family_phy::settle::settle_micros(
+            &mut oer_chips_esp32s31_hal::phy::settle_clock::SettleClock,
             micros,
         )
     }
@@ -249,8 +249,8 @@ pub enum PhyTargetPortError {
     DeadlineOverflow,
 }
 
-impl oer_diagnostics::DiagnosticPath for PhyTargetPortError {
-    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+impl oer_portable_diagnostics::DiagnosticPath for PhyTargetPortError {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
         path.name(match self {
             Self::HardwareEdgeTimedOut => "HardwareEdgeTimedOut",
             Self::HardwareCapabilityUnavailable => "HardwareCapabilityUnavailable",
@@ -413,7 +413,7 @@ macro_rules! define_timeout_pbus_executor {
 define_i2c_executor!(
     complete_masked_i2c,
     MaskedI2cWriteBinding,
-    oer_espressif_analog::Completion<crate::analog::i2c::Address>
+    oer_chips_family_analog::Completion<crate::analog::i2c::Address>
 );
 define_i2c_executor!(
     complete_temperature_i2c,
@@ -463,7 +463,7 @@ pub async fn complete_i2c_configuration<D: PhyShortDelay>(
 ) -> Result<crate::analog::i2c::PhyRfInitPrefixCompletion, PhyTargetPortError> {
     for _ in 0..HARDWARE_EDGE_LIMIT {
         match binding.action() {
-            oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::StartCommand => {
+            oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::StartCommand => {
                 match binding.start_target(registers) {
                     Ok(()) => {}
                     Err(PhyColdI2cError::BusyAtStart) => {
@@ -472,7 +472,7 @@ pub async fn complete_i2c_configuration<D: PhyShortDelay>(
                     Err(_) => return Err(PhyTargetPortError::HardwareInvariant),
                 }
             }
-            oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::AwaitCompletionEdge => {
+            oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::AwaitCompletionEdge => {
                 delay::<D, _>(timer, Kind::Completion, 1).await;
                 match binding
                     .observe_target_edge(registers)
@@ -481,7 +481,7 @@ pub async fn complete_i2c_configuration<D: PhyShortDelay>(
                     PhyColdI2cObservation::EdgeConsumed | PhyColdI2cObservation::StillPending => {}
                 }
             }
-            oer_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::Complete => {
+            oer_chips_esp32s31_hal::phy::i2c::PhyI2cConfigurationAction::Complete => {
                 return binding
                     .into_completion()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding);

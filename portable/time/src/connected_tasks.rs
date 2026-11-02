@@ -21,8 +21,8 @@ use embassy_futures::{
     join::join,
     select::{Either, select},
 };
-use oer_memory::ClaimCell;
-use oer_sync::PriorityWaker;
+use oer_portable_memory::ClaimCell;
+use oer_portable_sync::PriorityWaker;
 
 const IDLE: u8 = 0;
 const ACTIVE: u8 = 1;

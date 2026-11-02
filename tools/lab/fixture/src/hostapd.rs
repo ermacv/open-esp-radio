@@ -4,21 +4,21 @@
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_os_process as process;
+use oer_tools_os_process as process;
 use std::{fs, path::Path, process::Command};
 
 const URL: &str = "https://w1.fi/releases/hostapd-2.12.tar.gz";
 const SOURCE_SHA256: &str = "f43502561c28ba47ab77e18e1a973d07361c68cc8b14178e619bd5796b70eabd";
 
 fn verify_source(bytes: &[u8]) -> Result<()> {
-    if oer_os_durable::sha256_bytes(bytes) != SOURCE_SHA256 {
+    if oer_tools_os_durable::sha256_bytes(bytes) != SOURCE_SHA256 {
         return Err("hostapd archive SHA-256 mismatch".into());
     }
     Ok(())
 }
 
 fn command(root: &Path, program: impl AsRef<std::ffi::OsStr>) -> Command {
-    let mut command = oer_os_process::command(program);
+    let mut command = oer_tools_os_process::command(program);
     command.current_dir(root);
     command
 }
@@ -48,14 +48,14 @@ pub fn build(root: &Path) -> Result<()> {
         "openssl",
     ]))?;
     let inputs = serde_json::json!({"schema":1,"source":URL,"source_sha256":SOURCE_SHA256,
-        "patch_sha256":oer_os_durable::sha256_bytes(&patch),"config_sha256":oer_os_durable::sha256_bytes(&config),"builder_sha256":oer_os_durable::sha256_bytes(include_bytes!("lib.rs")),
+        "patch_sha256":oer_tools_os_durable::sha256_bytes(&patch),"config_sha256":oer_tools_os_durable::sha256_bytes(&config),"builder_sha256":oer_tools_os_durable::sha256_bytes(include_bytes!("lib.rs")),
         "compiler":compiler,"libraries":libraries});
     let binary = output.join("hostapd");
     let provenance = output.join("provenance.json");
     if let (Ok(old), Ok(bytes)) = (fs::read(&provenance), fs::read(&binary))
         && let Ok(old) = serde_json::from_slice::<serde_json::Value>(&old)
         && old["inputs"] == inputs
-        && old["binary_sha256"] == oer_os_durable::sha256_bytes(&bytes)
+        && old["binary_sha256"] == oer_tools_os_durable::sha256_bytes(&bytes)
     {
         eprintln!("hostapd build verified: {}", binary.display());
         return Ok(());
@@ -113,7 +113,7 @@ pub fn build(root: &Path) -> Result<()> {
     let mut staged = tempfile::NamedTempFile::new_in(&output)?;
     std::io::copy(&mut fs::File::open(&built)?, &mut staged)?;
     fs::set_permissions(staged.path(), fs::metadata(&built)?.permissions())?;
-    let hash = oer_os_durable::sha256_bytes(&fs::read(staged.path())?);
+    let hash = oer_tools_os_durable::sha256_bytes(&fs::read(staged.path())?);
     staged.persist(&binary)?;
     let record = serde_json::json!({"inputs":inputs,"binary_sha256":hash});
     let mut staged = tempfile::NamedTempFile::new_in(&output)?;
@@ -127,7 +127,7 @@ pub fn build(root: &Path) -> Result<()> {
 }
 
 fn verify_policy(root: &Path, binary: &Path, directory: &Path) -> Result<()> {
-    use oer_os_process::CommandExt as _;
+    use oer_tools_os_process::CommandExt as _;
     let config = directory.join("parser.conf");
     // An intentional final syntax error prevents all driver initialization.
     fs::write(&config, "noscan=1\nht_coex=1\noer_parser_stop=1\n")?;

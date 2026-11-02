@@ -14,18 +14,18 @@
 //! due at the next TBTT; the access point's owner moves the port and the
 //! template is written again for the new channel ([`ApBeacon::rewrite`]).
 
-use oer_ieee80211_wire::beacon::{
+use oer_protocols_ieee80211_wire::beacon::{
     BeaconTemplateError, dtim, insert_after_tim, remove_elements, write_channel_switch_count,
 };
-use oer_ieee80211_wire::channel_switch::{
+use oer_protocols_ieee80211_wire::channel_switch::{
     CHANNEL_SWITCH_ELEMENT_ID, ChannelSwitch, EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
     SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
 };
-use oer_ieee80211_wire::frame::write_sequence_control;
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_ieee80211_wire::tsf::time_units_micros;
+use oer_protocols_ieee80211_wire::frame::write_sequence_control;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::tsf::time_units_micros;
 
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     ap::profile::Advertisement,
     beacon::{
         AP_BEACON_CAPACITY, ApBeaconBuildError, ApBeaconProtectionError, TimPartialVirtualBitmap,
@@ -35,7 +35,7 @@ use oer_ieee80211_wire::{
     protection::ApBssProtection,
     ssid::WifiSsid,
 };
-use oer_time::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 use crate::{security_policy::ApSecurityPolicy, tbtt::next_tbtt};
 

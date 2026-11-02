@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::vec::Vec;
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154InterruptStartup, Ieee802154InterruptTeardown,
 };
 /// Execution port of the interrupt activation and teardown transactions,
@@ -406,7 +406,7 @@ impl Ieee802154InterruptTeardown for RecordingTeardown {
 
 #[test]
 fn first_and_later_activation_use_exactly_the_ten_serviced_events() {
-    use oer_espressif_ieee802154_mac_values::{Ieee802154Event as E, Ieee802154EventMask as M};
+    use oer_chips_family_ieee802154_mac_values::{Ieee802154Event as E, Ieee802154EventMask as M};
     let expected = M::NONE
         .with(E::TxDone)
         .with(E::RxDone)

@@ -9,8 +9,8 @@
 
 use std::vec::Vec;
 
-use oer_esp32s31_pac::{bt_bb::BtV32Baseband, instances};
-use oer_mmio::Index;
+use oer_chips_esp32s31_pac::{bt_bb::BtV32Baseband, instances};
+use oer_portable_mmio::Index;
 
 use super::host::{HostMemory, changed};
 use super::{
@@ -395,7 +395,7 @@ fn the_low_power_component_routes_channels_four_through_seven() {
 
 #[test]
 fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
-    use oer_esp32s31_pac::bt_mac::irq_enable_1;
+    use oer_chips_esp32s31_pac::bt_mac::irq_enable_1;
     let unrelated = |r: irq_enable_1::R| {
         (
             r.source_3(),
@@ -443,7 +443,7 @@ fn baseline_clear_enable_and_release_preserve_unrelated_sources() {
 
 #[test]
 fn timer_handler_acknowledges_only_nonzero_low_bytes_with_whole_word_zero() {
-    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+    use oer_chips_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
 
     for pending in [false, true] {
         for rollover in [false, true] {
@@ -475,7 +475,7 @@ fn timer_handler_acknowledges_only_nonzero_low_bytes_with_whole_word_zero() {
 
 #[test]
 fn counter_rollover_clears_the_whole_word_and_publishes_whole_word_pending() {
-    use oer_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
+    use oer_chips_esp32s31_pac::modem_pwr::{word_002c_opaque, word_0024_opaque};
 
     let mut memory = HostMemory::filled(u32::MAX);
     let mut epoch = BluetoothModemLpTimerEpoch::new();
@@ -491,7 +491,7 @@ fn counter_rollover_clears_the_whole_word_and_publishes_whole_word_pending() {
 
 #[test]
 fn immediate_deadline_publishes_pending_with_zero_upper_bytes() {
-    use oer_esp32s31_pac::modem_pwr::word_0024_opaque;
+    use oer_chips_esp32s31_pac::modem_pwr::word_0024_opaque;
 
     // Counter low bits and rollover byte are zero; pending has upper bits set.
     let mut memory = HostMemory::filled(0xa500_0000);

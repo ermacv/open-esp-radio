@@ -1,7 +1,7 @@
 # Radio comparison and calibrated silicon sheets
 
 The comparison binary retains its Blobray catalog and public-API session.
-The staged `oer-firmware-probes-esp32s31-radio-hardware` companion uses the same
+The staged `oer-hil-probes-esp32s31-radio-hardware` companion uses the same
 session source and the same P-EST/P-FREQ entry. It performs no scan, MAC RX/TX
 start, DMA publication or protocol. A production bootstrap supplies the normal
 PSRAM, clock and runtime handoff; a P2 task performs one full uncached production
@@ -9,8 +9,8 @@ PSRAM, clock and runtime handoff; a P2 task performs one full uncached productio
 The session retains every owner. There is no second PAC claim.
 
 ```console
-cargo fw probe oer-firmware-probes-esp32s31-radio
-cargo fw build ../probes/esp32s31-radio --bin oer-firmware-probes-esp32s31-radio-hardware --diagnostic
+cargo fw probe oer-hil-probes-esp32s31-radio
+cargo fw build ../probes/esp32s31-radio --bin oer-hil-probes-esp32s31-radio-hardware --diagnostic
 ```
 
 Build before leasing. Flash the built bundle with `cargo fw flash
@@ -21,7 +21,7 @@ Return the disposable session to ROM download before releasing the lease.
 
 `open_phy_est_freq_buffer_address(0)` returns the journal address and argument 1
 returns the request address (other arguments return 0). This C entry and the sheet
-entry use `oer_probe_macros::probe!`; the buffers use `oer_memory::zeroed_static!`
+entry use `oer_tools_probe_macros::probe!`; the buffers use `oer_portable_memory::zeroed_static!`
 in critical SRAM BSS. A debugger can also resolve their demangled Rust symbols,
 `est_freq::EST_FREQ_OUTPUT` and `est_freq::EST_FREQ_REQUEST`. The request starts at 0,
 which is ignored; only selection 150 starts calibration. The runtime's interrupt

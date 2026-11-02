@@ -13,7 +13,7 @@ fn only_channels_eleven_through_twenty_six_are_constructible() {
 
 #[test]
 fn channel_spans_two_megahertz_around_its_center() {
-    use oer_radio_regulatory::RadioChannel as _;
+    use oer_protocols_radio_regulatory::RadioChannel as _;
     let span = Channel::new(26).unwrap().span();
     assert_eq!((span.low_khz(), span.high_khz()), (2_479_000, 2_481_000));
 }

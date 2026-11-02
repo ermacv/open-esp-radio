@@ -1,6 +1,6 @@
 use super::{EdcaBackoffState, EdcaContentionParameters, EdcaParametersError, EdcaQueues};
 use crate::mac::tx::LegacyTxQueue;
-use oer_ieee80211_wire::extensions::wmm::parse_wmm_parameter_element;
+use oer_protocols_ieee80211_wire::extensions::wmm::parse_wmm_parameter_element;
 
 const STANDARD_WMM: [u8; 26] = [
     221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x85, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42, 0x43,
@@ -63,7 +63,7 @@ fn wmm_update_is_validated_before_any_queue_changes() {
     invalid[11] = (11 << 4) | 4;
     let parameters = parse_wmm_parameter_element(&invalid).unwrap();
     assert_eq!(
-        queues.configure_from_edca(oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+        queues.configure_from_edca(oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
             parameters
         )),
         Err(EdcaParametersError::MaximumExponentOutOfRange(11))
@@ -71,7 +71,7 @@ fn wmm_update_is_validated_before_any_queue_changes() {
     assert_eq!(queues, before);
 
     queues
-        .configure_from_edca(oer_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+        .configure_from_edca(oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
             parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
         ))
         .unwrap();
@@ -100,7 +100,7 @@ fn standard_defaults_retain_txop_policy_without_granting_admission() {
         assert!(!policy.admission_control_mandatory());
         assert_eq!(
             policy.txop_limit_units_32_us(),
-            oer_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
+            oer_protocols_ieee80211_contracts_port::EdcaParameterSet::STANDARD_DEFAULT
                 .access_category(queue.access_category())
                 .wmm
                 .txop_limit_units_32_us

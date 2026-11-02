@@ -22,7 +22,7 @@
 //! the image's configuration: the firmware gate checks where its writers run
 //! ([`crate::instances`]).
 use crate::{Analysis, Assumption, Bound, LevelDrop, Resolutions, TableEntry, TrapEntry};
-use oer_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
+use oer_tools_analysis_riscv_model::{Error, ErrorCode, Ledger, Result, RunControl};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// What the stacks of an image are bounded from.
@@ -42,7 +42,7 @@ pub struct Stacks<'a> {
 
 /// Read the runtime's required absolute nesting metadata, independently of
 /// function symbols. Missing, non-absolute or zero metadata is refused.
-pub fn exception_copies(file: &oer_analysis_elf::Elf<'_>) -> Result<u32> {
+pub fn exception_copies(file: &oer_tools_analysis_elf::Elf<'_>) -> Result<u32> {
     let invalid = || {
         Error::new(
             ErrorCode::Integrity,

@@ -28,7 +28,7 @@ pub(in crate::image) fn usb_packet(s: &mut Session<'_>) {
     s.generic
         .usb_irq
         .acknowledge_usb_serial_jtag_interrupt(sample);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     usb_state(s, 0x22620);
     wait_window();
     usb_state(s, 0x22630); // OUT FIFO deliberately still contains the byte.
@@ -105,13 +105,13 @@ fn init(s: &mut Session<'_>) {
     }
 }
 fn wait(s: &Session<'_>, n: usize, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
-    while !sy_raw(s, n) && oer_riscv::cycle32().wrapping_sub(start) < LIMIT {}
+    let start = oer_portable_riscv::cycle32();
+    while !sy_raw(s, n) && oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {}
     let ready = sy_raw(s, n);
     emit(
         tag,
         u32::from(ready),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     ready
@@ -192,7 +192,7 @@ fn seed(s: &mut Session<'_>, value: u64) {
         w.set_timer_unit0_load_lo(value as u32);
     });
     timer.trigger_unit0_load_timer_unit0_load();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(in crate::image) fn wrap(s: &mut Session<'_>) {
     init(s);
@@ -214,9 +214,9 @@ pub(in crate::image) fn wrap(s: &mut Session<'_>) {
         s.generic.systimer.systimer.modify_conf(|w| {
             w.set_timer_unit0_work_en(true);
         });
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let mut crossed = false;
-        while oer_riscv::cycle32().wrapping_sub(start) < LIMIT {
+        while oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {
             let Some(now) = sy_now(s) else { break };
             if (boundary == MODULUS && (16_000..32_000).contains(&now))
                 || (boundary != MODULUS && now >= target)
@@ -228,7 +228,7 @@ pub(in crate::image) fn wrap(s: &mut Session<'_>) {
         emit(
             tag + 0x18,
             u32::from(crossed),
-            oer_riscv::cycle32().wrapping_sub(start),
+            oer_portable_riscv::cycle32().wrapping_sub(start),
             0,
         );
         wait(s, 0, tag + 0x20);

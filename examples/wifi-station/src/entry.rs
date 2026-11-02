@@ -3,7 +3,7 @@
 // network's gateway, again after every reconnection.
 mod profile;
 
-use oer_espressif::{
+use oer::{
     AppResult, ApplicationEnd, Boot, Channel, Error, Hart1Boot, Hart1Peripherals,
     Hart1Started, Peripherals, SecondEnd, Started,
     print::{DiagPath, DiagnosticPath, Ipv4},
@@ -17,7 +17,7 @@ use profile::{PROFILE, Security};
 /// gateway and hears how it ended.
 static EXCHANGES: Channel<[u8; 4], Result<(), Exchange>, 1> = Channel::new();
 
-oer_espressif::entry!(boot, hart1 = network);
+oer::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;

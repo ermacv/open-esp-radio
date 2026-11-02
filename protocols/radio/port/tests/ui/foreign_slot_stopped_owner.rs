@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{SlotIdentity, SlotOwner, SlotStopped};
+use oer_protocols_radio_port::{SlotIdentity, SlotOwner, SlotStopped};
 
 pub fn stopped<Id: SlotIdentity, S: SlotOwner<Id>, Other: SlotOwner<Id>>(
     own: SlotStopped<Id, S>, foreign: SlotStopped<Id, Other>,

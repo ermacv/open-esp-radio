@@ -1,6 +1,6 @@
 //! Ownership boundary for the open promiscuous receive frontier.
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::mac::{WifiMacColdHal, WifiMacHal},
     owner::RadioAccess,
 };

@@ -2,13 +2,13 @@
 //! DIE offsets are used only to follow references, never as comparison keys.
 use super::TYPE_MIN_BYTES;
 use crate::Result;
-use oer_analysis_elf::{
+use oer_tools_analysis_elf::{
     Elf,
     dwarf::{DebugSections, gimli},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-type Reader<'a> = oer_analysis_elf::dwarf::SliceReader<'a>;
+type Reader<'a> = oer_tools_analysis_elf::dwarf::SliceReader<'a>;
 #[derive(Default)]
 struct Type {
     name: Option<String>,
@@ -233,7 +233,7 @@ async fn future<const N: usize>() { let value = [1u8; N]; core::future::pending:
 }
 fn main() { keep(); }
 "#).unwrap();
-        let output = oer_os_toolchain::command(oer_os_toolchain::Tool::Rustc)
+        let output = oer_tools_os_toolchain::command(oer_tools_os_toolchain::Tool::Rustc)
             .unwrap()
             .args(["--edition=2024", "-Cdebuginfo=2", "-Copt-level=1"])
             .arg(&source)

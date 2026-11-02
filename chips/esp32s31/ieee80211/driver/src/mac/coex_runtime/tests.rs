@@ -55,7 +55,7 @@ fn lmac_carries_only_bounded_itwt_and_tx_arguments() {
         pti_1: MacPti::new(3).unwrap(),
         pti_0: MacPti::new(4).unwrap(),
         pti_3: MacPti::new(5).unwrap(),
-        count: oer_esp32s31_hal::ieee80211::mac::MacTxPtiCount::new(0x0fff).unwrap(),
+        count: oer_chips_esp32s31_hal::ieee80211::mac::MacTxPtiCount::new(0x0fff).unwrap(),
     };
     configure_itwt_pti(&mut hardware, true, shared);
     clear_itwt_pti(&mut hardware, clear);

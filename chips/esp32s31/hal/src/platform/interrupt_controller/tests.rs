@@ -1,14 +1,14 @@
-use oer_riscv::clic::{Control, LineState, Trigger};
+use oer_portable_riscv::clic::{Control, LineState, Trigger};
 use std::vec;
 use std::vec::Vec;
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     clic::{self, Clic, ClicObserver},
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
-use oer_espressif_interrupt_table::{Binding, Class, Controller, Error, Router, Table};
-use oer_mmio::{Bits, Host, Index, InterruptSource};
+use oer_chips_family_interrupt_table::{Binding, Class, Controller, Error, Router, Table};
+use oer_portable_mmio::{Bits, Host, Index, InterruptSource};
 
 use super::{
     ForeignHart, InterruptController, InterruptGrant, InterruptView, LineObservation, Observer,
@@ -422,12 +422,12 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
 pub struct WakeIrq;
 
 impl InterruptSource for WakeIrq {
-    const SOURCE: u16 = <oer_esp32s31_pac::hp_system::FromCpu0 as InterruptSource>::SOURCE;
+    const SOURCE: u16 = <oer_chips_esp32s31_pac::hp_system::FromCpu0 as InterruptSource>::SOURCE;
 }
 
 pub fn on_wake(_: &mut WakeIrq) {}
 
-oer_espressif_interrupt_table::interrupt_table! {
+oer_chips_family_interrupt_table::interrupt_table! {
     lines: LINES,
     handler_attributes: [];
     contexts { radio: 3; }
@@ -541,7 +541,7 @@ fn a_source_is_pending_at_its_bit_of_its_status_word() {
     let mut words = vec![0; instances::interrupt_core0::SIZE / 4];
     words[0x2a8 / 4 + 2] = 1 << 4; // source 68, FROM_CPU_INTR3
     words[0x2a8 / 4 + 5] = 1 << 8; // source 168, the last
-    let status = oer_esp32s31_pac::interrupt_core::InterruptCore0Status::host(&mut words)
+    let status = oer_chips_esp32s31_pac::interrupt_core::InterruptCore0Status::host(&mut words)
         .expect("the memory holds the bank");
     assert!(super::pending_in(&status, 68));
     assert!(super::pending_in(&status, 168));

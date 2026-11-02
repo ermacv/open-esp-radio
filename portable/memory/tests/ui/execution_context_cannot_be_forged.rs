@@ -1,4 +1,4 @@
-use oer_memory::{Entered, Never};
+use oer_portable_memory::{Entered, Never};
 
 #[cfg(not(ui_reject))]
 pub fn proof() -> Option<Entered<Never>> {

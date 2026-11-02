@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 
-use oer_hil_protocol::{DecodeError, FrameDecoder, WireKind};
+use oer_protocols_hil_protocol::{DecodeError, FrameDecoder, WireKind};
 use zeroize::Zeroizing;
 
 use crate::{LinkError, Received, Shared, notes::Notes, transport::events::EventPoll};

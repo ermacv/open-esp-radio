@@ -1,12 +1,12 @@
-use oer_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
-use oer_ieee80211_contracts_port::*;
-use oer_ieee80211_core_arbiter::{AbsencePlace, LeasePlace};
-use oer_ieee80211_core_roles_sta::epoch::LinkEpochSource;
-use oer_ieee80211_core_roles_sta::machine::{StaConfig, StaTokens, Station, StationResources};
-use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
+use oer_protocols_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
+use oer_protocols_ieee80211_contracts_port::*;
+use oer_protocols_ieee80211_core_arbiter::{AbsencePlace, LeasePlace};
+use oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource;
+use oer_protocols_ieee80211_core_roles_sta::machine::{StaConfig, StaTokens, Station, StationResources};
+use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 struct Caps;
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -39,26 +39,26 @@ impl Ieee80211Capabilities for Caps {
 }
 struct Buffer;
 impl TxBufferMemory for Buffer {
-    fn renew_msdu(&mut self) -> Result<(), oer_ieee80211_contracts_port::BufferMemoryUnavailable> {
+    fn renew_msdu(&mut self) -> Result<(), oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
         Ok(())
     }
     fn bytes_mut(
         &mut self,
-    ) -> Result<&mut [u8], oer_ieee80211_contracts_port::BufferMemoryUnavailable> {
+    ) -> Result<&mut [u8], oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
         Ok(&mut [])
     }
 }
 struct Tokens<'id, const GROUPS: usize>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
-impl oer_ieee80211_contracts_port::TxBufferClass for Buffer {
+impl oer_protocols_ieee80211_contracts_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 256;
 }
 impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
     type AssociationStart = ();
     type Association = ();
     type VacantKeyBank =
-        oer_ieee80211_contracts_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
     type VacantAssociation = [(); GROUPS];
-    fn begin_association(_: (), _: oer_ieee80211_wire::security::Spp) {}
+    fn begin_association(_: (), _: oer_protocols_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {
         key
     }
@@ -66,7 +66,7 @@ impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
         (
             (),
             (),
-            oer_ieee80211_contracts_port::association::KeyBankParts {
+            oer_protocols_ieee80211_contracts_port::association::KeyBankParts {
                 pairwise: core::iter::empty().collect(),
                 group: group.into_iter().collect(),
             },
@@ -84,9 +84,9 @@ impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
     const PAIRWISE_SLOTS: usize = 1;
     const TOTAL_GROUP_SLOTS: usize = GROUPS;
     const GROUP_SLOTS: usize = GROUPS;
-    type GatePath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
-    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
-    type ConfigurationPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type GatePath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
+    type EpochPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
+    type ConfigurationPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
     type Small = Buffer;
     type Ticket = u8;
     type SmallBuffer = Buffer;
@@ -108,13 +108,13 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
     config: StaConfig<Caps, Callbacks>,
     place: LeasePlace<'id>,
     absence: AbsencePlace<'id>,
-    configure: oer_ieee80211_contracts_port::ConfigurePermission<
+    configure: oer_protocols_ieee80211_contracts_port::ConfigurePermission<
         'id,
-        oer_ieee80211_contracts_port::Station,
+        oer_protocols_ieee80211_contracts_port::Station,
     >,
 ) -> (
     Station<'id, Tokens<'id, G>, Caps, Callbacks>,
-    oer_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>,
+    oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>,
 ) {
     Station::new::<T, B, G>(
         config,
@@ -128,13 +128,13 @@ fn construct<'id, const T: usize, const B: usize, const G: usize>(
             keys: [(); G],
             group_permission: (),
         },
-        oer_ieee80211_core_roles_sta::machine::GroupCapacity::new(),
+        oer_protocols_ieee80211_core_roles_sta::machine::GroupCapacity::new(),
     )
 }
 
-struct Callbacks(oer_ieee80211_core_security_cipher::aes::SoftwareAes128);
-impl oer_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
-    type AesEngine = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
+struct Callbacks(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128);
+impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
+    type AesEngine = oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
         [0; 32]
     }
@@ -144,8 +144,8 @@ impl oer_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
     fn he_packet_padding(
         &self,
         _: &[u8],
-    ) -> oer_ieee80211_core_upper_mac::protection::HePacketPadding {
-        oer_ieee80211_core_upper_mac::protection::HePacketPadding::None
+    ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
+        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
     }
 }
 

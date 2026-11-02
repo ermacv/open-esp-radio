@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{Completed, TerminalAccess, TerminalParts};
-use oer_radio_port::Slot;
+use oer_protocols_ieee80211_contracts_port::{Completed, TerminalAccess, TerminalParts};
+use oer_protocols_radio_port::Slot;
 pub fn unpack<'id, C, K, M, O>(
     terminal: Completed<C, Slot<'id, K>, M, O>,
     access: &mut TerminalAccess<'id, K>,

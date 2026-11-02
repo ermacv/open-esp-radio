@@ -23,9 +23,9 @@ struct Observation {
 }
 
 fn observe(s: &mut Session<'_>) -> Option<Observation> {
-    let before = oer_riscv::cycle64();
+    let before = oer_portable_riscv::cycle64();
     let raw = sample(s)?;
-    let after = oer_riscv::cycle64();
+    let after = oer_portable_riscv::cycle64();
     Some(Observation {
         before,
         after,
@@ -191,7 +191,7 @@ fn run(s: &mut Session<'_>, full_period: bool) {
             s.ble
                 .bank
                 .acknowledge_bluetooth_primary_interrupt_bank_1(pending);
-            oer_riscv::fence();
+            oer_portable_riscv::fence();
             acked = true;
             if let Some(after) = observe(s) {
                 journal(0xe750, &after);

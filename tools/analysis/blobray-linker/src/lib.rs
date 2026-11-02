@@ -6,9 +6,9 @@
 mod linker;
 pub use linker::ElfLinker;
 
-use oer_analysis_blobray_domain::*;
+use oer_tools_analysis_blobray_domain::*;
 
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 use std::{
     fs::File,
     path::Path,

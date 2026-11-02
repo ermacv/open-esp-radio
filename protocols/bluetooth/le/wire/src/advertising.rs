@@ -1,7 +1,7 @@
 //! Legacy advertising data and the non-connectable `ADV_NONCONN_IND` and
 //! `ADV_SCAN_IND` PDUs.
 
-use oer_wire::{PrefixLength, Reader, U8};
+use oer_portable_wire::{PrefixLength, Reader, U8};
 
 use crate::advertising_header::{
     ADVERTISING_HEADER_LENGTH, AdvertisingHeader, AdvertisingPduType, encode_legacy_pdu,

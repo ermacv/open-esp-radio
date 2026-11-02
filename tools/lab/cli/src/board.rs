@@ -12,12 +12,12 @@ use std::{
 };
 
 use crate::Result;
-use oer_lab_client::{
+use oer_tools_lab_client::{
     client::{Client, Input},
     protocol::{Operation, Request},
 };
-use oer_lab_model::rom::ResetPath;
-use oer_os_process::Checkout;
+use oer_tools_lab_model::rom::ResetPath;
+use oer_tools_os_process::Checkout;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub(crate) enum Via {
@@ -109,18 +109,18 @@ impl Via {
 }
 
 fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
-    oer_lab_arbiter::parse_duration(text).map_err(|error| error.to_string())
+    oer_tools_lab_arbiter::parse_duration(text).map_err(|error| error.to_string())
 }
 
 /// A board of the stand file, resolved for a command.
 struct Target {
     /// Its stand-file entry.
-    board: oer_lab_model::Board,
-    mac: oer_lab_model::DeviceId,
+    board: oer_tools_lab_model::Board,
+    mac: oer_tools_lab_model::DeviceId,
 }
 
 fn target(board: &str) -> Result<Target> {
-    let stand = oer_lab_model::Stand::load(&oer_lab_model::paths::stand_file()?)?;
+    let stand = oer_tools_lab_model::Stand::load(&oer_tools_lab_model::paths::stand_file()?)?;
     let entry = stand.resolve(board)?.clone();
     Ok(Target {
         mac: entry.device_id()?,
@@ -133,7 +133,7 @@ fn lease(target: &Target, owner: String, work: String) -> Result<Client> {
     crate::service::lease(
         owner,
         work,
-        vec![oer_lab_arbiter::claims::Claim::board(&target.board.mac)],
+        vec![oer_tools_lab_arbiter::claims::Claim::board(&target.board.mac)],
     )
 }
 
@@ -193,7 +193,7 @@ pub(crate) fn board(
                 .join("target/hil/console")
                 .join(target.mac.compact());
             std::fs::create_dir_all(&log)?;
-            let log = log.join(format!("console-{}.log", oer_os_durable::unix_seconds()));
+            let log = log.join(format!("console-{}.log", oer_tools_os_durable::unix_seconds()));
             let (lines, input) = console_lines(&mut lease, &target)?;
             let seen = capture(&lines, duration, until.as_deref(), &log)?;
             let _ = input.cancel();
@@ -280,7 +280,7 @@ fn soak(
                             .join(target.mac.compact())
                             .join(format!(
                                 "soak-failure-{}.log",
-                                oer_os_durable::unix_seconds()
+                                oer_tools_os_durable::unix_seconds()
                             ));
                         std::fs::create_dir_all(log.parent().ok_or("no parent")?)?;
                         if let Ok((lines, input)) = console_lines(&mut leased, &target) {
@@ -298,7 +298,7 @@ fn soak(
     crate::service::client()?.administer(Request::Record {
         owner,
         device: Some(target.mac.to_string()),
-        event: oer_lab_arbiter::journal::BoardEventKind::Soaked {
+        event: oer_tools_lab_arbiter::journal::BoardEventKind::Soaked {
             paths: via.iter().map(|via| via.path()).collect(),
             cycles: cycle,
             resets,
@@ -317,7 +317,7 @@ fn soak(
 }
 
 /// Print `lines` until the `@OK` (true) or `@ERR` (false) answer to
-/// `command` in the peers' one grammar ([`oer_lab_model::peer_line::parse`]), or
+/// `command` in the peers' one grammar ([`oer_tools_lab_model::peer_line::parse`]), or
 /// `None` after `duration`. An answer naming another command, such as noise
 /// a peer read while it booted, is only printed.
 fn answer(
@@ -333,13 +333,13 @@ fn answer(
             Ok(line) => {
                 let text = String::from_utf8_lossy(&line);
                 print(&text);
-                match oer_lab_model::peer_line::parse(text.trim()) {
-                    Some(oer_lab_model::peer_line::Line::Ok { command: about })
+                match oer_tools_lab_model::peer_line::parse(text.trim()) {
+                    Some(oer_tools_lab_model::peer_line::Line::Ok { command: about })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(true);
                     }
-                    Some(oer_lab_model::peer_line::Line::Err { command: about, .. })
+                    Some(oer_tools_lab_model::peer_line::Line::Err { command: about, .. })
                         if about.eq_ignore_ascii_case(command) =>
                     {
                         return Some(false);
@@ -358,7 +358,7 @@ fn answer(
 /// `@ERR` or on a command unanswered within `timeout`.
 fn send(
     lines: &mpsc::Receiver<Vec<u8>>,
-    write: &mut dyn FnMut(&[u8]) -> oer_lab_client::client::Result<()>,
+    write: &mut dyn FnMut(&[u8]) -> oer_tools_lab_client::client::Result<()>,
     commands: &[String],
     timeout: Duration,
 ) -> Result<std::process::ExitCode> {
@@ -433,7 +433,7 @@ fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
     );
     // What the board runs is its receipt's; the journal is history.
     println!("  image: {}", text("image"));
-    let arbiter = oer_lab_arbiter::Arbiter::open()?;
+    let arbiter = oer_tools_lab_arbiter::Arbiter::open()?;
     match arbiter.journal().latest_flash(mac)? {
         Some(event) => println!("  last journaled flash: {event}"),
         None => println!("  last journaled flash: none"),
@@ -486,8 +486,8 @@ fn check(target: &Target, lease: &mut Client, board: &str) -> Result<()> {
 
 /// The reset paths the service takes for `board`: RTS and JTAG need its
 /// chip's profile, a power cycle only its hub port.
-fn reset_paths(board: &oer_lab_model::Board, profiled: bool) -> String {
-    let power = board.reset.contains(&oer_lab_model::ResetStep::Power);
+fn reset_paths(board: &oer_tools_lab_model::Board, profiled: bool) -> String {
+    let power = board.reset.contains(&oer_tools_lab_model::ResetStep::Power);
     let paths = [
         (profiled, "rts"),
         (profiled, "jtag"),
@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn a_board_without_a_chip_profile_reaches_only_its_hub_power() {
         let stand = |chip: &str, reset: &str| {
-            oer_lab_model::Stand::parse(&format!(
+            oer_tools_lab_model::Stand::parse(&format!(
                 "schema = 2\n[[board]]\nid = \"b\"\nusb-serial = \"02:00:00:00:00:01\"\n\
                  chip = \"{chip}\"\nreset = {reset}\n"
             ))

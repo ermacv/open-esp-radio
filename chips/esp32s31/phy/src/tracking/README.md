@@ -242,7 +242,7 @@ A PHY delay (`executor::wait::delay`) distinguishes minimum hardware settles
 from bus-admission and readiness retry backoff. Named nonzero settles up to
 20 µs use the synchronous short-delay backend, which counts `mcycle` at the
 adopted CPU frequency with interrupts enabled. Longer settles and all retry
-backoffs use the caller's `oer_time::Timer`, capturing the absolute deadline
+backoffs use the caller's `oer_portable_time::Timer`, capturing the absolute deadline
 when the wait is created. An elapsed timer deadline needs no wake registration;
 a future deadline uses ordinary timer wake registration. These waits are not
 cooperative execution budgets: several completed waits may permit more hardware

@@ -1,12 +1,12 @@
 //! The facade's permanent DMA backing. Claim transfers each placed owner once.
 use crate::chip::{B, DriverExecutor, N, Q, S, TX};
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::dma::{tx_ampdu_storage::AmpduDmaStorage, tx_storage::TxDmaStorage},
     memory::dma_static::Placed,
 };
-use oer_esp32s31_ieee80211_driver::port::{TX_AMPDU_SUBFRAMES, TX_BUFFERS};
-use oer_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic;
-use oer_memory::PinnedDmaTxPool;
+use oer_chips_esp32s31_ieee80211_driver::port::{TX_AMPDU_SUBFRAMES, TX_BUFFERS};
+use oer_chips_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic;
+use oer_portable_memory::PinnedDmaTxPool;
 type Rx = WifiRxStatic<N, B, S, Q, DriverExecutor>;
 /// Every buffer an MPDU or a subframe is written into.
 pub(crate) type TxPool = PinnedDmaTxPool<TX, 0, 0, TX_BUFFERS>;
@@ -14,7 +14,7 @@ pub(crate) type TxPool = PinnedDmaTxPool<TX, 0, 0, TX_BUFFERS>;
 pub(crate) type TxDescriptor = TxDmaStorage;
 /// One aggregate's descriptor chain over pool buffers.
 pub(crate) type TxChain = AmpduDmaStorage<TX_AMPDU_SUBFRAMES, 0>;
-oer_esp32s31_hal::dma_static! {
+oer_chips_esp32s31_hal::dma_static! {
     static RX: Rx = zeroed in ".dma.bss.wifi_rx";
     static TX_POOL: TxPool = zeroed in ".dma.bss.wifi_tx_pool";
     static TX0: TxDescriptor = zeroed in ".dma.bss.wifi_tx0";

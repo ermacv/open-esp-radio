@@ -7,11 +7,11 @@
 //! are covered by the unit tests; this checks the accepted encoding space.
 //!
 //! Run this exhaustive check explicitly with
-//! `cargo test -p oer-analysis-riscv-decode --test llvm_reference -- --ignored`.
+//! `cargo test -p oer-tools-analysis-riscv-decode --test llvm_reference -- --ignored`.
 //! It uses only the pinned toolchain's llvm-tools component, with no
 //! environment override, and writes probes into its own temporary directory.
 
-use oer_analysis_riscv_decode::{Extensions, decode};
+use oer_tools_analysis_riscv_decode::{Extensions, decode};
 use std::{fs, path::PathBuf, process::Command};
 
 const ATTRIBUTES: &str = "+m,+a,+f,+c,+zba,+zbb,+zbs,+zcb,+zcmp";

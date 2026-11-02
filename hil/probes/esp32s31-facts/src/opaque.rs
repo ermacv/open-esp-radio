@@ -14,8 +14,8 @@ pub(super) struct Hardware {
 
 /// Named observation bound from BB-L; independent of modem clock progress.
 fn wait_cycles(cycles: u32) {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
 /// Refuse timing attribution unless the CPU is directly on the 40 MHz XTAL.
@@ -37,7 +37,7 @@ pub(super) fn xtal_cpu(s: &Session<'_>) -> bool {
 /// SOURCE: existing HAL modem operations and ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP.
 pub(super) fn prepare(s: &mut Session<'_>) {
     contain(s);
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     s.sar.radio.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
         w.set_reg_modem_clk_en(pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled);
     });
@@ -82,7 +82,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
     s.opaque.core_enable.modify_core_enable_control(|w| {
         w.set_bits_4_7_opaque(pac::wifi_mac::core_enable_control::Bits4_7Opaque::Disabled);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn clock_snapshot(s: &Session<'_>, tag: u32) {
@@ -147,7 +147,7 @@ pub(super) fn pll(s: &mut Session<'_>) {
                 .set_modem_clk_source_sel(source)
                 .set_modem_xtal_clk_en(xtal);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         emit(
             0xa4 + step * 4,
             modem_conf(s.sar.radio.hp_sys_clkrst_radio.read_modem_conf()),
@@ -157,7 +157,7 @@ pub(super) fn pll(s: &mut Session<'_>) {
                 .read_hp_active_icg_modem()
                 .hp_active_dig_icg_modem_code()
                 .get(),
-            oer_riscv::cycle32(),
+            oer_portable_riscv::cycle32(),
         );
     }
     s.sar
@@ -251,7 +251,7 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
         .modify_rx_block_ack_agreement_update(|w| {
             w.set_ordinary_entry_update(w.ordinary_entry_update() | 1);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     wait_cycles(4096);
     ordinary_snapshot(s, 0xc8);
     let b = &mut s.opaque.block_ack;
@@ -296,7 +296,7 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
     b.modify_rx_block_ack_agreement_update(|w| {
         w.set_extra_softap_readback_latch(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     extra_snapshot(s, 0xce);
     s.opaque
         .block_ack
@@ -348,7 +348,7 @@ fn set_bb(s: &mut Session<'_>, irq: bool, clear: bool, reset: bool) {
                 .set_watchdog_interrupt_enable(irq)
                 .set_watchdog_timeout_clear_request(clear);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn enable_baseband(s: &mut Session<'_>) {
     // SOURCE: HAL modem clock-device BB reset-before-enable sequence and
@@ -499,12 +499,12 @@ pub(super) fn temperature(s: &mut Session<'_>) {
             let mut changes = 0u32;
             let mut prior = before.out();
             let mut last = before;
-            let start = oer_riscv::cycle32();
+            let start = oer_portable_riscv::cycle32();
             for sample in 1..=100u32 {
                 // At most 99 reads at 10..990 us: the 1000 us iteration
                 // reaches the deadline and exits before its read.
-                while oer_riscv::cycle32().wrapping_sub(start) < sample * 400 {}
-                if oer_riscv::cycle32().wrapping_sub(start) >= 40_000 {
+                while oer_portable_riscv::cycle32().wrapping_sub(start) < sample * 400 {}
+                if oer_portable_riscv::cycle32().wrapping_sub(start) >= 40_000 {
                     break;
                 }
                 last = s.sar.radio.lp_tsens.read_ctrl();

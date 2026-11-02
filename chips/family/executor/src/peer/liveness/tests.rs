@@ -8,12 +8,12 @@ use core::{
 };
 use std::{boxed::Box, sync::Arc, task::Wake, vec::Vec};
 
-use oer_espressif_interrupt_table::signal::host;
-use oer_memory::{InPlace, RequestSlot};
-use oer_time::{Clock as _, Duration};
-use oer_time_virtual::VirtualClock;
+use oer_chips_family_interrupt_table::signal::host;
+use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_time::{Clock as _, Duration};
+use oer_portable_time_virtual::VirtualClock;
 
-use oer_espressif_staged_runtime::panic::FaultReason;
+use oer_chips_family_staged_runtime::panic::FaultReason;
 
 use super::super::Obligations;
 use super::{Beat, LivenessError, Overdue, Period, PeriodError, pair};
@@ -27,7 +27,7 @@ fn slot() -> &'static RequestSlot<Beat, (), InPlace> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 
-fn table<C: oer_espressif_interrupt_table::signal::SignalExecutor>() -> &'static Obligations<C, 2> {
+fn table<C: oer_chips_family_interrupt_table::signal::SignalExecutor>() -> &'static Obligations<C, 2> {
     Box::leak(Box::new(Obligations::new()))
 }
 
@@ -203,7 +203,7 @@ fn every_end_of_supervision_keeps_its_own_reason_and_words() {
         (FaultReason::LivenessBroken, [2, 5, 4, 0])
     );
     assert_eq!(
-        LivenessError::Time(oer_time::TimeOverflow).diagnostic(),
+        LivenessError::Time(oer_portable_time::TimeOverflow).diagnostic(),
         (FaultReason::LivenessBroken, [3, 0, 0, 0])
     );
     assert_eq!(
@@ -278,11 +278,11 @@ fn drive(
     clock: &VirtualClock<4>,
     supervising: &mut core::pin::Pin<&mut impl Future<Output = LivenessError>>,
     serving: &mut core::pin::Pin<
-        &mut impl Future<Output = oer_espressif_interrupt_table::signal::ForeignContext>,
+        &mut impl Future<Output = oer_chips_family_interrupt_table::signal::ForeignContext>,
     >,
     step: Duration,
     steps: u32,
-) -> Option<(LivenessError, oer_time::Instant)> {
+) -> Option<(LivenessError, oer_portable_time::Instant)> {
     let waker = waker();
     let mut cx = Context::from_waker(&waker);
     for _ in 0..steps {
@@ -479,7 +479,7 @@ fn a_table_serves_one_supervisor_and_issues_its_seats_once() {
 
 #[test]
 fn a_supervised_overdue_request_records_its_channel_and_deadline() {
-    let deadline = oer_time::Instant::from_micros(0x1_0000_0002);
+    let deadline = oer_portable_time::Instant::from_micros(0x1_0000_0002);
     assert_eq!(
         LivenessError::RequestOverdue(super::RequestOverdue {
             channel: 1,

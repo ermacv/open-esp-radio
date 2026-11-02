@@ -156,17 +156,17 @@ impl CoexStatusType {
 
     /// The status word a portable client publishes: Bluetooth is the LE
     /// word, as no supported client runs Bluetooth Classic.
-    pub const fn from_radio(client: oer_radio_coex::RadioClient) -> Self {
+    pub const fn from_radio(client: oer_protocols_radio_coex::RadioClient) -> Self {
         match client {
-            oer_radio_coex::RadioClient::Wifi => Self::Wifi,
-            oer_radio_coex::RadioClient::Bluetooth => Self::Ble,
-            oer_radio_coex::RadioClient::Ieee802154 => Self::Ieee802154,
+            oer_protocols_radio_coex::RadioClient::Wifi => Self::Wifi,
+            oer_protocols_radio_coex::RadioClient::Bluetooth => Self::Ble,
+            oer_protocols_radio_coex::RadioClient::Ieee802154 => Self::Ieee802154,
         }
     }
 }
 
-impl From<oer_radio_coex::RadioClient> for CoexStatusType {
-    fn from(client: oer_radio_coex::RadioClient) -> Self {
+impl From<oer_protocols_radio_coex::RadioClient> for CoexStatusType {
+    fn from(client: oer_protocols_radio_coex::RadioClient) -> Self {
         Self::from_radio(client)
     }
 }

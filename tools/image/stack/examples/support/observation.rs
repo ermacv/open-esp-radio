@@ -1,12 +1,12 @@
 //! Replay the stack observer's exact inputs, alongside the structural example.
 use crate::{image, sweep};
-use oer_analysis_riscv_analysis::{
+use oer_tools_analysis_riscv_analysis::{
     FunctionInput, JumpTableSource, KnownJump, PreparedReferences, ProvenTables, RecognizedTables,
     research_following_tables, writes::closes_local_graph,
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::{ProgramView, facts::ImageFacts, tables::ImageTables};
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::{ProgramView, facts::ImageFacts, tables::ImageTables};
 
 // Same DispatchTables contract as the stack pipeline: the sweep owns known
 // jumps, while recognized tables are re-proved on every common-engine pass.
@@ -125,7 +125,7 @@ pub fn print(
     let observed_closed = image::observing(
         facts,
         call_behavior,
-        oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+        oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
         memory,
         control,
         |observe, control| {
@@ -147,7 +147,7 @@ pub fn print(
     };
     research_following_tables(
         FunctionInput {
-            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+            traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&view),
             section: function.section as u32,
             extent: CodeRange {

@@ -2,22 +2,22 @@
 //! The chip bootstrap checks its physical mapping and flash source, reports
 //! progress, publishes the copied code and enters it through [`hand_off`].
 //! Every report goes through the early writer `C` the bootstrap names
-//! ([`EarlyText`](oer_espressif_platform_port::EarlyText)), which also
+//! ([`EarlyText`](oer_chips_family_platform_port::EarlyText)), which also
 //! prints its panic ([`panic_handler!`]).
 
 use core::mem::size_of;
 
 #[cfg(target_arch = "riscv32")]
-use oer_espressif_platform_port::EarlyText;
-use oer_espressif_staged_layout::{
+use oer_chips_family_platform_port::EarlyText;
+use oer_chips_family_staged_layout::{
     Layout,
     stage_two::{Header as RuntimeHeader, PayloadCrc},
 };
-use oer_memory::{read_volatile, write_volatile};
+use oer_portable_memory::{read_volatile, write_volatile};
 
 /// The bootstrap's panic handler: it prints `OER_BOOT bootstrap=PANIC`
 /// through the early writer `$console`
-/// ([`EarlyText`](oer_espressif_platform_port::EarlyText)) and halts. The
+/// ([`EarlyText`](oer_chips_family_platform_port::EarlyText)) and halts. The
 /// bootstrap image invokes it once, naming its chip's writer.
 #[macro_export]
 macro_rules! panic_handler {
@@ -30,11 +30,11 @@ macro_rules! panic_handler {
 }
 
 /// Report the bootstrap's start on the USB Serial/JTAG console. Call first.
-/// Any hart but [`oer_espressif_staged_layout::boot::BOOT_HART`] stops here.
+/// Any hart but [`oer_chips_family_staged_layout::boot::BOOT_HART`] stops here.
 #[cfg(target_arch = "riscv32")]
 pub fn start<C: EarlyText>() {
-    let hart = oer_riscv::hart_id();
-    if !oer_espressif_staged_layout::boot::may_boot(hart) {
+    let hart = oer_portable_riscv::hart_id();
+    if !oer_chips_family_staged_layout::boot::may_boot(hart) {
         fail::<C>("OER_BOOT bootstrap=FAIL reason=not-boot-hart\r\n");
     }
     print::<C>("OER_BOOT bootstrap=START\r\n");
@@ -44,7 +44,7 @@ pub fn start<C: EarlyText>() {
 /// constant. A payload too short to hold a header only type-checks (an empty
 /// stand-in): its entry is 0, which no header names, and [`stage`] rejects it.
 pub const fn runtime_entry(payload: &[u8]) -> usize {
-    match oer_espressif_staged_layout::stage_two::entry_of(payload) {
+    match oer_chips_family_staged_layout::stage_two::entry_of(payload) {
         Some(entry) => entry as usize,
         None => 0,
     }
@@ -55,7 +55,7 @@ pub const fn runtime_entry(payload: &[u8]) -> usize {
 /// secondary. A payload too short to hold a header (an empty stand-in) uses
 /// none, and [`stage`] rejects it.
 pub const fn runtime_harts(payload: &[u8]) -> u32 {
-    match oer_espressif_staged_layout::stage_two::harts_of(payload) {
+    match oer_chips_family_staged_layout::stage_two::harts_of(payload) {
         Some(harts) => harts,
         None => 0,
     }
@@ -134,8 +134,8 @@ impl Staged<'_> {
 /// The payload loan prevents rewriting the region before publication:
 ///
 /// ```compile_fail,E0499
-/// use oer_espressif_staged_bootstrap::stage;
-/// use oer_espressif_staged_layout::Layout;
+/// use oer_chips_family_staged_bootstrap::stage;
+/// use oer_chips_family_staged_layout::Layout;
 /// fn rewrite(layout: &Layout, payload: &[u8], psram: &mut [u8]) {
 ///     let staged = stage(layout, payload, psram, |_| {}).expect("valid image");
 ///     psram.fill(0);
@@ -211,7 +211,7 @@ pub fn stage<'a>(
 #[allow(unsafe_code, reason = "publishes and enters the stage-two image")]
 pub fn hand_off<C: EarlyText, const ENTRY: usize>(
     staged: Staged<'_>,
-    published: oer_espressif_boot::cache::PublishedCode,
+    published: oer_chips_family_boot::cache::PublishedCode,
     finish_boot: impl FnOnce(),
 ) -> ! {
     if published.range().start() as usize != staged.load_address()
@@ -229,7 +229,7 @@ pub fn hand_off<C: EarlyText, const ENTRY: usize>(
     finish_boot();
     // SAFETY: the entry equals the build's constant and lies in the checked
     // executable range of the published image; its entry installs its own stack.
-    unsafe { oer_riscv::jump_to_entry::<ENTRY>() }
+    unsafe { oer_portable_riscv::jump_to_entry::<ENTRY>() }
 }
 
 struct ValidatedLayout {
@@ -317,7 +317,7 @@ pub fn print<C: EarlyText>(message: &'static str) {
 
 /// Report the typed cold-boot failure, retaining its observed density, and halt.
 #[cfg(target_arch = "riscv32")]
-pub fn fail_boot<C: EarlyText>(error: oer_espressif_boot::BootFailure) -> ! {
+pub fn fail_boot<C: EarlyText>(error: oer_chips_family_boot::BootFailure) -> ! {
     BootFailureRecord(error).write(|bytes| {
         let _ = C::text(bytes);
     });
@@ -325,12 +325,12 @@ pub fn fail_boot<C: EarlyText>(error: oer_espressif_boot::BootFailure) -> ! {
 }
 
 #[cfg(any(test, target_arch = "riscv32"))]
-struct BootFailureRecord(oer_espressif_boot::BootFailure);
+struct BootFailureRecord(oer_chips_family_boot::BootFailure);
 
 #[cfg(any(test, target_arch = "riscv32"))]
 impl BootFailureRecord {
     fn write(self, mut output: impl FnMut(&[u8])) {
-        use oer_espressif_boot::{BootFailure, ClockFailure, FlashFailure, psram::PsramFailure};
+        use oer_chips_family_boot::{BootFailure, ClockFailure, FlashFailure, psram::PsramFailure};
 
         output(b"OER_BOOT bootstrap=FAIL reason=");
         output(self.0.reason().as_bytes());
@@ -422,7 +422,7 @@ pub fn fail<C: EarlyText>(message: &'static str) -> ! {
 #[cfg(target_arch = "riscv32")]
 fn halt() -> ! {
     loop {
-        oer_riscv::wait_for_interrupt();
+        oer_portable_riscv::wait_for_interrupt();
     }
 }
 

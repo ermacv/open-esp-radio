@@ -1,7 +1,7 @@
 //! Isolated BLE interrupt facts. No RF engine, DMA publication or CPU rerouting.
 use super::{Session, contain, emit};
-use oer_esp32s31_pac as pac;
-use oer_mmio::Bits;
+use oer_chips_esp32s31_pac as pac;
+use oer_portable_mmio::Bits;
 use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 
 mod arrival;
@@ -38,8 +38,8 @@ const HALF: u32 = (COUNTER_MAX / 2) + 1;
 const WAIT_LIMIT: u32 = 40_000_000;
 
 fn window(cycles: u32) {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
 pub(super) fn clocks(s: &mut Session<'_>) {
@@ -106,7 +106,7 @@ pub(super) fn clocks(s: &mut Session<'_>) {
         .clocks
         .modem_lpcon_chip_clocks
         .set_modem_pwr_lp_timer_clock(true);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn enables(b: &Ble, tag: u32) {
@@ -221,7 +221,7 @@ fn baseline(b: &mut Ble, enabled: bool) {
             .set_source_9(enabled)
             .set_source_12(enabled);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn clear(b: &mut Ble) {
@@ -229,7 +229,7 @@ fn clear(b: &mut Ble) {
     let c = b.bank.sample_bluetooth_interrupt_bank_1();
     b.bank.acknowledge_bluetooth_interrupt_bank_0(a);
     b.bank.acknowledge_bluetooth_interrupt_bank_1(c);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn timer_stimulus(b: &mut Ble, second: bool) {
@@ -419,7 +419,7 @@ pub(super) fn init_lp(s: &mut Session<'_>) {
             .get(),
         0,
     );
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn start_counter(b: &mut Ble) {
     b.timer.write_runtime_timer_start_command(
@@ -437,14 +437,14 @@ fn command18(b: &mut Ble) {
     b.timer.write_word_0010_opaque(|w| {
         w.set_compare_software_delivery_set(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn wait_cause(s: &Session<'_>) {
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while s.ble.timer_status.read_bluetooth_modem_lp_status() == 0
-        && oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
     {}
-    emit(0x23ff, oer_riscv::cycle32().wrapping_sub(start), 0, 0);
+    emit(0x23ff, oer_portable_riscv::cycle32().wrapping_sub(start), 0, 0);
 }
 
 pub(super) fn lp_causes(s: &mut Session<'_>) {
@@ -481,10 +481,10 @@ pub(super) fn lp_stop(s: &mut Session<'_>) {
     let before = counter(&s.ble);
     window(4096);
     let running = counter(&s.ble);
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
-    oer_riscv::fence();
-    let duration = oer_riscv::cycle32().wrapping_sub(start);
+    oer_portable_riscv::fence();
+    let duration = oer_portable_riscv::cycle32().wrapping_sub(start);
     let stopped = counter(&s.ble);
     window(4096);
     emit(0x2401, before, running, duration);
@@ -503,10 +503,10 @@ pub(super) fn lp_wrap(s: &mut Session<'_>) {
     init_lp(s);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     lp_state(s, 0x2500);
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut prior = counter(&s.ble);
     let mut wraps = 0_u32;
-    while wraps < 1 && oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
+    while wraps < 1 && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
         let now = counter(&s.ble);
         if now < prior {
             wraps = wraps.saturating_add(1);
@@ -514,7 +514,7 @@ pub(super) fn lp_wrap(s: &mut Session<'_>) {
         }
         prior = now;
     }
-    emit(0x250f, wraps, oer_riscv::cycle32().wrapping_sub(start), 0);
+    emit(0x250f, wraps, oer_portable_riscv::cycle32().wrapping_sub(start), 0);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     lp_state(s, 0x2503);
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
@@ -618,7 +618,7 @@ pub(super) fn software_pending(s: &mut Session<'_>) {
     command18(&mut s.ble);
     lp_state(s, 0x290a);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     lp_state(s, 0x290b);
     start_counter(&mut s.ble);
     window(4096);
@@ -631,10 +631,10 @@ pub(super) fn software_pending(s: &mut Session<'_>) {
 pub(super) fn rollover_gates(s: &mut Session<'_>) {
     init_lp(s);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut prior = counter(&s.ble);
     let mut wrapped = false;
-    while oer_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {
         let now = counter(&s.ble);
         if now < prior {
             wrapped = true;
@@ -645,7 +645,7 @@ pub(super) fn rollover_gates(s: &mut Session<'_>) {
     emit(
         0x30ff,
         u32::from(wrapped),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     lp_state(s, 0x3000);
@@ -661,7 +661,7 @@ pub(super) fn rollover_gates(s: &mut Session<'_>) {
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     lp_state(s, 0x3002);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     lp_state(s, 0x3003);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     lp_state(s, 0x3004);

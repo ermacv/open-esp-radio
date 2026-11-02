@@ -4,8 +4,8 @@
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_os_process as process;
-use oer_os_process::Checkout;
+use oer_tools_os_process as process;
+use oer_tools_os_process::Checkout;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -31,7 +31,7 @@ pub fn audit_phy(ctx: &Checkout, path: &Path, sources: &[String]) -> Result<()> 
 }
 
 fn archive_symbols(ctx: &Checkout, bytes: &[u8]) -> Result<Symbols> {
-    let members = oer_analysis_elf::members(bytes)
+    let members = oer_tools_analysis_elf::members(bytes)
         .map_err(|error| format!("PHY archive must contain its own members: {error}"))?;
     let mut symbols = Symbols::default();
     let mut code_members = 0;
@@ -70,7 +70,7 @@ fn archive_symbols(ctx: &Checkout, bytes: &[u8]) -> Result<Symbols> {
 }
 
 fn elf_symbols(bytes: &[u8], symbols: &mut Symbols, require_table: bool) -> Result<()> {
-    let file = oer_analysis_elf::Elf::parse(bytes)?;
+    let file = oer_tools_analysis_elf::Elf::parse(bytes)?;
     if !file.is_relocatable() {
         return Err("expected a relocatable ELF archive member".into());
     }
@@ -82,7 +82,7 @@ fn elf_symbols(bytes: &[u8], symbols: &mut Symbols, require_table: bool) -> Resu
     for symbol in file.symbols() {
         if matches!(
             symbol.kind,
-            oer_analysis_elf::SymbolKind::File | oer_analysis_elf::SymbolKind::Section
+            oer_tools_analysis_elf::SymbolKind::File | oer_tools_analysis_elf::SymbolKind::Section
         ) || symbol.name.is_empty()
         {
             continue;
@@ -104,7 +104,7 @@ fn is_bitcode(bytes: &[u8]) -> bool {
 /// The `llvm-nm` of the active Rust toolchain: an LLVM on `PATH` need not
 /// read the compiler's bitcode.
 fn matched_llvm_nm() -> Result<PathBuf> {
-    Ok(oer_os_toolchain::program(oer_os_toolchain::Tool::LlvmNm)?.into())
+    Ok(oer_tools_os_toolchain::program(oer_tools_os_toolchain::Tool::LlvmNm)?.into())
 }
 
 fn bitcode_symbols(ctx: &Checkout, tool: &Path, input: &Path, symbols: &mut Symbols) -> Result<()> {
@@ -153,7 +153,7 @@ fn check_symbols(symbols: &Symbols, sources: &[String]) -> Result<()> {
         }
     }
     for raw in symbols.undefined.difference(&symbols.defined) {
-        let demangled = oer_analysis_elf::demangle(raw);
+        let demangled = oer_tools_analysis_elf::demangle(raw);
         if !allowed_external(&demangled, sources) {
             return Err(format!(
                 "unexpected external symbol in source-only radio rlib: {demangled}"

@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-instrumentation"
+name = "oer-chips-esp32s31-instrumentation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

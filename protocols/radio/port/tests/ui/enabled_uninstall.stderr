@@ -7,13 +7,13 @@ error[E0277]: the trait bound `Owner<'_, 'id, Id, B, Enabled>: UninstallOwner<_,
    |     required by a bound introduced by this call
    |
 help: the trait `UninstallOwner<_, _>` is not implemented for `Owner<'_, 'id, Id, B, Enabled>`
-      but trait `UninstallOwner<Id, B>` is implemented for `Owner<'_, '_, Id, B, oer_radio_port::Disabled>`
+      but trait `UninstallOwner<Id, B>` is implemented for `Owner<'_, '_, Id, B, oer_protocols_radio_port::Disabled>`
   --> src/lifecycle.rs
    |
    | / impl<Id: SlotIdentity, B: PortBackend<Id>> UninstallOwner<Id, B>
    | |     for Owner<'_, '_, Id, B, Disabled>
    | |______________________________________^
-   = help: for that trait implementation, expected `oer_radio_port::Disabled`, found `Enabled`
+   = help: for that trait implementation, expected `oer_protocols_radio_port::Disabled`, found `Enabled`
 note: required by a bound in `Ended::<Id, B, Out>::uninstall`
   --> src/lifecycle.rs
    |

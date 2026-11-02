@@ -3,8 +3,8 @@
 //! committed state words.
 //!
 //! The probe publishes these words for the Blobray tracking scenario, which
-//! compares them through `oer_esp32s31_knowledge::phy_relation::committed`. The module
-//! depends only on `oer_esp32s31_phy`.
+//! compares them through `oer_chips_esp32s31_knowledge::phy_relation::committed`. The module
+//! depends only on `oer_chips_esp32s31_phy`.
 
 /// Committed calibration state in the vendor `phy_param` byte order: the eight
 /// DCODE codes, the two status bytes holding the RX-gain DC (0x80 of the
@@ -12,7 +12,7 @@
 /// shared and Wi-Fi RX-gain table last indices, the tracking progress, then the
 /// temperature-sensor index.
 pub fn snapshot_committed(
-    state: &oer_esp32s31_phy::PhyState,
+    state: &oer_chips_esp32s31_phy::PhyState,
     progress: u16,
     output: &mut [u16; 8],
 ) {
@@ -46,7 +46,7 @@ pub fn snapshot_committed(
 pub const CALIBRATION_WORDS: usize = 77;
 
 pub fn snapshot_calibration(
-    state: &oer_esp32s31_phy::PhyState,
+    state: &oer_chips_esp32s31_phy::PhyState,
     output: &mut [u16; CALIBRATION_WORDS],
 ) {
     let parameters = state.calibration_tracking_parameters(None);
@@ -84,8 +84,8 @@ pub const PARENT_WORDS: usize = 7;
 /// tracking temperature and gain cache, the Wi-Fi and Bluetooth gain bases,
 /// the retained gain adjustment, the Wi-Fi I2C tracking band and the RFPLL
 /// reference temperature.
-pub fn snapshot_parent(state: &oer_esp32s31_phy::PhyState, output: &mut [u16; PARENT_WORDS]) {
-    use oer_esp32s31_phy::tracking::PhyWifiI2cTrackingBand;
+pub fn snapshot_parent(state: &oer_chips_esp32s31_phy::PhyState, output: &mut [u16; PARENT_WORDS]) {
+    use oer_chips_esp32s31_phy::tracking::PhyWifiI2cTrackingBand;
     let power = state.tx_power_tracking_parameters(true);
     output[..4].copy_from_slice(&[
         power.previous_tracking_temperature as u16,

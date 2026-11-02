@@ -1,9 +1,9 @@
 //! References selected from captured symbols and already proven function facts.
 //! No instruction decoding, inferred callback edges or interprocedural expansion.
 use crate::{captured, data, in_process::Executable};
-use oer_analysis_blobray_domain::{DataRequest, DataSelector, LibraryFunction, SymbolRecord};
-use oer_analysis_elf::{SymbolKind, classify as elf};
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_domain::{DataRequest, DataSelector, LibraryFunction, SymbolRecord};
+use oer_tools_analysis_elf::{SymbolKind, classify as elf};
+use oer_tools_analysis_riscv_model::{
     AbstractValue, FunctionRecord, MemoryKind, MemoryReservation, ReferenceKind, Result,
     RunControl, ValueAlternative, WorkingMemory,
 };
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 pub struct Target {
     pub address: u64,
     pub input: u64,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name")]
     pub name: Vec<u8>,
 }
 
@@ -126,17 +126,17 @@ impl<'m> Targets<'m> {
             .entries
             .partition_point(|target| target.address <= address);
         self.entries.get(start..end).ok_or_else(|| {
-            oer_analysis_riscv_model::Error::new(
-                oer_analysis_riscv_model::ErrorCode::Integrity,
+            oer_tools_analysis_riscv_model::Error::new(
+                oer_tools_analysis_riscv_model::ErrorCode::Integrity,
                 "invalid target index range",
             )
         })
     }
 }
 
-fn allocation_error() -> oer_analysis_riscv_model::Error {
-    oer_analysis_riscv_model::Error::new(
-        oer_analysis_riscv_model::ErrorCode::ResourceLimited,
+fn allocation_error() -> oer_tools_analysis_riscv_model::Error {
+    oer_tools_analysis_riscv_model::Error::new(
+        oer_tools_analysis_riscv_model::ErrorCode::ResourceLimited,
         "reference allocation refused",
     )
 }
@@ -163,7 +163,7 @@ pub struct Reference {
     pub offset: u64,
     pub site: u64,
     pub kind: Kind,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name")]
     pub target: Vec<u8>,
     pub destination: Option<Target>,
     pub relocation_kind: Option<ReferenceKind>,
@@ -281,7 +281,7 @@ pub enum Stored {
     StoredWord {
         input: u64,
         section: u32,
-        #[serde(with = "oer_analysis_riscv_model::symbol_name::option")]
+        #[serde(with = "oer_tools_analysis_riscv_model::symbol_name::option")]
         section_name: Option<Vec<u8>>,
         address: u64,
         owners: Vec<SymbolRecord>,
@@ -365,8 +365,8 @@ impl<'m> StoredScan<'m> {
                     {
                         continue;
                     }
-                    if oer_analysis_elf::SectionKind::of(section.section_type)
-                        == oer_analysis_elf::SectionKind::NoBits
+                    if oer_tools_analysis_elf::SectionKind::of(section.section_type)
+                        == oer_tools_analysis_elf::SectionKind::NoBits
                     {
                         self.summary.nobits_sections += 1;
                         continue;
@@ -403,7 +403,7 @@ impl<'m> StoredScan<'m> {
                         .enumerate()
                     {
                         let mut position = c.position();
-                        position.phase = oer_analysis_riscv_model::RunPhase::Materialize;
+                        position.phase = oer_tools_analysis_riscv_model::RunPhase::Materialize;
                         position.table = Some(u64::from(section.index));
                         position.entry = Some(word as u64);
                         c.set_position(position);
@@ -543,10 +543,10 @@ fn feeds_transfer(
                 decoded,
                 ..
             } if *next > offset => {
-                if matches!(decoded.flow, oer_analysis_riscv_model::InstructionFlow::Indirect { base, offset: 0, .. } if base == register)
+                if matches!(decoded.flow, oer_tools_analysis_riscv_model::InstructionFlow::Indirect { base, offset: 0, .. } if base == register)
                 {
                     transfer = Some(transfer.unwrap_or(u64::MAX).min(*next));
-                } else if decoded.flow != oer_analysis_riscv_model::InstructionFlow::Next {
+                } else if decoded.flow != oer_tools_analysis_riscv_model::InstructionFlow::Next {
                     // Do not infer register use across a different control transfer.
                     end = end.min(*next);
                 }

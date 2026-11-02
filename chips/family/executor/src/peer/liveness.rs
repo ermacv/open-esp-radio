@@ -30,10 +30,10 @@ use core::{
     task::Poll,
 };
 
-use oer_espressif_interrupt_table::signal::{self, ForeignContext, IrqSignal, SignalExecutor};
-use oer_espressif_staged_runtime::panic::FaultReason;
-use oer_memory::{InPlace, RequestSlot};
-use oer_time::{Duration, Instant, TimeOverflow, Timer};
+use oer_chips_family_interrupt_table::signal::{self, ForeignContext, IrqSignal, SignalExecutor};
+use oer_chips_family_staged_runtime::panic::FaultReason;
+use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_time::{Duration, Instant, TimeOverflow, Timer};
 
 use super::obligation::{Obligations, Scan, Watch};
 use super::{PeerClient, PeerError, PeerServer, PostError};

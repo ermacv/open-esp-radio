@@ -22,7 +22,7 @@ fn sample(s: &Session<'_>, start: u32) -> Sample {
     let h1 = m.read_i2c1_ctrl();
     let b = m.read_i2c_burst_status();
     Sample {
-        cycle: oer_riscv::cycle32().wrapping_sub(start),
+        cycle: oer_portable_riscv::cycle32().wrapping_sub(start),
         host0: u32::from(h0.data()),
         host1: u32::from(h1.data()),
         busy: u32::from(h0.i2c0_busy()) | (2 * u32::from(h1.i2c1_busy())),
@@ -104,7 +104,7 @@ fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, t
         return false;
     }
     irq_observer::clear(s);
-    let start_cycle = oer_riscv::cycle32();
+    let start_cycle = oer_portable_riscv::cycle32();
     let before = sample(s, start_cycle);
     for &(host, address, seed) in commands {
         start(s, host, address, seed);
@@ -129,7 +129,7 @@ fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, t
     let mut matrix4 = first.matrix4 | after_reset.matrix4;
     let mut seen_busy = first.busy | after_reset.busy | reset_mask;
     let mut polls = 2u32;
-    while last.busy != 0 && oer_riscv::cycle32().wrapping_sub(start_cycle) < COMMAND_CYCLES {
+    while last.busy != 0 && oer_portable_riscv::cycle32().wrapping_sub(start_cycle) < COMMAND_CYCLES {
         last = sample(s, start_cycle);
         matrix3 |= last.matrix3;
         matrix4 |= last.matrix4;

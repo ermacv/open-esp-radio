@@ -30,7 +30,7 @@ impl RequestId {
     }
 }
 
-impl oer_radio_port::Correlation for RequestId {
+impl oer_protocols_radio_port::Correlation for RequestId {
     fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
@@ -48,4 +48,4 @@ pub enum Ieee802154Radio {}
 ///
 /// The epoch is deliberately not wall-clock time. An adapter must use one
 /// stable epoch for every timestamp it publishes in a controller instance.
-pub type Ieee802154Instant = oer_time::RadioInstant<Ieee802154Radio>;
+pub type Ieee802154Instant = oer_portable_time::RadioInstant<Ieee802154Radio>;

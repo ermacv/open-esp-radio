@@ -36,7 +36,7 @@ application          credentials, network stack (embassy-net), sockets
                      BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
 image                boot (chosen peripherals and services), application tasks
-  application entry  the family SDK (`oer-espressif`): peripherals taken once,
+  application entry  the family SDK (`oer`): peripherals taken once,
                      drivers and services with defaults, their interrupts,
                      executors and service tasks, record and reset on the
                      image's behalf
@@ -56,9 +56,9 @@ image                boot (chosen peripherals and services), application tasks
                      hardware-free knowledge
 ```
 
-The family's `oer-espressif-boot::drivers` holds LP-fast, brownout,
+The family's `oer-chips-family-boot::drivers` holds LP-fast, brownout,
 secondary containment and release, access-filter and TRNG startup operations
-over register ports implemented by the HAL's owned boot parts. `oer-esp32s31-boot` supplies
+over register ports implemented by the HAL's owned boot parts. `oer-chips-esp32s31-boot` supplies
 S31 profiles, including the generated LP-fast source. This chip binding sits
 above HAL and family drivers so neither HAL nor chip knowledge chooses or
 executes those policies. The family staged-bootstrap cold-start runner owns
@@ -86,7 +86,7 @@ handoff or fabricated mapping proof; there is no second sequence. Neither path
 repeats cold boot or reconfigures CPU clocks, the MMU or PSRAM. Runtime SYSTIMER
 owners transfer unchanged to the executor, which retains its latch check.
 
-Every chip and HIL package has one explicit role in `oer-test-layers`, never
+Every chip and HIL package has one explicit role in `oer-tools-test-layers`, never
 derived from its path; the role names the level and its allowed direct
 dependencies ([layer tests](../tools/test/layers/README.md)).
 
@@ -141,7 +141,7 @@ fields: destination, source, the EtherType of its RFC 1042 LLC/SNAP header
 and its payload; they never read or write an Ethernet II header. Ethernet,
 VLAN, IP and transport fields are `protocols/network/wire`'s. IEEE 802.11
 packages reach them only through `protocols/bridges/ieee80211-ethernet`,
-which joins the two codecs and depends on nothing else; `oer-test-layers`
+which joins the two codecs and depends on nothing else; `oer-tools-test-layers`
 checks both rules. The network side's adapter reads and writes its Ethernet
 header through the network codec. IEEE 802.11 security transforms and MAC
 consumers take what they authenticate or route from the IEEE 802.11 codec:
@@ -160,7 +160,7 @@ management frames keep the Voice queue. A changed ACM applies to the next
 MSDU; a numbered one keeps its TID.
 
 Cryptographic operations shared by protocols have one contract each in
-`portable/crypto` (`oer-crypto`). One operation is one request: the request
+`portable/crypto` (`oer-portable-crypto`). One operation is one request: the request
 owns its key and buffers and runs to completion in one call over a
 synchronous engine the caller lends for that call (`block::unwrap_now`),
 which returns the response and the same buffers; no operation outlives the
@@ -178,14 +178,14 @@ launches hart 1 moves `AesParts` into hart 1's launch parts and builds the
 engine there over hart 1's router (boot-smoke). Its `Silent` proof holds on
 either hart: the proof checks the table's entries of every hart and that
 router's own bank, and every hart's router silences its own bank at install,
-before that hart first unmasks. The engine (`oer-esp32s31-crypto::AesBlocks`)
+before that hart first unmasks. The engine (`oer-chips-esp32s31-crypto::AesBlocks`)
 is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
 `Silent`, waits for each Typical block on its `STATE` flag within a named
 settle and erases the hardware key and intermediates when its keyed view
 drops. A failed engine retains its owner and refuses further keys with a
 typed error. Its one owner is the Wi-Fi station, the image that takes it
 from the library (`AesPeripheral::engine`) or boot-smoke's hart-1 task. An
-operation borrows it for the length of its call (`oer_crypto::block::unwrap_now`),
+operation borrows it for the length of its call (`oer_portable_crypto::block::unwrap_now`),
 so no operation outlives the call and no AES service, client or async
 operation exists.
 
@@ -193,7 +193,7 @@ Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
 time. Only a protocol's runtime awaits, and it binds no executor: time comes
-from `oer-time`, interrupt signals from `portable/`, no executor,
+from `oer-portable-time`, interrupt signals from `portable/`, no executor,
 `embassy-time`, `embassy-net`, `embassy-sync` or HAL dependency
 (`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
@@ -211,7 +211,7 @@ path. Runner receives the station's affine command credits at installation,
 retains each through its refusal or terminal, and restores it before delivering
 the lossless concrete callback. A duplicate in-flight kind has its own typed
 admission refusal. Runner selects inputs over the generic port and executes
-the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backend,
+the existing cores. The chip facade `oer-chips-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
 NetDevice, Runners)`. The station runs its EAPOL-Key data unwrap, its
 AES-CMAC EAPOL-Key MIC and its protected-management CCMP and BIP
@@ -232,8 +232,8 @@ Policy requests use the Runner's existing affine command credits and normal
 Control events. A facade Stop disconnects once, waits for link-down and then
 retires Runner. HIL retains command correlation and socket workload lifetime,
 without its own station policy loop or product counters.
-The neutral `oer-network-port::NetDevice` transfers Ethernet owners and publishes
-the link epoch. `oer_embassy_net::ip` builds its pools, one pinned IP stack
+The neutral `oer-protocols-network-port::NetDevice` transfers Ethernet owners and publishes
+the link epoch. `oer_portable_embassy_net::ip` builds its pools, one pinned IP stack
 and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and
 reports link epoch, IPv4 configuration and stop/error through typed product
 values and synchronous status callbacks. Reassociation invalidates DHCP before
@@ -248,8 +248,8 @@ The network bridges advance only on RX, TX publication/capacity and link
 level/epoch events, with bounded continuations for remaining work. They have
 no periodic safety timer. IP polling follows the stack's waker and protocol
 deadlines; application deadlines remain image policy.
-Finite connected-task shutdown lives in `oer-time` behind its non-default
-`connected-tasks` feature, without `embassy-sync`; `oer-cooperate` retains only
+Finite connected-task shutdown lives in `oer-portable-time` behind its non-default
+`connected-tasks` feature, without `embassy-sync`; `oer-portable-cooperate` retains only
 hardware-atom admission and its bounds.
 Drivers own hardware and wait; adapters bind executors.
 
@@ -267,13 +267,13 @@ including aliases, optional entries and target-specific entries:
 - `embassy-net`, `xarxa` and `xarxa-driver` belong to
   `portable/embassy/net` and `firmware/*`; `trouble-host` belongs to
   `portable/embassy/trouble` and `firmware/*`.
-- `bt-hci` belongs to `oer-bluetooth-hci`, `portable/embassy/trouble` and
+- `bt-hci` belongs to `oer-protocols-bluetooth-hci`, `portable/embassy/trouble` and
   `tools/`. The HCI codec exports selected packet, command and event values,
   without re-exporting the crate. Protocol sources never use
   `bt_hci::controller`.
 
 The sans-IO safety and panic rules cover all crates under `protocols/` and
-`portable/`, except the unsafe homes `oer-mmio`, `oer-riscv` and `oer-memory`.
+`portable/`, except the unsafe homes `oer-portable-mmio`, `oer-portable-riscv` and `oer-portable-memory`.
 They also cover the following Espressif crates: their ordinary dependency closures
 contain no PAC, HAL, mmio or riscv crate, and their roots forbid unsafe code.
 Build and development dependencies do not determine this membership.
@@ -285,26 +285,26 @@ existing local entries.
 
 | Package | Directory |
 | --- | --- |
-| `oer-espressif-analog` | `chips/family/analog` |
-| `oer-espressif-boot` | `chips/family/boot` |
-| `oer-espressif-coex` | `chips/family/coex` |
-| `oer-espressif-efuse` | `chips/family/efuse` |
-| `oer-espressif-facts` | `chips/family/facts` |
-| `oer-espressif-ieee80211-policy` | `chips/family/ieee80211-policy` |
-| `oer-espressif-ieee802154-engine` | `chips/family/ieee802154-engine` |
-| `oer-espressif-ieee802154-mac-values` | `chips/family/ieee802154-mac-values` |
-| `oer-espressif-modem-clock` | `chips/family/modem-clock` |
-| `oer-espressif-radio` | `chips/family/radio` |
-| `oer-espressif-phy` | `chips/family/phy` |
-| `oer-espressif-bluetooth-engine` | `chips/family/bluetooth-engine` |
-| `oer-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
+| `oer-chips-family-analog` | `chips/family/analog` |
+| `oer-chips-family-boot` | `chips/family/boot` |
+| `oer-chips-family-coex` | `chips/family/coex` |
+| `oer-chips-family-efuse` | `chips/family/efuse` |
+| `oer-chips-family-facts` | `chips/family/facts` |
+| `oer-chips-family-ieee80211-policy` | `chips/family/ieee80211-policy` |
+| `oer-chips-family-ieee802154-engine` | `chips/family/ieee802154-engine` |
+| `oer-chips-family-ieee802154-mac-values` | `chips/family/ieee802154-mac-values` |
+| `oer-chips-family-modem-clock` | `chips/family/modem-clock` |
+| `oer-chips-family-radio` | `chips/family/radio` |
+| `oer-chips-family-phy` | `chips/family/phy` |
+| `oer-chips-family-bluetooth-engine` | `chips/family/bluetooth-engine` |
+| `oer-chips-esp32s31-instrumentation` | `chips/esp32s31/instrumentation` |
 
-The console `oer-espressif-usb-serial-jtag` depends transitively on mmio
-through `oer-espressif-interrupt-table`, which owns platform interrupt
+The console `oer-chips-family-usb-serial-jtag` depends transitively on mmio
+through `oer-chips-family-interrupt-table`, which owns platform interrupt
 bindings below the unsafe boundary. Staged-layout owns an unsafe memory/ABI
 contract;
 staged-bootstrap, staged-runtime and executor depend on the platform.
-`oer-espressif-platform-port` holds the family's platform contracts (the
+`oer-chips-family-platform-port` holds the family's platform contracts (the
 early console writer, the fatal path's mask, stop of the other harts and
 software reset, a secondary hart's release, boot-word retirement and the
 hand-over of its interrupt grant, which only that hart makes into its
@@ -322,13 +322,13 @@ statics once in the chip's composition crate: the storage of the port's owned
 blocks and the one waker vtable. Each image declares its Embassy time driver
 and observer through `time_driver!`; the driver's exported ABI remains shared.
 The platform port names the counter owner; the executor binding requires
-`oer-espressif-boot::drivers::system_timer::CounterLatch` on it. HAL supplies
+`oer-chips-family-boot::drivers::system_timer::CounterLatch` on it. HAL supplies
 strobe/VALID/LO/HI atoms, and the family driver owns settling, verification
 and the bootstrap's named `Monotonic::start_initial_latch_check` check.
 The core driver likewise owns status, confirmation, peer-stop and reset
 preparation; HAL keeps ownership, fatal election/quarantine and the final
 system-reset trigger.
-`oer-esp32s31-compose` is the chip's side of an image's platform: the
+`oer-chips-esp32s31-compose` is the chip's side of an image's platform: the
 executor's binding `Esp32s31`, which images name in every executor type
 (`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,
 which need both the HAL's types and the runtime's retained memory and fatal
@@ -337,7 +337,7 @@ factory identity, entropy and timer installation. The reusable console and
 SAR/PWDET bindings keep the existing driver/handler ownership. Trace clocks
 and unanswered request resets bind through that same platform.
 
-`oer-espressif` (`oer`) is the family's application entry above
+`oer` (`oer`) is the family's application entry above
 the compositions and facades; the `esp32s31` feature selects the chip, and a
 second chip would add its implementation beside it without changing the API.
 An image built on it writes `entry!(boot)`: the synchronous `boot` runs once
@@ -361,15 +361,15 @@ application runs. A test image differs only by the SDK features it adds
 the handlers of its services; it serves them through the HIL agent on the
 entry (`hil/agent`). An image on the SDK depends on
 nothing the SDK places (compositions, facades, platform, interrupt table)
-besides it; `oer-test-layers` checks these direct dependencies, not that two
+besides it; `oer-tools-test-layers` checks these direct dependencies, not that two
 `boot` functions take the same steps in the same order, which review keeps.
-Every HIL image is an image on the SDK; `oer-test-layers` checks that each
+Every HIL image is an image on the SDK; `oer-tools-test-layers` checks that each
 depends on it. Probes and images whose function
 or layout the SDK does not offer select their entries, priorities and task
 spawning through the compositions directly.
-These crates are outside the sans-IO layer. `oer-espressif-watchdog` is
+These crates are outside the sans-IO layer. `oer-chips-family-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
-system-deadline lease. `oer-time::deadline` contains only the deadline policy,
+system-deadline lease. `oer-portable-time::deadline` contains only the deadline policy,
 taking time observations and returning typed completion errors; it owns no
 hardware or reset callback. The sans-IO rules forbid unsafe
 code, runtime panic paths and dependencies on fatal, reset, retained-record,
@@ -396,9 +396,9 @@ run its own executor.
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application; the Wi-Fi driver beside the station on the station's executor | the Wi-Fi driver and the station never preempt each other; the driver's work waits for the station's turn, and the station takes received units from the ring in its own turn |
-| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The SDK's second boot (`oer-espressif`, `hart1`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the station's IP service and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The SDK's second boot (`oer`, `hart1`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the station's IP service and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
-- `oer-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
+- `oer-portable-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
   `ContextCell` access. `SignalExecutor` is safe and names this context;
   its signal payload and list use the same context type. Shared cells require
@@ -426,7 +426,7 @@ run its own executor.
   system cannot keep a `Waker` on its hart. A task
   reaches an executor on another hart only by raising that executor's
   signal, declared with a `FromPeerHart` raiser
-  (`oer-espressif-executor::peer` carries one request and its answer that
+  (`oer-chips-family-executor::peer` carries one request and its answer that
   way, over an in-place request slot, with a deadline on the client's
   executor timer; `peer::liveness` supervises a peer hart with a periodic
   such request, below). Every software-interrupt raise fences `w, o` after the
@@ -463,7 +463,7 @@ run its own executor.
   when it serves its timers at the start of a round), then the alarm
   interrupt and the receiving executor's round. Every context of every hart
   reads the one SYSTIMER counter latch through
-  `oer-espressif-boot::drivers::system_timer`: across harts strobes and reads
+  `oer-chips-family-boot::drivers::system_timer`: across harts strobes and reads
   interleave access by access, and the LO/HI/LO verification still returns
   one whole copy completed during the read, monotonic across harts, or an
   unverified monotonic floor once another hart's strobes exhaust its rounds
@@ -496,7 +496,7 @@ run its own executor.
   The AES driver waits for each Typical block synchronously on its `STATE`
   flag within such a settle, sourced from the measured block time; a block
   still working at its end is a typed timeout.
-  PHY short busy-wait settles count `mcycle` through `oer-riscv`, at the stable CPU
+  PHY short busy-wait settles count `mcycle` through `oer-portable-riscv`, at the stable CPU
   frequency the clock owner adopts from its register state during runtime
   handover. They require neither a ROM delay nor ROM clock calibration.
 - PHY's shared transport and RX-gain drivers check CPU admission between
@@ -509,7 +509,7 @@ run its own executor.
   1 ms cutoff. CPU admission does not admit an RF maintenance window
   ([PHY execution](../chips/esp32s31/phy/README.md#runtime-sequence-and-timing)).
 - A lower-priority task wakes a higher-priority one only through
-  `oer_sync::PriorityWaker` ([notifications](execution-wakes.md)).
+  `oer_portable_sync::PriorityWaker` ([notifications](execution-wakes.md)).
 - Each interrupt table entry binds one interrupt part, whose type names its
   sources, to one CPU line (16 to 47) at a named context's level on a hart: the line's vector
   calls the entry's handler directly, the handler holds the part, and
@@ -540,11 +540,11 @@ run its own executor.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.
-- `chips/family/interrupt-table` (`oer-espressif-interrupt-table`) owns
+- `chips/family/interrupt-table` (`oer-chips-family-interrupt-table`) owns
   the Espressif interrupt matrix contract, vector ABI and staged-runtime
-  symbol names. Architectural CLIC line values live in `oer-riscv::clic`;
+  symbol names. Architectural CLIC line values live in `oer-portable-riscv::clic`;
   chip facts select line geometry and MNLBITS. Signal task cells, atomic
-  facts and intrusive lists live in `oer-memory::signal`. Chip crates and
+  facts and intrusive lists live in `oer-portable-memory::signal`. Chip crates and
   firmware use interrupt-table directly; portable support and protocol cores
   do not depend on it.
 - A signal's constructor declares its receiving executor entry and all its
@@ -673,7 +673,7 @@ run its own executor.
   a terminal decision after a handled error without relabelling it impossible.
   Unconfirmed hardware/DMA owners stay quarantined through record/reset;
   watchdog expiry is not an explicit fault transition.
-- Packet pools accept `oer-memory::FrameLen<CAP>` at publication and prefix
+- Packet pools accept `oer-portable-memory::FrameLen<CAP>` at publication and prefix
   access. Runtime construction validates input; constants are checked at
   monomorphization. A refused consuming range operation returns the original
   lease, and refused index/state claims lend no bytes. Only affine leases
@@ -781,7 +781,7 @@ The current mechanisms have narrower guarantees than the policy:
   bound to stack analysis; the IRQ sum includes all three frame/handler bounds.
   The ordinary executor
   idle wait's debugger check does not affect terminal policy.
-- All staged fault slots store `oer-diagnostics::fault::Record`: layout
+- All staged fault slots store `oer-portable-diagnostics::fault::Record`: layout
   version 1, payload length, registry class, diagnostic domain/reason, captured
   hart (or an explicit unavailable sentinel), context, up to 280 observation bytes, checksum and a completion marker.
   This 316-byte numeric envelope has no previous-layout decoder. The codec is
@@ -806,7 +806,7 @@ The current mechanisms have narrower guarantees than the policy:
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
   Every S31 image on the staged runtime, the SDK's included, binds one
-  exception hook (`oer-esp32s31-compose::exception`). It repeats none of the
+  exception hook (`oer-chips-esp32s31-compose::exception`). It repeats none of the
   frame's registers: after the stop it samples the trapping hart's pending
   sources and, for an interrupt of a line without a handler, the routes to
   that line and its state, recording whether the stop held, and copies the
@@ -850,7 +850,7 @@ defines the scan's scope and limits.
   unique owner; `Root::into_bootstrap` and `Root::into_runtime` split its
   partitions for each image's phase. Only these owned partitions grant
   access. The bootstrap owns reset, its linker sections and application
-  descriptor, and runs the bounded `oer-espressif-boot` sequences over the
+  descriptor, and runs the bounded `oer-chips-family-boot` sequences over the
   HAL's register traits.
   All bootstrap code and ordinary constants stay in internal SRAM: cache
   suspension and flash tuning may reach out-of-line callees across crates.
@@ -876,7 +876,7 @@ defines the scan's scope and limits.
   timer blocks. Source identities come from the platform port's
   `ExecutorPlatform` contract, which the HAL's `Port` implements and the
   image's executor binding names, and architectural CSR access and waits
-  from `oer-riscv`.
+  from `oer-portable-riscv`.
   Embassy futures, network and time utilities follow the external-crate
   homes above; remaining direct `embassy-sync` uses are listed deviations.
   Tasks run on the static executor (`chips/family/executor`), in static
@@ -955,12 +955,12 @@ defines the scan's scope and limits.
   the runtime epoch and lends it with `&mut`. There is no shared register
   arena or dynamic borrow guard.
 
-The family `oer-espressif-radio` executes common radio power prerequisites,
+The family `oer-chips-family-radio` executes common radio power prerequisites,
 semantic power checks, ordered cold-baseline restoration and platform clock
 reference transitions over HAL register ports. HAL keeps the clock-word claim,
 register atoms, the permanent PSRAM MPLL owner and PHY custody. S31 modem clock
 tables live in `knowledge::modem_clock`, with a HAL newtype implementing the
-family dependency contract. `oer-espressif-modem-clock::execution` orders the
+family dependency contract. `oer-chips-family-modem-clock::execution` orders the
 upstream-source and device edges; failed edges retain the poisoned planner and
 its leases. The radio family also owns common-power and coexistence membership,
 registration epoch policy, BTBB gain-generation admission, module lease slots,
@@ -970,7 +970,7 @@ drivers. PHY transactions retain the complete family state with their exact
 seat and both cancellation guards. Neither family depends on a chip or protocol
 driver.
 
-The family `oer-espressif-phy` owns analog-I2C power/reset decisions,
+The family `oer-chips-family-phy` owns analog-I2C power/reset decisions,
 retained-wake parallel-host sequencing, serial-byte starts and completion
 observations, PBus mode/completion order and named short settles over HAL atom
 ports. The serial port uses an opaque S31-validated address for command
@@ -989,7 +989,7 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
 
 The radio system depends on client contracts, never on protocol drivers,
 including through optional, target-specific or transitive normal dependencies.
-`oer-esp32s31-radio-client::bluetooth::RadioController` defines the controller
+`oer-chips-esp32s31-radio-client::bluetooth::RadioController` defines the controller
 lifecycle operations the actor invokes; the Bluetooth driver implements it.
 
 - **PHY.** Constructing the actor does not calibrate. After the executor
@@ -1004,7 +1004,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   timers and polls the actor. A failed tick, or a tracking deadline the
   clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
   keeps every owner, and the image records the fault's class and variant
-  path (`oer-esp32s31-compose::radio_fault`) and resets. The direct
+  path (`oer-chips-esp32s31-compose::radio_fault`) and resets. The direct
   maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
@@ -1014,7 +1014,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   interrupt latency and programming overhead can lengthen it. It judges ready before checking
   the 40 µs not-ready limit. It never polls a future. Other PHY leaves and the
   registration graph remain async.
-  The actor arms before depositing an affine bundle into an `oer-memory`
+  The actor arms before depositing an affine bundle into an `oer-portable-memory`
   one-slot request cell. The bundle holds `PhyTransaction` (registers, restore
   slots, epoch and grant-protect state), `Timg0AlarmProgram`, its binding proof
   and the machine. The waiting future keeps `DetachedRadioDomain`; its drop
@@ -1065,7 +1065,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
 - **Power and reset.** Common radio power enables the shared domain without
   resetting the Wi-Fi MAC. Wi-Fi resets its own baseband and MAC after PHY
   calibration at its client entry. Brownout policy belongs to the bootstrap.
-- **Regulatory domain.** `oer-radio-regulatory` holds a validated domain (a
+- **Regulatory domain.** `oer-protocols-radio-regulatory` holds a validated domain (a
   generated subset of `wireless-regdb`) fixed for an installation; without
   one no radio installs. Every tune, install, scan and transmission of all
   three radios takes a `Permitted` channel. A no-initiating-radiation
@@ -1077,7 +1077,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   only (the BLE connection event, 802.15.4 timed TX/RX and CSL slot, the
   beacon window of a dozing Wi-Fi station). Ports name what an operation is;
   one coexistence owner maps (client, kind) to a priority through the chip
-  family's table (`oer-espressif-coex`). Each MAC's PTI registers belong to
+  family's table (`oer-chips-family-coex`). Each MAC's PTI registers belong to
   its driver. Windows shorter than a grant are enforced by PTI alone and
   reported as blackouts. The runtime that combines the policy and the
   schedule does not exist yet. `RadioDomain::coex_ports` lends disjoint
@@ -1089,7 +1089,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
 ## Radio ports
 
 A port is the contract between a protocol's logic and a chip backend
-([radio ports](radio-ports.md), [time](time.md)). `oer-radio-port` and the
+([radio ports](radio-ports.md), [time](time.md)). `oer-protocols-radio-port` and the
 protocol ports are not frozen; they grow with the protocols, each change with
 its model and conformance case.
 
@@ -1139,7 +1139,7 @@ its model and conformance case.
   port as a `LeDeviceAddress`, separately from encoded packet bytes. Role
   images contain only hardware scheduler values, SRAM layout, channels and
   execution timing.
-  The family `oer-espressif-bluetooth-engine` declares separate task/interrupt
+  The family `oer-chips-family-bluetooth-engine` declares separate task/interrupt
   register ports, controller-time ports, modify/stop progress and non-repeating
   installation identities. HAL implements them with its existing owners and
   retains affine receipts, arena brands, memory projection and DMA custody.
@@ -1240,11 +1240,11 @@ locks, allocation or I/O. The caller chooses what an event becomes, binds it
 to the time of its step and synchronizes only where another context reads the
 result.
 `()` is the empty sink: no event is built and the point leaves no code. IEEE
-802.11 packages depend on no `oer-trace`, transport serialization or HIL;
-`oer-test-layers` checks it. A runtime holds its composition's sink and lends
+802.11 packages depend on no `oer-portable-trace`, transport serialization or HIL;
+`oer-tools-test-layers` checks it. A runtime holds its composition's sink and lends
 it to its cores; a facade maps protocol events into its image's collection.
 
-`oer-trace` contains only event values, encoding, decoding, ordering of
+`oer-portable-trace` contains only event values, encoding, decoding, ordering of
 caller-owned record slices and the observer contract
 ([portable/trace](../portable/trace/README.md)) of chip and platform owners.
 Such an owner holds an `O: Observer` field, by default the zero-sized `Noop`,
@@ -1255,9 +1255,9 @@ evaluates no argument and leaves no code. Owners keep no counters of
 observations: a count is the number of events of a kind, which the collector
 of an image declaring the `trace` class keeps.
 Instrumentation is never a Cargo feature of a library under
-`chips/`, `protocols/` or `portable/`; `oer-test-layers` rejects feature
+`chips/`, `protocols/` or `portable/`; `oer-tools-test-layers` rejects feature
 names carrying an instrumentation word, and its list of remaining ones only
-shrinks. `oer-espressif-staged-runtime::trace` owns the
+shrinks. `oer-chips-family-staged-runtime::trace` owns the
 retained recorder, commit/clear protocol, global installation and previous-boot
 policy. The image places its retained storage and recorder and supplies its
 clock with `trace_clock!`. The platform preserves OETR layout 1: the six-word

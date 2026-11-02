@@ -1,7 +1,7 @@
 //! The nonempty legacy-rate set carried from association into rate selection.
 
-use oer_ieee80211_wire::phy::LegacyRate;
-use oer_ieee80211_wire::rates::{LEGACY_RATES, LegacyRateSet, RateSelection};
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_wire::rates::{LEGACY_RATES, LegacyRateSet, RateSelection};
 
 /// All legacy rates admitted by an association. Unlike
 /// [`BasicRates`](crate::protection::BasicRates), this
@@ -99,7 +99,7 @@ fn constrain_in(set: LegacyRateSet, first: LegacyRate, proposed: LegacyRate) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_ieee80211_wire::phy::DsssPreamble;
+    use oer_protocols_ieee80211_wire::phy::DsssPreamble;
 
     #[test]
     fn selection_keeps_supported_nonbasic_and_extended_rates() {
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn the_single_pass_selects_as_the_definition_for_every_set_and_rate() {
-        use oer_ieee80211_wire::rates::LegacyRateSet;
+        use oer_protocols_ieee80211_wire::rates::LegacyRateSet;
         let proposals = LEGACY_RATES.iter().map(|(_, rate)| *rate).chain([
             LegacyRate::Dsss2M(DsssPreamble::Short),
             LegacyRate::Cck5M5(DsssPreamble::Short),

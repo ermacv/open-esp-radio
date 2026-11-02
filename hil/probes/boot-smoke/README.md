@@ -8,9 +8,9 @@ liveness. It declares `harts = ["boot", 1]`.
 During boot, before any executor, the boot hart installs the time driver
 with its own executor (`FROM_CPU0`, thread mode) as the SYSTIMER writer on
 comparator 0, and grants hart 1's executor comparator 1
-(`oer_espressif_executor::grant`). It then launches hart 1 with the root's
+(`oer_chips_family_executor::grant`). It then launches hart 1 with the root's
 one-shot permit under a deadline on the installed clock
-(`oer_esp32s31_compose::secondary::launch_hart1`), handing it, through its
+(`oer_chips_esp32s31_compose::secondary::launch_hart1`), handing it, through its
 `secondary_entry!` mailbox, hart 1's interrupt grant, the interrupt-mode
 executor that owns `FROM_CPU1`'s line, that line's interrupt part and table
 token, the timer grant, the AES block (`AesParts`, which this image places

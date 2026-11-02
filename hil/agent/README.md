@@ -1,6 +1,6 @@
-# oer-hil-agent-espressif
+# oer-hil-agent
 
-The HIL agent on the `oer-espressif` application entry. A HIL test image
+The HIL agent on the `oer` application entry. A HIL test image
 builds its drivers and services through the same `entry!(boot)` as the
 example of its function; it adds the SDK's `console` feature, settings in
 place of the library's defaults where the test needs them, and the handlers
@@ -31,9 +31,9 @@ async fn worker(mut inbox: Inbox<'static, Request>) -> AppResult {
 | `serve` | Runs the HIL console over the library's USB console and the image's worker side by side until the chip resets. It takes the worker as a function that makes its future, so the application's future holds that future once, inside the select. The console answers the base module: Hello with the image's keys, its largest payload and the stage-two payload CRC-32, the boot evidence and link health. A transport fault ends the application with `Error::Console`. |
 | `Mailbox` | Room for one request between the console and the worker. The console hands a request over without waiting; a second one while the worker has not taken the first is answered `Rejected(Busy)`. |
 | `answer` | Publishes a response to its request without waiting. |
-| `answer_then_trap` | Publishes the answer of a fault request, waits until the console wrote it and traps on an illegal instruction (`oer_riscv::illegal_instruction`). A write the console cannot confirm (its barrier's exhausted fan-out, a terminal fault by its contract) returns `Error::Console` without a trap; the worker ends the application with it, and the library records and resets. |
+| `answer_then_trap` | Publishes the answer of a fault request, waits until the console wrote it and traps on an illegal instruction (`oer_portable_riscv::illegal_instruction`). A write the console cannot confirm (its barrier's exhausted fan-out, a terminal fault by its contract) returns `Error::Console` without a trap; the worker ends the application with it, and the library records and resets. |
 
-The boot identity is the library's (`oer_espressif::boot_id`). The boot
+The boot identity is the library's (`oer::boot_id`). The boot
 evidence is what the library read before the boot (`Boot::evidence`):
 hart 0's reset cause, with its raw code, the previous boot's panic, and the
 previous boot's CPU exception as the post-mortem (`Fault::Exception`, one

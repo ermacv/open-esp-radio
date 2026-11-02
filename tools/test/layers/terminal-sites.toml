@@ -409,11 +409,11 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "examples/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "examples/wifi-station", classes = ["rust-panic", "cpu-exception"] }
 # examples/wifi-station/src/not_configured.rs
 "examples/wifi-station/src/not_configured.rs:crate:terminal-binding:entry:1" = { owner = "examples/wifi-station", classes = ["rust-panic", "cpu-exception"] }
-# hil/images/esp32s31-aes/src/entry.rs
-"hil/images/esp32s31-aes/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/esp32s31-aes", classes = ["rust-panic", "cpu-exception"] }
+# hil/images/aes/src/entry.rs
+"hil/images/aes/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/aes", classes = ["rust-panic", "cpu-exception"] }
 
-# hil/images/esp32s31-station/src/entry.rs
-"hil/images/esp32s31-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/esp32s31-station", classes = ["rust-panic", "cpu-exception"] }
+# hil/images/station/src/entry.rs
+"hil/images/station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/images/station", classes = ["rust-panic", "cpu-exception"] }
 # oer/src/esp32s31.rs
 "oer/src/esp32s31.rs:crate::esp32s31::start:terminal-entry:start:1" = { owner = "oer", classes = ["configuration-boot"] }
 "oer/src/esp32s31.rs:crate::esp32s31::fail:terminal-entry:fail:1" = { owner = "oer", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }

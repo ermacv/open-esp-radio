@@ -1,11 +1,11 @@
 use super::*;
 use {
-    oer_ieee80211_core_upper_mac::ccmp::CcmpRxProtection,
-    oer_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber},
+    oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxProtection,
+    oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpPacketNumber},
 };
 
 fn exchange_terminals() -> [Outcome; 5] {
-    use oer_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
+    use oer_protocols_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
     [
         ended(End::Delivered),
         ended(End::AckTimeout),
@@ -23,7 +23,7 @@ fn response_counters(world: &World<'_>, from: usize) -> Vec<u64> {
             let qos = frame[0] & 0x80 != 0;
             let start = 32 + usize::from(qos) * 2 + usize::from(protected) * 8;
             let end = frame.len();
-            oer_ieee80211_core_security_rsn::EapolKeyFrame::parse(&frame[start..end])
+            oer_protocols_ieee80211_core_security_rsn::EapolKeyFrame::parse(&frame[start..end])
                 .unwrap()
                 .replay_counter()
         })
@@ -244,7 +244,7 @@ fn connected_deferral_has_no_station_timeout_and_waits_for_the_port_terminal() {
             assert_eq!(world.frames.len(), before);
             world.outcomes.push_back((
                 TxOutcome::Indeterminate(
-                    oer_ieee80211_contracts_port::IndeterminateCause::HardwareTimeout,
+                    oer_protocols_ieee80211_contracts_port::IndeterminateCause::HardwareTimeout,
                 ),
                 true,
             ));
@@ -326,7 +326,7 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
             world.receive_verified(at(51), &group_message1(&ptk, 5, 2));
             let before = world.frames.len();
             world.outcomes.push_back((
-                TxOutcome::Withdrawn(oer_ieee80211_contracts_port::WithdrawCause::Disabled),
+                TxOutcome::Withdrawn(oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled),
                 true,
             ));
             world.end_transmissions(at(52));
@@ -654,7 +654,7 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
                     .filter(|event| matches!(
                         event,
                         Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::InvalidEapol(
-                            oer_ieee80211_wire::eapol::EapolParseError::Truncated
+                            oer_protocols_ieee80211_wire::eapol::EapolParseError::Truncated
                         )))
                     ))
                     .count(),
@@ -695,7 +695,7 @@ fn retained_security_ies_are_terminal_without_counting_a_peer_drop() {
         assert!(!world.station.is_connected());
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::RetainedSecurityIes(
-                oer_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe
+                oer_protocols_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe
             )
         ))));
     });
@@ -717,7 +717,7 @@ fn retained_security_ies_fail_with_the_same_cause_during_the_initial_handshake()
         assert!(!world.station.is_connected());
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::RetainedSecurityIes(
-                oer_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe
+                oer_protocols_ieee80211_core_security_rsn::frames::RsnFrameError::InvalidRsnIe
             )
         ))));
     });

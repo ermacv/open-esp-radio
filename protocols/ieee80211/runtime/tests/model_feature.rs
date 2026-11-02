@@ -31,25 +31,25 @@
 )]
 
 use core::{future::Future, num::NonZeroU8, task::Poll};
-use oer_ieee80211_wire::frame::FrameControl;
+use oer_protocols_ieee80211_wire::frame::FrameControl;
 use std::{rc::Rc, task::Waker};
 
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     AckHeader, Attempt, Channel, ChannelWidth, ClassFrame, HeaderSpec, InterfacePhase,
     LowerMacEvent, LowerMacPhase, LowerMacTerminal, MpduLength, Protection, RetryPlan, RetryStage,
     RxBuffer, SizedFrame, Station, SupportedPower, TxBufferPool, TxCompleted, TxFrame, TxOperation,
     TxPower, TxProtection, TxSource,
 };
-use oer_ieee80211_testing_model::{
+use oer_protocols_ieee80211_testing_model::{
     MODEL_RX_EVENTS, ModelAir, ModelAnyBuffer, ModelBackend, ModelLarge, ModelResources,
     ModelRxMeta, ModelSmall, ModelTypes,
 };
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
     phy::{LegacyRate, PhyRate},
     qos::WmmAccessCategory,
 };
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     Disabled, Ended, LocalId, Owner, PortBody, PortPhase, SlotIdentity, run_port, with_local_slot,
 };
 
@@ -66,7 +66,7 @@ fn backend<Id: SlotIdentity>() -> (ModelBackend<Id>, Rc<ModelAir>) {
             IndividualAddress::new(STATION).unwrap(),
             IndividualAddress::new(PEER).unwrap(),
         ],
-        std::rc::Rc::new(oer_time_virtual::VirtualClock::<8>::new()),
+        std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
     )
 }
 
@@ -77,9 +77,9 @@ where
     run(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (backend, air) = backend();
-        let end = oer_radio_port::LocalExecution
+        let end = oer_protocols_radio_port::LocalExecution
             .scope(
-                oer_radio_port::conformance::registration::guarded(
+                oer_protocols_radio_port::conformance::registration::guarded(
                     (&mut slot)
                         .register(backend)
                         .ok()
@@ -88,8 +88,8 @@ where
                 async |frontend| run_port(frontend, body(air)).await,
             )
             .await;
-        let stopped = matches!(&end, oer_radio_port::PortEnd::FailStopped { outcome, .. } if matches!(outcome.outcome(), oer_radio_port::Abandon::Stopped(_)));
-        assert!(stopped || matches!(&end, oer_radio_port::PortEnd::Uninstalled { .. }));
+        let stopped = matches!(&end, oer_protocols_radio_port::PortEnd::FailStopped { outcome, .. } if matches!(outcome.outcome(), oer_protocols_radio_port::Abandon::Stopped(_)));
+        assert!(stopped || matches!(&end, oer_protocols_radio_port::PortEnd::Uninstalled { .. }));
         drop(end);
         slot.end_model_world();
         stopped
@@ -188,9 +188,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveLoss {
         'id: 'p,
     {
         use embassy_futures::yield_now;
-        use oer_ieee80211_contracts_port::{StationPhase, StationReceive};
-        use oer_ieee80211_testing_model::MODEL_EVENTS;
-        use oer_radio_port::EventsLost;
+        use oer_protocols_ieee80211_contracts_port::{StationPhase, StationReceive};
+        use oer_protocols_ieee80211_testing_model::MODEL_EVENTS;
+        use oer_protocols_radio_port::EventsLost;
 
         let mut owner = owner.enable().await.ok().unwrap();
         {
@@ -220,7 +220,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for ReceiveLoss {
                         phase.recycle(frame);
                     }
                     Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(
-                        oer_ieee80211_contracts_port::Configured::Station(_),
+                        oer_protocols_ieee80211_contracts_port::Configured::Station(_),
                     ))) => terminals.push(1),
                     Ok(LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_))) => {
                         terminals.push(2)
@@ -343,10 +343,10 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Owners {
                 else {
                     panic!("one Single terminal per submission");
                 };
-                let oer_ieee80211_contracts_port::TerminalParts {
+                let oer_protocols_ieee80211_contracts_port::TerminalParts {
                     ticket, payload, ..
                 } = terminal.into_parts(&mut resources.terminal_access);
-                let (buffer, _) = oer_ieee80211_contracts_port::TxMpdu::into_parts(payload);
+                let (buffer, _) = oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(payload);
                 assert_eq!(ticket.index(), ticket_index);
                 assert_eq!(matches!(buffer, ModelAnyBuffer::LargeSent(_)), large);
                 if !large {

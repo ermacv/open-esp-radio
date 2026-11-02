@@ -5,7 +5,7 @@
 mod dtm;
 #[cfg(target_os = "linux")]
 mod hci;
-use oer_lab_fixture::bluetooth::model;
+use oer_tools_lab_fixture::bluetooth::model;
 #[cfg(target_os = "linux")]
 mod owner;
 
@@ -50,8 +50,8 @@ fn main() {
         return;
     }
     #[cfg(target_os = "linux")]
-    let _software = match oer_lab_fixture::launcher::enter(
-        oer_lab_fixture::launcher::LaunchTarget::Bluetooth,
+    let _software = match oer_tools_lab_fixture::launcher::enter(
+        oer_tools_lab_fixture::launcher::LaunchTarget::Bluetooth,
     ) {
         Ok(lease) => lease,
         Err(error) => {
@@ -62,7 +62,7 @@ fn main() {
     if let Command::AttParameters { adapter } | Command::RestoreAttParameters { adapter } = &command
     {
         let result = (|| -> Result<()> {
-            let _signals = oer_os_process::install_signal_handlers()?;
+            let _signals = oer_tools_os_process::install_signal_handlers()?;
             #[cfg(target_os = "linux")]
             {
                 owner::connection_parameters::run(
@@ -92,7 +92,7 @@ fn main() {
     };
     let mut report = model::Check::new(adapter, dtm_version, profile);
     let result = (|| -> Result<()> {
-        let _signals = oer_os_process::install_signal_handlers()?;
+        let _signals = oer_tools_os_process::install_signal_handlers()?;
         #[cfg(target_os = "linux")]
         {
             owner::check(adapter, &mut report)

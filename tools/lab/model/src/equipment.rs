@@ -3,7 +3,7 @@
 //! it by, whether it answers, its interfaces and their channels, and how
 //! busy the channel it uses is (clear-channel assessment, from the radio's
 //! survey). The LAB service probes the equipment it reaches over SSH
-//! (`oer-lab-router`); the host's own radios are the fixtures' (`oer-lab-fixture`).
+//! (`oer-tools-lab-router`); the host's own radios are the fixtures' (`oer-tools-lab-fixture`).
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};

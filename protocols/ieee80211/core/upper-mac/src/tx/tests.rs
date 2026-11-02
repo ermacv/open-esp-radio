@@ -1,4 +1,4 @@
-use oer_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 use super::*;
 use crate::protection::RtsLengthThreshold;
@@ -11,8 +11,8 @@ const LIMITS: RetryLimits = RetryLimits {
 };
 
 const AMPDU_POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_time::Duration::from_micros(100_000),
-    aged_margin: oer_time::Duration::from_micros(1_024),
+    lifetime: oer_portable_time::Duration::from_micros(100_000),
+    aged_margin: oer_portable_time::Duration::from_micros(1_024),
     retry_limit: 4,
     retain_single_mpdu: false,
 };
@@ -145,7 +145,7 @@ fn a_cts_timeout_retries_without_the_retry_bit_under_the_same_protection() {
     let (mut exchange, first) = planner.begin(mpdu(1_500), &Ladder).unwrap();
     assert_eq!(
         first.port_protection(),
-        oer_ieee80211_contracts_port::Protection::RtsCts {
+        oer_protocols_ieee80211_contracts_port::Protection::RtsCts {
             rate: LegacyRate::Ofdm24M
         }
     );
@@ -164,7 +164,7 @@ fn a_cts_timeout_retries_without_the_retry_bit_under_the_same_protection() {
     );
     assert_eq!(
         retry.port_protection(),
-        oer_ieee80211_contracts_port::Protection::RtsCts {
+        oer_protocols_ieee80211_contracts_port::Protection::RtsCts {
             rate: LegacyRate::Ofdm24M
         }
     );

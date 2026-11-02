@@ -3,20 +3,20 @@
 use super::*;
 use crate::events::{DataLoss, StaEvent};
 use core::num::NonZeroU16;
-use oer_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
+use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, Ieee80211Capabilities, LowerMacCapabilities,
     PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, WidthSet,
 };
-use oer_ieee80211_contracts_port::{BufferMemoryUnavailable, ResponseHeader};
-use oer_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
-use oer_ieee80211_core_upper_mac::qos::AcAdmission;
-use oer_ieee80211_core_upper_mac::sequence::SequenceCounter;
-use oer_ieee80211_wire::data::MsduParts;
-use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_contracts_port::{BufferMemoryUnavailable, ResponseHeader};
+use oer_protocols_ieee80211_contracts_port::{IndeterminateCause, WithdrawCause};
+use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
+use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_wire::data::MsduParts;
+use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use std::vec::Vec;
-use {oer_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch, oer_ieee80211_wire::ccmp::GroupKeyId};
+use {oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch, oer_protocols_ieee80211_wire::ccmp::GroupKeyId};
 
 struct Caps;
 
@@ -47,7 +47,7 @@ fn tokens_lost(events: &Kept) -> u32 {
 }
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -86,7 +86,7 @@ impl Buffer {
     }
 }
 
-impl oer_ieee80211_contracts_port::TxBufferClass for Buffer {
+impl oer_protocols_ieee80211_contracts_port::TxBufferClass for Buffer {
     const CAPACITY: usize = 1600;
 }
 
@@ -122,7 +122,7 @@ fn fresh_memory(buffer: &mut ReturnedMpdu<Buffer, Buffer>) -> &mut [u8] {
 struct Data<'id>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
 
 impl<'id> StaDataTokens for Data<'id> {
-    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type EpochPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
     type Class = Buffer;
     type Ticket = u8;
     type Buffer = Buffer;
@@ -140,9 +140,9 @@ impl<'id> StaTokens for Station<'id> {
     type AssociationStart = ();
     type Association = ();
     type VacantKeyBank =
-        oer_ieee80211_contracts_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
     type VacantAssociation = [(); 0];
-    fn begin_association(_: (), _: oer_ieee80211_wire::security::Spp) {}
+    fn begin_association(_: (), _: oer_protocols_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {
         key
     }
@@ -150,7 +150,7 @@ impl<'id> StaTokens for Station<'id> {
         (
             (),
             (),
-            oer_ieee80211_contracts_port::association::KeyBankParts {
+            oer_protocols_ieee80211_contracts_port::association::KeyBankParts {
                 pairwise: heapless::Vec::new(),
                 group: group.into_iter().collect(),
             },
@@ -168,9 +168,9 @@ impl<'id> StaTokens for Station<'id> {
     const PAIRWISE_SLOTS: usize = 1;
     const TOTAL_GROUP_SLOTS: usize = 0;
     const GROUP_SLOTS: usize = 0;
-    type GatePath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
-    type EpochPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
-    type ConfigurationPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>;
+    type GatePath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
+    type EpochPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
+    type ConfigurationPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
     type Small = Buffer;
     type Ticket = u8;
     type SmallBuffer = Buffer;
@@ -198,11 +198,11 @@ fn qos_link<'a>(
 ) -> LinkView<'a, 'static, Station<'static>> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
-        address: oer_ieee80211_wire::address::OwnAddress::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+        address: oer_protocols_ieee80211_wire::address::OwnAddress::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
-        bssid: oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        bssid: oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
         association_id: 1,
@@ -218,11 +218,11 @@ fn qos_link<'a>(
 fn open_link(counter: &mut SequenceCounter) -> LinkView<'_, 'static, Station<'static>> {
     LinkView {
         epoch: LinkEpoch::for_test(1),
-        address: oer_ieee80211_wire::address::OwnAddress::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+        address: oer_protocols_ieee80211_wire::address::OwnAddress::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
-        bssid: oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        bssid: oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
         )
         .unwrap(),
         association_id: 1,
@@ -249,7 +249,7 @@ fn msdu(priority: u8) -> Msdu<'static> {
         ether_type: 0x0800,
         priority: WmmUserPriority::new(priority).unwrap(),
         payload: &[0xab; 100],
-        admitted: oer_time::Instant::from_micros(1_000 + u64::from(priority)),
+        admitted: oer_portable_time::Instant::from_micros(1_000 + u64::from(priority)),
     }
 }
 
@@ -432,7 +432,7 @@ fn interleaved_returns_keep_the_original_tid_order_and_admission_count() {
         // A returned MSDU keeps the age it was admitted with.
         assert_eq!(
             operation.context.admitted(),
-            oer_time::Instant::from_micros(1_000 + u64::from(tid))
+            oer_portable_time::Instant::from_micros(1_000 + u64::from(tid))
         );
         assert_eq!(
             operation.context.frame.frame().len().get(),
@@ -638,7 +638,7 @@ fn preparation_refusal_ends_only_its_msdu_without_a_radio_terminal_or_retry() {
             ticket: rejected.ticket,
             buffer: rejected.buffer,
             reason: crate::machine::TxRefusal::Layout(
-                oer_ieee80211_contracts_port::LayoutError::BodyOverlap,
+                oer_protocols_ieee80211_contracts_port::LayoutError::BodyOverlap,
             ),
         },
         &mut events,
@@ -993,7 +993,7 @@ fn the_old_and_the_new_group_key_are_both_taken_until_the_old_is_removed() {
         replay
             .exchange_group(
                 GroupKeyId::new(2).unwrap(),
-                oer_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState::default(),
+                oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState::default(),
             )
             .is_none()
     );
@@ -1035,14 +1035,14 @@ enum End {
 /// The terminal of an attempt that made `transmissions`.
 fn ended(status: End, transmissions: u16) -> SingleOutcome<(), ()> {
     let air =
-        NonZeroU16::new(transmissions).map(|transmissions| oer_ieee80211_contracts_port::Air {
+        NonZeroU16::new(transmissions).map(|transmissions| oer_protocols_ieee80211_contracts_port::Air {
             transmissions,
             rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
         });
     TxOutcome::Ended(match status {
         End::Delivered => SingleEnd::Delivered {
             air: air.unwrap(),
-            response: oer_ieee80211_contracts_port::SingleResponse::Ack(()),
+            response: oer_protocols_ieee80211_contracts_port::SingleResponse::Ack(()),
         },
         End::AckTimeout => SingleEnd::AckTimeout(air.unwrap()),
         End::ContentionLimit => SingleEnd::ContentionLimit(air),
@@ -1366,18 +1366,18 @@ fn received<'f, T: StaTokens>(
     frame: &'f [u8],
     meta: &RxMeta,
 ) -> Result<
-    impl Iterator<Item = Result<MsduParts<'f>, oer_ieee80211_core_upper_mac::receive::RxDropReason>>
+    impl Iterator<Item = Result<MsduParts<'f>, oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason>>
     + 'f,
-    oer_ieee80211_core_upper_mac::receive::RxDropReason,
+    oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason,
 > {
-    use oer_ieee80211_core_upper_mac::receive::{AdmittedData, RxDropReason};
+    use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, RxDropReason};
     let protected_link = matches!(link.protection, LinkProtection::Ccmp { .. });
     let replay = match &mut link.protection {
         LinkProtection::Ccmp { replay, .. } => Some(&mut **replay),
         LinkProtection::Open => None,
     };
     let admitted = AdmittedData::admit(
-        oer_ieee80211_wire::frame::DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
+        oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
         link.address,
         link.bssid,
         integrity(meta),
@@ -1448,12 +1448,12 @@ fn data_losses_arrive_in_the_order_they_happen() {
 
 /// `restricted` closed to the station's QoS data.
 fn closed(restricted: &[WmmAccessCategory]) -> AcAdmission {
-    let defaults = oer_ieee80211_wire::extensions::wmm::WmmParameterSet::STANDARD_DEFAULT;
-    let record = |category| oer_ieee80211_wire::extensions::wmm::WmmAcParameters {
+    let defaults = oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::STANDARD_DEFAULT;
+    let record = |category| oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters {
         admission_control_mandatory: restricted.contains(&category),
         ..defaults.access_category(category)
     };
-    AcAdmission::from_edca(oer_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
+    AcAdmission::from_edca(oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
         1,
         false,
         WmmAccessCategory::ALL.map(record),
@@ -1576,17 +1576,17 @@ fn window(start: u16, subframes: usize, max_length: u32) -> Option<AggregateWind
 }
 
 const RETRY: AggregateRetry = AggregateRetry {
-    lifetime: oer_time::Duration::from_secs(1),
+    lifetime: oer_portable_time::Duration::from_secs(1),
     attempts: 2,
 };
 
-fn block_ack(start: u16, bitmap: u64) -> oer_ieee80211_contracts_port::AggregateOutcome<(), ()> {
-    TxOutcome::Ended(oer_ieee80211_contracts_port::AggregateEnd::Delivered {
-        air: oer_ieee80211_contracts_port::Air {
+fn block_ack(start: u16, bitmap: u64) -> oer_protocols_ieee80211_contracts_port::AggregateOutcome<(), ()> {
+    TxOutcome::Ended(oer_protocols_ieee80211_contracts_port::AggregateEnd::Delivered {
+        air: oer_protocols_ieee80211_contracts_port::Air {
             transmissions: NonZeroU16::MIN,
             rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
         },
-        report: oer_ieee80211_contracts_port::BlockAckReport::new(
+        report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
             SequenceNumber::new(start).unwrap(),
             bitmap,
         ),
@@ -1648,7 +1648,7 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
             ticket: first.ticket,
             completion: block_ack(1, 0b101),
         },
-        oer_time::Instant::from_micros(2_000),
+        oer_portable_time::Instant::from_micros(2_000),
         Some(RETRY),
         &mut events,
     );
@@ -1682,7 +1682,7 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
             ticket: short.ticket,
             completion: block_ack(2, 0),
         },
-        oer_time::Instant::from_micros(3_000),
+        oer_portable_time::Instant::from_micros(3_000),
         Some(RETRY),
         &mut events,
     );
@@ -1731,7 +1731,7 @@ fn every_return_gives_the_members_places_back() {
                 ticket: sent.ticket,
                 completion: block_ack(round * 4, 0b1111),
             },
-            oer_time::Instant::from_micros(1_000),
+            oer_portable_time::Instant::from_micros(1_000),
             Some(RETRY),
             &mut events,
         );
@@ -1749,7 +1749,7 @@ fn every_return_gives_the_members_places_back() {
             ticket: sent.ticket,
             completion: block_ack(40, 0b11),
         },
-        oer_time::Instant::from_micros(1_000),
+        oer_portable_time::Instant::from_micros(1_000),
         Some(RETRY),
         &mut events,
     );
@@ -1789,8 +1789,8 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
     let at = |mcs, bandwidth| {
         Some(AggregateWindow {
             rate: Some(PhyRate::Ht(
-                oer_ieee80211_wire::phy::HtRate::new(
-                    oer_ieee80211_wire::phy::HtMcs::new(mcs).unwrap(),
+                oer_protocols_ieee80211_wire::phy::HtRate::new(
+                    oer_protocols_ieee80211_wire::phy::HtMcs::new(mcs).unwrap(),
                     bandwidth,
                     false,
                 )
@@ -1801,7 +1801,7 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
     };
     // MCS 7 at 20 MHz: 32 full subframes would last over 5.484 ms.
     let narrow = aggregate(data.poll_attempt(
-        |_| at(7, oer_ieee80211_wire::phy::PpduBandwidth::Mhz20),
+        |_| at(7, oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20),
         &mut events,
     ));
     assert!(
@@ -1812,7 +1812,7 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
     // MCS 0: the time limit, not the length, ends it at three.
     data.unbuilt(&mut { narrow }.context, 0, &mut events);
     let slow = aggregate(data.poll_attempt(
-        |_| at(0, oer_ieee80211_wire::phy::PpduBandwidth::Mhz20),
+        |_| at(0, oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20),
         &mut events,
     ));
     assert_eq!(slow.context.len(), 2);
@@ -1895,7 +1895,7 @@ fn an_mpdu_beyond_the_window_waits_for_the_window_to_move() {
             ticket: first.ticket,
             completion: block_ack(0, 0b11),
         },
-        oer_time::Instant::from_micros(2_000),
+        oer_portable_time::Instant::from_micros(2_000),
         Some(RETRY),
         &mut events,
     );
@@ -1962,7 +1962,7 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
             ticket: first.ticket,
             completion: block_ack(0, 0b1),
         },
-        oer_time::Instant::from_micros(2_000),
+        oer_portable_time::Instant::from_micros(2_000),
         Some(RETRY),
         &mut attempts,
     );

@@ -2,9 +2,9 @@
 //!
 //! The HAL owns register access and reports decoded clock observations. This
 //! binding maps those observations into the executor-neutral
-//! [`CoexClockHardware`] port of `oer-espressif-coex`.
+//! [`CoexClockHardware`] port of `oer-chips-family-coex`.
 
-use oer_espressif_coex::{CoexClockHardware, CoexClockSelector, CoexError, CoexTimerClock};
+use oer_chips_family_coex::{CoexClockHardware, CoexClockSelector, CoexError, CoexTimerClock};
 
 use crate::{
     coex::CoexClockPort,

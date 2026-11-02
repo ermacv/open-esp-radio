@@ -151,7 +151,7 @@ impl BluetoothSchedulerBusyObservation {
 /// transferred bit to mint more than one list token.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::bluetooth::BluetoothSchedulerFinishedListObservation;
+/// use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerFinishedListObservation;
 ///
 /// fn cannot_reuse(observation: BluetoothSchedulerFinishedListObservation) {
 ///     let first = observation.pop_lowest();
@@ -234,16 +234,16 @@ impl BluetoothSchedulerHardwareListIndex {
     }
 
     /// The index of the list's scheduler-table entry.
-    pub(crate) const fn register_index(self) -> oer_mmio::Index<16> {
-        match oer_mmio::Index::new(self.0 as usize) {
+    pub(crate) const fn register_index(self) -> oer_portable_mmio::Index<16> {
+        match oer_portable_mmio::Index::new(self.0 as usize) {
             Ok(index) => index,
             Err(_) => panic!("a hardware-list index is below sixteen by construction"),
         }
     }
 
     /// The index as the four-bit request fields take it.
-    pub(crate) const fn field_bits(self) -> oer_mmio::Bits<4> {
-        oer_mmio::Bits::truncate(self.0 as u32)
+    pub(crate) const fn field_bits(self) -> oer_portable_mmio::Bits<4> {
+        oer_portable_mmio::Bits::truncate(self.0 as u32)
     }
 }
 
@@ -273,7 +273,7 @@ pub enum BluetoothSchedulerFinishedListPop {
 /// scheduler epoch.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_hal::bluetooth::BluetoothSchedulerFinishedHardwareListObserved;
+/// use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerFinishedHardwareListObserved;
 ///
 /// fn cannot_reuse(observed: BluetoothSchedulerFinishedHardwareListObserved) {
 ///     let first_consumer = observed;
@@ -393,7 +393,7 @@ fn agreed_diagnostic_value(
 /// selector, lane-zero bits 2:0 hold 2, or hold 3 while lane-one bits 5:4
 /// hold 1 (complete-word bits 13:12 of the vendor comparison).
 const fn execution_modify_repeats(value: DiagnosticValue) -> bool {
-    use oer_esp32s31_pac::bt_mac::diagnostic_value::{ProgressState, Stage};
+    use oer_chips_esp32s31_pac::bt_mac::diagnostic_value::{ProgressState, Stage};
     value.progress_state == ProgressState::ProgressState2.bits() as u8
         || (value.progress_state == ProgressState::ProgressState3.bits() as u8
             && value.stage == Stage::Stage1.bits() as u8)
@@ -402,7 +402,7 @@ const fn execution_modify_repeats(value: DiagnosticValue) -> bool {
 /// Whether execution modify settled: with the settle selector, the complete
 /// value differs from 9.
 const fn execution_modify_settled(value: DiagnosticValue) -> bool {
-    use oer_esp32s31_pac::bt_mac::diagnostic_value::{ProgressState, Value0High4};
+    use oer_chips_esp32s31_pac::bt_mac::diagnostic_value::{ProgressState, Value0High4};
     !(value.progress_state == ProgressState::UnsettledLow.bits() as u8
         && value.value_0_high_4 == Value0High4::UnsettledHigh.bits() as u8
         && !value.value_0_bit_7
@@ -413,13 +413,13 @@ const fn execution_modify_settled(value: DiagnosticValue) -> bool {
         && value.value_3 == 0)
 }
 
-struct HardwareDiagnosticControl<'a, B: oer_mmio::Placement> {
-    registers: &'a mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+struct HardwareDiagnosticControl<'a, B: oer_portable_mmio::Placement> {
+    registers: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothDiagnosticControl for HardwareDiagnosticControl<'_, B> {
+impl<B: oer_portable_mmio::Placement> BluetoothDiagnosticControl for HardwareDiagnosticControl<'_, B> {
     fn select(&mut self, selector: DiagnosticSelector) {
-        use oer_esp32s31_pac::bt_mac::diagnostic_select::Selection;
+        use oer_chips_esp32s31_pac::bt_mac::diagnostic_select::Selection;
         let selection = match selector {
             DiagnosticSelector::SchedulerStatus => Selection::SchedulerStatus,
             DiagnosticSelector::ExecutionModifyProgress => Selection::ExecutionModifyProgress,
@@ -446,40 +446,40 @@ impl<B: oer_mmio::Placement> BluetoothDiagnosticControl for HardwareDiagnosticCo
 
 /// Sample scheduler BUSY once through the diagnostic pair of the interrupt
 /// owner; `None` when the two reads disagree.
-pub(crate) fn sample_scheduler_busy<B: oer_mmio::Placement>(
-    registers: &mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+pub(crate) fn sample_scheduler_busy<B: oer_portable_mmio::Placement>(
+    registers: &mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 ) -> Option<bool> {
     execute_scheduler_status_sample(&mut HardwareDiagnosticControl { registers })
 }
 
 /// Select the execution-modify progress signal, as the vendor does before it
 /// publishes the request.
-pub(crate) fn select_execution_modify_progress<B: oer_mmio::Placement>(
-    registers: &mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+pub(crate) fn select_execution_modify_progress<B: oer_portable_mmio::Placement>(
+    registers: &mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 ) {
     HardwareDiagnosticControl { registers }.select(DiagnosticSelector::ExecutionModifyProgress);
 }
 
 /// Read the already selected progress signal twice and report whether
 /// execution modify must repeat its request; `None` when the reads disagree.
-pub(crate) fn sample_execution_modify_repeats<B: oer_mmio::Placement>(
-    registers: &mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+pub(crate) fn sample_execution_modify_repeats<B: oer_portable_mmio::Placement>(
+    registers: &mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 ) -> Option<bool> {
     agreed_diagnostic_value(&mut HardwareDiagnosticControl { registers })
         .map(execution_modify_repeats)
 }
 
 /// Select the execution-modify settle signal.
-pub(crate) fn select_execution_modify_settle<B: oer_mmio::Placement>(
-    registers: &mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+pub(crate) fn select_execution_modify_settle<B: oer_portable_mmio::Placement>(
+    registers: &mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 ) {
     HardwareDiagnosticControl { registers }.select(DiagnosticSelector::ExecutionModifySettle);
 }
 
 /// Read the already selected settle signal twice and report whether
 /// execution modify settled; `None` when the reads disagree.
-pub(crate) fn sample_execution_modify_settled<B: oer_mmio::Placement>(
-    registers: &mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+pub(crate) fn sample_execution_modify_settled<B: oer_portable_mmio::Placement>(
+    registers: &mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 ) -> Option<bool> {
     agreed_diagnostic_value(&mut HardwareDiagnosticControl { registers })
         .map(execution_modify_settled)
@@ -492,11 +492,11 @@ struct SchedulerStateObservation {
     current_hardware_list: BluetoothSchedulerHardwareListIndex,
 }
 
-struct HardwareSchedulerInterruptControl<'a, B: oer_mmio::Placement> {
-    registers: &'a mut oer_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
+struct HardwareSchedulerInterruptControl<'a, B: oer_portable_mmio::Placement> {
+    registers: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerInterruptControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInterruptControl
     for HardwareSchedulerInterruptControl<'_, B>
 {
     fn read_scheduler_busy(&mut self) -> Option<bool> {
@@ -516,7 +516,7 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerInterruptControl
 
     fn clear_scheduler_reference(&mut self) {
         self.registers.modify_scheduler_reference(|w| {
-            w.set_value_low_20(oer_mmio::Bits::constant::<0>());
+            w.set_value_low_20(oer_portable_mmio::Bits::constant::<0>());
         });
     }
 }
@@ -531,11 +531,11 @@ trait BluetoothSchedulerSoftwareListRemovalControl {
     fn read_command_1_status_18(&mut self) -> bool;
 }
 
-struct HardwareSchedulerSoftwareListRemovalControl<'a, B: oer_mmio::Placement> {
-    registers: &'a mut oer_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
+struct HardwareSchedulerSoftwareListRemovalControl<'a, B: oer_portable_mmio::Placement> {
+    registers: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerSoftwareListRemovalControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerSoftwareListRemovalControl
     for HardwareSchedulerSoftwareListRemovalControl<'_, B>
 {
     fn read_command_0_status_26(&mut self) -> bool {
@@ -547,11 +547,11 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerSoftwareListRemovalControl
     }
 }
 
-struct HardwareSchedulerFinishedListControl<'a, B: oer_mmio::Placement> {
-    registers: &'a mut oer_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
+struct HardwareSchedulerFinishedListControl<'a, B: oer_portable_mmio::Placement> {
+    registers: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerFinishedListControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerFinishedListControl
     for HardwareSchedulerFinishedListControl<'_, B>
 {
     fn read_finished_list_status(&mut self) -> u16 {

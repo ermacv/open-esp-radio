@@ -1,7 +1,7 @@
 //! The open promiscuous receive frontier over host memory.
 
-use oer_esp32s31_pac::wifi_mac::{misc_packet_policy, policy};
-use oer_mmio::Index;
+use oer_chips_esp32s31_pac::wifi_mac::{misc_packet_policy, policy};
+use oer_portable_mmio::Index;
 
 use crate::ieee80211::registers::HostWords;
 

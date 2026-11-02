@@ -1,6 +1,6 @@
 //! The TSF transactions over host memory.
 
-use oer_esp32s31_pac::modem_pwr::{
+use oer_chips_esp32s31_pac::modem_pwr::{
     snapshot_high, snapshot_low, soc_wakeup_clear, sta_light_sleep_wake_ahead, sta_tbtt_interval,
     sta_tsf_control::{self, StaTsfMode},
     target, tsf_load_control, value_high, value_low, wakeup_signal_clear,

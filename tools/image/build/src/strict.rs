@@ -1,8 +1,8 @@
 //! Validate Cargo's cached runtime link against the linker's actual inputs.
 
 use crate::Result;
-use oer_image_checks::linker::hot::FRAGMENT as HOT_FRAGMENT;
-use oer_image_checks::linker::strict::{FRAGMENT, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec};
+use oer_tools_image_checks::linker::hot::FRAGMENT as HOT_FRAGMENT;
+use oer_tools_image_checks::linker::strict::{FRAGMENT, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec};
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn reused_elf_keeps_its_nonempty_selection_and_fragment_in_the_new_bundle() {
-        use oer_image_checks::linker::strict::{Fingerprint, PlacedFunction};
+        use oer_tools_image_checks::linker::strict::{Fingerprint, PlacedFunction};
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
         let output = root.join("staging");
@@ -169,7 +169,7 @@ mod tests {
         for path in [&elf, &linker, &specification] {
             std::fs::write(path, b"unchanged").unwrap();
         }
-        let digest = oer_os_durable::sha256_bytes(b"unchanged");
+        let digest = oer_tools_os_durable::sha256_bytes(b"unchanged");
         let placement = Placement {
             irq_stacks: Vec::new(),
             task_stacks: Vec::new(),

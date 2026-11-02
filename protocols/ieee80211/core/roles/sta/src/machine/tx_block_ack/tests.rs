@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 const POLICY: StaTxBlockAckPolicy = StaTxBlockAckPolicy {
     window: 32,
@@ -290,7 +290,7 @@ fn a_stale_response_changes_nothing() {
 fn a_dropped_member_owes_a_block_ack_request_at_the_new_head() {
     let mut tx = operational();
     let marks = |delivered, expired| crate::data::BlockAckMarks {
-        tid: oer_ieee80211_wire::qos::WmmUserPriority::UP0,
+        tid: oer_protocols_ieee80211_wire::qos::WmmUserPriority::UP0,
         start: SequenceNumber::new(5).unwrap(),
         delivered,
         expired,

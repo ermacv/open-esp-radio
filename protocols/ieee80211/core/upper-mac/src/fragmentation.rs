@@ -1,9 +1,9 @@
 //! Bounded data-fragment reassembly above the port.
 
 #[cfg(test)]
-use oer_ieee80211_wire::data::DataInterfaceRole;
+use oer_protocols_ieee80211_wire::data::DataInterfaceRole;
 
-use oer_ieee80211_wire::{ccmp::CcmpPacketNumber, data::LLC_SNAP_HEADER_LEN, fragmentation::*};
+use oer_protocols_ieee80211_wire::{ccmp::CcmpPacketNumber, data::LLC_SNAP_HEADER_LEN, fragmentation::*};
 
 mod reassembly;
 pub use reassembly::{
@@ -83,7 +83,7 @@ pub const OPEN_DATA_REASSEMBLY_CAPACITY: usize = 1_500 + LLC_SNAP_HEADER_LEN;
 /// This is deliberately not presented as an ESP32-S31 hardware value. It is
 /// a finite host-owned eviction policy used only when a runtime clock sample
 /// accompanies the received fragment.
-pub const OPEN_DATA_FRAGMENT_TIMEOUT: oer_time::Duration = oer_time::Duration::from_secs(1);
+pub const OPEN_DATA_FRAGMENT_TIMEOUT: oer_portable_time::Duration = oer_portable_time::Duration::from_secs(1);
 
 #[cfg(test)]
 mod tests;

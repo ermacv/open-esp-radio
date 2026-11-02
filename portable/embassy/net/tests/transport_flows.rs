@@ -2,9 +2,9 @@
 
 //! Real packet owners through publication, nested selection and readiness.
 
-use oer_embassy_net::datapath::DestinationTxQueues;
-use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
-use oer_memory::HostContext;
+use oer_portable_embassy_net::datapath::DestinationTxQueues;
+use oer_portable_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_portable_memory::HostContext;
 use std::{
     sync::{
         Arc,
@@ -187,7 +187,7 @@ fn head_inspection_preserves_flow_rotation_packet_owners_and_admission() {
         for _ in 0..4 {
             // Exercise the object-safe boundary used by the radio, not an
             // adapter-internal shortcut around its synchronization.
-            let queues: &dyn DestinationTxQueues<Frame = _, Error = oer_embassy_net::AccessRefused> =
+            let queues: &dyn DestinationTxQueues<Frame = _, Error = oer_portable_embassy_net::AccessRefused> =
                 &radio;
             let head = queues.head_for([4; 6]).unwrap().unwrap();
             assert_eq!(

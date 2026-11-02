@@ -1,5 +1,5 @@
 //! Module lease orchestration over the existing modem edge executor.
-use oer_espressif_modem_clock::{self as clock, ModemClockDependency as Dependency};
+use oer_chips_family_modem_clock::{self as clock, ModemClockDependency as Dependency};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {

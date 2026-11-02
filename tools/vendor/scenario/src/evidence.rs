@@ -2,7 +2,7 @@
 //!
 //! Every helper fails instead of guessing: unknown, unavailable or
 //! noncontiguous bytes and unknown call words are never read as values.
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     ExecutionEvent, ExecutionEvidence, ExecutionStop, ObservedCallTarget, ObservedWord,
 };
 
@@ -328,7 +328,7 @@ pub fn split_cases(records: &[ExecutionEvidence], counts: &[u32]) -> Vec<Vec<Exe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_analysis_blobray_domain::FinalMemoryChunk;
+    use oer_tools_analysis_blobray_domain::FinalMemoryChunk;
 
     fn chunk(offset: u32, known: u16, available: u16, selection: u16) -> ExecutionEvidence {
         let mut bytes = [0; 16];

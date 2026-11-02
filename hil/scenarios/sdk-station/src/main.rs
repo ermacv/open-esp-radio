@@ -1,4 +1,4 @@
-//! The HIL SDK station scenario: the `oer-espressif` station of the
+//! The HIL SDK station scenario: the `oer` station of the
 //! `esp32s31-sdk-station` image meets the lab router's isolated WPA2
 //! network. A wrong passphrase is a handled result without a reset; the
 //! station joins, takes its DHCP address, exchanges a line over TCP with
@@ -17,13 +17,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
-use oer_hil_protocol::base::{
+use oer_protocols_hil_agent::base::Service as _;
+use oer_tools_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
+use oer_protocols_hil_protocol::base::{
     BootEvidence, ExceptionFault, Fault, GetBootStatus, PostMortemSummary,
 };
-use oer_services_fault::{RaiseException, Raising};
-use oer_services_sdk_station::{
+use oer_hil_services_fault::{RaiseException, Raising};
+use oer_hil_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, GetStatus, Ipv4, LinkLoss, MAX_LINE, Status,
     WaitIpv4, WaitLinkDown,
 };
@@ -32,8 +32,8 @@ const SCENARIO: Scenario = Scenario::new(
     "sdk-station",
     "esp32s31-sdk-station",
     &[
-        oer_services_sdk_station::Request::KEYS,
-        oer_services_fault::Request::KEYS,
+        oer_hil_services_sdk_station::Request::KEYS,
+        oer_hil_services_fault::Request::KEYS,
     ],
 )
 .using_router();
@@ -195,12 +195,12 @@ const ROUTER_ADDRESS: [u8; 4] = [10, 231, 0, 1];
 const STATION_NETWORK: &str = "10.231.0.0/24";
 
 fn main() -> ExitCode {
-    oer_hil_harness::main(&SCENARIO, &CASES)
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
-fn stand() -> Result<oer_lab_model::Stand, Failure> {
-    oer_lab_model::path()
-        .and_then(|path| oer_lab_model::Stand::load(&path))
+fn stand() -> Result<oer_tools_lab_model::Stand, Failure> {
+    oer_tools_lab_model::path()
+        .and_then(|path| oer_tools_lab_model::Stand::load(&path))
         .map_err(|error| Failure::Incomplete(format!("the stand file: {error}")))
 }
 
@@ -344,7 +344,7 @@ fn the_network(cx: &mut Cx<'_>) -> Result<(String, String), Failure> {
 }
 
 /// The class, kind and detail of a failure code
-/// (`oer_services_wifi_station::runtime`).
+/// (`oer_hil_services_wifi_station::runtime`).
 fn describe(code: u32) -> String {
     let [class, kind, high, low] = code.to_be_bytes();
     format!(
@@ -354,7 +354,7 @@ fn describe(code: u32) -> String {
 }
 
 /// Whether failure `code` is the 4-way handshake's refusal of a wrong
-/// passphrase on this stand's access point (`oer_services_wifi_station::
+/// passphrase on this stand's access point (`oer_hil_services_wifi_station::
 /// runtime` numbering): the station's `HandshakeFailed` (class 1, kind 6),
 /// or the access point's deauthentication with reason 15, 4-way handshake
 /// timeout (class 1, kind 1, detail 15; IEEE 802.11-2020 Table 9-49).
@@ -614,11 +614,11 @@ mod tests {
     #[test]
     fn a_generated_network_and_its_wrong_passphrase_fit_the_service() {
         let (ssid, passphrase) = network();
-        assert!(ssid.len() <= oer_services_sdk_station::MAX_SSID, "{ssid}");
+        assert!(ssid.len() <= oer_hil_services_sdk_station::MAX_SSID, "{ssid}");
         let wrong = format!("not-{passphrase}");
         for passphrase in [&passphrase, &wrong] {
             assert!(
-                (8..=oer_services_sdk_station::MAX_PASSPHRASE).contains(&passphrase.len()),
+                (8..=oer_hil_services_sdk_station::MAX_PASSPHRASE).contains(&passphrase.len()),
                 "{passphrase}"
             );
         }
@@ -654,7 +654,7 @@ mod tests {
 
     fn evidence(fault: Option<Fault>) -> BootEvidence {
         BootEvidence {
-            reset_reason: oer_hil_protocol::base::ResetReason::Software,
+            reset_reason: oer_protocols_hil_protocol::base::ResetReason::Software,
             raw_reset_reason: 3,
             post_mortem: Some(PostMortemSummary {
                 boot_count: 1,
@@ -665,15 +665,15 @@ mod tests {
         }
     }
 
-    fn illegal(mcause: u32, line: Option<oer_hil_protocol::base::TrapLine>) -> Fault {
+    fn illegal(mcause: u32, line: Option<oer_protocols_hil_protocol::base::TrapLine>) -> Fault {
         Fault::Exception(illegal_fault(mcause, line))
     }
 
     fn illegal_fault(
         mcause: u32,
-        line: Option<oer_hil_protocol::base::TrapLine>,
+        line: Option<oer_protocols_hil_protocol::base::TrapLine>,
     ) -> ExceptionFault {
-        use oer_hil_protocol::base::{TrapObservation, TrapState};
+        use oer_protocols_hil_protocol::base::{TrapObservation, TrapState};
         ExceptionFault {
             trap: TrapState {
                 hart: 0,
@@ -700,7 +700,7 @@ mod tests {
         assert!(trapped(&evidence(Some(illegal(0x3800_0002, None)))).is_ok());
         assert!(trapped(&evidence(Some(illegal(0x0000_0005, None)))).is_err());
         assert!(trapped(&evidence(Some(illegal(0x8000_0002, None)))).is_err());
-        let line = oer_hil_protocol::base::TrapLine {
+        let line = oer_protocols_hil_protocol::base::TrapLine {
             vector: 2,
             slot: 0,
             state: 0,

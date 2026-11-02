@@ -1,6 +1,6 @@
 # Shared modem clock planner
 
-`oer-espressif-modem-clock` is the reference-count planner of ESP-IDF's
+`oer-chips-family-modem-clock` is the reference-count planner of ESP-IDF's
 `components/esp_hw_support/modem/modem_clock.c`, which every chip shares.
 Radio modules (Wi-Fi, Bluetooth, IEEE 802.15.4, PHY, coexistence, ...)
 request fixed sets of modem clock dependencies; the planner counts each
@@ -24,7 +24,7 @@ Preparation is transactional: counts and lease slots change only when every
 edge was performed and the transaction commits. Leases are opaque, bound to
 one planner epoch and checked against stale, duplicate and cross-planner
 release. The crate performs no MMIO. The ESP32-S31 table is in
-`oer_esp32s31_knowledge::modem_clock`; the HAL's newtype implements the family
+`oer_chips_esp32s31_knowledge::modem_clock`; the HAL's newtype implements the family
 contract without making chip knowledge depend on a driver. `execution` performs
 prepared edges over `RegisterPort`/`AcquirePort`: sources are acquired before
 device gates and released after gates close. The HAL binding lends the device

@@ -49,15 +49,15 @@ const STALL_POLLS: u32 = 100_000;
 // entry installs gp and the reserved hart-1 stack before its only call.
 core::arch::global_asm!(
     include_str!("../hart1-entry.s"),
-    mstatus = const oer_riscv::machine::MSTATUS,
-    mie = const oer_riscv::machine::status::MIE,
-    mtvec = const oer_riscv::machine::MTVEC,
-    mscratch = const oer_riscv::machine::MSCRATCH,
-    mepc = const oer_riscv::machine::MEPC,
-    mcause = const oer_riscv::machine::MCAUSE,
-    mtvt = const oer_riscv::clic::MTVT,
-    mintthresh = const oer_riscv::clic::MINTTHRESH,
-    mintstatus = const oer_riscv::clic::MINTSTATUS,
+    mstatus = const oer_portable_riscv::machine::MSTATUS,
+    mie = const oer_portable_riscv::machine::status::MIE,
+    mtvec = const oer_portable_riscv::machine::MTVEC,
+    mscratch = const oer_portable_riscv::machine::MSCRATCH,
+    mepc = const oer_portable_riscv::machine::MEPC,
+    mcause = const oer_portable_riscv::machine::MCAUSE,
+    mtvt = const oer_portable_riscv::clic::MTVT,
+    mintthresh = const oer_portable_riscv::clic::MINTTHRESH,
+    mintstatus = const oer_portable_riscv::clic::MINTSTATUS,
 );
 
 // SAFETY: address only; the assembly above defines the entry.
@@ -109,7 +109,7 @@ extern "C" fn facts_hart1_main() -> ! {
         word.store(CLIC_DONE, Ordering::Release);
     }
     loop {
-        oer_riscv::wait_for_interrupt();
+        oer_portable_riscv::wait_for_interrupt();
     }
 }
 
@@ -212,7 +212,7 @@ fn park_routes(s: &mut Session<'_>) -> (u32, u32) {
             });
         }
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     (routed, first)
 }
 
@@ -222,7 +222,7 @@ fn set_boot_address(s: &mut Session<'_>, value: u32) {
         .modify_boot_addr_hp_core(SECONDARY.index(), |w| {
             w.set_boot_addr_hp_core(value);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 /// Park hart 1 as the session found it: boot word zero, stall requested,
@@ -230,7 +230,7 @@ fn set_boot_address(s: &mut Session<'_>, value: u32) {
 fn park(s: &mut Session<'_>) {
     set_boot_address(s, 0);
     super::contain(s);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 pub(super) fn main_path(s: &mut Session<'_>) {
@@ -258,7 +258,7 @@ fn run(s: &mut Session<'_>, direct: bool) {
         ptr::from_ref(&s.interrupt_matrix.clic_observer[1]).cast_mut(),
         Ordering::Relaxed,
     );
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     let entry = ptr::addr_of!(facts_hart1_entry) as u32;
     if direct {
         set_boot_address(s, entry | 0x8000_0000);
@@ -286,8 +286,8 @@ fn run(s: &mut Session<'_>, direct: bool) {
     c.hp_sys_clkrst_core.modify_hpcore_ctrl0(index, |w| {
         w.set_reg_core_global_rst_en(false);
     });
-    oer_riscv::fence();
-    let start = oer_riscv::cycle32();
+    oer_portable_riscv::fence();
+    let start = oer_portable_riscv::cycle32();
     if !direct {
         set_boot_address(s, entry);
     }
@@ -300,7 +300,7 @@ fn run(s: &mut Session<'_>, direct: bool) {
         let trapped = FACTS_HART1
             .get(TRAP)
             .is_some_and(|word| word.load(Ordering::Acquire) == TRAPPED);
-        elapsed = oer_riscv::cycle32().wrapping_sub(start);
+        elapsed = oer_portable_riscv::cycle32().wrapping_sub(start);
         if stage == CLIC_DONE || trapped {
             break;
         }

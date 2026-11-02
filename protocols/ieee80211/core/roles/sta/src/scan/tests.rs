@@ -1,5 +1,5 @@
 use super::{BssObservation, ScanCompleteness, ScanObservation, ScanTable, best_matching_ssid};
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_wire::{
     ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
     scan::{
         EXTENDED_RATES_CAPACITY, HE_CAPABILITY_IE_CAPACITY, HE_OPERATION_IE_CAPACITY,
@@ -8,7 +8,7 @@ use oer_ieee80211_wire::{
         he_extended_range_single_user_disabled, parse_management,
     },
 };
-use oer_time::Instant;
+use oer_portable_time::Instant;
 
 #[test]
 fn a_zero_bssid_cannot_enter_the_scan_table() {
@@ -203,8 +203,8 @@ fn parses_beacon_into_owned_bounded_record() {
     assert_eq!(record.ssid_bytes(), b"test");
     assert_eq!(
         record.bssid,
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new([2, 2, 3, 4, 5, 6]).unwrap()
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 2, 3, 4, 5, 6]).unwrap()
         )
         .unwrap()
     );
@@ -263,7 +263,7 @@ fn erp_beacon(information: &[u8]) -> std::vec::Vec<u8> {
     frame
 }
 
-fn erp_of(frame: &[u8]) -> oer_ieee80211_wire::protection::ErpProtection {
+fn erp_of(frame: &[u8]) -> oer_protocols_ieee80211_wire::protection::ErpProtection {
     crate::association::erp_protection(ScanFrame::parse(frame).unwrap().erp_elements())
 }
 
@@ -276,7 +276,7 @@ fn retains_erp_use_protection_without_confusing_the_element_header() {
 
 #[test]
 fn every_erp_element_of_a_frame_counts_in_either_order_and_without_a_limit() {
-    use oer_ieee80211_wire::protection::ErpProtection;
+    use oer_protocols_ieee80211_wire::protection::ErpProtection;
     // Use Protection asserted first or last: it counts either way.
     assert_eq!(
         erp_of(&erp_beacon(&[0x02, 0x00])),
@@ -309,7 +309,7 @@ fn every_erp_element_of_a_frame_counts_in_either_order_and_without_a_limit() {
 
 #[test]
 fn damaged_erp_elements_fail_closed() {
-    use oer_ieee80211_wire::protection::{ErpElementsError, ErpProtection};
+    use oer_protocols_ieee80211_wire::protection::{ErpElementsError, ErpProtection};
     // An ERP element of another length is refused, not taken as absent.
     let mut odd = erp_beacon(&[]);
     odd.extend_from_slice(&[42, 2, 0x02, 0x02]);
@@ -330,7 +330,7 @@ fn damaged_erp_elements_fail_closed() {
 
 #[test]
 fn a_damaged_frame_keeps_the_record_but_fails_its_erp_closed_until_a_sound_one() {
-    use oer_ieee80211_wire::protection::ErpProtection;
+    use oer_protocols_ieee80211_wire::protection::ErpProtection;
     let mut table = ScanTable::<1>::new();
     let erp = |table: &ScanTable<1>| table.observations().next().unwrap().erp;
     // A sound frame: Use Protection clear.
@@ -376,15 +376,15 @@ fn the_scan_table_keeps_the_stations_erp_decision() {
     ));
     assert_eq!(
         table.observations().next().unwrap().erp,
-        oer_ieee80211_wire::protection::ErpProtection::new(true, false)
+        oer_protocols_ieee80211_wire::protection::ErpProtection::new(true, false)
     );
 }
 
 #[test]
 fn ht40_geometry_requires_matching_capability_and_operation() {
     let mut record = ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
     );
@@ -415,8 +415,8 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
 #[test]
 fn ht_short_guard_intervals_are_read_from_capability_info() {
     let mut record = ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
     );
@@ -529,8 +529,8 @@ fn latest_hidden_beacon_preserves_probe_response_ssid() {
 #[test]
 fn strongest_exact_ssid_ignores_invalid_channel() {
     let mut records = [ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
     ); 3];
@@ -544,7 +544,7 @@ fn strongest_exact_ssid_ignores_invalid_channel() {
         *observation = Some(BssObservation {
             record: *record,
             channel,
-            erp: oer_ieee80211_wire::protection::ErpProtection::NONE,
+            erp: oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             rssi,
             received_at: None,
         });
@@ -620,11 +620,11 @@ fn read_record(record: &ScanRecord) {
     let _ = record.ssid_bytes();
     let _ = crate::security::matches_security(
         record,
-        oer_ieee80211_wire::security::LinkProtection::Open,
+        oer_protocols_ieee80211_wire::security::LinkProtection::Open,
     );
     let _ = crate::security::matches_security(
         record,
-        oer_ieee80211_wire::security::LinkProtection::Ccmp,
+        oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp,
     );
     let _ = record.supported_rates_bytes();
     let _ = record.extended_supported_rates_bytes();
@@ -642,20 +642,20 @@ fn read_record(record: &ScanRecord) {
     let _ = he_extended_range_single_user_disabled(record.he_operation_ie_bytes());
     let _ = record.wmm_ie_bytes();
     let _ = record.wmm_parameters();
-    let _ = oer_ieee80211_wire::security::rsn::RsnElement::parse(record.rsn_ie_bytes());
+    let _ = oer_protocols_ieee80211_wire::security::rsn::RsnElement::parse(record.rsn_ie_bytes());
     let _ = record.rsnxe_bytes();
 }
 
 fn parse_management_never_panics(count: usize) {
     let seeds = scan_seeds();
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
-    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
         if let Some(record) = parse_management(frame) {
             read_record(&record);
             let observation = BssObservation {
                 record,
                 channel: record.ds_channel.unwrap_or(1),
-                erp: oer_ieee80211_wire::protection::ErpProtection::NONE,
+                erp: oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
                 rssi: None,
                 received_at: None,
             };
@@ -666,13 +666,13 @@ fn parse_management_never_panics(count: usize) {
 
 #[test]
 fn parse_management_never_panics_on_received_bytes() {
-    parse_management_never_panics(oer_ieee80211_wire::fuzz::QUICK);
+    parse_management_never_panics(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn parse_management_never_panics_on_received_bytes_full() {
-    parse_management_never_panics(oer_ieee80211_wire::fuzz::FULL);
+    parse_management_never_panics(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 fn observe_management_never_panics(count: usize) {
@@ -681,7 +681,7 @@ fn observe_management_never_panics(count: usize) {
     let mut table = ScanTable::<4>::new();
     let mut rssi = 0_i8;
     let mut observed = 0_u32;
-    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 320, |frame| {
         rssi = rssi.wrapping_sub(7);
         // Every seventh frame has no signal level.
         let level = (rssi % 7 != 0).then_some(rssi);
@@ -701,13 +701,13 @@ fn observe_management_never_panics(count: usize) {
 
 #[test]
 fn observe_management_never_panics_on_received_bytes() {
-    observe_management_never_panics(oer_ieee80211_wire::fuzz::QUICK);
+    observe_management_never_panics(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn observe_management_never_panics_on_received_bytes_full() {
-    observe_management_never_panics(oer_ieee80211_wire::fuzz::FULL);
+    observe_management_never_panics(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 fn he_operation_never_panics(count: usize) {
@@ -716,7 +716,7 @@ fn he_operation_never_panics(count: usize) {
         &[255, 4, 36, 0, 0, 1],
         &[255, 7, 36, 0xf4, 0x3f, 0x01, 0x05, 0xfd, 0xff],
     ];
-    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 16, |element| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 16, |element| {
         let _ = he_default_packet_extension_duration(element);
         let _ = he_extended_range_single_user_disabled(element);
     });
@@ -724,13 +724,13 @@ fn he_operation_never_panics(count: usize) {
 
 #[test]
 fn he_operation_readers_never_panic_on_received_bytes() {
-    he_operation_never_panics(oer_ieee80211_wire::fuzz::QUICK);
+    he_operation_never_panics(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn he_operation_readers_never_panic_on_received_bytes_full() {
-    he_operation_never_panics(oer_ieee80211_wire::fuzz::FULL);
+    he_operation_never_panics(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]
@@ -760,7 +760,7 @@ fn a_rich_frame_keeps_every_retained_element() {
     // Mixed WPA/WPA2 advertisements match no exact mode.
     assert!(!crate::security::matches_security(
         &record,
-        oer_ieee80211_wire::security::LinkProtection::Ccmp
+        oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
     ));
     assert!(record.legacy_wpa);
     assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
@@ -831,8 +831,8 @@ fn a_setter_refuses_a_value_longer_than_its_buffer_and_keeps_the_record() {
     ];
     let value = [0xa5_u8; 300];
     let empty = ScanRecord::new(
-        oer_ieee80211_wire::address::Bssid::new(
-            oer_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+        oer_protocols_ieee80211_wire::address::Bssid::new(
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
         )
         .unwrap(),
     );

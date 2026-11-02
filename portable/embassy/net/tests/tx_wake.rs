@@ -2,8 +2,8 @@
 
 //! Interleave the sole producer and radio owner without timing races.
 
-use oer_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
-use oer_memory::HostContext;
+use oer_portable_embassy_net::{NetworkInterfaceId, OwnedEndpointResources};
+use oer_portable_memory::HostContext;
 use std::{
     sync::{
         Arc,

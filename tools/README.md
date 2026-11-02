@@ -48,5 +48,5 @@ with `[[bin]] name`. The aliases in `.cargo/config.toml` run the programs.
 | Install Linux fixture software | [Fixture contract](lab/fixture/README.md) |
 
 The typed vendor scenario library is `vendor/scenario/`; its CLI is
-`vendor/scenario-cli/` (`oer-tool-vendor-scenario-cli`). Host package paths
+`vendor/scenario-cli/` (`oer-tools-vendor-scenario-cli`). Host package paths
 are listed in the [workspace inventory](../docs/repository-layout.md#workspace-packages).

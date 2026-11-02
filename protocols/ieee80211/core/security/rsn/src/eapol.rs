@@ -12,8 +12,8 @@
 
 use crate::AkmKeys;
 use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
-use oer_crypto::block::{Aes128Engine, BlockError};
-use oer_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
+use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
 
 pub const DEFAULT_EAPOL_FRAME_CAPACITY: usize = 512;
 

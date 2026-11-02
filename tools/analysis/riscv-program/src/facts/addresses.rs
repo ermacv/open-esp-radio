@@ -1,7 +1,7 @@
 //! Structural address uses of one ELF, with no callback-resolution policy.
 use super::invalid;
-use oer_analysis_elf::{Elf, Function, Relocation, Symbol, Target, rv32};
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_elf::{Elf, Function, Relocation, Symbol, Target, rv32};
+use oer_tools_analysis_riscv_model::*;
 
 /// A relocation's numerical ELF value. An undefined symbol's value is kept
 /// for consumers whose existing policy reads it, without calling it resolved.

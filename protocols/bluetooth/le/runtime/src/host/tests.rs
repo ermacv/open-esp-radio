@@ -8,10 +8,10 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_bluetooth_hci::{self as hci, OpcodeGroup, PacketKind, Reset as HciReset};
-use oer_bluetooth_le_controller::dtm::EntropyUnavailable;
-use oer_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
-use oer_radio_port::{conformance::registration::guarded, *};
+use oer_protocols_bluetooth_hci::{self as hci, OpcodeGroup, PacketKind, Reset as HciReset};
+use oer_protocols_bluetooth_le_controller::dtm::EntropyUnavailable;
+use oer_protocols_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
+use oer_protocols_radio_port::{conformance::registration::guarded, *};
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,
@@ -114,7 +114,7 @@ struct Installed<'o, 'a, 'p: 'a, Id: SlotIdentity> {
 }
 impl<'p, Id: SlotIdentity> ControllerPort<'p, Root<Id>> for Installed<'_, '_, 'p, Id> {
     type Caps = ModelCaps;
-    type Fault = oer_bluetooth_le_model::Fault;
+    type Fault = oer_protocols_bluetooth_le_model::Fault;
     fn phase(
         &mut self,
     ) -> impl core::ops::DerefMut<

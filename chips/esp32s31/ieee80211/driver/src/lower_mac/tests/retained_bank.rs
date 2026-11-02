@@ -135,7 +135,7 @@ fn direct_owner_prepares_and_runs_the_complete_lifecycle_in_place_without_a_port
             LowerMacConfig {
                 station_address: STATION,
                 channel: channel(6),
-                publication_timeout: oer_time::Duration::from_micros(TIMEOUT),
+                publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
                 tsf_epoch: 1,
             },
             &RadioNine,

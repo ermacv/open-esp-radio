@@ -23,5 +23,5 @@ or reset callback. Calibration and tracking orchestration retain their current
 S31 bindings.
 
 Host regressions record port edges and drive independent waits with
-`oer-time-virtual`. These tests establish operation order and finite failure
+`oer-portable-time-virtual`. These tests establish operation order and finite failure
 behavior, not hardware timing or radio qualification.

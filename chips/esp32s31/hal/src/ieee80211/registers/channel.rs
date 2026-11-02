@@ -1,9 +1,9 @@
 //! The MAC side of a PHY channel switch.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     modem_pwr::regdma_control::ActiveLink, wifi_mac::control::PowerSaveTxBlock,
 };
-use oer_mmio::Bits;
+use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters, byte};
 
@@ -20,10 +20,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_tx_block_stop_request_low(true)
                 .set_power_save_tx_block(PowerSaveTxBlock::Blocked)
                 .set_tx_block_stop_request_high(Bits::truncate(
-                    oer_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll.bits(),
+                    oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll.bits(),
                 ));
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Block or unblock the TX queues for station power management.
@@ -39,7 +39,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 PowerSaveTxBlock::Run
             });
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Sample the three activity bits polled by the vendor channel switch.
@@ -54,10 +54,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_tx_block_stop_request_low(false)
                 .set_power_save_tx_block(PowerSaveTxBlock::Run)
                 .set_tx_block_stop_request_high(Bits::truncate(
-                    oer_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::Run.bits(),
+                    oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::Run.bits(),
                 ));
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Select the Wi-Fi no-power-save REGDMA link.
@@ -65,7 +65,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac.wifi_mac_regdma_control.modify_regdma_control(|w| {
             w.set_active_link(ActiveLink::WifiNoPowerSave);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Read the active REGDMA link for diagnostics and hardware assertions.

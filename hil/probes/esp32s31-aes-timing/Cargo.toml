@@ -1,5 +1,5 @@
 [package]
-name = "oer-firmware-probes-esp32s31-aes-timing"
+name = "oer-hil-probes-esp32s31-aes-timing"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,21 +10,21 @@ description = "A staged image that times the protocol layer's AES operations in 
 build = "build.rs"
 
 [dependencies]
-oer-crypto = { path = "../../../portable/crypto" }
+oer-portable-crypto = { path = "../../../portable/crypto" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-esp32s31-crypto = { path = "../../../chips/esp32s31/crypto" }
-oer-espressif-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-espressif-executor = { path = "../../../chips/family/executor" }
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-time = { path = "../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../../chips/family/interrupt-table" }
-oer-riscv = { path = "../../../portable/riscv" }
-oer-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
+oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-esp32s31-crypto = { path = "../../../chips/esp32s31/crypto" }
+oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-protocols-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
 ccm = { version = "=0.5.0", default-features = false }
 cmac = { version = "0.7.2", default-features = false }
@@ -35,7 +35,7 @@ ccm = { version = "=0.5.0", default-features = false }
 cmac = { version = "0.7.2", default-features = false }
 
 [build-dependencies]
-oer-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

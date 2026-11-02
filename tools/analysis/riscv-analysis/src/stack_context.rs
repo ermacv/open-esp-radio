@@ -2,7 +2,7 @@
 //! constructor is exposed: roots come from canonical machine inputs, and
 //! descendants from the same evaluator's all-incoming-path stack coordinates.
 use crate::writes::{WriteBase, WriteValue, closes_local_graph};
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_CONTEXT: AtomicU64 = AtomicU64::new(1);

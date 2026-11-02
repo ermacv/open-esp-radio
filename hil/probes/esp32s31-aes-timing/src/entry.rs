@@ -1,41 +1,41 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_crypto::block::{Aes128Blocks, Block, BlockCipher};
-use oer_crypto::{Aes128Key, KeyData, KeyUnwrapRequest};
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_board as board;
-use oer_esp32s31_compose::Esp32s31;
-use oer_esp32s31_hal::peripherals::aes::{
+use oer_portable_crypto::block::{Aes128Blocks, Block, BlockCipher};
+use oer_portable_crypto::{Aes128Key, KeyData, KeyUnwrapRequest};
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_board as board;
+use oer_chips_esp32s31_compose::Esp32s31;
+use oer_chips_esp32s31_hal::peripherals::aes::{
     AesInterrupt, BlockWords, DmaBlockMode, IDLE, InterruptingAes, KeyWords, Registers,
 };
-use oer_esp32s31_hal::peripherals::aes_dma::AesDma;
-use oer_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
-use oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
-use oer_esp32s31_hal::peripherals::usb_serial_jtag;
-use oer_esp32s31_hal::peripherals::watchdog::{
+use oer_chips_esp32s31_hal::peripherals::aes_dma::AesDma;
+use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
+use oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0;
+use oer_chips_esp32s31_hal::peripherals::usb_serial_jtag;
+use oer_chips_esp32s31_hal::peripherals::watchdog::{
     ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters,
 };
-use oer_esp32s31_hal::platform::Port;
-use oer_esp32s31_hal::root::Root;
-use oer_espressif_executor::Executor;
-use oer_ieee80211_core_security_cipher::aes::{SoftwareAes128, software_aes128_key_wrap};
-use oer_time::Timer as _;
+use oer_chips_esp32s31_hal::platform::Port;
+use oer_chips_esp32s31_hal::root::Root;
+use oer_chips_family_executor::Executor;
+use oer_protocols_ieee80211_core_security_cipher::aes::{SoftwareAes128, software_aes128_key_wrap};
+use oer_portable_time::Timer as _;
 
 use crate::ops::{
     BlockPasses, Line, NONCE, Stats, ccm_seal, ccm_seal_passes, cmac, cmac_passes,
 };
 
-oer_espressif_staged_runtime::interrupt_table! {
+oer_chips_family_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; aes_done: 2; }
     /// The boot hart's executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 16, context app_wake, hart 0, Hardware;
     /// The boot hart's executor's timer alarm; it only acknowledges and pends.
-    alarm: AlarmToken = SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
+    alarm: AlarmToken = SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<Tasks, 0, SystimerAlarm0>, line 17, context app_wake, hart 0, Hardware;
     /// The AES interrupt: its handler stamps its entry and acknowledges.
     aes: AesToken = AesInterrupt => on_aes, line 18, context aes_done, hart 0, Hardware;
 }
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
@@ -49,7 +49,7 @@ static HANDLED: AtomicU32 = AtomicU32::new(0);
 
 /// The AES interrupt's handler: stamp the entry, acknowledge, count.
 fn on_aes(part: &mut AesInterrupt) {
-    HANDLED_AT.store(oer_riscv::cycle32(), Ordering::Release);
+    HANDLED_AT.store(oer_portable_riscv::cycle32(), Ordering::Release);
     part.clear();
     HANDLED.fetch_add(1, Ordering::AcqRel);
 }
@@ -71,19 +71,19 @@ const UNWRAP_PLAIN: [usize; 2] = [32, 504];
 const CCM_BODIES: [usize; 3] = [64, 512, 1500];
 const CMAC_LENGTHS: [usize; 2] = [64, 512];
 
-oer_espressif_staged_runtime::entry!(main, Port);
+oer_chips_family_staged_runtime::entry!(main, Port);
 
-fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
+fn main(handoff: oer_chips_family_staged_runtime::Handoff<Port>) -> ! {
     let Some(root) = Root::take() else {
-        fail(oer_diagnostics::name!("root-taken"; 32));
+        fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, aes), _psram, mut adopted) =
-        match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
             board::BootstrapPsram,
-            oer_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_compose::phy_fault::report_previous,
             |hardware| {
                 (
                     hardware.system_timer,
@@ -97,10 +97,10 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             Err(error) => fail(error.name()),
         };
     let Some(interrupts) = Interrupts::take() else {
-        fail(oer_diagnostics::name!("interrupt-table"; 32));
+        fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
-    let _timers = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
-        oer_espressif_executor::systimer::SystemTimer {
+    let _timers = oer_chips_family_executor::init::<Esp32s31, 0, _, _, _>(
+        oer_chips_family_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
         },
@@ -114,7 +114,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
         .router()
         .bind(interrupts.aes, aes_interrupt)
         .unwrap_or_else(|error| {
-            oer_espressif_staged_runtime::interrupts::reset_binding::<Port, _>(error)
+            oer_chips_family_staged_runtime::interrupts::reset_binding::<Port, _>(error)
         });
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let watchdog = watchdogs.rtc;
@@ -128,7 +128,7 @@ fn main(handoff: oer_espressif_staged_runtime::Handoff<Port>) -> ! {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err()
                 || Tasks::measure(spawner, aes).is_err()
             {
-                fail(oer_diagnostics::name!("task-start"; 32));
+                fail(oer_portable_diagnostics::name!("task-start"; 32));
             }
         })
         .unwrap_or_else(|failure| failure.reset())
@@ -189,15 +189,15 @@ async fn measure(mut aes: InterruptingAes) {
 
 /// The CPU cycles of 10 ms of the system timer.
 async fn calibrate() {
-    let start = oer_riscv::cycle64();
+    let start = oer_portable_riscv::cycle64();
     if EmbassyClock
-        .wait_for(oer_time::Duration::from_millis(10))
+        .wait_for(oer_portable_time::Duration::from_millis(10))
         .await
         .is_err()
     {
-        fail(oer_diagnostics::name!("calibrate-time"; 32));
+        fail(oer_portable_diagnostics::name!("calibrate-time"; 32));
     }
-    let cycles = oer_riscv::cycle64().wrapping_sub(start);
+    let cycles = oer_portable_riscv::cycle64().wrapping_sub(start);
     let mut line = Line::new();
     line.text("OER-PROBE aes-timing clock cycles-per-10ms=")
         .number(cycles)
@@ -208,11 +208,11 @@ async fn calibrate() {
 /// Yield a millisecond between cases: the watchdog's feed runs.
 async fn pause() {
     if EmbassyClock
-        .wait_for(oer_time::Duration::from_millis(1))
+        .wait_for(oer_portable_time::Duration::from_millis(1))
         .await
         .is_err()
     {
-        fail(oer_diagnostics::name!("pause-time"; 32));
+        fail(oer_portable_diagnostics::name!("pause-time"; 32));
     }
 }
 
@@ -285,23 +285,23 @@ async fn hardware_cases(aes: &mut InterruptingAes, wait: Wait, mode: &str) -> bo
     agree
 }
 
-/// The AES driver's engine (`oer-esp32s31-crypto`: each block waited for on
+/// The AES driver's engine (`oer-chips-esp32s31-crypto`: each block waited for on
 /// `STATE` within its named settle on the executors' clock), unwrapping in
 /// place as the Wi-Fi station does in its step.
 async fn driver_mode(aes: InterruptingAes) -> bool {
-    let mut engine = oer_esp32s31_crypto::AesBlocks::new(aes, EmbassyClock);
+    let mut engine = oer_chips_esp32s31_crypto::AesBlocks::new(aes, EmbassyClock);
     let mut agree = true;
     for plain in UNWRAP_PLAIN {
         let (plaintext, wrapped) = wrapped(plain);
         let mut stats = Stats::default();
         for _ in 0..runs(plain) {
             let Ok(data) = KeyData::<512>::try_copy(wrapped.as_bytes()) else {
-                fail(oer_diagnostics::name!("wrapped-copy"; 32));
+                fail(oer_portable_diagnostics::name!("wrapped-copy"; 32));
             };
             let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&KEY), data);
-            let start = oer_riscv::cycle32();
-            let response = oer_crypto::block::unwrap_now(&mut engine, request);
-            stats.add(oer_riscv::cycle32().wrapping_sub(start));
+            let start = oer_portable_riscv::cycle32();
+            let response = oer_portable_crypto::block::unwrap_now(&mut engine, request);
+            stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
             agree &= response
                 .plaintext()
                 .is_ok_and(|bytes| bytes == plaintext.get(..plain).unwrap_or(&[]));
@@ -333,9 +333,9 @@ fn block_case<P: Aes128Blocks>(blocks: &mut P) -> Stats {
     let mut block: Block = [0x3c; 16];
     let mut stats = Stats::default();
     for _ in 0..256 {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         cipher.encrypt_block(&mut block);
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     stats
 }
@@ -347,7 +347,7 @@ fn wrapped(plain: usize) -> ([u8; 504], KeyData<512>) {
         *byte = (index as u8).wrapping_mul(13);
     }
     let Ok(wrapped) = software_aes128_key_wrap(&KEY, plaintext.get(..plain).unwrap_or(&[])) else {
-        fail(oer_diagnostics::name!("key-wrap"; 32));
+        fail(oer_portable_diagnostics::name!("key-wrap"; 32));
     };
     (plaintext, wrapped)
 }
@@ -360,12 +360,12 @@ fn unwrap_case<P: Aes128Blocks>(blocks: &mut P, plain: usize) -> (Stats, bool) {
     let mut agree = true;
     for _ in 0..runs(plain) {
         let Ok(data) = KeyData::<512>::try_copy(wrapped.as_bytes()) else {
-            fail(oer_diagnostics::name!("wrapped-copy"; 32));
+            fail(oer_portable_diagnostics::name!("wrapped-copy"; 32));
         };
         let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&KEY), data);
-        let start = oer_riscv::cycle32();
-        let response = oer_crypto::block::unwrap_now(blocks, request);
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        let start = oer_portable_riscv::cycle32();
+        let response = oer_portable_crypto::block::unwrap_now(blocks, request);
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
         agree &= response
             .plaintext()
             .is_ok_and(|bytes| bytes == plaintext.get(..plain).unwrap_or(&[]));
@@ -383,7 +383,7 @@ fn ccm_case<P: Aes128Blocks>(blocks: &mut P, body: usize) -> (Stats, [u8; 8]) {
         for (index, byte) in payload.iter_mut().enumerate() {
             *byte = index as u8;
         }
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let key = Aes128Key::copy_from(&KEY);
         let mut cipher = blocks.load_key(&key);
         mic = ccm_seal(
@@ -393,7 +393,7 @@ fn ccm_case<P: Aes128Blocks>(blocks: &mut P, body: usize) -> (Stats, [u8; 8]) {
             payload.get_mut(..body).unwrap_or(&mut []),
         );
         drop(cipher);
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     (stats, mic)
 }
@@ -406,14 +406,14 @@ fn ccm_crate_case(body: usize) -> Stats {
     let mut payload = [0_u8; 1500];
     let mut stats = Stats::default();
     for _ in 0..runs(body) {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let cipher = CcmpCcm::new(&KEY.into());
         let _tag = cipher.encrypt_in_place_detached(
             &CCM_NONCE.into(),
             &AAD,
             payload.get_mut(..body).unwrap_or(&mut []),
         );
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     stats
 }
@@ -428,12 +428,12 @@ fn cmac_case<P: Aes128Blocks>(blocks: &mut P, length: usize) -> (Stats, Block) {
     let mut stats = Stats::default();
     let mut tag = [0; 16];
     for _ in 0..runs(length) {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let key = Aes128Key::copy_from(&KEY);
         let mut cipher = blocks.load_key(&key);
         tag = cmac(&mut cipher, frame.get(..length).unwrap_or(&[]));
         drop(cipher);
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     (stats, tag)
 }
@@ -444,11 +444,11 @@ fn cmac_crate_case(length: usize) -> Stats {
     let frame = [0x5a_u8; 512];
     let mut stats = Stats::default();
     for _ in 0..runs(length) {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         let mut mac = <cmac::Cmac<aes::Aes128> as cmac::digest::KeyInit>::new(&KEY.into());
         mac.update(frame.get(..length).unwrap_or(&[]));
         let _tag = mac.finalize();
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     stats
 }
@@ -636,12 +636,12 @@ impl<'a> Dma<'a> {
 
     /// One transfer of `data` in place through the AES in `mode`.
     fn pass(&mut self, mode: DmaBlockMode, iv: Option<&Block>, data: &mut [u8]) {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         if self.dma.load(data).is_err() {
             self.failures = self.failures.saturating_add(1);
             return;
         }
-        let loaded = oer_riscv::cycle32();
+        let loaded = oer_portable_riscv::cycle32();
         if let Some(iv) = iv {
             self.aes.write_iv(&block_words(iv));
         }
@@ -650,7 +650,7 @@ impl<'a> Dma<'a> {
             self.failures = self.failures.saturating_add(1);
             return;
         }
-        let started = oer_riscv::cycle32();
+        let started = oer_portable_riscv::cycle32();
         let finished = match self.wait {
             DmaWait::Flag => (0..SPIN_LIMIT).any(|_| self.aes.dma_done(self.dma)),
             DmaWait::Interrupt => {
@@ -658,10 +658,10 @@ impl<'a> Dma<'a> {
                     && (0..SPIN_LIMIT).any(|_| self.aes.dma_done(self.dma))
             }
         };
-        let done = oer_riscv::cycle32();
+        let done = oer_portable_riscv::cycle32();
         self.aes.finish_dma();
         self.dma.output(data);
-        let end = oer_riscv::cycle32();
+        let end = oer_portable_riscv::cycle32();
         if !finished {
             self.timeouts = self.timeouts.saturating_add(1);
         }
@@ -826,7 +826,7 @@ fn ccm_passes_case(engine: &mut Dma<'_>, body: usize) -> (Stats, [u8; 8]) {
         for (index, byte) in payload.iter_mut().enumerate() {
             *byte = index as u8;
         }
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         engine.key(&Aes128Key::copy_from(&KEY), true);
         mic = ccm_seal_passes(
             engine,
@@ -834,7 +834,7 @@ fn ccm_passes_case(engine: &mut Dma<'_>, body: usize) -> (Stats, [u8; 8]) {
             &AAD,
             payload.get_mut(..body).unwrap_or(&mut []),
         );
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     (stats, mic)
 }
@@ -848,10 +848,10 @@ fn cmac_passes_case(engine: &mut Dma<'_>, length: usize) -> (Stats, Block) {
     let mut stats = Stats::default();
     let mut tag = [0; 16];
     for _ in 0..runs(length) {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         engine.key(&Aes128Key::copy_from(&KEY), true);
         tag = cmac_passes(engine, frame.get(..length).unwrap_or(&[]));
-        stats.add(oer_riscv::cycle32().wrapping_sub(start));
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }
     (stats, tag)
 }
@@ -875,7 +875,7 @@ fn dma_latency(
             continue;
         }
         let before = HANDLED.load(Ordering::Acquire);
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         if aes.start_dma(dma, DmaBlockMode::Ecb).is_err() {
             missed = missed.saturating_add(1);
             continue;
@@ -883,7 +883,7 @@ fn dma_latency(
         let ended = match wait {
             DmaWait::Flag => (0..SPIN_LIMIT)
                 .any(|_| aes.dma_done(dma))
-                .then(oer_riscv::cycle32),
+                .then(oer_portable_riscv::cycle32),
             DmaWait::Interrupt => (0..SPIN_LIMIT)
                 .any(|_| HANDLED.load(Ordering::Acquire) != before)
                 .then(|| HANDLED_AT.load(Ordering::Acquire)),
@@ -929,10 +929,10 @@ fn flag_latency(aes: &mut InterruptingAes) {
     aes.write_block(&BlockWords::default());
     let mut stats = Stats::default();
     for _ in 0..256 {
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         aes.start();
         let idle = (0..SPIN_LIMIT).any(|_| aes.state() == IDLE);
-        let end = oer_riscv::cycle32();
+        let end = oer_portable_riscv::cycle32();
         if idle {
             stats.add(end.wrapping_sub(start));
         }
@@ -947,7 +947,7 @@ fn interrupt_latency(aes: &mut InterruptingAes) -> bool {
     let mut missed = 0_u32;
     for _ in 0..256 {
         let before = HANDLED.load(Ordering::Acquire);
-        let start = oer_riscv::cycle32();
+        let start = oer_portable_riscv::cycle32();
         aes.start();
         if (0..SPIN_LIMIT).any(|_| HANDLED.load(Ordering::Acquire) != before) {
             stats.add(HANDLED_AT.load(Ordering::Acquire).wrapping_sub(start));
@@ -972,7 +972,7 @@ fn report(mode: &str, operation: &str, bytes: usize, stats: &Stats) {
 
 /// Feed the RTC watchdog for good.
 async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
-    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    let period = oer_portable_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
     match watchdog.feed_every(&EmbassyClock, period).await {}
 }
 
@@ -982,10 +982,10 @@ fn text(bytes: &[u8]) {
 }
 
 /// Retain and report a failed boot step before explicitly resetting the image.
-fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
-        let _note = usb_serial_jtag::fatal_note(&oer_diagnostics::Note::runtime_fail(reason));
+fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
+    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
+        let _note = usb_serial_jtag::fatal_note(&oer_portable_diagnostics::Note::runtime_fail(reason));
     })
 }
 
-oer_espressif_executor::time_driver!(Esp32s31);
+oer_chips_family_executor::time_driver!(Esp32s31);

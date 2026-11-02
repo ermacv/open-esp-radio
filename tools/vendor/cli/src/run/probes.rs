@@ -1,11 +1,11 @@
 //! Build each chip's caller-owned vendor comparison artifacts.
 //!
 //! The probes are the packages of `hil/probes/` (`<chip>-<name>`), built by
-//! `cargo fw`'s probe build (`oer_image_build::probe`): the chip's
+//! `cargo fw`'s probe build (`oer_tools_image_build::probe`): the chip's
 //! image compiler, with `cfg(oer_probe)`, in the probe target directory.
 
 use crate::Result;
-use oer_os_process::Checkout;
+use oer_tools_os_process::Checkout;
 use std::{ffi::OsStr, num::NonZeroUsize};
 
 const JOBS: &str = "OPEN_RADIO_ANALYSIS_BUILD_JOBS";
@@ -14,12 +14,12 @@ const JOBS: &str = "OPEN_RADIO_ANALYSIS_BUILD_JOBS";
 struct Probe {
     /// The chip whose `hil/probes/` (`<chip>-<name>`) holds the image.
     chip: String,
-    probe: oer_chip_profile::Probe,
+    probe: oer_tools_chip_profile::Probe,
 }
 
 /// Every chip's probe images, from the chip profiles at `root`.
 fn all(root: &std::path::Path) -> Result<Vec<Probe>> {
-    Ok(oer_chip_profile::Profile::all(root)?
+    Ok(oer_tools_chip_profile::Profile::all(root)?
         .into_iter()
         .flat_map(|profile| {
             let chip = profile.facts.id.clone();
@@ -67,11 +67,11 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
         |probe, jobs| {
             let package = probe.probe.package.as_str();
             let built =
-                oer_image_build::probe::build(&context.root, package, jobs.map(NonZeroUsize::get))?;
+                oer_tools_image_build::probe::build(&context.root, package, jobs.map(NonZeroUsize::get))?;
             let elf = output(context, probe);
             std::fs::create_dir_all(elf.parent().ok_or("probe output has no parent")?)?;
             std::fs::copy(&built, &elf)?;
-            let catalog = oer_probe_codegen::validate_elf(&std::fs::read(&elf)?, package)?;
+            let catalog = oer_tools_probe_codegen::validate_elf(&std::fs::read(&elf)?, package)?;
             eprintln!(
                 "Validated {} executable probe entries in {}",
                 catalog.entries.len(),

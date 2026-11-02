@@ -2,14 +2,14 @@
 //! (`discovery`, `doctor`), and the hub port switches
 //! of `discover --blink` and `--verify-power` under a lease.
 
-use oer_lab_model::Stand;
+use oer_tools_lab_model::Stand;
 mod discovery;
 mod doctor;
 
 use discovery as discover;
 
 use crate::Result;
-use oer_os_process::Checkout;
+use oer_tools_os_process::Checkout;
 
 #[derive(clap::Parser)]
 #[command(name = "cargo stand", no_binary_name = true)]
@@ -36,7 +36,7 @@ pub(crate) fn stand(
     owner: impl FnOnce() -> Result<String>,
     cli: StandCli,
 ) -> Result<std::process::ExitCode> {
-    let path = oer_lab_model::paths::stand_file()?;
+    let path = oer_tools_lab_model::paths::stand_file()?;
     match cli {
         StandCli::Discover {
             blink: Some(target),
@@ -93,19 +93,19 @@ pub(crate) fn stand(
 /// under `owner`'s lease of the port and of the board on it, to see which
 /// button it is.
 fn blink<'a>(
-    stand: &'a oer_lab_model::Stand,
+    stand: &'a oer_tools_lab_model::Stand,
     target: &str,
     owner: String,
-) -> Result<(&'a oer_lab_model::Hub, u8)> {
+) -> Result<(&'a oer_tools_lab_model::Hub, u8)> {
     let (hub, port) = discover::blink_target(stand, target)?;
-    let mut claims = vec![oer_lab_arbiter::claims::Claim::hub_port(&hub.usb2, port)];
+    let mut claims = vec![oer_tools_lab_arbiter::claims::Claim::hub_port(&hub.usb2, port)];
     if let Some(board) = stand.boards.iter().find(|board| {
         board
             .port
             .as_ref()
             .is_some_and(|place| place.hub == hub.id && place.port == u32::from(port))
     }) {
-        claims.push(oer_lab_arbiter::claims::Claim::board(&board.device_id()?));
+        claims.push(oer_tools_lab_arbiter::claims::Claim::board(&board.device_id()?));
     }
     let mut lease = crate::service::lease(
         owner,
@@ -114,7 +114,7 @@ fn blink<'a>(
     )?;
     crate::service::run(
         &mut lease,
-        oer_lab_client::protocol::Operation::HubPort {
+        oer_tools_lab_client::protocol::Operation::HubPort {
             hub: hub.id.clone(),
             port,
             off_secs: discover::BLINK.as_secs(),
@@ -126,7 +126,7 @@ fn blink<'a>(
 /// Cycle the hub port of the board `query` names under `owner`'s lease of
 /// the board, proving the board lost its power.
 fn verify_power(
-    stand: &oer_lab_model::Stand,
+    stand: &oer_tools_lab_model::Stand,
     query: &str,
     owner: String,
 ) -> Result<std::time::Duration> {
@@ -134,11 +134,11 @@ fn verify_power(
     let mut lease = crate::service::lease(
         owner,
         format!("stand discover --verify-power {query}"),
-        vec![oer_lab_arbiter::claims::Claim::board(&board.device_id()?)],
+        vec![oer_tools_lab_arbiter::claims::Claim::board(&board.device_id()?)],
     )?;
     let returned = crate::service::run(
         &mut lease,
-        oer_lab_client::protocol::Operation::ProvePowerLoss {
+        oer_tools_lab_client::protocol::Operation::ProvePowerLoss {
             board: board.mac.clone(),
         },
     )?;

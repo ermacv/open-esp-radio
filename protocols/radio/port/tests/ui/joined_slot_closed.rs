@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{Joined, SlotIdentity};
+use oer_protocols_radio_port::{Joined, SlotIdentity};
 
 pub fn joined<Id: SlotIdentity>(original: Joined<Id>) -> Joined<Id> {
     #[cfg(ui_reject)]

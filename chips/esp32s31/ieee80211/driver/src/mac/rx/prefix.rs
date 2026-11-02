@@ -13,8 +13,8 @@
     clippy::arithmetic_side_effects
 )]
 
-use oer_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
-use oer_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
+use oer_chips_esp32s31_hal::layouts::{WifiRxControlPrefix, WifiRxControlTail};
+use oer_protocols_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
 
 use super::{
     DYNAMIC_TAIL_SIZE, FCS_SIZE, FIXED_PREFIX_SIZE, INGRESS_STRICT_DUMP, INGRESS_STRICT_RXEND,
@@ -174,7 +174,7 @@ fn dynamic_tail_offset(prefix: WifiRxControlPrefix<'_>, csi_config: u32) -> Opti
             usize::from(sig_b.length_bytes()).checked_add(usize::from(sig_b.length_bits() != 0))?;
         offset = offset.checked_add(option_length.checked_add(3)? & !3)?;
     }
-    if csi_config & oer_esp32s31_hal::types::WifiRxCsiControlMask::APPEND.bits() != 0 {
+    if csi_config & oer_chips_esp32s31_hal::types::WifiRxCsiControlMask::APPEND.bits() != 0 {
         let channel_estimate = prefix.channel_estimate();
         let csi_length = usize::from(channel_estimate.length());
         if channel_estimate.valid() || csi_length != 0 {

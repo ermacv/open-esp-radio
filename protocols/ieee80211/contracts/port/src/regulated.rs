@@ -5,8 +5,8 @@
 //! frequencies that occupies, and what a regulatory domain allows there, is
 //! the port's operational description.
 
-use oer_ieee80211_wire::channel::{Channel, WifiChannel};
-use oer_radio_regulatory::{FrequencySpan, RadioChannel};
+use oer_protocols_ieee80211_wire::channel::{Channel, WifiChannel};
+use oer_protocols_radio_regulatory::{FrequencySpan, RadioChannel};
 
 /// A channel, [`Channel`] or [`WifiChannel`], as a regulatory domain sees it.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -74,7 +74,7 @@ static SPANS: [FrequencySpan; Channel::COUNT] = const {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_ieee80211_wire::channel::ChannelWidth;
+    use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 
     #[test]
     fn channels_span_their_width_around_the_center() {

@@ -10,8 +10,8 @@ use crate::{
     EapolKeyMessage, RsnInterface,
     frames::{OwnedRsnIe, RsnGtk, parse_gtk_key_data},
 };
-use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_ieee80211_wire::{ccmp::GroupKeyId, security::rsn::Akm};
+use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_protocols_ieee80211_wire::{ccmp::GroupKeyId, security::rsn::Akm};
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
 const PEER: [u8; 6] = [0x02, 0, 0, 0, 0, 2];

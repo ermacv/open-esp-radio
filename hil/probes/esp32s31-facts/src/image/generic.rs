@@ -6,8 +6,8 @@ use core::{
     ptr,
     sync::atomic::{AtomicPtr, Ordering},
 };
-use oer_esp32s31_pac as pac;
-use oer_mmio::{Bits, Index};
+use oer_chips_esp32s31_pac as pac;
+use oer_portable_mmio::{Bits, Index};
 
 pub(super) struct Hardware {
     pub usb: pac::usb_serial_jtag::UsbSerialJtagTask,
@@ -45,18 +45,18 @@ pub(super) fn interrupt() -> bool {
 /// One bounded handler loan; callers configure lines with MIE masked first.
 /// Neither caller accesses the borrowed CLIC owner during interrupt admission.
 pub(super) fn admit_window(clic: &mut pac::clic::Clic) -> [u32; 2] {
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     CLIC.store(ptr::from_mut(clic), Ordering::Release);
-    let start = oer_riscv::cycle32();
-    oer_riscv::enable_interrupts();
+    let start = oer_portable_riscv::cycle32();
+    oer_portable_riscv::enable_interrupts();
     wait_window();
-    oer_riscv::disable_interrupts();
+    oer_portable_riscv::disable_interrupts();
     CLIC.store(ptr::null_mut(), Ordering::Release);
-    [start, oer_riscv::cycle32()]
+    [start, oer_portable_riscv::cycle32()]
 }
 fn window(cycles: u32) {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 fn pack<const N: usize>(values: [bool; N]) -> u32 {
     const {
@@ -87,7 +87,7 @@ fn route(s: &mut Session<'_>, source: pac::Interrupt, bound: bool) {
             }
         });
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn matrix_state(s: &Session<'_>, tag: u32) {
     emit(
@@ -131,7 +131,7 @@ fn admit(s: &mut Session<'_>, tag: u32) {
     s.interrupt_matrix.clic[0].modify_ctrl(CPU_LINE, |w| {
         w.set_ie(true);
     });
-    oer_riscv::restore_interrupt_threshold(0);
+    oer_portable_riscv::restore_interrupt_threshold(0);
     admit_window(&mut s.interrupt_matrix.clic[0]);
     emit(
         tag,
@@ -317,15 +317,15 @@ fn usb_empty(s: &mut Session<'_>, tag: u32) -> bool {
         s.generic.usb.push_ep1(b'U');
         s.generic.usb.trigger_ep1_conf_wr_done();
     }
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while !s.generic.usb.read_int_raw().serial_in_empty_int_raw()
-        && oer_riscv::cycle32().wrapping_sub(start) < LIMIT
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT
     {}
     let ready = s.generic.usb.read_int_raw().serial_in_empty_int_raw();
     emit(
         tag,
         u32::from(ready),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     ready
@@ -410,7 +410,7 @@ fn sy_clear(s: &mut Session<'_>, n: usize) {
             .systimer_alarm1
             .trigger_int_clr_target1_int_clr();
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn sy_raw(s: &Session<'_>, n: usize) -> bool {
     let r = s.generic.systimer.systimer.read_int_raw();
@@ -453,9 +453,9 @@ pub(super) fn systimer_open(s: &mut Session<'_>) {
 fn sy_now(s: &Session<'_>) -> Option<u64> {
     let counter = &s.generic.systimer.systimer_counter;
     counter.trigger_unit0_op_timer_unit0_update();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while !counter.read_unit0_op().timer_unit0_value_valid() {
-        if oer_riscv::cycle32().wrapping_sub(start) >= LIMIT {
+        if oer_portable_riscv::cycle32().wrapping_sub(start) >= LIMIT {
             return None;
         }
     }
@@ -519,13 +519,13 @@ fn sy_future(s: &mut Session<'_>, n: usize, tag: u32) -> bool {
         return false;
     };
     sy_program(s, n, now.wrapping_add(16_000));
-    let start = oer_riscv::cycle32();
-    while !sy_raw(s, n) && oer_riscv::cycle32().wrapping_sub(start) < LIMIT {}
+    let start = oer_portable_riscv::cycle32();
+    while !sy_raw(s, n) && oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {}
     let ready = sy_raw(s, n);
     emit(
         tag,
         u32::from(ready),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     ready
@@ -635,9 +635,9 @@ pub(super) fn systimer1(s: &mut Session<'_>) {
 fn t0_count(s: &mut Session<'_>) -> Option<u64> {
     let timer = &mut s.generic.timer.timg0_timer0;
     timer.capture_timg0_timer0();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while timer.read_t0update().t_update() {
-        if oer_riscv::cycle32().wrapping_sub(start) >= LIMIT {
+        if oer_portable_riscv::cycle32().wrapping_sub(start) >= LIMIT {
             return None;
         }
     }
@@ -674,7 +674,7 @@ fn t0_clear(s: &mut Session<'_>) {
         .timer
         .timg0_interrupt_bank
         .trigger_int_clr_timers_t0_int_clr();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn t0_target(s: &mut Session<'_>, ticks: u64) {
     let timer = &mut s.generic.timer.timg0_timer0;
@@ -687,14 +687,14 @@ fn t0_target(s: &mut Session<'_>, ticks: u64) {
     timer.configure_timg0_timer0_armed();
 }
 fn t0_wait(s: &Session<'_>, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while !s
         .generic
         .timer
         .timg0_interrupt_bank
         .read_int_raw_timers()
         .t0_int_raw()
-        && oer_riscv::cycle32().wrapping_sub(start) < LIMIT
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT
     {}
     let ready = s
         .generic
@@ -705,7 +705,7 @@ fn t0_wait(s: &Session<'_>, tag: u32) -> bool {
     emit(
         tag,
         u32::from(ready),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
     ready
@@ -766,14 +766,14 @@ pub(super) fn timer0(s: &mut Session<'_>) {
         .timg0_timer0
         .configure_timg0_timer0_counting();
     if let Some(a) = t0_count(s) {
-        let cycle = oer_riscv::cycle32();
+        let cycle = oer_portable_riscv::cycle32();
         window(40_000);
         if let Some(b) = t0_count(s) {
             emit(
                 0x7010,
                 a as u32,
                 b as u32,
-                oer_riscv::cycle32().wrapping_sub(cycle),
+                oer_portable_riscv::cycle32().wrapping_sub(cycle),
             );
         }
     }

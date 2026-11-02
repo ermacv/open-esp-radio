@@ -15,8 +15,8 @@
 //!
 //! The chip-neutral contract (the `Layout` type, the stage-two header, the
 //! zeroed sections and the shared linker scripts) is
-//! `oer-espressif-staged-layout`. This crate's build generates the board's
-//! [`LAYOUT`] from the chip facts (`oer-espressif-facts`: its layers from the
+//! `oer-chips-family-staged-layout`. This crate's build generates the board's
+//! [`LAYOUT`] from the chip facts (`oer-chips-family-facts`: its layers from the
 //! ISA to the board, `chips/esp32s31/platform/`) and the chip's stack policy,
 //! for the bootstrap, the board, and the build scripts of every image; each
 //! value's `SOURCE:` is in those files. With the `build` feature, [`build`]
@@ -26,8 +26,8 @@
 //! An invalid derived window is rejected during constant evaluation:
 //!
 //! ```compile_fail,E0080
-//! use oer_esp32s31_layout::LAYOUT;
-//! use oer_espressif_staged_layout::Layout;
+//! use oer_chips_esp32s31_layout::LAYOUT;
+//! use oer_chips_family_staged_layout::Layout;
 //! const INVALID: Layout = Layout { bootstrap_psram_bytes: u32::MAX, ..LAYOUT };
 //! const _: () = INVALID.check();
 //! ```
@@ -47,7 +47,7 @@ pub mod build {
 
     /// Link binary `bin` as a stage-two runtime of this board.
     pub fn configure_runtime(bin: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-        oer_espressif_staged_layout::build::configure_runtime(
+        oer_chips_family_staged_layout::build::configure_runtime(
             bin,
             &super::LAYOUT,
             const { super::LAYOUT.runtime_psram().expect("runtime PSRAM fits") },
@@ -57,7 +57,7 @@ pub mod build {
 
     /// Link binary `bin` as this board's Flash-resident bootstrap.
     pub fn configure_bootstrap(bin: &str) {
-        oer_espressif_staged_layout::build::configure_bootstrap(
+        oer_chips_family_staged_layout::build::configure_bootstrap(
             bin,
             &super::LAYOUT,
             const { super::LAYOUT.runtime_psram().expect("runtime PSRAM fits") },
@@ -77,14 +77,14 @@ mod tests {
 
     #[test]
     fn the_linker_inputs_are_generated_from_the_tracked_facts() {
-        let (facts, _) = oer_espressif_facts::generate::tracked("esp32s31").expect("chip facts");
+        let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31").expect("chip facts");
         let rom = facts.rom.as_ref().expect("ROM facts");
         let out = std::path::Path::new(env!("OUT_DIR"));
         let script = std::fs::read_to_string(out.join(super::LAYOUT.rom_script))
             .expect("generated ROM script");
         assert_eq!(
             script,
-            oer_espressif_facts::generate::rom_script(rom).expect("ROM generation")
+            oer_chips_family_facts::generate::rom_script(rom).expect("ROM generation")
         );
         assert_eq!(
             std::fs::read(out.join("dma-window.x")).expect("staged DMA fragment"),

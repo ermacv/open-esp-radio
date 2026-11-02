@@ -1,5 +1,5 @@
 use super::*;
-use oer_time_virtual::VirtualClock;
+use oer_portable_time_virtual::VirtualClock;
 
 const CLIENTS: [RadioClient; 3] = [
     RadioClient::Wifi,
@@ -28,11 +28,11 @@ impl<const COUNT: usize> ScriptedClock<COUNT> {
     }
 }
 
-impl<const COUNT: usize> oer_time::Clock for ScriptedClock<COUNT> {
-    fn now(&self) -> oer_time::Instant {
+impl<const COUNT: usize> oer_portable_time::Clock for ScriptedClock<COUNT> {
+    fn now(&self) -> oer_portable_time::Instant {
         let next = self.next.get();
         self.next.set(next + 1);
-        oer_time::Instant::from_micros(self.samples[next])
+        oer_portable_time::Instant::from_micros(self.samples[next])
     }
 }
 
@@ -61,7 +61,7 @@ impl PhyClientStateTestExt for PhyClientState {
         now_micros: u64,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         available(self, client).acquire(&VirtualClock::<8>::starting_at(
-            oer_time::Instant::from_micros(now_micros),
+            oer_portable_time::Instant::from_micros(now_micros),
         ))
     }
 
@@ -70,7 +70,7 @@ impl PhyClientStateTestExt for PhyClientState {
         now_micros: u64,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         self.evaluate_immediate_tracking(&VirtualClock::<8>::starting_at(
-            oer_time::Instant::from_micros(now_micros),
+            oer_portable_time::Instant::from_micros(now_micros),
         ))
     }
 
@@ -79,7 +79,7 @@ impl PhyClientStateTestExt for PhyClientState {
         now_micros: u64,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         self.evaluate_periodic_tracking(&VirtualClock::<8>::starting_at(
-            oer_time::Instant::from_micros(now_micros),
+            oer_portable_time::Instant::from_micros(now_micros),
         ))
     }
 }
@@ -602,7 +602,7 @@ fn complete_wifi_i2c_child(
             crate::tracking::i2c::PhyWifiI2cTrackingAction::MaskedWrite(action) => {
                 let binding = child.lower_external().unwrap();
                 let completion = match action {
-                    oer_espressif_analog::Action::Read { address } => {
+                    oer_chips_family_analog::Action::Read { address } => {
                         assert!(matches!(
                             binding.action(),
                             crate::calibration::cold::PhyColdI2cAction::StartRead {
@@ -610,13 +610,13 @@ fn complete_wifi_i2c_child(
                             } if bound_address == address
                         ));
                         crate::tracking::i2c::PhyWifiI2cTrackingCompletion::MaskedWrite(
-                            oer_espressif_analog::Completion::Read {
+                            oer_chips_family_analog::Completion::Read {
                                 address,
                                 value: 0xa0,
                             },
                         )
                     }
-                    oer_espressif_analog::Action::Write { address, value } => {
+                    oer_chips_family_analog::Action::Write { address, value } => {
                         assert!(matches!(
                             binding.action(),
                             crate::calibration::cold::PhyColdI2cAction::StartWrite {
@@ -625,10 +625,10 @@ fn complete_wifi_i2c_child(
                             } if bound_address == address && bound_value == value
                         ));
                         crate::tracking::i2c::PhyWifiI2cTrackingCompletion::MaskedWrite(
-                            oer_espressif_analog::Completion::Written { address },
+                            oer_chips_family_analog::Completion::Written { address },
                         )
                     }
-                    oer_espressif_analog::Action::Complete(()) => unreachable!(),
+                    oer_chips_family_analog::Action::Complete(()) => unreachable!(),
                 };
                 child.advance(completion).unwrap();
             }
@@ -784,11 +784,11 @@ mod schedule;
 
 #[test]
 fn only_the_minting_registration_describes_a_detached_client_set() {
-    use oer_esp32s31_hal::owner::PhyInitializationAccess;
-    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
+    use oer_chips_esp32s31_hal::owner::PhyInitializationAccess;
+    let (mut radio, _partitions) = oer_chips_esp32s31_hal::root::RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     let domain = &mut radio;
@@ -807,7 +807,7 @@ fn only_the_minting_registration_describes_a_detached_client_set() {
 
 #[test]
 fn an_untracked_class_is_due_at_once_and_a_tracked_one_waits_the_period() {
-    let start = oer_time_virtual::START.as_micros();
+    let start = oer_portable_time_virtual::START.as_micros();
     let owner = PhyClientState::new_empty(DEFAULT_PLL_TRACK_PERIOD_MICROS);
     assert_eq!(
         owner.snapshot().previous_micros(PhyPllTrackClass::Wifi),
@@ -861,11 +861,11 @@ fn an_untracked_active_class_has_a_deadline_due_now() {
 
 #[test]
 fn a_new_registration_epoch_starts_untracked() {
-    use oer_esp32s31_hal::owner::PhyInitializationAccess;
-    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
+    use oer_chips_esp32s31_hal::owner::PhyInitializationAccess;
+    let (mut radio, _partitions) = oer_chips_esp32s31_hal::root::RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     let epoch = radio.begin_registration_for_host_test().epoch();

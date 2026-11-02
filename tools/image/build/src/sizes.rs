@@ -1,6 +1,6 @@
 //! Versioned image size summaries and comparisons under the owner's rule #375.
 use crate::{ImageSpec, Result};
-use oer_image_checks::sizes::Measurements;
+use oer_tools_image_checks::sizes::Measurements;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, process::Command};
 
@@ -49,7 +49,7 @@ pub struct Provenance {
     pub profile_settings: String,
     pub features: Vec<String>,
     pub default_features: bool,
-    pub purpose: oer_image_bundle::Purpose,
+    pub purpose: oer_tools_image_bundle::Purpose,
     pub layout_seed: Option<u32>,
     /// Values may contain stand credentials: record digests, never plaintext.
     pub configuration_sha256: BTreeMap<String, Option<String>>,
@@ -61,7 +61,7 @@ pub struct Provenance {
 }
 
 impl Summary {
-    pub(crate) fn new(spec: &ImageSpec, profile: &oer_chip_profile::Profile) -> Result<Self> {
+    pub(crate) fn new(spec: &ImageSpec, profile: &oer_tools_chip_profile::Profile) -> Result<Self> {
         let mut git = Command::new("git");
         git.current_dir(&spec.root).args(["rev-parse", "HEAD"]);
         let commit = capture(&mut git)?;
@@ -72,7 +72,7 @@ impl Summary {
         ]))?
         .is_empty();
         let rustc = capture(
-            oer_os_toolchain::command(oer_os_toolchain::Tool::Rustc)?
+            oer_tools_os_toolchain::command(oer_tools_os_toolchain::Tool::Rustc)?
                 .current_dir(&spec.root)
                 .arg("-vV"),
         )?;
@@ -84,7 +84,7 @@ impl Summary {
                     name.clone(),
                     value
                         .as_ref()
-                        .map(|v| oer_os_durable::sha256_bytes(v.as_bytes())),
+                        .map(|v| oer_tools_os_durable::sha256_bytes(v.as_bytes())),
                 )
             })
             .collect();
@@ -104,7 +104,7 @@ impl Summary {
                     .as_str()
                     .or_else(|| setting.get("value").and_then(toml::Value::as_str))
                     .ok_or("invalid image environment setting")?;
-                let digest = Some(oer_os_durable::sha256_bytes(value.as_bytes()));
+                let digest = Some(oer_tools_os_durable::sha256_bytes(value.as_bytes()));
                 configuration_sha256.insert(name.clone(), digest.clone());
                 if setting.get("force").and_then(toml::Value::as_bool) == Some(true) {
                     forced.insert(name.clone(), digest);
@@ -115,7 +115,7 @@ impl Summary {
             if let Some(name) = name.to_str().filter(|name| image_configuration(name)) {
                 configuration_sha256.insert(
                     name.into(),
-                    Some(oer_os_durable::sha256_bytes(value.as_encoded_bytes())),
+                    Some(oer_tools_os_durable::sha256_bytes(value.as_encoded_bytes())),
                 );
             }
         }
@@ -125,7 +125,7 @@ impl Summary {
         let policy: toml::Table = toml::from_str(&source)?;
         let mut stack_policy_sources = BTreeMap::from([(
             spec.stack_policy.to_string_lossy().into_owned(),
-            oer_os_durable::sha256_bytes(source.as_bytes()),
+            oer_tools_os_durable::sha256_bytes(source.as_bytes()),
         )]);
         if let Some(base) = policy.get("extends").and_then(toml::Value::as_str) {
             let path = policy_path
@@ -135,7 +135,7 @@ impl Summary {
             let relative = path.strip_prefix(&spec.root)?;
             stack_policy_sources.insert(
                 relative.to_string_lossy().into_owned(),
-                oer_os_durable::sha256_file(&path)?,
+                oer_tools_os_durable::sha256_file(&path)?,
             );
         }
         let manifest: toml::Table =
@@ -157,7 +157,7 @@ impl Summary {
         features.dedup();
         Ok(Self {
             schema: SCHEMA,
-            type_min_bytes: oer_image_checks::sizes::TYPE_MIN_BYTES,
+            type_min_bytes: oer_tools_image_checks::sizes::TYPE_MIN_BYTES,
             provenance: Provenance {
                 commit,
                 dirty,
@@ -217,12 +217,12 @@ impl Summary {
     pub(crate) fn publish(&self, output: &Path) -> Result<()> {
         let mut measured = self.clone();
         measured.contents(output)?;
-        oer_os_durable::atomic_json(&output.join(FILE), &measured)?;
+        oer_tools_os_durable::atomic_json(&output.join(FILE), &measured)?;
         Ok(())
     }
 
     fn contents(&mut self, directory: &Path) -> Result<()> {
-        use oer_image_bundle::files;
+        use oer_tools_image_bundle::files;
         self.image_files.clear();
         self.embedded_payloads.clear();
         for name in [files::RUNTIME_BIN, files::APPLICATION] {
@@ -242,7 +242,7 @@ impl Summary {
             return Err("sizes: embedded runtime payload is empty".into());
         }
         let data = std::fs::read(bootstrap)?;
-        let elf = oer_analysis_elf::Elf::parse(&data)?;
+        let elf = oer_tools_analysis_elf::Elf::parse(&data)?;
         for section in elf
             .sections()
             .filter(|s| s.allocated && !s.writable && !s.nobits)
@@ -259,7 +259,7 @@ impl Summary {
                     section: section.name.into(),
                     address: section.address + offset as u64,
                     bytes: payload.len() as u64,
-                    sha256: oer_os_durable::sha256_bytes(&payload),
+                    sha256: oer_tools_os_durable::sha256_bytes(&payload),
                 });
             }
         }
@@ -280,7 +280,7 @@ impl Summary {
         }
         let summary: Self = serde_json::from_value(value)?;
         if summary.schema != SCHEMA
-            || summary.type_min_bytes != oer_image_checks::sizes::TYPE_MIN_BYTES
+            || summary.type_min_bytes != oer_tools_image_checks::sizes::TYPE_MIN_BYTES
         {
             return Err("incompatible sizes schema or type inventory threshold".into());
         }

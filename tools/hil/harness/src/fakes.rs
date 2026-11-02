@@ -3,9 +3,9 @@
 
 use std::{cell::Cell, thread, time::Duration};
 
-use oer_hil_link::{Link, test_support::Device};
-use oer_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
-use oer_lab_model::rom::{RecoveryStep, Rung};
+use oer_tools_hil_link::{Link, test_support::Device};
+use oer_protocols_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
+use oer_tools_lab_model::rom::{RecoveryStep, Rung};
 
 use crate::finish::{Board, Waits};
 
@@ -20,7 +20,7 @@ pub(crate) const HELLO: Duration = Duration::from_millis(400);
 pub(crate) fn hello() -> Hello {
     Hello {
         image_crc32: IMAGE,
-        ..oer_hil_link::test_support::HELLO
+        ..oer_tools_hil_link::test_support::HELLO
     }
 }
 
@@ -76,8 +76,8 @@ pub(crate) struct FakeBoard {
     /// How a device behaves on a link the board opens while its image runs.
     pub serve: fn(Device),
     /// The router operations the cases ran, and how the router answers.
-    pub routed: std::cell::RefCell<Vec<oer_lab_client::protocol::RouterOperation>>,
-    pub router: fn(&oer_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
+    pub routed: std::cell::RefCell<Vec<oer_tools_lab_client::protocol::RouterOperation>>,
+    pub router: fn(&oer_tools_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
 }
 
 impl FakeBoard {
@@ -101,7 +101,7 @@ impl Rung for FakeRung<'_> {
     fn step(&self) -> RecoveryStep {
         self.1.step
     }
-    fn reset(&self) -> oer_lab_model::Result<Option<String>> {
+    fn reset(&self) -> oer_tools_lab_model::Result<Option<String>> {
         self.0.resets.set(self.0.resets.get() + 1);
         if self.1.restarts {
             self.0.boots.set(self.0.boots.get() + 1);
@@ -114,7 +114,7 @@ impl Rung for FakeRung<'_> {
 impl Board for FakeBoard {
     fn router(
         &self,
-        request: oer_lab_client::protocol::RouterOperation,
+        request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String> {
         let answer = (self.router)(&request);
         self.routed.borrow_mut().push(request);

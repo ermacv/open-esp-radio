@@ -55,7 +55,7 @@ pub const MAX_PART_NAME: usize = 12;
 /// samples in pages ([`CollectSamples::from`]).
 pub const MAX_PAGE_SAMPLES: usize = 27;
 
-oer_hil_protocol::messages! {
+oer_protocols_hil_protocol::messages! {
     endpoint Start = "load/start" => Started;
     topic Started = "load/started";
     endpoint Collect = "load/collect" => Collected;
@@ -920,7 +920,7 @@ pub enum LoadError {
     NotSampled,
 }
 
-oer_hil_agent::service! {
+oer_protocols_hil_agent::service! {
     /// The load service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         Start(Start) => start,

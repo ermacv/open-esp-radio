@@ -14,19 +14,19 @@ pub use crate::mac::{
 pub trait MacRuntimeStartHardware {
     fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
-    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT>;
+        ring: oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT>;
     fn start_mac_runtime<const COUNT: usize>(
         &mut self,
         ring: &crate::mac::rx::RxRingLive<'_, COUNT>,
     );
 }
 
-impl MacRuntimeStartHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
+impl MacRuntimeStartHardware for oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
     fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
-    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        ring: oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
         Self::prepare_mac_runtime(self, ring)
     }
 
@@ -38,11 +38,11 @@ impl MacRuntimeStartHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_
     }
 }
 
-impl MacRuntimeStartHardware for oer_esp32s31_hal::owner::RadioAccess {
+impl MacRuntimeStartHardware for oer_chips_esp32s31_hal::owner::RadioAccess {
     fn prepare_mac_runtime<'a, const COUNT: usize>(
         &mut self,
-        ring: oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
-    ) -> oer_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
+        ring: oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
+    ) -> oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
         self.wifi_mac_hal().prepare_mac_runtime(ring)
     }
 
@@ -69,7 +69,7 @@ pub trait MacRuntimeStopHardware {
     fn resume_mac_runtime(&mut self);
 }
 
-impl MacRuntimeStopHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
+impl MacRuntimeStopHardware for oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal<'_> {
     fn request_mac_runtime_stop(&mut self) {
         self.request_channel_stop();
     }
@@ -83,7 +83,7 @@ impl MacRuntimeStopHardware for oer_esp32s31_hal::ieee80211::mac::WifiMacHal<'_>
     }
 }
 
-impl MacRuntimeStopHardware for oer_esp32s31_hal::owner::RadioAccess {
+impl MacRuntimeStopHardware for oer_chips_esp32s31_hal::owner::RadioAccess {
     fn request_mac_runtime_stop(&mut self) {
         self.wifi_mac_hal().request_channel_stop();
     }

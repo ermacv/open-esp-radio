@@ -1,4 +1,4 @@
-use oer_espressif_interrupt_table::signal::{FromExecutorLevel, IrqSignal, host::Deferred};
+use oer_chips_family_interrupt_table::signal::{FromExecutorLevel, IrqSignal, host::Deferred};
 include!("support/executor_level.rs");
 
 #[cfg(ui_reject)]

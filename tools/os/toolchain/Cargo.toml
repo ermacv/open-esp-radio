@@ -1,5 +1,5 @@
 [package]
-name = "oer-os-toolchain"
+name = "oer-tools-os-toolchain"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ publish = false
 description = "The host tools repository builds run: their lookup and recorded versions"
 
 [dependencies]
-oer-os-durable = { path = "../durable" }
-oer-os-process = { path = "../process" }
+oer-tools-os-durable = { path = "../durable" }
+oer-tools-os-process = { path = "../process" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

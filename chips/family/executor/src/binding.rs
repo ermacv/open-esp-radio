@@ -8,8 +8,8 @@
 
 use core::task::RawWakerVTable;
 
-use oer_espressif_platform_port::{ExecutorPlatform, Platform};
-use oer_memory::{HandlerCell, OnceValue, StaticRef};
+use oer_chips_family_platform_port::{ExecutorPlatform, Platform};
+use oer_portable_memory::{HandlerCell, OnceValue, StaticRef};
 use static_cell::StaticCell;
 
 use crate::chip::{Line, SOFTWARE_INTERRUPT_COUNT};
@@ -19,7 +19,7 @@ use crate::systimer::ComparatorWriter;
 /// and its one waker vtable. Only [`bind!`](crate::bind) implements it.
 pub trait Binding: Sized + 'static {
     /// The chip HAL's implementation of the platform contracts.
-    type Port: ExecutorPlatform<Counter: oer_espressif_boot::drivers::system_timer::CounterLatch>
+    type Port: ExecutorPlatform<Counter: oer_chips_family_boot::drivers::system_timer::CounterLatch>
         + Platform;
     /// The binding's one storage of the port's owned blocks.
     fn storage() -> &'static Storage<Self::Port>;
@@ -103,7 +103,7 @@ impl<B, O> TimeDriver<B, O> {
 /// ```ignore
 /// /// The ESP32-S31's executor binding.
 /// pub struct Esp32s31 { _private: () }
-/// oer_espressif_executor::bind!(Esp32s31, oer_esp32s31_hal::platform::Port);
+/// oer_chips_family_executor::bind!(Esp32s31, oer_chips_esp32s31_hal::platform::Port);
 /// ```
 #[macro_export]
 macro_rules! bind {

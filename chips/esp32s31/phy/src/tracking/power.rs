@@ -360,18 +360,18 @@ impl ControlBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxPowerTrackingCompletion {
         match self.0 {
             PhyTxPowerTrackingAction::SetBbpllCalibration { enabled } => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
                 PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
             }
             PhyTxPowerTrackingAction::ForceTxRx(PhyForceTxRxAction::Configure {
                 enabled,
                 phase,
             }) => {
-                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
+                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, enabled, phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
                     enabled,
                     phase,
@@ -490,18 +490,18 @@ impl PhyTxPowerTrackingExternalBinding {
     pub fn execute_target<P>(
         self,
         _platform: &mut P,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxPowerTrackingCompletion {
         match &self.operation {
             PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled } => {
-                oer_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, *enabled);
+                oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, *enabled);
                 PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: *enabled }
             }
             PhyTxPowerTrackingExternalOperation::ForceTxRx(PhyForceTxRxAction::Configure {
                 enabled,
                 phase,
             }) => {
-                oer_esp32s31_hal::phy::pbus::configure_force_txrx(registers, *enabled, *phase);
+                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, *enabled, *phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
                     enabled: *enabled,
                     phase: *phase,

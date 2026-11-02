@@ -4,8 +4,8 @@
 //! `RX_DESCRIPTOR_HIGH_WINDOW` only to its placement's prefix, and the
 //! append/reload request is the generated doorbell with its pending read.
 
-use oer_esp32s31_pac::layouts::WifiRxDmaDescriptor;
-use oer_memory::DmaRef;
+use oer_chips_esp32s31_pac::layouts::WifiRxDmaDescriptor;
+use oer_portable_memory::DmaRef;
 
 use crate::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters, bits};
 
@@ -147,13 +147,13 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
             return false;
         }
         self.set_walker_enabled(true);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         self.mac_rx_walker_enabled()
     }
 
     pub fn try_disable_mac_rx_walker(&mut self) -> bool {
         self.set_walker_enabled(false);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         !self.mac_rx_walker_enabled()
     }
 

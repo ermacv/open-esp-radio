@@ -2,7 +2,7 @@ error[E0080]: evaluation panicked: a diagnostic name fits its budget and MAX_NAM
  --> $RUST/core/src/panic.rs
   |
   |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_diagnostics::Name::<65>::from_static::<REASON::Text>::{constant#0}` failed here
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_portable_diagnostics::Name::<65>::from_static::<REASON::Text>::{constant#0}` failed here
   |
  ::: src/text.rs
   |
@@ -22,7 +22,7 @@ note: erroneous constant encountered
 note: erroneous constant encountered
  --> tests/ui/name_budget.rs:8:55
   |
-8 | const REASON: oer_diagnostics::Name<{ TEXT.len() }> = oer_diagnostics::name!(TEXT); // ui-error@outside: E0080: evaluation panicked: ...
+8 | const REASON: oer_portable_diagnostics::Name<{ TEXT.len() }> = oer_portable_diagnostics::name!(TEXT); // ui-error@outside: E0080: evaluation panicked: ...
   |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
-  = note: this note originates in the macro `$crate::name` which comes from the expansion of the macro `oer_diagnostics::name` (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this note originates in the macro `$crate::name` which comes from the expansion of the macro `oer_portable_diagnostics::name` (in Nightly builds, run with -Z macro-backtrace for more info)

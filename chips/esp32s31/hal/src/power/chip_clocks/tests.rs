@@ -1,7 +1,7 @@
 //! HAL word atoms and their installed-owner authority.
 use super::{ClockCounts, ClockWords, PsramMpll};
 use crate::power::{PlatformClock, PlatformClockBackend, PlatformClockError};
-use oer_esp32s31_pac::{hp_sys_clkrst::HpSysClkrstPll160, modem_lpcon::ModemLpconChipClocks};
+use oer_chips_esp32s31_pac::{hp_sys_clkrst::HpSysClkrstPll160, modem_lpcon::ModemLpconChipClocks};
 use std::{vec, vec::Vec};
 
 /// `MODEM_LPCON` up to `CLK_CONF` and `HP_SYS_CLKRST` up to `REF_160M_CTRL0`.

@@ -3,10 +3,10 @@
 
 use super::{InterruptStacks, Result, cached_hook_references, code::Role};
 use crate::stack::Image;
-use oer_analysis_elf::{Elf, SymbolKind};
-use oer_chip_profile::Profile;
-use oer_espressif_facts::Region;
-use oer_image_stack::{Analysis, HartStack};
+use oer_tools_analysis_elf::{Elf, SymbolKind};
+use oer_tools_chip_profile::Profile;
+use oer_chips_family_facts::Region;
+use oer_tools_image_stack::{Analysis, HartStack};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};
 

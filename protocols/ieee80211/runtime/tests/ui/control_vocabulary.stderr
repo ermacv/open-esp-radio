@@ -11,7 +11,7 @@ note: associated function defined here
    |
    |     pub const fn new(correlation: u64, command: Command) -> Self {
    |                  ^^^
-help: call `Into::into` on this expression to convert `StaCommand` into `oer_ieee80211_runtime::station::contract::Command`
+help: call `Into::into` on this expression to convert `StaCommand` into `oer_protocols_ieee80211_runtime::station::contract::Command`
    |
 10 |     Request::new(7, kind.into()) // ui-error: E0308
    |                         +++++++

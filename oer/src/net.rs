@@ -1,7 +1,7 @@
 //! Waiting on the IP service's status: an IPv4 configuration, or the loss of
 //! the link it came over.
 //!
-//! The service (`oer_embassy_net::ip`) publishes each status change in its
+//! The service (`oer_portable_embassy_net::ip`) publishes each status change in its
 //! own task; the library's task wakes every registered waiter
 //! ([`Watchers::wake_all`]). A wait reads the status afresh on each poll, so
 //! a change between polls is never lost, and ends:
@@ -26,11 +26,11 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use oer_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
-use oer_memory::{ContextCell, Entered, ExecutionContext, QueueNotify};
-use oer_network_port::LinkState;
+use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
+use oer_portable_memory::{ContextCell, Entered, ExecutionContext, QueueNotify};
+use oer_protocols_network_port::LinkState;
 
-pub use oer_embassy_net::ip::Error as ServiceError;
+pub use oer_portable_embassy_net::ip::Error as ServiceError;
 
 #[cfg_attr(not(all(target_arch = "riscv32", feature = "wifi")), allow(dead_code))]
 pub(crate) mod published;

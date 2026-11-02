@@ -52,7 +52,7 @@ fn chip_twins_resolve_proc_macros_with_a_configured_build_directory() {
         .lines()
         .find_map(|line| line.strip_prefix("host: "))
         .expect("rustc reports its host target");
-    oer_test_ui_cases::run_chip(
+    oer_tools_test_ui_cases::run_chip(
         root,
         &root.join("twins"),
         host,

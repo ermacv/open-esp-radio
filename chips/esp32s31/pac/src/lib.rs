@@ -21,7 +21,7 @@
 //! T0's movable program part cannot acknowledge the permanent IRQ owner's cause:
 //!
 //! ```compile_fail,E0599
-//! # use oer_esp32s31_pac::timg::Timg0Timer0;
+//! # use oer_chips_esp32s31_pac::timg::Timg0Timer0;
 //! fn clear(mut timer: Timg0Timer0) {
 //!     timer.trigger_int_clr_timers_t0_int_clr();
 //! }
@@ -30,7 +30,7 @@
 //! The timer partition cannot reset the group and re-enable its watchdog:
 //!
 //! ```compile_fail,E0609
-//! # use oer_esp32s31_pac::ownership::TimerGroup0Peripherals;
+//! # use oer_chips_esp32s31_pac::ownership::TimerGroup0Peripherals;
 //! fn reset(mut timer: TimerGroup0Peripherals) {
 //!     timer.hp_sys_clkrst_timg0.modify_timergrp0_ctrl0(|w| {
 //!         w.set_reg_timergrp0_rst_en(true);
@@ -41,7 +41,7 @@
 //! The permanent IRQ part cannot change the movable program owner's enable:
 //!
 //! ```compile_fail,E0599
-//! # use oer_esp32s31_pac::timg::Timg0InterruptBank;
+//! # use oer_chips_esp32s31_pac::timg::Timg0InterruptBank;
 //! fn enable(mut irq: Timg0InterruptBank) {
 //!     irq.modify_int_ena_timers(|w| { w.set_t0_int_ena(true); });
 //! }
@@ -50,14 +50,14 @@
 //! The split CLR word exposes only T0's strobe:
 //!
 //! ```compile_fail,E0599
-//! # use oer_esp32s31_pac::timg::Timg0InterruptBank;
+//! # use oer_chips_esp32s31_pac::timg::Timg0InterruptBank;
 //! fn clear_watchdog(mut bank: Timg0InterruptBank) {
 //!     bank.trigger_int_clr_timers_wdt_int_clr();
 //! }
 //! ```
 //!
 //! ```compile_fail,E0599
-//! # use oer_esp32s31_pac::timg::Timg0InterruptBank;
+//! # use oer_chips_esp32s31_pac::timg::Timg0InterruptBank;
 //! fn clear_timer1(mut bank: Timg0InterruptBank) {
 //!     bank.trigger_int_clr_timers_t1_int_clr();
 //! }
@@ -67,27 +67,27 @@
 //! The radio clock/power owner has no access to these wake words.
 //!
 //! ```
-//! fn observe(wake: &oer_esp32s31_pac::pmu::PmuWakeStatus) -> bool {
+//! fn observe(wake: &oer_chips_esp32s31_pac::pmu::PmuWakeStatus) -> bool {
 //!     wake.read_hp_int_ena().soc_wakeup_int_ena()
 //! }
 //! ```
 //!
 //! ```compile_fail
-//! fn change(wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus) {
+//! fn change(wake: &mut oer_chips_esp32s31_pac::pmu::PmuWakeStatus) {
 //!     wake.modify_hp_int_ena(|_| {});
 //! }
 //! ```
 //!
 //! ```compile_fail
-//! fn change(wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus) {
+//! fn change(wake: &mut oer_chips_esp32s31_pac::pmu::PmuWakeStatus) {
 //!     wake.modify_lp_int_ena(|_| {});
 //! }
 //! ```
 //!
 //! ```compile_fail
 //! fn acknowledge(
-//!     wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus,
-//!     sample: oer_esp32s31_pac::pmu::int_raw::Snapshot,
+//!     wake: &mut oer_chips_esp32s31_pac::pmu::PmuWakeStatus,
+//!     sample: oer_chips_esp32s31_pac::pmu::int_raw::Snapshot,
 //! ) {
 //!     wake.acknowledge_int_raw(sample);
 //! }
@@ -95,15 +95,15 @@
 //!
 //! ```compile_fail
 //! fn acknowledge(
-//!     wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus,
-//!     sample: oer_esp32s31_pac::pmu::lp_int_raw::Snapshot,
+//!     wake: &mut oer_chips_esp32s31_pac::pmu::PmuWakeStatus,
+//!     sample: oer_chips_esp32s31_pac::pmu::lp_int_raw::Snapshot,
 //! ) {
 //!     wake.acknowledge_lp_int_raw(sample);
 //! }
 //! ```
 //!
 //! ```compile_fail
-//! fn observe(radio: &oer_esp32s31_pac::pmu::PmuRadio) {
+//! fn observe(radio: &oer_chips_esp32s31_pac::pmu::PmuRadio) {
 //!     let _ = radio.read_hp_int_ena();
 //! }
 //! ```
@@ -112,19 +112,19 @@
 //! grants no write to the inherited wake enables.
 //!
 //! ```
-//! fn observe(wake: &oer_esp32s31_pac::modem_lpcon::ModemWakeStatus) -> bool {
+//! fn observe(wake: &oer_chips_esp32s31_pac::modem_lpcon::ModemWakeStatus) -> bool {
 //!     wake.read_modem_intr_wakeup_conf().lp_timer_intr_wakeup_en()
 //! }
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn change(wake: &mut oer_esp32s31_pac::modem_lpcon::ModemWakeStatus) {
+//! fn change(wake: &mut oer_chips_esp32s31_pac::modem_lpcon::ModemWakeStatus) {
 //!     wake.modify_modem_intr_wakeup_conf(|_| {});
 //! }
 //! ```
 //!
 //! ```compile_fail,E0599
-//! fn change(wake: &mut oer_esp32s31_pac::pmu::PmuWakeStatus) {
+//! fn change(wake: &mut oer_chips_esp32s31_pac::pmu::PmuWakeStatus) {
 //!     wake.modify_slp_wakeup_cntl2(|_| {});
 //! }
 //! ```
@@ -165,6 +165,6 @@ pub fn take() -> Option<ownership::Partitions> {
     // constructor of a block). A hart-local word is listed once per hart:
     // element `h` of a hart-local part is accessed only on hart `h`, which
     // the HAL's per-hart grant enforces.
-    let claims = unsafe { oer_mmio::assume_owned::<ownership::Claims>() };
+    let claims = unsafe { oer_portable_mmio::assume_owned::<ownership::Claims>() };
     Some(ownership::partition(claims))
 }

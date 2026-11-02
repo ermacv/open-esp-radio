@@ -1,10 +1,10 @@
 //! `cargo fw hot-code`: an image's hot-code list from a PC profile
-//! ([`oer_image_checks::linker::hot`]).
+//! ([`oer_tools_image_checks::linker::hot`]).
 
 use std::path::Path;
 
-use oer_image_build::Result;
-use oer_image_checks::linker::hot::{HotCode, profiled_functions};
+use oer_tools_image_build::Result;
+use oer_tools_image_checks::linker::hot::{HotCode, profiled_functions};
 use serde_json::Value;
 
 /// Write the list of the functions of `elf` that hold the most samples of
@@ -28,7 +28,7 @@ pub fn write(
         pcs.extend(profile);
     }
     let bytes = std::fs::read(elf)?;
-    let functions = profiled_functions(&oer_analysis_elf::Elf::parse(&bytes)?)?;
+    let functions = profiled_functions(&oer_tools_analysis_elf::Elf::parse(&bytes)?)?;
     let list = HotCode::from_samples(&functions, pcs.iter().copied(), budget_bytes);
     let name = |path: &Path| {
         path.file_name().map_or_else(

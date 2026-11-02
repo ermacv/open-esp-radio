@@ -1,5 +1,5 @@
 //! `cargo stand stand-file convert`: the one rewrite of a schema 1 stand
-//! file to schema 2 (`oer_lab_model::convert`). The stand file holds
+//! file to schema 2 (`oer_tools_lab_model::convert`). The stand file holds
 //! credentials: the result is written private (mode 0600), never printed,
 //! and an in-place rewrite keeps the schema 1 file beside it.
 
@@ -17,9 +17,9 @@ pub(crate) fn schema_1_copy(path: &Path) -> std::path::PathBuf {
 pub(crate) fn convert(path: &Path, output: &Path) -> Result<()> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("read stand file {}: {error}", path.display()))?;
-    let converted = oer_lab_model::convert::from_schema_1(&text)?;
+    let converted = oer_tools_lab_model::convert::from_schema_1(&text)?;
     // What it writes is a stand file this build reads.
-    oer_lab_model::Stand::parse(&converted.text)?.validate()?;
+    oer_tools_lab_model::Stand::parse(&converted.text)?.validate()?;
     if output == path {
         let kept = schema_1_copy(path);
         crate::init::write_private(&kept, &text)?;
@@ -53,7 +53,7 @@ mod tests {
             let mode = std::fs::metadata(file).unwrap().permissions().mode() & 0o777;
             assert_eq!(mode, 0o600);
         }
-        let stand = oer_lab_model::Stand::load(&path).unwrap();
+        let stand = oer_tools_lab_model::Stand::load(&path).unwrap();
         assert_eq!(stand.router.unwrap().channels, [13]);
     }
 }

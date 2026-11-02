@@ -3,16 +3,16 @@
 extern crate std;
 
 use core::num::NonZeroU16;
-use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
 use std::vec::Vec;
 
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RETRY_STAGES, RateSupport,
     ReceiveFilter, WidthSet,
 };
 use {
-    oer_ieee80211_core_upper_mac::phy_mode::PhyMode,
-    oer_ieee80211_wire::{
+    oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
+    oer_protocols_ieee80211_wire::{
         ht::ht_peer_capabilities,
         phy::{HeMcs, HtMcs},
     },
@@ -20,15 +20,15 @@ use {
 
 use super::*;
 use crate::rate_schedule::schedule_state;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     Air, IndeterminateCause, SingleEnd, SingleResponse, TxOutcome, WithdrawCause,
 };
-use oer_ieee80211_contracts_port::{Channel, ChannelWidth, LinkMetric, RxMeta, RxMetadata};
+use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, LinkMetric, RxMeta, RxMetadata};
 
 struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20,
@@ -87,7 +87,7 @@ fn legacy_peer() -> RatePeer {
     RatePeer {
         phy: PhyMode::Legacy,
         legacy_rates:
-            oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[2, 4, 11, 22, 12, 18, 24, 36],
                 &[48, 72, 96, 108],
             )
@@ -104,7 +104,7 @@ fn ht20_peer() -> RatePeer {
     RatePeer {
         phy: PhyMode::Ht20,
         legacy_rates:
-            oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[2, 4, 11, 22, 12, 18, 24, 36],
                 &[48, 72, 96, 108],
             )
@@ -251,15 +251,15 @@ fn an_aggregate_goes_once_at_the_controls_ampdu_rate_and_only_when_associated() 
     );
     // An aggregate's BlockAck reaches the rate control without a panic or
     // a refusal of its own, answered or not.
-    let tally = oer_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
+    let tally = oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
         NonZeroU16::new(4).unwrap(),
         3,
     )
     .unwrap();
     let delivered: AggregateOutcome<Snr, ()> = TxOutcome::Ended(AggregateEnd::Delivered {
         air: air(1),
-        report: oer_ieee80211_contracts_port::BlockAckReport::new(
-            oer_ieee80211_wire::sequence::SequenceNumber::ZERO,
+        report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
+            oer_protocols_ieee80211_wire::sequence::SequenceNumber::ZERO,
             0b111,
         ),
         ack: Snr(30),
@@ -376,7 +376,7 @@ fn ht40_peer() -> RatePeer {
     RatePeer {
         phy: PhyMode::Ht40,
         legacy_rates:
-            oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[2, 4, 11, 22, 12, 18, 24, 36],
                 &[48, 72, 96, 108],
             )
@@ -500,11 +500,11 @@ fn a_zero_retry_budget_never_creates_a_transmission() {
 
 #[test]
 fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
-    use oer_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates;
+    use oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates;
     let he = RatePeer {
         phy: PhyMode::He20,
         he_capabilities: Some(
-            oer_ieee80211_wire::he::parse_he20_capabilities(&[
+            oer_protocols_ieee80211_wire::he::parse_he20_capabilities(&[
                 255, 22, 35, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
                 0xc0, 0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
             ])

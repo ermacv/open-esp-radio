@@ -1,7 +1,7 @@
 //! Affine completion of a bounded 32-slot MPDU batch.
 use crate::sequence::SequenceSpace;
-use oer_ieee80211_contracts_port::BlockAckReport;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_contracts_port::BlockAckReport;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 const TX_AMPDU_SLOT_CAPACITY: usize = 32;
 /// Opaque index of one statically owned TX frame.
 ///
@@ -77,8 +77,8 @@ pub struct BatchCompleting(Option<BlockAckReport>);
 /// Each completion step returns exactly one frame without a drain loop.
 ///
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_upper_mac::block_ack::batch::TxAmpduBatch;
-/// use oer_ieee80211_wire::sequence::SequenceNumber;
+/// use oer_protocols_ieee80211_core_upper_mac::block_ack::batch::TxAmpduBatch;
+/// use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 /// let idle = TxAmpduBatch::new();
 /// let building = idle.begin(SequenceNumber::ZERO, 2);
 /// let duplicate = idle.begin(SequenceNumber::ZERO, 2);

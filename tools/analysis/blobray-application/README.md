@@ -1,6 +1,6 @@
 # Blobray application
 
-`oer-analysis-blobray-application` owns the operations Blobray performs over executables
+`oer-tools-analysis-blobray-application` owns the operations Blobray performs over executables
 its caller gives as bytes, inside the caller's process. Its internal
 dependencies are [domain](../blobray-domain/README.md),
 [artifacts](../blobray-artifacts/README.md), [analysis](../blobray-analysis/README.md) and
@@ -62,7 +62,7 @@ local-label strings referenced by function records. `image_symbols` returns
 sized function entries for listing renderers. These queries use the captured
 inventory and data exporter with the caller's memory and control; raw ELF
 symbol, section, flag and header classification comes from
-`oer_analysis_elf::{SymbolKind, SectionKind}` and `classify`. Both captured
+`oer_tools_analysis_elf::{SymbolKind, SectionKind}` and `classify`. Both captured
 queries and parsed ELF views use the same type and flag classifications;
 `classify::is_riscv32_little_endian` owns their shared machine/header profile.
 

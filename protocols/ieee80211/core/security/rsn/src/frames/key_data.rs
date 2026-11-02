@@ -11,8 +11,8 @@
 )]
 
 use super::*;
-use oer_ieee80211_wire::ccmp::GroupKeyId;
-use oer_ieee80211_wire::eapol::{
+use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
+use oer_protocols_ieee80211_wire::eapol::{
     GTK_KDE_LEN, GtkKde, GtkKdeInfo, IGTK_KDE_LEN, IgtkKde, Kde, KeyDataElements, key_data_padding,
     write_key_data_padding,
 };

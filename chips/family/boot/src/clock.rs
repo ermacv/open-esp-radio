@@ -27,7 +27,7 @@
 //! (calibration start, completion, 10 µs settle, stop; prepare the PLL
 //! when the CPU source changes, then switch the CPU configuration).
 
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 use crate::{
     Access, BootFailure, Busy,

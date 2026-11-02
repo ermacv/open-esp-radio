@@ -21,7 +21,7 @@
 
 use core::ops::Range;
 
-use oer_esp32s31_layout::LAYOUT;
+use oer_chips_esp32s31_layout::LAYOUT;
 
 pub const PSRAM_BASE_ADDRESS: usize = LAYOUT.psram.origin() as usize;
 pub const PSRAM_SIZE_BYTES: usize = LAYOUT.psram.length() as usize;
@@ -41,8 +41,8 @@ pub const WIFI_ANTENNA_GAIN_MBM: i32 = 233;
 pub const fn wifi_power_limits(
     chip_maximum_mbm: i32,
     owner_cap_mbm: Option<i32>,
-) -> oer_radio_regulatory::PowerLimits {
-    oer_radio_regulatory::PowerLimits {
+) -> oer_protocols_radio_regulatory::PowerLimits {
+    oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: WIFI_ANTENNA_GAIN_MBM,
         chip_maximum_mbm,
         owner_cap_mbm,
@@ -54,12 +54,12 @@ pub const fn wifi_power_limits(
 /// handoff adopts it:
 ///
 /// ```ignore
-/// let ready = match oer_espressif_staged_runtime::adoption::run::<oer_esp32s31_compose::Esp32s31, _, _>(
+/// let ready = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
 ///     handoff,
 ///     root.into_runtime(),
 ///     INTERRUPT_TABLE,
 ///     BootstrapPsram,
-///     oer_esp32s31_compose::phy_fault::report_previous,
+///     oer_chips_esp32s31_compose::phy_fault::report_previous,
 ///     core::convert::identity,
 /// ) {
 ///     Ok(adopted) => adopted,
@@ -90,12 +90,12 @@ impl PsramMapping {
 #[allow(unsafe_code, reason = "adopting the bootstrap's PSRAM mapping")]
 // SAFETY: `adopt` writes no register: it records the window the bootstrap
 // mapped and leaves PSRAM, the MMU and interrupts as it found them.
-unsafe impl oer_espressif_staged_layout::handoff::AdoptsBootstrapMapping for BootstrapPsram {
+unsafe impl oer_chips_family_staged_layout::handoff::AdoptsBootstrapMapping for BootstrapPsram {
     type Mapping = PsramMapping;
 
     fn adopt(
         self,
-        _handoff: &oer_espressif_staged_layout::handoff::StageTwoHandoff,
+        _handoff: &oer_chips_family_staged_layout::handoff::StageTwoHandoff,
     ) -> PsramMapping {
         PsramMapping {
             range: PSRAM_BASE_ADDRESS..PSRAM_BASE_ADDRESS + PSRAM_SIZE_BYTES,

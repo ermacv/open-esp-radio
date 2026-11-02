@@ -700,7 +700,7 @@ impl PhyTxIqCoverTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackAction {
-    I2c(oer_espressif_analog::Action<crate::analog::i2c::Address, ()>),
+    I2c(oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>),
     ConfigureTxClock { enabled: bool },
     ConfigureRxClock { enabled: bool },
     Complete { enabled: bool },
@@ -708,7 +708,7 @@ pub enum PhyTxIqLoopbackAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackCompletion {
-    I2c(oer_espressif_analog::Completion<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_analog::Completion<crate::analog::i2c::Address>),
     TxClockConfigured { enabled: bool },
     RxClockConfigured { enabled: bool },
 }
@@ -721,7 +721,7 @@ pub enum PhyTxIqLoopbackTransitionError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LoopbackStep {
-    I2c(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     TxClock,
     RxClock,
     Complete,
@@ -770,7 +770,7 @@ impl PhyTxIqLoopbackTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxIqLoopbackTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(()) {
                     LoopbackStep::TxClock
                 } else {
                     LoopbackStep::I2c(transition)
@@ -1599,7 +1599,7 @@ impl PhyTxIqMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<PhyTxIqCalibrationCompletion, PhyTxIqHardwareInvariant> {
         match self.action {
             PhyTxIqCalibrationAction::ConfigureCorrection { begin } => {
@@ -1607,8 +1607,8 @@ impl PhyTxIqMmioBinding {
                 Ok(PhyTxIqCalibrationCompletion::CorrectionConfigured { begin })
             }
             PhyTxIqCalibrationAction::ConfigurePbusDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 Ok(PhyTxIqCalibrationCompletion::PbusDebugModeConfigured)
             }
@@ -1643,7 +1643,7 @@ impl PhyTxIqMisPowerMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxIqMisPowerCompletion {
         match self.action {
             PhyTxIqMisPowerAction::Configure {
@@ -1689,7 +1689,7 @@ impl PhyTxIqCoverMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxIqCoverCompletion {
         match self.action {
             PhyTxIqCoverAction::ConfigureCoefficient {
@@ -1728,15 +1728,15 @@ impl PhyTxIqLoopbackMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxIqLoopbackCompletion {
         match self.action {
             PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
             }
             PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
-                oer_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::phy::pbus::configure_rx_clock(registers, enabled);
                 PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
             }
             _ => unreachable!(),
@@ -1924,7 +1924,7 @@ impl PhyTxIqPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -1932,7 +1932,7 @@ impl PhyTxIqPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,
@@ -2057,7 +2057,7 @@ impl PhyTxIqInitI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -2065,7 +2065,7 @@ impl PhyTxIqInitI2cBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<

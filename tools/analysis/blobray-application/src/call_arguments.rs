@@ -8,8 +8,8 @@
 //! The values are may-values of one call site, without interprocedural
 //! expansion: a value does not prove that the path reaching the call runs.
 use crate::references::{self, Kind, Target, Targets};
-use oer_analysis_blobray_domain::{ArgumentValue, LibraryFunction};
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_domain::{ArgumentValue, LibraryFunction};
+use oer_tools_analysis_riscv_model::{
     AbstractValue, Expression, FunctionIndex, Result, RunControl, ValueAlternative,
 };
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ const ARGUMENTS: std::ops::Range<usize> = 10..18;
 pub struct CallSite {
     /// The transfer instruction's offset, or its image address.
     pub offset: u64,
-    #[serde(with = "oer_analysis_riscv_model::symbol_name")]
+    #[serde(with = "oer_tools_analysis_riscv_model::symbol_name")]
     pub target: Vec<u8>,
     pub kind: Kind,
     pub destination: Option<Target>,
@@ -48,8 +48,8 @@ pub fn call_sites(
                 || matches!(
                     site.relocation_kind,
                     Some(
-                        oer_analysis_riscv_model::ReferenceKind::Call
-                            | oer_analysis_riscv_model::ReferenceKind::Branch
+                        oer_tools_analysis_riscv_model::ReferenceKind::Call
+                            | oer_tools_analysis_riscv_model::ReferenceKind::Branch
                     )
                 )
         })

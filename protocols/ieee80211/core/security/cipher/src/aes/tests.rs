@@ -1,8 +1,8 @@
 use super::*;
-use oer_crypto::{KeyUnwrapError, KeyUnwrapRequest, conformance};
+use oer_portable_crypto::{KeyUnwrapError, KeyUnwrapRequest, conformance};
 
 fn unwrap(kek: &[u8; 16], wrapped: &[u8]) -> Result<RsnKeyData, KeyUnwrapError> {
-    oer_crypto::block::unwrap_now(
+    oer_portable_crypto::block::unwrap_now(
         &mut SoftwareAes128,
         KeyUnwrapRequest::new(
             Aes128Key::copy_from(kek),

@@ -5,8 +5,8 @@
 
 pub(crate) use crate::binding::Binding;
 use crate::{Failure, Fault, SoftwareInterrupt};
-use oer_espressif_boot::drivers::system_timer;
-use oer_espressif_platform_port::{ExecutorPlatform, Hart};
+use oer_chips_family_boot::drivers::system_timer;
+use oer_chips_family_platform_port::{ExecutorPlatform, Hart};
 
 use crate::software_line::{SoftwareLine, raise, serve};
 
@@ -33,19 +33,19 @@ pub(crate) fn current_core<B: Binding>() -> usize {
 /// Validate the architectural ID before selecting any per-hart state.
 #[inline(always)]
 pub(crate) fn current_hart<B: Binding>() -> Hart {
-    match Hart::new(oer_riscv::hart_id() as u32) {
+    match Hart::new(oer_portable_riscv::hart_id() as u32) {
         Ok(hart) => hart,
         Err(_fault) => {
             // The existing fatal path retains InvalidHart's full raw ID;
             // no executor or register owner is released on this path.
             #[cfg(target_arch = "riscv32")]
             {
-                oer_espressif_staged_runtime::fatal::reset_recording::<PortOf<B>>(|_, _| ())
+                oer_chips_family_staged_runtime::fatal::reset_recording::<PortOf<B>>(|_, _| ())
             }
             // Host type checks have no reset hardware or retained boot record.
             #[cfg(not(target_arch = "riscv32"))]
             {
-                <PortOf<B> as oer_espressif_platform_port::Platform>::fatal(|_| ())
+                <PortOf<B> as oer_chips_family_platform_port::Platform>::fatal(|_| ())
             }
         }
     }
@@ -56,7 +56,7 @@ pub(crate) fn current_hart<B: Binding>() -> Hart {
 /// round and pend validates the hart through [`current_hart`] first.
 #[inline(always)]
 pub(crate) fn checked_hart() -> Option<Hart> {
-    Hart::new(oer_riscv::hart_id() as u32).ok()
+    Hart::new(oer_portable_riscv::hart_id() as u32).ok()
 }
 
 /// The interrupt level the caller runs at: the CLIC's `mintstatus.mil`,
@@ -65,9 +65,9 @@ pub(crate) fn checked_hart() -> Option<Hart> {
 /// through a CLIC.
 #[inline(always)]
 pub(crate) fn interrupt_level() -> u8 {
-    let status = oer_riscv::read_mintstatus();
+    let status = oer_portable_riscv::read_mintstatus();
     // `mil` is the top byte: the truncation keeps exactly the field.
-    (status >> oer_riscv::clic::MINTSTATUS_MIL_SHIFT) as u8
+    (status >> oer_portable_riscv::clic::MINTSTATUS_MIL_SHIFT) as u8
 }
 
 /// Publish the counter latch, from the system timer's handoff, once its
@@ -122,9 +122,9 @@ pub(crate) const fn software_interrupt_source<P: ExecutorPlatform>(swi: Software
 }
 
 pub(crate) const fn alarm_source<P: ExecutorPlatform>(
-    comparator: oer_espressif_platform_port::Comparator,
+    comparator: oer_chips_family_platform_port::Comparator,
 ) -> u16 {
-    use oer_espressif_platform_port::Comparator;
+    use oer_chips_family_platform_port::Comparator;
     let [zero, one, two] = P::ALARM_SOURCES;
     match comparator {
         Comparator::Zero => zero,
@@ -138,14 +138,14 @@ pub(crate) fn wait_for_interrupt<B: Binding, T: crate::Tasks<Binding = B>>() {
     if !PortOf::<B>::debugger_connected(current_hart::<B>()) {
         #[cfg(oer_trace)]
         let started = now::<B>() as u32;
-        oer_riscv::wait_for_interrupt();
+        oer_portable_riscv::wait_for_interrupt();
         #[cfg(oer_trace)]
         {
             let ended = now::<B>() as u32;
             let observer = T::observer();
             // Publish both edges after the wait, while still masked: observer
             // work is busy time, and the waking handler has not run yet.
-            oer_trace::observe!(
+            oer_portable_trace::observe!(
                 observer,
                 crate::observation::Activity::new(
                     started,
@@ -155,7 +155,7 @@ pub(crate) fn wait_for_interrupt<B: Binding, T: crate::Tasks<Binding = B>>() {
                     crate::observation::Phase::IdleStart
                 )
             );
-            oer_trace::observe!(
+            oer_portable_trace::observe!(
                 observer,
                 crate::observation::Activity::new(
                     ended,

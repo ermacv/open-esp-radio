@@ -12,19 +12,19 @@
 //! its handler and returns the clocked client with the complete controller
 //! arena, which no hardware references after the reset.
 
-use oer_esp32s31_hal::bluetooth::engine::ControllerMemory;
+use oer_chips_esp32s31_hal::bluetooth::engine::ControllerMemory;
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_esp32s31_hal::bluetooth::engine::{
+use oer_chips_esp32s31_hal::bluetooth::engine::{
     EngineOutputReleaseError, EngineResetTimerPending, EngineShutDown, EngineShutdownError,
     EngineShutdownFailure, scheduler::interrupt::SchedulerDoorbell,
 };
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::{InterruptOutputReleasedOwner, ModemLpTimerStopped},
     domain::RadioDomain,
 };
-use oer_espressif_interrupt_table::signal::{ForeignContext, SignalExecutor};
+use oer_chips_family_interrupt_table::signal::{ForeignContext, SignalExecutor};
 
 use crate::{
     interrupt::{BluetoothInterruptGate, ChipGate, GateError, RadioDoorbell},
@@ -85,7 +85,7 @@ impl<X: SignalExecutor, M: ControllerMemory> ControllerShutdownFailure<X, M> {
     /// Observation is present once LP stop succeeded, even if a later step refused.
     pub const fn pending_observation(
         &self,
-    ) -> Option<oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation> {
+    ) -> Option<oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation> {
         match &self._retained {
             Retained::Retired(retired) => Some(retired.pending_observation()),
             Retained::Reset { failure } => Some(failure.pending_observation()),
@@ -194,7 +194,7 @@ impl<M: ControllerMemory> ControllerRetired<M> {
     /// Pending sampled before LP quieting; retained across the actor leave.
     pub const fn pending_observation(
         &self,
-    ) -> oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
+    ) -> oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
         self.stopped.pending_observation()
     }
     /// Identity checked before a retirement can satisfy an actor leave.
@@ -203,7 +203,7 @@ impl<M: ControllerMemory> ControllerRetired<M> {
     }
 
     /// Borrow authority for the actor's PHY/BTBB leave before reset.
-    pub fn task_owner(&self) -> &oer_esp32s31_hal::bluetooth::TaskOwner {
+    pub fn task_owner(&self) -> &oer_chips_esp32s31_hal::bluetooth::TaskOwner {
         self.task.hal()
     }
 
@@ -257,7 +257,7 @@ impl<M: ControllerMemory> ControllerResetTimerPending<M> {
     /// Pending observed before LP quieting, preserved through reset.
     pub const fn pending_observation(
         &self,
-    ) -> oer_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
+    ) -> oer_chips_esp32s31_hal::bluetooth::BluetoothModemLpTimerPendingObservation {
         self.engine.pending_observation()
     }
     /// Take the timer from its handler, which gives it up only after the

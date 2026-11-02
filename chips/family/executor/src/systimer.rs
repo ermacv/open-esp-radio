@@ -6,9 +6,9 @@
 
 use crate::binding::Binding;
 use crate::chip::{Comparators as Owner, Counter, PortOf};
-use oer_espressif_platform_port::{Comparators as _, ExecutorPlatform};
+use oer_chips_family_platform_port::{Comparators as _, ExecutorPlatform};
 
-pub use oer_espressif_platform_port::{AlarmPart, Comparator};
+pub use oer_chips_family_platform_port::{AlarmPart, Comparator};
 
 /// The running timer's comparator and counter owners of port `P`, moved
 /// from the reset root; the alarm parts go to their table entries.

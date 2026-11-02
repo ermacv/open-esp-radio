@@ -1,5 +1,5 @@
 //! Blobray's canonical-record contract over the shared structural index.
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_model::*;
 use std::ops::Deref;
 
 /// Construction guarantees the earlier-expression DAG that Blobray's

@@ -1,5 +1,5 @@
 [package]
-name = "oer-firmware-probes-esp32s31-mcycle"
+name = "oer-hil-probes-esp32s31-mcycle"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,20 +10,20 @@ description = "A staged image that measures the RISC-V cycle counter against the
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-espressif-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-espressif-executor = { path = "../../../chips/family/executor" }
-oer-espressif-platform-port = { path = "../../../chips/family/platform-port", features = ["esp32s31"] }
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-time = { path = "../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../../chips/family/interrupt-table" }
-oer-riscv = { path = "../../../portable/riscv" }
+oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-chips-family-platform-port = { path = "../../../chips/family/platform-port", features = ["esp32s31"] }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
 
 [build-dependencies]
-oer-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

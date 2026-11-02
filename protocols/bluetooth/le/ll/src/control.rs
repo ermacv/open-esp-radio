@@ -5,14 +5,14 @@
 //! This module does not own SN/NESN, encryption, ACL delivery or LL teardown.
 //! Optional features are deliberately absent until their procedures are closed.
 
-use oer_bluetooth_le_wire::control::{
+use oer_protocols_bluetooth_le_wire::control::{
     LeChannelMapUpdate, LeConnectionUpdate, LeControlResponse, LePduDecodeError,
     LePeripheralDataFragment, LePeripheralPdu, LeVersionInformation, decode_peripheral_pdu,
 };
 
 use crate::connection::{LePeripheralChannelMapUpdateError, LePeripheralConnectionUpdateError};
 use crate::data_length::LeDataLengthProcedure;
-use oer_bluetooth_le_wire::data_length::{LeDataLength, LeDataLengths};
+use oer_protocols_bluetooth_le_wire::data_length::{LeDataLength, LeDataLengths};
 
 /// Page-zero feature result produced by one Host-initiated procedure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -2,8 +2,8 @@
 extern crate alloc;
 use alloc::boxed::Box;
 use core::any::Any;
-use oer_ieee80211_core_roles_sta::{epoch::EpochContext, machine::StaTxContext};
-use oer_radio_port::{LoanedContext, PortContext, Root, StaticId};
+use oer_protocols_ieee80211_core_roles_sta::{epoch::EpochContext, machine::StaTxContext};
+use oer_protocols_radio_port::{LoanedContext, PortContext, Root, StaticId};
 
 pub enum Declaration {}
 type Id = StaticId<Declaration>;

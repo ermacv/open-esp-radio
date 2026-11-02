@@ -6,7 +6,7 @@ use crate::esp32s31::evidence::{events, stop};
 use crate::esp32s31::harness::{Result, case, direct, setup};
 use crate::esp32s31::i2c::I2c;
 use crate::esp32s31::layout::FREQUENCY_CONTROL;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_domain::{
     CallBinding, CallBoundary, CallCapture, CallDeclaration, CallResponse, CallValue,
     ComparisonVerdict, DeviceBehavior, DeviceDeclaration, ExecutionEvent, ExecutionEvidence,
     ExecutionStop, ModelStatus, RegionLifetime, RegisterCell, SessionReset,
@@ -38,7 +38,7 @@ pub fn exercise(ctx: &mut I2c) -> Result<()> {
         overrides: vec![],
     });
     phase.calls = vec![CallDeclaration {
-        repetition: oer_analysis_blobray_domain::CallRepetition::Finite,
+        repetition: oer_tools_analysis_blobray_domain::CallRepetition::Finite,
         id: "delay".into(),
         applicability: "explicit ROM delay interception".into(),
         lifetime: RegionLifetime::Phase,

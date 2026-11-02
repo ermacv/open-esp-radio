@@ -1,5 +1,5 @@
 //! Human names of reference classifications.
-use oer_analysis_blobray_application::references::Kind;
+use oer_tools_analysis_blobray_application::references::Kind;
 
 pub fn kind_human(kind: Kind) -> &'static str {
     match kind {

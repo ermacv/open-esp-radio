@@ -1,5 +1,5 @@
 //! Build only the pinned BusyBox udhcpc applet, without root or radio access.
-use oer_os_process as process;
+use oer_tools_os_process as process;
 use std::{
     fs,
     path::Path,
@@ -20,7 +20,7 @@ fn command(root: &Path, program: &str) -> Command {
 }
 
 pub fn verify(bytes: &[u8]) -> Result<()> {
-    if oer_os_durable::sha256_bytes(bytes) != SHA256 {
+    if oer_tools_os_durable::sha256_bytes(bytes) != SHA256 {
         return Err("BusyBox archive SHA-256 mismatch".into());
     }
     Ok(())
@@ -39,14 +39,14 @@ pub fn build(root: &Path) -> Result<()> {
     if !compiler.status.success() {
         return Err("cannot inspect udhcpc compiler".into());
     }
-    let inputs = serde_json::json!({"source":URL,"source_sha256":SHA256,"version":"1.38.0","license":"GPL-2.0-only","config":std::str::from_utf8(&seed)?,"compiler":String::from_utf8(compiler.stdout)?,"builder_sha256":oer_os_durable::sha256_bytes(include_bytes!("udhcpc.rs"))});
+    let inputs = serde_json::json!({"source":URL,"source_sha256":SHA256,"version":"1.38.0","license":"GPL-2.0-only","config":std::str::from_utf8(&seed)?,"compiler":String::from_utf8(compiler.stdout)?,"builder_sha256":oer_tools_os_durable::sha256_bytes(include_bytes!("udhcpc.rs"))});
     let binary = out.join("busybox");
     let record = out.join("provenance.json");
     if let (Ok(bytes), Ok(old)) = (fs::read(&binary), fs::read(&record))
         && let Ok(old) = serde_json::from_slice::<serde_json::Value>(&old)
         && old.get("inputs") == Some(&inputs)
         && old.get("binary_sha256").and_then(serde_json::Value::as_str)
-            == Some(oer_os_durable::sha256_bytes(&bytes).as_str())
+            == Some(oer_tools_os_durable::sha256_bytes(&bytes).as_str())
     {
         return Ok(());
     }
@@ -111,7 +111,7 @@ pub fn build(root: &Path) -> Result<()> {
         return Err("DHCP build must contain only udhcpc".into());
     }
     let bytes = fs::read(source.join("busybox"))?;
-    let provenance = serde_json::json!({"inputs":inputs,"binary_sha256":oer_os_durable::sha256_bytes(&bytes),"applets":["udhcpc"]});
+    let provenance = serde_json::json!({"inputs":inputs,"binary_sha256":oer_tools_os_durable::sha256_bytes(&bytes),"applets":["udhcpc"]});
     let mut staged = tempfile::NamedTempFile::new_in(&out)?;
     std::io::Write::write_all(&mut staged, &bytes)?;
     use std::os::unix::fs::PermissionsExt as _;

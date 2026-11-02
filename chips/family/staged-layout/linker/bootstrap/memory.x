@@ -1,6 +1,6 @@
 /* Physical address spaces used by the Flash-resident bootstrap image.
    Addresses and sizes are the chip layout's symbols
-   (`oer-espressif-staged-layout` `build`). */
+   (`oer-chips-family-staged-layout` `build`). */
 MEMORY
 {
     /* The staged chips have unified instruction/data SRAM.  ESP-IDF uses the

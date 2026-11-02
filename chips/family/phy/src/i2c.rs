@@ -1,11 +1,11 @@
 //! Finite retained-wake analog-I2C host sequencing.
-use oer_espressif_analog::model::Host;
+use oer_chips_family_analog::model::Host;
 
 /// One finite failure while publishing current-vendor retained-wake analog
 /// initialization through both PHY-I²C hosts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyI2cInitializationStageTwoError {
-    Transition(oer_espressif_analog::TransitionError),
+    Transition(oer_chips_family_analog::TransitionError),
     BusyAtStart { host: Host },
     CompletionTimeout { host: Host, pair: u8 },
 }
@@ -24,7 +24,7 @@ pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess>(
     maximum_observations: u32,
     mut wait: impl AsyncFnMut(),
 ) -> Result<(), PhyI2cInitializationStageTwoError> {
-    use oer_espressif_analog::{ParallelAction, ParallelHost, ParallelTransition};
+    use oer_chips_family_analog::{ParallelAction, ParallelHost, ParallelTransition};
     let host = |host| match host {
         ParallelHost::First => Host::Host0,
         ParallelHost::Second => Host::Host1,
@@ -235,8 +235,8 @@ mod tests {
             future::Future,
             task::{Context, Poll, Waker},
         };
-        use oer_time::{Clock, Duration, Timer};
-        let clock = oer_time_virtual::VirtualClock::<1>::new();
+        use oer_portable_time::{Clock, Duration, Timer};
+        let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
         let mut access = FakeParallelI2c {
             busy_after_start_host: Some(Host::Host1),
             ..FakeParallelI2c::default()
@@ -267,7 +267,7 @@ mod tests {
         assert_eq!(access.events.last(), Some(&ParallelEvent::RestoreRadioMap));
         assert_eq!(
             clock.now(),
-            oer_time_virtual::START
+            oer_portable_time_virtual::START
                 .checked_add(Duration::from_micros(2))
                 .unwrap()
         );
@@ -278,8 +278,8 @@ mod tests {
             future::Future,
             task::{Context, Poll, Waker},
         };
-        use oer_time::{Duration, Timer};
-        let clock = oer_time_virtual::VirtualClock::<1>::new();
+        use oer_portable_time::{Duration, Timer};
+        let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
         let mut access = FakeParallelI2c {
             busy_after_start_host: Some(Host::Host0),
             ..FakeParallelI2c::default()

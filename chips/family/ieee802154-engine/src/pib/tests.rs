@@ -1,12 +1,12 @@
 //! PIB behavior read from the pinned `esp_ieee802154_pib.c`.
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex, Ieee802154TxPowerLevels,
 };
 use std::vec::Vec;
 
 use super::{Ieee802154Pib, Ieee802154PibDefaults};
-use oer_ieee802154_port::AutoPendingMode;
+use oer_protocols_ieee802154_port::AutoPendingMode;
 
 use crate::engine::tests::{Call, Hw};
 
@@ -136,7 +136,7 @@ fn defaults_hold_a_threshold_of_the_kconfig_range() {
     for threshold in [-121, 1] {
         assert_eq!(
             Ieee802154PibDefaults::new(Ieee802154CcaMode::Carrier, threshold),
-            Err(oer_ieee802154_port::CcaThresholdError::OutOfRange {
+            Err(oer_protocols_ieee802154_port::CcaThresholdError::OutOfRange {
                 requested_dbm: threshold,
                 lowest_dbm: -120,
                 highest_dbm: 0,
@@ -161,10 +161,10 @@ fn permit_with_ceiling(
     number: u8,
     ceiling_mbm: i32,
 ) -> Result<super::Ieee802154Permit, super::CeilingBelowLowestLevel> {
-    let permitted = oer_radio_regulatory::TEST_DOMAIN
+    let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
         .permit(channel(number))
         .unwrap();
-    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+    let ceiling = permitted.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: Some(ceiling_mbm),

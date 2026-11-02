@@ -130,7 +130,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             .bluetooth_controller_core
             .write_scheduler_lifecycle_request(|w| {
                 w.set_value(
-                    oer_esp32s31_pac::bt_mac::scheduler_lifecycle_request::Value::Request.bits(),
+                    oer_chips_esp32s31_pac::bt_mac::scheduler_lifecycle_request::Value::Request.bits(),
                 );
             });
         device_fence();
@@ -179,7 +179,7 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
         let bank = &mut self.peripherals.bluetooth_interrupt_bank;
         bank.modify_irq_enable_0(|w| {
             w.set_source_21(false);
-            w.set_sources_27_28(oer_mmio::Bits::constant::<0x0>());
+            w.set_sources_27_28(oer_portable_mmio::Bits::constant::<0x0>());
         });
         bank.modify_irq_enable_1(|w| {
             w.set_source_3(false);

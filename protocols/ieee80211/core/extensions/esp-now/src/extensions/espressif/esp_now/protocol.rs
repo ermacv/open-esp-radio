@@ -6,11 +6,11 @@
 
 use crate::extensions::espressif::phy::EspNowPhyMode;
 use core::fmt;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use {
-    oer_ieee80211_core_upper_mac::sequence::SequenceCounter,
-    oer_ieee80211_wire::{
+    oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
+    oer_protocols_ieee80211_wire::{
         channel::WifiChannel,
         extensions::espressif::esp_now::{
             ESP_NOW_V1_MAX_PAYLOAD_LEN, ESP_NOW_V2_MAX_PAYLOAD_LEN, EspNowDestination,
@@ -20,8 +20,8 @@ use {
     },
 };
 
-use oer_ieee80211_contracts_port::{ChannelContextId, VifRole};
-use oer_ieee80211_core_arbiter::interface::BoundVirtualInterface;
+use oer_protocols_ieee80211_contracts_port::{ChannelContextId, VifRole};
+use oer_protocols_ieee80211_core_arbiter::interface::BoundVirtualInterface;
 
 /// Default source-owned peer storage. The const-generic table remains usable
 /// with a smaller application-selected capacity.

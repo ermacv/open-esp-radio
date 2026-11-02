@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-ieee80211-driver"
+name = "oer-chips-esp32s31-ieee80211-driver"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,47 +8,47 @@ repository.workspace = true
 description = "Role-neutral ESP32-S31 Wi-Fi device composition"
 
 [dependencies]
-oer-wire = { path = "../../../../portable/wire" }
-oer-sync = { path = "../../../../portable/sync" }
-oer-events = { path = "../../../../portable/events" }
+oer-portable-wire = { path = "../../../../portable/wire" }
+oer-portable-sync = { path = "../../../../portable/sync" }
+oer-portable-events = { path = "../../../../portable/events" }
 atomic-waker = "1.1.2"
 heapless = "0.9.2"
 pin-project = "1.1.13"
 subtle = { version = "2.6.1", default-features = false }
 zeroize = { version = "1.9.0", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
-oer-espressif-coex = { path = "../../../family/coex" }
-oer-esp32s31-hal = { path = "../../hal" }
-oer-esp32s31-phy = { path = "../../phy" }
-oer-esp32s31-radio-client = { path = "../../radio/client" }
-oer-ieee80211-contracts-port = { path = "../../../../protocols/ieee80211/contracts/port" }
-oer-memory = { path = "../../../../portable/memory" }
-oer-radio-port = { path = "../../../../protocols/radio/port" }
-oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
-oer-ieee80211-contracts-security = { path = "../../../../protocols/ieee80211/contracts/security" }
-oer-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
-oer-time = { path = "../../../../portable/time" }
-oer-espressif-interrupt-table = { path = "../../../family/interrupt-table" }
+oer-chips-family-coex = { path = "../../../family/coex" }
+oer-chips-esp32s31-hal = { path = "../../hal" }
+oer-chips-esp32s31-phy = { path = "../../phy" }
+oer-chips-esp32s31-radio-client = { path = "../../radio/client" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../../protocols/ieee80211/contracts/port" }
+oer-portable-memory = { path = "../../../../portable/memory" }
+oer-protocols-radio-port = { path = "../../../../protocols/radio/port" }
+oer-protocols-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire" }
+oer-protocols-ieee80211-contracts-security = { path = "../../../../protocols/ieee80211/contracts/security" }
+oer-protocols-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
+oer-portable-time = { path = "../../../../portable/time" }
+oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table" }
 
 [target.'cfg(oer_debug_control)'.dependencies]
-oer-espressif-staged-runtime = { path = "../../../family/staged-runtime" }
-oer-trace = { path = "../../../../portable/trace" }
+oer-chips-family-staged-runtime = { path = "../../../family/staged-runtime" }
+oer-portable-trace = { path = "../../../../portable/trace" }
 
 [features]
 default = []
-test-support = ["oer-esp32s31-hal/test-support", "oer-espressif-interrupt-table/host-signal"]
+test-support = ["oer-chips-esp32s31-hal/test-support", "oer-chips-family-interrupt-table/host-signal"]
 
 [dev-dependencies]
-oer-embassy-net = { path = "../../../../portable/embassy/net" }
-oer-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
-oer-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
-oer-espressif-ieee80211-policy = { path = "../../../family/ieee80211-policy" }
-oer-ieee80211-core-upper-mac = { path = "../../../../protocols/ieee80211/core/upper-mac" }
-oer-ieee80211-testing-conformance = { path = "../../../../protocols/ieee80211/testing/conformance" }
+oer-portable-embassy-net = { path = "../../../../portable/embassy/net" }
+oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-protocols-ieee80211-wire = { path = "../../../../protocols/ieee80211/wire", features = ["test-support"] }
+oer-chips-family-ieee80211-policy = { path = "../../../family/ieee80211-policy" }
+oer-protocols-ieee80211-core-upper-mac = { path = "../../../../protocols/ieee80211/core/upper-mac" }
+oer-protocols-ieee80211-testing-conformance = { path = "../../../../protocols/ieee80211/testing/conformance" }
 
-oer-espressif-interrupt-table = { path = "../../../family/interrupt-table", features = ["host-signal"] }
-oer-time-virtual = { path = "../../../../portable/time-virtual" }
-oer-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
+oer-chips-family-interrupt-table = { path = "../../../family/interrupt-table", features = ["host-signal"] }
+oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 [target.'cfg(not(target_os = "none"))'.dev-dependencies]
 tempfile = "=3.27.0"

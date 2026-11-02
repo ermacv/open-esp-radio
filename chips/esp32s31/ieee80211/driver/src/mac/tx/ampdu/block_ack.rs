@@ -1,13 +1,13 @@
 //! ESP32-S31 BlockAck completion observations.
 //!
 //! Frame parsing and one generic agreement state machine live in
-//! [`oer_ieee80211_wire::block_ack`], the station's originator in
-//! `oer_ieee80211_core_upper_mac::block_ack::originator` and the vendor TIDs and Dialog Tokens in
-//! `oer_espressif_ieee80211_policy::block_ack`. This module retains only
+//! [`oer_protocols_ieee80211_wire::block_ack`], the station's originator in
+//! `oer_protocols_ieee80211_core_upper_mac::block_ack::originator` and the vendor TIDs and Dialog Tokens in
+//! `oer_chips_family_ieee80211_policy::block_ack`. This module retains only
 //! the S31 window bound and the three-register completion snapshot. It still owns no DMA address or register access.
 
-use oer_ieee80211_contracts_port::BlockAckReport;
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_contracts_port::BlockAckReport;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 /// Strict S31 TX window recovered from the fixed vendor queue geometry.
 pub const TX_BLOCK_ACK_MAX_WINDOW: u16 = 32;
 pub const TX_AMPDU_SLOT_CAPACITY: usize = TX_BLOCK_ACK_MAX_WINDOW as usize;

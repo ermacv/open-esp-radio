@@ -5,11 +5,11 @@
 //! borrow. Queue saturation is an ordinary observation loss and must never
 //! backpressure the primary radio owner. Which frames a monitor keeps is
 //! the runtime's policy; the injected MPDU's geometry is checked by
-//! `oer_ieee80211_wire::monitor_injection`.
+//! `oer_protocols_ieee80211_wire::monitor_injection`.
 
 use core::{fmt, num::NonZeroU32};
 
-use oer_ieee80211_wire::{channel::WifiChannel, monitor_injection::MonitorInjectionMpdu};
+use oer_protocols_ieee80211_wire::{channel::WifiChannel, monitor_injection::MonitorInjectionMpdu};
 
 use crate::MacRxMetadata;
 

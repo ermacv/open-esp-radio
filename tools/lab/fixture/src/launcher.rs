@@ -7,7 +7,7 @@ use crate::{ArtifactRole, Provider};
 /// The provider lease's handoff from a fixed launcher to its helper.
 #[cfg(target_os = "linux")]
 mod handoff {
-    use oer_os_process::launch_handoff::LaunchHandoff;
+    use oer_tools_os_process::launch_handoff::LaunchHandoff;
 
     pub(super) const BOUND: &str = "OPEN_RADIO_GENERATION_BOUND";
     pub(super) const DIRECTORY: &str = "OPEN_RADIO_GENERATION_DIR";
@@ -86,7 +86,7 @@ pub fn enter(target: LaunchTarget) -> crate::Result<std::fs::File> {
     use std::os::unix::process::CommandExt as _;
 
     if std::env::var(handoff::BOUND).as_deref() != Ok(target.marker()) {
-        let error = oer_os_process::command(target.launcher())
+        let error = oer_tools_os_process::command(target.launcher())
             .args(std::env::args_os().skip(1))
             .exec();
         return Err(format!("{}: {error}", target.launcher()).into());
@@ -124,10 +124,10 @@ fn adopt_lease(target: LaunchTarget) -> crate::Result<std::fs::File> {
     }
     // The shared lock stays with the inherited descriptor.
     let path = format!("/var/lib/open-radio/fixture/{provider}/session.lock");
-    Ok(oer_os_process::lock::FileLock::try_lock(
+    Ok(oer_tools_os_process::lock::FileLock::try_lock(
         file,
         Path::new(&path),
-        oer_os_process::lock::Mode::Shared,
+        oer_tools_os_process::lock::Mode::Shared,
     )?
     .ok_or("the provider lease is being updated")?
     .into_file())
@@ -151,7 +151,7 @@ fn launch(target: LaunchTarget) -> crate::Result<std::convert::Infallible> {
     }
     let helper = lease.artifact(target.role())?;
     handoff::LEASE.pass(lease.file())?;
-    let error = oer_os_process::command(&helper)
+    let error = oer_tools_os_process::command(&helper)
         .args(std::env::args_os().skip(1))
         .env(handoff::BOUND, target.marker())
         .env(handoff::DIRECTORY, lease.generation())

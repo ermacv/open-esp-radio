@@ -35,7 +35,7 @@
 //! Portable IEEE 802.11 frame-exchange state above the lower-MAC port.
 //!
 //! One lower-MAC submission is one hardware transmission attempt
-//! (`oer-ieee80211-contracts-port`). Everything a backend does not do on its own
+//! (`oer-protocols-ieee80211-contracts-port`). Everything a backend does not do on its own
 //! lies above that port and is decided here, once for every backend:
 //!
 //! - [`retry`]: the retry counters, limits and Retry bit of one MPDU, and the
@@ -61,14 +61,14 @@
 //! the channels it visits; [`vif`] routes a received MPDU of a same-channel
 //! station and SoftAP pair to its interface. Transmit owners retain PN allocation,
 //! the [`sequence`] number spaces and Block Ack negotiation/originator windows. Wire formats remain in
-//! `oer-ieee80211-wire`.
+//! `oer-protocols-ieee80211-wire`.
 //!
 //! The package is sans-IO: completions and the radio time enter as values,
 //! attempt plans and reports leave as values, and nothing waits. The station
-//! service in `oer-ieee80211-runtime` submits to the port and feeds its
+//! service in `oer-protocols-ieee80211-runtime` submits to the port and feeds its
 //! terminals into rate selection ([`rate_selection::RateSelection::learn`]). Vendor retry schedules, limits and
 //! duration estimates are parameters a profile supplies, such as
-//! `oer-espressif-ieee80211-policy`.
+//! `oer-chips-family-ieee80211-policy`.
 
 #[cfg(test)]
 extern crate std;
@@ -115,8 +115,8 @@ pub mod vif;
 
 /// A literal test sequence number; panics outside twelve bits.
 #[cfg(test)]
-pub(crate) const fn seq(value: u16) -> oer_ieee80211_wire::sequence::SequenceNumber {
-    match oer_ieee80211_wire::sequence::SequenceNumber::new(value) {
+pub(crate) const fn seq(value: u16) -> oer_protocols_ieee80211_wire::sequence::SequenceNumber {
+    match oer_protocols_ieee80211_wire::sequence::SequenceNumber::new(value) {
         Some(sequence) => sequence,
         None => panic!("test sequence number exceeds twelve bits"),
     }

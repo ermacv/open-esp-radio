@@ -209,7 +209,7 @@ pub enum PhyParamTrackingCompletion {
 /// and committed its semantic reference-temperature outcome.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::parameters::{
+/// use oer_chips_esp32s31_phy::tracking::parameters::{
 ///     PhyParamTrackingCompletion, PhyParamTrackingRfpllCompletion,
 /// };
 ///
@@ -230,7 +230,7 @@ pub struct PhyParamTrackingRfpllCompletion {
 /// unconditional TX-gain-compensation restore and committed its references.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::tracking::parameters::{
+/// use oer_chips_esp32s31_phy::tracking::parameters::{
 ///     PhyCalibrationTrackClass, PhyParamTrackingCalibrationCompletion,
 ///     PhyParamTrackingCompletion,
 /// };

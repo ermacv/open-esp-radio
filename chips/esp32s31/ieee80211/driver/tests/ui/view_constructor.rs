@@ -1,8 +1,8 @@
 #![no_std]
-use oer_esp32s31_ieee80211_driver::{lower_mac::*, ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile}};
-use oer_time::Timer;
+use oer_chips_esp32s31_ieee80211_driver::{lower_mac::*, ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile}};
+use oer_portable_time::Timer;
 
-pub fn borrow<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities>(
+pub fn borrow<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer, C: oer_chips_esp32s31_ieee80211_driver::lower_mac::RadioCoexPriorities>(
     owner: &mut CoreOwner<LowerMacCore<'core, 'slot, P, E, T, C, 512>>,
 ) {
     #[cfg(ui_reject)]

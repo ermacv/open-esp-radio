@@ -1,5 +1,5 @@
 [package]
-name = "oer-embassy-net"
+name = "oer-portable-embassy-net"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,22 +9,22 @@ description = "Owned-packet boundary for the optimized open ESP radio Embassy/Xa
 
 [dependencies]
 embassy-futures = "0.1.2"
-oer-sync = { path = "../../sync" }
-oer-network-port = { path = "../../../protocols/network/port" }
-oer-network-wire = { path = "../../../protocols/network/wire" }
-oer-memory = { path = "../../memory" }
+oer-portable-sync = { path = "../../sync" }
+oer-protocols-network-port = { path = "../../../protocols/network/port" }
+oer-protocols-network-wire = { path = "../../../protocols/network/wire" }
+oer-portable-memory = { path = "../../memory" }
 xarxa-driver = { git = "https://github.com/ermacv/xarxa.git", rev = "5b6f11a793c3b07e5ef5be39f3ad5e9b6e0fa711", features = ["async", "external-origin"] }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "073d3fc49234db76005cb0ea1a86097d5f633c2d", features = ["medium-ethernet", "ipv4", "dhcpv4", "icmp-ping-reply"] }
 
 [dev-dependencies]
 # Link the pinned runner's time ABI. Tests never set or advance this driver;
-# service deadlines and stack events use a per-test oer-time-virtual clock.
-# The queue size is oer-embassy-time's: the workspace unifies the features of
+# service deadlines and stack events use a per-test oer-portable-time-virtual clock.
+# The queue size is oer-portable-embassy-time's: the workspace unifies the features of
 # both test builds, and two generic-queue sizes do not compile together.
 embassy-time = { version = "0.5.1", features = ["mock-driver", "generic-queue-64"] }
-oer-time = { path = "../../time" }
-oer-time-virtual = { path = "../../time-virtual" }
-oer-memory = { path = "../../memory", features = ["host-context"] }
+oer-portable-time = { path = "../../time" }
+oer-portable-time-virtual = { path = "../../time-virtual" }
+oer-portable-memory = { path = "../../memory", features = ["host-context"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 owned-embassy-net = { package = "embassy-net", git = "https://github.com/ermacv/embassy.git", rev = "073d3fc49234db76005cb0ea1a86097d5f633c2d", features = ["medium-ethernet", "ipv4", "ipv4-fragmentation", "ipv4-reassembly", "udp"] }
 

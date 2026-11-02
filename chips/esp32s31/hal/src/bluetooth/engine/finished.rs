@@ -1,7 +1,7 @@
 //! A finished-list fence belongs to the engine epoch that captured it.
 
 use crate::bluetooth;
-use oer_espressif_bluetooth_engine::phase::EngineEpoch;
+use oer_chips_family_bluetooth_engine::phase::EngineEpoch;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct EngineFinishedListObservation {

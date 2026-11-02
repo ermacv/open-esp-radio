@@ -1,5 +1,5 @@
 [package]
-name = "oer-events"
+name = "oer-portable-events"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

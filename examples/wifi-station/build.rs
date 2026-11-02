@@ -19,7 +19,7 @@ fn main() -> Result<(), Error> {
     println!("cargo:rustc-check-cfg=cfg(oer_wifi_station_configured)");
     println!("cargo:rerun-if-env-changed={PROFILE}");
     if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
-        oer_esp32s31_layout::build::configure_runtime("oer-firmware-apps-wifi-station")?;
+        oer_chips_esp32s31_layout::build::configure_runtime("oer-examples-wifi-station")?;
     }
     let station = env::var_os("CARGO_FEATURE_STATION").is_some();
     profile::composition(env::var_os(PROFILE).is_some(), station)?;

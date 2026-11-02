@@ -1,4 +1,4 @@
-use oer_ieee80211_wire::extensions::wmm::WmmAcParameters;
+use oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters;
 
 use super::*;
 
@@ -18,9 +18,9 @@ impl BackoffEntropy for Seeded {
 
 const BEST_EFFORT: WmmAcParameters = WmmAcParameters {
     admission_control_mandatory: false,
-    aifsn: oer_wire::U8::constant::<3>(),
-    ecw_min: oer_wire::U8::constant::<4>(),
-    ecw_max: oer_wire::U8::constant::<10>(),
+    aifsn: oer_portable_wire::U8::constant::<3>(),
+    ecw_min: oer_portable_wire::U8::constant::<4>(),
+    ecw_max: oer_portable_wire::U8::constant::<10>(),
     txop_limit_units_32_us: 0,
 };
 

@@ -10,9 +10,9 @@
 //!
 //! SOURCE: ESP_IDF_7B9CC1AC_IEEE802154_DRIVER_ETM, ESP_IDF_7B9CC1AC_S31_SOC_ETM.
 
-use oer_esp32s31_pac::modem_etm::{ch_event, ch_task};
-use oer_espressif_ieee802154_mac_values::{Ieee802154EtmChannel, Ieee802154EtmRoute};
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::modem_etm::{ch_event, ch_task};
+use oer_chips_family_ieee802154_mac_values::{Ieee802154EtmChannel, Ieee802154EtmRoute};
+use oer_portable_mmio::Placement;
 
 use super::Ieee802154TaskOwner;
 

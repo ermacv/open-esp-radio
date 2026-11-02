@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     Configured, LowerMacEvent, LowerMacPhase, LowerMacTerminal, StationPhase, StationReceive,
 };
 pub async fn reuse<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &mut P) {

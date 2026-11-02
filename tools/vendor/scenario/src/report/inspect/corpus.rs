@@ -1,8 +1,8 @@
 //! Verified inputs and structural names for presenting Blobray's records.
 use super::*;
 use app::in_process::Executable;
-use oer_analysis_elf::{SymbolKind, classify};
-use oer_analysis_riscv_model::{ObjectId, SymbolId};
+use oer_tools_analysis_elf::{SymbolKind, classify};
+use oer_tools_analysis_riscv_model::{ObjectId, SymbolId};
 use std::path::Path;
 
 pub struct Corpus {
@@ -137,7 +137,7 @@ impl Corpus {
 #[derive(Default)]
 pub(super) struct Metadata {
     pub functions: BTreeMap<(u64, SymbolId), Function>,
-    pub symbols: BTreeMap<SymbolId, oer_analysis_blobray_domain::SymbolRecord>,
+    pub symbols: BTreeMap<SymbolId, oer_tools_analysis_blobray_domain::SymbolRecord>,
     pub sections: BTreeMap<(ObjectId, u32), Vec<u8>>,
     pub section_addresses: BTreeMap<(ObjectId, u32), u64>,
     pub names: BTreeMap<u64, String>,
@@ -174,9 +174,9 @@ impl Metadata {
     pub fn literal_value(
         &self,
         object: &ObjectId,
-        value: &oer_analysis_riscv_model::AbstractValue,
+        value: &oer_tools_analysis_riscv_model::AbstractValue,
     ) -> Option<String> {
-        use oer_analysis_riscv_model::AbstractValue;
+        use oer_tools_analysis_riscv_model::AbstractValue;
         match value {
             AbstractValue::Symbol { symbol, addend } => self.literal(symbol, *addend),
             AbstractValue::Section { section, offset } => app::symbols::string_at(

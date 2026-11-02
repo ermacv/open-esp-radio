@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_contracts_port::InFlight;
+use oer_protocols_ieee80211_contracts_port::InFlight;
 
 pub fn reorder<C, T, M>(first: &mut InFlight<C, T, M>, second: &mut InFlight<C, T, M>) {
     #[cfg(ui_reject)]

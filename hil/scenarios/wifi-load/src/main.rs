@@ -24,15 +24,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
-use oer_services_load::{
+use oer_protocols_hil_agent::base::Service as _;
+use oer_tools_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
+use oer_hil_services_load::{
     CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
     CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
     LinkCollected, Load, MAX_PARTS, PartWindow, PartsCollected, Report, Start, Started, Tracking,
     TrackingCollected, Transmit,
 };
-use oer_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
+use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
 
 /// The image the scenario runs.
 const IMAGE: &str = "esp32s31-sdk-station";
@@ -41,8 +41,8 @@ const SCENARIO: Scenario = Scenario::new(
     "wifi-load",
     IMAGE,
     &[
-        oer_services_wifi_station::Request::KEYS,
-        oer_services_load::Request::KEYS,
+        oer_hil_services_wifi_station::Request::KEYS,
+        oer_hil_services_load::Request::KEYS,
     ],
 )
 .using_router()
@@ -85,7 +85,7 @@ const PAYLOAD: usize = 1400;
 const LEVELS_MBPS: [u64; 4] = [10, 30, 50, 65];
 const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 /// Each level's measuring window, the time before it opens and the drain
-/// after it (the image's run, `oer_services_load::Start`).
+/// after it (the image's run, `oer_hil_services_load::Start`).
 const DURATION_MS: u32 = 5000;
 const DELAY_MS: u32 = 300;
 const DRAIN_MS: u32 = 500;
@@ -98,7 +98,7 @@ const DHCP_TIMEOUT: Duration = Duration::from_secs(30);
 const CALL: Duration = Duration::from_secs(2);
 
 fn main() -> ExitCode {
-    oer_hil_harness::main(&SCENARIO, &CASES)
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
 /// The route the host takes to an address of the station network, as
@@ -173,9 +173,9 @@ fn host_route(to: Ipv4Addr) -> Result<Route, Failure> {
     Ok(route)
 }
 
-fn stand() -> Result<oer_lab_model::Stand, Failure> {
-    oer_lab_model::path()
-        .and_then(|path| oer_lab_model::Stand::load(&path))
+fn stand() -> Result<oer_tools_lab_model::Stand, Failure> {
+    oer_tools_lab_model::path()
+        .and_then(|path| oer_tools_lab_model::Stand::load(&path))
         .map_err(|error| Failure::Incomplete(format!("the stand file: {error}")))
 }
 
@@ -1123,7 +1123,7 @@ mod tests {
         let report = Report {
             window_start_us: 1_000_000,
             window_end_us: 6_000_000,
-            received: oer_services_load::Received {
+            received: oer_hil_services_load::Received {
                 // 65 Mbit in the window's first second, nothing after.
                 window_bytes: 65_000_000 / 8,
                 datagrams: 5804,
@@ -1156,10 +1156,10 @@ mod tests {
     fn a_hart_s_busy_share_is_its_window_less_its_idle_time() {
         let at = |now_us, idle_us, work_us| Load {
             now_us,
-            harts: [oer_services_load::HartLoad { hart: 0, idle_us }]
+            harts: [oer_hil_services_load::HartLoad { hart: 0, idle_us }]
                 .into_iter()
                 .collect(),
-            executors: [oer_services_load::ExecutorLoad {
+            executors: [oer_hil_services_load::ExecutorLoad {
                 executor: 1,
                 hart: 0,
                 level: 2,
@@ -1200,12 +1200,12 @@ mod tests {
         assert!(none["tx"]["ampdu"]["average_subframes"].is_null());
         let sent = counters(
             &Counters {
-                tx: oer_services_load::TxCounts {
-                    ampdu: oer_services_load::TxAmpdu {
+                tx: oer_hil_services_load::TxCounts {
+                    ampdu: oer_hil_services_load::TxAmpdu {
                         aggregates: 4,
                         subframes: 90,
                         subframes_17_32: 3,
-                        ..oer_services_load::TxAmpdu::default()
+                        ..oer_hil_services_load::TxAmpdu::default()
                     },
                 },
                 ..Counters::default()
@@ -1224,7 +1224,7 @@ mod tests {
             &Counters {
                 instructions: 4_000_000,
                 stack_received: 4000,
-                cache: oer_services_load::CacheCounts {
+                cache: oer_hil_services_load::CacheCounts {
                     ibus0: InstructionBus {
                         hits: 98_000,
                         misses: 2_000,
@@ -1239,7 +1239,7 @@ mod tests {
                         next_level_writes: 100,
                         ..DataBus::default()
                     },
-                    ..oer_services_load::CacheCounts::default()
+                    ..oer_hil_services_load::CacheCounts::default()
                 },
                 ..Counters::default()
             },
@@ -1268,14 +1268,14 @@ mod tests {
         let value = counters(
             &Counters {
                 instructions: 1000,
-                cache: oer_services_load::CacheCounts {
+                cache: oer_hil_services_load::CacheCounts {
                     dbus1: DataBus {
                         hits: 10,
                         misses: 10,
                         overflowed: true,
                         ..DataBus::default()
                     },
-                    ..oer_services_load::CacheCounts::default()
+                    ..oer_hil_services_load::CacheCounts::default()
                 },
                 ..Counters::default()
             },
@@ -1311,14 +1311,14 @@ mod tests {
 
     #[test]
     fn a_part_s_polls_are_rated_over_the_window() {
-        let part = oer_services_load::PartWindow {
+        let part = oer_hil_services_load::PartWindow {
             name: "ip".try_into().unwrap(),
             polls: 2000,
             poll_us: 1_500_000,
             ended_poll_us: 1_500_000,
             longest_poll_us: Some(900),
         };
-        let idle = oer_services_load::PartWindow {
+        let idle = oer_hil_services_load::PartWindow {
             name: "console".try_into().unwrap(),
             ..Default::default()
         };
@@ -1334,7 +1334,7 @@ mod tests {
 
     #[test]
     fn a_poll_open_at_the_window_s_end_counts_in_the_share_not_the_mean() {
-        let part = oer_services_load::PartWindow {
+        let part = oer_hil_services_load::PartWindow {
             name: "station".try_into().unwrap(),
             polls: 1,
             poll_us: 10 + 979,

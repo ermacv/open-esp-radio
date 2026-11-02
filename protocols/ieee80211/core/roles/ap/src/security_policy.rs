@@ -2,8 +2,8 @@
 //! and the RSN elements it advertises.
 
 #[cfg(doc)]
-use oer_ieee80211_wire::security::spp::SppScope;
-use oer_ieee80211_wire::security::{
+use oer_protocols_ieee80211_wire::security::spp::SppScope;
+use oer_protocols_ieee80211_wire::security::{
     BssSecurityElements, LinkProtection, ManagementProtection, SppCapability,
     rsn::{
         RSN_AKM_PSK, RSN_AKM_SAE, RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR,

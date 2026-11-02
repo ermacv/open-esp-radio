@@ -3,7 +3,7 @@
 //! The backing cannot be reused while a projected field still owns it:
 //! ```compile_fail,E0499
 //! use core::mem::MaybeUninit;
-//! use oer_memory::{Placed, init_in_place, unpack_placed};
+//! use oer_portable_memory::{Placed, init_in_place, unpack_placed};
 //! struct Pair { first: u32, second: u32 }
 //! let mut storage = MaybeUninit::uninit();
 //! let pair = Placed::init(&mut storage, |p| init_in_place!(p, Pair { first: 1, second: 2 }));
@@ -15,7 +15,7 @@
 //! Projection cannot omit a user destructor:
 //! ```compile_fail,E0509
 //! use core::mem::MaybeUninit;
-//! use oer_memory::{Placed, init_in_place, unpack_placed};
+//! use oer_portable_memory::{Placed, init_in_place, unpack_placed};
 //! struct Owner { value: Box<u8> }
 //! impl Drop for Owner { fn drop(&mut self) {} }
 //! let mut storage = MaybeUninit::uninit();

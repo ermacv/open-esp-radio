@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_os_process::lock::{FileLock, Mode};
+use oer_tools_os_process::lock::{FileLock, Mode};
 use serde::{Deserialize, Serialize};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -129,7 +129,7 @@ impl Owners {
     /// The stand's registry, `owners.json` in its state directory.
     pub fn open() -> Result<Self> {
         Ok(Self::at(
-            oer_lab_model::paths::arbiter()?.join("owners.json"),
+            oer_tools_lab_model::paths::arbiter()?.join("owners.json"),
         ))
     }
 
@@ -151,7 +151,7 @@ impl Owners {
         let mut registry = self.registry()?;
         registry.schema = 1;
         registry.checkouts.insert(checkout, owner);
-        oer_os_durable::atomic_write(&self.path, &serde_json::to_vec_pretty(&registry)?)
+        oer_tools_os_durable::atomic_write(&self.path, &serde_json::to_vec_pretty(&registry)?)
     }
 
     /// The registered checkouts that still exist.
@@ -183,7 +183,7 @@ impl Owners {
 /// registered for the checkout, else that of the main checkout of a
 /// worktree that registered none. Nothing is derived from directory names.
 pub fn resolve(explicit: Option<&str>, root: &Path) -> Result<Owner> {
-    let context = oer_os_process::Context::current()?;
+    let context = oer_tools_os_process::Context::current()?;
     if let Some(owner) = explicit
         .map(str::to_owned)
         .or_else(|| context.get(OWNER_KEY).map(str::to_owned))
@@ -213,7 +213,7 @@ pub fn resolve(explicit: Option<&str>, root: &Path) -> Result<Owner> {
 /// The main checkout of the worktree at `root`: the directory holding the
 /// repository's common `.git`.
 fn main_checkout(root: &Path) -> Option<PathBuf> {
-    let common = oer_os_process::git::text(
+    let common = oer_tools_os_process::git::text(
         root,
         ["rev-parse", "--path-format=absolute", "--git-common-dir"],
     )
@@ -234,7 +234,7 @@ pub fn of_current_checkout() -> Result<Owner> {
 
 /// The owner [`OWNER_ENV`] names, else the checkout's registered one.
 pub fn from_environment() -> Result<Owner> {
-    if let Some(owner) = oer_os_process::Context::current()?.get(OWNER_KEY) {
+    if let Some(owner) = oer_tools_os_process::Context::current()?.get(OWNER_KEY) {
         return Ok(Owner::new(owner)?);
     }
     match std::env::var(OWNER_ENV)

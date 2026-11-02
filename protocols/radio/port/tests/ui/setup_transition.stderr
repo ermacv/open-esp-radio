@@ -1,7 +1,7 @@
 error[E0505]: cannot move out of `owner` because it is borrowed
   --> tests/ui/setup_transition.rs:7:13
    |
- 3 | pub async fn setup<'p, 'id, Id: oer_radio_port::SlotIdentity, B: PortBackend<Id>>(mut owner: Owner<'p, 'id, Id, B, Disabled>) {
+ 3 | pub async fn setup<'p, 'id, Id: oer_protocols_radio_port::SlotIdentity, B: PortBackend<Id>>(mut owner: Owner<'p, 'id, Id, B, Disabled>) {
    |                                                                                   --------- binding `owner` declared here
  4 |     let setup = owner.setup();
    |                 ----- borrow of `owner` occurs here

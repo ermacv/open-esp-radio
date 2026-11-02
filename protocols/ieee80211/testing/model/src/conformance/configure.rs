@@ -1,6 +1,6 @@
 //! Actual FIFO context returns across running, queued and posted disable.
 use super::*;
-use oer_ieee80211_testing_conformance::interface_commands::{Case, Drain, Identity, Trace};
+use oer_protocols_ieee80211_testing_conformance::interface_commands::{Case, Drain, Identity, Trace};
 
 struct Witness {
     allocation: alloc::boxed::Box<u8>,
@@ -46,7 +46,7 @@ pub async fn configure(
         _ => Err("configuration failed to uninstall"),
     }
 }
-fn record<'id, R: InterfaceRole, P: oer_radio_port::PoolPath>(
+fn record<'id, R: InterfaceRole, P: oer_protocols_radio_port::PoolPath>(
     permission: ConfigurePermission<'id, R, P, Witness>,
     returned: &mut Vec<Identity>,
 ) -> ConfigurePermission<'id, R, P, Witness> {
@@ -197,7 +197,7 @@ pub(super) async fn yield_once() {
 }
 
 async fn stop<'p, 'id, Id: SlotIdentity + 'id>(
-    owner: Owner<'p, 'id, Id, Backend<Id>, oer_radio_port::Enabled>,
+    owner: Owner<'p, 'id, Id, Backend<Id>, oer_protocols_radio_port::Enabled>,
     result: Result<Captured, &'static str>,
 ) -> Ended<Id, Backend<Id>, Result<Captured, &'static str>> {
     match owner

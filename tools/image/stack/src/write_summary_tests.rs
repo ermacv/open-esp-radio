@@ -1,9 +1,9 @@
 //! End-to-end RV32 facts, stack words, summaries and callsite substitution.
-use oer_analysis_riscv_analysis::{
+use oer_tools_analysis_riscv_analysis::{
     FunctionInput, PreparedReferences, ResearchOptions, research_with_options, writes::*,
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
 
 mod alignment;
 mod contextual;
@@ -64,7 +64,7 @@ fn try_facts_calls<'m>(
     let mut saved = Saved(RecordBuffer::new(memory));
     research_with_options(
         FunctionInput {
-            traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+            traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
             image: Some(&NoMemory),
             section: 1,
             extent: CodeRange {

@@ -2,8 +2,8 @@
 use crate::captured::{Member, visit_members};
 use crate::in_process::Executable;
 use crate::*;
-use oer_analysis_blobray_analysis::navigation::Facts;
-use oer_analysis_elf::{SymbolKind, classify as elf};
+use oer_tools_analysis_blobray_analysis::navigation::Facts;
+use oer_tools_analysis_elf::{SymbolKind, classify as elf};
 use std::collections::BTreeSet;
 mod queries;
 #[cfg(test)]
@@ -362,7 +362,7 @@ pub struct Assumptions<'a> {
     /// With it, a call the analysis cannot follow keeps the registers this
     /// calling convention preserves; without it, every register is unknown
     /// after such a call.
-    pub abi: Option<oer_analysis_riscv_model::CallAbi>,
+    pub abi: Option<oer_tools_analysis_riscv_model::CallAbi>,
     /// Compute the direct-call graph without summaries, then analyze every
     /// function in callee-first order with shared result/argument contracts.
     /// Constants propagate through any acyclic call depth in two analyses.
@@ -438,12 +438,12 @@ impl ElfSink for Selection {
 /// object's other functions.
 #[allow(clippy::too_many_arguments)]
 fn research_function<'m>(
-    object: &mut oer_analysis_blobray_artifacts::PreparedObject<'_, '_>,
-    references: &mut AdmittedVec<'m, (u32, oer_analysis_riscv_analysis::PreparedReferences<'m>)>,
+    object: &mut oer_tools_analysis_blobray_artifacts::PreparedObject<'_, '_>,
+    references: &mut AdmittedVec<'m, (u32, oer_tools_analysis_riscv_analysis::PreparedReferences<'m>)>,
     symbol: &SymbolId,
     input: u64,
     payload: &ArtifactId,
-    abi: Option<oer_analysis_riscv_model::CallAbi>,
+    abi: Option<oer_tools_analysis_riscv_model::CallAbi>,
     pointer_chains: bool,
     returns: &dyn CallSummaries,
     tables: &dyn TableEntries,
@@ -452,8 +452,8 @@ fn research_function<'m>(
     control: &mut dyn RunControl,
     sink: &mut dyn FunctionSink,
 ) -> Result<(
-    oer_analysis_riscv_analysis::AnalysisSummary,
-    oer_analysis_riscv_analysis::ProvenTables<'m, JumpDispatch>,
+    oer_tools_analysis_riscv_analysis::AnalysisSummary,
+    oer_tools_analysis_riscv_analysis::ProvenTables<'m, JumpDispatch>,
 )> {
     let mut position = RunPosition {
         phase: RunPhase::AnalyzeFunction,
@@ -474,7 +474,7 @@ fn research_function<'m>(
         {
             index
         } else {
-            let prepared = oer_analysis_riscv_analysis::PreparedReferences::new(
+            let prepared = oer_tools_analysis_riscv_analysis::PreparedReferences::new(
                 view.relocations,
                 view.section,
                 decoder,
@@ -484,9 +484,9 @@ fn research_function<'m>(
             references.push((view.section, prepared), control.position())?;
             references.len() - 1
         };
-        oer_analysis_riscv_analysis::research_following_tables_with_options(
-            oer_analysis_riscv_analysis::FunctionInput {
-                traps: oer_analysis_riscv_analysis::TrapSemantics::Unknown,
+        oer_tools_analysis_riscv_analysis::research_following_tables_with_options(
+            oer_tools_analysis_riscv_analysis::FunctionInput {
+                traps: oer_tools_analysis_riscv_analysis::TrapSemantics::Unknown,
                 image: view.image,
                 section: view.section,
                 extent: view.extent,
@@ -497,7 +497,7 @@ fn research_function<'m>(
                 returns,
                 call_behavior: &UnknownCallBehavior,
             },
-            &oer_analysis_riscv_analysis::RecognizedTables {
+            &oer_tools_analysis_riscv_analysis::RecognizedTables {
                 entries: tables,
                 section: view.section,
             },
@@ -505,7 +505,7 @@ fn research_function<'m>(
             memory,
             control,
             sink,
-            oer_analysis_riscv_analysis::ResearchOptions {
+            oer_tools_analysis_riscv_analysis::ResearchOptions {
                 abi,
                 relocated_loads: pointer_chains,
                 ..Default::default()
@@ -527,7 +527,7 @@ impl FunctionSink for Records<'_, '_> {
 fn analyze_object(
     input: u64,
     member: Member<'_>,
-    abi: Option<oer_analysis_riscv_model::CallAbi>,
+    abi: Option<oer_tools_analysis_riscv_model::CallAbi>,
     read_only: &[ReadOnlyWindow],
     names: &[String],
     pointer_chains: bool,
@@ -617,7 +617,7 @@ fn analyze_object(
         return Ok(());
     }
     let mut entered = false;
-    let result = oer_analysis_blobray_artifacts::with_prepared_object(
+    let result = oer_tools_analysis_blobray_artifacts::with_prepared_object(
         bytes,
         &payload,
         read_only,
@@ -643,13 +643,13 @@ fn analyze_object(
             let mut image_facts = None;
             match object_type {
                 Some(elf::ObjectKind::Relocatable) => {
-                    match oer_analysis_riscv_program::tables::ObjectTables::new(bytes, memory, c) {
+                    match oer_tools_analysis_riscv_program::tables::ObjectTables::new(bytes, memory, c) {
                         Ok(tables) => object_tables = Some(tables),
                         Err(error) => unreadable(error, c)?,
                     }
                 }
                 Some(elf::ObjectKind::Executable) => {
-                    match oer_analysis_riscv_program::facts::ImageFacts::new(
+                    match oer_tools_analysis_riscv_program::facts::ImageFacts::new(
                         bytes, read_only, memory, c,
                     ) {
                         Ok(facts) => image_facts = Some(facts),
@@ -660,7 +660,7 @@ fn analyze_object(
             }
             let image_tables = image_facts
                 .as_ref()
-                .map(|image| oer_analysis_riscv_program::tables::ImageTables { image });
+                .map(|image| oer_tools_analysis_riscv_program::tables::ImageTables { image });
             let tables: &dyn TableEntries = match (&object_tables, &image_tables) {
                 (Some(tables), _) => tables,
                 (None, Some(tables)) => tables,
@@ -918,7 +918,7 @@ pub fn register_accesses(
                         return None;
                     };
                     stored.as_deref().and_then(|stored| {
-                        oer_analysis_blobray_analysis::registers::write_mask(*width, stored)
+                        oer_tools_analysis_blobray_analysis::registers::write_mask(*width, stored)
                     })
                 });
                 summary.observations += 1;

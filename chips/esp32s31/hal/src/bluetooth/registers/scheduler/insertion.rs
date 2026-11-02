@@ -105,11 +105,11 @@ trait BluetoothSchedulerInsertionExecutionObservationControl {
     fn observe_execution_modify_rejected(&mut self) -> bool;
 }
 
-struct HardwareBluetoothSchedulerInsertionExecutionControl<'registers, B: oer_mmio::Placement> {
-    registers: &'registers mut oer_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
+struct HardwareBluetoothSchedulerInsertionExecutionControl<'registers, B: oer_portable_mmio::Placement> {
+    registers: &'registers mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInsertionExecutionControl
     for HardwareBluetoothSchedulerInsertionExecutionControl<'_, B>
 {
     fn publish_execution_lock(&mut self, request: BluetoothSchedulerExecutionLockRequest) {
@@ -121,7 +121,7 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionControl
             w.set_status_24(false);
             w.set_bit_25_opaque(false);
             w.set_status_26(false);
-            w.set_execution_lock_result(oer_mmio::Bits::constant::<0>());
+            w.set_execution_lock_result(oer_portable_mmio::Bits::constant::<0>());
             w.set_bit_30_opaque(false);
             w.set_start(true);
         });
@@ -135,7 +135,7 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionControl
             w.set_status_17(false);
             w.set_status_18(false);
             w.set_status_19(false);
-            w.set_payload_high_20_30(oer_mmio::Bits::constant::<0>());
+            w.set_payload_high_20_30(oer_portable_mmio::Bits::constant::<0>());
             w.set_start(true);
         });
     }
@@ -152,7 +152,7 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionControl
             w.set_status_17(false);
             w.set_status_18(false);
             w.set_status_19(false);
-            w.set_payload_high_20_30(oer_mmio::Bits::constant::<0>());
+            w.set_payload_high_20_30(oer_portable_mmio::Bits::constant::<0>());
             w.set_start(true);
         });
     }
@@ -168,7 +168,7 @@ const fn list_mask(index: BluetoothSchedulerHardwareListIndex) -> u16 {
     1u16.wrapping_shl(index.get() as u32)
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerInsertionExecutionObservationControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInsertionExecutionObservationControl
     for HardwareBluetoothSchedulerInsertionExecutionControl<'_, B>
 {
     fn observe_execution_lock_ready(&mut self) -> bool {

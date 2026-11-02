@@ -8,7 +8,7 @@ use crate::lower_mac::{
 };
 use crate::mac::tx::{TxPhyRate, ampdu::HtAmpduTxError};
 use crate::port::aggregate::{AggregateExecution, Subframes, TX_AMPDU_SUBFRAMES};
-use oer_memory::StableDmaBacking as _;
+use oer_portable_memory::StableDmaBacking as _;
 
 /// One admitted aggregate on its way to the hardware.
 pub(in crate::port) struct PendingAggregate<

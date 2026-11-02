@@ -3,7 +3,7 @@
 #![forbid(unsafe_code)]
 use super::{CONTROLS, LINE, Session, emit, generic, pac, setup, wait_window};
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use oer_mmio::{Bits, Index};
+use oer_portable_mmio::{Bits, Index};
 
 const LIMIT: u32 = 200_000;
 const LOW: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
@@ -18,8 +18,8 @@ pub(super) fn interrupt(clic: &mut pac::clic::Clic) -> bool {
     if !ACTIVE.load(Ordering::Acquire) {
         return false;
     }
-    let cycle = oer_riscv::cycle32();
-    let cause = oer_riscv::read_mcause() as u32;
+    let cycle = oer_portable_riscv::cycle32();
+    let cause = oer_portable_riscv::read_mcause() as u32;
     // SOURCE: RISC-V CLIC specification 3f8ee744, mcause.exccode[11:0].
     // Architectural CSR decoding only; peripheral MMIO stays typed PAC.
     let id = (cause & 0xfff) as usize;
@@ -36,12 +36,12 @@ pub(super) fn interrupt(clic: &mut pac::clic::Clic) -> bool {
     clic.modify_ctrl(selected, |w| {
         w.set_ie(false);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     let at = COUNT.fetch_add(1, Ordering::Relaxed) as usize;
     if let (Some(c), Some(t), Some(l)) = (CAUSES.get(at), CYCLES.get(at), LEVELS.get(at)) {
         c.store(cause, Ordering::Relaxed);
         t.store(cycle, Ordering::Relaxed);
-        l.store(oer_riscv::read_mintstatus() as u32, Ordering::Release);
+        l.store(oer_portable_riscv::read_mintstatus() as u32, Ordering::Release);
     } else {
         emit(0x19ee, cause, cycle, 2);
         super::halt();
@@ -59,7 +59,7 @@ fn clear(s: &mut Session<'_>) {
         .timer
         .timg0_interrupt_bank
         .trigger_int_clr_timers_t0_int_clr();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn raw(s: &Session<'_>) -> bool {
     s.generic
@@ -96,9 +96,9 @@ fn target(s: &mut Session<'_>, value: u32) {
 fn count(s: &mut Session<'_>) -> Option<u64> {
     let timer = &mut s.generic.timer.timg0_timer0;
     timer.capture_timg0_timer0();
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     while timer.read_t0update().t_update() {
-        if oer_riscv::cycle32().wrapping_sub(start) >= LIMIT {
+        if oer_portable_riscv::cycle32().wrapping_sub(start) >= LIMIT {
             emit(0x19ee, 0, start, 3);
             return None;
         }
@@ -193,15 +193,15 @@ fn finish(s: &mut Session<'_>) {
 fn arm(s: &mut Session<'_>, us: u32) -> [u32; 2] {
     stop(s);
     ena(s, false);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     target(s, us);
     load(s, 0);
-    let before = oer_riscv::cycle32();
+    let before = oer_portable_riscv::cycle32();
     s.generic.timer.timg0_timer0.configure_timg0_timer0_armed();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     ena(s, true);
-    oer_riscv::fence();
-    [before, oer_riscv::cycle32()]
+    oer_portable_riscv::fence();
+    [before, oer_portable_riscv::cycle32()]
 }
 fn expiry(s: &Session<'_>, tag: u32, start: u32) {
     // Last negative/first positive read bracket RAW assertion plus polling
@@ -209,13 +209,13 @@ fn expiry(s: &Session<'_>, tag: u32, start: u32) {
     let mut negative = start;
     let mut positive = false;
     let end = loop {
-        let before = oer_riscv::cycle32();
+        let before = oer_portable_riscv::cycle32();
         if raw(s) {
             positive = true;
-            break oer_riscv::cycle32();
+            break oer_portable_riscv::cycle32();
         }
         negative = before;
-        let now = oer_riscv::cycle32();
+        let now = oer_portable_riscv::cycle32();
         if now.wrapping_sub(start) >= LIMIT {
             break now;
         }
@@ -256,14 +256,14 @@ pub(super) fn reload_rate(s: &mut Session<'_>) {
         .timg0_timer0
         .configure_timg0_timer0_counting();
     if let Some(a) = count(s) {
-        let start = oer_riscv::cycle32();
-        while oer_riscv::cycle32().wrapping_sub(start) < 40_000 {}
+        let start = oer_portable_riscv::cycle32();
+        while oer_portable_riscv::cycle32().wrapping_sub(start) < 40_000 {}
         if let Some(b) = count(s) {
             emit(
                 0x1913,
                 a as u32,
                 b as u32,
-                oer_riscv::cycle32().wrapping_sub(start),
+                oer_portable_riscv::cycle32().wrapping_sub(start),
             );
         }
     }
@@ -329,7 +329,7 @@ pub(super) fn equal_below(s: &mut Session<'_>) {
             .configure_timg0_timer0_stopped_alarm();
         wait_window();
         state(s, 0x1942);
-        let before = oer_riscv::cycle32();
+        let before = oer_portable_riscv::cycle32();
         s.generic.timer.timg0_timer0.configure_timg0_timer0_armed();
         expiry(s, 0x1943, before);
         state(s, 0x1944);
@@ -352,7 +352,7 @@ pub(super) fn running_past(s: &mut Session<'_>) {
     }
     state(s, 0x1951);
     target(s, 0);
-    let before = oer_riscv::cycle32();
+    let before = oer_portable_riscv::cycle32();
     s.generic.timer.timg0_timer0.configure_timg0_timer0_armed();
     expiry(s, 0x1952, before);
     state(s, 0x1953);

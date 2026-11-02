@@ -1,5 +1,5 @@
-//! The lower-MAC port on the owner shape of `oer-radio-port`
-//! ([`Owner`](oer_radio_port::Owner), [`PortBody`](oer_radio_port::PortBody)):
+//! The lower-MAC port on the owner shape of `oer-protocols-radio-port`
+//! ([`Owner`](oer_protocols_radio_port::Owner), [`PortBody`](oer_protocols_radio_port::PortBody)):
 //! its validated values and its disabled-only settings. The running phase
 //! and its tokens are [`phase`](crate::phase)'s.
 //!
@@ -21,13 +21,13 @@
 //! | a busy queue, no free buffer | a transmit ticket and buffers of a class ([`TxBufferClass`](crate::TxBufferClass)), tokens the caller holds; the backend keeps an attempt its queue cannot take yet |
 //! | a duplicate attempt identifier | the ticket, which comes back with the terminal |
 //! | an invalid length | [`MpduLength`] and [`ClassFrame`](crate::ClassFrame) |
-//! | no key slot, an unknown key | a key slot ([`Slot`](oer_radio_port::Slot) of the interface's own kind) and the installed key token an attempt names |
-//! | an invalid key | [`Ccmp128Key`](oer_ieee80211_contracts_security::Ccmp128Key), [`GroupKeyId`](oer_ieee80211_wire::ccmp::GroupKeyId), an [`IndividualAddress`] peer |
+//! | no key slot, an unknown key | a key slot ([`Slot`](oer_protocols_radio_port::Slot) of the interface's own kind) and the installed key token an attempt names |
+//! | an invalid key | [`Ccmp128Key`](oer_protocols_ieee80211_contracts_security::Ccmp128Key), [`GroupKeyId`](oer_protocols_ieee80211_wire::ccmp::GroupKeyId), an [`IndividualAddress`] peer |
 //! | no Block Ack slot, an invalid agreement | a Block Ack slot, [`SupportedBlockAck`] and the agreement token that holds the slot |
 //! | an unsupported EDCA record or BSS color | [`SupportedEdca`], [`BssColor`] |
 //!
-//! These stay the world's outcomes: [`Poisoned`](oer_radio_port::Poisoned),
-//! [`EventsLost`](oer_radio_port::EventsLost) (only unsolicited reception),
+//! These stay the world's outcomes: [`Poisoned`](oer_protocols_radio_port::Poisoned),
+//! [`EventsLost`](oer_protocols_radio_port::EventsLost) (only unsolicited reception),
 //! a clock that could not be read, a TSF that failed its timing check, and
 //! hardware that rejects a key or misreads a programmed agreement (a
 //! fault).
@@ -42,10 +42,10 @@
 //! checked against the marker:
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::{
+//! # use oer_protocols_ieee80211_contracts_port::{
 //! #     Channel, ChannelWidth, Ieee80211Capabilities, RegulatedChannel, SupportedChannel,
 //! # };
-//! # use oer_radio_regulatory::{RegulatoryDomain, Refused};
+//! # use oer_protocols_radio_regulatory::{RegulatoryDomain, Refused};
 //! fn tune<K: Ieee80211Capabilities>(
 //!     domain: &RegulatoryDomain,
 //!     channel: Channel,
@@ -59,11 +59,11 @@
 //! A backend that tunes to 2.4 GHz only does not tune to a 5 GHz channel:
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::*;
-//! # use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
+//! # use oer_protocols_ieee80211_contracts_port::*;
+//! # use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 //! # struct TwoFourOnly;
 //! # impl Ieee80211Capabilities for TwoFourOnly {
-//! #     type SppScope = oer_ieee80211_wire::security::spp::Association;
+//! #     type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
 //! #     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
 //! #         bands: BandSet::GHZ2_4,
 //! #         widths: WidthSet::MHZ20,
@@ -93,7 +93,7 @@
 //! #         edca_max_txop_limit_units_32_us: u16::MAX,
 //! #     };
 //! # }
-//! let permitted = oer_radio_regulatory::TEST_DOMAIN
+//! let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
 //!     .permit(RegulatedChannel::new(Channel::ghz5(36, ChannelWidth::Mhz20).unwrap()))
 //!     .unwrap();
 //! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_none());
@@ -102,11 +102,11 @@
 //! Its compiling twin names a channel the capabilities state:
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::*;
-//! # use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
+//! # use oer_protocols_ieee80211_contracts_port::*;
+//! # use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 //! # struct TwoFourOnly;
 //! # impl Ieee80211Capabilities for TwoFourOnly {
-//! #     type SppScope = oer_ieee80211_wire::security::spp::Association;
+//! #     type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
 //! #     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
 //! #         bands: BandSet::GHZ2_4,
 //! #         widths: WidthSet::MHZ20,
@@ -136,7 +136,7 @@
 //! #         edca_max_txop_limit_units_32_us: u16::MAX,
 //! #     };
 //! # }
-//! let permitted = oer_radio_regulatory::TEST_DOMAIN
+//! let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
 //!     .permit(RegulatedChannel::new(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap()))
 //!     .unwrap();
 //! assert!(SupportedChannel::<TwoFourOnly>::new(permitted).is_some());
@@ -145,40 +145,40 @@
 //! No caller or backend mints a rate past the phase's check:
 //!
 //! ```compile_fail,E0624
-//! # use oer_ieee80211_contracts_port::{PhaseRate, PhyRate};
-//! # use oer_ieee80211_wire::phy::LegacyRate;
+//! # use oer_protocols_ieee80211_contracts_port::{PhaseRate, PhyRate};
+//! # use oer_protocols_ieee80211_wire::phy::LegacyRate;
 //! let _ = PhaseRate::checked(PhyRate::Legacy(LegacyRate::Ofdm6M));
 //! ```
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::{LowerMacPhase, PhaseRate, PhyRate};
-//! # use oer_ieee80211_wire::phy::LegacyRate;
+//! # use oer_protocols_ieee80211_contracts_port::{LowerMacPhase, PhaseRate, PhyRate};
+//! # use oer_protocols_ieee80211_wire::phy::LegacyRate;
 //! fn rate<'p, 'id: 'p, P: LowerMacPhase<'p, 'id>>(phase: &P) -> Option<PhaseRate<'p, 'id, P::Caps>> {
 //!     phase.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
 //! }
 //! ```
 //!
 //! ```compile_fail,E0451
-//! # use oer_ieee80211_contracts_port::BssColor;
+//! # use oer_protocols_ieee80211_contracts_port::BssColor;
 //! let _ = BssColor { color: 64 };
 //! ```
 //!
 //! ```
-//! # use oer_ieee80211_contracts_port::BssColor;
+//! # use oer_protocols_ieee80211_contracts_port::BssColor;
 //! assert!(BssColor::new(64).is_none());
 //! assert!(BssColor::new(63).is_some());
 //! ```
 
 use core::marker::PhantomData;
-use oer_ieee80211_wire::address::IndividualAddress;
-use oer_ieee80211_wire::frame::{
+use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_wire::frame::{
     FrameControl, MacHeader, QosAckPolicy, QosControl as QosControlField,
 };
 
 use crate::EdcaParameterSet;
-use oer_ieee80211_wire::sequence::SequenceNumber;
-use oer_radio_port::PortBackend;
-use oer_radio_regulatory::Permitted;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_radio_port::PortBackend;
+use oer_protocols_radio_regulatory::Permitted;
 
 use crate::{
     Channel, LowerMacCapabilities, PhyRate, ReceiveFilter, RegulatedChannel, TxPower, VifRole,
@@ -188,7 +188,7 @@ use crate::{
 /// brand of its validated values.
 pub trait Ieee80211Capabilities {
     /// Smallest domain whose association SPP mode can be programmed independently.
-    type SppScope: oer_ieee80211_wire::security::spp::SppScope;
+    type SppScope: oer_protocols_ieee80211_wire::security::spp::SppScope;
     /// The backend's capabilities.
     const CAPS: LowerMacCapabilities;
 }
@@ -480,7 +480,7 @@ impl<K> Eq for SupportedEdca<K> {}
 impl<K: Ieee80211Capabilities> SupportedEdca<K> {
     /// `parameters`, when `K` applies every record of it.
     pub const fn new(parameters: EdcaParameterSet) -> Option<Self> {
-        use oer_ieee80211_wire::qos::WmmAccessCategory;
+        use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
         const fn valid<K: Ieee80211Capabilities>(
             parameters: EdcaParameterSet,
             category: WmmAccessCategory,
@@ -645,7 +645,7 @@ impl QosControl {
     /// The field, with the policy derived from its checked response header.
     pub const fn field(self, policy: QosAckPolicy) -> QosControlField {
         QosControlField::new(
-            oer_wire::U8::from_low_bits(self.tid.get()),
+            oer_portable_wire::U8::from_low_bits(self.tid.get()),
             self.end_of_service_period,
             policy,
             self.amsdu_present,
@@ -672,8 +672,8 @@ impl QosControl {
 /// Only preparation derives Protected from the operation's protection:
 ///
 /// ```compile_fail,E0624
-/// use oer_ieee80211_contracts_port::HeaderSpec;
-/// use oer_ieee80211_wire::address::IndividualAddress;
+/// use oer_protocols_ieee80211_contracts_port::HeaderSpec;
+/// use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// fn flag(header: HeaderSpec<IndividualAddress>) {
 ///     let _header = header.with_protection(false);
 /// }
@@ -683,7 +683,7 @@ impl QosControl {
 /// supplies Protected from `TxProtection` when constructing a fresh MPDU.
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{AckHeader, LayoutError, ResponseHeader};
+/// use oer_protocols_ieee80211_contracts_port::{AckHeader, LayoutError, ResponseHeader};
 /// fn encode(header: AckHeader, out: &mut [u8]) -> Result<usize, LayoutError> {
 ///     header.encode(out)
 /// }
@@ -692,12 +692,12 @@ impl QosControl {
 /// A checked MAC header always contains its mandatory fields:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_contracts_port::{HeaderSpec, ReceiverAddress};
+/// use oer_protocols_ieee80211_contracts_port::{HeaderSpec, ReceiverAddress};
 /// fn empty<A: ReceiverAddress>(header: HeaderSpec<A>) { let _empty = header.is_empty(); }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{HeaderSpec, ReceiverAddress};
+/// use oer_protocols_ieee80211_contracts_port::{HeaderSpec, ReceiverAddress};
 /// fn length<A: ReceiverAddress>(header: HeaderSpec<A>) -> usize { header.header_len() }
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -894,15 +894,15 @@ mod response_header {
 /// A caller cannot replace the header's acknowledgement policy at encoding:
 ///
 /// ```compile_fail,E0061
-/// use oer_ieee80211_contracts_port::{AckHeader, ResponseHeader};
+/// use oer_protocols_ieee80211_contracts_port::{AckHeader, ResponseHeader};
 /// fn policy(header: AckHeader, out: &mut [u8]) { let _ = header.encode(out, true); }
 /// ```
 ///
 /// An individual header must have a checked response kind:
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_contracts_port::{HeaderSpec, ResponseHeader};
-/// use oer_ieee80211_wire::address::IndividualAddress;
+/// use oer_protocols_ieee80211_contracts_port::{HeaderSpec, ResponseHeader};
+/// use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// fn raw(header: HeaderSpec<IndividualAddress>, out: &mut [u8]) {
 ///     let _ = header.encode(out);
 /// }
@@ -911,7 +911,7 @@ mod response_header {
 /// Each accepted header type carries its own response policy:
 ///
 /// ```
-/// use oer_ieee80211_contracts_port::{
+/// use oer_protocols_ieee80211_contracts_port::{
 ///     AckHeader, GroupAddress, HeaderSpec, LayoutError, NoAckHeader, ResponseHeader,
 /// };
 /// fn typed(
@@ -1025,7 +1025,7 @@ impl<K> TxFrame<'_, '_, K> {
             Self::Individual { frame, .. } => frame.len.len as usize,
             Self::IndividualNoAck { frame, .. } => frame.len.len as usize,
             Self::Group { frame, .. } => frame.len.len as usize,
-            Self::BlockAckRequest { .. } => oer_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN,
+            Self::BlockAckRequest { .. } => oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN,
         }
     }
 }
@@ -1095,7 +1095,7 @@ impl<H: FrameHeader, K: Ieee80211Capabilities> SizedFrame<H, K> {
 /// [`LowerMacSetup`] and its running phase a
 /// [`LowerMacPhase`](crate::LowerMacPhase); the body's resources give its
 /// transmit tickets, buffers, key and Block Ack slots and its gate once.
-pub trait LowerMacBackend<Id: oer_radio_port::SlotIdentity>: PortBackend<Id> {
+pub trait LowerMacBackend<Id: oer_protocols_radio_port::SlotIdentity>: PortBackend<Id> {
     /// The backend's capabilities marker.
     type Caps: Ieee80211Capabilities;
 
@@ -1109,14 +1109,14 @@ pub trait LowerMacBackend<Id: oer_radio_port::SlotIdentity>: PortBackend<Id> {
     /// Longest current publication: PPDU plus response wait or hardware
     /// timeout. Gate/key/disable barriers never wait for the remaining plan.
     /// Composition passes this constant to the channel arbiter.
-    const PUBLICATION_BOUND: oer_time::Duration;
+    const PUBLICATION_BOUND: oer_portable_time::Duration;
 
     /// Maximum admission-to-terminal time of a GTK mutation, including
     /// queued publications and the finite DMA/ISR/software RX cut. The driver
     /// owns a completion wake and a deadline wake. Expiry poisons with all
     /// resources retained; it never returns a usable mutation permission.
     /// Disable must finish or poison within this same bound under continuous RX.
-    const GROUP_COMMAND_BOUND: oer_time::Duration;
+    const GROUP_COMMAND_BOUND: oer_portable_time::Duration;
 }
 
 /// The disabled-only settings of a lower-MAC port.

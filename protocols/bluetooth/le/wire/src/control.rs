@@ -1,7 +1,7 @@
 //! Data and LL Control PDU envelopes and fixed control bodies (Core Vol 6 Part B 2.4).
 
 use crate::connection::{LeConnectionTiming, LeDataChannelMap};
-use oer_wire::PrefixLength;
+use oer_portable_wire::PrefixLength;
 
 /// Controller identity supplied by the product; independent of the radio vendor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

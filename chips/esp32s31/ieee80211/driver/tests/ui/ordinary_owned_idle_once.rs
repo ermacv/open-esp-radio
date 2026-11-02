@@ -1,7 +1,7 @@
 #![no_std]
-use oer_esp32s31_ieee80211_driver::ordinary_tx::OrdinaryTxOwner;
-use oer_esp32s31_ieee80211_driver::tx::{WifiTxEntropy, WifiTxPowerProfile};
-use oer_time::Timer;
+use oer_chips_esp32s31_ieee80211_driver::ordinary_tx::OrdinaryTxOwner;
+use oer_chips_esp32s31_ieee80211_driver::tx::{WifiTxEntropy, WifiTxPowerProfile};
+use oer_portable_time::Timer;
 
 pub fn handoff<P: WifiTxPowerProfile, E: WifiTxEntropy, T: Timer>(
     mut owner: OrdinaryTxOwner<'_, P, E, T, 64>,

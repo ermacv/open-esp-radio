@@ -1,5 +1,5 @@
 use super::*;
-use oer_analysis_riscv_model::{FunctionDecoder, InstructionFlow};
+use oer_tools_analysis_riscv_model::{FunctionDecoder, InstructionFlow};
 
 #[test]
 fn base_classification_preserves_the_provenance_instruction_restriction() {
@@ -144,7 +144,7 @@ fn stack_forms_decode_as_the_assembler_wrote_them() {
     }
     // The frame stores s11 at the top and ra at the bottom.
     assert_eq!(
-        oer_analysis_riscv_decode::list_registers(9).collect::<Vec<_>>(),
+        oer_tools_analysis_riscv_decode::list_registers(9).collect::<Vec<_>>(),
         [20, 19, 18, 9, 8, 1]
     );
     // Zcmt table jumps and a register list below {ra} are not decoded.

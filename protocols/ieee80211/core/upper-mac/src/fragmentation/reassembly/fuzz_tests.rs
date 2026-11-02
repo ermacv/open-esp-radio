@@ -10,12 +10,12 @@ use std::vec::Vec;
 
 use super::*;
 use crate::fragmentation::OpenDataReassemblyError;
-use oer_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CcmpHeader};
-use oer_ieee80211_wire::data::{DataInterfaceRole, IEEE80211_LEGACY_DATA_HEADER_LEN};
-use oer_ieee80211_wire::fragmentation::{
+use oer_protocols_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CcmpHeader};
+use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, IEEE80211_LEGACY_DATA_HEADER_LEN};
+use oer_protocols_ieee80211_wire::fragmentation::{
     parse_ccmp_data_fragment, parse_open_data_fragment, parse_open_data_identity,
 };
-use oer_ieee80211_wire::fuzz::{FULL, QUICK, inputs};
+use oer_protocols_ieee80211_wire::fuzz::{FULL, QUICK, inputs};
 
 const STA: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const AP: [u8; 6] = [2, 0, 0, 0, 0, 2];

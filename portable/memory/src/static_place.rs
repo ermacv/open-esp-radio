@@ -43,13 +43,13 @@ impl<Layout: 'static> StaticPlace<Layout> {
     ///
     /// Stack backing cannot grant the permanent loan:
     /// ```compile_fail,E0597
-    /// use oer_memory::StaticPlace;
+    /// use oer_portable_memory::StaticPlace;
     /// let mut place = StaticPlace::<u32>::new();
     /// let _ = place.uninit::<u32>();
     /// ```
     /// Nor can a static place be claimed twice:
     /// ```compile_fail,E0499
-    /// use oer_memory::StaticPlace;
+    /// use oer_portable_memory::StaticPlace;
     /// let place = Box::leak(Box::new(StaticPlace::<u32>::new()));
     /// let first = place.uninit::<u32>();
     /// let second = place.uninit::<u32>();

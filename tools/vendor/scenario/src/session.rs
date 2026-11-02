@@ -2,14 +2,14 @@
 //! submission and failure reports. Capture, linking, data and execution run
 //! in this process over the authenticated inputs, identified by content.
 use crate::harness::{Budget, Input, ProbeCatalog, Result, invalid, seed};
-use oer_analysis_blobray_application::data::DataExport;
-use oer_analysis_blobray_application::in_process::Executable;
-use oer_analysis_blobray_domain::{
+use oer_tools_analysis_blobray_application::data::DataExport;
+use oer_tools_analysis_blobray_application::in_process::Executable;
+use oer_tools_analysis_blobray_domain::{
     ArtifactInventory, CallEndpoint, EffectContract, ExecutionEvidence, ExecutionRequest,
     ExecutionTarget, ImageManifest, LayoutProjection, LinkRequest, ReviewedCallBoundary,
 };
-use oer_analysis_blobray_linker::ElfLinker;
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_linker::ElfLinker;
+use oer_tools_analysis_riscv_model::{
     ArtifactId, CallAbi, ErrorCode, ObjectId, SymbolId, SymbolTableKind,
 };
 use std::{
@@ -25,13 +25,13 @@ pub struct Artifact {
     pub identity: ArtifactId,
     pub request: ExecutionRequest,
     pub records: Vec<ExecutionEvidence>,
-    pub verdict: Option<oer_analysis_blobray_domain::ComparisonVerdict>,
+    pub verdict: Option<oer_tools_analysis_blobray_domain::ComparisonVerdict>,
     pub complete: bool,
     /// Vendor and production entries and the verdict of every compared case.
     pub compared: Vec<ComparedCase>,
     /// Executed production instructions and those a compared observation
     /// depends on.
-    pub observed: oer_analysis_blobray_application::in_process::ObservedInstructions,
+    pub observed: oer_tools_analysis_blobray_application::in_process::ObservedInstructions,
 }
 
 /// One claimed pair: vendor `symbol` at `vendor`, compared with
@@ -70,7 +70,7 @@ struct ClaimLines {
 pub struct ComparedCase {
     pub vendor: u32,
     pub production: u32,
-    pub verdict: Option<oer_analysis_blobray_domain::ComparisonVerdict>,
+    pub verdict: Option<oer_tools_analysis_blobray_domain::ComparisonVerdict>,
 }
 
 /// Authenticated inputs, their inventory and the probe catalog.
@@ -114,7 +114,7 @@ const PROBE_INPUT: usize = 2;
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct OperationResources {
     pub operation: String,
-    pub resources: oer_analysis_riscv_model::AnalysisResources,
+    pub resources: oer_tools_analysis_riscv_model::AnalysisResources,
 }
 
 fn operation<T>(
@@ -122,8 +122,8 @@ fn operation<T>(
     resources: &std::cell::RefCell<Vec<OperationResources>>,
     name: &str,
     run: impl FnOnce(
-        &oer_analysis_riscv_model::WorkingMemory,
-        &mut oer_analysis_blobray_application::in_process::Limits,
+        &oer_tools_analysis_riscv_model::WorkingMemory,
+        &mut oer_tools_analysis_blobray_application::in_process::Limits,
     ) -> Result<T>,
 ) -> Result<T> {
     let (result, report) = budget.run(run)?;
@@ -152,12 +152,12 @@ impl Session {
     pub fn data(
         &self,
         name: &str,
-        request: &oer_analysis_blobray_domain::DataRequest,
+        request: &oer_tools_analysis_blobray_domain::DataRequest,
     ) -> Result<DataExport> {
         self.doc(name, request)?;
         let executables = self.executables();
         operation(&self.budget, &self.resources, name, |memory, control| {
-            Ok(oer_analysis_blobray_application::data::export(
+            Ok(oer_tools_analysis_blobray_application::data::export(
                 request,
                 &executables,
                 memory,
@@ -183,7 +183,7 @@ impl Session {
             .iter()
             .map(|input| {
                 operation(&budget, &resources, "inventory", |memory, control| {
-                    Ok(oer_analysis_blobray_application::captured::inventory(
+                    Ok(oer_tools_analysis_blobray_application::captured::inventory(
                         input, memory, control,
                     )?)
                 })
@@ -254,7 +254,7 @@ impl Session {
             &serde_json::json!({"subject": subject, "reason": reason, "contract": &contract}),
         )?;
         let selection =
-            oer_analysis_blobray_application::in_process::effect_contract_id(&contract)?;
+            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract)?;
         if !self.effects.contains(&contract) {
             self.reviewed.push(crate::rule_use::Reviewed::new(
                 name,
@@ -267,14 +267,14 @@ impl Session {
     }
 
     /// Every relation must select a contract or projection reviewed by this session.
-    fn check_reviews(&self, case: &oer_analysis_blobray_domain::ExecutionCase) -> Result<()> {
+    fn check_reviews(&self, case: &oer_tools_analysis_blobray_domain::ExecutionCase) -> Result<()> {
         let Some(relation) = &case.relation else {
             return Ok(());
         };
         if let Some(selected) = &relation.effects {
             let mut reviewed = false;
             for contract in &self.effects {
-                if oer_analysis_blobray_application::in_process::effect_contract_id(contract)?
+                if oer_tools_analysis_blobray_application::in_process::effect_contract_id(contract)?
                     == *selected
                 {
                     reviewed = true;
@@ -291,7 +291,7 @@ impl Session {
         if let Some(selected) = &relation.projection {
             let mut reviewed = false;
             for projection in &self.projections {
-                if oer_analysis_blobray_application::in_process::projection_id(projection)?
+                if oer_tools_analysis_blobray_application::in_process::projection_id(projection)?
                     == *selected
                 {
                     reviewed = true;
@@ -320,7 +320,7 @@ impl Session {
             name,
             &serde_json::json!({"subject": subject, "reason": reason, "projection": &projection}),
         )?;
-        let selection = oer_analysis_blobray_application::in_process::projection_id(&projection)?;
+        let selection = oer_tools_analysis_blobray_application::in_process::projection_id(&projection)?;
         if !self.projections.contains(&projection) {
             self.projections.push(projection);
         }
@@ -351,19 +351,19 @@ impl Session {
     fn verify(
         &self,
         request: &ExecutionRequest,
-    ) -> oer_analysis_riscv_model::Result<
-        oer_analysis_blobray_application::in_process::InProcessResult,
+    ) -> oer_tools_analysis_riscv_model::Result<
+        oer_tools_analysis_blobray_application::in_process::InProcessResult,
     > {
         let executables = self.executables();
         let (result, resources) = self.budget.run(|memory, control| {
-            oer_analysis_blobray_application::in_process::verify(
-                &oer_analysis_blobray_application::in_process::InProcessComparison {
+            oer_tools_analysis_blobray_application::in_process::verify(
+                &oer_tools_analysis_blobray_application::in_process::InProcessComparison {
                     request,
                     executables: &executables,
                     effects: &self.effects,
                     projections: &self.projections,
                     vendor_results: None,
-                    dependence: Some(&oer_analysis_riscv_lift::RiscvDecoder),
+                    dependence: Some(&oer_tools_analysis_riscv_lift::RiscvDecoder),
                     patches: &[],
                 },
                 crate::chip().isa.executor(),
@@ -398,7 +398,7 @@ impl Session {
             "propose",
             |memory, control| {
                 Ok(
-                    oer_analysis_blobray_application::linking::propose_companions(
+                    oer_tools_analysis_blobray_application::linking::propose_companions(
                         request,
                         &candidates,
                         &self.inputs,
@@ -443,7 +443,7 @@ impl Session {
             .extend(self.propose(&request, linker, candidates)?);
         self.doc("plan", &request)?;
         let linked = operation(&self.budget, &self.resources, "link", |memory, control| {
-            Ok(oer_analysis_blobray_application::linking::link(
+            Ok(oer_tools_analysis_blobray_application::linking::link(
                 &request,
                 &self.inputs,
                 &std::path::absolute(linker)?,
@@ -507,7 +507,7 @@ impl Session {
         &mut self,
         label: &str,
         request: &ExecutionRequest,
-        verdict: Option<oer_analysis_blobray_domain::ComparisonVerdict>,
+        verdict: Option<oer_tools_analysis_blobray_domain::ComparisonVerdict>,
     ) -> Result<&Artifact> {
         self.submit_records(label, request, verdict, true)
     }
@@ -517,7 +517,7 @@ impl Session {
         &mut self,
         label: &str,
         request: &ExecutionRequest,
-        verdict: Option<oer_analysis_blobray_domain::ComparisonVerdict>,
+        verdict: Option<oer_tools_analysis_blobray_domain::ComparisonVerdict>,
         events: bool,
     ) -> Result<&Artifact> {
         // Compared cases report the persistent vendor bytes they write.
@@ -560,7 +560,7 @@ impl Session {
                 contracts
                     .iter()
                     .find(|contract| {
-                        oer_analysis_blobray_application::in_process::effect_contract_id(contract)
+                        oer_tools_analysis_blobray_application::in_process::effect_contract_id(contract)
                             .is_ok_and(|reference| &reference == selected)
                     })
                     .cloned()
@@ -672,7 +672,7 @@ impl Session {
             }
             if selected
                 .iter()
-                .any(|c| c.verdict != Some(oer_analysis_blobray_domain::ComparisonVerdict::Match))
+                .any(|c| c.verdict != Some(oer_tools_analysis_blobray_domain::ComparisonVerdict::Match))
             {
                 continue;
             }
@@ -699,7 +699,7 @@ impl Session {
             .filter(|a| executions.contains(&a.identity.as_str().to_owned()))
             .collect();
         let mut instructions =
-            oer_analysis_blobray_application::in_process::ObservedInstructions::default();
+            oer_tools_analysis_blobray_application::in_process::ObservedInstructions::default();
         for artifact in &selected {
             let o = &artifact.observed;
             instructions.executed.extend(&o.executed);
@@ -756,10 +756,10 @@ impl Session {
     /// name: several for a name that static functions share.
     fn image_functions(&self) -> Result<BTreeMap<String, Vec<u32>>> {
         let elf = fs::read(self.run.join("image").join(IMAGE_ELF))?;
-        let file = oer_analysis_elf::Elf::parse(&elf)?;
+        let file = oer_tools_analysis_elf::Elf::parse(&elf)?;
         let mut functions = BTreeMap::<String, Vec<u32>>::new();
         for symbol in file.symbols() {
-            if symbol.kind == oer_analysis_elf::SymbolKind::Text
+            if symbol.kind == oer_tools_analysis_elf::SymbolKind::Text
                 && symbol.size > 0
                 && symbol.defined
             {
@@ -784,7 +784,7 @@ impl Session {
             .iter()
             .flat_map(|a| a.observed.executed.iter().copied())
             .collect();
-        let root = oer_os_process::built_root();
+        let root = oer_tools_os_process::built_root();
         let mut lines = ClaimLines {
             map: crate::observation::LineMap::new(
                 self.inputs[PROBE_INPUT].bytes(),
@@ -906,7 +906,7 @@ impl Session {
             .map(Executable::bytes)
             .collect();
         let registers = crate::registers::Registers::load(
-            &oer_os_process::built_root(),
+            &oer_tools_os_process::built_root(),
             crate::chip().registers,
         )?;
         let symbols = crate::discovery::Symbols::of(&elfs, registers);
@@ -974,7 +974,7 @@ pub fn start_run(output: &Path) -> Result<PathBuf> {
 /// the complete defined-symbol listing next to the evidence.
 pub fn image_symbol(elf: &Path, listing: &Path, name: &str) -> Result<(u32, u64)> {
     let bytes = fs::read(elf)?;
-    let file = oer_analysis_elf::Elf::parse(&bytes)?;
+    let file = oer_tools_analysis_elf::Elf::parse(&bytes)?;
     let mut lines = String::new();
     let mut matches = vec![];
     for symbol in file.symbols().filter(|s| s.defined) {
@@ -1004,7 +1004,7 @@ pub fn image_symbol(elf: &Path, listing: &Path, name: &str) -> Result<(u32, u64)
 /// ELF whose payload is `object`.
 pub fn image_symbol_id(elf: &Path, object: &ObjectId, name: &str) -> Result<SymbolId> {
     let bytes = fs::read(elf)?;
-    let file = oer_analysis_elf::Elf::parse(&bytes)?;
+    let file = oer_tools_analysis_elf::Elf::parse(&bytes)?;
     let table = file
         .section_by_name(".symtab")
         .ok_or_else(|| invalid("image has no static symbol table"))?;
@@ -1031,7 +1031,7 @@ pub fn request(
     vendor: &ExecutionTarget,
     replacement: Option<&ExecutionTarget>,
     fill: Option<u8>,
-    cases: Vec<oer_analysis_blobray_domain::ExecutionCase>,
+    cases: Vec<oer_tools_analysis_blobray_domain::ExecutionCase>,
     max_events: u32,
 ) -> ExecutionRequest {
     let with_fill = |target: &ExecutionTarget| {
@@ -1042,9 +1042,9 @@ pub fn request(
         target
     };
     ExecutionRequest {
-        schema: oer_analysis_blobray_domain::EXECUTION_SCHEMA,
+        schema: oer_tools_analysis_blobray_domain::EXECUTION_SCHEMA,
         vendor: with_fill(vendor),
-        binding: replacement.map(|_| oer_analysis_blobray_domain::CompiledBinding::SharedCore),
+        binding: replacement.map(|_| oer_tools_analysis_blobray_domain::CompiledBinding::SharedCore),
         replacement: replacement.map(with_fill),
         cases,
         max_events,

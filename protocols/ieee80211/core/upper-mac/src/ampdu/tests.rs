@@ -8,8 +8,8 @@ fn at(micros: u64) -> Instant {
 const FRESH: fn(u8) -> Option<Instant> = |_| Some(Instant::from_micros(0));
 
 const POLICY: AmpduRetryPolicy = AmpduRetryPolicy {
-    lifetime: oer_time::Duration::from_micros(10_000),
-    aged_margin: oer_time::Duration::from_micros(1_000),
+    lifetime: oer_portable_time::Duration::from_micros(10_000),
+    aged_margin: oer_portable_time::Duration::from_micros(1_000),
     retry_limit: 3,
     retain_single_mpdu: false,
 };
@@ -171,7 +171,7 @@ fn a_trigger_flow_end_and_a_changed_count_are_distinct() {
             seq(0),
             1,
             AmpduRetryPolicy {
-                lifetime: oer_time::Duration::from_micros(0),
+                lifetime: oer_portable_time::Duration::from_micros(0),
                 ..POLICY
             }
         ),
@@ -257,7 +257,7 @@ fn an_msdu_ages_from_its_admission_within_the_margin() {
         seq(0),
         2,
         AmpduRetryPolicy {
-            aged_margin: oer_time::Duration::from_micros(11_000),
+            aged_margin: oer_portable_time::Duration::from_micros(11_000),
             ..POLICY
         },
     )

@@ -13,7 +13,7 @@ mod linux {
     pub struct OperationalLease {
         /// The installation lease's shared lock, released when the lease
         /// drops; the launcher hands its descriptor to the helper it executes.
-        lock: oer_os_process::lock::FileLock,
+        lock: oer_tools_os_process::lock::FileLock,
         expected_uid: u32,
         expected_gid: u32,
         generation: PathBuf,
@@ -65,7 +65,7 @@ mod linux {
             require_file(&path, artifact.mode, self.expected_uid, self.expected_gid)?;
             let bytes = fs::read(&path)?;
             if bytes.len() as u64 != artifact.size_bytes
-                || oer_os_durable::sha256_bytes(&bytes) != artifact.sha256
+                || oer_tools_os_durable::sha256_bytes(&bytes) != artifact.sha256
             {
                 return Err(format!(
                     "recovery-required: committed artifact identity differs at {}",
@@ -122,10 +122,10 @@ mod linux {
             )
             .into());
         }
-        let lock = oer_os_process::lock::FileLock::try_lock(
+        let lock = oer_tools_os_process::lock::FileLock::try_lock(
             file,
             &lease_path,
-            oer_os_process::lock::Mode::Shared,
+            oer_tools_os_process::lock::Mode::Shared,
         )?
         .ok_or_else(|| format!("fixture provider {provider} is being updated"))?;
 

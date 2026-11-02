@@ -3,8 +3,8 @@
 #![forbid(unsafe_code)]
 
 use clap::{Parser, Subcommand, ValueEnum};
-use oer_analysis_blobray_application as app;
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_blobray_application as app;
+use oer_tools_analysis_riscv_model::{
     AnalysisLimited, AnalysisProfile, AnalysisResources, AnalysisUsage, CallAbi, Error, ErrorCode,
     LimitReason, OperationLimits, ReadOnlyWindow, Result,
 };
@@ -93,7 +93,7 @@ enum Command {
         inputs: Vec<OsString>,
         /// START:LENGTH candidate interval; without one, every numeric address.
         #[arg(long = "range", value_parser = parse_range)]
-        ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
+        ranges: Vec<oer_tools_analysis_blobray_domain::ImageRegion>,
         /// Track result bits of calls to these names (repeat, or give several names).
         #[arg(long, num_args = 1.., value_name = "NAME")]
         call_results: Vec<String>,
@@ -178,7 +178,7 @@ enum Command {
         new: Vec<OsString>,
         /// START:LENGTH MMIO window; repeat for several.
         #[arg(long = "range", required = true, value_parser = parse_range)]
-        ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
+        ranges: Vec<oer_tools_analysis_blobray_domain::ImageRegion>,
         #[command(flatten)]
         assumptions: Assumptions,
         #[command(flatten)]
@@ -283,7 +283,7 @@ impl InProcessOptions {
     }
     fn resources(
         &self,
-        memory: &oer_analysis_riscv_model::WorkingMemory,
+        memory: &oer_tools_analysis_riscv_model::WorkingMemory,
         control: &app::in_process::Limits,
         limited: AnalysisLimited,
     ) -> Result<AnalysisResources> {
@@ -304,8 +304,8 @@ impl InProcessOptions {
             limited,
         ))
     }
-    fn memory(&self) -> Result<oer_analysis_riscv_model::WorkingMemory> {
-        oer_analysis_riscv_model::WorkingMemory::new(
+    fn memory(&self) -> Result<oer_tools_analysis_riscv_model::WorkingMemory> {
+        oer_tools_analysis_riscv_model::WorkingMemory::new(
             self.working_memory_mib
                 .unwrap_or(self.analysis_profile.limits().working_memory_bytes / MIB)
                 .checked_mul(MIB)
@@ -480,7 +480,7 @@ fn field_accesses(
         assumptions,
         offset,
         width,
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |result, _| {
@@ -504,14 +504,14 @@ fn field_accesses(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::FieldAccessesDocument {
-                schema: oer_tool_analysis_cli::wire::FIELD_ACCESSES_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::FieldAccessesDocument {
+                schema: oer_tools_analysis_cli::wire::FIELD_ACCESSES_SCHEMA,
                 analysis_resources: limits.resources(&memory, &control, limited)?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| oer_tool_analysis_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tools_analysis_cli::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -564,7 +564,7 @@ fn field_accesses(
                 "{} functions access the field; {} functions blocked; {partial} functions analyzed incompletely{}; {gaps} gaps; {unknown_addresses} accesses at unknown addresses",
                 functions.len(),
                 blocked.len(),
-                oer_tool_analysis_cli::partial::human(&partial_causes),
+                oer_tools_analysis_cli::partial::human(&partial_causes),
             )
             .map_err(io_error)?;
             if assumptions.abi.is_none() && unknown_addresses > 0 {
@@ -610,7 +610,7 @@ fn function_records(
             .iter()
             .map(|executable| {
                 app::symbols::image_symbols(executable, &memory, &mut control)
-                    .map(|symbols| symbols.map(oer_tool_analysis_cli::listing::ImageSymbols::new))
+                    .map(|symbols| symbols.map(oer_tools_analysis_cli::listing::ImageSymbols::new))
             })
             .collect::<Result<Vec<_>>>()?,
         Format::Json => Vec::new(),
@@ -623,7 +623,7 @@ fn function_records(
         }
         Format::Json => std::collections::BTreeMap::new(),
     };
-    let wanted = |function: &oer_analysis_blobray_domain::LibraryFunction| {
+    let wanted = |function: &oer_tools_analysis_blobray_domain::LibraryFunction| {
         function
             .name
             .as_deref()
@@ -636,13 +636,13 @@ fn function_records(
             functions: &names,
             ..assumptions
         },
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |outcome, _| {
             match outcome {
                 app::library::LibraryOutcome::Analyzed(analyzed) if wanted(analyzed.function) => {
-                    functions.push(oer_tool_analysis_cli::wire::NamedFunction::Analyzed {
+                    functions.push(oer_tools_analysis_cli::wire::NamedFunction::Analyzed {
                         function: analyzed.function.clone(),
                         complete: analyzed.complete(),
                         coverage: analyzed.coverage,
@@ -652,7 +652,7 @@ fn function_records(
                     });
                 }
                 app::library::LibraryOutcome::Blocked { function, error } if wanted(function) => {
-                    functions.push(oer_tool_analysis_cli::wire::NamedFunction::Blocked {
+                    functions.push(oer_tools_analysis_cli::wire::NamedFunction::Blocked {
                         function: function.clone(),
                         error: error.clone(),
                     });
@@ -664,8 +664,8 @@ fn function_records(
     )?;
     let found = |name: &str| {
         functions.iter().any(|function| {
-            let (oer_tool_analysis_cli::wire::NamedFunction::Analyzed { function, .. }
-            | oer_tool_analysis_cli::wire::NamedFunction::Blocked { function, .. }) = function;
+            let (oer_tools_analysis_cli::wire::NamedFunction::Analyzed { function, .. }
+            | oer_tools_analysis_cli::wire::NamedFunction::Blocked { function, .. }) = function;
             function.name.as_deref() == Some(name.as_bytes())
         })
     };
@@ -677,9 +677,9 @@ fn function_records(
     };
     let mut projected = AnalysisLimited::default();
     for function in &functions {
-        if let oer_tool_analysis_cli::wire::NamedFunction::Analyzed { records, .. } = function {
+        if let oer_tools_analysis_cli::wire::NamedFunction::Analyzed { records, .. } = function {
             for record in records {
-                if let oer_analysis_riscv_model::FunctionRecord::SemanticGap { reason, .. } = record
+                if let oer_tools_analysis_riscv_model::FunctionRecord::SemanticGap { reason, .. } = record
                     && let Some(reason) = LimitReason::semantic_gap(*reason)
                 {
                     projected.result(reason);
@@ -691,14 +691,14 @@ fn function_records(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::FunctionRecordsDocument {
-                schema: oer_tool_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::FunctionRecordsDocument {
+                schema: oer_tools_analysis_cli::wire::FUNCTION_RECORDS_SCHEMA,
                 analysis_resources: limits.resources(&memory, &control, limited)?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| oer_tool_analysis_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tools_analysis_cli::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -716,7 +716,7 @@ fn function_records(
         Format::Human => {
             for function in &functions {
                 match function {
-                    oer_tool_analysis_cli::wire::NamedFunction::Analyzed {
+                    oer_tools_analysis_cli::wire::NamedFunction::Analyzed {
                         function,
                         complete,
                         records,
@@ -731,7 +731,7 @@ fn function_records(
                         if *complete { "complete" } else { "incomplete" }
                     )
                     .and_then(|()| {
-                        oer_tool_analysis_cli::listing::listing(
+                        oer_tools_analysis_cli::listing::listing(
                             records,
                             images.get(function.input as usize).and_then(Option::as_ref),
                             &app::symbols::referenced_strings(function, records, &strings),
@@ -741,10 +741,10 @@ fn function_records(
                     })
                     .and_then(|()| {
                         jump_tables.iter().try_for_each(|table| {
-                            writeln!(out, "{}", oer_tool_analysis_cli::jump_table::human(table))
+                            writeln!(out, "{}", oer_tools_analysis_cli::jump_table::human(table))
                         })
                     }),
-                    oer_tool_analysis_cli::wire::NamedFunction::Blocked { function, error } => {
+                    oer_tools_analysis_cli::wire::NamedFunction::Blocked { function, error } => {
                         writeln!(
                             out,
                             "{} (input {}): blocked: {error}",
@@ -768,7 +768,7 @@ fn function_records(
 fn mmio_diff(
     old: Vec<OsString>,
     new: Vec<OsString>,
-    ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
+    ranges: Vec<oer_tools_analysis_blobray_domain::ImageRegion>,
     assumptions: app::library::Assumptions<'_>,
     limits: InProcessOptions,
     format: Format,
@@ -797,15 +797,15 @@ fn mmio_diff(
         &new,
         assumptions,
         &ranges,
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
     )?;
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::MmioDiffDocument {
-                schema: oer_tool_analysis_cli::wire::MMIO_DIFF_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::MmioDiffDocument {
+                schema: oer_tools_analysis_cli::wire::MMIO_DIFF_SCHEMA,
                 analysis_resources: limits.resources(&memory, &control, limited)?,
                 old: described(&old_inputs, &old),
                 new: described(&new_inputs, &new),
@@ -818,7 +818,7 @@ fn mmio_diff(
             writeln!(out).map_err(io_error)?;
         }
         Format::Human => {
-            out.write_all(oer_tool_analysis_cli::mmio::render(&diff).as_bytes())
+            out.write_all(oer_tools_analysis_cli::mmio::render(&diff).as_bytes())
                 .map_err(io_error)?;
         }
     }
@@ -860,8 +860,8 @@ fn symbols(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::SymbolsDocument {
-                schema: oer_tool_analysis_cli::wire::SYMBOLS_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::SymbolsDocument {
+                schema: oer_tools_analysis_cli::wire::SYMBOLS_SCHEMA,
                 analysis_resources: limits.resources(
                     &memory,
                     &control,
@@ -925,8 +925,8 @@ fn strings(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::StringsDocument {
-                schema: oer_tool_analysis_cli::wire::STRINGS_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::StringsDocument {
+                schema: oer_tools_analysis_cli::wire::STRINGS_SCHEMA,
                 analysis_resources: limits.resources(
                     &memory,
                     &control,
@@ -961,12 +961,12 @@ fn strings(
 fn described(
     inputs: &[Input],
     executables: &[app::in_process::Executable],
-) -> Vec<oer_tool_analysis_cli::wire::RegisterAccessInput> {
+) -> Vec<oer_tools_analysis_cli::wire::RegisterAccessInput> {
     inputs
         .iter()
         .zip(executables)
         .map(
-            |(input, executable)| oer_tool_analysis_cli::wire::RegisterAccessInput {
+            |(input, executable)| oer_tools_analysis_cli::wire::RegisterAccessInput {
                 role: input.role.clone(),
                 sha256: executable.id().clone(),
             },
@@ -975,7 +975,7 @@ fn described(
 }
 
 fn io_error(e: std::io::Error) -> Error {
-    oer_analysis_riscv_model::storage_io(e)
+    oer_tools_analysis_riscv_model::storage_io(e)
 }
 
 fn invalid(message: &str) -> Error {
@@ -1020,7 +1020,7 @@ fn parse_input(value: OsString) -> Result<Input> {
             .ok_or_else(|| invalid("expected pin:CHIP/ID"))?;
         let root = root()?;
         chip_facts::check(&root, chip)?;
-        let path = oer_pins_artifacts::artifacts::ensure(&root, chip, id)
+        let path = oer_tools_pins_artifacts::artifacts::ensure(&root, chip, id)
             .map_err(|error| invalid(&format!("pin {pin}: {error}")))?;
         return Ok(Input { role, path });
     }
@@ -1032,7 +1032,7 @@ fn parse_input(value: OsString) -> Result<Input> {
 /// Refuse `path` when it lies in the vendor store: a vendor artifact is
 /// read by its pin, which verifies it.
 fn refuse_store_path(path: &std::path::Path) -> Result<()> {
-    let store = oer_pins_artifacts::artifacts::store()
+    let store = oer_tools_pins_artifacts::artifacts::store()
         .map_err(|error| invalid(&format!("vendor store: {error}")))?;
     refuse_inside(path, &[&store, &root()?.join("target/vendor")])
 }
@@ -1066,9 +1066,9 @@ fn parse_number(v: &str) -> std::result::Result<u64, String> {
 
 fn parse_range(
     text: &str,
-) -> std::result::Result<oer_analysis_blobray_domain::ImageRegion, String> {
+) -> std::result::Result<oer_tools_analysis_blobray_domain::ImageRegion, String> {
     let (start, length) = text.split_once(':').ok_or("expected START:LENGTH")?;
-    Ok(oer_analysis_blobray_domain::ImageRegion {
+    Ok(oer_tools_analysis_blobray_domain::ImageRegion {
         start: u32::try_from(parse_number(start)?).map_err(|e| e.to_string())?,
         length: parse_number(length)?,
     })
@@ -1091,7 +1091,7 @@ fn json_error(e: serde_json::Error) -> Error {
 
 fn register_accesses(
     inputs: Vec<OsString>,
-    ranges: Vec<oer_analysis_blobray_domain::ImageRegion>,
+    ranges: Vec<oer_tools_analysis_blobray_domain::ImageRegion>,
     filter: app::access_groups::AccessFilter,
     group_by: Option<app::access_groups::GroupBy>,
     assumptions: app::library::Assumptions<'_>,
@@ -1125,7 +1125,7 @@ fn register_accesses(
             .iter()
             .zip(&executables)
             .map(
-                |(input, executable)| oer_tool_analysis_cli::wire::RegisterAccessInput {
+                |(input, executable)| oer_tools_analysis_cli::wire::RegisterAccessInput {
                     role: input.role.clone(),
                     sha256: executable.id().clone(),
                 },
@@ -1134,7 +1134,7 @@ fn register_accesses(
         write!(
             out,
             "{{\"schema\":{},\"inputs\":{},\"abi\":{},\"call_summaries\":{},\"read_only\":{}",
-            oer_tool_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA,
+            oer_tools_analysis_cli::wire::REGISTER_ACCESSES_SCHEMA,
             serde_json::to_string(&described).map_err(json_error)?,
             serde_json::to_string(&assumptions.abi).map_err(json_error)?,
             assumptions.call_summaries,
@@ -1163,7 +1163,7 @@ fn register_accesses(
         &executables,
         assumptions,
         &ranges,
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |record, _| {
@@ -1177,7 +1177,7 @@ fn register_accesses(
                 groups.add(record);
             }
             if !json
-                && let oer_analysis_blobray_domain::RegisterAccess::CallResult {
+                && let oer_tools_analysis_blobray_domain::RegisterAccess::CallResult {
                     function,
                     site,
                     callee,
@@ -1188,7 +1188,7 @@ fn register_accesses(
             {
                 let arguments = arguments
                     .iter()
-                    .map(oer_tool_analysis_cli::call_arguments::human)
+                    .map(oer_tools_analysis_cli::call_arguments::human)
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(
@@ -1196,7 +1196,7 @@ fn register_accesses(
                     "{} +{site:#x} {}({arguments}) -> x{register}: {}",
                     String::from_utf8_lossy(function.name.as_deref().unwrap_or(b"?")),
                     callee.name.as_deref().unwrap_or("?"),
-                    oer_tool_analysis_cli::mmio::reads(reads)
+                    oer_tools_analysis_cli::mmio::reads(reads)
                 )
                 .map_err(io_error)?;
             }
@@ -1235,7 +1235,7 @@ fn register_accesses(
         writeln!(out).map_err(io_error)?;
     } else {
         if let Some(groups) = &groups {
-            for line in oer_tool_analysis_cli::access_groups::human(&groups) {
+            for line in oer_tools_analysis_cli::access_groups::human(&groups) {
                 writeln!(out, "{line}").map_err(io_error)?;
             }
         }
@@ -1275,7 +1275,7 @@ fn register_accesses(
             "{} functions ({} partial{}, {} blocked), {} gaps, {} observations ({} unresolved, {} indexed)",
             summary.functions,
             summary.partial_functions,
-            oer_tool_analysis_cli::partial::human(&summary.partial_causes),
+            oer_tools_analysis_cli::partial::human(&summary.partial_causes),
             summary.blocked_functions,
             summary.gaps,
             summary.observations,
@@ -1329,7 +1329,7 @@ fn call_arguments(
         &executables,
         assumptions,
         &symbols,
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |result, _| {
@@ -1345,14 +1345,14 @@ fn call_arguments(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::CallArgumentsDocument {
-                schema: oer_tool_analysis_cli::wire::CALL_ARGUMENTS_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::CallArgumentsDocument {
+                schema: oer_tools_analysis_cli::wire::CALL_ARGUMENTS_SCHEMA,
                 analysis_resources: limits.resources(&memory, &control, limited)?,
                 inputs: inputs
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| oer_tool_analysis_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tools_analysis_cli::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -1391,7 +1391,7 @@ fn call_arguments(
                             .map(|(index, value)| {
                                 format!(
                                     "a{index}={}",
-                                    oer_tool_analysis_cli::call_arguments::human(value)
+                                    oer_tools_analysis_cli::call_arguments::human(value)
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -1402,7 +1402,7 @@ fn call_arguments(
                         "{name} (input {}) +{:x}: {} {}({arguments}){}{}",
                         caller.function.input,
                         site.offset,
-                        oer_tool_analysis_cli::references::kind_human(site.kind),
+                        oer_tools_analysis_cli::references::kind_human(site.kind),
                         String::from_utf8_lossy(&site.target),
                         destination_human(site.destination.as_ref()),
                         alternatives_human(site.alternatives),
@@ -1414,7 +1414,7 @@ fn call_arguments(
                 out,
                 "{count} call sites in {} functions; {partial} partial{}, {} blocked, {gaps} gaps",
                 callers.len(),
-                oer_tool_analysis_cli::partial::human(&partial_causes),
+                oer_tools_analysis_cli::partial::human(&partial_causes),
                 blocked.len(),
             )
             .map_err(io_error)?;
@@ -1454,7 +1454,7 @@ fn callers(
         &executables,
         assumptions,
         &symbols,
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |result, _| {
@@ -1482,8 +1482,8 @@ fn callers(
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     match format {
         Format::Json => {
-            let document = oer_tool_analysis_cli::wire::CallersDocument {
-                schema: oer_tool_analysis_cli::wire::CALLERS_SCHEMA,
+            let document = oer_tools_analysis_cli::wire::CallersDocument {
+                schema: oer_tools_analysis_cli::wire::CALLERS_SCHEMA,
                 analysis_resources: limits.resources(
                     &memory,
                     &control,
@@ -1493,7 +1493,7 @@ fn callers(
                     .iter()
                     .zip(&executables)
                     .map(
-                        |(input, executable)| oer_tool_analysis_cli::wire::RegisterAccessInput {
+                        |(input, executable)| oer_tools_analysis_cli::wire::RegisterAccessInput {
                             role: input.role.clone(),
                             sha256: executable.id().clone(),
                         },
@@ -1529,7 +1529,7 @@ fn callers(
                         "{name} (input {}) +{:x}: {}{} {}{}{}",
                         caller.function.input,
                         reference.offset,
-                        oer_tool_analysis_cli::references::kind_human(reference.kind),
+                        oer_tools_analysis_cli::references::kind_human(reference.kind),
                         reference
                             .relocation_kind
                             .map(|kind| format!(" {kind:?}"))
@@ -1567,7 +1567,7 @@ fn callers(
                 out,
                 "{} functions reference the symbols; {functions} analyzed, {partial} partial{}, {} blocked; {gaps} gaps",
                 callers.len(),
-                oer_tool_analysis_cli::partial::human(&partial_causes),
+                oer_tools_analysis_cli::partial::human(&partial_causes),
                 blocked.len()
             )
             .map_err(io_error)?;

@@ -1,4 +1,4 @@
-use oer_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
+use oer_chips_esp32s31_hal::{bluetooth::ClockedOwner, root::RadioHardware};
 
 use crate::controller_time::ControllerTimeWorkerPhase;
 
@@ -8,7 +8,7 @@ fn clocked() -> ClockedOwner {
     let (_shared, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .ok()
         .expect("host radio split");

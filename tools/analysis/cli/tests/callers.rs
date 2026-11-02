@@ -2,9 +2,9 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 #[allow(dead_code)]
 mod support;
-use oer_analysis_blobray_application::in_process::Executable;
-use oer_analysis_blobray_application::references::{StoredScan, Targets};
-use oer_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, WorkingMemory};
+use oer_tools_analysis_blobray_application::in_process::Executable;
+use oer_tools_analysis_blobray_application::references::{StoredScan, Targets};
+use oer_tools_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, WorkingMemory};
 use serde_json::{Value, json};
 use std::process::Command;
 

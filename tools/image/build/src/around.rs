@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use oer_image_bundle::ImageBundle;
+use oer_tools_image_bundle::ImageBundle;
 
 use crate::{Boot, Result};
 
@@ -72,7 +72,7 @@ pub struct EspIdfChip<'a> {
     pub rust_target: &'a str,
     /// The chip as `espflash` names it.
     pub espflash_chip: &'a str,
-    pub flash: &'a oer_espressif_facts::FlashMap,
+    pub flash: &'a oer_chips_family_facts::FlashMap,
 }
 
 /// The bundle published in `output` of a catalog `application` with the

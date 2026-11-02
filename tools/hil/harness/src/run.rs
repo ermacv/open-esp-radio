@@ -2,7 +2,7 @@
 
 use std::{io::Write, time::Duration};
 
-use oer_hil_link::{Boot, Link, LinkError};
+use oer_tools_hil_link::{Boot, Link, LinkError};
 
 use crate::dut::{Device, Dut};
 use crate::finish::{Cleanup, Ending};
@@ -161,7 +161,7 @@ pub(crate) fn cases(
             },
             out,
         );
-        if oer_os_process::cancellation_requested() {
+        if oer_tools_os_process::cancellation_requested() {
             record(Outcome::stand(LinkError::Cancelled.to_string()), out);
             break;
         }

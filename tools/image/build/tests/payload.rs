@@ -1,8 +1,8 @@
-use oer_image_build::encode::stage_two::{pack_runtime, payload_crc32};
+use oer_tools_image_build::encode::stage_two::{pack_runtime, payload_crc32};
 
 /// A stage-two contract shaped like a staged chip's profile.
-fn contract() -> oer_espressif_facts::StageTwo {
-    oer_espressif_facts::StageTwo {
+fn contract() -> oer_chips_family_facts::StageTwo {
+    oer_chips_family_facts::StageTwo {
         magic: 0x3247_5453,
         abi_version: 1,
         header_bytes: 44,
@@ -78,15 +78,15 @@ fn a_field_outside_the_header_is_a_contract_error_not_a_panic() {
     let path = directory.path().join("runtime.bin");
     std::fs::write(&path, image()).unwrap();
     for broken in [
-        oer_espressif_facts::StageTwo {
+        oer_chips_family_facts::StageTwo {
             crc_offset: 42,
             ..contract()
         },
-        oer_espressif_facts::StageTwo {
+        oer_chips_family_facts::StageTwo {
             crc_offset: u32::MAX,
             ..contract()
         },
-        oer_espressif_facts::StageTwo {
+        oer_chips_family_facts::StageTwo {
             magic_offset: 1 << 20,
             ..contract()
         },
@@ -98,7 +98,7 @@ fn a_field_outside_the_header_is_a_contract_error_not_a_panic() {
 }
 
 /// The fixture line `key` of the stage-two packing fixture the bootstrap's
-/// contract (`oer-espressif-staged-layout`) checks too.
+/// contract (`oer-chips-family-staged-layout`) checks too.
 fn fixture(key: &str) -> String {
     include_str!("../../../../chips/family/staged-layout/fixtures/stage-two.txt")
         .lines()
@@ -114,9 +114,9 @@ fn every_staged_chip_packs_the_shared_fixture_as_the_bootstrap_checks_it() {
         .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
         .collect::<Vec<_>>();
     let crc = u32::from_str_radix(&fixture("crc32"), 16).unwrap();
-    let staged = oer_espressif_facts::tracked::ids()
+    let staged = oer_chips_family_facts::tracked::ids()
         .into_iter()
-        .map(|id| oer_chip_profile::Profile::tracked(id).unwrap())
+        .map(|id| oer_tools_chip_profile::Profile::tracked(id).unwrap())
         .filter_map(|profile| profile.facts.staged)
         .collect::<Vec<_>>();
     assert!(!staged.is_empty());

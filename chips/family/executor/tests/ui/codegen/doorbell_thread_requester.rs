@@ -1,5 +1,5 @@
-use oer_espressif_interrupt_table::{Bound, signal::host::Foreign};
-oer_espressif_interrupt_table::__fake_parts!();
+use oer_chips_family_interrupt_table::{Bound, signal::host::Foreign};
+oer_chips_family_interrupt_table::__fake_parts!();
 include!("support/doorbell.rs");
 
 pub fn on_timer(_: &mut TimerIrq) {}
@@ -8,7 +8,7 @@ pub fn on_wake(_: &mut AbsentIrq) {}
 // tasks run at level zero; its executor entry would poll no thread tasks.
 macro_rules! table {
     ($handler:path, $class:ident) => {
-        oer_espressif_interrupt_table::interrupt_table! {
+        oer_chips_family_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { radio: 3; app_wake: 1; }

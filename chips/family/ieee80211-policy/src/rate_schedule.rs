@@ -25,7 +25,7 @@ const RATE_SCHEDULE_KINDS: [RateScheduleKind; 9] = [
 ];
 
 use crate::rate_record::{RATE_SCHEDULE_RECORD_SIZE, RateScheduleRecordState, RateScheduleRef};
-use oer_ieee80211_contracts_port::backend::RateScheduleKind;
+use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
 
 #[repr(C, align(4))]
 struct ScheduleArena<const RECORDS: usize>([[u8; RATE_SCHEDULE_RECORD_SIZE]; RECORDS]);
@@ -406,12 +406,12 @@ pub enum RateIndexMap {
 /// Callers must handle absence before using an arena index.
 ///
 /// ```compile_fail,E0308
-/// use oer_espressif_ieee80211_policy::rate_schedule::{RateIndexMap,rate_to_schedule_index};
+/// use oer_chips_family_ieee80211_policy::rate_schedule::{RateIndexMap,rate_to_schedule_index};
 /// let index: u8 = rate_to_schedule_index(RateIndexMap::Dot11N, u8::MAX);
 /// ```
 ///
 /// ```
-/// use oer_espressif_ieee80211_policy::rate_schedule::{RateIndexMap,rate_to_schedule_index};
+/// use oer_chips_family_ieee80211_policy::rate_schedule::{RateIndexMap,rate_to_schedule_index};
 /// assert_eq!(rate_to_schedule_index(RateIndexMap::Dot11N, u8::MAX), None);
 /// assert_eq!(rate_to_schedule_index(RateIndexMap::Dot11N, 0x21), Some(0));
 /// ```

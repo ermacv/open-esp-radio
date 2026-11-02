@@ -1,10 +1,10 @@
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::{ClockedOwner, TaskOwner},
     domain::{BtbbError, RadioClient, RadioDomain},
     owner::PhyInitializationAccess,
     root::{ProtocolPartitions, RadioHardware},
 };
-use oer_time_virtual::VirtualClock;
+use oer_portable_time_virtual::VirtualClock;
 
 use super::*;
 use crate::concurrent::ConcurrentAcquire;
@@ -26,7 +26,7 @@ fn radio_domain(
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     {
@@ -122,7 +122,7 @@ fn joining_an_unregistered_domain_changes_nothing() {
     let (mut radio, partitions) = RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             ConcurrentPhy::new(),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     let task = task(partitions);
@@ -180,24 +180,24 @@ fn leaving_without_the_btbb_reference_keeps_the_membership_and_the_client() {
 
 /// Enter `client` with a proof for the domain's registration.
 fn enter_client(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+    radio: &mut oer_chips_esp32s31_hal::domain::RadioDomain<
         crate::test_clocks::TestClockBackend,
         crate::concurrent::ConcurrentPhy,
     >,
-    client: oer_esp32s31_hal::domain::RadioClient,
-    clock: &impl oer_time::Clock,
+    client: oer_chips_esp32s31_hal::domain::RadioClient,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
 }
 
 /// Join with a proof for the domain's registration.
 fn join_bluetooth_prepared(
-    radio: &mut oer_esp32s31_hal::domain::RadioDomain<
+    radio: &mut oer_chips_esp32s31_hal::domain::RadioDomain<
         crate::test_clocks::TestClockBackend,
         crate::concurrent::ConcurrentPhy,
     >,
     task: &TaskOwner,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<(BluetoothPhyMembership, ConcurrentAcquire), BluetoothPhyClientError> {
     let ready = crate::concurrent::PhyClientReady::<_, BluetoothPhyMembership>::for_test(radio);
     join_bluetooth(ready, task, clock)
@@ -227,7 +227,7 @@ fn btbb_is_taken_only_from_a_settled_registered_state() {
     ));
     assert!(!domain.holds_btbb(RadioClient::Bluetooth));
     // The settled acquisition writes BTBB registers, which a host test does
-    // not reach; `oer-esp32s31-hal` tests the published gain's admission.
+    // not reach; `oer-chips-esp32s31-hal` tests the published gain's admission.
 }
 
 #[test]
@@ -267,7 +267,7 @@ fn first_due_join_keeps_membership_and_btbb_through_maintenance() {
 #[test]
 fn settled_join_and_rejoin_after_rf_restart_keep_tracking_history() {
     use crate::concurrent::Slot;
-    use oer_time::Duration;
+    use oer_portable_time::Duration;
     let (mut radio, partitions) = radio_domain(false);
     let task = task(partitions);
     radio.hold_btbb_for_test(RadioClient::Ieee802154);
@@ -321,7 +321,7 @@ fn rejected_clock_and_existing_btbb_return_the_unchanged_client() {
     assert!(radio.attachment_mut().complete_tracking_for_test());
     assert!(leave_bluetooth(&mut radio, &task, membership).expect("valid PHY lifecycle fixture"));
     let before = radio.attachment().client_snapshot();
-    let past = VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
+    let past = VirtualClock::<8>::starting_at(oer_portable_time::Instant::EPOCH);
     assert!(matches!(
         join_bluetooth_prepared(&mut radio, &task, &past),
         Err(BluetoothPhyClientError::Phy(ConcurrentPhyError::Acquire(_)))

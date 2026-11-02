@@ -3,8 +3,8 @@
 //! function declaration. Global and PC-specific field discovery stay distinct.
 use crate::dwarf::{Entry, Reader, Unit, reference, text};
 use crate::{Fact, Resolutions, TransferKind};
-use oer_analysis_elf::dwarf::gimli;
-use oer_analysis_riscv_model::{Ledger, Result, RunControl};
+use oer_tools_analysis_elf::dwarf::gimli;
+use oer_tools_analysis_riscv_model::{Ledger, Result, RunControl};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod audit;

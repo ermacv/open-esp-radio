@@ -57,7 +57,7 @@ pub use esp32s31::*;
 /// executor runs.
 ///
 /// ```ignore
-/// oer_espressif::entry!(boot, hart1 = network);
+/// oer::entry!(boot, hart1 = network);
 ///
 /// fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 ///     let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;

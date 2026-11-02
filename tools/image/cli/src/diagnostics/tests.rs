@@ -1,6 +1,6 @@
 use super::*;
-use oer_diagnostics::{Console, PreviousPanic};
-use oer_trace::{Channel, Kind};
+use oer_portable_diagnostics::{Console, PreviousPanic};
+use oer_portable_trace::{Channel, Kind};
 
 fn write(bytes: &mut Vec<u8>) -> impl FnMut(&[u8]) -> Result<(), ()> + '_ {
     |chunk| {
@@ -9,7 +9,7 @@ fn write(bytes: &mut Vec<u8>) -> impl FnMut(&[u8]) -> Result<(), ()> + '_ {
     }
 }
 
-fn rendered(bytes: &[u8]) -> oer_image_build::Result<String> {
+fn rendered(bytes: &[u8]) -> oer_tools_image_build::Result<String> {
     let mut output = Vec::new();
     render_stream(&mut std::io::Cursor::new(bytes), &mut output)?;
     Ok(String::from_utf8(output).unwrap())
@@ -19,8 +19,8 @@ fn rendered(bytes: &[u8]) -> oer_image_build::Result<String> {
 fn boot_failure_notes_remain_complete_console_lines() {
     let mut bytes = Vec::new();
     Console::new(write(&mut bytes))
-        .note(&oer_diagnostics::Note::runtime_fail(
-            oer_diagnostics::name!("refused"),
+        .note(&oer_portable_diagnostics::Note::runtime_fail(
+            oer_portable_diagnostics::name!("refused"),
         ))
         .unwrap();
     assert_eq!(
@@ -72,9 +72,9 @@ fn human_panic_text_preserves_static_formatted_empty_and_interrupt_fields() {
 
 #[test]
 fn radio_root_round_trip_renders_every_clock_and_failure_as_before() {
-    use oer_diagnostics::radio_root::RadioRoot;
-    use oer_diagnostics::radio_root::RadioRoot::*;
-    use oer_trace::Event;
+    use oer_portable_diagnostics::radio_root::RadioRoot;
+    use oer_portable_diagnostics::radio_root::RadioRoot::*;
+    use oer_portable_trace::Event;
     // The same explicit wire ids must decode as the original semantic event.
     let mut events = Vec::new();
     for clock in 0..5 {
@@ -147,8 +147,8 @@ fn boot_verdict_cannot_hide_lost_panic_or_partial_tail() {
             .contains("OER-RESULT: pass boot-smoke")
     );
     let last = bytes
-        .windows(oer_diagnostics::PREFIX.len())
-        .rposition(|part| part == oer_diagnostics::PREFIX)
+        .windows(oer_portable_diagnostics::PREFIX.len())
+        .rposition(|part| part == oer_portable_diagnostics::PREFIX)
         .unwrap();
     assert!(
         rendered(&bytes[last..])
@@ -156,7 +156,7 @@ fn boot_verdict_cannot_hide_lost_panic_or_partial_tail() {
             .to_string()
             .contains("loss/order")
     );
-    for end in last + oer_diagnostics::PREFIX.len()..bytes.len() - 1 {
+    for end in last + oer_portable_diagnostics::PREFIX.len()..bytes.len() - 1 {
         assert!(rendered(&bytes[..end]).is_err(), "cut {end}");
     }
 }
@@ -165,7 +165,7 @@ fn boot_verdict_cannot_hide_lost_panic_or_partial_tail() {
 fn unknown_event_is_a_handled_error_and_rom_reset_restarts_sequence() {
     struct Unknown;
     impl Event for Unknown {
-        const KIND: Kind = Kind::new(oer_trace::Domain::Platform, 255);
+        const KIND: Kind = Kind::new(oer_portable_trace::Domain::Platform, 255);
         const CHANNEL: Channel = BootSmokePassed::CHANNEL;
         fn encode(&self) -> [u32; 2] {
             [0, 0]
@@ -224,7 +224,7 @@ fn a_secondary_ready_event_renders_its_hart_and_stack_pointer() {
     {
         let mut console = Console::new(write(&mut bytes));
         console
-            .event(&oer_diagnostics::SecondaryReady {
+            .event(&oer_portable_diagnostics::SecondaryReady {
                 hart: 1,
                 sp: 0x5012_3450,
             })
@@ -245,7 +245,7 @@ fn a_hart_exchange_event_renders_its_hart_request_and_answer() {
     {
         let mut console = Console::new(write(&mut bytes));
         console
-            .event(&oer_diagnostics::HartExchange {
+            .event(&oer_portable_diagnostics::HartExchange {
                 hart: 1,
                 request: 7,
                 answer: 49,
@@ -267,19 +267,19 @@ fn hart_aes_and_liveness_events_render_their_hart_and_result() {
     {
         let mut console = Console::new(write(&mut bytes));
         console
-            .event(&oer_diagnostics::HartAes {
+            .event(&oer_portable_diagnostics::HartAes {
                 hart: 1,
                 matched: true,
             })
             .unwrap();
         console
-            .event(&oer_diagnostics::HartAes {
+            .event(&oer_portable_diagnostics::HartAes {
                 hart: 1,
                 matched: false,
             })
             .unwrap();
         console
-            .event(&oer_diagnostics::HartLiveness { hart: 1, rounds: 2 })
+            .event(&oer_portable_diagnostics::HartLiveness { hart: 1, rounds: 2 })
             .unwrap();
         console.event(&BootSmokePassed).unwrap();
     }

@@ -1,5 +1,5 @@
 [package]
-name = "oer-crypto"
+name = "oer-portable-crypto"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

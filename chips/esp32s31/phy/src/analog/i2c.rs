@@ -30,13 +30,13 @@ use crate::analog::{
     },
 };
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::owner::SharedPhyAccess;
+use oer_chips_esp32s31_hal::owner::SharedPhyAccess;
 
-use oer_esp32s31_hal::phy::i2c::PhyAdcRate;
+use oer_chips_esp32s31_hal::phy::i2c::PhyAdcRate;
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::phy::i2c as hal_phy_i2c;
-pub(crate) use oer_esp32s31_hal::phy::i2c::{Address, Field, analog_i2c};
+use oer_chips_esp32s31_hal::phy::i2c as hal_phy_i2c;
+pub(crate) use oer_chips_esp32s31_hal::phy::i2c::{Address, Field, analog_i2c};
 
 mod profile;
 
@@ -70,8 +70,8 @@ pub async fn configure_i2c_initialization_stage_two(
     parameter: PhyRfInitParameterSnapshot,
     maximum_observations: u32,
     wait: impl AsyncFnMut(),
-) -> Result<(), oer_espressif_phy::i2c::PhyI2cInitializationStageTwoError> {
-    oer_espressif_phy::i2c::configure_initialization_stage_two(
+) -> Result<(), oer_chips_family_phy::i2c::PhyI2cInitializationStageTwoError> {
+    oer_chips_family_phy::i2c::configure_initialization_stage_two(
         &mut hal_phy_i2c::parallel_port(registers),
         |index| parameter.initialization_stage_two_pair(index),
         maximum_observations,
@@ -88,8 +88,8 @@ pub async fn configure_i2c_initialization_stage_two(
 /// offsets `0x2e..0x4e`; field identities remain private to the custom PAC.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_open_i2c_pre_delay(registers: &mut impl SharedPhyAccess) {
-    oer_espressif_phy::analog_i2c::prepare_open_i2c_pre_delay(
-        &mut oer_esp32s31_hal::phy::analog_i2c::power_port(registers),
+    oer_chips_family_phy::analog_i2c::prepare_open_i2c_pre_delay(
+        &mut oer_chips_esp32s31_hal::phy::analog_i2c::power_port(registers),
     );
 }
 
@@ -100,8 +100,8 @@ pub fn configure_open_i2c_pre_delay(registers: &mut impl SharedPhyAccess) {
 /// identities remain private to the custom PAC.
 #[cfg(target_arch = "riscv32")]
 pub fn configure_open_i2c_power_and_pulse(registers: &mut impl SharedPhyAccess) {
-    oer_espressif_phy::analog_i2c::complete_open_i2c_power_and_reset(
-        &mut oer_esp32s31_hal::phy::analog_i2c::power_port(registers),
+    oer_chips_family_phy::analog_i2c::complete_open_i2c_power_and_reset(
+        &mut oer_chips_esp32s31_hal::phy::analog_i2c::power_port(registers),
     );
 }
 
@@ -314,7 +314,7 @@ impl AdcRateTransition {
 }
 
 /// One owned replacement for ROM `phy_i2c_writeReg_Mask`: the portable
-/// [`oer_espressif_analog::FieldWriteTransition`] over this chip's analog
+/// [`oer_chips_family_analog::FieldWriteTransition`] over this chip's analog
 /// identities. The current byte crosses the async read edge as a completion
 /// value, is transformed in Rust, and is then owned until the separately
 /// completed write.
@@ -324,8 +324,8 @@ impl AdcRateTransition {
 pub const fn field_write(
     field: Field,
     value: u8,
-) -> oer_espressif_analog::FieldWriteTransition<Address> {
-    match oer_espressif_analog::FieldWriteTransition::new(field, value) {
+) -> oer_chips_family_analog::FieldWriteTransition<Address> {
+    match oer_chips_family_analog::FieldWriteTransition::new(field, value) {
         Ok(write) => write,
         Err(_) => panic!("a production value fits its analog field"),
     }
@@ -339,10 +339,10 @@ pub enum MaskedI2cWriteBindingError {
 }
 
 /// Non-cloneable lowering for one explicit read or write emitted by
-/// [`oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>`].
+/// [`oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>`].
 #[derive(Debug, Eq, PartialEq)]
 pub struct MaskedI2cWriteBinding {
-    outer_action: oer_espressif_analog::Action<crate::analog::i2c::Address, ()>,
+    outer_action: oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>,
     transaction: crate::calibration::cold::PhyColdI2cTransaction,
 }
 
@@ -354,16 +354,16 @@ impl MaskedI2cWriteBinding {
     }
 
     pub fn new(
-        action: oer_espressif_analog::Action<crate::analog::i2c::Address, ()>,
+        action: oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>,
     ) -> Result<Self, MaskedI2cWriteBindingError> {
         let request = match action {
-            oer_espressif_analog::Action::Read { address } => {
+            oer_chips_family_analog::Action::Read { address } => {
                 crate::calibration::cold::PhyColdI2cRequest::read_byte(address)
             }
-            oer_espressif_analog::Action::Write { address, value } => {
+            oer_chips_family_analog::Action::Write { address, value } => {
                 crate::calibration::cold::PhyColdI2cRequest::write_byte(address, value)
             }
-            oer_espressif_analog::Action::Complete(()) => {
+            oer_chips_family_analog::Action::Complete(()) => {
                 return Err(MaskedI2cWriteBindingError::UnsupportedAction);
             }
         };
@@ -410,7 +410,7 @@ impl MaskedI2cWriteBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn start_target<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn start_target<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &mut P,
     ) -> Result<(), crate::calibration::cold::PhyColdI2cError> {
@@ -418,7 +418,7 @@ impl MaskedI2cWriteBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn observe_target_edge<P: oer_esp32s31_hal::owner::SharedPhyAccess>(
+    pub fn observe_target_edge<P: oer_chips_esp32s31_hal::owner::SharedPhyAccess>(
         &mut self,
         platform: &P,
     ) -> Result<
@@ -431,12 +431,12 @@ impl MaskedI2cWriteBinding {
     pub fn into_completion(
         self,
     ) -> Result<
-        oer_espressif_analog::Completion<crate::analog::i2c::Address>,
+        oer_chips_family_analog::Completion<crate::analog::i2c::Address>,
         MaskedI2cWriteBindingError,
     > {
         match (self.outer_action, self.transaction.action()) {
             (
-                oer_espressif_analog::Action::Read { address },
+                oer_chips_family_analog::Action::Read { address },
                 crate::calibration::cold::PhyColdI2cAction::Complete(
                     crate::calibration::cold::PhyColdI2cOutcome::Read {
                         address: completed_address,
@@ -444,17 +444,17 @@ impl MaskedI2cWriteBinding {
                     },
                 ),
             ) if completed_address == address => {
-                Ok(oer_espressif_analog::Completion::Read { address, value })
+                Ok(oer_chips_family_analog::Completion::Read { address, value })
             }
             (
-                oer_espressif_analog::Action::Write { address, .. },
+                oer_chips_family_analog::Action::Write { address, .. },
                 crate::calibration::cold::PhyColdI2cAction::Complete(
                     crate::calibration::cold::PhyColdI2cOutcome::Written {
                         address: completed_address,
                     },
                 ),
             ) if completed_address == address => {
-                Ok(oer_espressif_analog::Completion::Written { address })
+                Ok(oer_chips_family_analog::Completion::Written { address })
             }
             (_, crate::calibration::cold::PhyColdI2cAction::Complete(_)) => {
                 Err(MaskedI2cWriteBindingError::UnexpectedOutcome)
@@ -498,8 +498,8 @@ impl FilterDcapParameters {
         }
     }
 
-    pub(crate) const fn pac_inputs(self) -> oer_esp32s31_hal::phy::i2c::PhyFilterDcapInputs {
-        oer_esp32s31_hal::phy::i2c::PhyFilterDcapInputs::new(
+    pub(crate) const fn pac_inputs(self) -> oer_chips_esp32s31_hal::phy::i2c::PhyFilterDcapInputs {
+        oer_chips_esp32s31_hal::phy::i2c::PhyFilterDcapInputs::new(
             self.parameter_e9,
             self.parameter_ea,
             self.parameter_ed,
@@ -600,8 +600,8 @@ impl PhyRfInitParameterSnapshot {
 
     pub(crate) const fn pac_initialization_stage_one_inputs(
         self,
-    ) -> oer_esp32s31_hal::phy::i2c::PhyI2cInitializationStageOneInputs {
-        oer_esp32s31_hal::phy::i2c::PhyI2cInitializationStageOneInputs::new(
+    ) -> oer_chips_esp32s31_hal::phy::i2c::PhyI2cInitializationStageOneInputs {
+        oer_chips_esp32s31_hal::phy::i2c::PhyI2cInitializationStageOneInputs::new(
             self.parameter_18e,
             self.filter_dcap.parameter_ee,
         )

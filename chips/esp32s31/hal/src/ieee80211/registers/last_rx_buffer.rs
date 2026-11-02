@@ -1,7 +1,7 @@
 //! The complete last-RX-buffer table initialization.
 
-use oer_esp32s31_pac::wifi_mac::WifiMacLastRxBuffer;
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::wifi_mac::WifiMacLastRxBuffer;
+use oer_portable_mmio::Placement;
 
 use super::{MacPlacement, WifiRadioRegisters, bits, element};
 

@@ -1,5 +1,5 @@
 #![no_std]
-use oer_radio_port::{BodyLoan, Root, Slot, SlotIdentity, SlotOwner};
+use oer_protocols_radio_port::{BodyLoan, Root, Slot, SlotIdentity, SlotOwner};
 
 pub fn reclaim<'p, Id: SlotIdentity, Other: SlotIdentity, S: SlotOwner<Id>>(
     loan: BodyLoan<'p, Id, S>, own: Slot<'p, (), Root<Id>>, foreign: Slot<'p, (), Root<Other>>,

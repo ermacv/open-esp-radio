@@ -5,8 +5,8 @@ protocol and the backend that executes it: a chip, a family driver or a host
 model. Everything above a port is written once for every backend; everything
 below it is the backend's. The ports are not frozen; this page states the
 principles the port crates follow. The shared lifecycle and vocabulary are in
-[`oer-radio-port`](../protocols/radio/port/README.md), the Wi-Fi port in
-[`oer-ieee80211-contracts-port`](../protocols/ieee80211/contracts/port/README.md).
+[`oer-protocols-radio-port`](../protocols/radio/port/README.md), the Wi-Fi port in
+[`oer-protocols-ieee80211-contracts-port`](../protocols/ieee80211/contracts/port/README.md).
 
 ## Placement follows hardware autonomy
 
@@ -57,7 +57,7 @@ link layer above the port decides how long each event may last.
   them is refused as unsupported and that refusal means nothing else. Why a
   backend lacks something is written in its documentation, not in code.
 - **Shared RF path.** Protocols name themselves with `RadioClient`
-  (`oer-radio-coex`) and name each request by the port's own `Operation`
+  (`oer-protocols-radio-coex`) and name each request by the port's own `Operation`
   enum; the chip family's coexistence owner maps both onto its arbitration
   below the port. There is no urgency level.
 - **Names.** `*Port` is a portable contract trait, `*Service` a portable state

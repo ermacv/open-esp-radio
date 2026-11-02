@@ -21,14 +21,14 @@
 //! that describes the radio and published to the domain right before the
 //! acquisition, never supplied by a caller.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
 use core::fmt;
-use oer_espressif_ieee802154_engine::lifecycle::{
+use oer_chips_family_ieee802154_engine::lifecycle::{
     Ieee802154FoundationFailure, Ieee802154FoundationReturn, Ieee802154Lifecycle, state,
 };
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     domain::{BtbbError, RadioClient, RadioDomain},
     ieee802154::{
         Ieee802154Clocked, Ieee802154Operational,
@@ -45,7 +45,7 @@ use crate::concurrent::{
 /// on the shared BTBB baseband, with its transmit-on delay applied.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::ieee802154_client::Ieee802154PhyMembership;
+/// use oer_chips_esp32s31_phy::ieee802154_client::Ieee802154PhyMembership;
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<Ieee802154PhyMembership>();
 /// ```
@@ -87,7 +87,7 @@ pub enum Ieee802154PhyClientError {
 pub fn join_ieee802154<'l, B: PlatformClockBackend>(
     ready: PhyClientReady<'l, B, Ieee802154PhyMembership>,
     clocked: &Ieee802154Clocked,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<Joined<'l, B, Ieee802154PhyMembership>, JoinRefused<'l, B, Ieee802154PhyClientError>> {
     let radio = ready.into_radio();
     let acquired =
@@ -180,9 +180,9 @@ pub fn leave_ieee802154<B: PlatformClockBackend>(
 /// issued.
 ///
 /// ```
-/// use oer_esp32s31_hal::ieee802154::Ieee802154Clocked;
-/// use oer_espressif_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
-/// use oer_esp32s31_phy::ieee802154_client::{
+/// use oer_chips_esp32s31_hal::ieee802154::Ieee802154Clocked;
+/// use oer_chips_family_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
+/// use oer_chips_esp32s31_phy::ieee802154_client::{
 ///     Ieee802154PhyMembership, RegisteredIeee802154Operational,
 /// };
 /// fn install(
@@ -196,9 +196,9 @@ pub fn leave_ieee802154<B: PlatformClockBackend>(
 /// Not without it:
 ///
 /// ```compile_fail,E0061
-/// use oer_esp32s31_hal::ieee802154::Ieee802154Clocked;
-/// use oer_espressif_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
-/// use oer_esp32s31_phy::ieee802154_client::RegisteredIeee802154Operational;
+/// use oer_chips_esp32s31_hal::ieee802154::Ieee802154Clocked;
+/// use oer_chips_family_ieee802154_engine::lifecycle::{Ieee802154Lifecycle, state};
+/// use oer_chips_esp32s31_phy::ieee802154_client::RegisteredIeee802154Operational;
 /// fn install(foundation: Ieee802154Lifecycle<Ieee802154Clocked, state::FoundationConfigured>) -> RegisteredIeee802154Operational {
 ///     RegisteredIeee802154Operational::new(foundation)
 /// }
@@ -239,8 +239,8 @@ impl RegisteredIeee802154Operational {
 /// leaves the PHY only after its operational MAC was taken apart:
 ///
 /// ```
-/// use oer_esp32s31_hal::ieee802154::mac::{Ieee802154InterruptSetupOwner, Ieee802154TaskOwner};
-/// use oer_esp32s31_phy::ieee802154_client::RegisteredIeee802154OperationalRoute;
+/// use oer_chips_esp32s31_hal::ieee802154::mac::{Ieee802154InterruptSetupOwner, Ieee802154TaskOwner};
+/// use oer_chips_esp32s31_phy::ieee802154_client::RegisteredIeee802154OperationalRoute;
 /// fn uninstall(
 ///     route: RegisteredIeee802154OperationalRoute,
 ///     task: Ieee802154TaskOwner,
@@ -251,7 +251,7 @@ impl RegisteredIeee802154Operational {
 /// ```
 ///
 /// ```compile_fail,E0616
-/// use oer_esp32s31_phy::ieee802154_client::{
+/// use oer_chips_esp32s31_phy::ieee802154_client::{
 ///     Ieee802154PhyMembership, RegisteredIeee802154OperationalRoute,
 /// };
 /// fn leave_early(route: RegisteredIeee802154OperationalRoute) -> Ieee802154PhyMembership {

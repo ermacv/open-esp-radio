@@ -803,10 +803,10 @@ fn a_lost_unregistration_completion_never_issues_joined() {
 
 #[test]
 fn a_late_p2_answer_cannot_upgrade_the_supervisors_expired_result() {
-    use oer_time::{Instant, Timer};
+    use oer_portable_time::{Instant, Timer};
 
     let model = model(true);
-    let clock = oer_time_virtual::VirtualClock::<4>::starting_at(Instant::EPOCH);
+    let clock = oer_portable_time_virtual::VirtualClock::<4>::starting_at(Instant::EPOCH);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot

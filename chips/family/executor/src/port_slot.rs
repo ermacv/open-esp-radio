@@ -1,14 +1,14 @@
 //! Nominal, irreversible static placement of port backing.
 
 use core::{marker::PhantomData, ptr::NonNull};
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     Joined, PortSlot, SlotFrontend, SlotIdentity, SlotOwner, SlotRegisterError, SlotRegistration,
     SlotRetireRefused,
 };
-use oer_radio_port::{SlotClaim, StaticId};
+use oer_protocols_radio_port::{SlotClaim, StaticId};
 
 #[doc(hidden)]
-pub use oer_radio_port as contract;
+pub use oer_protocols_radio_port as contract;
 #[doc(hidden)]
 pub use static_cell::StaticCell;
 

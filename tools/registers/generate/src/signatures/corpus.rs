@@ -2,9 +2,9 @@
 //! the existing ELF view remains the sole binary reader. Data/absolute
 //! names are candidates too: only Blobray decides whether a call targets one.
 use crate::Result;
-use oer_analysis_elf::SymbolKind;
-use oer_analysis_riscv_model::{AnalysisProfile, AnalysisResources};
-use oer_os_process::Checkout;
+use oer_tools_analysis_elf::SymbolKind;
+use oer_tools_analysis_riscv_model::{AnalysisProfile, AnalysisResources};
+use oer_tools_os_process::Checkout;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -28,7 +28,7 @@ struct Site {
 }
 #[derive(Deserialize)]
 struct Document {
-    analysis_resources: oer_analysis_riscv_model::AnalysisResources,
+    analysis_resources: oer_tools_analysis_riscv_model::AnalysisResources,
     schema: u32,
     inputs: Vec<Input>,
     abi: Option<String>,
@@ -63,19 +63,19 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
     let mut inputs = Vec::new();
     let mut names = BTreeSet::new();
     let mut defined = BTreeSet::new();
-    for pin in oer_pins_artifacts::artifacts::pinned(&ctx.root, chip)? {
+    for pin in oer_tools_pins_artifacts::artifacts::pinned(&ctx.root, chip)? {
         if pin.firmware {
             continue;
         }
         let bytes = fs::read(&pin.path)?;
-        if !oer_analysis_elf::is_binary(&bytes) {
+        if !oer_tools_analysis_elf::is_binary(&bytes) {
             continue;
         }
         inputs.push(Input {
             role: pin.id,
-            sha256: oer_os_durable::sha256_bytes(&bytes),
+            sha256: oer_tools_os_durable::sha256_bytes(&bytes),
         });
-        for (_, elf) in oer_analysis_elf::objects(&bytes)? {
+        for (_, elf) in oer_tools_analysis_elf::objects(&bytes)? {
             let executable: BTreeMap<_, _> = elf
                 .sections()
                 .filter(|s| s.executable && !s.data.is_empty())
@@ -107,7 +107,7 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
         return Err(format!("no pinned binary/function corpus for {chip}").into());
     }
     let names: Vec<_> = names.into_iter().collect();
-    let host = oer_os_toolchain::workspace::build(&ctx.root, "oer-tool-analysis-cli", "blobray")?;
+    let host = oer_tools_os_toolchain::workspace::build(&ctx.root, "oer-tools-analysis-cli", "blobray")?;
     let mut command = ctx.command(host);
     let limits = AnalysisProfile::SignatureCorpus.limits();
     command.args([
@@ -200,7 +200,7 @@ fn finish(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_analysis_riscv_model::{
+    use oer_tools_analysis_riscv_model::{
         AnalysisLimited, AnalysisUsage, FunctionLimits, LimitReason, LocalBudgetScope,
     };
 

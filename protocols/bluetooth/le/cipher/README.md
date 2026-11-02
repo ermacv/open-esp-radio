@@ -1,6 +1,6 @@
 # Bluetooth LE cipher
 
-`oer-bluetooth-le-cipher` provides allocation-free AES-CCM ACL packet protection,
+`oer-protocols-bluetooth-le-cipher` provides allocation-free AES-CCM ACL packet protection,
 LTK-to-session-key derivation and the 39-bit packet-counter/direction/IV nonce
 transform. It depends on LE wire formats and the same RustCrypto AES/CCM and
 zeroize primitives used by the Link Layer.

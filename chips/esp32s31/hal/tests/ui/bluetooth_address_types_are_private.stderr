@@ -1,31 +1,31 @@
-error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothControllerSramAddress`
+error[E0432]: unresolved import `oer_chips_esp32s31_hal::bluetooth::BluetoothControllerSramAddress`
   --> tests/ui/bluetooth_address_types_are_private.rs:13:5
    |
-13 | use oer_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0432
+13 | use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0432
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BluetoothControllerSramAddress` in `bluetooth`
    |
 help: a similar name exists in the module
    |
-13 - use oer_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0432
-13 + use oer_esp32s31_hal::bluetooth::BluetoothControllerParts; // ui-error: E0432
+13 - use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerSramAddress; // ui-error: E0432
+13 + use oer_chips_esp32s31_hal::bluetooth::BluetoothControllerParts; // ui-error: E0432
    |
 
-error[E0432]: unresolved import `oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady`
+error[E0432]: unresolved import `oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady`
   --> tests/ui/bluetooth_address_types_are_private.rs:21:5
    |
-21 | use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432
+21 | use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BluetoothSchedulerSoftwareListRemovalReady` in `bluetooth`
    |
 help: a similar name exists in the module
    |
-21 - use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432
-21 + use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalIdle; // ui-error: E0432
+21 - use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalReady; // ui-error: E0432
+21 + use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalIdle; // ui-error: E0432
    |
 
 error[E0603]: struct `DeviceTablePublication` is private
  --> tests/ui/bluetooth_address_types_are_private.rs:5:34
   |
-5 | use oer_esp32s31_hal::bluetooth::DeviceTablePublication; // ui-error: E0603
+5 | use oer_chips_esp32s31_hal::bluetooth::DeviceTablePublication; // ui-error: E0603
   |                                  ^^^^^^^^^^^^^^^^^^^^^^ private struct
   |
 note: the struct `DeviceTablePublication` is defined here
@@ -37,7 +37,7 @@ note: the struct `DeviceTablePublication` is defined here
 error[E0603]: struct `RxChainHead` is private
  --> tests/ui/bluetooth_address_types_are_private.rs:7:34
   |
-7 | use oer_esp32s31_hal::bluetooth::RxChainHead; // ui-error: E0603
+7 | use oer_chips_esp32s31_hal::bluetooth::RxChainHead; // ui-error: E0603
   |                                  ^^^^^^^^^^^ private struct
   |
 note: the struct `RxChainHead` is defined here
@@ -49,7 +49,7 @@ note: the struct `RxChainHead` is defined here
 error[E0603]: struct `BlePhyHardwareObjects` is private
  --> tests/ui/bluetooth_address_types_are_private.rs:9:34
   |
-9 | use oer_esp32s31_hal::bluetooth::BlePhyHardwareObjects; // ui-error: E0603
+9 | use oer_chips_esp32s31_hal::bluetooth::BlePhyHardwareObjects; // ui-error: E0603
   |                                  ^^^^^^^^^^^^^^^^^^^^^ private struct
   |
 note: the struct `BlePhyHardwareObjects` is defined here
@@ -61,7 +61,7 @@ note: the struct `BlePhyHardwareObjects` is defined here
 error[E0603]: struct `DirectionFindingDescriptor` is private
   --> tests/ui/bluetooth_address_types_are_private.rs:11:34
    |
-11 | use oer_esp32s31_hal::bluetooth::DirectionFindingDescriptor; // ui-error: E0603
+11 | use oer_chips_esp32s31_hal::bluetooth::DirectionFindingDescriptor; // ui-error: E0603
    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
    |
 note: the struct `DirectionFindingDescriptor` is defined here
@@ -73,7 +73,7 @@ note: the struct `DirectionFindingDescriptor` is defined here
 error[E0603]: module `registers` is private
   --> tests/ui/bluetooth_address_types_are_private.rs:15:34
    |
-15 | use oer_esp32s31_hal::bluetooth::registers::BluetoothTaskRegisters; // ui-error: E0603
+15 | use oer_chips_esp32s31_hal::bluetooth::registers::BluetoothTaskRegisters; // ui-error: E0603
    |                                  ^^^^^^^^^  ---------------------- struct `BluetoothTaskRegisters` is not publicly re-exported
    |                                  |
    |                                  private module
@@ -87,7 +87,7 @@ note: the module `registers` is defined here
 error[E0603]: module `registers` is private
   --> tests/ui/bluetooth_address_types_are_private.rs:17:34
    |
-17 | use oer_esp32s31_hal::bluetooth::registers::BluetoothPhyRegisterInitInputs; // ui-error: E0603
+17 | use oer_chips_esp32s31_hal::bluetooth::registers::BluetoothPhyRegisterInitInputs; // ui-error: E0603
    |                                  ^^^^^^^^^  ------------------------------ struct `BluetoothPhyRegisterInitInputs` is not publicly re-exported
    |                                  |
    |                                  private module
@@ -101,7 +101,7 @@ note: the module `registers` is defined here
 error[E0603]: enum `BluetoothSchedulerSoftwareListRemovalJoin` is private
   --> tests/ui/bluetooth_address_types_are_private.rs:19:34
    |
-19 | use oer_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
+19 | use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private enum
    |
 note: the enum `BluetoothSchedulerSoftwareListRemovalJoin` is defined here
@@ -111,5 +111,5 @@ note: the enum `BluetoothSchedulerSoftwareListRemovalJoin` is defined here
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 help: import `BluetoothSchedulerSoftwareListRemovalJoin` directly
    |
-19 | use oer_esp32s31_hal::bluetooth::registers::scheduler::runtime::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
+19 | use oer_chips_esp32s31_hal::bluetooth::registers::scheduler::runtime::BluetoothSchedulerSoftwareListRemovalJoin; // ui-error: E0603
    |                                  +++++++++++++++++++++++++++++++

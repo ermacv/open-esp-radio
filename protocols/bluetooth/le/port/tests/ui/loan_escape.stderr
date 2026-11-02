@@ -6,6 +6,6 @@ error: lifetime may not live long enough
 7 |     session // ui-error: lifetime may not live long enough
   |     ^^^^^^^ returning this value requires that `'p` must outlive `'static`
   |
-  = note: requirement occurs because of the type `Session<'_, P, oer_bluetooth_le_port::Idle>`, which makes the generic argument `'_` invariant
+  = note: requirement occurs because of the type `Session<'_, P, oer_protocols_bluetooth_le_port::Idle>`, which makes the generic argument `'_` invariant
   = note: the struct `Session<'p, P, State>` is invariant over the parameter `'p`
   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance

@@ -13,18 +13,18 @@
 //! Every failure is classified as the client contract's [`Failure`] table
 //! states; a `ClientFailed` site says why the shared domain is not touched.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
-use oer_esp32s31_phy::executor::boundary::Boundary;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_phy::executor::boundary::Boundary;
 
-use oer_esp32s31_hal::ieee80211::init::{MacCoexPti, initialize_wifi_mac};
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::ieee80211::init::{MacCoexPti, initialize_wifi_mac};
+use oer_chips_esp32s31_hal::{
     domain::{
         CoexAbsent, Coexisting, CommonPower, CommonRadioPowerError, ModemClockError,
         PlatformClockProvider, RadioDomain, WifiClient,
     },
     ieee80211::client::{WifiClocked, WifiCold, WifiPowered},
 };
-use oer_esp32s31_phy::{
+use oer_chips_esp32s31_phy::{
     ConcurrentPhyRegisterFailure, ConcurrentPhyTrackingError, ConcurrentRfError,
     ConcurrentWifiChannelError, PhyCalibrationTrackingFailure, PhyCalibrationTrackingRunError,
     PhyParamTrackingPortError, PhyParamTrackingRunError, PhyRegisterConfig, PhyRegisterFailure,
@@ -35,7 +35,7 @@ use oer_esp32s31_phy::{
     track_concurrent_phy, wake_concurrent_rf,
     wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
 };
-use oer_esp32s31_radio_client::{
+use oer_chips_esp32s31_radio_client::{
     CalibrationTrackingFailure, CalibrationTrackingFault, DomainHealth, Failed, Failure, LpClock,
     PhyFault, PhyPreparation, Poison, PoisonCause, RcSlow, RegistrationFailure, RegistrationFault,
     RequestKind,
@@ -58,7 +58,7 @@ mod retune;
 /// Wi-Fi's request `request` poisoned the domain with `cause`.
 pub(crate) const fn wifi_poisoned(request: RequestKind, cause: PoisonCause) -> Failure {
     Failure::Poisoned(Poison::request(
-        oer_esp32s31_hal::domain::RadioClient::Wifi,
+        oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
         request,
         cause,
     ))
@@ -206,7 +206,7 @@ struct WifiShare {
 /// events ([`crate::observation`]).
 pub struct Esp32s31Radio<C: PlatformClockProvider, T, O, S, R> {
     radio: Option<RadioDomain<C::Backend, ConcurrentPhy>>,
-    radio_fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
+    radio_fault: oer_chips_esp32s31_hal::domain::transaction::FaultHandle,
     clocks: C,
     timer: T,
     pilot: S,
@@ -227,10 +227,10 @@ pub struct Esp32s31Radio<C: PlatformClockProvider, T, O, S, R> {
 impl<C, T, O, S, R> Esp32s31Radio<C, T, O, S, R>
 where
     C: PlatformClockProvider,
-    T: oer_cooperate::CooperativeTimer,
+    T: oer_portable_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
-    R: oer_trace::Observer,
-    S: oer_esp32s31_phy::sar_pilot::Service,
+    R: oer_portable_trace::Observer,
+    S: oer_chips_esp32s31_phy::sar_pilot::Service,
 {
     /// The backend over the split radio domain and Wi-Fi's coexistence
     /// state; `registration` configures the first PHY registration and
@@ -275,11 +275,11 @@ where
     #[cfg(oer_trace)]
     fn tracking_tick(
         &self,
-        tick: oer_esp32s31_phy::ConcurrentTrackingTick,
-        started: oer_time::Instant,
+        tick: oer_chips_esp32s31_phy::ConcurrentTrackingTick,
+        started: oer_portable_time::Instant,
     ) -> crate::observation::TrackingTick {
         use crate::observation::{TickRan, TrackingBranches, TrackingTick};
-        use oer_esp32s31_phy::ConcurrentTrackingTick as Tick;
+        use oer_chips_esp32s31_phy::ConcurrentTrackingTick as Tick;
         let micros = u32::try_from(self.micros_since(started)).unwrap_or(u32::MAX);
         let (ran, temperature) = match tick {
             Tick::Tracked(outcome) => (
@@ -300,7 +300,7 @@ where
         }
     }
 
-    fn micros_since(&self, start: oer_time::Instant) -> u64 {
+    fn micros_since(&self, start: oer_portable_time::Instant) -> u64 {
         self.timer
             .now()
             .saturating_duration_since(start)
@@ -381,7 +381,7 @@ where
 /// Wi-Fi's leave poisoned the domain with `cause`.
 const fn leave_poisoned(cause: PoisonCause) -> DomainHealth {
     DomainHealth::Poisoned(Poison::request(
-        oer_esp32s31_hal::domain::RadioClient::Wifi,
+        oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
         RequestKind::Leave,
         cause,
     ))
@@ -390,10 +390,10 @@ const fn leave_poisoned(cause: PoisonCause) -> DomainHealth {
 impl<C, T, O, S, R> PhyDomain for Esp32s31Radio<C, T, O, S, R>
 where
     C: PlatformClockProvider,
-    T: oer_cooperate::CooperativeTimer,
+    T: oer_portable_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
-    R: oer_trace::Observer,
-    S: oer_esp32s31_phy::sar_pilot::Service,
+    R: oer_portable_trace::Observer,
+    S: oer_chips_esp32s31_phy::sar_pilot::Service,
 {
     async fn prepare(&mut self) -> Result<PhyPreparation, Fault> {
         let start = self.timer.now();
@@ -478,7 +478,7 @@ where
         }
     }
 
-    fn tracking_deadline(&self) -> Result<Option<oer_time::Instant>, Fault> {
+    fn tracking_deadline(&self) -> Result<Option<oer_portable_time::Instant>, Fault> {
         let Some(clients) = require_radio(self.radio.as_ref(), self.radio_fault)
             .attachment()
             .client_snapshot()
@@ -488,7 +488,7 @@ where
         // A deadline past the clock's range would silently end tracking.
         clients
             .next_tracking_deadline_micros()
-            .map(|micros| micros.map(oer_time::Instant::from_micros))
+            .map(|micros| micros.map(oer_portable_time::Instant::from_micros))
             .map_err(|error| {
                 Fault(PoisonCause::TrackingRefused(ConcurrentPhyError::Time(
                     error,
@@ -520,7 +520,7 @@ where
         let result = match completed {
             #[cfg(oer_trace)]
             Ok(tick) => {
-                oer_trace::observe!(self.tracking, self.tracking_tick(tick, started));
+                oer_portable_trace::observe!(self.tracking, self.tracking_tick(tick, started));
                 Ok(())
             }
             #[cfg(not(oer_trace))]
@@ -538,10 +538,10 @@ where
 impl<C, T, O, S, R> ClientBackend<Wifi, RcSlow> for Esp32s31Radio<C, T, O, S, R>
 where
     C: PlatformClockProvider,
-    T: oer_cooperate::CooperativeTimer,
+    T: oer_portable_cooperate::CooperativeTimer,
     O: PhyTargetObserver + Clone,
-    R: oer_trace::Observer,
-    S: oer_esp32s31_phy::sar_pilot::Service,
+    R: oer_portable_trace::Observer,
+    S: oer_chips_esp32s31_phy::sar_pilot::Service,
 {
     async fn enter(
         &mut self,
@@ -553,7 +553,7 @@ where
         if self.bluetooth_attached {
             if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return Err(Failed {
-                    returned: <Wifi as oer_esp32s31_radio_client::Client>::join_returned(join),
+                    returned: <Wifi as oer_chips_esp32s31_radio_client::Client>::join_returned(join),
                     cause: wifi_poisoned(RequestKind::Join, cause),
                 });
             }
@@ -726,7 +726,7 @@ where
         let mut observer = self.observer.clone();
         let mut platform = ();
         let transaction = require_radio(self.radio.take(), self.radio_fault)
-            .detach(oer_esp32s31_hal::domain::transaction::Operation::Channel);
+            .detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Channel);
         let selected = {
             let channel = wifi.channel_transaction(&mut platform, transaction);
             let mut operation =
@@ -917,8 +917,8 @@ where
         if self.bluetooth_attached {
             if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return (
-                    oer_esp32s31_radio_client::wifi::WifiLeft {
-                        wifi: oer_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
+                    oer_chips_esp32s31_radio_client::wifi::WifiLeft {
+                        wifi: oer_chips_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
                     },
                     Exit {
                         last: false,
@@ -975,10 +975,10 @@ where
 
 #[cfg(target_arch = "riscv32")]
 fn vacant_wifi<B: PlatformClockBackend>(
-    ready: oer_esp32s31_phy::concurrent::PhyReady<'_, B>,
-) -> oer_esp32s31_phy::concurrent::PhyClientReady<'_, B, WifiPhyMembership> {
+    ready: oer_chips_esp32s31_phy::concurrent::PhyReady<'_, B>,
+) -> oer_chips_esp32s31_phy::concurrent::PhyClientReady<'_, B, WifiPhyMembership> {
     match ready.client::<WifiPhyMembership>() {
-        oer_esp32s31_phy::concurrent::PhyClientAccess::Available(available) => available,
+        oer_chips_esp32s31_phy::concurrent::PhyClientAccess::Available(available) => available,
         _ => panic!("Wi-Fi join phase owns the unacquired PHY client"),
     }
 }
@@ -990,16 +990,16 @@ pub use bluetooth::BluetoothAttachment;
 
 // Project the registration diagnostic before returning to the actor poll.
 #[inline(never)]
-fn finish_registration<B: oer_esp32s31_hal::power::PlatformClockBackend>(
+fn finish_registration<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
     destination: &mut Option<RadioDomain<B, ConcurrentPhy>>,
-    returned: oer_memory::Placed<
+    returned: oer_portable_memory::Placed<
         '_,
         (
             RadioDomain<B, ConcurrentPhy>,
-            Result<oer_esp32s31_phy::ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
+            Result<oer_chips_esp32s31_phy::ConcurrentPhyRegistration, ConcurrentPhyRegisterFailure>,
         ),
     >,
-) -> Result<oer_esp32s31_phy::PhyRegisterOutcome, Fault> {
+) -> Result<oer_chips_esp32s31_phy::PhyRegisterOutcome, Fault> {
     let registration = owned_operation::restore(destination, returned)
         .map_err(|failure| Fault(registration_cause(&failure)))?;
     Ok(registration.outcome())
@@ -1009,7 +1009,7 @@ fn finish_registration<B: oer_esp32s31_hal::power::PlatformClockBackend>(
 // diagnostic capability retains the source owner even after cancellation.
 fn require_radio<R>(
     owner: Option<R>,
-    fault: oer_esp32s31_hal::domain::transaction::FaultHandle,
+    fault: oer_chips_esp32s31_hal::domain::transaction::FaultHandle,
 ) -> R {
     fault.require_owner(owner)
 }

@@ -1,5 +1,5 @@
 [package]
-name = "oer-analysis-riscv-program"
+name = "oer-tools-analysis-riscv-program"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,8 @@ publish = false
 description = "Static RV32 ELF images of the program model: load segments, constant memory, code symbols and executable sections"
 
 [dependencies]
-oer-analysis-elf = { path = "../elf" }
-oer-analysis-riscv-model = { path = "../riscv-model" }
+oer-tools-analysis-elf = { path = "../elf" }
+oer-tools-analysis-riscv-model = { path = "../riscv-model" }
 
 [dev-dependencies]
 object = { version = "=0.39.1", default-features = false, features = ["elf", "std", "write"] }

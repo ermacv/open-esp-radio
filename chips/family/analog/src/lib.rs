@@ -495,7 +495,7 @@ enum BusPhase {
 /// The transaction exclusively borrows the same bus across all polls.
 ///
 /// ```compile_fail,E0499
-/// use oer_espressif_analog::{AnalogRegisterBus, ByteTransition, Driver};
+/// use oer_chips_family_analog::{AnalogRegisterBus, ByteTransition, Driver};
 /// fn interleave<B, T>(bus: &mut B, first: T, second: T)
 /// where B: AnalogRegisterBus<Address = T::Address>, T: ByteTransition {
 ///     let mut first = Driver::new(bus, first);
@@ -581,7 +581,7 @@ where
 /// Polled `phy_i2c_readReg_Mask` over a bus.
 ///
 /// ```compile_fail,E0382
-/// use oer_espressif_analog::{AnalogRegisterBus, FieldRead};
+/// use oer_chips_family_analog::{AnalogRegisterBus, FieldRead};
 /// fn duplicate<B: AnalogRegisterBus>(mut read: FieldRead<'_, B>) {
 ///     let mut other = read;
 ///     read.poll();
@@ -608,7 +608,7 @@ impl<'bus, Bus: AnalogRegisterBus> FieldRead<'bus, Bus> {
 /// Polled `phy_i2c_writeReg_Mask` over a bus.
 ///
 /// ```compile_fail,E0499
-/// use oer_espressif_analog::{AnalogField, AnalogRegisterBus, FieldWrite};
+/// use oer_chips_family_analog::{AnalogField, AnalogRegisterBus, FieldWrite};
 /// fn interleave<B: AnalogRegisterBus>(bus: &mut B, field: AnalogField<B::Address>) {
 ///     let mut first = FieldWrite::new(bus, field, 0).ok().expect("fits");
 ///     let mut second = FieldWrite::new(bus, field, 0).ok().expect("fits");
@@ -655,7 +655,7 @@ pub enum ConfigurationError {
 /// Polled vendor configuration leaf over a bus.
 ///
 /// ```compile_fail,E0499
-/// use oer_espressif_analog::{AnalogRegisterBus, Configuration, ConfigurationCommand};
+/// use oer_chips_family_analog::{AnalogRegisterBus, Configuration, ConfigurationCommand};
 /// fn interleave<B: AnalogRegisterBus>(bus: &mut B) {
 ///     let mut first = Configuration::new(bus, |_| None::<ConfigurationCommand<B::Address>>);
 ///     let mut second = Configuration::new(bus, |_| None::<ConfigurationCommand<B::Address>>);
@@ -817,7 +817,7 @@ impl<Pairs> ParallelTransition<Pairs> {
 /// Polled parallel write sequence over a [`ParallelAnalogBus`].
 ///
 /// ```compile_fail,E0499
-/// use oer_espressif_analog::{ParallelAnalogBus, ParallelWrites};
+/// use oer_chips_family_analog::{ParallelAnalogBus, ParallelWrites};
 /// fn interleave<B: ParallelAnalogBus>(bus: &mut B) {
 ///     let mut first = ParallelWrites::new(bus, |_| None);
 ///     let mut second = ParallelWrites::new(bus, |_| None);

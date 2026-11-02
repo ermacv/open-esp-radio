@@ -1,7 +1,7 @@
 #![no_std]
-use oer_ieee80211_contracts_port::{Completed, InFlight, PhaseTypes, TerminalAccess};
-use oer_ieee80211_testing_model::{ModelMpdu, ModelSingleOutcome, ModelTypes};
-use oer_radio_port::Slot;
+use oer_protocols_ieee80211_contracts_port::{Completed, InFlight, PhaseTypes, TerminalAccess};
+use oer_protocols_ieee80211_testing_model::{ModelMpdu, ModelSingleOutcome, ModelTypes};
+use oer_protocols_radio_port::Slot;
 type Kind<'id> = <ModelTypes<Composition> as PhaseTypes<'id>>::TicketKind;
 type Path<'id> = <ModelTypes<Composition> as PhaseTypes<'id>>::TicketPath;
 type Ticket<'id> = Slot<'id, Kind<'id>, Path<'id>>;
@@ -28,4 +28,4 @@ pub fn swap<'id, C>(
 }
 
 pub enum UiSlot {}
-type Composition = oer_ieee80211_testing_model::ModelBackend<oer_radio_port::StaticId<UiSlot>>;
+type Composition = oer_protocols_ieee80211_testing_model::ModelBackend<oer_protocols_radio_port::StaticId<UiSlot>>;

@@ -342,13 +342,13 @@ struct Extension {
 
 impl StackPolicy {
     pub fn load(path: &Path) -> Result<Self> {
-        Self::load_with_inputs(path, &mut oer_os_durable::inputs::Inputs::default())
+        Self::load_with_inputs(path, &mut oer_tools_os_durable::inputs::Inputs::default())
     }
 
     /// Record both this policy and any extended base at their actual reads.
     pub fn load_with_inputs(
         path: &Path,
-        inputs: &mut oer_os_durable::inputs::Inputs,
+        inputs: &mut oer_tools_os_durable::inputs::Inputs,
     ) -> Result<Self> {
         let source = inputs
             .read_to_string(path)
@@ -906,7 +906,7 @@ mod tests {
     fn tracked_loads_record_the_chip_and_both_policy_files_at_their_reads() {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
-        for (path, text) in oer_espressif_facts::tracked::FILES {
+        for (path, text) in oer_chips_family_facts::tracked::FILES {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
@@ -920,7 +920,7 @@ mod tests {
             include_str!("../../../../chips/esp32s31/platform/stack.toml"),
         )
         .unwrap();
-        let mut inputs = oer_os_durable::inputs::Inputs::tracked();
+        let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
         crate::Profile::load_with_inputs(root, "esp32s31", &mut inputs).unwrap();
         StackPolicy::load_with_inputs(&policy, &mut inputs).unwrap();
         let digests = inputs.into_digests();
@@ -937,7 +937,7 @@ mod tests {
         .map(|path| root.join(path));
         assert_eq!(digests.len(), layers.len() + 2);
         for path in layers.into_iter().chain([policy, base]) {
-            assert_eq!(digests[&path], oer_os_durable::sha256_file(&path).unwrap());
+            assert_eq!(digests[&path], oer_tools_os_durable::sha256_file(&path).unwrap());
         }
     }
 

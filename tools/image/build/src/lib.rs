@@ -9,7 +9,7 @@
 //! The pipeline compiles with the image compiler of `oer-image-toolchain` under the
 //! image's stack policy (its move limit and stack reserves), run the
 //! [`Gates`] the caller requests (the binary analyses of
-//! `oer-image-checks`: stacks, interrupts, placement), and encode
+//! `oer-tools-image-checks`: stacks, interrupts, placement), and encode
 //! the complete flash contents at build time with the `espflash` library:
 //! the application, the bootloader, the partition table and the OTA
 //! selection, at the offsets of the chip's [`FlashMap`]. A flash only writes
@@ -47,14 +47,14 @@ use std::{
 pub use build_log::{BuildLog, BuildStepFailed};
 
 pub use cargo::LAYOUT_SEED_ENV;
-use oer_chip_profile::policy::StackPolicy;
-pub use oer_espressif_facts::{Boot, FlashMap};
+use oer_tools_chip_profile::policy::StackPolicy;
+pub use oer_chips_family_facts::{Boot, FlashMap};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub use around::{BootFiles, around};
-use oer_image_bundle::{CheckRecord, CheckResult, CheckedElf};
-pub use oer_image_checks::{Check, CheckInput, CheckOutcome, Enforced, Gates};
+use oer_tools_image_bundle::{CheckRecord, CheckResult, CheckedElf};
+pub use oer_tools_image_checks::{Check, CheckInput, CheckOutcome, Enforced, Gates};
 
 /// The Cargo profile every image builds with (the root `Cargo.toml`).
 pub const FIRMWARE_PROFILE: &str = "firmware";
@@ -62,7 +62,7 @@ pub const FIRMWARE_PROFILE: &str = "firmware";
 /// What to build.
 pub struct ImageSpec {
     /// Whether this build may be flashed or is only for analysis.
-    pub purpose: oer_image_bundle::Purpose,
+    pub purpose: oer_tools_image_bundle::Purpose,
     /// The tree the image is built from: a checkout or a worktree.
     pub root: PathBuf,
     /// The chip id; its profile names the boot kind and the flash map.
@@ -110,7 +110,7 @@ impl Application {
 
 /// Build `spec`: the staged pipeline of its chip, with the instrumentation
 /// classes and the task-stack declaration its application makes.
-pub fn build(spec: &ImageSpec) -> Result<oer_image_bundle::ImageBundle> {
+pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
@@ -175,7 +175,7 @@ pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
     cargo::ensure_fetched(&spec.root)?;
     // Through the shared runner, so a caller's output policy (xtask logs
     // child output by default) applies to the type check too.
-    oer_os_process::run(&mut command).map_err(|error| {
+    oer_tools_os_process::run(&mut command).map_err(|error| {
         format!(
             "the {} runtime {} failed: {error}",
             spec.application.package,
@@ -186,8 +186,8 @@ pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
 }
 
 /// The profile of `chip` at `root`, which must name its flash map.
-pub fn profile(root: &Path, chip: &str) -> Result<oer_chip_profile::Profile> {
-    let profile = oer_chip_profile::Profile::load(root, chip)?;
+pub fn profile(root: &Path, chip: &str) -> Result<oer_tools_chip_profile::Profile> {
+    let profile = oer_tools_chip_profile::Profile::load(root, chip)?;
     if profile.facts.flash.is_none() {
         return Err(
             format!("platform/{chip}/chip.toml names no [flash] map for its images").into(),
@@ -202,7 +202,7 @@ pub fn profile(root: &Path, chip: &str) -> Result<oer_chip_profile::Profile> {
 /// features alone, against the committed pins.
 fn runtime_command(
     spec: &ImageSpec,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
     subcommand: &str,
     policy: &StackPolicy,
     instrumentation: &instrumentation::Instrumentation,
@@ -254,7 +254,7 @@ fn runtime_command(
 /// which it refuses initialized bytes in.
 pub(crate) fn zeroed_inputs(
     command: &mut std::process::Command,
-    profile: &oer_chip_profile::Profile,
+    profile: &oer_tools_chip_profile::Profile,
 ) {
     command.env(crate::compiler::ZEROED_INPUTS_ENV, profile.zeroed_inputs());
 }
@@ -266,7 +266,7 @@ pub fn host_build_root() -> Result<PathBuf> {
     // never into the host's shared build root.
     #[cfg(test)]
     if std::env::var_os(crate::compiler::BUILD_ROOT_ENV).is_none_or(|root| root.is_empty()) {
-        return Ok(oer_os_process::built_root().join("target/test-build-root"));
+        return Ok(oer_tools_os_process::built_root().join("target/test-build-root"));
     }
     crate::compiler::host_build_root()
 }
@@ -321,14 +321,14 @@ mod tests;
 /// warnings beside it. A requested check without a result, or with one that
 /// does not pass, fails the build if it is enforced (a warning otherwise),
 /// after the results are written to
-/// [`files::CHECKS`](oer_image_bundle::files::CHECKS) in its directory. An image
+/// [`files::CHECKS`](oer_tools_image_bundle::files::CHECKS) in its directory. An image
 /// that declares its task stacks proven (`enforce_stack`) is also held to its
 /// stack check.
 pub(crate) fn apply_outcome(
     checks: &Gates,
     elf: CheckedElf,
     outcome: CheckOutcome,
-    bundle: &mut oer_image_bundle::ImageBundle,
+    bundle: &mut oer_tools_image_bundle::ImageBundle,
     enforce_stack: bool,
 ) -> Result<()> {
     let mut failed = Vec::new();
@@ -345,7 +345,7 @@ pub(crate) fn apply_outcome(
                 .push(format!("check `{name}` does not apply: {reason}"));
         }
         if !result.passes() {
-            if checks.enforced.requires(&name) || (enforce_stack && name == oer_image_checks::STACK)
+            if checks.enforced.requires(&name) || (enforce_stack && name == oer_tools_image_checks::STACK)
             {
                 failed.push(format!("{name} ({elf:?}): {result}"));
             } else {
@@ -367,8 +367,8 @@ pub(crate) fn apply_outcome(
     if failed.is_empty() {
         return Ok(());
     }
-    oer_os_durable::atomic_json(
-        &bundle.path(oer_image_bundle::files::CHECKS),
+    oer_tools_os_durable::atomic_json(
+        &bundle.path(oer_tools_image_bundle::files::CHECKS),
         &bundle.checks,
     )?;
     Err(format!("requested checks did not pass: {}", failed.join("; ")).into())

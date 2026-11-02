@@ -8,8 +8,8 @@ extern crate std;
 
 use super::*;
 use core::{cell::Cell, pin::pin};
-use oer_memory::HostContext;
-use oer_network_port::LinkSnapshot;
+use oer_portable_memory::HostContext;
+use oer_protocols_network_port::LinkSnapshot;
 use std::sync::{
     Arc,
     atomic::{AtomicU32, Ordering},

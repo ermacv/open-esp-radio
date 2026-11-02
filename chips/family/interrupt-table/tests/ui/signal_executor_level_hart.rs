@@ -1,10 +1,10 @@
-use oer_espressif_interrupt_table::signal::{FromExecutorLevel, IrqSignal, host::Deferred};
-oer_espressif_interrupt_table::__fake_parts!();
+use oer_chips_family_interrupt_table::signal::{FromExecutorLevel, IrqSignal, host::Deferred};
+oer_chips_family_interrupt_table::__fake_parts!();
 
 pub fn on_timer(_: &mut TimerIrq) {}
 macro_rules! table {
     ($hart:literal) => {
-        oer_espressif_interrupt_table::interrupt_table! {
+        oer_chips_family_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { receiver: 2; }

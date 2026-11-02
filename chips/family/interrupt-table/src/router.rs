@@ -17,11 +17,11 @@
 //! every router silences its own bank at `install`), and each router routes
 //! only its own hart's entries of the one table.
 
-use oer_mmio::{InterruptSource, InterruptSources};
+use oer_portable_mmio::{InterruptSource, InterruptSources};
 
 use crate::{BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
 
-use oer_riscv::clic::{LevelBits, LineState};
+use oer_portable_riscv::clic::{LevelBits, LineState};
 
 /// A hart's interrupt matrix bank and CLIC, as the table writes them. The
 /// chip implements it on its typed blocks; each method is a few word reads
@@ -250,65 +250,65 @@ impl<C: Controller, const H: u8> Router<C, H> {
     /// source, line or level lies outside the controller fails to compile:
     ///
     /// ```compile_fail,E0080
-    /// # oer_espressif_interrupt_table::__fake_parts!();
-    /// # oer_espressif_interrupt_table::__fake_controller!();
+    /// # oer_chips_family_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_interrupt_table::__fake_controller!();
     /// # pub fn on_timer(_: &mut TimerIrq) {}
     /// // The table's lines reach past the controller's 48.
-    /// const WIDE: oer_espressif_interrupt_table::Lines =
-    ///     oer_espressif_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_espressif_interrupt_table::TieBreak::HighestLine };
-    /// oer_espressif_interrupt_table::interrupt_table! {
+    /// const WIDE: oer_chips_family_interrupt_table::Lines =
+    ///     oer_chips_family_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_chips_family_interrupt_table::TieBreak::HighestLine };
+    /// oer_chips_family_interrupt_table::interrupt_table! {
     ///     lines: WIDE,
     ///     handler_attributes: [];
     ///     contexts { radio: 3; }
     ///     timer: TimerToken = TimerIrq => on_timer, line 60, context radio, hart 0, Hardware;
     /// }
-    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController, 0>) {
+    /// fn bind(router: &mut oer_chips_family_interrupt_table::Router<FakeController, 0>) {
     ///     let tokens = Interrupts::take().unwrap();
     ///     let _ = router.bind(tokens.timer, TimerIrq::default());
     /// }
-    /// # bind(&mut oer_espressif_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// # bind(&mut oer_chips_family_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
     ///
     /// ```compile_fail,E0080
-    /// # oer_espressif_interrupt_table::__fake_parts!();
-    /// # oer_espressif_interrupt_table::__fake_controller!();
+    /// # oer_chips_family_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_interrupt_table::__fake_controller!();
     /// /// A source past the fake controller's eight.
     /// pub struct FarIrq;
-    /// impl oer_espressif_interrupt_table::InterruptSource for FarIrq {
+    /// impl oer_chips_family_interrupt_table::InterruptSource for FarIrq {
     ///     const SOURCE: u16 = 84;
     /// }
     /// # pub fn on_far(_: &mut FarIrq) {}
-    /// oer_espressif_interrupt_table::interrupt_table! {
+    /// oer_chips_family_interrupt_table::interrupt_table! {
     ///     lines: FAKE_LINES,
     ///     handler_attributes: [];
     ///     contexts { radio: 3; }
     ///     far: FarToken = FarIrq => on_far, line 20, context radio, hart 0, Hardware;
     /// }
-    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController, 0>) {
+    /// fn bind(router: &mut oer_chips_family_interrupt_table::Router<FakeController, 0>) {
     ///     let tokens = Interrupts::take().unwrap();
     ///     let _ = router.bind(tokens.far, FarIrq);
     /// }
-    /// # bind(&mut oer_espressif_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// # bind(&mut oer_chips_family_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
     ///
     /// An entry of another hart than the router's fails to compile too:
     ///
     /// ```compile_fail,E0080
-    /// # oer_espressif_interrupt_table::__fake_parts!();
-    /// # oer_espressif_interrupt_table::__fake_controller!();
+    /// # oer_chips_family_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_interrupt_table::__fake_controller!();
     /// # pub fn on_timer(_: &mut TimerIrq) {}
-    /// oer_espressif_interrupt_table::interrupt_table! {
+    /// oer_chips_family_interrupt_table::interrupt_table! {
     ///     lines: FAKE_LINES,
     ///     handler_attributes: [];
     ///     contexts { radio: 3; }
     ///     timer: TimerToken = TimerIrq => on_timer, line 20, context radio, hart 1, Hardware;
     /// }
     /// // Hart zero's router.
-    /// fn bind(router: &mut oer_espressif_interrupt_table::Router<FakeController, 0>) {
+    /// fn bind(router: &mut oer_chips_family_interrupt_table::Router<FakeController, 0>) {
     ///     let tokens = Interrupts::take().unwrap();
     ///     let _ = router.bind(tokens.timer, TimerIrq::default());
     /// }
-    /// # bind(&mut oer_espressif_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// # bind(&mut oer_chips_family_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
     pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, BindError<E>> {
         const {

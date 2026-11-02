@@ -1,5 +1,5 @@
 [package]
-name = "oer-firmware-apps-radio-root"
+name = "oer-hil-probes-radio-root"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,17 +10,17 @@ description = "Takes the reset root and requests and releases each platform cloc
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-espressif-staged-runtime = { path = "../../../chips/family/staged-runtime" }
-oer-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-espressif-executor = { path = "../../../chips/family/executor" }
-oer-diagnostics = { path = "../../../portable/diagnostics" }
-oer-embassy-time = { path = "../../../portable/embassy/time" }
-oer-time = { path = "../../../portable/time" }
+oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
+oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
+oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
 
 [build-dependencies]
-oer-esp32s31-layout = { workspace = true, features = ["build"] }
+oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

@@ -13,15 +13,15 @@
 //! reception masks ACK flags without replacing the configured values.
 //! Addresses, PAN identifiers and ACK timeout are written directly.
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154CcaMode, Ieee802154Channel, Ieee802154MultipanIndex, Ieee802154TxPowerLevels,
 };
-use oer_ieee802154_port::AutoPendingMode;
-use oer_ieee802154_port::CcaThresholdError;
+use oer_protocols_ieee802154_port::AutoPendingMode;
+use oer_protocols_ieee802154_port::CcaThresholdError;
 
 use crate::ll::Ieee802154LowLevel;
 
-use oer_radio_regulatory::{Permitted, TxCeiling};
+use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 
 const CHANNEL_COUNT: usize = 16;
 const INTERFACE_COUNT: usize = Ieee802154MultipanIndex::COUNT as usize;
@@ -135,10 +135,10 @@ impl Ieee802154Permit {
 /// Channel `number` under the open test domain, for the tests of this crate.
 #[cfg(test)]
 pub(crate) fn test_permit(number: u8, levels: Ieee802154TxPowerLevels<'_>) -> Ieee802154Permit {
-    let permitted = oer_radio_regulatory::TEST_DOMAIN
+    let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
         .permit(Ieee802154Channel::new(number).unwrap())
         .unwrap();
-    let ceiling = permitted.tx_ceiling(oer_radio_regulatory::PowerLimits {
+    let ceiling = permitted.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,
         owner_cap_mbm: None,

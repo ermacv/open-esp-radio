@@ -1,10 +1,10 @@
 extern crate std;
 
 use super::*;
-use oer_ieee80211_contracts_port::VifRole;
-use oer_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
-use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
-use oer_ieee80211_wire::channel::ChannelWidth;
+use oer_protocols_ieee80211_contracts_port::VifRole;
+use oer_protocols_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
+use oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
+use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 
 fn channel() -> WifiChannel {
     WifiChannel::new_2_4_ghz(1, ChannelWidth::Mhz20).unwrap()

@@ -1,7 +1,7 @@
 //! An image owns capture storage, its clock, lifecycle and context. The agent
 //! serves only bounded encoded records and aggregate counters.
 use crate::console::{Console, Immediate};
-use oer_hil_protocol::{RequestIdentity, capture::*};
+use oer_protocols_hil_protocol::{RequestIdentity, capture::*};
 
 #[cfg(oer_trace)]
 pub mod atomic;

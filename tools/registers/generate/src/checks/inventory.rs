@@ -7,7 +7,7 @@
 //! This module supplies expanded geometry, inherited resets, and the same
 //! bounded/indexed candidate addresses used by the MMIO inventory.
 use crate::Result;
-use oer_analysis_blobray_domain::IndexedAddress;
+use oer_tools_analysis_blobray_domain::IndexedAddress;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -72,7 +72,7 @@ pub struct DeclaredWord {
 pub fn declared_words(registers: &[DeclaredRegister]) -> BTreeMap<u32, DeclaredWord> {
     let mut words: BTreeMap<u32, DeclaredWord> = BTreeMap::new();
     let mut reset_conflicts = BTreeMap::<u32, u32>::new();
-    let opaque = |name: &str| name.ends_with(oer_registers_model::OPAQUE_SUFFIX);
+    let opaque = |name: &str| name.ends_with(oer_tools_registers_model::OPAQUE_SUFFIX);
     for register in registers {
         let Ok(address) = u32::try_from(register.address) else {
             continue;
@@ -265,7 +265,7 @@ fn region_of(regions: &[Region], address: u32) -> Option<&str> {
 /// register element of the chip root (`chips/<chip>/registers/chip.toml`)
 /// and every instance's window.
 pub fn model(root: &Path, chip: &str) -> Result<(Vec<DeclaredRegister>, Vec<Region>)> {
-    let chip = oer_registers_model::Chip::load(root, chip)?;
+    let chip = oer_tools_registers_model::Chip::load(root, chip)?;
     let model = &chip.model;
     let regions = model
         .instances()
@@ -286,7 +286,7 @@ pub fn model(root: &Path, chip: &str) -> Result<(Vec<DeclaredRegister>, Vec<Regi
         .collect::<Result<Vec<_>>>()?;
     let mut registers = Vec::new();
     for register in model.registers() {
-        let oer_registers_model::chip_model::Location::Mmio { address } = register.location else {
+        let oer_tools_registers_model::chip_model::Location::Mmio { address } = register.location else {
             continue;
         };
         let template = model

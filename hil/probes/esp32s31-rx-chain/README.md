@@ -81,7 +81,7 @@ patterns; buffers12/20/28 keep full patterns and other buffers keep the leading
 marker. RX descriptors stay armed; there are no CPU-owned barrier nodes.
 These bytes are never painted during RX.
 
-Build with `cargo fw probe oer-firmware-probes-esp32s31-rx-chain`. The staged
+Build with `cargo fw probe oer-hil-probes-esp32s31-rx-chain`. The staged
 ELF requires the normal bootstrap/PSRAM handoff. Under a board/air lease:
 
 ```console

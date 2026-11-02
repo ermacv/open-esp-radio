@@ -1,5 +1,5 @@
 use super::*;
-use oer_network_port::LinkSnapshot;
+use oer_protocols_network_port::LinkSnapshot;
 
 const BSSID: [u8; 6] = [2, 0x11, 0x22, 0x33, 0x44, 0x55];
 

@@ -170,7 +170,7 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
                 mint,
                 3,
                 StaSecurity::Personal {
-                    password: oer_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
                         .unwrap(),
                     pmk: Pmk::from_bytes(PMK),
                 },
@@ -186,7 +186,7 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
             if message1 {
                 world.receive(at(31), &association_response(0));
                 let frame = RsnTxFrame::<512>::message1(
-                    oer_ieee80211_wire::security::rsn::Akm::Psk,
+                    oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
                     LOCAL,
                     1,
                     ANONCE,

@@ -6,16 +6,16 @@
 
 use std::{process::ExitCode, time::Duration};
 
-use oer_hil_agent::base::Service as _;
-use oer_hil_harness::{Case, Cx, Failure, Scenario, check};
-use oer_services_aes::{MAX_WRAPPED, UnwrapError, UnwrapKey, Unwrapped};
+use oer_protocols_hil_agent::base::Service as _;
+use oer_tools_hil_harness::{Case, Cx, Failure, Scenario, check};
+use oer_hil_services_aes::{MAX_WRAPPED, UnwrapError, UnwrapKey, Unwrapped};
 
 mod reference;
 
 const SCENARIO: Scenario = Scenario::new(
     "aes",
     "esp32s31-sdk-rpc",
-    &[oer_services_aes::Request::KEYS],
+    &[oer_hil_services_aes::Request::KEYS],
 );
 
 const CASES: [Case; 4] = [
@@ -41,7 +41,7 @@ const CASES: [Case; 4] = [
 const UNWRAP_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn main() -> ExitCode {
-    oer_hil_harness::main(&SCENARIO, &CASES)
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
 /// The device's answer to unwrapping `wrapped` under `kek`.

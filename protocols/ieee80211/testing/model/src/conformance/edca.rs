@@ -1,10 +1,10 @@
 //! Actual per-VIF tables and publication draws on every physical AC workload.
 use super::*;
-use oer_ieee80211_testing_conformance::{
+use oer_protocols_ieee80211_testing_conformance::{
     Execution,
     edca::{self as contract, Case, Draw, Scenario},
 };
-use oer_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 pub type EdcaTrace = contract::Trace<Vec<Draw>>;
 pub async fn edca(
     case: Case,

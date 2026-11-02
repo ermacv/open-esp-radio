@@ -7,12 +7,12 @@ use crate::bluetooth::registers::{BluetoothPlacements, BluetoothTaskRegisters, d
 /// The value scanner start writes to both hardware-maintained backoff words.
 ///
 /// SOURCE: BLOB_LIBBLE_SCAN_BACKOFF.
-const SCAN_BACKOFF_INITIAL_STATE: oer_mmio::Bits<9> = oer_mmio::Bits::constant::<1>();
+const SCAN_BACKOFF_INITIAL_STATE: oer_portable_mmio::Bits<9> = oer_portable_mmio::Bits::constant::<1>();
 
 /// The maximum backoff upper limit of the S31 Controller configuration.
 ///
 /// SOURCE: BLOB_LIBBLE_SCAN_BACKOFF, HIL_VENDOR_SCAN_BACKOFF_UPPER_LIMIT_2026_09_28.
-const SCAN_BACKOFF_STANDARD_UPPER_LIMIT_MAX: oer_mmio::Bits<9> = oer_mmio::Bits::constant::<0x20>();
+const SCAN_BACKOFF_STANDARD_UPPER_LIMIT_MAX: oer_portable_mmio::Bits<9> = oer_portable_mmio::Bits::constant::<0x20>();
 
 /// Affine proof that one complete scanner command sequence was published.
 #[must_use = "the scanner command publication belongs to a live controller epoch"]
@@ -34,11 +34,11 @@ fn execute_scan_start_transaction(transaction: &mut impl BluetoothScanStartTrans
     transaction.publish_standard_upper_limit_max();
 }
 
-struct PacBluetoothScanStartTransaction<'registers, B: oer_mmio::Placement> {
-    registers: &'registers mut oer_esp32s31_pac::bt_mac::BleScanBackoff<B>,
+struct PacBluetoothScanStartTransaction<'registers, B: oer_portable_mmio::Placement> {
+    registers: &'registers mut oer_chips_esp32s31_pac::bt_mac::BleScanBackoff<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothScanStartTransaction
+impl<B: oer_portable_mmio::Placement> BluetoothScanStartTransaction
     for PacBluetoothScanStartTransaction<'_, B>
 {
     fn initialize_backoff_state_1(&mut self) {

@@ -1,7 +1,7 @@
 //! Permanently placed IEEE 802.15.4 DMA frames and their concrete projection.
 
 use crate::{layouts::DmaWindowAddress, memory::dma_static::Placed};
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154DmaAddresses, Ieee802154EngineBuffers, RX_BUFFER_COUNT,
 };
 

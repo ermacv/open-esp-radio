@@ -11,7 +11,7 @@
 
 use crate::modem::values::{CfrValue, ForcedRxGain};
 use crate::phy::registers::{AgcRegisters, BasebandRegisters, ClockRegisters, FrequencyRegisters};
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     fe::{PhyIqEstimatorOracle, PhyMemory, PhyPbus},
     i2c_ana_mst::I2cAnaMst,
     i2c_ana_mst_mem::PhyI2cCommandRam,
@@ -30,7 +30,7 @@ use crate::phy::{
 
 #[test]
 fn estimator_indications_keep_the_pair_even_when_ready() {
-    use oer_esp32s31_pac::fe;
+    use oer_chips_esp32s31_pac::fe;
     for ready in [false, true] {
         for pair in 0..4 {
             let mut memory = vec![0; instances::fe::SIZE.div_ceil(4)];

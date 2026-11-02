@@ -1,13 +1,13 @@
 # Boot diagnostic records and console framing
 
-`oer-diagnostics` is a portable, chip-independent codec shared by applications,
+`oer-portable-diagnostics` is a portable, chip-independent codec shared by applications,
 HIL images and the host decoder. It has two layers: raw typed records and the
 synchronous line frame used by the pilot apps. It installs no queue, retained
 storage, transport singleton or trace clock. The platform still owns panic
 capture and retained memory; `staged-runtime::diagnostics::previous_panic` is
 the shared conversion of its unchanged `PanicRecord` to `PreviousPanic`.
 
-## Fault envelope: `oer_diagnostics::fault`
+## Fault envelope: `oer_portable_diagnostics::fault`
 
 `fault::Record` is the one staged fault format: numeric version, payload length,
 registry class, domain/reason, captured hart or an unavailable sentinel, and domain-specific context,
@@ -20,7 +20,7 @@ emitter succeeds. No old-format decoder is provided. Staged runtime owns the
 boot-initialized terminal election and the retained cells. Retention is best
 effort, without a power-loss or RTC-watchdog guarantee.
 
-## Record codec: `oer_diagnostics::record`
+## Record codec: `oer_portable_diagnostics::record`
 
 `record::encode(&Record, write)` emits raw byte slices into a caller-supplied
 sink. It accepts complete slices or propagates the sink's error. There is no
@@ -52,18 +52,18 @@ static message is the retained prefix (up to 64 bytes). `None` distinguishes
 a formatted message that was not kept from an empty static message. Platform
 accessors preserve their existing handling of UTF-8 boundaries.
 
-Event payload: `oer_trace::Kind` u16 and two u32 words. Platform event 1,
+Event payload: `oer_portable_trace::Kind` u16 and two u32 words. Platform event 1,
 channel 0, is the radio adapter's `RadioRoot`; platform event 2, channel 0,
 is `BootSmokePassed` with words `[0, 0]`. No retained trace ring is required.
 
-HIL's `oer-hil-agent` console puts the **same `record::encode` bytes** into its
+HIL's `oer-protocols-hil-agent` console puts the **same `record::encode` bytes** into its
 own envelope and framing, and the host uses `record::decode` on that payload.
 It does not wrap them in `Console`, `OER-DIAG:01`, hex, or a second sequence/CRC.
 The HIL transport supplies its own header, ordering and integrity; its
 integration belongs to the HIL images' migration. The record format has one
 definition shared with the line console below.
 
-## Notes: `oer_diagnostics::note`
+## Notes: `oer_portable_diagnostics::note`
 
 A **note** is a typed HIL diagnostic: a `Topic` and its values, record tag 3.
 Each topic has a constructor on `Note` whose arguments the compiler checks
@@ -101,11 +101,11 @@ With the `render` feature (host only; firmware never enables it)
 and numbers a boot's lines. `emit_note` writes a note as an `OER-DIAG:01`
 line numbered from the boot's one shared sequence, so notes from the ROM and
 from a USB writer in one image do not each count from zero; the S31 board
-prints them through the ROM in 64-byte pieces. The HIL host (`oer-hil-link`)
+prints them through the ROM in 64-byte pieces. The HIL host (`oer-tools-hil-link`)
 renders them in `uart.log` and for its console checks, and shows a lost,
 damaged or unknown line as an `OER-DIAG-ERROR` line with the raw text.
 
-## Synchronous line frame: `oer_diagnostics::console`
+## Synchronous line frame: `oer_portable_diagnostics::console`
 
 `Console` wraps the record codec. It runs only on CPU0 after USB initialization;
 it is not a concurrent task/IRQ logging backend. Its writer is a concrete
@@ -135,7 +135,7 @@ owns event interpretation, sequence checking and text rendering. The pilot's
 host is [`cargo fw`](../../tools/image/cli/README.md).
 
 ```console
-cargo test -p oer-diagnostics
+cargo test -p oer-portable-diagnostics
 ```
 
 Tests cover the raw codec independently, the line frame, and byte-exact frame

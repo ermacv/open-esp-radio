@@ -1,6 +1,6 @@
 #![no_std]
 #![forbid(unsafe_code)]
-use oer_radio_port::{
+use oer_protocols_radio_port::{
     Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped,
 };
 
@@ -12,8 +12,8 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     const VACANT_QUEUES: Self::Queues = ();
     type Frontend<'s> = () where Self: 's, Id: 's;
     type Invocation<'s> = () where Self: 's, Id: 's;
-    fn prepare_queues(&mut self, _: &mut Self::Queues, mint: oer_radio_port::Mint<'static, (), Id>) { mint.into_pools(); }
-    fn split<'s>(_: &'s mut (), _: oer_radio_port::SlotWakes<'s, Id>) -> Result<((), ()), oer_radio_port::SlotInitError>
+    fn prepare_queues(&mut self, _: &mut Self::Queues, mint: oer_protocols_radio_port::Mint<'static, (), Id>) { mint.into_pools(); }
+    fn split<'s>(_: &'s mut (), _: oer_protocols_radio_port::SlotWakes<'s, Id>) -> Result<((), ()), oer_protocols_radio_port::SlotInitError>
     where Self: 's, Id: 's { Ok(((), ()))
     }
 
@@ -24,8 +24,8 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     fn finish<'s>(&mut self, _: &mut Self::Invocation<'s>)  where Self: 's, Id: 's {}
 }
 
-oer_espressif_executor::declare_port_slot!(first: crate::Owner);
-oer_espressif_executor::declare_port_slot!(second: crate::Owner);
+oer_chips_family_executor::declare_port_slot!(first: crate::Owner);
+oer_chips_family_executor::declare_port_slot!(second: crate::Owner);
 
 pub fn slots() {
     let first = first::take_static().expect("one take");

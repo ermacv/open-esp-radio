@@ -11,9 +11,9 @@
 //! The final subframe needs no empty delimiters. PHY-specific hardware limits
 //! and vendor density rounding remain the encoder's admission responsibility.
 
-use oer_ieee80211_contracts_port::{AmpduCapabilities, PhyRate};
-use oer_ieee80211_wire::ht::HtAmpduParameters;
-use oer_ieee80211_wire::{ampdu, phy::LegacyRate};
+use oer_protocols_ieee80211_contracts_port::{AmpduCapabilities, PhyRate};
+use oer_protocols_ieee80211_wire::ht::HtAmpduParameters;
+use oer_protocols_ieee80211_wire::{ampdu, phy::LegacyRate};
 
 use crate::ampdu::MAX_AMPDU_SUBFRAMES;
 
@@ -173,8 +173,8 @@ impl AmpduRun {
 mod tests {
     extern crate std;
 
-    use oer_ieee80211_contracts_port::{AmpduLengthTable, PhyFormatSet};
-    use oer_ieee80211_wire::phy::{
+    use oer_protocols_ieee80211_contracts_port::{AmpduLengthTable, PhyFormatSet};
+    use oer_protocols_ieee80211_wire::phy::{
         FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
     };
 

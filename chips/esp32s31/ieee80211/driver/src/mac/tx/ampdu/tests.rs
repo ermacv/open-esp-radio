@@ -1,10 +1,10 @@
 //! Host/oracle tests for A-MPDU protocol, formatting and ownership.
 
-use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use super::*;
 
-use oer_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
+use oer_chips_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 
 /// A host pool, as if placed: its radio leases are the placed leases
 /// A-MPDU takes.
@@ -22,13 +22,13 @@ mod length_budget;
 use crate::mac::tx::{
     HeAmpduTxConfig, HeEdcaTxopLimit, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
 };
-use oer_esp32s31_hal::types::{
+use oer_chips_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
-use oer_espressif_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
-use oer_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision;
-use oer_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
+use oer_chips_family_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
+use oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision;
+use oer_portable_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -40,7 +40,7 @@ impl TxHardware for CompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
@@ -49,14 +49,14 @@ impl TxHardware for CompletionHardware {
     fn start_bound_legacy_tx(
         &mut self,
         _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacHtTxProgram,
     ) -> bool {
         true
@@ -65,24 +65,24 @@ impl TxHardware for CompletionHardware {
     fn start_bound_ht_tx(
         &mut self,
         _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn take_tx_completion(
         &mut self,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacTxCompletionObservation> {
         None
     }
 
-    fn begin_tx_timeout_abort(&mut self, _: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(&mut self, _: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
         false
     }
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: u32,
         _: MacTxDetachReason,
         _: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -92,7 +92,7 @@ impl TxHardware for CompletionHardware {
 
     fn take_block_ack_completion(
         &mut self,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacHtAmpduCompletionObservation> {
         self.completion.take()
     }
@@ -128,7 +128,7 @@ struct DetachingCompletionHardware {
     abort_requested: bool,
     detach_failed: bool,
     reject_publication: bool,
-    control: Option<oer_esp32s31_hal::types::MacTxControlFrame>,
+    control: Option<oer_chips_esp32s31_hal::types::MacTxControlFrame>,
 }
 
 impl DetachingCompletionHardware {
@@ -157,7 +157,7 @@ impl TxHardware for DetachingCompletionHardware {
     fn prepare_bound_legacy_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacLegacyTxProgram,
     ) -> bool {
         false
@@ -166,14 +166,14 @@ impl TxHardware for DetachingCompletionHardware {
     fn start_bound_legacy_tx(
         &mut self,
         _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_ht_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         program: MacHtTxProgram,
     ) -> bool {
         if !self.reject_publication {
@@ -185,15 +185,15 @@ impl TxHardware for DetachingCompletionHardware {
     fn start_bound_ht_tx(
         &mut self,
         _: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) {
     }
 
     fn prepare_bound_he_tx(
         &mut self,
         _: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
-        program: oer_esp32s31_hal::types::MacHeTxProgram,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+        program: oer_chips_esp32s31_hal::types::MacHeTxProgram,
     ) -> bool {
         if !self.reject_publication {
             self.control = Some(program.control());
@@ -203,19 +203,19 @@ impl TxHardware for DetachingCompletionHardware {
 
     fn take_tx_completion(
         &mut self,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacTxCompletionObservation> {
         None
     }
 
-    fn begin_tx_timeout_abort(&mut self, _: oer_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(&mut self, _: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
         self.abort_requested = true;
         true
     }
 
     fn with_tx_queue_detached<R>(
         &mut self,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         descriptor_head: u32,
         _: MacTxDetachReason,
         detached: impl for<'detached> FnOnce(MacTxQueueDetached<'detached>) -> R,
@@ -228,7 +228,7 @@ impl TxHardware for DetachingCompletionHardware {
 
     fn take_block_ack_completion(
         &mut self,
-        _: oer_esp32s31_hal::types::MacTxQueueIndex,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
     ) -> Option<MacHtAmpduCompletionObservation> {
         self.completion.take()
     }
@@ -314,7 +314,7 @@ fn frame<const CAPACITY: usize, const DEPTH: usize>(
     encode: impl FnOnce(&mut [u8]),
 ) -> PlacedTxLease<PinnedDmaTxRadioLease<'static, CAPACITY, 0, 0>> {
     let (index, ()) = pool.claim_network(slot).unwrap().publish(
-        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + length).expect("test frame length"),
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + length).expect("test frame length"),
         |bytes| {
             encode(&mut bytes[TX_AMPDU_METADATA_SIZE..]);
         },
@@ -333,7 +333,7 @@ fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
         .claim_network(slot)
         .unwrap()
         .try_publish(
-            oer_memory::FrameLen::new(length).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(length).expect("test frame length"),
             |bytes| Err::<(), _>(bytes.to_vec()),
         )
         .err()
@@ -345,7 +345,7 @@ fn released_slot<const CAPACITY: usize, const DEPTH: usize>(
 /// Publish the committed HT aggregate, then complete and detach it the way
 /// the MAC reports a finished exchange.
 fn complete_and_detach<
-    B: oer_esp32s31_hal::memory::dma_static::PlacedBacking,
+    B: oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking,
     const SLOTS: usize,
 >(
     owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
@@ -390,7 +390,7 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
     )));
     let network = pool.claim_network(0).unwrap();
     let (index, ()) = network.publish(
-        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
         |bytes| {
             bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
         },
@@ -434,7 +434,7 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
     )));
     let network = pool.claim_network(0).unwrap();
     let (index, ()) = network.publish(
-        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
         |_| {},
     );
     let backing = pool.claim_radio(index).expect("ready placed slot");
@@ -477,7 +477,7 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
     )));
     let network = pool.claim_network(0).unwrap();
     let (index, ()) = network.publish(
-        oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
         |bytes| {
             bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(0x5a);
         },
@@ -524,7 +524,7 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
             std::boxed::Box::new(PinnedDmaTxPool::new()),
         ));
         let (index, ()) = pool.claim_network(0).unwrap().publish(
-            oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
             |_| {},
         );
         let mut retention = RetainedAmpduDmaStorage::new();
@@ -598,7 +598,7 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     for slot in 0..4 {
         let network = pool.claim_network(slot).unwrap();
         let (index, ()) = network.publish(
-            oer_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
             |bytes| {
                 bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(slot);
                 bytes[TX_AMPDU_METADATA_SIZE + 1] = 0x41;
@@ -618,8 +618,8 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     let mut retry = AmpduRetryState::<4>::new(
         SequenceNumber::new(0).unwrap(),
         4,
-        oer_time::Duration::from_micros(
-            oer_espressif_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
+        oer_portable_time::Duration::from_micros(
+            oer_chips_family_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
         ),
         true,
     )
@@ -1574,7 +1574,7 @@ fn basic_ht_assembly_rejects_he_bar_ampdu_and_bad_lengths_before_mutation() {
     );
 }
 
-use oer_ieee80211_core_upper_mac::block_ack::acknowledges;
+use oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges;
 
 #[test]
 fn block_ack_bitmap_handles_sequence_wrap() {
@@ -1631,13 +1631,13 @@ mod work;
 
 mod exchange_budget;
 
-fn mono(micros: u64) -> oer_time::Instant {
-    oer_time::Instant::from_micros(micros)
+fn mono(micros: u64) -> oer_portable_time::Instant {
+    oer_portable_time::Instant::from_micros(micros)
 }
 
 /// Every MPDU's MSDU admitted at zero.
-fn admitted_at_zero(_: u8) -> Option<oer_time::Instant> {
-    Some(oer_time::Instant::from_micros(0))
+fn admitted_at_zero(_: u8) -> Option<oer_portable_time::Instant> {
+    Some(oer_portable_time::Instant::from_micros(0))
 }
 
 #[test]

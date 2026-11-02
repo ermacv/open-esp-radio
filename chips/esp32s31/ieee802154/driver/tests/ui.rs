@@ -7,7 +7,7 @@ fn ui() {
         .prefix("driver-ui-")
         .tempdir_in(output.canonicalize().expect("absolute UI output directory"))
         .expect("own UI build directory");
-    oer_test_ui_cases::run(
+    oer_tools_test_ui_cases::run(
         env!("CARGO_MANIFEST_DIR"),
         scratch.path().to_str().expect("UTF-8 repository path"),
         &[],

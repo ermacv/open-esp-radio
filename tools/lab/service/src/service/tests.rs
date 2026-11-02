@@ -4,7 +4,7 @@
 use std::sync::atomic::AtomicU64;
 
 use super::*;
-use oer_lab_client::client::{Client, Event};
+use oer_tools_lab_client::client::{Client, Event};
 
 const A: &str = "02:00:00:00:00:0a";
 
@@ -86,7 +86,7 @@ impl Drivers for Fake {
         if lock(&self.unavailable).contains(&recovery.resource) {
             return Confirmation::Unavailable {
                 reason: "unreachable".to_owned(),
-                emission: oer_lab_arbiter::readiness::Emission::Unknown,
+                emission: oer_tools_lab_arbiter::readiness::Emission::Unknown,
             };
         }
         lock(&self.confirmation).clone()
@@ -96,7 +96,7 @@ impl Drivers for Fake {
         Vec::new()
     }
 
-    fn inventory(&self) -> Vec<oer_lab_client::protocol::AttachedBoard> {
+    fn inventory(&self) -> Vec<oer_tools_lab_client::protocol::AttachedBoard> {
         Vec::new()
     }
 
@@ -168,7 +168,7 @@ fn open(directory: &std::path::Path, fake: &Arc<Fake>) -> Service {
 /// A service whose clock reads `now`.
 fn open_at(directory: &std::path::Path, fake: &Arc<Fake>, now: Arc<AtomicU64>) -> Service {
     Service::open(
-        oer_lab_arbiter::Arbiter::at(directory).unwrap(),
+        oer_tools_lab_arbiter::Arbiter::at(directory).unwrap(),
         vec![board(A)],
         fake.clone(),
         Box::new(move || now.load(Ordering::SeqCst)),
@@ -196,12 +196,12 @@ fn ready(status: &Status) -> bool {
     status.resources.iter().all(|(_, readiness)| {
         matches!(
             readiness,
-            oer_lab_arbiter::readiness::Readiness::Ready { .. }
+            oer_tools_lab_arbiter::readiness::Readiness::Ready { .. }
         )
     })
 }
 
-fn readiness(service: &Service) -> oer_lab_arbiter::readiness::Readiness {
+fn readiness(service: &Service) -> oer_tools_lab_arbiter::readiness::Readiness {
     service
         .status()
         .resources
@@ -274,7 +274,7 @@ fn a_lost_client_releases_nothing_while_its_hardware_work_runs() {
     assert!(status.holders[0].ending);
     assert!(matches!(
         readiness(&service),
-        oer_lab_arbiter::readiness::Readiness::InUse { .. }
+        oer_tools_lab_arbiter::readiness::Readiness::InUse { .. }
     ));
     assert_eq!(
         fake.recoveries.load(Ordering::SeqCst),
@@ -297,7 +297,7 @@ fn a_failed_recovery_holds_the_board_until_a_person_returns_it() {
     service.wait_until(ready);
     *lock(&fake.confirmation) = Confirmation::Unavailable {
         reason: "neither its image nor its ROM answered".to_owned(),
-        emission: oer_lab_arbiter::readiness::Emission::Unknown,
+        emission: oer_tools_lab_arbiter::readiness::Emission::Unknown,
     };
     let mut first = client(&service);
     first.acquire(request("ann"), &mut |_| {}).unwrap();
@@ -312,7 +312,7 @@ fn a_failed_recovery_holds_the_board_until_a_person_returns_it() {
         status.resources.iter().any(|(_, readiness)| {
             matches!(
                 readiness,
-                oer_lab_arbiter::readiness::Readiness::Unavailable { .. }
+                oer_tools_lab_arbiter::readiness::Readiness::Unavailable { .. }
             )
         })
     });
@@ -352,7 +352,7 @@ fn a_restart_with_a_lease_held_recovers_its_board_before_the_next_grant() {
     assert!(after.status().holders.is_empty());
     assert!(matches!(
         readiness(&after),
-        oer_lab_arbiter::readiness::Readiness::Recovering { .. }
+        oer_tools_lab_arbiter::readiness::Readiness::Recovering { .. }
     ));
     fake.recovery.open();
     let _next = next.join().unwrap().unwrap();
@@ -468,7 +468,7 @@ fn a_released_lease_waits_for_its_operations() {
     );
     assert!(matches!(
         readiness(&service),
-        oer_lab_arbiter::readiness::Readiness::InUse { .. }
+        oer_tools_lab_arbiter::readiness::Readiness::InUse { .. }
     ));
     fake.hardware.open();
     holder.ended().unwrap();
@@ -586,7 +586,7 @@ fn a_recovery_past_its_deadline_leaves_the_board_unavailable_and_untouched() {
     fake.recovery.close();
     let now = Arc::new(AtomicU64::new(START_MS));
     let service = Service::open_with(
-        oer_lab_arbiter::Arbiter::at(directory.path()).unwrap(),
+        oer_tools_lab_arbiter::Arbiter::at(directory.path()).unwrap(),
         vec![board(A)],
         fake.clone(),
         Box::new(move || now.load(Ordering::SeqCst)),
@@ -597,7 +597,7 @@ fn a_recovery_past_its_deadline_leaves_the_board_unavailable_and_untouched() {
         status.resources.iter().any(|(_, readiness)| {
             matches!(
                 readiness,
-                oer_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }
+                oer_tools_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }
                     if reason.contains("did not finish")
             )
         })
@@ -662,7 +662,7 @@ fn a_joined_command_works_only_with_the_claims_it_joined_for() {
     let mut lease = request("ann");
     lease
         .claims
-        .push(Claim::shared(oer_lab_arbiter::claims::AIR));
+        .push(Claim::shared(oer_tools_lab_arbiter::claims::AIR));
     let granted = holder.acquire(lease, &mut |_| {}).unwrap();
     let mut joined = client(&service);
     let narrowed = joined.join(&granted.token, vec![Claim::board(A)]).unwrap();
@@ -675,7 +675,7 @@ fn a_joined_command_works_only_with_the_claims_it_joined_for() {
         Some(vec![Claim::board(A)])
     );
     // What the joined client hands on allows no more than it holds.
-    let air = Claim::shared(oer_lab_arbiter::claims::AIR);
+    let air = Claim::shared(oer_tools_lab_arbiter::claims::AIR);
     let refused = client(&service)
         .join(&narrowed.token, vec![air.clone()])
         .unwrap_err();
@@ -700,7 +700,7 @@ fn input_beyond_the_window_flows_by_credit() {
     holder.acquire(request("ann"), &mut |_| {}).unwrap();
     let running = holder.start(command("echo")).unwrap();
     let input = running.input();
-    let chunks = 4 * oer_lab_client::protocol::INPUT_WINDOW;
+    let chunks = 4 * oer_tools_lab_client::protocol::INPUT_WINDOW;
     let feeder = std::thread::spawn(move || {
         for chunk in 0..chunks {
             input.send(&[u8::try_from(chunk % 251).unwrap()]).unwrap();
@@ -730,7 +730,7 @@ fn input_sent_beyond_the_window_fails_the_operation() {
     let mut stream = service.connect().unwrap();
     let mut send = |request: &Request| Frame::message(request).unwrap().write(&mut stream).unwrap();
     send(&Request::Hello {
-        protocol: oer_lab_client::protocol::PROTOCOL,
+        protocol: oer_tools_lab_client::protocol::PROTOCOL,
         client: "test".to_owned(),
     });
     send(&Request::Acquire {
@@ -750,7 +750,7 @@ fn input_sent_beyond_the_window_fails_the_operation() {
         operation: command("hold"),
     });
     service.wait_until(|status| status.holders.iter().any(|holder| holder.operations == 1));
-    for _ in 0..=oer_lab_client::protocol::INPUT_WINDOW {
+    for _ in 0..=oer_tools_lab_client::protocol::INPUT_WINDOW {
         Frame::Data {
             operation: 1,
             bytes: vec![0],
@@ -879,12 +879,12 @@ fn a_drain_answers_only_once_every_recovery_returned() {
 
 #[test]
 fn a_board_alone_is_granted_and_used_while_the_router_is_unreachable() {
-    use oer_lab_arbiter::readiness::{ROUTER, Readiness};
+    use oer_tools_lab_arbiter::readiness::{ROUTER, Readiness};
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     lock(&fake.unavailable).push(ROUTER.to_owned());
     let service = Service::open(
-        oer_lab_arbiter::Arbiter::at(directory.path()).unwrap(),
+        oer_tools_lab_arbiter::Arbiter::at(directory.path()).unwrap(),
         vec![board(A), ROUTER.to_owned()],
         fake.clone(),
         Box::new(|| START_MS),

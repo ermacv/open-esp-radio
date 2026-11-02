@@ -5,14 +5,14 @@
 
 use core::convert::Infallible;
 
-use oer_bluetooth_le_port::{LeBand, TxPower};
-use oer_esp32s31_hal::{
+use oer_protocols_bluetooth_le_port::{LeBand, TxPower};
+use oer_chips_esp32s31_hal::{
     bluetooth::{ClockedOwner, TaskOwner, engine::LeTxPower},
     domain::RadioDomain,
     power::PlatformClockBackend,
 };
-use oer_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
-use oer_radio_regulatory::{Initiate, Permitted, PowerLimits, TxCeiling};
+use oer_chips_esp32s31_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
+use oer_protocols_radio_regulatory::{Initiate, Permitted, PowerLimits, TxCeiling};
 
 use crate::{Client, PhyPreparation, sealed};
 
@@ -151,14 +151,14 @@ pub struct Installation(pub u32);
 /// The initial operation is validated before it can enter an actor cell.
 ///
 /// ```
-/// use oer_esp32s31_radio_client::bluetooth::{BluetoothJoin, Permission, Operation};
+/// use oer_chips_esp32s31_radio_client::bluetooth::{BluetoothJoin, Permission, Operation};
 /// fn receive(permission: Permission) {
 ///     let _ = BluetoothJoin::new(permission, Operation::DtmRx, None);
 /// }
 /// ```
 ///
 /// ```compile_fail,E0451
-/// use oer_esp32s31_radio_client::bluetooth::{BluetoothJoin, Permission, Operation};
+/// use oer_chips_esp32s31_radio_client::bluetooth::{BluetoothJoin, Permission, Operation};
 /// fn bypass(permission: Permission) -> BluetoothJoin {
 ///     BluetoothJoin { permission, operation: Operation::DtmTx, power: None }
 /// }

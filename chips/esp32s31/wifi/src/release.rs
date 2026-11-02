@@ -4,7 +4,7 @@ use core::{
     future::Future,
     task::{Context, Poll},
 };
-use oer_time::{Instant, Timer};
+use oer_portable_time::{Instant, Timer};
 
 /// Wait for `answer` until `deadline`, which is checked before each poll of
 /// it: once the deadline has passed `answer` is not polled again, so an
@@ -37,8 +37,8 @@ pub(crate) async fn within<A>(
 mod tests {
     use super::*;
     use core::cell::Cell;
-    use oer_time::{Clock as _, Duration};
-    use oer_time_virtual::VirtualClock;
+    use oer_portable_time::{Clock as _, Duration};
+    use oer_portable_time_virtual::VirtualClock;
 
     fn poll<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
         future.poll(&mut Context::from_waker(core::task::Waker::noop()))

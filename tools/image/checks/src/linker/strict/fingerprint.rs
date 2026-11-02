@@ -1,7 +1,7 @@
 //! Bind the placement record to the final ELF and every byte of its analysis.
 
 use crate::Result;
-use oer_os_durable::{inputs::Inputs, sha256_file};
+use oer_tools_os_durable::{inputs::Inputs, sha256_file};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,

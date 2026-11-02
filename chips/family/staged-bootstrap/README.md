@@ -1,8 +1,8 @@
 # Espressif staged bootstrap
 
-`oer-espressif-staged-bootstrap` owns flash entry, the application descriptor,
+`oer-chips-family-staged-bootstrap` owns flash entry, the application descriptor,
 payload validation, relocation and the non-returning stage-two handoff.
-It reaches the chip through `oer-espressif-platform-port`; the S31 HAL
+It reaches the chip through `oer-chips-family-platform-port`; the S31 HAL
 implements that contract. The board crate supplies mapping adoption and
 links no runtime.
 
@@ -13,7 +13,7 @@ MMU, validates the stage-two header and CRC, copies PSRAM code and publishes
 its caches before jumping. Peripheral owners do not cross that image boundary.
 
 `startup::run` owns the cold-start order over the family's boot drivers.
-The chip binding supplies a `BootProfile` (S31's `oer-esp32s31-boot::S31`);
+The chip binding supplies a `BootProfile` (S31's `oer-chips-esp32s31-boot::S31`);
 the image supplies its layout, payload, tuning reference and SRAM scratch.
 The root only splits owners. The runner installs the console and starts the
 initial bounded timer latch check before creating the common boot deadline.

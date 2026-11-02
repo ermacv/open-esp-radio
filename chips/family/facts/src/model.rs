@@ -50,7 +50,7 @@ pub struct CoreStart {
 
 /// The `[pma]` table of the family: the vendor physical memory attribute
 /// CSRs a secondary hart's generated entry programs and their encodings.
-/// Vendor CSRs stay in the facts; `oer-riscv` holds only architectural ones.
+/// Vendor CSRs stay in the facts; `oer-portable-riscv` holds only architectural ones.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct PmaCsrs {
@@ -144,7 +144,7 @@ pub struct ResetCause {
 ///
 /// Fields cannot be constructed or mutated without checking the exclusive end.
 /// ```compile_fail
-/// use oer_espressif_facts::Region;
+/// use oer_chips_family_facts::Region;
 /// let mut region = Region::new(1, 1).unwrap();
 /// region.length = u32::MAX;
 /// ```
@@ -483,7 +483,7 @@ pub struct InterruptContract {
     /// The CPU line the entry's source is routed to.
     pub table_line: [u32; 2],
     pub table_level: [u32; 2],
-    /// The entry's handler class (`oer_espressif_interrupt_table::Class`).
+    /// The entry's handler class (`oer_chips_family_interrupt_table::Class`).
     pub table_class: [u32; 2],
     pub table_core: [u32; 2],
     pub table_handler: u32,

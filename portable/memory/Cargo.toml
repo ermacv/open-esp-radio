@@ -1,5 +1,5 @@
 [package]
-name = "oer-memory"
+name = "oer-portable-memory"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ description = "Audited buffer ownership boundaries for open ESP radio drivers"
 
 [dependencies]
 atomic-waker = "=1.1.2"
-oer-sync = { path = "../sync" }
+oer-portable-sync = { path = "../sync" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["const_zeroed", "derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 
 [features]
@@ -17,7 +17,7 @@ default = []
 host-context = []
 
 [dev-dependencies]
-oer-test-ui-cases = { path = "../../tools/test/ui-cases" }
+oer-tools-test-ui-cases = { path = "../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

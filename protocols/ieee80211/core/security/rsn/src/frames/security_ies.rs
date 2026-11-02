@@ -11,7 +11,7 @@
 )]
 
 use super::*;
-use oer_ieee80211_wire::element::Element;
+use oer_protocols_ieee80211_wire::element::Element;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedRsnIe<const N: usize = RSN_IE_CAPACITY> {

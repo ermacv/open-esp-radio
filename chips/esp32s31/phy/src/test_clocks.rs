@@ -1,6 +1,6 @@
 //! A backend for host domains that never acquire platform clocks.
 
-use oer_esp32s31_hal::power::{
+use oer_chips_esp32s31_hal::power::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
 };
 

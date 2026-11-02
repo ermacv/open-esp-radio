@@ -33,7 +33,7 @@ use crate::sequence::SequenceSpace;
 
 use core::num::NonZeroUsize;
 
-use oer_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The widest window a [`RxReorderBuffer`] holds: its occupancy bitmap has
 /// one bit per window position.
@@ -75,14 +75,14 @@ pub enum RxReorderError {
 /// The list cannot be overwritten or extended by another operation:
 ///
 /// ```compile_fail,E0616
-/// use oer_ieee80211_core_upper_mac::block_ack::RxReorderRelease;
+/// use oer_protocols_ieee80211_core_upper_mac::block_ack::RxReorderRelease;
 /// fn overwrite(release: &mut RxReorderRelease<8>) {
 ///     release.frames = [None; 8];
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_upper_mac::block_ack::RxReorderRelease;
+/// use oer_protocols_ieee80211_core_upper_mac::block_ack::RxReorderRelease;
 /// fn returned_slots(release: &RxReorderRelease<8>) -> usize {
 ///     release.iter().count()
 /// }
@@ -173,8 +173,8 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     /// arithmetic never reduces modulo zero:
     ///
     /// ```compile_fail,E0080
-    /// use oer_ieee80211_core_upper_mac::block_ack::RxReorderBuffer;
-    /// use oer_ieee80211_wire::sequence::SequenceNumber;
+    /// use oer_protocols_ieee80211_core_upper_mac::block_ack::RxReorderBuffer;
+    /// use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
     /// let _ = RxReorderBuffer::<0, 8>::new(SequenceNumber::ZERO, 1);
     /// ```
     pub const fn new(

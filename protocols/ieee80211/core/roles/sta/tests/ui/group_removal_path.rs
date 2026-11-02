@@ -1,5 +1,5 @@
 #![no_std]
-use oer_ieee80211_core_roles_sta::machine::{PendingGroupRemoval, StaInput, StaTokens};
+use oer_protocols_ieee80211_core_roles_sta::machine::{PendingGroupRemoval, StaInput, StaTokens};
 
 pub fn return_to_station<'id, A: StaTokens, B: StaTokens, K>(
     local: PendingGroupRemoval<'id, A::EpochPath>,

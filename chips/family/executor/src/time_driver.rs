@@ -55,10 +55,10 @@
 use core::{marker::PhantomData, task::Waker};
 
 use crate::{Failure, Fault, SoftwareInterrupt};
-use oer_memory::{ContextCell, ContextProof, OnceValue};
+use oer_portable_memory::{ContextCell, ContextProof, OnceValue};
 
 use embassy_time_driver::Driver;
-use oer_espressif_interrupt_table::Entry;
+use oer_chips_family_interrupt_table::Entry;
 use portable_atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::{
@@ -70,7 +70,7 @@ use crate::{
     task::TaskId,
     timer_queue::WakeQueue,
 };
-use oer_espressif_platform_port::ExecutorPlatform;
+use oer_chips_family_platform_port::ExecutorPlatform;
 
 const COMPARATOR_COUNT: usize = 3;
 const NO_COMPARATOR: u8 = u8::MAX;
@@ -133,7 +133,7 @@ unsafe impl ContextProof for SlotContext {
     }
 }
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// Each executor's timers. Executors of different harts touch
     /// neighbouring slots, so the array sits in critical SRAM.
     static SLOTS: [ContextCell<Slot, SlotContext>; SOFTWARE_INTERRUPT_COUNT] = [const {
@@ -150,7 +150,7 @@ struct Assignment {
     comparator: Comparator,
     writer: SoftwareInterrupt,
 }
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// No assignment exists before the executor's alarm is bound. A grant
     /// publishes it on the writer's hart; the executor's hart reads it.
     static COMPARATOR_OF: [OnceValue<Assignment>; SOFTWARE_INTERRUPT_COUNT] =
@@ -166,7 +166,7 @@ oer_espressif_staged_runtime::placed_static! {
 /// The one executor that writes the SYSTIMER registers.
 static WRITER: AtomicU8 = AtomicU8::new(NO_EXECUTOR);
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     /// Each comparator's fired flag, set by its alarm handler for its
     /// executor, on the alarm's hart; neighbouring flags belong to other
     /// harts' alarms.
@@ -210,7 +210,7 @@ enum TimeSetupOwners<P: ExecutorPlatform, A: Entry> {
         _part: A::Part,
     },
     Binding {
-        _error: oer_espressif_interrupt_table::BindError<A>,
+        _error: oer_chips_family_interrupt_table::BindError<A>,
     },
 }
 
@@ -240,14 +240,14 @@ pub struct TimeDriverReady<B: Binding> {
 /// quarantine. Duplicate installation records a fault and resets.
 pub fn init<B: Binding, const WRITER_SWI: u8, A, C, const H: u8>(
     systimer: SystemTimer<PortOf<B>>,
-    router: &mut oer_espressif_interrupt_table::Router<C, H>,
+    router: &mut oer_chips_family_interrupt_table::Router<C, H>,
     alarm: A,
     part: A::Part,
 ) -> Result<TimeDriverReady<B>, SetupFailure<B, A>>
 where
     A: Entry,
     A::Part: AlarmPart,
-    C: oer_espressif_interrupt_table::Controller,
+    C: oer_chips_family_interrupt_table::Controller,
 {
     let identity = const { SoftwareInterrupt::constant::<WRITER_SWI>() };
     let writer = WRITER.load(Ordering::Acquire);
@@ -305,14 +305,14 @@ where
 /// assignment or an unavailable timer bank records a fault and resets.
 pub fn bind<B: Binding, const SWI: u8, A, C, const H: u8>(
     ready: &mut TimeDriverReady<B>,
-    router: &mut oer_espressif_interrupt_table::Router<C, H>,
+    router: &mut oer_chips_family_interrupt_table::Router<C, H>,
     alarm: A,
     part: A::Part,
-) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+) -> Result<(), Failure<PortOf<B>, oer_chips_family_interrupt_table::BindError<A>>>
 where
     A: Entry,
     A::Part: AlarmPart,
-    C: oer_espressif_interrupt_table::Controller,
+    C: oer_chips_family_interrupt_table::Controller,
 {
     crate::hart_binding::check::<H, A>();
     let mut part = part;
@@ -372,11 +372,11 @@ where
     /// A refused route returns its token and part in quarantine.
     pub fn bind<const H: u8, C>(
         self,
-        _hart: &oer_espressif_staged_runtime::Hart<H>,
-        router: &mut oer_espressif_interrupt_table::Router<C, H>,
-    ) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+        _hart: &oer_chips_family_staged_runtime::Hart<H>,
+        router: &mut oer_chips_family_interrupt_table::Router<C, H>,
+    ) -> Result<(), Failure<PortOf<B>, oer_chips_family_interrupt_table::BindError<A>>>
     where
-        C: oer_espressif_interrupt_table::Controller,
+        C: oer_chips_family_interrupt_table::Controller,
     {
         crate::hart_binding::check::<H, A>();
         route::<B, SWI, A, C, H>(router, self.alarm, self.part)
@@ -393,7 +393,7 @@ where
 {
     let comparator = const {
         let comparator = comparator_of_source::<PortOf<B>>(
-            <A::Part as oer_espressif_interrupt_table::InterruptSource>::SOURCE,
+            <A::Part as oer_chips_family_interrupt_table::InterruptSource>::SOURCE,
         );
         let Some(comparator) = comparator else {
             panic!("the token is not a SYSTIMER alarm");
@@ -449,14 +449,14 @@ where
 
 /// Route `alarm` with the running hart's router.
 fn route<B: Binding, const SWI: u8, A, C, const H: u8>(
-    router: &mut oer_espressif_interrupt_table::Router<C, H>,
+    router: &mut oer_chips_family_interrupt_table::Router<C, H>,
     alarm: A,
     part: A::Part,
-) -> Result<(), Failure<PortOf<B>, oer_espressif_interrupt_table::BindError<A>>>
+) -> Result<(), Failure<PortOf<B>, oer_chips_family_interrupt_table::BindError<A>>>
 where
     A: Entry,
     A::Part: AlarmPart,
-    C: oer_espressif_interrupt_table::Controller,
+    C: oer_chips_family_interrupt_table::Controller,
 {
     router
         .bind(alarm, part)
@@ -498,7 +498,7 @@ fn mark(swi: SoftwareInterrupt) -> impl FnMut(u8) {
 
 /// After `slot`'s queue changed: program its comparator (the writer) or
 /// publish its next deadline to the writer.
-fn rearm<B: Binding, O: oer_trace::Observer>(
+fn rearm<B: Binding, O: oer_portable_trace::Observer>(
     swi: SoftwareInterrupt,
     assignment: Assignment,
     slot: &mut Slot,
@@ -549,7 +549,7 @@ pub(crate) fn service<B: Binding, T: crate::Tasks<Binding = B>>(swi: SoftwareInt
     #[cfg(oer_trace)]
     let observer = T::observer();
     #[cfg(not(oer_trace))]
-    let observer = oer_trace::Noop;
+    let observer = oer_portable_trace::Noop;
     let _ = with_slot::<B, _>(swi, |slot| {
         let fired = alarm_slot(comparator, &ALARM_FIRED).swap(false, Ordering::AcqRel);
         let start = now::<B>();
@@ -620,7 +620,7 @@ where
     }
 }
 
-impl<B: Binding, O: oer_trace::Observer + Send + Sync + 'static> Driver for TimeDriver<B, O> {
+impl<B: Binding, O: oer_portable_trace::Observer + Send + Sync + 'static> Driver for TimeDriver<B, O> {
     #[inline]
     fn now(&self) -> u64 {
         now::<B>()
@@ -648,7 +648,7 @@ impl<B: Binding, O: oer_trace::Observer + Send + Sync + 'static> Driver for Time
                 #[cfg(oer_trace)]
                 let observer = &self.observer;
                 #[cfg(not(oer_trace))]
-                let observer = &oer_trace::Noop;
+                let observer = &oer_portable_trace::Noop;
                 rearm::<B, _>(swi, assignment, slot, now, false, observer);
             }
         });

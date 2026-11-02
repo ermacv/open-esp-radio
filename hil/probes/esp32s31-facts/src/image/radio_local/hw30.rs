@@ -119,7 +119,7 @@ fn enable(s: &mut Session<'_>, c: Cause, on: bool) {
             w.set_tbtt_3(on);
         }
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn run(s: &mut Session<'_>, c: Cause, on: bool) {
     match c {
@@ -143,7 +143,7 @@ fn run(s: &mut Session<'_>, c: Cause, on: bool) {
             w.set_tbtt_enable(on);
         }),
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn snapshot(s: &mut Session<'_>, n: u8, tag: u32) -> u64 {
     s.radio.load.modify_tsf_load_control(|w| {
@@ -289,13 +289,13 @@ fn stage(s: &mut Session<'_>, c: Cause, tag: u32, running_tbtt: bool) -> u64 {
     target
 }
 fn wait(s: &Session<'_>, c: Cause, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
-    while raw(s) & c.bit() == 0 && oer_riscv::cycle32().wrapping_sub(start) < DEADLINE {}
+    let start = oer_portable_riscv::cycle32();
+    while raw(s) & c.bit() == 0 && oer_portable_riscv::cycle32().wrapping_sub(start) < DEADLINE {}
     let positive = raw(s) & c.bit() != 0;
     emit(
         tag,
         u32::from(positive),
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
         c.bit(),
     );
     positive
@@ -338,7 +338,7 @@ fn leaf(s: &mut Session<'_>, c: Cause) {
     state(s, 0x3130);
     enable(s, c, false);
     s.radio.power.acknowledge_mac_power_interrupt(retained);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x3140);
     enable(s, c, true);
     window();
@@ -348,7 +348,7 @@ fn leaf(s: &mut Session<'_>, c: Cause) {
     }
     let sample = s.radio.power.sample_mac_power_interrupt();
     s.radio.power.acknowledge_mac_power_interrupt(sample);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x3170);
     if !fresh(s, c, false, 0x3180) {
         return;
@@ -356,12 +356,12 @@ fn leaf(s: &mut Session<'_>, c: Cause) {
     enable(s, c, true);
     state(s, 0x3190);
     s.radio.power.clear_all_mac_power_interrupts();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x31a0);
     // Keep run disabled while crossing a fresh programmed target.
     let target = program(s, c, 0x31b0);
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < DEADLINE {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < DEADLINE {}
     let end = snapshot(s, c.domain(), 0x31b2);
     state(s, 0x31b4);
     emit(0x31b6, u32::from(end >= target), raw(s), c.bit());
@@ -444,7 +444,7 @@ pub(in crate::image) fn distinct(s: &mut Session<'_>) {
         .sample_mac_power_interrupt()
         .retain_tsf_timer_3(false);
     s.radio.power.acknowledge_mac_power_interrupt(selected);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x3240);
     s.radio.power.clear_all_mac_power_interrupts();
     state(s, 0x3250);
@@ -509,7 +509,7 @@ pub(in crate::image) fn distinct_tbtt(s: &mut Session<'_>) {
             sample.retain_tbtt_3(false)
         };
         s.radio.power.acknowledge_mac_power_interrupt(selected);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         state(s, tag + 0x40);
         s.radio.power.clear_all_mac_power_interrupts();
         state(s, tag + 0x50);
@@ -536,8 +536,8 @@ fn tbtt_recovery(s: &mut Session<'_>, domains: core::ops::Range<u8>) {
         }
         s.radio.power.clear_all_mac_power_interrupts();
         let stopped = program(s, c, tag + 0x10);
-        let start = oer_riscv::cycle32();
-        while oer_riscv::cycle32().wrapping_sub(start) < DEADLINE {}
+        let start = oer_portable_riscv::cycle32();
+        while oer_portable_riscv::cycle32().wrapping_sub(start) < DEADLINE {}
         let end = snapshot(s, n, tag + 0x12);
         state(s, tag + 0x14);
         emit(tag + 0x16, u32::from(end >= stopped), raw(s), c.bit());

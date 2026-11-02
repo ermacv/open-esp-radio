@@ -1,14 +1,14 @@
 #![no_std]
-use oer_ieee80211_testing_model::{ModelBackend, ModelCaps, ModelMpdu, ModelPool, ModelPrepared, ModelTickets, ModelTxExecution};
-use oer_ieee80211_contracts_port::{Admission, AdmissionOwners, PreparedTx, Station};
-use oer_radio_port::{Slot, StaticId};
+use oer_protocols_ieee80211_testing_model::{ModelBackend, ModelCaps, ModelMpdu, ModelPool, ModelPrepared, ModelTickets, ModelTxExecution};
+use oer_protocols_ieee80211_contracts_port::{Admission, AdmissionOwners, PreparedTx, Station};
+use oer_protocols_radio_port::{Slot, StaticId};
 
 pub enum Declaration {}
 type Id = StaticId<Declaration>;
 type Backend = ModelBackend<Id>;
 type Source<'k, 'phase, 'p> = ModelPrepared<'k, 'phase, 'p, Station, ModelCaps, Backend>;
 #[cfg(ui_reject)]
-type Other<'k, 'phase, 'p> = ModelPrepared<'k, 'phase, 'p, oer_ieee80211_contracts_port::AccessPoint, ModelCaps, Backend>;
+type Other<'k, 'phase, 'p> = ModelPrepared<'k, 'phase, 'p, oer_protocols_ieee80211_contracts_port::AccessPoint, ModelCaps, Backend>;
 #[cfg(not(ui_reject))]
 type Other<'k, 'phase, 'p> = Source<'k, 'phase, 'p>;
 

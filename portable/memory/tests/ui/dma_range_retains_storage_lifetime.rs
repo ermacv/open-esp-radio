@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::StableDmaRange;
+use oer_portable_memory::StableDmaRange;
 
 pub fn bind<'storage>(storage: &'storage mut [u8; 16]) -> StableDmaRange<'storage> {
     // SAFETY: this host fixture maps the complete allocation to a synthetic

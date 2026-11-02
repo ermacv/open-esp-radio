@@ -1,6 +1,6 @@
 # Blobray verification
 
-`oer-analysis-blobray-verification` compares concrete observations through domain values and
+`oer-tools-analysis-blobray-verification` compares concrete observations through domain values and
 validates the records of a run. It has no filesystem, executor or selection
 authority. Application
 supplies observations, the exact case relation and shared operation control.

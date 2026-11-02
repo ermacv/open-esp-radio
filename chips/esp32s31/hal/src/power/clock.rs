@@ -1,9 +1,9 @@
 //! S31 newtype binding of the hardware-free profile to the family clock planner.
 #![forbid(unsafe_code)]
-use oer_esp32s31_knowledge::modem_clock::Dependency as ChipDependency;
-pub(crate) use oer_esp32s31_knowledge::modem_clock::ModemClockModule;
-pub(crate) use oer_espressif_modem_clock::ModemClockPlannerIdentity;
-use oer_espressif_modem_clock::{DependencySet, ModemClockDependency};
+use oer_chips_esp32s31_knowledge::modem_clock::Dependency as ChipDependency;
+pub(crate) use oer_chips_esp32s31_knowledge::modem_clock::ModemClockModule;
+pub(crate) use oer_chips_family_modem_clock::ModemClockPlannerIdentity;
+use oer_chips_family_modem_clock::{DependencySet, ModemClockDependency};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Dependency(ChipDependency);
@@ -24,8 +24,8 @@ impl ModemClockDependency for Dependency {
         wrapped
     };
 
-    fn index(self) -> oer_espressif_modem_clock::DependencyIndex {
-        use oer_espressif_modem_clock::DependencyIndex;
+    fn index(self) -> oer_chips_family_modem_clock::DependencyIndex {
+        use oer_chips_family_modem_clock::DependencyIndex;
         match self.0 {
             ChipDependency::ModemAdcCommonFe => DependencyIndex::constant::<0>(),
             ChipDependency::ModemPrivateFe => DependencyIndex::constant::<1>(),
@@ -55,21 +55,21 @@ impl ModemClockDependency for Dependency {
 }
 
 #[cfg(test)]
-pub(crate) type ModemClockPlanner = oer_espressif_modem_clock::ModemClockPlanner<Dependency>;
+pub(crate) type ModemClockPlanner = oer_chips_family_modem_clock::ModemClockPlanner<Dependency>;
 #[cfg(test)]
-pub(crate) type ModemClockLease = oer_espressif_modem_clock::ModemClockLease<Dependency>;
+pub(crate) type ModemClockLease = oer_chips_family_modem_clock::ModemClockLease<Dependency>;
 #[cfg(test)]
 pub(crate) type PreparedModemClockAcquire =
-    oer_espressif_modem_clock::PreparedModemClockAcquire<Dependency>;
+    oer_chips_family_modem_clock::PreparedModemClockAcquire<Dependency>;
 #[cfg(test)]
 pub(crate) type PreparedModemClockRelease =
-    oer_espressif_modem_clock::PreparedModemClockRelease<Dependency>;
+    oer_chips_family_modem_clock::PreparedModemClockRelease<Dependency>;
 #[cfg(test)]
 pub(crate) type PoisonedModemClockAcquire =
-    oer_espressif_modem_clock::PoisonedModemClockAcquire<Dependency>;
+    oer_chips_family_modem_clock::PoisonedModemClockAcquire<Dependency>;
 #[cfg(test)]
 pub(crate) type PoisonedModemClockRelease =
-    oer_espressif_modem_clock::PoisonedModemClockRelease<Dependency>;
+    oer_chips_family_modem_clock::PoisonedModemClockRelease<Dependency>;
 
 pub(crate) fn module_dependencies(module: ModemClockModule) -> DependencySet<Dependency> {
     DependencySet::of_iter(module.dependencies().iter().copied().map(Dependency))

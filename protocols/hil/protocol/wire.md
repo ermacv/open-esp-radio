@@ -37,7 +37,7 @@ the one it built. The host pages the sorted keys with
 of the keys of the services the image mounts, base module included: each
 endpoint, its response and every topic and property the service publishes.
 The image computes it at compile time
-([`oer_hil_agent::image_keys!`](../agent/README.md#image-keys)); a request
+([`oer_protocols_hil_agent::image_keys!`](../agent/README.md#image-keys)); a request
 with any other key is refused as unsupported. The host accepts an image for a
 scenario when the set holds every key of the services the scenario requires;
 other keys are accepted.

@@ -425,9 +425,9 @@ fn render_owner(
         None => words.clone(),
     };
     let inner = match (owner.division, copy) {
-        (_, true) => format!("oer_mmio::Reader<P, {registers}, {words}>"),
-        (None, false) => format!("oer_mmio::Block<P, {words}>"),
-        (Some(_), false) => format!("oer_mmio::Part<P, {registers}, {words}>"),
+        (_, true) => format!("oer_portable_mmio::Reader<P, {registers}, {words}>"),
+        (None, false) => format!("oer_portable_mmio::Block<P, {words}>"),
+        (Some(_), false) => format!("oer_portable_mmio::Part<P, {registers}, {words}>"),
     };
     // Every word the part reaches is a 32-bit word its block lists.
     for offset in owner
@@ -475,13 +475,13 @@ fn render_owner(
     };
     let _ = writeln!(
         output,
-        "{must_use}pub struct {name}<P: oer_mmio::Placement = oer_mmio::Fixed<0x{base:x}>>({inner});\n"
+        "{must_use}pub struct {name}<P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<0x{base:x}>>({inner});\n"
     );
     if copy {
         let _ = writeln!(
             output,
-            "impl<P: oer_mmio::Placement> Clone for {name}<P> {{\nfn clone(&self) -> Self {{\n*self\n}}\n}}\n\n\
-             impl<P: oer_mmio::Placement> Copy for {name}<P> {{}}\n"
+            "impl<P: oer_portable_mmio::Placement> Clone for {name}<P> {{\nfn clone(&self) -> Self {{\n*self\n}}\n}}\n\n\
+             impl<P: oer_portable_mmio::Placement> Copy for {name}<P> {{}}\n"
         );
     }
     // The word lists and the policy marker that derives their sharing.
@@ -493,8 +493,8 @@ fn render_owner(
                 output,
                 "/// The words [`{name}`] holds, as byte offsets from its instance's base.\n\
                  pub struct {words};\n\n\
-                 impl oer_mmio::Registers for {words} {{\ntype Sharing = oer_mmio::sharing::{sharing};\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
-                 impl oer_mmio::Words for {words} {{\nconst OWNED: &'static [usize] = &[{}];\nconst OBSERVED: &'static [usize] = &[];\n}}\n",
+                 impl oer_portable_mmio::Registers for {words} {{\ntype Sharing = oer_portable_mmio::sharing::{sharing};\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
+                 impl oer_portable_mmio::Words for {words} {{\nconst OWNED: &'static [usize] = &[{}];\nconst OBSERVED: &'static [usize] = &[];\n}}\n",
                 list(listed.iter().copied()),
                 list(listed.iter().copied()),
             );
@@ -510,26 +510,26 @@ fn render_owner(
             let _ = writeln!(
                 output,
                 "/// The part's device registers, as the PAC root claims them.\n\
-                 pub type {name}Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, {words}>;\n"
+                 pub type {name}Claim = oer_portable_mmio::Block<oer_portable_mmio::Fixed<0x{base:x}>, {words}>;\n"
             );
             let (wrap, wrap_host) = if copy {
                 (
                     "Self(block.into_reader())".to_owned(),
-                    "oer_mmio::Block::host(words).map(|block| Self(block.into_reader()))",
+                    "oer_portable_mmio::Block::host(words).map(|block| Self(block.into_reader()))",
                 )
             } else {
                 (
                     "Self(block)".to_owned(),
-                    "oer_mmio::Block::host(words).map(Self)",
+                    "oer_portable_mmio::Block::host(words).map(Self)",
                 )
             };
             let _ = writeln!(
                 output,
                 "impl {name} {{\n/// The owner of the part's device registers.\n\
                  #[inline]\npub fn new(block: {name}Claim) -> Self {{\n{wrap}\n}}\n}}\n\n\
-                 impl<'a> {name}<oer_mmio::Host<'a>> {{\n\
+                 impl<'a> {name}<oer_portable_mmio::Host<'a>> {{\n\
                  /// The part over host memory, for tests of its accessors.\n\
-                 pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {{\n{wrap_host}\n}}\n}}\n"
+                 pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {{\n{wrap_host}\n}}\n}}\n"
             );
         }
         Some(_) => {
@@ -556,7 +556,7 @@ fn render_owner(
                 output,
                 "/// The words [`{name}`] holds, observes and shares by field.\n\
                  pub struct {words};\n\n\
-                 impl oer_mmio::Words for {words} {{\n\
+                 impl oer_portable_mmio::Words for {words} {{\n\
                  const OWNED: &'static [usize] = &[{}];\n\
                  const OBSERVED: &'static [usize] = &[{}];\n{triggers}}}\n",
                 list(owner.words.owned.iter().copied()),
@@ -571,13 +571,13 @@ fn render_owner(
         [source] => {
             let _ = writeln!(
                 output,
-                "impl<P: oer_mmio::Placement> oer_mmio::InterruptSource for {name}<P> {{\nconst SOURCE: u16 = {source};\n}}\n"
+                "impl<P: oer_portable_mmio::Placement> oer_portable_mmio::InterruptSource for {name}<P> {{\nconst SOURCE: u16 = {source};\n}}\n"
             );
         }
         sources => {
             let _ = writeln!(
                 output,
-                "impl<P: oer_mmio::Placement> oer_mmio::InterruptSources for {name}<P> {{\nconst SOURCES: &'static [u16] = &[{}];\n}}\n",
+                "impl<P: oer_portable_mmio::Placement> oer_portable_mmio::InterruptSources for {name}<P> {{\nconst SOURCES: &'static [u16] = &[{}];\n}}\n",
                 sources
                     .iter()
                     .map(u16::to_string)
@@ -689,7 +689,7 @@ fn render_owner(
     if !body.is_empty() {
         let _ = writeln!(
             output,
-            "impl<P: oer_mmio::Placement> {name}<P> {{\n{body}}}\n"
+            "impl<P: oer_portable_mmio::Placement> {name}<P> {{\n{body}}}\n"
         );
     }
     Ok(())
@@ -735,17 +735,17 @@ fn render_division(output: &mut String, division: &Division, owners: &[Owner<'_>
         "/// The words of `{}` its parts {} hold, which one block divides:\n\
          /// the parts observe or split each other's words.\n\
          pub struct {name};\n\n\
-         impl oer_mmio::Registers for {name} {{\ntype Sharing = oer_mmio::sharing::Owned;\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
+         impl oer_portable_mmio::Registers for {name} {{\ntype Sharing = oer_portable_mmio::sharing::Owned;\nconst WORDS: &'static [usize] = &[{}];\n}}\n\n\
          /// The divided words' device registers, as the PAC root claims them.\n\
-         pub type {name}Claim = oer_mmio::Block<oer_mmio::Fixed<0x{base:x}>, {name}>;\n\n\
+         pub type {name}Claim = oer_portable_mmio::Block<oer_portable_mmio::Fixed<0x{base:x}>, {name}>;\n\n\
          /// Divide the block into its parts.\n\
-         #[inline]\npub fn {snake}_divide<P: oer_mmio::Placement>(block: oer_mmio::Block<P, {name}>) -> ({parts},) {{\n\
+         #[inline]\npub fn {snake}_divide<P: oer_portable_mmio::Placement>(block: oer_portable_mmio::Block<P, {name}>) -> ({parts},) {{\n\
          let ({},) = block.divide::<({words},)>();\n\
          ({wrapped},)\n}}\n\n\
          /// The parts over host memory, for tests of their accessors.\n\
          #[allow(clippy::type_complexity, reason = \"one owner per part\")]\n\
-         pub fn {snake}_host(words: &mut [u32]) -> Result<({},), oer_mmio::HostTooSmall> {{\n\
-         oer_mmio::Block::host(words).map({snake}_divide)\n}}\n",
+         pub fn {snake}_host(words: &mut [u32]) -> Result<({},), oer_portable_mmio::HostTooSmall> {{\n\
+         oer_portable_mmio::Block::host(words).map({snake}_divide)\n}}\n",
         division.instance,
         members
             .iter()
@@ -756,7 +756,7 @@ fn render_division(output: &mut String, division: &Division, owners: &[Owner<'_>
         bindings.join(", "),
         members
             .iter()
-            .map(|owner| format!("{}<oer_mmio::Host<'_>>", owner.name()))
+            .map(|owner| format!("{}<oer_portable_mmio::Host<'_>>", owner.name()))
             .collect::<Vec<_>>()
             .join(", "),
     );
@@ -881,7 +881,7 @@ pub(super) fn render_root(
             bindings.push(binding);
         }
         let block = format!(
-            "(0x{:x}, <{path}Words as oer_mmio::Registers>::WORDS)",
+            "(0x{:x}, <{path}Words as oer_portable_mmio::Registers>::WORDS)",
             owner.base
         );
         if owner.hart_local {
@@ -914,7 +914,7 @@ pub(super) fn render_root(
             bindings.push(binding);
         }
         let block = format!(
-            "(0x{:x}, <{path} as oer_mmio::Registers>::WORDS)",
+            "(0x{:x}, <{path} as oer_portable_mmio::Registers>::WORDS)",
             division.base
         );
         if division.hart_local {
@@ -931,7 +931,7 @@ pub(super) fn render_root(
     let _ = writeln!(
         output,
         "/// The device registers of every part, which the PAC root takes with\n\
-         /// one `oer_mmio::assume_owned`.{per_hart}\n\
+         /// one `oer_portable_mmio::assume_owned`.{per_hart}\n\
          pub type Claims = {};\n",
         nest(&claims)
     );
@@ -974,7 +974,7 @@ pub(super) fn render_root(
         let _ = writeln!(
             output,
             "const _: () = assert!(\n\
-             oer_mmio::check::disjoint_blocks(&[{}]),\n\
+             oer_portable_mmio::check::disjoint_blocks(&[{}]),\n\
              \"no two claimed blocks list the same word\"\n);",
             common.join(", ")
         );
@@ -987,7 +987,7 @@ pub(super) fn render_root(
             let _ = writeln!(
                 output,
                 "const _: () = assert!(\n\
-                 oer_mmio::check::disjoint_blocks(&[{}]),\n\
+                 oer_portable_mmio::check::disjoint_blocks(&[{}]),\n\
                  \"no two claimed blocks of hart {hart}'s context list the same word\"\n);",
                 common
                     .iter()

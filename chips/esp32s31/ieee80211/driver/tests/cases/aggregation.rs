@@ -261,9 +261,9 @@ fn aggregate_config_updates_the_same_retry_geometry_for_ht_and_he() {
         HtGuardInterval::Short400Ns,
         HtChannelWidth::Mhz40,
     );
-    let control = oer_esp32s31_ieee80211_driver::mac::tx::TxControlFrame {
-        protection: oer_esp32s31_ieee80211_driver::mac::tx::protection::TxProtection::RtsCts {
-            rate: oer_esp32s31_hal::types::MacLegacyRate::Ofdm24M,
+    let control = oer_chips_esp32s31_ieee80211_driver::mac::tx::TxControlFrame {
+        protection: oer_chips_esp32s31_ieee80211_driver::mac::tx::protection::TxProtection::RtsCts {
+            rate: oer_chips_esp32s31_hal::types::MacLegacyRate::Ofdm24M,
         },
         power_primary: 1,
         power_alternate: 2,

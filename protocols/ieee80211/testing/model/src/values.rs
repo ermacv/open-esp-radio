@@ -119,10 +119,10 @@ impl ModelSettingsCell for Cell<Settings> {
     }
 }
 pub(super) trait AssociationsCell {
-    fn apply(&self, role: VifRole, spp: oer_ieee80211_wire::security::Spp);
+    fn apply(&self, role: VifRole, spp: oer_protocols_ieee80211_wire::security::Spp);
 }
 impl AssociationsCell for Cell<InterfaceAssociations> {
-    fn apply(&self, role: VifRole, spp: oer_ieee80211_wire::security::Spp) {
+    fn apply(&self, role: VifRole, spp: oer_protocols_ieee80211_wire::security::Spp) {
         let mut value = self.get();
         value.apply(role, spp);
         self.set(value);

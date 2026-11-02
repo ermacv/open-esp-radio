@@ -3,7 +3,7 @@
 use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
 use super::{CoexTimerBankRegisters, CoexTimerRegister};
 use crate::phy::RadioPhyRegisters;
-use oer_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPeripherals};
+use oer_chips_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPeripherals};
 
 /// Shared register ownership retained by the radio-system actor.
 pub struct SharedRadioRegisters {
@@ -17,7 +17,7 @@ impl SharedRadioRegisters {
         radio_phy: RadioPhyRegisters,
         coexistence: CoexistencePeripherals,
         shared_radio: SharedRadioPeripherals,
-    ) -> (Self, oer_esp32s31_pac::bt_bb::BtV32BasebandRxInfo) {
+    ) -> (Self, oer_chips_esp32s31_pac::bt_bb::BtV32BasebandRxInfo) {
         let SharedRadioPeripherals {
             bt_v32_baseband,
             bt_v32_baseband_rx_info,
@@ -52,7 +52,7 @@ impl SharedRadioRegisters {
     /// initialization suffix.
     pub(crate) fn shared_radio_init_control_mut(
         &mut self,
-    ) -> &mut oer_esp32s31_pac::wifi_mac::SharedRadioInitControl {
+    ) -> &mut oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl {
         &mut self.shared_radio.shared_radio_init_control
     }
 
@@ -141,10 +141,10 @@ impl SharedRadioRegisters {
 
 /// Shared baseband ownership after the root transfers RSSI to IEEE 802.15.4.
 pub struct SharedBasebandParts {
-    pub(crate) bt_v32_baseband: oer_esp32s31_pac::bt_bb::BtV32Baseband,
-    pub(crate) shared_radio_init_control: oer_esp32s31_pac::wifi_mac::SharedRadioInitControl,
+    pub(crate) bt_v32_baseband: oer_chips_esp32s31_pac::bt_bb::BtV32Baseband,
+    pub(crate) shared_radio_init_control: oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl,
     pub(crate) shared_baseband_reset_idle_status:
-        oer_esp32s31_pac::ieee802154::SharedBasebandResetIdleStatus,
-    pub(crate) shared_baseband_tx_timing: oer_esp32s31_pac::bt_bb::SharedBasebandTxTiming,
-    pub(crate) zbbb_radio_control: oer_esp32s31_pac::bt_bb::ZbbbRadioControl,
+        oer_chips_esp32s31_pac::ieee802154::SharedBasebandResetIdleStatus,
+    pub(crate) shared_baseband_tx_timing: oer_chips_esp32s31_pac::bt_bb::SharedBasebandTxTiming,
+    pub(crate) zbbb_radio_control: oer_chips_esp32s31_pac::bt_bb::ZbbbRadioControl,
 }

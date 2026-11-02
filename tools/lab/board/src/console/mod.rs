@@ -95,7 +95,7 @@ pub fn rom_line(lines: &mpsc::Receiver<Vec<u8>>, within: Duration) -> Option<Str
         match lines.recv_timeout(remaining) {
             Ok(line) => {
                 let text = String::from_utf8_lossy(&line).trim().to_owned();
-                if oer_lab_model::rom::is_reset_line(&text) {
+                if oer_tools_lab_model::rom::is_reset_line(&text) {
                     return Some(text);
                 }
             }

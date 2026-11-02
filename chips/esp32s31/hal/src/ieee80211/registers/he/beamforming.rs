@@ -1,6 +1,6 @@
 //! Typed HE beamforming report-rate configuration.
 
-use oer_mmio::Bits;
+use oer_portable_mmio::Bits;
 
 use crate::ieee80211::registers::{MacPlacement, WifiRadioRegisters, bits};
 
@@ -21,10 +21,10 @@ impl MacHeErSuAckRateProfile {
     pub const fn encoded_byte(self) -> u8 {
         match self {
             Self::Ordinary => {
-                oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8
             }
             Self::ExtendedRange => {
-                oer_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::ExtendedRange.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::ExtendedRange.bits() as u8
             }
         }
     }

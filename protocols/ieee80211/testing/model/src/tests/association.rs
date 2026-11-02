@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_contracts_port::{QosControl, Tid};
-use oer_ieee80211_wire::security::Spp;
+use oer_protocols_ieee80211_contracts_port::{QosControl, Tid};
+use oer_protocols_ieee80211_wire::security::Spp;
 
 // Independent AESCCM wire peer, PN 010203040506, TID 5, one A-MSDU subframe.
 const WIRE: &[(Spp, &str, &str)] = &[
@@ -197,11 +197,11 @@ impl Work for WirePeer {
         assert_eq!(
             meta.common.crypto,
             RxEvidence::HardwareObserved(
-                oer_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified
+                oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified
             )
         );
-        let mut subframes = oer_ieee80211_wire::data::amsdu_subframes(
-            oer_ieee80211_wire::data::DataInterfaceRole::Station,
+        let mut subframes = oer_protocols_ieee80211_wire::data::amsdu_subframes(
+            oer_protocols_ieee80211_wire::data::DataInterfaceRole::Station,
             frame.bytes(),
             34,
             26,
@@ -220,7 +220,7 @@ impl Work for WirePeer {
             assert_eq!(
                 result,
                 Err(ModelCcmpError::Authentication(
-                    oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpMpduError::InvalidMic
+                    oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpMpduError::InvalidMic
                 ))
             );
             assert!(phase.held.air.rx.inspect().is_empty());

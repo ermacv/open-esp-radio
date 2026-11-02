@@ -1,6 +1,6 @@
 //! Exact-match legacy advertising duplicate history.
 
-use oer_bluetooth_le_wire::{
+use oer_protocols_bluetooth_le_wire::{
     LeDeviceAddress,
     scanning::{LEGACY_SCAN_DATA_CAPACITY, LegacyAdvertisingReport, LegacyAdvertisingReportKind},
 };

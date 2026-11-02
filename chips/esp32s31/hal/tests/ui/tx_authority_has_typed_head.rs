@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
-use oer_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 pub fn prepared(
     dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,

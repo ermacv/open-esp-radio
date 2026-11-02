@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, mpsc},
 };
 
-use oer_lab_arbiter::claims::Claim;
+use oer_tools_lab_arbiter::claims::Claim;
 
 use crate::protocol::{
     Frame, INPUT_WINDOW, LeaseRequest, Operation, PROTOCOL, Reply, Request, Status,
@@ -199,7 +199,7 @@ impl Credits {
 impl Client {
     /// Connect to the installed service as `client`.
     pub fn open(client: &str) -> Result<Self> {
-        let socket = oer_lab_model::paths::socket().map_err(|error| error.to_string())?;
+        let socket = oer_tools_lab_model::paths::socket().map_err(|error| error.to_string())?;
         let stream = UnixStream::connect(&socket).map_err(|error| {
             format!(
                 "the LAB service does not answer at {}: {error}; start it with `systemctl --user \
@@ -351,7 +351,7 @@ impl Client {
             let reply = match self.replies.recv_timeout(WAIT_POLL) {
                 Ok(reply) => reply,
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    if oer_os_process::cancellation_requested() {
+                    if oer_tools_os_process::cancellation_requested() {
                         return Err("cancelled while waiting for the lease".to_owned());
                     }
                     continue;
@@ -465,7 +465,7 @@ impl Client {
     }
 
     /// The stand's full report.
-    pub fn report(&mut self) -> Result<oer_lab_arbiter::Status> {
+    pub fn report(&mut self) -> Result<oer_tools_lab_arbiter::Status> {
         self.send(&Request::Report)?;
         match self.reply()? {
             Reply::Report { status } => Ok(*status),

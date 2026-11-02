@@ -1,6 +1,6 @@
 use super::*;
-use oer_time::Clock;
-type VirtualClock = oer_time_virtual::VirtualClock<8>;
+use oer_portable_time::Clock;
+type VirtualClock = oer_portable_time_virtual::VirtualClock<8>;
 
 fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {
     RxAddbaRequest::from_action(BlockAckAction::AddbaRequest {
@@ -47,7 +47,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     assert_eq!(response.tid, 3);
     assert!(response.amsdu);
     assert!(matches!(
-        oer_ieee80211_wire::block_ack::frame::parse_block_ack_action(&response.encode().unwrap()),
+        oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(&response.encode().unwrap()),
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 17,
             status: 0,
@@ -75,7 +75,7 @@ fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
         assert_eq!(negotiation.response().status, AddbaStatus::Success);
         assert_eq!(negotiation.response().amsdu, granted);
         assert!(matches!(
-            oer_ieee80211_wire::block_ack::frame::parse_block_ack_action(
+            oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(
                 &negotiation.response().encode().unwrap()
             ),
             Some(BlockAckAction::AddbaResponse { amsdu, .. }) if amsdu == granted

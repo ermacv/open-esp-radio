@@ -2,7 +2,7 @@
 
 use crate::mac::tx::TxHardware;
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     ieee80211::mac::WifiMacHal,
     owner::RadioAccess,
     types::{

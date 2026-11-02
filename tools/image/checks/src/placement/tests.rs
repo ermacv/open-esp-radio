@@ -45,7 +45,7 @@ fn swapping() -> Vec<Symbols> {
 }
 
 fn audit_entries(bytes: &[u8]) -> Result<()> {
-    let elf = oer_analysis_elf::Elf::parse(bytes).unwrap();
+    let elf = oer_tools_analysis_elf::Elf::parse(bytes).unwrap();
     audit_stack_swap_entries(&elf, &elf.addresses(), &swapping())
 }
 
@@ -114,7 +114,7 @@ fn a_mangled_rust_symbol_is_found_by_its_demangled_name() {
         flags: SymbolFlags::None,
     });
     let bytes = writer.write().unwrap();
-    let elf = oer_analysis_elf::Elf::parse(&bytes).unwrap();
+    let elf = oer_tools_analysis_elf::Elf::parse(&bytes).unwrap();
     assert_eq!(
         by_demangled_name(&elf, "__rustc::rust_begin_unwind"),
         Some(offset)
@@ -230,7 +230,7 @@ fn bootstrap_fixture(
     let output = directory.join("bootstrap.elf");
     let linker_scripts =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/espressif/staged-layout/linker");
-    let result = std::process::Command::new(oer_os_toolchain::lld().unwrap())
+    let result = std::process::Command::new(oer_tools_os_toolchain::lld().unwrap())
         .arg("-L")
         .arg(linker_scripts)
         .arg("-T")
@@ -278,7 +278,7 @@ fn the_bootstrap_script_places_out_of_line_code_and_constants_in_sram() {
             .contains("result=PASS")
     );
     let bytes = fs::read(path).unwrap();
-    let elf = oer_analysis_elf::Elf::executable(&bytes).unwrap();
+    let elf = oer_tools_analysis_elf::Elf::executable(&bytes).unwrap();
     for name in ["_start", "dependency_helper", "dependency_constant"] {
         let symbol = elf.symbol(name).unwrap();
         assert!(

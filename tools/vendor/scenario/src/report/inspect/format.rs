@@ -1,7 +1,7 @@
 //! Presentation of typed values and stored-bit runs; no instruction semantics.
 use super::*;
-use oer_analysis_blobray_domain::{StoredBits, StoredBitsSource};
-use oer_analysis_riscv_model::{AbstractValue, Expression, ValueAlternative};
+use oer_tools_analysis_blobray_domain::{StoredBits, StoredBitsSource};
+use oer_tools_analysis_riscv_model::{AbstractValue, Expression, ValueAlternative};
 
 pub(super) fn bit_list(mask: u32) -> String {
     let bits: Vec<_> = (0..u32::BITS)
@@ -80,7 +80,7 @@ fn bits(corpus: &Corpus, address: Option<u32>, mask: u32) -> String {
 pub(super) fn read_bits(
     corpus: &Corpus,
     address: Option<u32>,
-    reads: &oer_analysis_blobray_domain::ReadUses,
+    reads: &oer_tools_analysis_blobray_domain::ReadUses,
 ) -> String {
     let used = reads.uses.iter().fold(0, |mask, usage| mask | usage.bits);
     let unknown = reads
@@ -132,7 +132,7 @@ fn alternative(value_: &ValueAlternative, metadata: &Metadata) -> String {
 }
 
 fn symbol_value(
-    symbol: &oer_analysis_riscv_model::SymbolId,
+    symbol: &oer_tools_analysis_riscv_model::SymbolId,
     addend: i64,
     metadata: &Metadata,
 ) -> String {
@@ -153,11 +153,11 @@ fn symbol_value(
 pub(super) fn expression(expression: &Expression, metadata: &Metadata) -> String {
     match expression {
         Expression::EntryRegister { register } => {
-            oer_analysis_riscv_lift::register_name(*register).to_owned()
+            oer_tools_analysis_riscv_lift::register_name(*register).to_owned()
         }
         Expression::CallResult { callsite, register } => format!(
             "{} from call {callsite:#x}",
-            oer_analysis_riscv_lift::register_name(*register)
+            oer_tools_analysis_riscv_lift::register_name(*register)
         ),
         Expression::Load { address, width, .. } => {
             format!("load{width}({})", value(address, metadata))

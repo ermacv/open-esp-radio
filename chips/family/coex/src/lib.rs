@@ -25,7 +25,7 @@
 //! radios' status and steps its phases; [`CoexScheduleExecutor`] adds its
 //! phase timer. A chip crate binds the ports to its HAL.
 //!
-//! The portable client vocabulary is `oer-radio-coex`: [`CoexClient`] and
+//! The portable client vocabulary is `oer-protocols-radio-coex`: [`CoexClient`] and
 //! [`CoexStatusType`] convert from it into the vendor's request kinds and
 //! status words, and each protocol's operation maps to its table row
 //! ([`wifi_event`], [`ieee802154_event`]); the Bluetooth LE controller's lanes

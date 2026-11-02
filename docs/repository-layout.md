@@ -103,13 +103,13 @@ tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
 ## Names
 
 A library's package name is `oer-` and its path below its root:
-`protocols/ieee80211/wire` is `oer-ieee80211-wire`,
-`chips/esp32s31/hal` is `oer-esp32s31-hal`, `oer` is
-`oer-espressif`, `tools/hil/link` is
-`oer-hil-link`, `hil/services/aes` is `oer-services-aes`, and
-`hil/agent` is `oer-hil-agent-espressif`. An
+`protocols/ieee80211/wire` is `oer-protocols-ieee80211-wire`,
+`chips/esp32s31/hal` is `oer-chips-esp32s31-hal`, `oer` is
+`oer`, `tools/hil/link` is
+`oer-tools-hil-link`, `hil/services/aes` is `oer-hil-services-aes`, and
+`hil/agent` is `oer-hil-agent`. An
 executable keeps its root: `hil/probes/boot-smoke` is
-`oer-firmware-apps-boot-smoke`, `tools/image/cli` is `oer-tool-image-cli`, and
+`oer-hil-probes-boot-smoke`, `tools/image/cli` is `oer-tools-image-cli`, and
 `hil/scenarios/aes` is `oer-hil-scenarios-aes`.
 Rust imports replace hyphens with underscores. A program called by name,
 such as the image linker or a privileged helper, sets its binary name
@@ -118,7 +118,7 @@ with `[[bin]] name`.
 ## Layer roles
 
 Each package under `chips/`, `protocols/hil/` and `hil-scenarios/` has one
-role in `oer-test-layers` that names its level
+role in `oer-tools-test-layers` that names its level
 ([architecture](architecture.md#layers)); a directory name such as `driver`
 grants nothing. `chips/esp32s31/wifi` assembles the S31 station backend and portable runtime as the Wi-Fi facade.
 A protocol leaf named `hil` takes its role from the list. A package under a protocol's
@@ -128,7 +128,7 @@ backend conformance suite and `testing/model` a reference model, and no
 product package depends on either; and
 `protocols/bridges/*` are bridges, which stand only on the codecs they
 join. Each `protocols/network/*` package has an explicit layer in
-`oer-test-layers`: the network codec stands on `oer-wire` alone and the
+`oer-tools-test-layers`: the network codec stands on `oer-portable-wire` alone and the
 network contract on the codec.
 
 ## Known deviations

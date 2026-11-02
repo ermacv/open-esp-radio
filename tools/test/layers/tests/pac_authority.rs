@@ -2,8 +2,8 @@
 use std::path::Path;
 
 const FACTS: &str = "hil/probes/esp32s31-facts";
-const PAC: &str = "oer-esp32s31-pac";
-const IMAGE: &str = "oer-firmware-probes-esp32s31-facts";
+const PAC: &str = "oer-chips-esp32s31-pac";
+const IMAGE: &str = "oer-hil-probes-esp32s31-facts";
 
 fn inspect(
     owner: &str,
@@ -39,7 +39,7 @@ fn inspect(
                 }
                 if owner == FACTS
                     && key != "build-dependencies"
-                    && !matches!(name, PAC | "oer-mmio" | "oer-riscv")
+                    && !matches!(name, PAC | "oer-portable-mmio" | "oer-portable-riscv")
                 {
                     found.push(format!("{owner}: runtime dependency {name}"));
                 }
@@ -73,7 +73,7 @@ fn only_the_hal_and_this_facts_image_may_depend_on_the_pac() {
 
 #[test]
 fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
-    let spec: toml::Value = toml::from_str("[target.'cfg(test)'.dependencies]\nrenamed = { package = 'oer-esp32s31-pac', path = 'pac' }\n").unwrap();
+    let spec: toml::Value = toml::from_str("[target.'cfg(test)'.dependencies]\nrenamed = { package = 'oer-chips-esp32s31-pac', path = 'pac' }\n").unwrap();
     for owner in [FACTS, "chips/esp32s31/hal"] {
         let mut found = Vec::new();
         inspect(owner, &spec, None, &mut found);
@@ -101,7 +101,7 @@ fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
 #[test]
 fn workspace_aliases_are_resolved_at_the_actual_consumer() {
     let workspace: toml::Value =
-        toml::from_str("renamed = { package = 'oer-esp32s31-pac', path = 'pac' }").unwrap();
+        toml::from_str("renamed = { package = 'oer-chips-esp32s31-pac', path = 'pac' }").unwrap();
     let consumer: toml::Value =
         toml::from_str("[dependencies]\nrenamed = { workspace = true }").unwrap();
     let mut found = Vec::new();

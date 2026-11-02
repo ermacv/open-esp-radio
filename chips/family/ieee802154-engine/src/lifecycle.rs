@@ -10,7 +10,7 @@
 
 use core::marker::PhantomData;
 
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::{
     COEX_DISABLED_PTI, Ieee802154FoundationSnapshot, Ieee802154LifecycleBackend,
     Ieee802154ResetPort, Ieee802154ResetReadback,
 };
@@ -345,28 +345,28 @@ fn verify<Checkpoint: Copy>(
 )]
 mod tests;
 
-impl<B: oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyWrites>
-    oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyWrites
+impl<B: oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicyWrites>
+    oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicyWrites
     for Ieee802154Lifecycle<B, state::FoundationConfigured>
 {
-    fn set_channel(&mut self, v: oer_espressif_ieee802154_mac_values::Ieee802154Channel) {
+    fn set_channel(&mut self, v: oer_chips_family_ieee802154_mac_values::Ieee802154Channel) {
         self.backend.set_channel(v)
     }
-    fn set_cca_mode(&mut self, v: oer_espressif_ieee802154_mac_values::Ieee802154CcaMode) {
+    fn set_cca_mode(&mut self, v: oer_chips_family_ieee802154_mac_values::Ieee802154CcaMode) {
         self.backend.set_cca_mode(v)
     }
     fn set_cca_threshold_code(&mut self, v: i8) {
         self.backend.set_cca_threshold_code(v)
     }
-    fn set_mac_control(&mut self, v: oer_espressif_ieee802154_mac_values::Ieee802154MacControl) {
+    fn set_mac_control(&mut self, v: oer_chips_family_ieee802154_mac_values::Ieee802154MacControl) {
         self.backend.set_mac_control(v)
     }
-    fn set_ack_timeout(&mut self, v: oer_espressif_ieee802154_mac_values::Ieee802154AckTimeout) {
+    fn set_ack_timeout(&mut self, v: oer_chips_family_ieee802154_mac_values::Ieee802154AckTimeout) {
         self.backend.set_ack_timeout(v)
     }
     fn set_primary_pan_identity(
         &mut self,
-        v: oer_espressif_ieee802154_mac_values::Ieee802154PanIdentity,
+        v: oer_chips_family_ieee802154_mac_values::Ieee802154PanIdentity,
     ) {
         self.backend.set_primary_pan_identity(v)
     }
@@ -374,13 +374,13 @@ impl<B: oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyWrites>
         self.backend.order_device_accesses()
     }
 }
-impl<B: oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyBackend>
-    oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyBackend
+impl<B: oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicyBackend>
+    oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicyBackend
     for Ieee802154Lifecycle<B, state::FoundationConfigured>
 {
     fn mac_policy_readback(
         &mut self,
-    ) -> oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyReadback {
+    ) -> oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicyReadback {
         self.backend.mac_policy_readback()
     }
 }

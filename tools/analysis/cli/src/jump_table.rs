@@ -1,5 +1,5 @@
 //! A readable view of a jump table the analysis followed.
-use oer_analysis_riscv_model::JumpDispatch;
+use oer_tools_analysis_riscv_model::JumpDispatch;
 use std::collections::BTreeMap;
 
 /// `jump table +176: +1bc <- cases 0, 3; +2de <- case 1`, targets ascending,
@@ -49,7 +49,7 @@ fn ordered(site: u64, first_case: Option<i64>, entries: &[u64]) -> String {
 #[cfg(test)]
 mod tests {
     use super::human;
-    use oer_analysis_riscv_model::JumpDispatch;
+    use oer_tools_analysis_riscv_model::JumpDispatch;
 
     #[test]
     fn targets_list_the_cases_that_select_them() {

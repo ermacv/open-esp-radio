@@ -218,13 +218,13 @@ impl Default for PartCounter {
 
 /// The names of the image's parts, each given once.
 pub struct ImageNames {
-    names: [oer_memory::OnceValue<&'static str>; IMAGE_PARTS],
+    names: [oer_portable_memory::OnceValue<&'static str>; IMAGE_PARTS],
 }
 
 impl ImageNames {
     pub const fn new() -> Self {
         Self {
-            names: [const { oer_memory::OnceValue::new() }; IMAGE_PARTS],
+            names: [const { oer_portable_memory::OnceValue::new() }; IMAGE_PARTS],
         }
     }
 
@@ -240,7 +240,7 @@ impl ImageNames {
     pub fn name(&self, number: usize) -> Option<&'static str> {
         match number.checked_sub(LIBRARY_PARTS) {
             None => LibraryPart::ALL.get(number).map(|part| part.name()),
-            Some(slot) => self.names.get(slot).and_then(oer_memory::OnceValue::get),
+            Some(slot) => self.names.get(slot).and_then(oer_portable_memory::OnceValue::get),
         }
     }
 }

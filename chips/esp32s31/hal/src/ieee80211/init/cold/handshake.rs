@@ -1,7 +1,7 @@
 //! Ownership boundary for the cold MAC handshake prefix.
 
 use crate::ieee80211::mac::WifiMacColdHal;
-use oer_time::{Duration, Timer};
+use oer_portable_time::{Duration, Timer};
 
 /// The wait between two samples of the ready edge.
 pub const MAC_COLD_HANDSHAKE_RESAMPLE: Duration = Duration::from_micros(10);

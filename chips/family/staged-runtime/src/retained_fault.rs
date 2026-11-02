@@ -7,8 +7,8 @@
 //! earlier number.
 use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicBool, Ordering};
-use oer_diagnostics::fault::{Error, Record};
-use oer_memory::retained::{RetainedCell, RetainedGuard};
+use oer_portable_diagnostics::fault::{Error, Record};
+use oer_portable_memory::retained::{RetainedCell, RetainedGuard};
 
 pub(crate) struct Election {
     claimed: AtomicBool,

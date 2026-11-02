@@ -163,7 +163,7 @@ impl<'a> RsnElement<'a> {
             return Err(RsnSyntaxError::Malformed);
         }
 
-        let mut reader = RsnReader(oer_wire::Reader::new(body));
+        let mut reader = RsnReader(oer_portable_wire::Reader::new(body));
         if reader.u16()? != RSN_VERSION {
             return Err(RsnSyntaxError::UnsupportedVersion);
         }
@@ -244,7 +244,7 @@ impl<'a, const N: usize> CountedArrays<'a, N> {
     }
 }
 
-struct RsnReader<'a>(oer_wire::Reader<'a>);
+struct RsnReader<'a>(oer_portable_wire::Reader<'a>);
 
 impl<'a> RsnReader<'a> {
     fn take(&mut self, length: usize) -> Result<&'a [u8], RsnSyntaxError> {
@@ -431,12 +431,12 @@ pub const fn rsnx_element(capabilities: RsnExtendedCapabilities) -> [u8; RSNXE_O
 /// The Extended RSN Capabilities of an RSNXE, or `None` for an element
 /// shorter than its first capability octet.
 pub fn rsnx_capabilities(element: &[u8]) -> Option<RsnExtendedCapabilities> {
-    let mut reader = oer_wire::Reader::new(element);
+    let mut reader = oer_portable_wire::Reader::new(element);
     let [_, _, octet] = *reader.array::<RSNXE_ONE_OCTET_LEN>().ok()?;
     Some(RsnExtendedCapabilities::from_bytes([octet]))
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24 (RSN Capabilities field).
     pub struct RsnCapabilities[2] (little) {
         pub mfpr, with_mfpr: bool = 6..7;
@@ -445,7 +445,7 @@ oer_wire::bitfield! {
         pub spp_required, with_spp_required: bool = 11..12;
     }
 }
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element).
     pub struct RsnExtendedCapabilities[1] (little) {
         pub sae_h2e, with_sae_h2e: bool = 5..6;

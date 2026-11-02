@@ -42,30 +42,30 @@ fn state(s: &Session<'_>, tag: u32) {
 fn quiet(s: &mut Session<'_>) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn enable18(s: &mut Session<'_>) {
     s.ble.timer.write_word_0010_opaque(|w| {
         w.set_compare_software_delivery_set(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn enable1(s: &mut Session<'_>) {
     s.ble.timer.write_word_0010_opaque(|w| {
         w.set_rollover_delivery_set(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn wrap(s: &Session<'_>, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut prior = counter(s);
-    while oer_riscv::cycle32().wrapping_sub(start) < WRAP_LIMIT {
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < WRAP_LIMIT {
         let now = counter(s);
         if now < prior {
-            emit(tag, prior, now, oer_riscv::cycle32().wrapping_sub(start));
+            emit(tag, prior, now, oer_portable_riscv::cycle32().wrapping_sub(start));
             return true;
         }
         prior = now;
@@ -94,7 +94,7 @@ fn lp_clear_run(s: &mut Session<'_>, initial_clear: bool) {
     state(s, 0x9600);
     if initial_clear {
         s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         state(s, 0x9608);
     }
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
@@ -114,7 +114,7 @@ fn lp_clear_run(s: &mut Session<'_>, initial_clear: bool) {
     enable18(s);
     state(s, 0x9640);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x9650);
     quiet(s);
     state(s, 0x9660);
@@ -130,8 +130,8 @@ fn future(s: &mut Session<'_>) -> u32 {
     target
 }
 fn wait_target(s: &Session<'_>, origin: u32) -> bool {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 200_000 {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 200_000 {
         if counter(s).wrapping_sub(origin) & LOW_MAX >= 1024 {
             return true;
         }
@@ -153,7 +153,7 @@ pub(in crate::image) fn sleep16(s: &mut Session<'_>) {
         emit(0x970f + mode * 0x30, mode, origin, target);
         state(s, 0x9700 + mode * 0x30);
         s.ble.timer.enable_bluetooth_lp_sleep_16();
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         let completed = wait_target(s, origin);
         emit(0x971e + mode * 0x30, u32::from(completed), counter(s), 0);
         state(s, 0x9710 + mode * 0x30);
@@ -202,7 +202,7 @@ pub(in crate::image) fn sleep_other(s: &mut Session<'_>) {
     s.ble.etm.trigger_channel_enable_set_ch6();
     s.ble.etm.trigger_channel_enable_set_bit_11_opaque();
     s.ble.timer.enable_bluetooth_lp_sleep_17();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     window(4096);
     state(s, 0x9830);
     s.ble.timer.disable_bluetooth_lp_sleep_17();
@@ -314,7 +314,7 @@ fn reset(s: &mut Session<'_>, tag: u32) {
         .modify_modem_rst_conf(|w| {
             w.set_rst_modem_sec(r::RstModemSec::Released);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, tag + 32);
 }
 fn shutdown(s: &mut Session<'_>, rollover: bool) {
@@ -359,7 +359,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0014();
     state(s, 0x9950);
     s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0004();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x9960);
     emit(
         0x996f,
@@ -369,7 +369,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
     );
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_0024();
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x9970);
     reset(s, 0x9a00);
     // Production reunite performs no MMIO; this marks the corresponding PAC
@@ -417,7 +417,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
         .hp_sys_clkrst_radio
         .close_modem_pll_source_gate();
 
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     emit(
         0x9a50,
         0,
@@ -488,7 +488,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
         .modify_lp_timer_conf(|w| {
             w.set_clk_lp_timer_sel_xtal(true);
         });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x9a60);
     window(4096);
     state(s, 0x9a70);

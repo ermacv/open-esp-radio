@@ -823,7 +823,7 @@ pub enum PhyTxCapSearchAction {
         attenuation: u8,
         enabled: bool,
     },
-    I2c(oer_espressif_analog::Action<crate::analog::i2c::Address, ()>),
+    I2c(oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>),
     ToneSar(PhyToneSarAction),
     Complete(PhyTxCapSearchOutcome),
     Failed(PhyTxCapSearchFailure),
@@ -836,7 +836,7 @@ pub enum PhyTxCapSearchCompletion {
         attenuation: u8,
         enabled: bool,
     },
-    I2c(oer_espressif_analog::Completion<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_analog::Completion<crate::analog::i2c::Address>),
     ToneSar(PhyToneSarCompletion),
 }
 
@@ -849,9 +849,9 @@ pub enum PhyTxCapSearchTransitionError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TxCapSearchStep {
     ConfigureTone,
-    WriteCandidate(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    WriteCandidate(oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     Measure(PhyToneSarTransition),
-    WriteBest(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    WriteBest(oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     StopTone,
     Complete(PhyTxCapSearchOutcome),
     Failed(PhyTxCapSearchFailure),
@@ -894,7 +894,7 @@ impl PhyTxCapSearchTransition {
     const fn write(
         self,
         value: u8,
-    ) -> oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address> {
+    ) -> oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address> {
         crate::analog::i2c::field_write(tx_cap_field(self.bank), value)
     }
 
@@ -946,7 +946,7 @@ impl PhyTxCapSearchTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(()) {
                     TxCapSearchStep::Measure(PhyToneSarTransition::new_nonzero(PhyToneSarRequest {
                         measurement: self.bank.wrapping_mul(16).wrapping_add(self.candidate),
                         samples: 1,
@@ -992,7 +992,7 @@ impl PhyTxCapSearchTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
-                if transition.action() == oer_espressif_analog::Action::Complete(()) {
+                if transition.action() == oer_chips_family_analog::Action::Complete(()) {
                     if self.bank == 0 {
                         self.bank = 1;
                         self.candidate = tx_cap_max(1);
@@ -1055,7 +1055,7 @@ pub enum PhyTxCapFailure {
 pub enum PhyTxCapAction {
     Environment(PhyTxCalibrationEnvironmentAction),
     Rfpll(RfpllFrequencyAction),
-    I2c(oer_espressif_analog::Action<crate::analog::i2c::Address, ()>),
+    I2c(oer_chips_family_analog::Action<crate::analog::i2c::Address, ()>),
     Attenuation(PhyPowerAttenuationAction),
     Search(PhyTxCapSearchAction),
     Complete(PhyTxCapOutcome),
@@ -1066,7 +1066,7 @@ pub enum PhyTxCapAction {
 pub enum PhyTxCapCompletion {
     Environment(PhyTxCalibrationEnvironmentCompletion),
     Rfpll(RfpllFrequencyCompletion),
-    I2c(oer_espressif_analog::Completion<crate::analog::i2c::Address>),
+    I2c(oer_chips_family_analog::Completion<crate::analog::i2c::Address>),
     Attenuation(PhyPowerAttenuationCompletion),
     Search(PhyTxCapSearchCompletion),
 }
@@ -1087,8 +1087,8 @@ enum TxCapTerminal {
 enum TxCapStep {
     Enter(PhyTxCalibrationEnvironmentTransition),
     Rfpll(RfpllFrequencyTransition),
-    SetLow(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
-    SetHigh(oer_espressif_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    SetLow(oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>),
+    SetHigh(oer_chips_family_analog::FieldWriteTransition<crate::analog::i2c::Address>),
     Attenuation(PhyPowerAttenuationTransition),
     Search(PhyTxCapSearchTransition),
     Exit {
@@ -1199,7 +1199,7 @@ impl PhyTxCapTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_espressif_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(()) {
                     TxCapStep::SetHigh(crate::analog::i2c::field_write(
                         analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_HIGH,
                         13,
@@ -1212,7 +1212,7 @@ impl PhyTxCapTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
-                if transition.action() == oer_espressif_analog::Action::Complete(()) {
+                if transition.action() == oer_chips_family_analog::Action::Complete(()) {
                     self.step = if self.channel == 0 {
                         TxCapStep::Attenuation(PhyPowerAttenuationTransition::new(
                             PhyPowerAttenuationRequest {
@@ -1346,7 +1346,7 @@ impl PhyPowerAttenuationMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyPowerAttenuationCompletion {
         match self.action {
             PhyPowerAttenuationAction::ConfigureTone {
@@ -1391,7 +1391,7 @@ impl PhyToneSarMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyToneSarCompletion {
         match self.action {
             PhyToneSarAction::ArmTone {
@@ -1408,7 +1408,7 @@ impl PhyToneSarMmioBinding {
                 measurement,
                 sample,
             } => {
-                oer_esp32s31_hal::phy::power_detector::trigger_sar(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::trigger_sar(registers);
                 PhyToneSarCompletion::SarTriggered {
                     measurement,
                     sample,
@@ -1420,7 +1420,7 @@ impl PhyToneSarMmioBinding {
             } => PhyToneSarCompletion::ReadySampled {
                 measurement,
                 sample,
-                ready: oer_esp32s31_hal::phy::power_detector::sample_ready(registers),
+                ready: oer_chips_esp32s31_hal::phy::power_detector::sample_ready(registers),
             },
             PhyToneSarAction::ClearTone {
                 measurement,
@@ -1438,7 +1438,7 @@ impl PhyToneSarMmioBinding {
             } => PhyToneSarCompletion::SarRead {
                 measurement,
                 sample,
-                value: oer_esp32s31_hal::phy::power_detector::sample_sar(registers),
+                value: oer_chips_esp32s31_hal::phy::power_detector::sample_sar(registers),
             },
             _ => unreachable!(),
         }
@@ -1478,25 +1478,25 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyContext,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext,
     ) -> PhyTxCalibrationEnvironmentCompletion {
         match self.action {
             PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode => {
-                oer_espressif_phy::pbus::configure_debug_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                oer_chips_family_phy::pbus::configure_debug_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                 );
                 PhyTxCalibrationEnvironmentCompletion::PbusDebugModeConfigured
             }
             PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
-                oer_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(registers, enabled);
                 PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled }
             }
             PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector => {
-                oer_esp32s31_hal::phy::power_detector::configure_enabled(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(registers);
                 PhyTxCalibrationEnvironmentCompletion::PowerDetectorConfigured
             }
             PhyTxCalibrationEnvironmentAction::ConfigureCalibrationMode => {
-                oer_esp32s31_hal::phy::power_detector::configure_calibration_mode(registers);
+                oer_chips_esp32s31_hal::phy::power_detector::configure_calibration_mode(registers);
                 PhyTxCalibrationEnvironmentCompletion::CalibrationModeConfigured
             }
             PhyTxCalibrationEnvironmentAction::StopTone => {
@@ -1505,17 +1505,17 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
             }
             PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkMode => {
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModeConfigured {
-                    settle_required: oer_espressif_phy::pbus::configure_work_mode(
-                        &mut oer_esp32s31_hal::phy::pbus::port(registers),
+                    settle_required: oer_chips_family_phy::pbus::configure_work_mode(
+                        &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
                     ),
                 }
             }
             PhyTxCalibrationEnvironmentAction::ConfigurePbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(registers);
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModePulseConfigured
             }
             PhyTxCalibrationEnvironmentAction::ClearPbusWorkModePulse => {
-                oer_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
+                oer_chips_esp32s31_hal::phy::agc::clear_pbus_work_mode_pulse(registers);
                 PhyTxCalibrationEnvironmentCompletion::PbusWorkModePulseCleared
             }
             _ => unreachable!(),
@@ -1540,7 +1540,7 @@ impl PhyTxCapSearchMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target(
         self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyTxCapSearchCompletion {
         match self.action {
             PhyTxCapSearchAction::ConfigureTone {
@@ -1617,7 +1617,7 @@ impl PhyTxCalibrationEnvironmentPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn start_target(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<(), crate::analog::pbus::PhyPbusHardwareBindingError> {
         self.hardware.start_target(registers)
     }
@@ -1625,7 +1625,7 @@ impl PhyTxCalibrationEnvironmentPbusBinding {
     #[cfg(target_arch = "riscv32")]
     pub fn observe_target_edge(
         &mut self,
-        registers: &mut impl oer_esp32s31_hal::owner::SharedPhyAccess,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> Result<
         crate::analog::pbus::PhyPbusHardwareObservation,
         crate::analog::pbus::PhyPbusHardwareBindingError,

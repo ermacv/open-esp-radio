@@ -53,12 +53,12 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use oer_diagnostics::Note;
-use oer_espressif_boot::drivers::cores::{
+use oer_portable_diagnostics::Note;
+use oer_chips_family_boot::drivers::cores::{
     self as driver, CoreState, STALL_POLLS, Stopped, Unconfirmed,
 };
-use oer_memory::{Claim, ClaimCell, Held};
-use oer_mmio::Placement;
+use oer_portable_memory::{Claim, ClaimCell, Held};
+use oer_portable_mmio::Placement;
 
 use crate::platform::core_control::{CoreControlRegisters, Uart0ClockRegisters};
 pub use crate::platform::{BOOT_HART, HARTS, Hart, SecondaryHart};
@@ -68,7 +68,7 @@ mod launch;
 mod tests;
 
 pub use launch::{LaunchPermit, Released, StartError};
-pub use oer_espressif_platform_port::SecondaryEntry;
+pub use oer_chips_family_platform_port::SecondaryEntry;
 
 /// Keeps a value on the hart that made it: not `Send`.
 type ThisHart = PhantomData<*const ()>;
@@ -77,7 +77,7 @@ type ThisHart = PhantomData<*const ()>;
 pub(crate) const fn key(hart: Hart) -> u8 {
     const {
         assert!(
-            HARTS <= oer_memory::KEYS as usize,
+            HARTS <= oer_portable_memory::KEYS as usize,
             "every hart has a fatal election key"
         );
     }
@@ -116,7 +116,7 @@ pub enum Fault {
 
 fn current_hart() -> Result<Hart, Fault> {
     #[cfg(target_arch = "riscv32")]
-    let raw = oer_riscv::hart_id() as u32;
+    let raw = oer_portable_riscv::hart_id() as u32;
     #[cfg(not(target_arch = "riscv32"))]
     let raw = BOOT_HART.get() as u32;
     Hart::new(raw).map_err(|invalid| Fault::InvalidHart { raw: invalid.raw })
@@ -270,20 +270,20 @@ pub fn fatal(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
     fatal_with(
         || {
             #[cfg(target_arch = "riscv32")]
-            let _ = oer_riscv::swap_interrupt_threshold(u8::MAX);
+            let _ = oer_portable_riscv::swap_interrupt_threshold(u8::MAX);
         },
         || {
             #[cfg(target_arch = "riscv32")]
-            oer_riscv::disable_interrupts();
+            oer_portable_riscv::disable_interrupts();
         },
         current_hart,
         fatal_path,
         || {
             #[cfg(target_arch = "riscv32")]
-            oer_riscv::disable_interrupts();
+            oer_portable_riscv::disable_interrupts();
             loop {
                 #[cfg(target_arch = "riscv32")]
-                oer_riscv::wait_for_interrupt();
+                oer_portable_riscv::wait_for_interrupt();
                 #[cfg(not(target_arch = "riscv32"))]
                 #[allow(
                     clippy::disallowed_methods,
@@ -411,8 +411,8 @@ pub struct AwaitWatchdog {
 
 /// The reason the console's fatal note gives for a reset left to the
 /// watchdog.
-pub const RESET_UNPREPARED: oer_diagnostics::Name<32> =
-    oer_diagnostics::name!("reset-unprepared"; 32);
+pub const RESET_UNPREPARED: oer_portable_diagnostics::Name<32> =
+    oer_portable_diagnostics::name!("reset-unprepared"; 32);
 
 /// Reset the chip from `fatal`'s path, as the boot ROM expects it: UART0's
 /// clock restored, no boot address for hart 1, the other hart reset and
@@ -440,7 +440,7 @@ pub fn software_reset(fatal: Fatal<'_>) -> AwaitWatchdog {
     match reset {
         Ok(()) => loop {
             #[cfg(target_arch = "riscv32")]
-            oer_riscv::wait_for_interrupt();
+            oer_portable_riscv::wait_for_interrupt();
             #[cfg(not(target_arch = "riscv32"))]
             #[allow(
                 clippy::disallowed_methods,
@@ -472,7 +472,7 @@ fn reset_with<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placeme
 ) -> Result<(), StopError> {
     match cell.hold(key(hart), |words| {
         driver::prepare_reset(words, hart);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         words.request_system_reset();
     }) {
         Ok(Held { value: (), .. }) => Ok(()),
@@ -489,7 +489,7 @@ fn reset_quarantined_with<P: Placement, Q: Placement, R: Placement, S: Placement
 ) -> Result<(), StopError> {
     cell.seal(|words| {
         driver::clear_boot_addresses(words);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         words.request_system_reset();
     })
     .map_err(|_| StopError::InvalidHart { raw })

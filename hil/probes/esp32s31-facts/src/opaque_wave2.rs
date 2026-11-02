@@ -11,8 +11,8 @@ pub(super) mod observer;
 const COMMAND_CYCLES: u32 = 40_000;
 
 fn settle(cycles: u32) {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < cycles {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < cycles {}
 }
 
 /// Probe-specific transport prefix. Its complete differences from production
@@ -181,7 +181,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
     m.modify_ana_conf0(|w| {
         w.set_phy_register_enable(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 // Diagnostic packing above the TXRF lane retains the recorded result format.
@@ -295,16 +295,16 @@ fn start(s: &mut Session<'_>, host: Host, address: Address, seed: u8) {
 }
 
 fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
-    let start = oer_riscv::cycle32();
+    let start = oer_portable_riscv::cycle32();
     let mut polls = 0u32;
     while busy(s, host) {
         polls = polls.saturating_add(1);
-        if oer_riscv::cycle32().wrapping_sub(start) >= COMMAND_CYCLES {
+        if oer_portable_riscv::cycle32().wrapping_sub(start) >= COMMAND_CYCLES {
             emit(
                 tag + 1,
                 u32::MAX,
                 polls,
-                oer_riscv::cycle32().wrapping_sub(start),
+                oer_portable_riscv::cycle32().wrapping_sub(start),
             );
             return false;
         }
@@ -324,7 +324,7 @@ fn finish(s: &Session<'_>, host: Host, tag: u32) -> bool {
         tag + 1,
         u32::from(data),
         polls,
-        oer_riscv::cycle32().wrapping_sub(start),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
     );
     emit(
         tag + 2,

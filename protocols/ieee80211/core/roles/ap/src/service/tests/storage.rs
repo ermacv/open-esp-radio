@@ -10,7 +10,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
                 PEER,
                 Pmk::from_bytes(SAE_PMK),
                 SAE_PMKID,
-                oer_time::Instant::from_micros(1)
+                oer_portable_time::Instant::from_micros(1)
             )
             .unwrap(),
         status_code::SUCCESS,
@@ -23,7 +23,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
     assert_eq!(peers.storage.generation, old.association_epoch());
 
     let mut restarted =
-        AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
             AP,
             AccessPointClientLimit::new(2).unwrap(),
             AccessPointInactiveTimeout::default(),
@@ -32,7 +32,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
         .unwrap();
     assert!(restarted.peer_status(PEER).is_none());
     restarted
-        .authenticate_open(PEER, oer_time::Instant::from_micros(2))
+        .authenticate_open(PEER, oer_portable_time::Instant::from_micros(2))
         .unwrap();
     let new = restarted.peer_status(PEER).unwrap().association_identity();
     assert_eq!(new.association_id(), old.association_id());
@@ -51,7 +51,7 @@ fn dropping_an_active_service_clears_its_caller_placed_secrets() {
                     PEER,
                     Pmk::from_bytes(SAE_PMK),
                     SAE_PMKID,
-                    oer_time::Instant::from_micros(1)
+                    oer_portable_time::Instant::from_micros(1)
                 )
                 .unwrap(),
             status_code::SUCCESS,
@@ -76,13 +76,13 @@ fn exhausted_storage_refuses_every_security_constructor_without_reusing_its_fron
         let limit = AccessPointClientLimit::new(2).unwrap();
         let timeout = AccessPointInactiveTimeout::default();
         let gtk = RsnGtk::new(
-            oer_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+            oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
             true,
             &[0x55; 16],
         );
         let result = match policy {
             ApSecurityPolicy::Open => AccessPointService::<
-                oer_ieee80211_wire::security::spp::Association,
+                oer_protocols_ieee80211_wire::security::spp::Association,
             >::new_open(AP, limit, timeout, storage.lend()),
             ApSecurityPolicy::Wpa2Personal => AccessPointService::new(
                 AP,
@@ -111,7 +111,7 @@ fn the_last_generation_is_usable_and_exhaustion_preserves_the_live_peer_and_pmks
     let mut storage = AccessPointPeerStorage::new();
     storage.generation = u32::MAX - 2;
     let mut service = wpa3_service(&mut storage);
-    let now = oer_time::Instant::from_micros(1);
+    let now = oer_portable_time::Instant::from_micros(1);
     assert_eq!(
         service.authenticate_sae(PEER, Pmk::from_bytes(SAE_PMK), SAE_PMKID, now),
         Ok(status_code::SUCCESS)
@@ -149,7 +149,7 @@ fn removing_the_last_generation_keeps_the_frontier_exhausted_across_restart() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = wpa3_service(&mut storage);
     service
-        .authenticate_open(PEER, oer_time::Instant::from_micros(0))
+        .authenticate_open(PEER, oer_portable_time::Instant::from_micros(0))
         .unwrap();
     service.storage_mut().generation = u32::MAX - 1;
     assert_eq!(
@@ -157,7 +157,7 @@ fn removing_the_last_generation_keeps_the_frontier_exhausted_across_restart() {
         Ok(ApMlmeAction::PeerRemoved { peer: PEER })
     );
     let peers = service.into_peer_storage();
-    let result = AccessPointService::<oer_ieee80211_wire::security::spp::Association>::new_open(
+    let result = AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
         AP,
         AccessPointClientLimit::new(1).unwrap(),
         AccessPointInactiveTimeout::default(),

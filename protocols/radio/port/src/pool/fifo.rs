@@ -30,7 +30,7 @@
 //! No caller makes a permit, so no caller adds capacity:
 //!
 //! ```compile_fail,E0451
-//! # use oer_radio_port::Permit;
+//! # use oer_protocols_radio_port::Permit;
 //! fn forge<'id, K>() -> Permit<'id, K> {
 //!     Permit { index: 0, brand: core::marker::PhantomData, kind: core::marker::PhantomData }
 //! }
@@ -40,16 +40,16 @@
 //! holds a place for exactly the seats minted with it:
 //!
 //! ```compile_fail
-//! # use oer_radio_port::FifoPermitPool;
-//! # use oer_radio_port::{Line, PermitSupply};
+//! # use oer_protocols_radio_port::FifoPermitPool;
+//! # use oer_protocols_radio_port::{Line, PermitSupply};
 //! fn mix<'a, 'b, K>(supply: PermitSupply<'a, K, 1>, line: Line<'b, K, 2>) -> FifoPermitPool<'b, K, 1, 2> {
 //!     FifoPermitPool::new(supply, line)
 //! }
 //! ```
 //!
 //! ```compile_fail,E0308
-//! # use oer_radio_port::FifoPermitPool;
-//! # use oer_radio_port::{Line, PermitSupply};
+//! # use oer_protocols_radio_port::FifoPermitPool;
+//! # use oer_protocols_radio_port::{Line, PermitSupply};
 //! fn short<'id, K>(supply: PermitSupply<'id, K, 1>, line: Line<'id, K, 2>) -> FifoPermitPool<'id, K, 1, 1> {
 //!     FifoPermitPool::new(supply, line)
 //! }
@@ -59,8 +59,8 @@
 //! line of its seats:
 //!
 //! ```
-//! # use oer_radio_port::FifoPermitPool;
-//! # use oer_radio_port::{Line, PermitSupply};
+//! # use oer_protocols_radio_port::FifoPermitPool;
+//! # use oer_protocols_radio_port::{Line, PermitSupply};
 //! fn fill<'id, K>(supply: PermitSupply<'id, K, 1>, line: Line<'id, K, 2>) -> FifoPermitPool<'id, K, 1, 2> {
 //!     FifoPermitPool::new(supply, line)
 //! }
@@ -69,7 +69,7 @@
 //! The pool is not `Sync`, so no other task shares it:
 //!
 //! ```compile_fail,E0277
-//! # use oer_radio_port::FifoPermitPool;
+//! # use oer_protocols_radio_port::FifoPermitPool;
 //! fn shared<T: Sync>() {}
 //! fn check<'id, K>() {
 //!     shared::<FifoPermitPool<'id, K, 1, 2>>();
@@ -77,7 +77,7 @@
 //! ```
 //!
 //! ```
-//! # use oer_radio_port::FifoPermitPool;
+//! # use oer_protocols_radio_port::FifoPermitPool;
 //! fn owned<T>() {}
 //! fn check<'id, K>() {
 //!     owned::<FifoPermitPool<'id, K, 1, 2>>();
@@ -150,8 +150,8 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
     /// waiter would have no operation whose terminal could ever wake it.
     ///
     /// ```compile_fail,E0080
-    /// use oer_radio_port::FifoPermitPool;
-    /// use oer_radio_port::{Mint, Permits};
+    /// use oer_protocols_radio_port::FifoPermitPool;
+    /// use oer_protocols_radio_port::{Mint, Permits};
     /// fn build(mint: Mint<'static, Permits<(), 0, 1>>) {
     ///     let tokens = mint.into_pools();
     ///     let _pool = FifoPermitPool::new(tokens.supply, tokens.line);
@@ -160,8 +160,8 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
     /// ```
     ///
     /// ```
-    /// use oer_radio_port::FifoPermitPool;
-    /// use oer_radio_port::{Mint, Permits};
+    /// use oer_protocols_radio_port::FifoPermitPool;
+    /// use oer_protocols_radio_port::{Mint, Permits};
     /// fn build(mint: Mint<'static, Permits<(), 1, 1>>) {
     ///     let tokens = mint.into_pools();
     ///     let _pool = FifoPermitPool::new(tokens.supply, tokens.line);

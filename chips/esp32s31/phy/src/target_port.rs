@@ -8,7 +8,7 @@
 //! contract.
 
 use crate::executor::wait::{Kind, PhyShortDelay, delay, delay_observed};
-use oer_cooperate::CooperativeTimer as Timer;
+use oer_portable_cooperate::CooperativeTimer as Timer;
 
 use core::marker::PhantomData;
 
@@ -128,7 +128,7 @@ pub use domain::{PhyDomainRegisterFailure, PhyDomainRegistered, PhyRegisterConfi
 mod radio_lifecycle;
 pub(crate) use radio_lifecycle::PhyRfCloseTemperatureFailure;
 
-use oer_esp32s31_hal::owner::{PhyInitializationAccess, SharedPhyAccess, SharedPhyContext};
+use oer_chips_esp32s31_hal::owner::{PhyInitializationAccess, SharedPhyAccess, SharedPhyContext};
 
 /// The maintaining owner's PHY grant-protect request.
 ///
@@ -145,7 +145,7 @@ pub trait PhyGrantProtectPort {
     fn set_grant_protect(&mut self, enabled: bool) -> Result<(), PhyTargetPortError>;
 }
 
-impl PhyGrantProtectPort for oer_esp32s31_hal::coex::PhyGrantProtect<'_> {
+impl PhyGrantProtectPort for oer_chips_esp32s31_hal::coex::PhyGrantProtect<'_> {
     fn set_grant_protect(&mut self, enabled: bool) -> Result<(), PhyTargetPortError> {
         if enabled {
             self.acquire()
@@ -323,20 +323,20 @@ pub enum TargetPhyRegisterError {
 /// The field is private to this module, so no sibling module can mint it even
 /// though the proof constructor can name the type through crate visibility.
 pub(crate) struct TargetRegistrationWitness {
-    grant: oer_esp32s31_hal::owner::PhyRegistrationGrant,
+    grant: oer_chips_esp32s31_hal::owner::PhyRegistrationGrant,
 }
 
 impl TargetRegistrationWitness {
-    const fn new(grant: oer_esp32s31_hal::owner::PhyRegistrationGrant) -> Self {
+    const fn new(grant: oer_chips_esp32s31_hal::owner::PhyRegistrationGrant) -> Self {
         Self { grant }
     }
 
-    pub(crate) const fn epoch(&self) -> oer_esp32s31_hal::owner::PhyRegistrationEpoch {
+    pub(crate) const fn epoch(&self) -> oer_chips_esp32s31_hal::owner::PhyRegistrationEpoch {
         self.grant.epoch()
     }
 
     /// The registration's grant, which the registered state keeps.
-    pub(crate) fn into_grant(self) -> oer_esp32s31_hal::owner::PhyRegistrationGrant {
+    pub(crate) fn into_grant(self) -> oer_chips_esp32s31_hal::owner::PhyRegistrationGrant {
         self.grant
     }
 }
@@ -397,28 +397,28 @@ impl From<PhyTargetPortError> for PhyParamTrackingPortError {
     }
 }
 
-impl oer_diagnostics::DiagnosticPath for PhyParamTrackingPortError {
-    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+impl oer_portable_diagnostics::DiagnosticPath for PhyParamTrackingPortError {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
         match self {
             Self::Step(error) => {
                 path.name("Step");
-                oer_diagnostics::DiagnosticPath::push_path(error, path);
+                oer_portable_diagnostics::DiagnosticPath::push_path(error, path);
             }
             Self::CalibrationTracking(error) => {
                 path.name("CalibrationTracking");
-                oer_diagnostics::DiagnosticPath::push_path(error, path);
+                oer_portable_diagnostics::DiagnosticPath::push_path(error, path);
             }
         }
     }
 }
 
-impl oer_diagnostics::DiagnosticPath for TargetPhyParamTrackingError {
-    fn push_path(&self, path: &mut oer_diagnostics::DiagPath) {
+impl oer_portable_diagnostics::DiagnosticPath for TargetPhyParamTrackingError {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
         match self {
             Self::EpochMismatch => path.name("EpochMismatch"),
             Self::Run(error) => {
                 path.name("Run");
-                oer_diagnostics::DiagnosticPath::push_path(error, path);
+                oer_portable_diagnostics::DiagnosticPath::push_path(error, path);
             }
             Self::MissingCompletedOwner => path.name("MissingCompletedOwner"),
         }
@@ -1247,7 +1247,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
     async fn complete_channel_hal<P, O: PhyTargetObserver>(
         &self,
         binding: PhyChipChannelExternalBinding,
-        channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+        channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
         observer: &mut O,
     ) -> Result<PhyChipChannelCompletion, PhyTargetPortError> {
         match binding {
@@ -1299,7 +1299,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         state: &mut PhyState,
         channel_or_frequency: u16,
         cbw: u8,
-        channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+        channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
         observer: &mut O,
     ) -> Result<(), PhyTargetPortError> {
         let mut transition = PhyChipChannelTransition::new(PhyChipChannelRequest {
@@ -1340,7 +1340,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
         state: &mut PhyState,
         channel_or_frequency: u16,
         cbw: u8,
-        channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+        channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
         observer: &mut O,
     ) -> Result<(), PhyTargetPortError> {
         channel.request_mac_stop();
@@ -1611,7 +1611,7 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                 }
                 binding
                     .execute_target(registers, || D::settle_micros(
-                        oer_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
+                        oer_chips_esp32s31_hal::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
                     ))
                     .map_err(|error| match error {
                         crate::calibration::cold::PhyColdLoweringError::HardwareRestoreInvariant => {
@@ -2001,7 +2001,7 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                 if !D::settle_micros(2) {
                     return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
                 }
-                oer_esp32s31_hal::phy::frequency::observe_software_frequency_boundary(
+                oer_chips_esp32s31_hal::phy::frequency::observe_software_frequency_boundary(
                     self.physical.hardware(),
                 );
                 crate::tracking::calibration::PhyCalibrationTrackingCompletion::SoftwareFrequencySettled
@@ -2257,7 +2257,7 @@ pub(crate) async fn select_phy_channel_with_hal<D: PhyShortDelay, P, O: PhyTarge
     state: &mut PhyState,
     channel_or_frequency: u16,
     cbw: u8,
-    channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+    channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
     observer: &mut O,
 ) -> Result<(), PhyTargetPortError> {
     TargetCompleter::<D, _>::new(timer)
@@ -2275,7 +2275,7 @@ pub(crate) async fn switch_phy_channel_with_hal_and_mac_restart<
     state: &mut PhyState,
     channel_or_frequency: u16,
     cbw: u8,
-    channel: &mut oer_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
+    channel: &mut oer_chips_esp32s31_hal::ieee80211::channel::RadioChannelHal<'_, P>,
     observer: &mut O,
 ) -> Result<(), PhyTargetPortError> {
     TargetCompleter::<D, _>::new(timer)

@@ -162,7 +162,7 @@ restoring registers. Its named fault retains the cancelled operation
 and registration observation. Both halves report the same operation,
 independently of drop order. Firmware binds the fault directly at link
 time through the HAL's `phy_fault_reporter!` macro to the chip composition's
-`phy_fault::reset` (`oer-esp32s31-compose`), which calls `fatal::reset_recording`;
+`phy_fault::reset` (`oer-chips-esp32s31-compose`), which calls `fatal::reset_recording`;
 a 16-byte record naming the operation and epoch is printed on the next
 boot and cleared only after successful output. Host tests use an independent
 seat and catch their own never-returning reporter. There is no lock, unsafe
@@ -323,7 +323,7 @@ registration and common tracking. Borrowed typed step tokens carry each
 hardware command directly to one poll loop; consuming a completion updates
 that same cursor and coefficient bank. Short ready leaves share a bounded
 poll, while an incomplete DC/IQ observation waits on the caller's timer.
-Other required 1–20 us hardware settles count machine cycles through `oer-riscv`,
+Other required 1–20 us hardware settles count machine cycles through `oer-portable-riscv`,
 using the stable frequency adopted by the HAL clock owner at runtime handover.
 PBus/I2C leaves retain their bounded direct observation policy.
 TXDC/PWDET retains its direct search/root interpreter inside the owned PHY
@@ -369,7 +369,7 @@ succeeds at any time, even after a late wake-up; the deadline bounds only the
 not-ready case.
 Interrupts remain enabled and the physical owner remains held until terminal
 restoration. Longer registration, tracking and lifecycle operations wait on
-the caller's `oer_time::Timer` through `executor::wait::delay` and its
+the caller's `oer_portable_time::Timer` through `executor::wait::delay` and its
 `executor::wait::Kind`.
 
 Direct PBus, analog-I2C and TX-DC/PWDET status observations use a named

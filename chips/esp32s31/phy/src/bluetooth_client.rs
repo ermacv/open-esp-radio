@@ -11,11 +11,11 @@
 //! Unlike IEEE 802.15.4, Bluetooth keeps the transmit-on delay that the
 //! first BTBB initialization writes.
 
-use oer_esp32s31_hal::power::PlatformClockBackend;
+use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
 use core::fmt;
 
-use oer_esp32s31_hal::{
+use oer_chips_esp32s31_hal::{
     bluetooth::TaskOwner,
     domain::{BtbbError, RadioClient, RadioDomain},
 };
@@ -29,7 +29,7 @@ use crate::concurrent::{
 /// the shared BTBB baseband.
 ///
 /// ```compile_fail
-/// use oer_esp32s31_phy::bluetooth_client::BluetoothPhyMembership;
+/// use oer_chips_esp32s31_phy::bluetooth_client::BluetoothPhyMembership;
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<BluetoothPhyMembership>();
 /// ```
@@ -104,7 +104,7 @@ pub enum BluetoothPhyClientError {
 pub fn join_bluetooth<'l, B: PlatformClockBackend>(
     ready: PhyClientReady<'l, B, BluetoothPhyMembership>,
     task: &TaskOwner,
-    clock: &impl oer_time::Clock,
+    clock: &impl oer_portable_time::Clock,
 ) -> Result<Joined<'l, B, BluetoothPhyMembership>, JoinRefused<'l, B, BluetoothPhyClientError>> {
     let radio = ready.into_radio();
     let acquired = match acquire_btbb_client(radio, RadioClient::Bluetooth, clock, |radio, gain| {

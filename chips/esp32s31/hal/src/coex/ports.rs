@@ -2,11 +2,11 @@
 //!
 //! The radio domain owns the timer bank, the event priority table and the shared
 //! modem clock fields. [`CoexDomainPorts`] lends them to
-//! [`oer_espressif_coex::CoexCore`] for one transaction: the timer port
+//! [`oer_chips_family_coex::CoexCore`] for one transaction: the timer port
 //! programs the policy timers and reads the domain's current event
 //! priorities, the clock port samples the bank's low-power clock selection.
 
-use oer_espressif_coex::{
+use oer_chips_family_coex::{
     CoexClient, CoexClockHardware, CoexClockSelector, CoexError, CoexEventId, CoexPti,
     CoexTimerClock, CoexTimerHardware, CoexTimerIndex,
 };
@@ -75,7 +75,7 @@ impl TimerClockConfig {
         };
         // SOURCE: complete pinned coex_hw_timer_freq_set keeps the field's low bits.
         // The selector check above rejects zero; wrapping_sub names this encoding arithmetic.
-        let divider = CoexTimerClockDividerMinusOne::from_bits(oer_mmio::Bits::truncate(
+        let divider = CoexTimerClockDividerMinusOne::from_bits(oer_portable_mmio::Bits::truncate(
             divisor.wrapping_sub(1),
         ));
         Ok(Self { source, divider })

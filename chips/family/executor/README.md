@@ -1,6 +1,6 @@
 # Espressif executor
 
-`oer-espressif-executor` runs statically placed tasks over the platform port.
+`oer-chips-family-executor` runs statically placed tasks over the platform port.
 The image selects its chip binding, contexts, task set and timers. Protocol
 runtimes expose futures; images choose which executor polls them.
 
@@ -48,10 +48,10 @@ that preempts it runs at a higher level and is never its context, so it gets
 no signal context and no timer slot. The executor's calls into the chip
 (software interrupt lines, the wait for an interrupt, the interrupt level,
 the core, the system timer's counter, the pending sources) sit in
-`chip.rs`; architectural instructions come from `oer-riscv`. The executor
+`chip.rs`; architectural instructions come from `oer-portable-riscv`. The executor
 names no chip: its code is generic over a chip binding `B: Binding`, whose
 `Port` is the chip HAL's implementation of the platform port's
-`ExecutorPlatform` and `Platform` (`oer-espressif-platform-port`) for source
+`ExecutorPlatform` and `Platform` (`oer-chips-family-platform-port`) for source
 IDs, pending and debugger reads, the software lines, the counter, the
 comparators and the fatal path; the hart geometry is the port's. Rust has no
 generic statics, so the chip's composition crate declares the binding once
@@ -65,7 +65,7 @@ image links one.
 
 ## Radio interrupt levels
 
-[`executor`](src/lib.rs) (`oer-espressif-executor`) places
+[`executor`](src/lib.rs) (`oer-chips-family-executor`) places
 the image's contexts on one core: the radio interrupts at P3 (the MAC and
 PWR sources and the radio doorbell), the radio executor (`InterruptExecutor`
 on `FROM_CPU` line 2) at P2, the application below it. The table declares
@@ -128,7 +128,7 @@ the task's executor's records `WakerCrossedHarts` (the executor, its hart
 and the waking hart) and resets, before the task is marked. A task on one hart reaches a
 task on another only by raising the other executor's `IrqSignal`, declared
 with a `FromPeerHart` raiser. [`peer`](src/peer.rs) carries one request and
-its answer between two such tasks over an `oer-memory` in-place request
+its answer between two such tasks over an `oer-portable-memory` in-place request
 slot: a successful `post` creates the obligation of one answer by the
 deadline it names, which the client keeps across cancelled waits; the slot
 is `WORKING` only inside the server's call. The client returns an answer
@@ -175,7 +175,7 @@ The time driver consumes `SystemTimer`, containing
 the running timer's disjoint owners from the reset root: our comparator writer, three alarm
 acknowledgers that each strobe their own bit of the shared
 acknowledgement block, and the shared counter latch, which every context
-of every hart reads through `oer-espressif-boot::drivers::system_timer`: strobe, 64 bounded
+of every hart reads through `oer-chips-family-boot::drivers::system_timer`: strobe, 64 bounded
 VALID polls per settle, then up to 16 LO/HI/LO rounds, retaining a
 monotonic floor when other strobes (a preempting context's, or another
 hart's between any two accesses) prevent verification. The binding

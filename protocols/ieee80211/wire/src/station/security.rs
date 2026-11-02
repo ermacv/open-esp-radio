@@ -13,7 +13,7 @@ use crate::security::rsn::{
 /// negotiate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SelectedRsn {
-    length: oer_wire::PrefixLength<SELECTED_SECURITY_IES_CAPACITY>,
+    length: oer_portable_wire::PrefixLength<SELECTED_SECURITY_IES_CAPACITY>,
     bytes: [u8; SELECTED_SECURITY_IES_CAPACITY],
     security: AssociationSecurity,
 }
@@ -21,7 +21,7 @@ pub struct SelectedRsn {
 impl SelectedRsn {
     /// An Open association: no security element.
     pub const OPEN: Self = Self {
-        length: oer_wire::PrefixLength::ZERO,
+        length: oer_portable_wire::PrefixLength::ZERO,
         bytes: [0; SELECTED_SECURITY_IES_CAPACITY],
         security: AssociationSecurity::Open,
     };
@@ -53,7 +53,7 @@ impl SelectedRsn {
         association.pmkid = Some(pmkid);
         let mut resumed = self;
         resumed.security = AssociationSecurity::Rsn(association);
-        let mut reader = oer_wire::Reader::new(self.as_bytes());
+        let mut reader = oer_portable_wire::Reader::new(self.as_bytes());
         reader.array::<SELECTED_RSN_IE_LEN>().ok()?;
         let rsnxe = reader.remaining();
         resumed.bytes[1] = resumed.bytes[1].checked_add(PMKID_LIST_LEN as u8)?;
@@ -66,10 +66,10 @@ impl SelectedRsn {
             &pmkid.0,
         );
         let rsnxe_start = SELECTED_RSN_IE_LEN + PMKID_LIST_LEN;
-        oer_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
+        oer_portable_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
             .write(rsnxe)
             .ok()?;
-        resumed.length = oer_wire::PrefixLength::new(rsnxe_start.checked_add(rsnxe.len())?)?;
+        resumed.length = oer_portable_wire::PrefixLength::new(rsnxe_start.checked_add(rsnxe.len())?)?;
         Some(resumed)
     }
 }
@@ -102,14 +102,14 @@ impl SelectedRsn {
                 capabilities,
             ),
         );
-        selected.length = oer_wire::PrefixLength::constant::<SELECTED_RSN_IE_LEN>();
+        selected.length = oer_portable_wire::PrefixLength::constant::<SELECTED_RSN_IE_LEN>();
         if let Some(extended) = extended {
             crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
                 &mut selected.bytes,
                 &rsnx_element(extended),
             );
             selected.length =
-                oer_wire::PrefixLength::constant::<{ SELECTED_RSN_IE_LEN + RSNXE_ONE_OCTET_LEN }>();
+                oer_portable_wire::PrefixLength::constant::<{ SELECTED_RSN_IE_LEN + RSNXE_ONE_OCTET_LEN }>();
         }
         selected
     }

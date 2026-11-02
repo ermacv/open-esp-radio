@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::Ieee80211Capabilities;
-use oer_ieee80211_core_roles_sta::data::{RetiredData, StaDataTokens};
+use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+use oer_protocols_ieee80211_core_roles_sta::data::{RetiredData, StaDataTokens};
 
 pub fn terminal<'id, T: StaDataTokens, K: Ieee80211Capabilities>(mut ended: RetiredData<'id, T, K>) {
     #[cfg(ui_reject)]

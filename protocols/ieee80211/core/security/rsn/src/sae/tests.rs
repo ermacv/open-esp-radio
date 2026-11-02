@@ -5,7 +5,7 @@
     clippy::unreachable
 )]
 use super::*;
-use oer_ieee80211_wire::sae::SAE_COMMIT_LEN;
+use oer_protocols_ieee80211_wire::sae::SAE_COMMIT_LEN;
 
 // IEEE Std 802.11-2020 Annex J.10, as hostap's `sae_tests` carries it.
 const ADDR1: [u8; 6] = [0x4d, 0x3f, 0x2f, 0xff, 0xe3, 0x87];
@@ -167,14 +167,14 @@ fn an_access_point_refuses_commit_values_off_the_scalar_range_or_curve() {
 fn a_comeback_token_is_bound_to_its_station_and_used_once() {
     let station = [2, 0, 0, 0, 0, 7];
     let mut tokens = SaeComebackTokens::new();
-    let token = tokens.issue(station, oer_time::Instant::from_micros(1_000), || {
+    let token = tokens.issue(station, oer_portable_time::Instant::from_micros(1_000), || {
         [0x42; 32]
     });
     assert_eq!(token[..2], [0, 1]);
     assert_eq!(
         tokens.issue(
             station,
-            oer_time::Instant::from_micros(2_000),
+            oer_portable_time::Instant::from_micros(2_000),
             || unreachable!()
         ),
         token
@@ -186,7 +186,7 @@ fn a_comeback_token_is_bound_to_its_station_and_used_once() {
     assert!(tokens.check(station, &token));
     assert!(!tokens.check(station, &token));
 
-    let reissued = tokens.issue(station, oer_time::Instant::from_micros(70_000_000), || {
+    let reissued = tokens.issue(station, oer_portable_time::Instant::from_micros(70_000_000), || {
         [0x43; 32]
     });
     assert_ne!(reissued, token);

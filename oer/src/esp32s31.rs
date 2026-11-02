@@ -16,8 +16,8 @@
 //! executor runs only when a Wi-Fi station starts. An entry no driver binds
 //! routes no source.
 
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::{
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_hal::{
     peripherals::{
         aes::AesParts,
         entropy::EntropyRegisters,
@@ -28,10 +28,10 @@ use oer_esp32s31_hal::{
     platform::{InterruptController, Port},
     root::Root,
 };
-use oer_espressif_executor::{Executor, Spawner};
-use oer_espressif_staged_runtime::{Adopted, Handoff};
+use oer_chips_family_executor::{Executor, Spawner};
+use oer_chips_family_staged_runtime::{Adopted, Handoff};
 
-pub use oer_esp32s31_compose::Esp32s31;
+pub use oer_chips_esp32s31_compose::Esp32s31;
 
 /// Time on the executors' clock: timers, timeouts, instants.
 pub use embassy_time as time;
@@ -85,8 +85,8 @@ use observed::executor_observer;
         reason = "only a trace build asks a task set for its observer"
     )
 )]
-const fn executor_observer<const SLOT: usize>() -> oer_trace::Noop {
-    oer_trace::Noop
+const fn executor_observer<const SLOT: usize>() -> oer_portable_trace::Noop {
+    oer_portable_trace::Noop
 }
 
 mod aes;
@@ -103,47 +103,47 @@ pub use console::{Console, ConsolePeripheral, UsbConsole};
 
 /// What the interrupt controller showed after the previous boot's
 /// exception trapped.
-pub use oer_esp32s31_compose::exception::{LineView, Observed, Terminal, TrapIdentity};
+pub use oer_chips_esp32s31_compose::exception::{LineView, Observed, Terminal, TrapIdentity};
 /// Why a hart left reset.
-pub use oer_esp32s31_hal::peripherals::reset_cause::ResetCause;
+pub use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
 /// The record of the previous boot's panic.
-pub use oer_espressif_staged_runtime::panic::PanicRecord;
+pub use oer_chips_family_staged_runtime::panic::PanicRecord;
 /// The previous boot's exception as the trap left it.
-pub use oer_espressif_staged_runtime::trap::PreviousException;
+pub use oer_chips_family_staged_runtime::trap::PreviousException;
 
-oer_espressif_staged_runtime::interrupt_table! {
+oer_chips_family_staged_runtime::interrupt_table! {
     contexts { app_wake: 1; radio_executor: 2; radio: 3; hart1_app: 1; profile: 4; }
     /// The application executor's wake (thread mode).
-    wake: WakeToken = FromCpu0Irq => oer_espressif_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app_wake, hart 0, Hardware;
     /// The application executor's alarm (system timer comparator 1).
-    alarm: AppAlarmToken = SystimerAlarm1 => oer_espressif_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
+    alarm: AppAlarmToken = SystimerAlarm1 => oer_chips_family_executor::alarm_interrupt::<SdkTasks, 1, SystimerAlarm1>, line 41, context app_wake, hart 0, Hardware;
     #[cfg(feature = "wifi")]
     /// The radio executor's alarm (system timer comparator 0).
-    radio_alarm: RadioAlarmToken = oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_espressif_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
+    radio_alarm: RadioAlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0 => oer_chips_family_executor::alarm_interrupt::<wifi::RadioTasks, 0, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm0>, line 19, context radio, hart 0, Hardware;
     // SOURCE: family.toml [interrupts] highest-line; HW23_S31_P2_ARBITRATION_20261027
     // measures only this P2 pair on S31: FROM_CPU2 line17 before TIMG0 line16.
     #[cfg(feature = "wifi")]
     /// The SAR/PWDET pilot, between radio executor rounds.
-    phy: PhyToken = oer_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => wifi::on_pilot, line 16, context radio_executor, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     #[cfg(feature = "wifi")]
     /// The radio executor (P2), polled in its handler.
-    radio: RadioToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_espressif_executor::Round<wifi::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
+    radio: RadioToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_chips_family_executor::Round<wifi::RadioTasks>, line 17, context radio_executor, hart 0, Executor;
     #[cfg(feature = "wifi")]
     /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, line 21, context radio, hart 0, Hardware;
     #[cfg(feature = "console")]
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.
-    console_usb: ConsoleToken = oer_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, line 42, context app_wake, hart 0, Hardware;
+    console_usb: ConsoleToken = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::ConsoleInterrupt => console::on_usb, line 42, context app_wake, hart 0, Hardware;
     #[cfg(feature = "observe")]
     /// The PC sampler (TIMG1 T0), above every other level of hart 0 so that
     /// it sees what it interrupts; it ticks only while a session runs.
-    sampler: SamplerToken = oer_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, line 22, context profile, hart 0, Hardware;
+    sampler: SamplerToken = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, line 22, context profile, hart 0, Hardware;
     #[cfg(feature = "hart1")]
     /// Hart 1's executor's wake (thread mode).
-    hart1_wake: Hart1WakeToken = oer_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_espressif_executor::wake_handler::<Esp32s31, 1, oer_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
+    hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
     #[cfg(feature = "hart1")]
     /// Hart 1's executor's alarm (system timer comparator 2).
-    hart1_alarm: Hart1AlarmToken = oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_espressif_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
+    hart1_alarm: Hart1AlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_chips_family_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
 }
 
 #[cfg(feature = "hart1")]
@@ -152,7 +152,7 @@ mod hart1;
 #[doc(hidden)]
 pub use hart1::{Hart1Parts, hart1_main};
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// The library's service tasks on the application executor; an image's
     /// set extends it.
     pub SdkTasks: Executor<Esp32s31, 0> {
@@ -168,8 +168,8 @@ oer_espressif_executor::tasks! {
     }
 }
 
-oer_espressif_executor::time_driver!(Esp32s31);
-oer_esp32s31_hal::phy_fault_reporter!(oer_esp32s31_compose::phy_fault::reset);
+oer_chips_family_executor::time_driver!(Esp32s31);
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_compose::phy_fault::reset);
 
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
@@ -214,8 +214,8 @@ pub struct Boot {
     /// executor, once a station installed the time driver.
     #[cfg(feature = "hart1")]
     pub(crate) timers: Option<(
-        oer_espressif_executor::TimeDriverReady<Esp32s31>,
-        oer_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
+        oer_chips_family_executor::TimeDriverReady<Esp32s31>,
+        oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
     )>,
     /// What only the boot hart observes, until the boot takes it.
     #[cfg(feature = "observe")]
@@ -228,7 +228,7 @@ pub struct NoNet;
 impl Boot {
     pub(crate) fn router(
         &mut self,
-    ) -> &mut oer_espressif_interrupt_table::Router<InterruptController, 0> {
+    ) -> &mut oer_chips_family_interrupt_table::Router<InterruptController, 0> {
         self.adopted.router()
     }
 
@@ -273,7 +273,7 @@ pub fn boot_id() -> u64 {
 }
 
 /// A nonzero boot identity from `rng`.
-pub(crate) fn draw_boot_id(rng: &mut oer_esp32s31_compose::platform::Entropy) -> u64 {
+pub(crate) fn draw_boot_id(rng: &mut oer_chips_esp32s31_compose::platform::Entropy) -> u64 {
     let mut bytes = [0; 8];
     rng.fill(&mut bytes);
     crate::boot::identity(bytes)
@@ -439,10 +439,10 @@ pub type AppNotify = atomic_waker::AtomicWaker;
 pub type SecondNotify = atomic_waker::AtomicWaker;
 #[cfg(feature = "hart1")]
 pub type AppNotify =
-    &'static oer_espressif_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
+    &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
 #[cfg(feature = "hart1")]
 pub type SecondNotify =
-    &'static oer_espressif_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
+    &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
 
 /// The application's notify, which the IP status publication tells.
 #[cfg(all(feature = "wifi", not(feature = "hart1")))]
@@ -528,7 +528,7 @@ pub enum Error {
     Console,
     /// The IP service refused its configuration.
     #[cfg(feature = "wifi")]
-    Net(oer_embassy_net::ip::Error),
+    Net(oer_portable_embassy_net::ip::Error),
     /// The station's configuration was refused.
     #[cfg(feature = "wifi")]
     WifiConfig(wifi::ConfigError),
@@ -573,30 +573,30 @@ impl From<crate::net::NetError> for Error {
 
 impl Error {
     /// The error's name in the retained record.
-    pub const fn name(self) -> oer_diagnostics::Name<32> {
+    pub const fn name(self) -> oer_portable_diagnostics::Name<32> {
         match self {
-            Self::AlreadyStarted => oer_diagnostics::name!("sdk-already-started"; 32),
-            Self::InterruptTaken => oer_diagnostics::name!("sdk-interrupt-taken"; 32),
-            Self::InterruptRouted => oer_diagnostics::name!("sdk-interrupt-routed"; 32),
-            Self::Storage => oer_diagnostics::name!("sdk-storage"; 32),
-            Self::Entropy => oer_diagnostics::name!("sdk-entropy"; 32),
-            Self::Channel(_) => oer_diagnostics::name!("sdk-channel"; 32),
+            Self::AlreadyStarted => oer_portable_diagnostics::name!("sdk-already-started"; 32),
+            Self::InterruptTaken => oer_portable_diagnostics::name!("sdk-interrupt-taken"; 32),
+            Self::InterruptRouted => oer_portable_diagnostics::name!("sdk-interrupt-routed"; 32),
+            Self::Storage => oer_portable_diagnostics::name!("sdk-storage"; 32),
+            Self::Entropy => oer_portable_diagnostics::name!("sdk-entropy"; 32),
+            Self::Channel(_) => oer_portable_diagnostics::name!("sdk-channel"; 32),
             #[cfg(feature = "console")]
-            Self::Console => oer_diagnostics::name!("sdk-console"; 32),
+            Self::Console => oer_portable_diagnostics::name!("sdk-console"; 32),
             #[cfg(feature = "wifi")]
-            Self::Net(_) => oer_diagnostics::name!("sdk-net"; 32),
+            Self::Net(_) => oer_portable_diagnostics::name!("sdk-net"; 32),
             #[cfg(feature = "wifi")]
-            Self::WifiConfig(_) => oer_diagnostics::name!("sdk-wifi-config"; 32),
+            Self::WifiConfig(_) => oer_portable_diagnostics::name!("sdk-wifi-config"; 32),
             #[cfg(feature = "wifi")]
-            Self::WifiProfile(_) => oer_diagnostics::name!("sdk-wifi-profile"; 32),
+            Self::WifiProfile(_) => oer_portable_diagnostics::name!("sdk-wifi-profile"; 32),
             #[cfg(feature = "wifi")]
-            Self::NetWait(_) => oer_diagnostics::name!("sdk-net-wait"; 32),
+            Self::NetWait(_) => oer_portable_diagnostics::name!("sdk-net-wait"; 32),
             #[cfg(feature = "wifi")]
-            Self::NoDevice => oer_diagnostics::name!("sdk-no-device"; 32),
+            Self::NoDevice => oer_portable_diagnostics::name!("sdk-no-device"; 32),
             #[cfg(feature = "observe")]
-            Self::ImageParts => oer_diagnostics::name!("sdk-image-parts"; 32),
+            Self::ImageParts => oer_portable_diagnostics::name!("sdk-image-parts"; 32),
             #[cfg(feature = "observe")]
-            Self::ObserveTaken => oer_diagnostics::name!("sdk-observe-taken"; 32),
+            Self::ObserveTaken => oer_portable_diagnostics::name!("sdk-observe-taken"; 32),
         }
     }
 }
@@ -616,44 +616,44 @@ pub fn start<S: Started, H: Hart1Started>(
     hart1: fn(Hart1Peripherals, Hart1Boot) -> Result<H, Error>,
     #[cfg_attr(not(feature = "hart1"), allow(unused_variables))] mailbox: Hart1Mailbox,
 ) -> ! {
-    let previous = oer_espressif_staged_runtime::panic::peek_previous();
+    let previous = oer_chips_family_staged_runtime::panic::peek_previous();
     // Read before adoption prints and clears them.
     let previous_exception =
-        oer_espressif_staged_runtime::trap::peek_previous_exception().map(|trap| {
+        oer_chips_family_staged_runtime::trap::peek_previous_exception().map(|trap| {
             ExceptionEvidence {
                 trap,
                 // Only the observations of this trap: an earlier trap's
                 // record may outlive it.
-                observed: oer_esp32s31_compose::exception::peek_previous()
+                observed: oer_chips_esp32s31_compose::exception::peek_previous()
                     .filter(|observed| observed.follows(&trap)),
             }
         });
     let Some(root) = Root::take() else {
-        fail(oer_diagnostics::name!("root-taken"; 32));
+        fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let (hardware, _psram, adopted) =
-        match oer_espressif_staged_runtime::adoption::run::<Esp32s31, _, _>(
+        match oer_chips_family_staged_runtime::adoption::run::<Esp32s31, _, _>(
             handoff,
             root.into_runtime(),
             INTERRUPT_TABLE,
-            oer_esp32s31_board::BootstrapPsram,
-            oer_esp32s31_compose::phy_fault::report_previous,
+            oer_chips_esp32s31_board::BootstrapPsram,
+            oer_chips_esp32s31_compose::phy_fault::report_previous,
             |hardware| {
-                let causes = oer_esp32s31_compose::reset_causes::read(hardware.reset_cause);
-                oer_esp32s31_compose::wifi_fault::report_previous();
-                oer_esp32s31_compose::radio_fault::report_previous();
-                oer_esp32s31_compose::exception::report_previous();
+                let causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+                oer_chips_esp32s31_compose::wifi_fault::report_previous();
+                oer_chips_esp32s31_compose::radio_fault::report_previous();
+                oer_chips_esp32s31_compose::exception::report_previous();
                 if let Some(record) = previous {
-                    let mut console = oer_espressif_staged_runtime::diagnostics::Console::shared(
+                    let mut console = oer_chips_family_staged_runtime::diagnostics::Console::shared(
                         crate::print::whole,
                     );
-                    let _ = oer_espressif_staged_runtime::diagnostics::previous_panic(
+                    let _ = oer_chips_family_staged_runtime::diagnostics::previous_panic(
                         &mut console,
                         &record,
                     );
                 }
                 Owned {
-                    reset_cause: causes.of(oer_esp32s31_hal::platform::BOOT_HART),
+                    reset_cause: causes.of(oer_chips_esp32s31_hal::platform::BOOT_HART),
                     entropy: hardware.entropy,
                     aes: hardware.aes,
                     system_timer: hardware.system_timer,
@@ -681,7 +681,7 @@ pub fn start<S: Started, H: Hart1Started>(
             Ok(adopted) => adopted.into_parts(),
             Err(error) => fail(error.name()),
         };
-    oer_esp32s31_compose::exception::report_stack_guard();
+    oer_chips_esp32s31_compose::exception::report_stack_guard();
     let Some(interrupts) = Interrupts::take() else {
         fail(Error::InterruptTaken.name());
     };
@@ -752,8 +752,8 @@ pub fn start<S: Started, H: Hart1Started>(
     let _ = hart1;
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
-        let ready = oer_espressif_executor::init::<Esp32s31, 0, _, _, _>(
-            oer_espressif_executor::systimer::SystemTimer {
+        let ready = oer_chips_family_executor::init::<Esp32s31, 0, _, _, _>(
+            oer_chips_family_executor::systimer::SystemTimer {
                 comparators: timer.comparators,
                 counter: timer.counter,
             },
@@ -774,7 +774,7 @@ pub fn start<S: Started, H: Hart1Started>(
     let id = match (setup.boot_id, setup.entropy.take()) {
         (Some(id), _) => id,
         (None, Some(registers)) => {
-            let mut rng = oer_esp32s31_compose::platform::Entropy::new(registers, EmbassyClock);
+            let mut rng = oer_chips_esp32s31_compose::platform::Entropy::new(registers, EmbassyClock);
             if !rng.is_healthy() {
                 fail(Error::Entropy.name());
             }
@@ -787,7 +787,7 @@ pub fn start<S: Started, H: Hart1Started>(
     #[cfg(feature = "hart1")]
     let _hart1 = {
         let Some(timers) = setup.timers.take() else {
-            fail(oer_diagnostics::name!("hart1-timer"; 32));
+            fail(oer_portable_diagnostics::name!("hart1-timer"; 32));
         };
         hart1::launch(
             mailbox,
@@ -835,13 +835,13 @@ pub fn start<S: Started, H: Hart1Started>(
     #[cfg(not(feature = "hart1"))]
     let roots = (
         (
-            oer_espressif_executor::Root::new(net.as_mut()),
-            oer_espressif_executor::Root::new(second.as_mut()),
+            oer_chips_family_executor::Root::new(net.as_mut()),
+            oer_chips_family_executor::Root::new(second.as_mut()),
         ),
-        oer_espressif_executor::Root::new(app.as_mut()),
+        oer_chips_family_executor::Root::new(app.as_mut()),
     );
     #[cfg(feature = "hart1")]
-    let roots = oer_espressif_executor::Root::new(app.as_mut());
+    let roots = oer_chips_family_executor::Root::new(app.as_mut());
     #[cfg(feature = "wifi")]
     if let Some(urgent) = urgent {
         match executor
@@ -906,13 +906,13 @@ struct Owned {
     software: SoftwareInterrupts,
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
     #[cfg(feature = "hart1")]
-    hart1: oer_esp32s31_hal::cores::LaunchPermit,
+    hart1: oer_chips_esp32s31_hal::cores::LaunchPermit,
     #[cfg(feature = "hart1")]
-    causes: oer_esp32s31_hal::peripherals::reset_cause::ResetCauses,
+    causes: oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses,
     #[cfg(feature = "observe")]
-    timg1_alarm: oer_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
+    timg1_alarm: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
     #[cfg(feature = "observe")]
-    cache_counters: oer_esp32s31_hal::peripherals::cache_counters::CacheCounters,
+    cache_counters: oer_chips_esp32s31_hal::peripherals::cache_counters::CacheCounters,
     #[cfg(feature = "wifi")]
     wifi: wifi::WifiPeripheral,
 }
@@ -921,8 +921,8 @@ struct Owned {
 /// `hart1` feature, nothing without it. Not an API.
 #[doc(hidden)]
 #[cfg(feature = "hart1")]
-pub type Hart1Mailbox = &'static oer_espressif_staged_runtime::Mailbox<
-    oer_esp32s31_hal::platform::Hart1Grant,
+pub type Hart1Mailbox = &'static oer_chips_family_staged_runtime::Mailbox<
+    oer_chips_esp32s31_hal::platform::Hart1Grant,
     Hart1Parts,
 >;
 #[doc(hidden)]
@@ -942,16 +942,16 @@ async fn run_app<F: core::future::Future<Output = AppResult>>(app: core::pin::Pi
 /// Feed the RTC watchdog for good: the chip resets when the executor stops
 /// polling.
 async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
-    let period = oer_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
+    let period = oer_portable_time::Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS);
     match observed!(Watchdog, watchdog.feed_every(&EmbassyClock, period)).await {}
 }
 
 /// Retain `reason`, report it and reset: the record-and-reset policy the
 /// library applies on the image's behalf.
-pub(crate) fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
-    oer_espressif_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
-        let _note = oer_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-            &oer_diagnostics::Note::runtime_fail(reason),
+pub(crate) fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
+    oer_chips_family_staged_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
+        let _note = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+            &oer_portable_diagnostics::Note::runtime_fail(reason),
         );
     })
 }
@@ -960,8 +960,8 @@ pub(crate) fn fail<const B: usize>(reason: oer_diagnostics::Name<B>) -> ! {
 #[doc(hidden)]
 pub mod __private {
     pub use super::{no_hart1, start};
-    pub use oer_esp32s31_compose::exception::capture as exception;
-    pub use oer_esp32s31_hal::platform::Port;
-    pub use oer_espressif_staged_runtime::{Handoff, entry};
-    pub use oer_espressif_staged_runtime::{SecondaryHandoff, secondary_entry};
+    pub use oer_chips_esp32s31_compose::exception::capture as exception;
+    pub use oer_chips_esp32s31_hal::platform::Port;
+    pub use oer_chips_family_staged_runtime::{Handoff, entry};
+    pub use oer_chips_family_staged_runtime::{SecondaryHandoff, secondary_entry};
 }

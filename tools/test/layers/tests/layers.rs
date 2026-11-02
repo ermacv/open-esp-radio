@@ -28,25 +28,25 @@ fn expected_name(path: &str, executable: bool) -> String {
 #[test]
 fn the_name_follows_the_path() {
     for (path, executable, name) in [
-        ("portable/time", false, "oer-time"),
+        ("portable/time", false, "oer-portable-time"),
         (
             "protocols/ieee80211/core/roles/sta",
             false,
-            "oer-ieee80211-core-roles-sta",
+            "oer-protocols-ieee80211-core-roles-sta",
         ),
         (
             "chips/esp32s31/ieee80211/driver",
             false,
-            "oer-esp32s31-ieee80211-driver",
+            "oer-chips-esp32s31-ieee80211-driver",
         ),
         (
             "hil/probes/boot-smoke",
             true,
-            "oer-firmware-apps-boot-smoke",
+            "oer-hil-probes-boot-smoke",
         ),
         ("hil/scenarios/aes", true, "oer-hil-scenarios-aes"),
-        ("hil/services/aes", false, "oer-services-aes"),
-        ("hil/services/load", false, "oer-services-load"),
+        ("hil/services/aes", false, "oer-hil-services-aes"),
+        ("hil/services/load", false, "oer-hil-services-load"),
         (
             "hil/scenarios/wifi-load",
             true,
@@ -60,21 +60,21 @@ fn the_name_follows_the_path() {
         (
             "hil/services/wifi-station",
             false,
-            "oer-services-wifi-station",
+            "oer-hil-services-wifi-station",
         ),
-        ("tools/image/build", false, "oer-image-build"),
-        ("tools/image/bundle", false, "oer-image-bundle"),
-        ("tools/vendor/scenario", false, "oer-vendor-scenario"),
+        ("tools/image/build", false, "oer-tools-image-build"),
+        ("tools/image/bundle", false, "oer-tools-image-bundle"),
+        ("tools/vendor/scenario", false, "oer-tools-vendor-scenario"),
         (
             "tools/vendor/scenario-cli",
             true,
-            "oer-tool-vendor-scenario-cli",
+            "oer-tools-vendor-scenario-cli",
         ),
-        ("tools/image/cli", true, "oer-tool-image-cli"),
+        ("tools/image/cli", true, "oer-tools-image-cli"),
         (
             "tools/image/large-values",
             true,
-            "oer-tool-image-large-values",
+            "oer-tools-image-large-values",
         ),
     ] {
         assert_eq!(expected_name(path, executable), name);
@@ -165,7 +165,7 @@ fn the_boundary_is_named_by_package_or_domain() {
         "tools/os/durable",
         "tools/hil/link",
         "hil/probes/boot-smoke",
-        "hil/images/esp32s31-aes",
+        "hil/images/aes",
         "tools/lab/fixture-install",
     ] {
         assert!(!below_the_boundary(package), "{package}");
@@ -482,8 +482,8 @@ fn ieee802154_engine_has_no_terminal_custody_or_retained_policy() {
         })
         .collect();
     assert!(
-        forbidden_paths(&graph, "oer-espressif-ieee802154-engine", |name| {
-            forbidden_dependency(name) || name == "oer-espressif-staged-runtime"
+        forbidden_paths(&graph, "oer-chips-family-ieee802154-engine", |name| {
+            forbidden_dependency(name) || name == "oer-chips-family-staged-runtime"
         })
         .is_empty()
     );
@@ -522,9 +522,9 @@ fn normal_dependency_graph_includes_aliases_inheritance_targets_and_optional_edg
 alias = { workspace = true }
 bridge = { version = "1", optional = true }
 [dev-dependencies]
-oer-mmio = "1"
+oer-portable-mmio = "1"
 [build-dependencies]
-oer-riscv = "1"
+oer-portable-riscv = "1"
 [target.'cfg(target_os = "none")'.dependencies]
 other = { package = "oer-chip-hal", version = "1" }
 "#,
@@ -681,17 +681,17 @@ fn sans_io_crate_root_denies_require_the_complete_canonical_catalogue() {
 #[test]
 fn lint_catalogue_comparison_accepts_tables_and_strings_and_rejects_missing_paths() {
     let common: toml::Value = toml::from_str(
-        "disallowed-methods = [{ path = 'oer_mmio::assume_owned', reason = 'ownership' }]",
+        "disallowed-methods = [{ path = 'oer_portable_mmio::assume_owned', reason = 'ownership' }]",
     )
     .expect("common config");
     let complete: toml::Value =
-        toml::from_str("disallowed-methods = ['oer_mmio::assume_owned', 'slice::split_at']")
+        toml::from_str("disallowed-methods = ['oer_portable_mmio::assume_owned', 'slice::split_at']")
             .expect("complete config");
     assert!(missing_lints(&complete, &common, "disallowed-methods").is_empty());
     let empty: toml::Value = toml::from_str("").expect("empty config");
     assert_eq!(
         missing_lints(&empty, &common, "disallowed-methods"),
-        BTreeSet::from(["oer_mmio::assume_owned".into()])
+        BTreeSet::from(["oer_portable_mmio::assume_owned".into()])
     );
 }
 
@@ -713,7 +713,7 @@ fn hal_and_knowledge_do_not_reach_the_ieee802154_engine_or_driver() {
             )
         })
         .collect();
-    for owner in ["oer-esp32s31-hal", "oer-esp32s31-knowledge"] {
+    for owner in ["oer-chips-esp32s31-hal", "oer-chips-esp32s31-knowledge"] {
         let violations = forbidden_paths(&graph, owner, ieee802154_execution);
         assert!(violations.is_empty(), "{owner}: {violations:?}");
     }
@@ -722,7 +722,7 @@ fn hal_and_knowledge_do_not_reach_the_ieee802154_engine_or_driver() {
 fn ieee802154_execution(name: &str) -> bool {
     matches!(
         name,
-        "oer-espressif-ieee802154-engine" | "oer-esp32s31-ieee802154-driver"
+        "oer-chips-family-ieee802154-engine" | "oer-chips-esp32s31-ieee802154-driver"
     )
 }
 
@@ -732,12 +732,12 @@ fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
         ("hal".into(), BTreeSet::from(["knowledge".into()])),
         (
             "knowledge".into(),
-            BTreeSet::from(["hal".into(), "oer-espressif-ieee802154-engine".into()]),
+            BTreeSet::from(["hal".into(), "oer-chips-family-ieee802154-engine".into()]),
         ),
     ]);
     assert_eq!(
         forbidden_paths(&graph, "hal", ieee802154_execution),
-        ["hal -> knowledge -> oer-espressif-ieee802154-engine"],
+        ["hal -> knowledge -> oer-chips-family-ieee802154-engine"],
     );
     assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
 }
@@ -978,8 +978,8 @@ const ROLES: &[(&str, Role)] = &[
     ("protocols/hil/agent", Role::HilAgent),
     ("hil/agent", Role::HilSdkAgent),
     ("chips/esp32s31/instrumentation", Role::ObservationContract),
-    ("hil/images/esp32s31-aes", Role::HilImage),
-    ("hil/images/esp32s31-station", Role::HilImage),
+    ("hil/images/aes", Role::HilImage),
+    ("hil/images/station", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
     ("hil/services/load", Role::HilBinding),
@@ -1130,7 +1130,7 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
         // It serves the HIL console over the SDK's console and evidence; the
         // composition writes notes before the console opens, the platform
-        // places the console and names the image, and `oer-riscv` raises the
+        // places the console and names the image, and `oer-portable-riscv` raises the
         // fault a test requests.
         Role::HilSdkAgent => {
             matches!(
@@ -1348,7 +1348,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         // directory says.
         ("chips/esp32s31/new/driver", None),
         (
-            "hil/images/esp32s31-aes",
+            "hil/images/aes",
             Some(Role::HilImage),
         ),
         ("hil-scenarios/new", None),
@@ -1437,50 +1437,50 @@ build-core = "1"
 #[test]
 fn bluetooth_backend_core_edges_have_no_exemption() {
     let graph = BTreeMap::from([(
-        "oer-esp32s31-bluetooth-driver".into(),
+        "oer-chips-esp32s31-bluetooth-driver".into(),
         BTreeSet::from([
-            "oer-bluetooth-le-ll".into(),
-            "oer-bluetooth-hci".into(),
-            "oer-bluetooth-le-port".into(),
-            "oer-bluetooth-le-wire".into(),
+            "oer-protocols-bluetooth-le-ll".into(),
+            "oer-protocols-bluetooth-hci".into(),
+            "oer-protocols-bluetooth-le-port".into(),
+            "oer-protocols-bluetooth-le-wire".into(),
         ]),
     )]);
     let roles = BTreeMap::from([
         (
-            "oer-bluetooth-le-ll".into(),
+            "oer-protocols-bluetooth-le-ll".into(),
             Role::Protocol(ProtocolRole::Core),
         ),
         (
-            "oer-bluetooth-hci".into(),
+            "oer-protocols-bluetooth-hci".into(),
             Role::Protocol(ProtocolRole::Core),
         ),
         (
-            "oer-bluetooth-le-port".into(),
+            "oer-protocols-bluetooth-le-port".into(),
             Role::Protocol(ProtocolRole::Port),
         ),
         (
-            "oer-bluetooth-le-wire".into(),
+            "oer-protocols-bluetooth-le-wire".into(),
             Role::Protocol(ProtocolRole::Wire),
         ),
     ]);
     assert_eq!(
-        backend_core_paths(&graph, &roles, "oer-esp32s31-bluetooth-driver"),
+        backend_core_paths(&graph, &roles, "oer-chips-esp32s31-bluetooth-driver"),
         [
-            "oer-esp32s31-bluetooth-driver -> oer-bluetooth-hci",
-            "oer-esp32s31-bluetooth-driver -> oer-bluetooth-le-ll",
+            "oer-chips-esp32s31-bluetooth-driver -> oer-protocols-bluetooth-hci",
+            "oer-chips-esp32s31-bluetooth-driver -> oer-protocols-bluetooth-le-ll",
         ]
     );
 }
 
 /// The IEEE 802.11 cores above the lower-MAC port.
 const IEEE80211_CORES: [&str; 7] = [
-    "oer-ieee80211-core-upper-mac",
-    "oer-ieee80211-core-security-rsn",
-    "oer-ieee80211-core-roles-sta",
-    "oer-ieee80211-core-roles-ap",
-    "oer-ieee80211-core-arbiter",
-    "oer-ieee80211-core-extensions-esp-now",
-    "oer-ieee80211-runtime",
+    "oer-protocols-ieee80211-core-upper-mac",
+    "oer-protocols-ieee80211-core-security-rsn",
+    "oer-protocols-ieee80211-core-roles-sta",
+    "oer-protocols-ieee80211-core-roles-ap",
+    "oer-protocols-ieee80211-core-arbiter",
+    "oer-protocols-ieee80211-core-extensions-esp-now",
+    "oer-protocols-ieee80211-runtime",
 ];
 
 fn ieee80211_core(name: &str) -> bool {
@@ -1494,11 +1494,11 @@ fn the_ieee80211_port_reaches_no_core() {
     let graph = workspace_dependency_graph();
     for name in IEEE80211_CORES
         .iter()
-        .chain(&["oer-ieee80211-contracts-port"])
+        .chain(&["oer-protocols-ieee80211-contracts-port"])
     {
         assert!(graph.contains_key(*name), "{name} is a workspace package");
     }
-    let violations = forbidden_paths(&graph, "oer-ieee80211-contracts-port", ieee80211_core);
+    let violations = forbidden_paths(&graph, "oer-protocols-ieee80211-contracts-port", ieee80211_core);
     assert!(violations.is_empty(), "port reaches a core: {violations:?}");
 }
 
@@ -1507,47 +1507,47 @@ fn the_ieee80211_port_rule_rejects_direct_and_transitive_core_paths() {
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-wire = { package = "oer-ieee80211-wire", version = "1" }
+wire = { package = "oer-protocols-ieee80211-wire", version = "1" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-policy = { package = "oer-ieee80211-core-roles-sta", version = "1", optional = true }
+policy = { package = "oer-protocols-ieee80211-core-roles-sta", version = "1", optional = true }
 [dev-dependencies]
-model = { package = "oer-ieee80211-core-upper-mac", version = "1" }
+model = { package = "oer-protocols-ieee80211-core-upper-mac", version = "1" }
 "#,
     )
     .expect("manifest");
     let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
     let graph = BTreeMap::from([
         (
-            "oer-ieee80211-contracts-port".into(),
+            "oer-protocols-ieee80211-contracts-port".into(),
             normal_dependencies(&manifest, &workspace),
         ),
         (
-            "oer-ieee80211-wire".into(),
+            "oer-protocols-ieee80211-wire".into(),
             BTreeSet::from(["helper".into()]),
         ),
         (
             "helper".into(),
-            BTreeSet::from(["oer-ieee80211-runtime".into()]),
+            BTreeSet::from(["oer-protocols-ieee80211-runtime".into()]),
         ),
     ]);
     assert_eq!(
-        forbidden_paths(&graph, "oer-ieee80211-contracts-port", ieee80211_core),
+        forbidden_paths(&graph, "oer-protocols-ieee80211-contracts-port", ieee80211_core),
         [
-            "oer-ieee80211-contracts-port -> oer-ieee80211-core-roles-sta",
-            "oer-ieee80211-contracts-port -> oer-ieee80211-wire -> helper -> oer-ieee80211-runtime",
+            "oer-protocols-ieee80211-contracts-port -> oer-protocols-ieee80211-core-roles-sta",
+            "oer-protocols-ieee80211-contracts-port -> oer-protocols-ieee80211-wire -> helper -> oer-protocols-ieee80211-runtime",
         ]
     );
     let clean = BTreeMap::from([(
-        "oer-ieee80211-contracts-port".into(),
-        BTreeSet::from(["oer-ieee80211-wire".into(), "oer-radio-port".into()]),
+        "oer-protocols-ieee80211-contracts-port".into(),
+        BTreeSet::from(["oer-protocols-ieee80211-wire".into(), "oer-protocols-radio-port".into()]),
     )]);
-    assert!(forbidden_paths(&clean, "oer-ieee80211-contracts-port", ieee80211_core).is_empty());
+    assert!(forbidden_paths(&clean, "oer-protocols-ieee80211-contracts-port", ieee80211_core).is_empty());
 }
 
 /// What the IEEE 802.11 wire formats may not reach: time, which belongs to
 /// the cores and runtimes, and every IEEE 802.11 crate above the formats.
 fn above_ieee80211_wire(name: &str) -> bool {
-    name == "oer-time" || (name.starts_with("oer-ieee80211-") && name != "oer-ieee80211-wire")
+    name == "oer-portable-time" || (name.starts_with("oer-ieee80211-") && name != "oer-protocols-ieee80211-wire")
 }
 
 fn workspace_dependency_graph() -> BTreeMap<String, BTreeSet<String>> {
@@ -1574,13 +1574,13 @@ fn workspace_dependency_graph() -> BTreeMap<String, BTreeSet<String>> {
 fn the_ieee80211_wire_reaches_neither_time_nor_a_crate_above_it() {
     let graph = workspace_dependency_graph();
     for name in [
-        "oer-ieee80211-wire",
-        "oer-ieee80211-contracts-port",
-        "oer-time",
+        "oer-protocols-ieee80211-wire",
+        "oer-protocols-ieee80211-contracts-port",
+        "oer-portable-time",
     ] {
         assert!(graph.contains_key(name), "{name} is a workspace package");
     }
-    let violations = forbidden_paths(&graph, "oer-ieee80211-wire", above_ieee80211_wire);
+    let violations = forbidden_paths(&graph, "oer-protocols-ieee80211-wire", above_ieee80211_wire);
     assert!(
         violations.is_empty(),
         "wire reaches time or a crate above it: {violations:?}"
@@ -1592,38 +1592,38 @@ fn the_ieee80211_wire_rule_rejects_direct_and_transitive_time_and_upper_paths() 
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-format = { package = "oer-wire", version = "1" }
+format = { package = "oer-portable-wire", version = "1" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-clock = { package = "oer-time", version = "1", optional = true }
+clock = { package = "oer-portable-time", version = "1", optional = true }
 [dev-dependencies]
-model = { package = "oer-ieee80211-testing-model", version = "1" }
+model = { package = "oer-protocols-ieee80211-testing-model", version = "1" }
 "#,
     )
     .expect("manifest");
     let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
     let graph = BTreeMap::from([
         (
-            "oer-ieee80211-wire".into(),
+            "oer-protocols-ieee80211-wire".into(),
             normal_dependencies(&manifest, &workspace),
         ),
-        ("oer-wire".into(), BTreeSet::from(["helper".into()])),
+        ("oer-portable-wire".into(), BTreeSet::from(["helper".into()])),
         (
             "helper".into(),
-            BTreeSet::from(["oer-ieee80211-contracts-port".into()]),
+            BTreeSet::from(["oer-protocols-ieee80211-contracts-port".into()]),
         ),
     ]);
     assert_eq!(
-        forbidden_paths(&graph, "oer-ieee80211-wire", above_ieee80211_wire),
+        forbidden_paths(&graph, "oer-protocols-ieee80211-wire", above_ieee80211_wire),
         [
-            "oer-ieee80211-wire -> oer-time",
-            "oer-ieee80211-wire -> oer-wire -> helper -> oer-ieee80211-contracts-port",
+            "oer-protocols-ieee80211-wire -> oer-portable-time",
+            "oer-protocols-ieee80211-wire -> oer-portable-wire -> helper -> oer-protocols-ieee80211-contracts-port",
         ]
     );
     let clean = BTreeMap::from([(
-        "oer-ieee80211-wire".into(),
-        BTreeSet::from(["oer-wire".into(), "oer-radio-regulatory".into()]),
+        "oer-protocols-ieee80211-wire".into(),
+        BTreeSet::from(["oer-portable-wire".into(), "oer-protocols-radio-regulatory".into()]),
     )]);
-    assert!(forbidden_paths(&clean, "oer-ieee80211-wire", above_ieee80211_wire).is_empty());
+    assert!(forbidden_paths(&clean, "oer-protocols-ieee80211-wire", above_ieee80211_wire).is_empty());
 }
 
 /// Each workspace package's name and its directory below the root.
@@ -1664,24 +1664,24 @@ fn portable_or_radio(path: &str) -> bool {
 /// and portable support; the reference model takes the port, its
 /// conformance suite, the formats, the contract and the cipher beside them.
 fn ieee80211_layer_allows(package: &str, name: &str, path: &str) -> bool {
-    const CONTRACT: &str = "oer-ieee80211-contracts-security";
+    const CONTRACT: &str = "oer-protocols-ieee80211-contracts-security";
     match package {
-        "oer-ieee80211-core-security-cipher" => {
-            ["oer-ieee80211-wire", CONTRACT].contains(&name) || path.starts_with("portable/")
+        "oer-protocols-ieee80211-core-security-cipher" => {
+            ["oer-protocols-ieee80211-wire", CONTRACT].contains(&name) || path.starts_with("portable/")
         }
-        "oer-ieee80211-contracts-port" => {
-            ["oer-ieee80211-wire", CONTRACT].contains(&name) || portable_or_radio(path)
+        "oer-protocols-ieee80211-contracts-port" => {
+            ["oer-protocols-ieee80211-wire", CONTRACT].contains(&name) || portable_or_radio(path)
         }
-        "oer-ieee80211-testing-conformance" => {
-            ["oer-ieee80211-contracts-port", "oer-ieee80211-wire"].contains(&name)
+        "oer-protocols-ieee80211-testing-conformance" => {
+            ["oer-protocols-ieee80211-contracts-port", "oer-protocols-ieee80211-wire"].contains(&name)
                 || path.starts_with("portable/")
         }
-        "oer-ieee80211-testing-model" => {
+        "oer-protocols-ieee80211-testing-model" => {
             [
-                "oer-ieee80211-contracts-port",
-                "oer-ieee80211-testing-conformance",
-                "oer-ieee80211-wire",
-                "oer-ieee80211-core-security-cipher",
+                "oer-protocols-ieee80211-contracts-port",
+                "oer-protocols-ieee80211-testing-conformance",
+                "oer-protocols-ieee80211-wire",
+                "oer-protocols-ieee80211-core-security-cipher",
                 CONTRACT,
             ]
             .contains(&name)
@@ -1696,10 +1696,10 @@ fn ieee80211_cipher_port_and_model_take_only_the_layers_below_them() {
     let graph = workspace_dependency_graph();
     let paths = workspace_package_paths();
     for package in [
-        "oer-ieee80211-core-security-cipher",
-        "oer-ieee80211-contracts-port",
-        "oer-ieee80211-testing-conformance",
-        "oer-ieee80211-testing-model",
+        "oer-protocols-ieee80211-core-security-cipher",
+        "oer-protocols-ieee80211-contracts-port",
+        "oer-protocols-ieee80211-testing-conformance",
+        "oer-protocols-ieee80211-testing-model",
     ] {
         let dependencies = graph.get(package).expect("workspace package");
         let violations = disallowed_workspace_dependencies(dependencies, &paths, |name, path| {
@@ -1716,36 +1716,36 @@ fn ieee80211_cipher_port_and_model_take_only_the_layers_below_them() {
 fn ieee80211_layer_table_rejects_cores_chips_and_a_cipher_on_the_port() {
     let paths = BTreeMap::from([
         (
-            "oer-ieee80211-wire".into(),
+            "oer-protocols-ieee80211-wire".into(),
             "protocols/ieee80211/wire".into(),
         ),
         (
-            "oer-ieee80211-contracts-port".into(),
+            "oer-protocols-ieee80211-contracts-port".into(),
             "protocols/ieee80211/contracts/port".into(),
         ),
         (
-            "oer-ieee80211-core-security-cipher".into(),
+            "oer-protocols-ieee80211-core-security-cipher".into(),
             "protocols/ieee80211/core/security/cipher".into(),
         ),
         (
-            "oer-ieee80211-core-roles-sta".into(),
+            "oer-protocols-ieee80211-core-roles-sta".into(),
             "protocols/ieee80211/core/roles/sta".into(),
         ),
-        ("oer-radio-port".into(), "protocols/radio/port".into()),
-        ("oer-wire".into(), "portable/wire".into()),
-        ("oer-esp32s31-hal".into(), "chips/esp32s31/hal".into()),
+        ("oer-protocols-radio-port".into(), "protocols/radio/port".into()),
+        ("oer-portable-wire".into(), "portable/wire".into()),
+        ("oer-chips-esp32s31-hal".into(), "chips/esp32s31/hal".into()),
     ]);
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-format = { package = "oer-ieee80211-wire", version = "1" }
-port = { package = "oer-ieee80211-contracts-port", version = "1" }
-support = { package = "oer-wire", version = "1" }
+format = { package = "oer-protocols-ieee80211-wire", version = "1" }
+port = { package = "oer-protocols-ieee80211-contracts-port", version = "1" }
+support = { package = "oer-portable-wire", version = "1" }
 aes = "0.8"
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-hal = { package = "oer-esp32s31-hal", version = "1", optional = true }
+hal = { package = "oer-chips-esp32s31-hal", version = "1", optional = true }
 [dev-dependencies]
-station = { package = "oer-ieee80211-core-roles-sta", version = "1" }
+station = { package = "oer-protocols-ieee80211-core-roles-sta", version = "1" }
 "#,
     )
     .expect("manifest");
@@ -1753,30 +1753,30 @@ station = { package = "oer-ieee80211-core-roles-sta", version = "1" }
     let dependencies = normal_dependencies(&manifest, &workspace);
     assert_eq!(
         disallowed_workspace_dependencies(&dependencies, &paths, |name, path| {
-            ieee80211_layer_allows("oer-ieee80211-core-security-cipher", name, path)
+            ieee80211_layer_allows("oer-protocols-ieee80211-core-security-cipher", name, path)
         }),
         [
-            "oer-esp32s31-hal (chips/esp32s31/hal)",
-            "oer-ieee80211-contracts-port (protocols/ieee80211/contracts/port)",
+            "oer-chips-esp32s31-hal (chips/esp32s31/hal)",
+            "oer-protocols-ieee80211-contracts-port (protocols/ieee80211/contracts/port)",
         ]
     );
     let model = BTreeSet::from([
-        "oer-ieee80211-contracts-port".into(),
-        "oer-ieee80211-core-security-cipher".into(),
-        "oer-radio-port".into(),
-        "oer-ieee80211-core-roles-sta".into(),
+        "oer-protocols-ieee80211-contracts-port".into(),
+        "oer-protocols-ieee80211-core-security-cipher".into(),
+        "oer-protocols-radio-port".into(),
+        "oer-protocols-ieee80211-core-roles-sta".into(),
     ]);
     assert_eq!(
         disallowed_workspace_dependencies(&model, &paths, |name, path| {
-            ieee80211_layer_allows("oer-ieee80211-testing-model", name, path)
+            ieee80211_layer_allows("oer-protocols-ieee80211-testing-model", name, path)
         }),
-        ["oer-ieee80211-core-roles-sta (protocols/ieee80211/core/roles/sta)"]
+        ["oer-protocols-ieee80211-core-roles-sta (protocols/ieee80211/core/roles/sta)"]
     );
 }
 
 /// What the Wi-Fi runtime reaches by no normal path: chip crates (their
 /// HALs, drivers and executor binding among them), an executor and Embassy
-/// time. It binds no executor and takes time from `oer-time`.
+/// time. It binds no executor and takes time from `oer-portable-time`.
 fn below_the_ieee80211_runtime(paths: &BTreeMap<String, String>, name: &str) -> bool {
     paths
         .get(name)
@@ -1787,7 +1787,7 @@ fn below_the_ieee80211_runtime(paths: &BTreeMap<String, String>, name: &str) -> 
 /// The air formats and frame protection the runtime never names: the cores
 /// parse, build and protect frames and hand it finished actions.
 const BESIDE_THE_IEEE80211_RUNTIME: [&str; 2] =
-    ["oer-ieee80211-wire", "oer-ieee80211-core-security-cipher"];
+    ["oer-protocols-ieee80211-wire", "oer-protocols-ieee80211-core-security-cipher"];
 
 fn runtime_direct_violations(dependencies: &BTreeSet<String>) -> Vec<String> {
     dependencies
@@ -1802,14 +1802,14 @@ fn the_ieee80211_runtime_takes_neither_formats_cipher_chips_nor_an_executor() {
     let graph = workspace_dependency_graph();
     let paths = workspace_package_paths();
     let direct = graph
-        .get("oer-ieee80211-runtime")
+        .get("oer-protocols-ieee80211-runtime")
         .expect("the runtime is a workspace package");
     assert!(
         runtime_direct_violations(direct).is_empty(),
         "the runtime depends on formats or the cipher: {:?}",
         runtime_direct_violations(direct)
     );
-    let violations = forbidden_paths(&graph, "oer-ieee80211-runtime", |name| {
+    let violations = forbidden_paths(&graph, "oer-protocols-ieee80211-runtime", |name| {
         below_the_ieee80211_runtime(&paths, name)
     });
     assert!(
@@ -1821,43 +1821,43 @@ fn the_ieee80211_runtime_takes_neither_formats_cipher_chips_nor_an_executor() {
 #[test]
 fn the_ieee80211_runtime_rule_rejects_formats_and_transitive_chip_and_time_paths() {
     let paths = BTreeMap::from([(
-        "oer-espressif-executor".into(),
+        "oer-chips-family-executor".into(),
         "chips/family/executor".into(),
     )]);
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-format = { package = "oer-ieee80211-wire", version = "1" }
-station = { package = "oer-ieee80211-core-roles-sta", version = "1" }
+format = { package = "oer-protocols-ieee80211-wire", version = "1" }
+station = { package = "oer-protocols-ieee80211-core-roles-sta", version = "1" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 clock = { package = "embassy-time", version = "0.5", optional = true }
 [dev-dependencies]
-protect = { package = "oer-ieee80211-core-security-cipher", version = "1" }
-policy = { package = "oer-espressif-ieee80211-policy", version = "1" }
+protect = { package = "oer-protocols-ieee80211-core-security-cipher", version = "1" }
+policy = { package = "oer-chips-family-ieee80211-policy", version = "1" }
 "#,
     )
     .expect("manifest");
     let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
     let direct = normal_dependencies(&manifest, &workspace);
-    assert_eq!(runtime_direct_violations(&direct), ["oer-ieee80211-wire"]);
+    assert_eq!(runtime_direct_violations(&direct), ["oer-protocols-ieee80211-wire"]);
     let graph = BTreeMap::from([
-        ("oer-ieee80211-runtime".into(), direct),
+        ("oer-protocols-ieee80211-runtime".into(), direct),
         (
-            "oer-ieee80211-core-roles-sta".into(),
+            "oer-protocols-ieee80211-core-roles-sta".into(),
             BTreeSet::from(["helper".into()]),
         ),
         (
             "helper".into(),
-            BTreeSet::from(["oer-espressif-executor".into()]),
+            BTreeSet::from(["oer-chips-family-executor".into()]),
         ),
     ]);
     assert_eq!(
-        forbidden_paths(&graph, "oer-ieee80211-runtime", |name| {
+        forbidden_paths(&graph, "oer-protocols-ieee80211-runtime", |name| {
             below_the_ieee80211_runtime(&paths, name)
         }),
         [
-            "oer-ieee80211-runtime -> embassy-time",
-            "oer-ieee80211-runtime -> oer-ieee80211-core-roles-sta -> helper -> oer-espressif-executor",
+            "oer-protocols-ieee80211-runtime -> embassy-time",
+            "oer-protocols-ieee80211-runtime -> oer-protocols-ieee80211-core-roles-sta -> helper -> oer-chips-family-executor",
         ]
     );
 }
@@ -2296,7 +2296,7 @@ embassy-sync = "1"
     let path = "protocols/ieee80211/runtime";
     let runtime = Member {
         dependencies: dependencies.clone(),
-        ..member(path, "oer-ieee80211-runtime", false, &[])
+        ..member(path, "oer-protocols-ieee80211-runtime", false, &[])
     };
     assert_eq!(
         external_crate_violations(&[runtime]).expect("runtime role"),
@@ -2317,7 +2317,7 @@ embassy-sync = "1"
         dependencies,
         ..member(
             "protocols/ieee80211/core/roles/sta",
-            "oer-ieee80211-core-roles-sta",
+            "oer-protocols-ieee80211-core-roles-sta",
             false,
             &[],
         )
@@ -2343,13 +2343,13 @@ embassy-sync = "1"
 /// What an IEEE 802.11 protocol package never takes as a direct normal
 /// dependency: trace records, transport serialization, HIL and the network
 /// codec. Its owners report to the sink their caller lends a call
-/// (`oer-events`); a facade or an image chooses what an event becomes and how
+/// (`oer-portable-events`); a facade or an image chooses what an event becomes and how
 /// it leaves the device. Network fields reach it only through the bridge
 /// (`protocols/bridges/ieee80211-ethernet`).
 fn ieee80211_foreign_dependency(dependency: &str) -> bool {
     matches!(
         dependency,
-        "oer-trace" | "serde" | "postcard" | "postcard-schema" | "oer-network-wire"
+        "oer-portable-trace" | "serde" | "postcard" | "postcard-schema" | "oer-protocols-network-wire"
     ) || dependency.starts_with("oer-hil-")
 }
 
@@ -2367,10 +2367,10 @@ fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
         .collect()
 }
 
-/// The codecs whose every normal and build dependency is `oer-wire`.
+/// The codecs whose every normal and build dependency is `oer-portable-wire`.
 const STRICT_CODECS: [&str; 2] = ["protocols/ieee80211/wire", "protocols/network/wire"];
 
-/// A strict codec's dependencies other than `oer-wire`, normal or build,
+/// A strict codec's dependencies other than `oer-portable-wire`, normal or build,
 /// optional or target-specific.
 fn strict_codec_edges(members: &[Member]) -> BTreeSet<Edge> {
     members
@@ -2381,7 +2381,7 @@ fn strict_codec_edges(members: &[Member]) -> BTreeSet<Edge> {
                 .dependencies
                 .iter()
                 .chain(&member.build_dependencies)
-                .filter(|dependency| *dependency != "oer-wire")
+                .filter(|dependency| *dependency != "oer-portable-wire")
                 .map(|dependency| (member.path.clone(), dependency.clone()))
         })
         .collect()
@@ -2402,8 +2402,8 @@ fn a_strict_codec_refuses_optional_target_and_build_dependencies() {
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-oer-wire = { path = "../../../portable/wire" }
-regulatory = { package = "oer-radio-regulatory", path = "../../radio/regulatory", optional = true }
+oer-portable-wire = { path = "../../../portable/wire" }
+regulatory = { package = "oer-protocols-radio-regulatory", path = "../../radio/regulatory", optional = true }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 zeroize = "1"
 [build-dependencies]
@@ -2417,17 +2417,17 @@ tempfile = "3"
     let codec = Member {
         dependencies: normal_dependencies(&manifest, &workspace),
         build_dependencies: scoped_dependencies(&manifest, &workspace, "build-dependencies"),
-        ..member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[])
+        ..member("protocols/ieee80211/wire", "oer-protocols-ieee80211-wire", false, &[])
     };
     let other = member(
         "protocols/ieee80211/core/roles/sta",
-        "oer-ieee80211-core-roles-sta",
+        "oer-protocols-ieee80211-core-roles-sta",
         false,
         &["zeroize"],
     );
     assert_eq!(
         strict_codec_edges(&[codec, other]),
-        ["cc", "oer-radio-regulatory", "zeroize"]
+        ["cc", "oer-protocols-radio-regulatory", "zeroize"]
             .map(|dependency| ("protocols/ieee80211/wire".to_owned(), dependency.to_owned()))
             .into()
     );
@@ -2469,29 +2469,29 @@ fn a_protocol_contract_depends_on_no_protocol_package() {
 fn a_contract_edge_to_a_wire_or_core_is_found_and_portable_support_is_not() {
     let contract = member(
         "protocols/ieee80211/contracts/security",
-        "oer-ieee80211-contracts-security",
+        "oer-protocols-ieee80211-contracts-security",
         false,
         &[
-            "oer-wire",
-            "oer-ieee80211-wire",
-            "oer-ieee80211-core-roles-sta",
+            "oer-portable-wire",
+            "oer-protocols-ieee80211-wire",
+            "oer-protocols-ieee80211-core-roles-sta",
             "zeroize",
         ],
     );
     let roles = BTreeMap::from([
-        ("oer-wire".to_owned(), Role::Portable),
+        ("oer-portable-wire".to_owned(), Role::Portable),
         (
-            "oer-ieee80211-wire".to_owned(),
+            "oer-protocols-ieee80211-wire".to_owned(),
             Role::Protocol(ProtocolRole::Wire),
         ),
         (
-            "oer-ieee80211-core-roles-sta".to_owned(),
+            "oer-protocols-ieee80211-core-roles-sta".to_owned(),
             Role::Protocol(ProtocolRole::Core),
         ),
     ]);
     assert_eq!(
         contract_edges(&[contract], &roles),
-        ["oer-ieee80211-core-roles-sta", "oer-ieee80211-wire"]
+        ["oer-protocols-ieee80211-core-roles-sta", "oer-protocols-ieee80211-wire"]
             .map(|dependency| (
                 "protocols/ieee80211/contracts/security".to_owned(),
                 dependency.to_owned()
@@ -2511,13 +2511,13 @@ fn ieee80211_foreign_dependencies_include_aliases_and_spare_other_families() {
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-events = { package = "oer-events", path = "../../../portable/events" }
-records = { package = "oer-trace", path = "../../../portable/trace" }
-fields = { package = "oer-network-wire", path = "../../network/wire" }
-bridge = { package = "oer-bridges-ieee80211-ethernet", path = "../../bridges/ieee80211-ethernet" }
+events = { package = "oer-portable-events", path = "../../../portable/events" }
+records = { package = "oer-portable-trace", path = "../../../portable/trace" }
+fields = { package = "oer-protocols-network-wire", path = "../../network/wire" }
+bridge = { package = "oer-protocols-bridges-ieee80211-ethernet", path = "../../bridges/ieee80211-ethernet" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 schema = { package = "postcard-schema", version = "0.2", optional = true }
-agent = { package = "oer-hil-agent", path = "../../hil/agent" }
+agent = { package = "oer-protocols-hil-agent", path = "../../hil/agent" }
 [dev-dependencies]
 serde = "1"
 "#,
@@ -2529,21 +2529,21 @@ serde = "1"
         dependencies: dependencies.clone(),
         ..member(
             "protocols/ieee80211/runtime",
-            "oer-ieee80211-runtime",
+            "oer-protocols-ieee80211-runtime",
             false,
             &[],
         )
     };
     let facade = Member {
         dependencies,
-        ..member("chips/esp32s31/wifi", "oer-esp32s31-wifi", false, &[])
+        ..member("chips/esp32s31/wifi", "oer-chips-esp32s31-wifi", false, &[])
     };
     assert_eq!(
         ieee80211_foreign_edges(&[runtime, facade]),
         [
-            "oer-hil-agent",
-            "oer-network-wire",
-            "oer-trace",
+            "oer-protocols-hil-agent",
+            "oer-protocols-network-wire",
+            "oer-portable-trace",
             "postcard-schema"
         ]
         .map(|dependency| (
@@ -2711,26 +2711,26 @@ fn bt_hci_controller_scan_checks_paths_and_grouped_imports_not_comments_or_strin
 #[test]
 fn the_name_rule_tells_libraries_from_programs_by_their_binary_targets() {
     let members = [
-        member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[]),
+        member("protocols/ieee80211/wire", "oer-protocols-ieee80211-wire", false, &[]),
         member("protocols/ieee80211/core/roles/sta", "oer-sta", false, &[]),
         member(
             "hil/probes/boot-smoke",
-            "oer-firmware-apps-boot-smoke",
+            "oer-hil-probes-boot-smoke",
             true,
             &[],
         ),
         member("firmware/apps/example", "oer-apps-example", true, &[]),
-        member("tools/image/build", "oer-image-build", false, &[]),
-        member("tools/image/cli", "oer-tool-image-cli", true, &[]),
+        member("tools/image/build", "oer-tools-image-build", false, &[]),
+        member("tools/image/cli", "oer-tools-image-cli", true, &[]),
         member("tools/image/bundle", "oer-tool-image-bundle", false, &[]),
         member("tools/pins", "oer-pins", true, &[]),
     ];
     assert_eq!(
         name_violations(&members),
         [
-            "protocols/ieee80211/core/roles/sta: named oer-sta, expected oer-ieee80211-core-roles-sta",
+            "protocols/ieee80211/core/roles/sta: named oer-sta, expected oer-protocols-ieee80211-core-roles-sta",
             "firmware/apps/example: named oer-apps-example, expected oer-firmware-apps-example",
-            "tools/image/bundle: named oer-tool-image-bundle, expected oer-image-bundle",
+            "tools/image/bundle: named oer-tool-image-bundle, expected oer-tools-image-bundle",
             "tools/pins: named oer-pins, expected oer-tool-pins",
         ]
     );
@@ -2883,53 +2883,53 @@ fn the_edge_rules_see_optional_target_and_aliased_dependencies_and_judge_by_path
         normal_dependencies(&manifest, &workspace)
     };
     let members = [
-        member("chips/family/analog", "oer-espressif-analog", false, &[]),
+        member("chips/family/analog", "oer-chips-family-analog", false, &[]),
         Member {
             dependencies: manifest(
                 r#"
 [dependencies]
-hal = { package = "oer-esp32s31-hal", version = "1", optional = true }
+hal = { package = "oer-chips-esp32s31-hal", version = "1", optional = true }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-app = { package = "oer-firmware-apps-radio-root", version = "1" }
+app = { package = "oer-hil-probes-radio-root", version = "1" }
 [dev-dependencies]
 tool = { package = "oer-tool-pins", version = "1" }
 "#,
             ),
             ..member(
                 "chips/family/executor",
-                "oer-espressif-executor",
+                "oer-chips-family-executor",
                 false,
                 &[],
             )
         },
-        member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[]),
+        member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[]),
         member(
             "hil/probes/radio-root",
-            "oer-firmware-apps-radio-root",
+            "oer-hil-probes-radio-root",
             true,
             &[],
         ),
         member("tools/pins", "oer-tool-pins", true, &[]),
-        member("tools/image/build", "oer-image-build", false, &[]),
+        member("tools/image/build", "oer-tools-image-build", false, &[]),
         member(
             "tools/image/checks",
-            "oer-image-checks",
+            "oer-tools-image-checks",
             false,
-            &["oer-tool-pins", "oer-image-build"],
+            &["oer-tool-pins", "oer-tools-image-build"],
         ),
         member(
             "portable/time",
-            "oer-time",
+            "oer-portable-time",
             false,
-            &["oer-ieee80211-wire", "oer-esp32s31-hal"],
+            &["oer-protocols-ieee80211-wire", "oer-chips-esp32s31-hal"],
         ),
         member(
             "portable/embassy/net",
-            "oer-embassy-net",
+            "oer-portable-embassy-net",
             false,
-            &["oer-ieee80211-wire", "oer-esp32s31-hal"],
+            &["oer-protocols-ieee80211-wire", "oer-chips-esp32s31-hal"],
         ),
-        member("protocols/ieee80211/wire", "oer-ieee80211-wire", false, &[]),
+        member("protocols/ieee80211/wire", "oer-protocols-ieee80211-wire", false, &[]),
     ];
     let edge = |from: &str, to: &str| (from.to_owned(), to.to_owned());
     assert_eq!(
@@ -2958,13 +2958,13 @@ fn the_family_rule_sees_build_dependencies_and_ignores_dev_dependencies() {
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-port = { package = "oer-espressif-platform-port", version = "1" }
+port = { package = "oer-chips-family-platform-port", version = "1" }
 [build-dependencies]
-facts = { package = "oer-espressif-facts", version = "1" }
+facts = { package = "oer-chips-family-facts", version = "1" }
 [target.'cfg(unix)'.build-dependencies]
-layout = { package = "oer-esp32s31-layout", version = "1", optional = true }
+layout = { package = "oer-chips-esp32s31-layout", version = "1", optional = true }
 [dev-dependencies]
-hal = { package = "oer-esp32s31-hal", version = "1" }
+hal = { package = "oer-chips-esp32s31-hal", version = "1" }
 "#,
     )
     .expect("manifest");
@@ -2975,20 +2975,20 @@ hal = { package = "oer-esp32s31-hal", version = "1" }
             build_dependencies: scoped_dependencies(&manifest, &workspace, "build-dependencies"),
             ..member(
                 "chips/family/staged-runtime",
-                "oer-espressif-staged-runtime",
+                "oer-chips-family-staged-runtime",
                 false,
                 &[],
             )
         },
         member(
             "chips/family/platform-port",
-            "oer-espressif-platform-port",
+            "oer-chips-family-platform-port",
             false,
             &[],
         ),
-        member("chips/family/facts", "oer-espressif-facts", false, &[]),
-        member("chips/esp32s31/layout", "oer-esp32s31-layout", false, &[]),
-        member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[]),
+        member("chips/family/facts", "oer-chips-family-facts", false, &[]),
+        member("chips/esp32s31/layout", "oer-chips-esp32s31-layout", false, &[]),
+        member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[]),
     ];
     assert!(forbidden_edges(&members, family_reaches_a_chip).is_empty());
     assert_eq!(
@@ -3240,7 +3240,7 @@ fn only_a_composition_and_a_facade_assemble_runtimes_and_backends() {
                 (Role::HilAgent, "protocols/hil/agent", false),
                 (
                     Role::HilImage,
-                    "hil/images/esp32s31-aes",
+                    "hil/images/aes",
                     false,
                 ),
                 (Role::Image, "hil/probes/radio-root", false),
@@ -3455,24 +3455,24 @@ fn an_image_on_the_application_entry_takes_nothing_the_entry_places() {
 fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
     let members = [
         member(
-            "hil/images/esp32s31-station",
+            "hil/images/station",
             "image",
             true,
-            &["oer-espressif", "oer-esp32s31-compose"],
+            &["oer", "oer-chips-esp32s31-compose"],
         ),
         member(
-            "hil/images/esp32s31-aes",
+            "hil/images/aes",
             "hand-built",
             true,
-            &["oer-esp32s31-compose"],
+            &["oer-chips-esp32s31-compose"],
         ),
-        member("oer", "oer-espressif", false, &[]),
-        member("chips/esp32s31/compose", "oer-esp32s31-compose", false, &[]),
+        member("oer", "oer", false, &[]),
+        member("chips/esp32s31/compose", "oer-chips-esp32s31-compose", false, &[]),
     ];
     assert_eq!(
         outside_the_entry(&members),
         BTreeSet::from([(
-            "hil/images/esp32s31-station".to_owned(),
+            "hil/images/station".to_owned(),
             "chips/esp32s31/compose".to_owned(),
         )])
     );
@@ -3506,29 +3506,29 @@ fn every_hil_image_is_an_application_of_the_entry() {
 fn a_hil_image_without_the_entry_is_named_and_another_image_is_not() {
     let members = [
         member(
-            "hil/images/esp32s31-station",
+            "hil/images/station",
             "station",
             true,
-            &["oer-espressif"],
+            &["oer"],
         ),
         member(
-            "hil/images/esp32s31-aes",
+            "hil/images/aes",
             "hand-built",
             true,
-            &["oer-esp32s31-compose"],
+            &["oer-chips-esp32s31-compose"],
         ),
         member(
             "hil/probes/radio-root",
             "radio-root",
             true,
-            &["oer-esp32s31-compose"],
+            &["oer-chips-esp32s31-compose"],
         ),
-        member("oer", "oer-espressif", false, &[]),
-        member("chips/esp32s31/compose", "oer-esp32s31-compose", false, &[]),
+        member("oer", "oer", false, &[]),
+        member("chips/esp32s31/compose", "oer-chips-esp32s31-compose", false, &[]),
     ];
     assert_eq!(
         hil_images_off_the_entry(&members),
-        BTreeSet::from(["hil/images/esp32s31-aes".to_owned()])
+        BTreeSet::from(["hil/images/aes".to_owned()])
     );
 }
 
@@ -3544,40 +3544,40 @@ fn the_role_rule_judges_listed_packages_by_their_optional_target_and_aliased_edg
             dependencies: manifest(
                 r#"
 [dependencies]
-pac = { package = "oer-esp32s31-pac", version = "1" }
+pac = { package = "oer-chips-esp32s31-pac", version = "1" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-phy = { package = "oer-esp32s31-phy", version = "1", optional = true }
+phy = { package = "oer-chips-esp32s31-phy", version = "1", optional = true }
 [dev-dependencies]
-adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
+adapter = { package = "oer-chips-esp32s31-ieee80211-driver", version = "1" }
 "#,
             ),
-            ..member("chips/esp32s31/hal", "oer-esp32s31-hal", false, &[])
+            ..member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[])
         },
-        member("chips/esp32s31/pac", "oer-esp32s31-pac", false, &[]),
-        member("chips/esp32s31/phy", "oer-esp32s31-phy", false, &[]),
+        member("chips/esp32s31/pac", "oer-chips-esp32s31-pac", false, &[]),
+        member("chips/esp32s31/phy", "oer-chips-esp32s31-phy", false, &[]),
         member(
             "chips/esp32s31/ieee80211/driver",
-            "oer-esp32s31-ieee80211-driver",
+            "oer-chips-esp32s31-ieee80211-driver",
             false,
-            &["oer-ieee80211-runtime", "oer-esp32s31-phy"],
+            &["oer-protocols-ieee80211-runtime", "oer-chips-esp32s31-phy"],
         ),
         member(
             "protocols/ieee80211/runtime",
-            "oer-ieee80211-runtime",
+            "oer-protocols-ieee80211-runtime",
             false,
             &[],
         ),
         member(
             "chips/esp32s31/wifi",
-            "oer-esp32s31-wifi",
+            "oer-chips-esp32s31-wifi",
             false,
-            &["oer-ieee80211-runtime", "oer-esp32s31-ieee80211-driver"],
+            &["oer-protocols-ieee80211-runtime", "oer-chips-esp32s31-ieee80211-driver"],
         ),
         member(
-            "hil/images/esp32s31-aes",
+            "hil/images/aes",
             "oer-firmware-hil-esp32s31",
             true,
-            &["oer-esp32s31-wifi", "oer-esp32s31-hal"],
+            &["oer-chips-esp32s31-wifi", "oer-chips-esp32s31-hal"],
         ),
         // A package without a listed role is the completeness rule's failure,
         // not an allowed edge.
@@ -3585,7 +3585,7 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
             "chips/esp32s31/unlisted",
             "oer-esp32s31-unlisted",
             false,
-            &["oer-ieee80211-runtime"],
+            &["oer-protocols-ieee80211-runtime"],
         ),
     ];
     let edge = |from: &str, to: &str| (from.to_owned(), to.to_owned());
@@ -3598,11 +3598,11 @@ adapter = { package = "oer-esp32s31-ieee80211-driver", version = "1" }
                 "protocols/ieee80211/runtime"
             ),
             edge(
-                "hil/images/esp32s31-aes",
+                "hil/images/aes",
                 "chips/esp32s31/hal"
             ),
             edge(
-                "hil/images/esp32s31-aes",
+                "hil/images/aes",
                 "chips/esp32s31/wifi"
             ),
         ])
@@ -4080,36 +4080,36 @@ fn no_product_package_depends_on_a_conformance_suite_or_a_model() {
 fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
     let model = member(
         "protocols/ieee80211/testing/model",
-        "oer-ieee80211-testing-model",
+        "oer-protocols-ieee80211-testing-model",
         false,
-        &["oer-ieee80211-testing-conformance"],
+        &["oer-protocols-ieee80211-testing-conformance"],
     );
     let mut runtime = member(
         "protocols/ieee80211/runtime",
-        "oer-ieee80211-runtime",
+        "oer-protocols-ieee80211-runtime",
         false,
-        &["oer-ieee80211-contracts-port"],
+        &["oer-protocols-ieee80211-contracts-port"],
     );
     runtime
         .build_dependencies
-        .insert("oer-ieee80211-testing-model".to_owned());
+        .insert("oer-protocols-ieee80211-testing-model".to_owned());
     let core = member(
         "protocols/ieee80211/core/upper-mac",
-        "oer-ieee80211-core-upper-mac",
+        "oer-protocols-ieee80211-core-upper-mac",
         false,
-        &["oer-ieee80211-testing-conformance"],
+        &["oer-protocols-ieee80211-testing-conformance"],
     );
     let roles = BTreeMap::from([
         (
-            "oer-ieee80211-testing-conformance".to_owned(),
+            "oer-protocols-ieee80211-testing-conformance".to_owned(),
             Role::Protocol(ProtocolRole::Conformance),
         ),
         (
-            "oer-ieee80211-testing-model".to_owned(),
+            "oer-protocols-ieee80211-testing-model".to_owned(),
             Role::Protocol(ProtocolRole::Model),
         ),
         (
-            "oer-ieee80211-contracts-port".to_owned(),
+            "oer-protocols-ieee80211-contracts-port".to_owned(),
             Role::Protocol(ProtocolRole::Port),
         ),
     ]);
@@ -4118,9 +4118,9 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
         [
             (
                 "protocols/ieee80211/core/upper-mac",
-                "oer-ieee80211-testing-conformance"
+                "oer-protocols-ieee80211-testing-conformance"
             ),
-            ("protocols/ieee80211/runtime", "oer-ieee80211-testing-model"),
+            ("protocols/ieee80211/runtime", "oer-protocols-ieee80211-testing-model"),
         ]
         .map(|(path, dependency)| (path.to_owned(), dependency.to_owned()))
         .into()
@@ -4128,10 +4128,10 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 }
 
 /// Every network package and the workspace packages it may take, normal or
-/// build: the codec stands on `oer-wire` alone and the contract on the codec.
+/// build: the codec stands on `oer-portable-wire` alone and the contract on the codec.
 const NETWORK_LAYERS: [(&str, &[&str]); 2] = [
-    ("protocols/network/wire", &["oer-wire"]),
-    ("protocols/network/port", &["oer-network-wire"]),
+    ("protocols/network/wire", &["oer-portable-wire"]),
+    ("protocols/network/port", &["oer-protocols-network-wire"]),
 ];
 
 /// The network packages missing from [`NETWORK_LAYERS`], and the workspace
@@ -4185,22 +4185,22 @@ fn every_network_package_has_an_explicit_layer() {
 fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
     let port = member(
         "protocols/network/port",
-        "oer-network-port",
+        "oer-protocols-network-port",
         false,
-        &["oer-network-wire", "oer-ieee80211-wire", "heapless"],
+        &["oer-protocols-network-wire", "oer-protocols-ieee80211-wire", "heapless"],
     );
     let codec = member(
         "protocols/network/wire",
-        "oer-network-wire",
+        "oer-protocols-network-wire",
         false,
-        &["oer-wire"],
+        &["oer-portable-wire"],
     );
     let stack = member("protocols/network/stack", "oer-network-stack", false, &[]);
     let workspace = [
-        "oer-network-wire",
-        "oer-network-port",
-        "oer-ieee80211-wire",
-        "oer-wire",
+        "oer-protocols-network-wire",
+        "oer-protocols-network-port",
+        "oer-protocols-ieee80211-wire",
+        "oer-portable-wire",
     ]
     .map(str::to_owned)
     .into();
@@ -4210,7 +4210,7 @@ fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
         edges,
         [(
             "protocols/network/port".to_owned(),
-            "oer-ieee80211-wire".to_owned()
+            "oer-protocols-ieee80211-wire".to_owned()
         )]
         .into()
     );

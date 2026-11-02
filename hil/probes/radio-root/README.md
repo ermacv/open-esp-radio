@@ -3,7 +3,7 @@
 This ESP32-S31 staged application takes the reset root, adopts PSRAM, owns
 `RadioHardware` from the staged adoption runner, and acquires and
 releases each platform clock once through the chip's platform clock owner
-(`oer_esp32s31_hal::power::ChipClocks`). It initializes no RF, PHY or MAC.
+(`oer_chips_esp32s31_hal::power::ChipClocks`). It initializes no RF, PHY or MAC.
 The radio root remains held until reset, and the image's one executor feeds
 the RTC watchdog the root armed.
 
@@ -27,7 +27,7 @@ A refused clock reports `clock=<name> refused=PlatformClockError` followed
 by a failing clock verdict.
 The shared previous-panic record keeps every retained field, including
 whether the static message was absent or empty. No target formatter runs.
-The records use `oer_trace::Event` without changing `portable/trace` or
+The records use `oer_portable_trace::Event` without changing `portable/trace` or
 allocating a trace ring. Sequence gaps, duplicate/reordered records,
 unknown event types and malformed records are host errors.
 

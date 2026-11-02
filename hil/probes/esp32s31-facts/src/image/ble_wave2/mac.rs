@@ -11,14 +11,14 @@ pub(in crate::image) fn sample(s: &mut Session<'_>) -> Option<u32> {
     s.ble.core.modify_btlc_timer_control(|w| {
         w.set_latch_request(true);
     });
-    oer_riscv::fence();
-    let start = oer_riscv::cycle32();
+    oer_portable_riscv::fence();
+    let start = oer_portable_riscv::cycle32();
     loop {
         let control = s.ble.core.read_btlc_timer_control();
         if !control.latch_request() {
             break;
         }
-        let elapsed = oer_riscv::cycle32().wrapping_sub(start);
+        let elapsed = oer_portable_riscv::cycle32().wrapping_sub(start);
         if elapsed >= LIMIT {
             // Retain the actual final poll, rather than a later read whose
             // self-clearing request may already differ. The capture read is
@@ -68,7 +68,7 @@ fn all_mask(s: &mut Session<'_>) {
             .set_bits_10_11_opaque(Bits::constant::<0>())
             .set_bits_14_31_opaque(Bits::constant::<0>());
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(in crate::image) fn clear(s: &mut Session<'_>) {
     let a = s.ble.bank.sample_bluetooth_primary_interrupt_bank_0();
@@ -79,7 +79,7 @@ pub(in crate::image) fn clear(s: &mut Session<'_>) {
     let b = s.ble.bank.sample_bluetooth_interrupt_bank_1();
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_0(a);
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_1(b);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(in crate::image) fn command(s: &mut Session<'_>, n: u32) {
     match n {
@@ -93,7 +93,7 @@ pub(in crate::image) fn command(s: &mut Session<'_>, n: u32) {
             w.set_command(pac::bt_mac::irq_control_2::Command::Command1.bits());
         }),
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(in crate::image) fn enable(s: &mut Session<'_>, cause: u32, on: bool) {
     s.ble.bank.modify_irq_enable_1(|w| match cause {
@@ -107,7 +107,7 @@ pub(in crate::image) fn enable(s: &mut Session<'_>, cause: u32, on: bool) {
             w.set_controller_time_overflow(on);
         }
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn compare(s: &mut Session<'_>, cause: u32, on: bool) {
     s.ble.core.modify_btlc_timer_control(|w| {
@@ -117,7 +117,7 @@ fn compare(s: &mut Session<'_>, cause: u32, on: bool) {
             w.set_compare_1_enable(on);
         }
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(super) fn state(s: &Session<'_>, tag: u32) {
     let b = &s.ble.bank;
@@ -205,11 +205,11 @@ fn seed(s: &mut Session<'_>, value: u32) {
     s.ble.core.modify_btlc_timer_control(|w| {
         w.set_timer_arm(true);
     });
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 fn wait(s: &mut Session<'_>, origin: u32, delta: u32) -> Option<u32> {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < LIMIT {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {
         let now = sample(s)?;
         if now.wrapping_sub(origin) >= delta {
             return Some(now);
@@ -309,7 +309,7 @@ pub(in crate::image) fn masks(s: &mut Session<'_>) {
         s.ble
             .bank
             .acknowledge_bluetooth_primary_interrupt_bank_1(saved);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
         state(s, tag + 24);
         enable(s, cause, true);
         state(s, tag + 32);
@@ -374,7 +374,7 @@ pub(super) fn group(s: &mut Session<'_>, n: u32, on: bool) {
             w.set_source_3(on);
         }),
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 pub(in crate::image) fn groups(s: &mut Session<'_>) {
     if !prepare(s) {
@@ -427,7 +427,7 @@ pub(in crate::image) fn arrivals(s: &mut Session<'_>) {
     s.ble
         .bank
         .acknowledge_bluetooth_primary_interrupt_bank_1(old);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x9520);
     clear(s);
     // Separated same-bit phases; no claim of exact set/clear coincidence.
@@ -444,7 +444,7 @@ pub(in crate::image) fn arrivals(s: &mut Session<'_>) {
     s.ble
         .bank
         .acknowledge_bluetooth_primary_interrupt_bank_1(old);
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
     state(s, 0x9550);
     if produce(s, 0, 0x956f) {
         state(s, 0x9560);

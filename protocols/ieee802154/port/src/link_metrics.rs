@@ -13,7 +13,7 @@
 //! Ermachenkov; see `NOTICE`.
 //!
 
-use oer_ieee802154_wire::{FrameAddress, ProbingData};
+use oer_protocols_ieee802154_wire::{FrameAddress, ProbingData};
 
 const INVALID_RSSI: i8 = 127;
 

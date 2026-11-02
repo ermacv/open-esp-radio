@@ -15,7 +15,7 @@ fn safe_table_exports_resolve_transitive_paths_and_restrict_token_construction()
         .join("../../../portable/memory")
         .canonicalize()
         .unwrap();
-    // Macro expansions must resolve oer-riscv through interrupt-table, without
+    // Macro expansions must resolve oer-portable-riscv through interrupt-table, without
     // requiring the consumer to declare that transitive dependency.
     fs::write(
         scratch.path().join("Cargo.toml"),
@@ -32,7 +32,7 @@ fn safe_table_exports_resolve_transitive_paths_and_restrict_token_construction()
 [[package]]
 name = "interrupt-exports"
 version = "0.0.0"
-dependencies = ["oer-espressif-interrupt-table", "oer-memory"]
+dependencies = ["oer-chips-family-interrupt-table", "oer-portable-memory"]
 "#,
     );
     fs::write(scratch.path().join("Cargo.lock"), &lock).unwrap();
@@ -80,10 +80,10 @@ dependencies = ["oer-espressif-interrupt-table", "oer-memory"]
     }
     let source = r#"#![forbid(unsafe_code)]
 #![deny(clippy::disallowed_methods)]
-oer_espressif_interrupt_table::__fake_parts!();
-oer_espressif_interrupt_table::__fake_controller!();
+oer_chips_family_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_controller!();
 pub fn on_timer(_: &mut TimerIrq) {}
-oer_espressif_interrupt_table::interrupt_table! {
+oer_chips_family_interrupt_table::interrupt_table! {
     lines: FAKE_LINES,
     handler_attributes: [#[inline(never)]];
     contexts { executor: 2; }
@@ -126,7 +126,7 @@ oer_espressif_interrupt_table::interrupt_table! {
 
     fs::write(
         &case,
-        format!("{source}\npub fn forge() {{ let _ = oer_espressif_interrupt_table::__private::Unique::new(); }}\n"),
+        format!("{source}\npub fn forge() {{ let _ = oer_chips_family_interrupt_table::__private::Unique::new(); }}\n"),
     )
     .unwrap();
     let reject = run("direct", &["clippy"]);
@@ -141,7 +141,7 @@ oer_espressif_interrupt_table::interrupt_table! {
         "{diagnostics}"
     );
 
-    fs::write(&case, format!("{source}\npub fn proof() {{ let _ = oer_espressif_interrupt_table::__private::EntryProof::<TimerToken>::new(TimerToken::PROOF.handler(), <TimerToken as oer_espressif_interrupt_table::Entry>::cell()); }}\nuse oer_espressif_interrupt_table::Entry;" )).unwrap();
+    fs::write(&case, format!("{source}\npub fn proof() {{ let _ = oer_chips_family_interrupt_table::__private::EntryProof::<TimerToken>::new(TimerToken::PROOF.handler(), <TimerToken as oer_chips_family_interrupt_table::Entry>::cell()); }}\nuse oer_chips_family_interrupt_table::Entry;" )).unwrap();
     let reject = run("direct-proof", &["clippy"]);
     assert_eq!(reject.status.code(), Some(101));
     assert!(
@@ -152,50 +152,50 @@ oer_espressif_interrupt_table::interrupt_table! {
     for (name, body, expected) in [
         (
             "wrong-signature",
-            "fn wrong() -> u8 { 0 } oer_memory::link_fn! { define oer_memory::TraceClockSlot => fn __oer_trace_now_micros() -> u8 = wrong; }",
+            "fn wrong() -> u8 { 0 } oer_portable_memory::link_fn! { define oer_portable_memory::TraceClockSlot => fn __oer_trace_now_micros() -> u8 = wrong; }",
             "mismatched types",
         ),
         (
             "wrong-kind",
-            r#"fn clock() -> u64 { 0 } oer_memory::link_fn! { @static oer_memory::TraceClockSlot, "__oer_trace_now_micros" => static BAD: fn() -> u64 = clock; }"#,
+            r#"fn clock() -> u64 { 0 } oer_portable_memory::link_fn! { @static oer_portable_memory::TraceClockSlot, "__oer_trace_now_micros" => static BAD: fn() -> u64 = clock; }"#,
             "a function slot cannot define a static",
         ),
         (
             "wrong-name",
-            "fn clock() -> u64 { 0 } oer_memory::link_fn! { define oer_memory::TraceClockSlot => fn memcpy() -> u64 = clock; }",
+            "fn clock() -> u64 { 0 } oer_portable_memory::link_fn! { define oer_portable_memory::TraceClockSlot => fn memcpy() -> u64 = clock; }",
             "definition names another slot",
         ),
         (
             "wrong-abi",
-            r#"oer_memory::link_fn! { @function oer_memory::TraceClockSlot, "__oer_trace_now_micros" => extern "C" fn bad() -> u64 { 0 } }"#,
+            r#"oer_portable_memory::link_fn! { @function oer_portable_memory::TraceClockSlot, "__oer_trace_now_micros" => extern "C" fn bad() -> u64 { 0 } }"#,
             "mismatched types",
         ),
         (
             "free-name",
-            r#"oer_memory::link_fn! { export "memcpy" => static BAD: u8 = 0; }"#,
+            r#"oer_portable_memory::link_fn! { export "memcpy" => static BAD: u8 = 0; }"#,
             "no rules expected",
         ),
         (
             "missing-proof",
             r#"struct Forged;
-impl oer_espressif_interrupt_table::Entry for Forged {
+impl oer_chips_family_interrupt_table::Entry for Forged {
     type Part = TimerIrq;
     const LINE: u8 = 18;
     const LEVEL: u8 = 2;
     const HART: u8 = 0;
-    const CLASS: oer_espressif_interrupt_table::Class = oer_espressif_interrupt_table::Class::Hardware;
-    fn storage() -> &'static oer_espressif_interrupt_table::__private::StaticCell<TimerIrq> {
-        <TimerToken as oer_espressif_interrupt_table::Entry>::storage()
+    const CLASS: oer_chips_family_interrupt_table::Class = oer_chips_family_interrupt_table::Class::Hardware;
+    fn storage() -> &'static oer_chips_family_interrupt_table::__private::StaticCell<TimerIrq> {
+        <TimerToken as oer_chips_family_interrupt_table::Entry>::storage()
     }
-    fn cell() -> &'static oer_memory::HandlerCell<TimerIrq> {
-        <TimerToken as oer_espressif_interrupt_table::Entry>::cell()
+    fn cell() -> &'static oer_portable_memory::HandlerCell<TimerIrq> {
+        <TimerToken as oer_chips_family_interrupt_table::Entry>::cell()
     }
 }"#,
             "not all trait items implemented",
         ),
         (
             "foreign-proof",
-            "const BAD: oer_espressif_interrupt_table::__private::EntryProof<RadioToken> = <TimerToken as oer_espressif_interrupt_table::Entry>::PROOF;",
+            "const BAD: oer_chips_family_interrupt_table::__private::EntryProof<RadioToken> = <TimerToken as oer_chips_family_interrupt_table::Entry>::PROOF;",
             "mismatched types",
         ),
     ] {

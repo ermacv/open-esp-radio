@@ -1,5 +1,5 @@
 use super::*;
-use oer_time_virtual::VirtualClock;
+use oer_portable_time_virtual::VirtualClock;
 use std::{cell::RefCell, vec::Vec};
 
 struct Hardware<'a> {

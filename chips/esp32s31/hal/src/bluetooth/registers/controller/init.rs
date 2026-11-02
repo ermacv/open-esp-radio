@@ -360,23 +360,23 @@ fn execute_hal_init(
     }
 }
 
-struct MmioHalInit<'a, C: oer_mmio::Placement> {
-    registers: &'a mut oer_esp32s31_pac::bt_mac::BluetoothControllerCore<C>,
+struct MmioHalInit<'a, C: oer_portable_mmio::Placement> {
+    registers: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<C>,
 }
 
-impl<C: oer_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
+impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
     fn apply(&mut self, operation: HalInitOperation) {
         match operation {
             HalInitOperation::PublishSchedulerSramPrefix => {
                 self.registers.modify_scheduler_sram_pointer_prefix(|w| {
-                    w.set_bits_0_21_opaque(oer_mmio::Bits::constant::<0x0>());
-                    w.set_address_prefix(oer_mmio::Bits::constant::<0xbc>());
+                    w.set_bits_0_21_opaque(oer_portable_mmio::Bits::constant::<0x0>());
+                    w.set_address_prefix(oer_portable_mmio::Bits::constant::<0xbc>());
                 });
             }
             HalInitOperation::PublishSleepTimerShift(shift) => {
                 // The configuration's input domains give only shifts 2..=5.
                 self.registers.modify_btlc_timer_control(|w| {
-                    w.set_clock_shift(oer_mmio::Bits::truncate(u32::from(shift)));
+                    w.set_clock_shift(oer_portable_mmio::Bits::truncate(u32::from(shift)));
                 });
             }
             HalInitOperation::PublishValue0(value) => {
@@ -399,7 +399,7 @@ impl<C: oer_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
             }
             HalInitOperation::InitializeLow20 => {
                 self.registers.write_hal_init_low_20(|w| {
-                    w.set_config_low_20(oer_mmio::Bits::constant::<0x000f_ffff>());
+                    w.set_config_low_20(oer_portable_mmio::Bits::constant::<0x000f_ffff>());
                 });
             }
             HalInitOperation::EnableLatch => {
@@ -410,13 +410,13 @@ impl<C: oer_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
             HalInitOperation::ConfigureControl1High => {
                 self.registers.modify_wdt_config_1(|w| {
                     w.set_config_15(true);
-                    w.set_config_18_19(oer_mmio::Bits::constant::<0x3>());
+                    w.set_config_18_19(oer_portable_mmio::Bits::constant::<0x3>());
                 });
             }
             HalInitOperation::ConfigureControl1Low => {
                 self.registers.modify_wdt_config_1(|w| {
                     w.set_config_3(true);
-                    w.set_config_6_7(oer_mmio::Bits::constant::<0x3>());
+                    w.set_config_6_7(oer_portable_mmio::Bits::constant::<0x3>());
                 });
             }
             HalInitOperation::EnableControl0 => {
@@ -426,12 +426,12 @@ impl<C: oer_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
             }
             HalInitOperation::ClearSchedulerConfig16To20 => {
                 self.registers.modify_hal_init_scheduler_control(|w| {
-                    w.set_config_16_20(oer_mmio::Bits::constant::<0x0>());
+                    w.set_config_16_20(oer_portable_mmio::Bits::constant::<0x0>());
                 });
             }
             HalInitOperation::PublishSchedulerConfig16To20 => {
                 self.registers.modify_hal_init_scheduler_control(|w| {
-                    w.set_config_16_20(oer_mmio::Bits::constant::<0x10>());
+                    w.set_config_16_20(oer_portable_mmio::Bits::constant::<0x10>());
                 });
             }
             HalInitOperation::EnableSchedulerControl => {
@@ -461,8 +461,8 @@ impl<C: oer_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
             }
             HalInitOperation::ClearSlotLaneUpper { register, lane } => {
                 let register_index = match register {
-                    HalInitRegister::SlotMap0 => oer_mmio::Index::constant::<0>(),
-                    HalInitRegister::SlotMap1 => oer_mmio::Index::constant::<1>(),
+                    HalInitRegister::SlotMap0 => oer_portable_mmio::Index::constant::<0>(),
+                    HalInitRegister::SlotMap1 => oer_portable_mmio::Index::constant::<1>(),
                 };
                 match lane {
                     0 => self
@@ -523,8 +523,8 @@ impl<C: oer_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> {
                 index_high,
             } => {
                 let register_index = match register {
-                    HalInitRegister::SlotMap0 => oer_mmio::Index::constant::<0>(),
-                    HalInitRegister::SlotMap1 => oer_mmio::Index::constant::<1>(),
+                    HalInitRegister::SlotMap0 => oer_portable_mmio::Index::constant::<0>(),
+                    HalInitRegister::SlotMap1 => oer_portable_mmio::Index::constant::<1>(),
                 };
                 match (lane, set_retained_index_low, index_high) {
                     (0, false, 0) => self

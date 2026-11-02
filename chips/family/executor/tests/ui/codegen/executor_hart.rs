@@ -1,11 +1,11 @@
 #[path = "__HART_BINDING__"]
 mod hart_binding;
 
-oer_espressif_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_parts!();
 
 macro_rules! table {
     ($hart:literal) => {
-        oer_espressif_interrupt_table::interrupt_table! {
+        oer_chips_family_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { executor: 1; peer_executor: 2; }

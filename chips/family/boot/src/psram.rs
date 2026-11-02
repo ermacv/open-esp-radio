@@ -38,7 +38,7 @@
 //! and `components/esp_hal_clock/esp32s31/include/hal/clk_tree_ll.h:200-208`
 //! (the memory PLL's power).
 
-use oer_time::Clock;
+use oer_portable_time::Clock;
 
 use crate::{
     Access, BootFailure, Busy,

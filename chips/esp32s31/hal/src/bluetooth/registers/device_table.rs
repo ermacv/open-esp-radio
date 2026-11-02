@@ -34,11 +34,11 @@ fn execute_device_table_publication(
     transaction.publish_first_entry(first_entry);
 }
 
-struct HardwareDeviceTableTransaction<'registers, B: oer_mmio::Placement> {
-    registers: &'registers mut oer_esp32s31_pac::bt_mac::BtmacBlePhyInit<B>,
+struct HardwareDeviceTableTransaction<'registers, B: oer_portable_mmio::Placement> {
+    registers: &'registers mut oer_chips_esp32s31_pac::bt_mac::BtmacBlePhyInit<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothDeviceTableTransaction
+impl<B: oer_portable_mmio::Placement> BluetoothDeviceTableTransaction
     for HardwareDeviceTableTransaction<'_, B>
 {
     fn publish_entry_count(&mut self, count: u8) {

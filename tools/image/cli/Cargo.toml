@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-image-cli"
+name = "oer-tools-image-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,26 +13,26 @@ name = "fw"
 path = "src/main.rs"
 
 [dependencies]
-oer-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
-oer-trace = { path = "../../../portable/trace" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics", features = ["render"] }
+oer-portable-trace = { path = "../../../portable/trace" }
 jiff = { version = "=0.2.37", default-features = false, features = ["std"] }
-oer-image-build = { path = "../build" }
-oer-image-bundle = { path = "../bundle" }
-oer-image-checks = { path = "../checks" }
-oer-analysis-elf = { path = "../../analysis/elf" }
-oer-image-esp-idf = { path = "../esp-idf" }
-oer-chip-profile = { path = "../../chip/profile" }
-oer-lab-arbiter = { path = "../../lab/arbiter" }
-oer-lab-client = { path = "../../lab/client" }
-oer-os-process = { path = "../../os/process" }
-oer-lab-model = { path = "../../lab/model" }
+oer-tools-image-build = { path = "../build" }
+oer-tools-image-bundle = { path = "../bundle" }
+oer-tools-image-checks = { path = "../checks" }
+oer-tools-analysis-elf = { path = "../../analysis/elf" }
+oer-tools-image-esp-idf = { path = "../esp-idf" }
+oer-tools-chip-profile = { path = "../../chip/profile" }
+oer-tools-lab-arbiter = { path = "../../lab/arbiter" }
+oer-tools-lab-client = { path = "../../lab/client" }
+oer-tools-os-process = { path = "../../os/process" }
+oer-tools-lab-model = { path = "../../lab/model" }
 serde_json = "1.0"
-oer-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
+oer-tools-os-command-tree = { path = "../../os/command-tree", features = ["clap"] }
 clap = { version = "=4.5.48", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"
-oer-espressif-facts = { path = "../../../chips/family/facts" }
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
 
 [lints]
 workspace = true

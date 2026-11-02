@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_testing_conformance::{
+use oer_protocols_ieee80211_testing_conformance::{
     self as conformance, BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot, MpduState,
 };
 
@@ -20,7 +20,7 @@ type RecordedBarrier = Rc<RefCell<Option<ModelBarrierTrace>>>;
 struct DuringPublication(
     Barrier,
     Option<RecordedBarrier>,
-    Rc<oer_time_virtual::VirtualClock>,
+    Rc<oer_portable_time_virtual::VirtualClock>,
 );
 
 fn held_snapshot<Id: SlotIdentity>(
@@ -40,7 +40,7 @@ impl Work for DuringPublication {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -107,7 +107,7 @@ impl Work for DuringPublication {
         let mut just_before_timeout = None;
         if matches!(self.0, Barrier::GateTimeout) {
             self.2
-                .advance(oer_time::Duration::from_micros(
+                .advance(oer_portable_time::Duration::from_micros(
                     MODEL_PUBLICATION_BOUND.as_micros() - 1,
                 ))
                 .unwrap();
@@ -117,7 +117,7 @@ impl Work for DuringPublication {
             }
             assert!(phase.held.events.is_empty());
             just_before_timeout = Some(held_snapshot(phase));
-            self.2.advance(oer_time::Duration::from_micros(1)).unwrap();
+            self.2.advance(oer_portable_time::Duration::from_micros(1)).unwrap();
             air.clock_advanced();
         } else {
             air.hold_completion(WmmAccessCategory::BestEffort, false);
@@ -128,7 +128,7 @@ impl Work for DuringPublication {
         else {
             panic!("published head returns first, as Sent")
         };
-        let oer_ieee80211_contracts_port::TerminalParts {
+        let oer_protocols_ieee80211_contracts_port::TerminalParts {
             ticket,
             outcome: completion,
             payload,
@@ -174,7 +174,7 @@ impl Work for DuringPublication {
         else {
             panic!("unpublished tail returns second, as Fresh")
         };
-        let oer_ieee80211_contracts_port::TerminalParts {
+        let oer_protocols_ieee80211_contracts_port::TerminalParts {
             ticket: tail,
             outcome: completion,
             payload,
@@ -287,7 +287,7 @@ impl Work for DuringPublication {
 }
 #[test]
 fn gate_waits_one_publication_and_returns_sent_for_retry_with_original_numbers() {
-    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let clock = Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_model(
         backend,
@@ -296,7 +296,7 @@ fn gate_waits_one_publication_and_returns_sent_for_retry_with_original_numbers()
 }
 #[test]
 fn ack_wins_while_gate_closes_and_barrier_follows_the_result() {
-    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let clock = Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_model(
         backend,
@@ -305,7 +305,7 @@ fn ack_wins_while_gate_closes_and_barrier_follows_the_result() {
 }
 #[test]
 fn missing_result_ends_at_publication_bound_without_finishing_the_plan() {
-    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let clock = Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_model(
         backend,
@@ -314,7 +314,7 @@ fn missing_result_ends_at_publication_bound_without_finishing_the_plan() {
 }
 #[test]
 fn key_removal_waits_for_the_publication_then_returns_sent_without_retry() {
-    let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+    let clock = Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new());
     let (backend, _) = backend_on(clock.clone());
     let _port_end = block_on(run_model(
         backend,
@@ -336,7 +336,7 @@ impl conformance::BarrierHarness for ModelBarrierHarness {
             BarrierCase::GateTimeout => Barrier::GateTimeout,
             BarrierCase::RemoveKey => Barrier::RemoveKey,
         };
-        let clock = Rc::new(oer_time_virtual::VirtualClock::<8>::new());
+        let clock = Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new());
         let (backend, _) = backend_on(clock.clone());
         let recorded = Rc::new(RefCell::new(None));
         let _port_end = run_model(

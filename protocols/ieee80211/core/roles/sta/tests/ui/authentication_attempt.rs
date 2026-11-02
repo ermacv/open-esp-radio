@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_core_upper_mac::sequence::SequenceCounter;
-use oer_ieee80211_core_roles_sta::join::authentication::{StaAuthenticationEvent, StaAuthenticationRuntime};
+use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_core_roles_sta::join::authentication::{StaAuthenticationEvent, StaAuthenticationRuntime};
 
 pub fn retry(ready: StaAuthenticationRuntime, sequence: &mut SequenceCounter) {
     let (active, _) = ready.begin_attempt(sequence);

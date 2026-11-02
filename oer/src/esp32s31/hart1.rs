@@ -16,8 +16,8 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use oer_embassy_time::EmbassyClock;
-use oer_esp32s31_hal::{
+use oer_portable_embassy_time::EmbassyClock;
+use oer_chips_esp32s31_hal::{
     cores::{Cores, LaunchPermit},
     peripherals::{
         reset_cause::ResetCauses,
@@ -26,10 +26,10 @@ use oer_esp32s31_hal::{
     },
     platform::{Hart1Grant, Port},
 };
-use oer_espressif_boot::wait::{BootBudget, BootDeadline, BootWait};
-use oer_espressif_executor::{AlarmGrant, Executor, Root, TimeDriverReady};
-use oer_espressif_interrupt_table::signal::{FromPeerHart, IrqSignal, PeerNotify};
-use oer_espressif_staged_runtime::{Mailbox, Running, SecondaryHandoff};
+use oer_chips_family_boot::wait::{BootBudget, BootDeadline, BootWait};
+use oer_chips_family_executor::{AlarmGrant, Executor, Root, TimeDriverReady};
+use oer_chips_family_interrupt_table::signal::{FromPeerHart, IrqSignal, PeerNotify};
+use oer_chips_family_staged_runtime::{Mailbox, Running, SecondaryHandoff};
 
 use super::{
     Error, Esp32s31, Hart1AlarmToken, Hart1Boot, Hart1Peripherals, Hart1Started, Hart1WakeToken,
@@ -41,7 +41,7 @@ pub(crate) type AppExecutor = Executor<Esp32s31, 0>;
 /// Hart 1's executor.
 pub(crate) type Hart1Executor = Executor<Esp32s31, 1>;
 
-oer_espressif_executor::tasks! {
+oer_chips_family_executor::tasks! {
     /// Hart 1's executor's tasks: none of the library's; the second boot's
     /// IP service and future are its roots.
     pub Hart1Tasks: Executor<Esp32s31, 1> {
@@ -49,7 +49,7 @@ oer_espressif_executor::tasks! {
     }
 }
 
-oer_espressif_staged_runtime::placed_static! {
+oer_chips_family_staged_runtime::placed_static! {
     static APPLICATION_SIGNAL: IrqSignal<AppExecutor> = IrqSignal::new::<FromPeerHart<Hart1Executor, Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
     static SECOND_SIGNAL: IrqSignal<Hart1Executor> = IrqSignal::new::<FromPeerHart<AppExecutor, WakeToken>, Hart1WakeToken>(), in critical_data "hart_peers";
     /// The application's future on hart 0: the IP status and its channel
@@ -67,7 +67,7 @@ static BOOTED: AtomicBool = AtomicBool::new(false);
 /// service in place. A bound, not a measurement: the boot's work is
 /// constructors without waits.
 const BOOTED_WAIT: BootWait = const {
-    match BootWait::new("hart1-booted", oer_time::Duration::from_millis(50)) {
+    match BootWait::new("hart1-booted", oer_portable_time::Duration::from_millis(50)) {
         Ok(wait) => wait,
         Err(_) => panic!("a boot wait has a nonzero bound"),
     }
@@ -76,9 +76,9 @@ const BOOTED_WAIT: BootWait = const {
 /// The deadline of the wait for hart 1's second boot, below the RTC
 /// watchdog the runtime armed.
 const BOOTED_BUDGET: BootBudget = match BootBudget::below(
-    oer_time::Duration::from_millis(100),
-    oer_time::Duration::from_millis(
-        oer_esp32s31_hal::peripherals::watchdog::RTC_WATCHDOG_BUDGET_MS,
+    oer_portable_time::Duration::from_millis(100),
+    oer_portable_time::Duration::from_millis(
+        oer_chips_esp32s31_hal::peripherals::watchdog::RTC_WATCHDOG_BUDGET_MS,
     ),
 ) {
     Some(budget) => budget,
@@ -123,11 +123,11 @@ pub(crate) fn launch(
 ) -> Running<Port, 1> {
     let (mut ready, comparator) = timers;
     let alarm =
-        oer_espressif_executor::grant::<Esp32s31, 1, _>(&mut ready, launch.alarm, comparator);
+        oer_chips_family_executor::grant::<Esp32s31, 1, _>(&mut ready, launch.alarm, comparator);
     let Ok(Some(mut cores)) = Cores::take() else {
-        fail(oer_diagnostics::name!("hart1-cores"; 32));
+        fail(oer_portable_diagnostics::name!("hart1-cores"; 32));
     };
-    let running = oer_esp32s31_compose::secondary::launch_hart1(
+    let running = oer_chips_esp32s31_compose::secondary::launch_hart1(
         &mut cores,
         launch.permit,
         launch.causes,
@@ -147,7 +147,7 @@ pub(crate) fn launch(
         .poll(BOOTED_WAIT, || BOOTED.load(Ordering::Acquire).then_some(()))
         .is_err()
     {
-        fail(oer_diagnostics::name!("hart1-boot"; 32));
+        fail(oer_portable_diagnostics::name!("hart1-boot"; 32));
     }
     running
 }

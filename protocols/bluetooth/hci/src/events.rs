@@ -6,11 +6,11 @@
 //! the shutdown subevent and its observation bytes are the controller shutdown dialect.
 
 use bt_hci::{PacketKind, cmd::Opcode, param::Status};
-use oer_wire::{U8, U16};
+use oer_portable_wire::{U8, U16};
 
 use crate::HciControllerResponse;
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     struct HardwareErrorFields[3] (little) {
         /// Core 6.0, Vol 4, Part E, 5.4.4 and 7.7.16: event code 0x10.
         code, with_code: (u8) = 0..8;
@@ -47,7 +47,7 @@ impl HciControllerResponse for HardwareErrorEvent {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     struct CommandCompleteStatusFields[6] (little) {
         /// Core 6.0, Vol 4, Part E, 5.4.4 and 7.7.14: event code 0x0e.
         code, with_code: (u8) = 0..8;
@@ -89,7 +89,7 @@ impl HciControllerResponse for CommandCompleteStatusEvent {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     struct ShutdownObservationFields[5] (little) {
         /// Core 6.0, Vol 4, Part E, 5.4.4: vendor event code 0xff.
         code, with_code: (u8) = 0..8;
@@ -126,7 +126,7 @@ impl VendorShutdownObservationEvent {
         let [_, _, _, _, _] = bytes else {
             return None;
         };
-        let bytes = oer_wire::Reader::new(bytes).read::<5>().ok()?;
+        let bytes = oer_portable_wire::Reader::new(bytes).read::<5>().ok()?;
         let fields = ShutdownObservationFields::from_bytes(bytes);
         if fields.code().get() != 0xff || fields.length().get() != 3 || fields.subevent().get() != 1
         {

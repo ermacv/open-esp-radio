@@ -1,5 +1,5 @@
 [package]
-name = "oer-tool-analysis-cli"
+name = "oer-tools-analysis-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,13 +13,13 @@ name = "blobray"
 path = "src/main.rs"
 
 [dependencies]
-oer-espressif-facts = { path = "../../../chips/family/facts" }
-oer-pins-artifacts = { path = "../../pins/artifacts" }
-oer-analysis-riscv-lift = { path = "../riscv-lift" }
-oer-analysis-blobray-riscv = { path = "../blobray-riscv" }
-oer-analysis-blobray-application = { path = "../blobray-application" }
-oer-analysis-blobray-domain = { path = "../blobray-domain" }
-oer-analysis-riscv-model = { path = "../riscv-model" }
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
+oer-tools-pins-artifacts = { path = "../../pins/artifacts" }
+oer-tools-analysis-riscv-lift = { path = "../riscv-lift" }
+oer-tools-analysis-blobray-riscv = { path = "../blobray-riscv" }
+oer-tools-analysis-blobray-application = { path = "../blobray-application" }
+oer-tools-analysis-blobray-domain = { path = "../blobray-domain" }
+oer-tools-analysis-riscv-model = { path = "../riscv-model" }
 clap = { version = "=4.5.48", features = ["derive"] }
 serde_json = "=1.0.151"
 serde = { version = "=1.0.229", features = ["derive"] }

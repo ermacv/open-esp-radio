@@ -19,8 +19,8 @@ use std::{
     net::Ipv4Addr,
 };
 
-use oer_lab_arbiter::claims::Claim;
-use oer_lab_arbiter::readiness::Readiness;
+use oer_tools_lab_arbiter::claims::Claim;
+use oer_tools_lab_arbiter::readiness::Readiness;
 use serde::{Deserialize, Serialize};
 
 /// The protocol version; another one is refused.
@@ -130,7 +130,7 @@ pub struct LeaseRequest {
     #[serde(default)]
     pub maintenance: Option<String>,
     /// Work that can stop at a boundary and queue again: after
-    /// [`oer_lab_arbiter::balance::MIN_SLICE`] it is asked to yield to a
+    /// [`oer_tools_lab_arbiter::balance::MIN_SLICE`] it is asked to yield to a
     /// waiter whose owner's balance is higher.
     #[serde(default)]
     pub divisible: bool,
@@ -186,13 +186,13 @@ pub enum Request {
     RecordFlash {
         owner: String,
         mac: String,
-        image: oer_lab_arbiter::journal::ImageIdentity,
+        image: oer_tools_lab_arbiter::journal::ImageIdentity,
     },
     /// Journal `event` of board `device` by `owner`.
     Record {
         owner: String,
         device: Option<String>,
-        event: oer_lab_arbiter::journal::BoardEventKind,
+        event: oer_tools_lab_arbiter::journal::BoardEventKind,
     },
     /// End held lease `lease` for `reason`, on behalf of `by`.
     Preempt {
@@ -222,7 +222,7 @@ pub enum Operation {
     Flash {
         board: String,
         bundle: String,
-        image: oer_lab_arbiter::journal::ImageIdentity,
+        image: oer_tools_lab_arbiter::journal::ImageIdentity,
         owner: String,
         via: FlashVia,
         skip_carried: bool,
@@ -231,7 +231,7 @@ pub enum Operation {
     /// file lists when none. Result: the ROM's reset line.
     Reset {
         board: String,
-        path: Option<oer_lab_model::rom::ResetPath>,
+        path: Option<oer_tools_lab_model::rom::ResetPath>,
     },
     /// `board`'s console as the operation's stream, opened without a reset,
     /// or with a reset into its application when `reset`, until the client
@@ -250,7 +250,7 @@ pub enum Operation {
     Router { request: RouterOperation },
     /// Probe the equipment the stand reaches over SSH (the lab router, the
     /// air observer). The lease must hold the router. Result: the
-    /// `oer_lab_router::fixtures::Fixture` list.
+    /// `oer_tools_lab_router::fixtures::Fixture` list.
     ProbeRouter,
     /// The chip of every board attached to the host, its ROM asked when no
     /// earlier answer is known; the lease must hold the whole stand.
@@ -333,7 +333,7 @@ pub enum Reply {
         status: Status,
     },
     Report {
-        status: Box<oer_lab_arbiter::Status>,
+        status: Box<oer_tools_lab_arbiter::Status>,
     },
     /// The request was served; `changed` when it changed anything.
     Done {
@@ -342,7 +342,7 @@ pub enum Reply {
     Inventory {
         boards: Vec<AttachedBoard>,
     },
-    /// `uhubctl`'s report, as it printed it (`oer_lab_model::hubs::parse`).
+    /// `uhubctl`'s report, as it printed it (`oer_tools_lab_model::hubs::parse`).
     Hubs {
         report: String,
     },

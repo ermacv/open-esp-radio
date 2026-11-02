@@ -6,7 +6,7 @@
 //! embedded in channel selection, calibration and tracking does. It publishes
 //! no temperature observation; callers own that state.
 
-use oer_esp32s31_hal::owner::SharedPhyAccess;
+use oer_chips_esp32s31_hal::owner::SharedPhyAccess;
 
 use crate::{
     analog::temperature::{
@@ -20,7 +20,7 @@ use crate::{
 /// Run one complete temperature transition. The outer error is an executor
 /// failure; the inner one is the transition's own fail-closed outcome.
 pub async fn sample<D: PhyShortDelay>(
-    timer: &impl oer_cooperate::CooperativeTimer,
+    timer: &impl oer_portable_cooperate::CooperativeTimer,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<Result<PhyTemperatureOutcome, PhyTemperatureFailure>, PhyTargetPortError> {
     let mut transition = PhyTemperatureTransition::new();

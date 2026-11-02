@@ -1,6 +1,6 @@
 //! Register operations and absorbing terminal custody of the whole arena.
 
-use oer_espressif_bluetooth_engine::port::OutputTaskPort;
+use oer_chips_family_bluetooth_engine::port::OutputTaskPort;
 
 use super::{ControllerMemory, Engine, scheduler};
 use crate::bluetooth::{self, ControllerHalBorrow};

@@ -2,7 +2,7 @@
 //! Algorithm #2 capability and the matching `SCAN_RSP`, and the directed
 //! `ADV_DIRECT_IND`.
 
-use oer_wire::{Reader, U8};
+use oer_portable_wire::{Reader, U8};
 
 use crate::{
     LE_DEVICE_ADDRESS_LENGTH, LeDeviceAddress, LeDeviceAddressKind,

@@ -1,7 +1,7 @@
 error[E0603]: struct `BlePhyEngineCpuOwned` is private
   --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:33:42
    |
-33 | use oer_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
+33 | use oer_chips_esp32s31_hal::bluetooth::engine::BlePhyEngineCpuOwned; // ui-error: E0603
    |                                          ^^^^^^^^^^^^^^^^^^^^ private struct
    |
 note: the struct `BlePhyEngineCpuOwned` is defined here
@@ -13,7 +13,7 @@ note: the struct `BlePhyEngineCpuOwned` is defined here
 error[E0603]: struct `DirectionFindingWorkspaceCpuOwned` is private
   --> tests/ui/bluetooth_storage_proofs_are_unforgeable.rs:35:42
    |
-35 | use oer_esp32s31_hal::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
+35 | use oer_chips_esp32s31_hal::bluetooth::engine::DirectionFindingWorkspaceCpuOwned; // ui-error: E0603
    |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private struct
    |
 note: the struct `DirectionFindingWorkspaceCpuOwned` is defined here

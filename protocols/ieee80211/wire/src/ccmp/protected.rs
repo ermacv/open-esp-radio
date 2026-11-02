@@ -46,7 +46,7 @@ pub enum ProtectedMpduError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CcmpAad {
     bytes: [u8; 30],
-    length: oer_wire::PrefixLength<30>,
+    length: oer_portable_wire::PrefixLength<30>,
 }
 
 impl CcmpAad {
@@ -157,7 +157,7 @@ impl<'a> ProtectedMpdu<'a> {
         let address4 = self.header.address4();
         let qos = self.masked_qos(spp).map(|qos| qos.to_bytes());
         let mut bytes = [0; 30];
-        let mut writer = oer_wire::Writer::new(&mut bytes);
+        let mut writer = oer_portable_wire::Writer::new(&mut bytes);
         for part in [
             fields.to_bytes().as_slice(),
             &self.header.receiver(),
@@ -173,7 +173,7 @@ impl<'a> ProtectedMpdu<'a> {
         ] {
             writer.write(part).ok()?;
         }
-        let length = oer_wire::PrefixLength::new(writer.written())?;
+        let length = oer_portable_wire::PrefixLength::new(writer.written())?;
         Some(CcmpAad { bytes, length })
     }
 
@@ -202,7 +202,7 @@ impl<'a> ProtectedMpdu<'a> {
     }
 }
 
-oer_wire::bitfield! {
+oer_portable_wire::bitfield! {
     /// The CCM Nonce Flags octet: the priority (the TID of QoS data), the
     /// management bit, and with SPP A-MSDU the A-MSDU Present bit.
     /// SOURCE: IEEE Std 802.11-2020, 12.5.3.3.4 (Construct CCM nonce,

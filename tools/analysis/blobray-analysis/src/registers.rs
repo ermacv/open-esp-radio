@@ -1,7 +1,7 @@
 //! Expression observations and bounded CFG bit dataflow, never physical field inference.
 use crate::navigation::Facts;
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 mod arguments;
 mod domain;
 mod provenance;
@@ -1791,10 +1791,10 @@ impl<'f, 'a, 'm> ReadUsesEvaluator<'f, 'a, 'm> {
 }
 
 fn opaque_read_registers(bytes: &[u8], operation: SemanticOp) -> u32 {
-    use oer_analysis_riscv_decode::{
+    use oer_tools_analysis_riscv_decode::{
         Extension, Extensions, Float, Instruction, Operand as IsaOperand, Register,
     };
-    match oer_analysis_riscv_decode::decode(bytes, Extensions::ALL)
+    match oer_tools_analysis_riscv_decode::decode(bytes, Extensions::ALL)
         .map(|(instruction, _)| instruction)
     {
         Some(Instruction::Extension(Extension::Csr {

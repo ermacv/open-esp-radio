@@ -2,7 +2,7 @@ error[E0080]: evaluation panicked: frame length exceeds capacity
  --> $RUST/core/src/panic.rs
   |
   |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_memory::FrameLen::<4>::constant::<5>::{constant#0}` failed here
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_portable_memory::FrameLen::<4>::constant::<5>::{constant#0}` failed here
   |
  ::: src/frame_len.rs
   |

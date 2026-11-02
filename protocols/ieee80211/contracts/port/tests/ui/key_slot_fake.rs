@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::Station;
-use oer_ieee80211_contracts_port::association::{AssociationPool, AssociationSlot, PairwiseKeySlot};
+use oer_protocols_ieee80211_contracts_port::Station;
+use oer_protocols_ieee80211_contracts_port::association::{AssociationPool, AssociationSlot, PairwiseKeySlot};
 
 /// A slot a backend would declare to claim a key pool it does not mint.
 pub struct Declared;

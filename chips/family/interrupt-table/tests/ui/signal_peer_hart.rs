@@ -1,13 +1,13 @@
-use oer_espressif_interrupt_table::signal::{
+use oer_chips_family_interrupt_table::signal::{
     FromPeerHart, IrqSignal,
     host::{Deferred, Foreign},
 };
-oer_espressif_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_parts!();
 
 pub fn on_wake(_: &mut AbsentIrq) {}
 macro_rules! table {
     ($hart:literal) => {
-        oer_espressif_interrupt_table::interrupt_table! {
+        oer_chips_family_interrupt_table::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { app_wake: 1; receiver: 2; }

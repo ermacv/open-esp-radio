@@ -115,7 +115,7 @@ _runtime_start:
 
 "#,
     boot_hart = const crate::BOOT_HART,
-    mtvt = const oer_riscv::clic::MTVT,
+    mtvt = const oer_portable_riscv::clic::MTVT,
 );
 
 // A core with the F extension (`riscv32imafc`) starts its task code with the
@@ -139,7 +139,7 @@ _runtime_enable_fpu:
     ret
     .size _runtime_enable_fpu, . - _runtime_enable_fpu
 "#,
-    fs = const oer_riscv::machine::status::FS_MASK,
+    fs = const oer_portable_riscv::machine::status::FS_MASK,
 );
 
 #[cfg(not(target_feature = "f"))]
@@ -246,7 +246,7 @@ _runtime_start_h\hart:
 "#,
     include_str!(concat!(env!("OUT_DIR"), "/secondary.s")),
     handshake = sym crate::secondary::HANDSHAKE,
-    mie = const oer_riscv::machine::status::MIE,
+    mie = const oer_portable_riscv::machine::status::MIE,
     entered = const core::mem::offset_of!(crate::secondary::Handshake, entered),
     ack = const core::mem::offset_of!(crate::secondary::Handshake, ack),
     ready = const core::mem::offset_of!(crate::secondary::Handshake, ready),

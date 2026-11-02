@@ -2,7 +2,7 @@
 //! Times wrap modulo 2^32, like the trace record's microsecond field. Collectors
 //! sample more often than half that period (about 35 minutes). Work spans include
 //! preemption; only idle spans (bracketed with interrupts masked) measure CPU idle.
-use oer_trace::{Channel, Domain, Event, Kind};
+use oer_portable_trace::{Channel, Domain, Event, Kind};
 pub mod timer;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -79,7 +79,7 @@ impl core::fmt::Display for Activity {
         )
     }
 }
-oer_trace::event_set!(pub ExecutorEvents: Activity);
+oer_portable_trace::event_set!(pub ExecutorEvents: Activity);
 
 #[cfg(test)]
 mod tests {

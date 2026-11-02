@@ -1,7 +1,7 @@
 //! EtherType values the IEEE 802.11 side itself names after an RFC 1042
 //! LLC/SNAP header (IEEE 802.11-2020 5.1.4 and 9.3.2.1). Each value is the
 //! big-endian number of its registry entry; the values of the network side
-//! (IP, ARP, VLAN) belong to `oer-network-wire`.
+//! (IP, ARP, VLAN) belong to `oer-protocols-network-wire`.
 
 /// EAP over LAN: IEEE 802.1X port access entity frames, which carry the
 /// RSN 4-way and group key handshakes.

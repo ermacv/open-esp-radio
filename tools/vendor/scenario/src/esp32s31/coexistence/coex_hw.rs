@@ -14,7 +14,7 @@ const EVENTS: &[u32] = &events::<49>(None);
 const EVENTS_AND_INVALID: &[u32] = &events::<50>(None);
 /// The PHY grant-protect event: vendor `coex_core_timer_idx_get` maps it to
 /// timer 5, which production reserves for the radio arbiter's
-/// `oer_esp32s31_hal::coex::PhyGrantProtect` instead of the driver's policy
+/// `oer_chips_esp32s31_hal::coex::PhyGrantProtect` instead of the driver's policy
 /// timers. The driver leaves compare every other event.
 const GRANT_PROTECT_EVENT: u32 = 48;
 /// The driver's events and the first event beyond them.

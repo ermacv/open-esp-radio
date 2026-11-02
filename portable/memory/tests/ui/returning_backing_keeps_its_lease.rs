@@ -1,5 +1,5 @@
 #![no_std]
-use oer_memory::{DmaIndexReturn, IndexedStableDmaLease, ReturningStableDmaBacking};
+use oer_portable_memory::{DmaIndexReturn, IndexedStableDmaLease, ReturningStableDmaBacking};
 pub fn keep<B: IndexedStableDmaLease, R: DmaIndexReturn>(
     mut owner: ReturningStableDmaBacking<B, R>,
     replacement: B,

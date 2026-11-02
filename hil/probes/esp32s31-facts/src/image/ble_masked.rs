@@ -3,8 +3,8 @@
 use super::{Index, Session, ble_wave2::mac, emit, irq_observer, pac};
 
 fn settle() {
-    let start = oer_riscv::cycle32();
-    while oer_riscv::cycle32().wrapping_sub(start) < 4096 {}
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < 4096 {}
 }
 
 fn discard(s: &mut Session<'_>, cause: u32) {
@@ -18,7 +18,7 @@ fn discard(s: &mut Session<'_>, cause: u32) {
             .bank
             .discard_bluetooth_controller_time_overflow_indication(),
     }
-    oer_riscv::fence();
+    oer_portable_riscv::fence();
 }
 
 fn state(s: &Session<'_>, tag: u32) {
@@ -56,7 +56,7 @@ fn state(s: &Session<'_>, tag: u32) {
         tag + 2,
         irq_observer::pending(s),
         ie,
-        u32::from(oer_riscv::take_interrupts()),
+        u32::from(oer_portable_riscv::take_interrupts()),
     );
     let w = &s.wake_status;
     let r = w.read_int_raw();

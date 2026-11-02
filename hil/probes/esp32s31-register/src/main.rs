@@ -2,7 +2,7 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 #[cfg(target_arch = "riscv32")]
-extern crate oer_firmware_probes_esp32s31_register as _;
+extern crate oer_hil_probes_esp32s31_register as _;
 #[cfg(target_arch = "riscv32")]
 include!(concat!(env!("OUT_DIR"), "/probe_catalog.rs"));
 

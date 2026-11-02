@@ -115,24 +115,24 @@ pub use control::{
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
 use core::marker::PhantomData;
-use oer_events::{EventSink, report};
-use oer_ieee80211_core_roles_sta::machine::TxRefusal;
+use oer_portable_events::{EventSink, report};
+use oer_protocols_ieee80211_core_roles_sta::machine::TxRefusal;
 
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
     LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
     PhaseTypes, PoolMpdu, PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu,
     RxBuffer, StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu,
     TxProtection, TxSource,
 };
-use oer_ieee80211_core_arbiter::{
+use oer_protocols_ieee80211_core_arbiter::{
     Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice, NoReservation, RetiredArbiter, RetuneRefused,
 };
-use oer_ieee80211_core_roles_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey};
-use oer_ieee80211_core_roles_sta::{
+use oer_protocols_ieee80211_core_roles_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey};
+use oer_protocols_ieee80211_core_roles_sta::{
     data,
     data::{
         DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame,
@@ -143,16 +143,16 @@ use oer_ieee80211_core_roles_sta::{
         StaTokens, StaTraffic, StaTransmit, StaTxContext, Station,
     },
 };
-use oer_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
-use oer_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
-use oer_network_port::LentFrame;
-use oer_radio_port::Slot;
-use oer_radio_port::{
+use oer_protocols_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
+use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
+use oer_portable_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
+use oer_protocols_network_port::LentFrame;
+use oer_protocols_radio_port::Slot;
+use oer_protocols_radio_port::{
     DisableFailed, Disabled, Enabled, Ended, EventEnd, EventsLost, FailStopRequested, Failed,
     Owner, PoisonedOwner, PortBackend,
 };
-use oer_time::{Instant, Timer};
+use oer_portable_time::{Instant, Timer};
 
 /// The composition's mapping from its concrete backend to station resources.
 /// This is a mapping rather than a backend supertrait because orphan rules and
@@ -163,11 +163,11 @@ pub trait StationPort: Sized {
     /// Capability family shared by the backend and portable machines.
     type Caps: Ieee80211Capabilities;
     /// Nominal identity of this backend's registered slot.
-    type SlotId: oer_radio_port::SlotIdentity;
+    type SlotId: oer_protocols_radio_port::SlotIdentity;
     /// Public phase/resource family under each separate body loan.
     type Types<'id>: PhaseTypes<
             'id,
-            StationConfigureContext = oer_ieee80211_core_roles_sta::machine::StaConfigurationContext<
+            StationConfigureContext = oer_protocols_ieee80211_core_roles_sta::machine::StaConfigurationContext<
                 'id,
                 <Self::Types<'id> as PhaseTypes<'id>>::EpochPath,
             >,
@@ -175,8 +175,8 @@ pub trait StationPort: Sized {
             TxBody = core::convert::Infallible,
             LentRx = Self::LentRx,
             Context = (),
-            EpochPath: oer_radio_port::PoolPath<Identity = Self::SlotId>,
-            TicketPath: oer_radio_port::PoolPath<Identity = Self::SlotId>,
+            EpochPath: oer_protocols_radio_port::PoolPath<Identity = Self::SlotId>,
+            TicketPath: oer_protocols_radio_port::PoolPath<Identity = Self::SlotId>,
         > + TxBufferPool<'id, Self::Small>
         + TxBufferPool<'id, Self::Large>
     where
@@ -185,7 +185,7 @@ pub trait StationPort: Sized {
         Self::SlotId: 'id;
     /// A received buffer the backend lends to the network, the same in
     /// every install.
-    type LentRx: oer_ieee80211_contracts_port::LentRxBuffer;
+    type LentRx: oer_protocols_ieee80211_contracts_port::LentRxBuffer;
     /// Fixed terminal custody from the backend's capacity layout.
     type TerminalStorage<T>: TerminalStorage<T>;
     /// The station's transmit contexts, one place per transmit ticket of
@@ -269,19 +269,19 @@ pub enum TxContext<
     'id,
     K,
     C,
-    Path: oer_radio_port::PoolPath = oer_radio_port::Root<oer_radio_port::LocalId<'id>>,
+    Path: oer_protocols_radio_port::PoolPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     /// A station protocol operation, including its connection epoch and purpose.
     Station(StaTxContext<'id, Path>),
     /// An MSDU operation, including its original link, TID and queue order.
-    Data(DataTxContext<'id, K, C, oer_ieee80211_core_roles_sta::data::AcPermit, Path>),
+    Data(DataTxContext<'id, K, C, oer_protocols_ieee80211_core_roles_sta::data::AcPermit, Path>),
     /// An aggregate of a TID's MSDUs, each member's description in order.
     DataAggregate(
-        oer_ieee80211_core_roles_sta::data::DataAggregateContext<
+        oer_protocols_ieee80211_core_roles_sta::data::DataAggregateContext<
             'id,
             K,
             C,
-            oer_ieee80211_core_roles_sta::data::AcPermit,
+            oer_protocols_ieee80211_core_roles_sta::data::AcPermit,
             Path,
         >,
     ),
@@ -437,7 +437,7 @@ type DataContext<'id, B> = DataTxContext<
     'id,
     <B as StationPort>::Caps,
     <B as StationPort>::Large,
-    oer_ieee80211_core_roles_sta::data::AcPermit,
+    oer_protocols_ieee80211_core_roles_sta::data::AcPermit,
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
 >;
 
@@ -459,7 +459,7 @@ pub type PortStation<'id, B, C, const GROUPS: usize = 2> = Station<
 
 /// The terminal bank of the service's station on the port `B`.
 pub type PortRetiredStation<'id, B, C, const GROUPS: usize = 2> =
-    oer_ieee80211_core_roles_sta::machine::RetiredStation<
+    oer_protocols_ieee80211_core_roles_sta::machine::RetiredStation<
         'id,
         PortStaTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small, GROUPS>,
         <B as StationPort>::Caps,
@@ -481,7 +481,7 @@ type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
 
 /// The most data buffers a station service's data machine holds: two
 /// aggregates' worth of MPDUs, one on the air and one waiting.
-pub const DATA_BUFFERS: usize = 2 * oer_ieee80211_core_roles_sta::data::MAX_AGGREGATE;
+pub const DATA_BUFFERS: usize = 2 * oer_protocols_ieee80211_core_roles_sta::data::MAX_AGGREGATE;
 
 /// The data machine of the service on the port `B`.
 pub type PortData<'id, B> = StaData<
@@ -495,7 +495,7 @@ pub type PortData<'id, B> = StaData<
 pub type PortArbiter<'id, B> = Arbiter<
     'id,
     <B as StationPort>::Caps,
-    oer_ieee80211_core_arbiter::NoReservation,
+    oer_protocols_ieee80211_core_arbiter::NoReservation,
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::GatePath,
 >;
 
@@ -675,18 +675,18 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 ///
 /// ```compile_fail,E0308
 /// use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
-/// use oer_ieee80211_runtime::station::{
+/// use oer_protocols_ieee80211_runtime::station::{
 ///     Control, ControlCommand, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_ieee80211_runtime::station::Received;
-/// use oer_ieee80211_core_roles_sta::data::TxMsdu;
-/// use oer_memory::WakingSpscQueue;
+/// use oer_protocols_ieee80211_runtime::station::Received;
+/// use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
+/// use oer_portable_memory::WakingSpscQueue;
 /// let commands = Channel::<NoopRawMutex, ServiceCommand<()>, 1>::new();
-/// let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (_, transmit) = tx.split(TxMsdu::empty);
 /// let (receive, _) = rx.split();
-/// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
+/// let mut copies = WakingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, { oer_protocols_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
 /// let (receive_copied, _) = copies.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let mut control_queue = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
@@ -695,32 +695,32 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// let (_control, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
 ///     commands: commands.dyn_receiver(), transmit, receive, receive_copied, output: &mut output, control,
-///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
+///     network: &oer_protocols_ieee80211_runtime::station::NoNetwork, stop: oer_protocols_ieee80211_runtime::station::StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
 /// };
 /// ```
 ///
 /// The composition moves one receiver into the service and retains its sole sender:
 ///
 /// ```
-/// use oer_ieee80211_runtime::station::{
+/// use oer_protocols_ieee80211_runtime::station::{
 ///     Control, ControlCommand, Received, State, ServiceCommand, ServiceIo, ServiceOutput,
 /// };
-/// use oer_ieee80211_core_roles_sta::data::TxMsdu;
-/// use oer_memory::WakingSpscQueue;
+/// use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
+/// use oer_portable_memory::WakingSpscQueue;
 /// let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-/// let mut tx = oer_memory::WakingSlotQueue::<TxMsdu, 1>::new();
+/// let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1>::new();
 /// let mut rx = WakingSpscQueue::<Received<()>, 1>::new();
 /// let (application, commands) = commands.split();
 /// let (_, transmit) = tx.split(TxMsdu::empty);
 /// let (receive, _) = rx.split();
-/// let mut copies = WakingSpscQueue::<oer_ieee80211_core_roles_sta::data::EthernetFrame, { oer_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
+/// let mut copies = WakingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, { oer_protocols_ieee80211_runtime::station::RX_COPIED_DEPTH }>::new();
 /// let (receive_copied, _) = copies.split();
 /// let mut output = |_: ServiceOutput<()>| {};
 /// let state = State::new();
 /// let (mut application, control) = Control::new(application, &state).unwrap();
 /// let io = ServiceIo {
 ///     commands, transmit, receive, receive_copied, output: &mut output, control,
-///     network: &oer_ieee80211_runtime::station::NoNetwork, stop: oer_ieee80211_runtime::station::StopPolicy { drain: oer_time::Duration::from_secs(1) },
+///     network: &oer_protocols_ieee80211_runtime::station::NoNetwork, stop: oer_protocols_ieee80211_runtime::station::StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
 /// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
@@ -829,7 +829,7 @@ impl<'p, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> ServiceStop<'p, '
     fn init_end<'out>(
         self,
         output: &'out mut core::mem::MaybeUninit<ServiceEnd<'p, 'id, B>>,
-        custody: oer_memory::Placed<'_, TerminalCustody<'id, B>>,
+        custody: oer_portable_memory::Placed<'_, TerminalCustody<'id, B>>,
     ) -> &'out mut ServiceEnd<'p, 'id, B> {
         let end = match self {
             Self::Stopped(owner) => output.write(ServiceEnd::Stopped(owner)),
@@ -932,8 +932,8 @@ pub struct RestartedService<
 > {
     pub owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
     pub service: Runner<'id, B, C, S, GROUPS, O>,
-    pub deferred_eapol: oer_ieee80211_core_roles_sta::machine::DeferredEapol,
-    pub notice: Option<oer_ieee80211_core_roles_sta::machine::StaNotice>,
+    pub deferred_eapol: oer_protocols_ieee80211_core_roles_sta::machine::DeferredEapol,
+    pub notice: Option<oer_protocols_ieee80211_core_roles_sta::machine::StaNotice>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1009,7 +1009,7 @@ impl<
     )]
     pub fn restart(
         self,
-        channel: oer_ieee80211_contracts_port::SupportedChannel<B::Caps>,
+        channel: oer_protocols_ieee80211_contracts_port::SupportedChannel<B::Caps>,
     ) -> Restart<'p, 'id, B, C, S, GROUPS, O> {
         let Self {
             mut owner,
@@ -1034,10 +1034,10 @@ impl<
                     retired._places = missing.places;
                     return Err(RestartFailed {
                         reason: match missing.missing {
-                            oer_ieee80211_core_arbiter::MissingArbiterReturn::GateTerminal => {
+                            oer_protocols_ieee80211_core_arbiter::MissingArbiterReturn::GateTerminal => {
                                 RestartFailure::MissingGateTerminal
                             }
-                            oer_ieee80211_core_arbiter::MissingArbiterReturn::StationPlaces => {
+                            oer_protocols_ieee80211_core_arbiter::MissingArbiterReturn::StationPlaces => {
                                 RestartFailure::MissingStationPlaces
                             }
                         },
@@ -1107,7 +1107,7 @@ pub struct RetiredService<
     O: StationEvents = (),
 > {
     pub station: PortRetiredStation<'id, B, C, GROUPS>,
-    pub data: oer_ieee80211_core_roles_sta::data::RetiredData<
+    pub data: oer_protocols_ieee80211_core_roles_sta::data::RetiredData<
         'id,
         PortDataTokens<'id, B::Types<'id>, B::Large>,
         B::Caps,
@@ -1116,14 +1116,14 @@ pub struct RetiredService<
     pub rates: S,
     /// The composition's event sink, which a restart carries on.
     events: O,
-    _places: oer_ieee80211_core_arbiter::StationPlaceReturns<
+    _places: oer_protocols_ieee80211_core_arbiter::StationPlaceReturns<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::GatePath,
     >,
     _arbiter:
         RetiredArbiter<'id, B::Caps, NoReservation, <B::Types<'id> as PhaseTypes<'id>>::GatePath>,
     _pending: PendingActions<'id, B>,
-    _terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
+    _terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
         <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
@@ -1133,7 +1133,7 @@ pub struct RetiredService<
 /// A constructed station and the original permissions issued with it.
 pub type ConstructedStation<'id, B, C, const GROUPS: usize> = (
     PortStation<'id, B, C, GROUPS>,
-    oer_ieee80211_core_roles_sta::machine::StaCommandCredits<
+    oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<
         'id,
         <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
     >,
@@ -1170,7 +1170,7 @@ struct ServiceState<
     /// The composition's sink, lent to each call of the station, its data
     /// machine and its receive agreements, and the service's own events.
     events: O,
-    terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
+    terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
         <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
@@ -1188,7 +1188,7 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     network: Option<NetworkDrainFailure>,
     /// A retune whose disable/enable failed remains owned until retirement.
     retune: Option<
-        oer_ieee80211_core_arbiter::PendingRetune<
+        oer_protocols_ieee80211_core_arbiter::PendingRetune<
             'id,
             B::Caps,
             <B::Types<'id> as PhaseTypes<'id>>::GatePath,
@@ -1200,11 +1200,11 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 }
 
 struct PendingPairwise<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
-    pending: oer_ieee80211_core_roles_sta::machine::PendingPairwiseKey<
+    pending: oer_protocols_ieee80211_core_roles_sta::machine::PendingPairwiseKey<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::EpochPath,
     >,
-    key: oer_ieee80211_core_roles_sta::port::PendingStationPairwiseKey<
+    key: oer_protocols_ieee80211_core_roles_sta::port::PendingStationPairwiseKey<
         'id,
         <B::Types<'id> as PhaseTypes<'id>>::StationKeys,
     >,
@@ -1212,15 +1212,15 @@ struct PendingPairwise<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 
 struct PendingGroup<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     slot: <<B::Types<'id> as PhaseTypes<'id>>::StationKeys as KeyTypes<'id>>::GroupSlotIdentity,
-    key_id: Option<oer_ieee80211_contracts_port::GroupKeyId>,
+    key_id: Option<oer_protocols_ieee80211_contracts_port::GroupKeyId>,
     action: PendingGroupAction<'id, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
 }
 
-enum PendingGroupAction<'id, Path: oer_radio_port::PoolPath> {
-    Install(oer_ieee80211_core_roles_sta::machine::PendingGroupKey<'id, Path>),
-    Replace(oer_ieee80211_core_roles_sta::machine::PendingGroupReplacement<'id, Path>),
-    Select(oer_ieee80211_core_roles_sta::machine::PendingGroupSelection<'id, Path>),
-    Remove(oer_ieee80211_core_roles_sta::machine::PendingGroupRemoval<'id, Path>),
+enum PendingGroupAction<'id, Path: oer_protocols_radio_port::PoolPath> {
+    Install(oer_protocols_ieee80211_core_roles_sta::machine::PendingGroupKey<'id, Path>),
+    Replace(oer_protocols_ieee80211_core_roles_sta::machine::PendingGroupReplacement<'id, Path>),
+    Select(oer_protocols_ieee80211_core_roles_sta::machine::PendingGroupSelection<'id, Path>),
+    Remove(oer_protocols_ieee80211_core_roles_sta::machine::PendingGroupRemoval<'id, Path>),
 }
 
 /// What a step left the loop to do.
@@ -1229,7 +1229,7 @@ enum Next<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     Wait,
     /// Move the port to the channel.
     Retune(
-        oer_ieee80211_core_arbiter::PendingRetune<
+        oer_protocols_ieee80211_core_arbiter::PendingRetune<
             'id,
             B::Caps,
             <B::Types<'id> as PhaseTypes<'id>>::GatePath,
@@ -1255,7 +1255,7 @@ impl<
         data: PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
-        terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
+        terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
             'id,
             <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
@@ -1306,7 +1306,7 @@ impl<
             &'a mut core::mem::MaybeUninit<PortStation<'id, B, C, GROUPS>>,
         ) -> (
             &'a mut PortStation<'id, B, C, GROUPS>,
-            oer_ieee80211_core_roles_sta::machine::StaCommandCredits<
+            oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<
                 'id,
                 <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
             >,
@@ -1316,14 +1316,14 @@ impl<
         ) -> &'a mut PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
-        terminal_access: oer_ieee80211_contracts_port::TerminalAccess<
+        terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
             'id,
             <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
             <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
         >,
         receive: RxBlockAckView<'id, B::Types<'id>>,
         events: O,
-    ) -> oer_memory::Placed<'s, Self> {
+    ) -> oer_portable_memory::Placed<'s, Self> {
         const {
             let _power = DataContext::<'id, B>::POWER;
             if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
@@ -1333,10 +1333,10 @@ impl<
             }
         };
         let credits = core::cell::Cell::new(CommandCredits::empty());
-        oer_memory::Placed::init(storage, |place| {
-            oer_memory::init_in_place!(place, Self {
+        oer_portable_memory::Placed::init(storage, |place| {
+            oer_portable_memory::init_in_place!(place, Self {
                 arbiter: arbiter,
-                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS, O>>| oer_memory::init_in_place!(place, ServiceState {
+                state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS, O>>| oer_portable_memory::init_in_place!(place, ServiceState {
                     station => |place| { let (station, granted) = station(place); credits.set(CommandCredits::new(granted)); station },
                     data => data,
                     rates: rates,
@@ -1359,7 +1359,7 @@ impl<
         const RX_DEPTH: usize,
         const COMMAND_DEPTH: usize,
     >(
-        service: oer_memory::Placed<'s, Self>,
+        service: oer_portable_memory::Placed<'s, Self>,
         output: &'out mut core::mem::MaybeUninit<ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>>,
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         io: &mut ServiceIo<
@@ -1374,10 +1374,10 @@ impl<
             impl Notifies,
         >,
         timer: &impl Timer,
-    ) -> oer_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>> {
-        let (arbiter, mut state) = oer_memory::unpack_placed!(service, Self { arbiter, state });
+    ) -> oer_portable_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>> {
+        let (arbiter, mut state) = oer_portable_memory::unpack_placed!(service, Self { arbiter, state });
         let mut custody_storage = core::mem::MaybeUninit::uninit();
-        let mut custody = oer_memory::Placed::init(&mut custody_storage, |place| {
+        let mut custody = oer_portable_memory::Placed::init(&mut custody_storage, |place| {
             place.write(TerminalCustody::Clear)
         });
         let (end, arbiter) = state
@@ -1385,13 +1385,13 @@ impl<
             .await;
         let reason = match &end {
             ServiceStop::Stopped(_) => {
-                oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested
+                oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested
             }
-            _ => oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Arbiter(
-                oer_ieee80211_core_arbiter::LeaveReason::PortFailed,
+            _ => oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Arbiter(
+                oer_protocols_ieee80211_core_arbiter::LeaveReason::PortFailed,
             ),
         };
-        let (station, data, mut rates, mut events, terminal_access, pending) = oer_memory::unpack_placed!(
+        let (station, data, mut rates, mut events, terminal_access, pending) = oer_portable_memory::unpack_placed!(
             state,
             ServiceState {
                 station,
@@ -1404,8 +1404,8 @@ impl<
         );
         let pending = pending.read();
         let network = pending.network;
-        let completed = oer_memory::Placed::init(output, |place| {
-            oer_memory::init_in_place!(place, ServiceCompleted {
+        let completed = oer_portable_memory::Placed::init(output, |place| {
+            oer_portable_memory::init_in_place!(place, ServiceCompleted {
                 end => |place| end.init_end(place, custody),
                 network: network,
                 retired => |place: &mut core::mem::MaybeUninit<RetiredService<'id, B, C, S, GROUPS, O>>| {
@@ -1413,7 +1413,7 @@ impl<
                     // the retired bank with its station and returned places.
                     let mut station_storage = core::mem::MaybeUninit::uninit();
                     let (station, places) = Station::finish_placed(station, &mut station_storage, reason);
-                    let mut retired = oer_memory::Placed::init(place, |place| oer_memory::init_in_place!(place, RetiredService {
+                    let mut retired = oer_portable_memory::Placed::init(place, |place| oer_portable_memory::init_in_place!(place, RetiredService {
                         station => |place| station.move_to(place).into_mut(),
                         data => |place| StaData::finish_placed(data, place, &mut *events).into_mut(),
                         rates: { rates.disconnected(); rates.read() },
@@ -1431,9 +1431,9 @@ impl<
                     }
                     while let Some(output) = retired.station.poll_output() {
                         match output {
-                            oer_ieee80211_core_roles_sta::machine::StaFinalOutput::CommandCompleted(terminal) =>
+                            oer_protocols_ieee80211_core_roles_sta::machine::StaFinalOutput::CommandCompleted(terminal) =>
                                 io.output.emit(ServiceOutput::CommandCompleted(retired._pending.commands.completed(terminal))),
-                            oer_ieee80211_core_roles_sta::machine::StaFinalOutput::Notify(notice) =>
+                            oer_protocols_ieee80211_core_roles_sta::machine::StaFinalOutput::Notify(notice) =>
                                 io.output.emit(ServiceOutput::Notice(notice.into())),
                         }
                     }
@@ -1476,13 +1476,13 @@ impl<
         let end = end.into_end(custody);
         let reason = match &end {
             ServiceEnd::Stopped(_) => {
-                oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested
+                oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested
             }
             ServiceEnd::Failed { .. }
             | ServiceEnd::Poisoned { .. }
             | ServiceEnd::Quarantined { .. } => {
-                oer_ieee80211_core_roles_sta::machine::StaDisconnectReason::Arbiter(
-                    oer_ieee80211_core_arbiter::LeaveReason::PortFailed,
+                oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Arbiter(
+                    oer_protocols_ieee80211_core_arbiter::LeaveReason::PortFailed,
                 )
             }
         };
@@ -1508,12 +1508,12 @@ impl<
         }
         while let Some(output) = station.poll_output() {
             match output {
-                oer_ieee80211_core_roles_sta::machine::StaFinalOutput::CommandCompleted(
+                oer_protocols_ieee80211_core_roles_sta::machine::StaFinalOutput::CommandCompleted(
                     terminal,
                 ) => io.output.emit(ServiceOutput::CommandCompleted(
                     pending.commands.completed(terminal),
                 )),
-                oer_ieee80211_core_roles_sta::machine::StaFinalOutput::Notify(notice) => {
+                oer_protocols_ieee80211_core_roles_sta::machine::StaFinalOutput::Notify(notice) => {
                     io.output.emit(ServiceOutput::Notice(notice.into()))
                 }
             }
@@ -1721,7 +1721,7 @@ impl<
         mut arbiter: PortArbiter<'id, B>,
         mut owner: Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         mut pending: Option<
-            oer_ieee80211_core_arbiter::PendingRetune<
+            oer_protocols_ieee80211_core_arbiter::PendingRetune<
                 'id,
                 B::Caps,
                 <B::Types<'id> as PhaseTypes<'id>>::GatePath,
@@ -1851,7 +1851,7 @@ impl<
         owner: Owner<'p, 'id, B::SlotId, B::Backend, Enabled>,
         timer: &impl Timer,
         custody: &mut TerminalCustody<'id, B>,
-        deadline: oer_radio_port::StopDeadline,
+        deadline: oer_protocols_radio_port::StopDeadline,
     ) -> Result<
         Owner<'p, 'id, B::SlotId, B::Backend, Disabled>,
         DisableFailed<'p, 'id, B::SlotId, B::Backend>,
@@ -2381,11 +2381,11 @@ impl<
                             return Next::Failed(fault);
                         }
                     }
-                    Err((_, oer_ieee80211_core_roles_sta::machine::BlockAckReplyRefusal::Busy)) => {
+                    Err((_, oer_protocols_ieee80211_core_roles_sta::machine::BlockAckReplyRefusal::Busy)) => {
                     }
                     Err((
                         _,
-                        oer_ieee80211_core_roles_sta::machine::BlockAckReplyRefusal::Encode,
+                        oer_protocols_ieee80211_core_roles_sta::machine::BlockAckReplyRefusal::Encode,
                     )) => {
                         return Next::Failed(ServiceFault::RxBlockAckEncode.into());
                     }
@@ -2558,7 +2558,7 @@ impl<
                         )
                         .err();
                         let result = phase.station().submit(
-                            (oer_ieee80211_contracts_port::Attempt {
+                            (oer_protocols_ieee80211_contracts_port::Attempt {
                                 context: (),
                                 ticket,
                                 source,
@@ -3172,7 +3172,7 @@ impl<
     ) -> Result<(), ContractFault<'id, B>> {
         let control = match &terminal {
             LowerMacTerminal::GateClosed(_) => Some(ControlTerminal::GateClosed),
-            LowerMacTerminal::Configured(oer_ieee80211_contracts_port::Configured::Station(_)) => {
+            LowerMacTerminal::Configured(oer_protocols_ieee80211_contracts_port::Configured::Station(_)) => {
                 Some(ControlTerminal::Configure)
             }
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => {
@@ -3194,7 +3194,7 @@ impl<
         }
         match terminal {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
-                let oer_ieee80211_contracts_port::TerminalParts {
+                let oer_protocols_ieee80211_contracts_port::TerminalParts {
                     context: (),
                     ticket,
                     payload,
@@ -3237,7 +3237,7 @@ impl<
                 self.aggregate_terminal(now, terminal)?;
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
-            LowerMacTerminal::Configured(oer_ieee80211_contracts_port::Configured::Station(
+            LowerMacTerminal::Configured(oer_protocols_ieee80211_contracts_port::Configured::Station(
                 permission,
             )) => {
                 self.station
@@ -3297,7 +3297,7 @@ impl<
                 );
             }
             terminal @ (LowerMacTerminal::Configured(
-                oer_ieee80211_contracts_port::Configured::AccessPoint(_),
+                oer_protocols_ieee80211_contracts_port::Configured::AccessPoint(_),
             )
             | LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::AccessPoint(
                 _,
@@ -3434,9 +3434,9 @@ impl<
     fn aggregate_terminal(
         &mut self,
         now: Instant,
-        terminal: oer_ieee80211_contracts_port::AggregateCompleted<'id, B::Types<'id>>,
+        terminal: oer_protocols_ieee80211_contracts_port::AggregateCompleted<'id, B::Types<'id>>,
     ) -> Result<(), ContractFault<'id, B>> {
-        let oer_ieee80211_contracts_port::TerminalParts {
+        let oer_protocols_ieee80211_contracts_port::TerminalParts {
             context: (),
             ticket,
             payload,
@@ -3463,7 +3463,7 @@ impl<
                     let Some(mpdu) = rest.next() else {
                         break;
                     };
-                    let (buffer, body) = oer_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
+                    let (buffer, body) = oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
                     if let Some(body) = body {
                         match body {}
                     }
@@ -3516,7 +3516,7 @@ impl<
             .ok()
             .and_then(core::num::NonZeroU16::new);
         let marks = self.data.aggregate_returned(
-            oer_ieee80211_core_roles_sta::data::DataAggregateReturn::TxDone {
+            oer_protocols_ieee80211_core_roles_sta::data::DataAggregateReturn::TxDone {
                 context,
                 ticket,
                 completion: outcome,
@@ -3529,7 +3529,7 @@ impl<
             u16::try_from(marks.delivered.count_ones()).unwrap_or(u16::MAX)
         });
         if let Some(tally) = attempted.and_then(|attempted| {
-            oer_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(attempted, acknowledged)
+            oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(attempted, acknowledged)
                 .ok()
         }) {
             self.rates.learn_aggregate(now, current, tally, &outcome);
@@ -3692,7 +3692,7 @@ where
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
     C: StaCallbacks,
 {
-    use oer_ieee80211_contracts_port::AmpduPhase;
+    use oer_protocols_ieee80211_contracts_port::AmpduPhase;
     // Only an operational agreement asks for the aggregate rate.
     station.tx_block_ack(tid)?;
     let rate = rates
@@ -3723,7 +3723,7 @@ where
 fn submit_aggregate<'p, 'id: 'p, B, P, S, O, const GROUPS: usize>(
     now: Instant,
     phase: &mut P,
-    link: &oer_ieee80211_core_roles_sta::machine::LinkView<
+    link: &oer_protocols_ieee80211_core_roles_sta::machine::LinkView<
         '_,
         'id,
         PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
@@ -3737,9 +3737,9 @@ where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
-    O: EventSink<oer_ieee80211_core_roles_sta::events::StaEvent>,
+    O: EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>,
 {
-    use oer_ieee80211_contracts_port::{
+    use oer_protocols_ieee80211_contracts_port::{
         AggregateAttempt, AggregateRefused, AmpduPhase, CheckedAggregate, ClassSubframe,
         LayoutRefused, MpduStartSpacing, SubframeSource, Tid, TxNumbering,
     };
@@ -3801,14 +3801,14 @@ where
     // packet number of the link's key. `Err` returns it unchanged.
     let source = |mpdu: PoolMpdu<'id, B::Types<'id>, B::Large>,
                   frame: Option<
-        oer_ieee80211_contracts_port::ClassSizedFrame<
+        oer_protocols_ieee80211_contracts_port::ClassSizedFrame<
             B::Large,
-            oer_ieee80211_contracts_port::AckHeader,
+            oer_protocols_ieee80211_contracts_port::AckHeader,
             B::Caps,
         >,
     >|
      -> Result<
-        oer_ieee80211_contracts_port::PoolSubframe<'id, B::Types<'id>, B::Large, B::Caps>,
+        oer_protocols_ieee80211_contracts_port::PoolSubframe<'id, B::Types<'id>, B::Large, B::Caps>,
         (PoolMpdu<'id, B::Types<'id>, B::Large>, TxRefusal),
     > {
         match mpdu {
@@ -3835,14 +3835,14 @@ where
                     (Some(_), None) => Err((
                         ReturnedMpdu::Fresh(buffer),
                         TxRefusal::Preparation(
-                            oer_ieee80211_contracts_port::PreparationError::AggregateFull,
+                            oer_protocols_ieee80211_contracts_port::PreparationError::AggregateFull,
                         ),
                     )),
                 }
             }
         }
     };
-    let back = |subframe: oer_ieee80211_contracts_port::PoolSubframe<
+    let back = |subframe: oer_protocols_ieee80211_contracts_port::PoolSubframe<
         'id,
         B::Types<'id>,
         B::Large,
@@ -3884,14 +3884,14 @@ where
         },
         Err(reason) => {
             // The empty builder holds no subframe: cancelling it releases none.
-            let _cancelled = oer_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
+            let _cancelled = oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
             refuse!(context, reason);
         }
     };
     let mut builder = match pushed {
         Ok(builder) => builder,
         Err((empty, mpdu, reason)) => {
-            let _cancelled = oer_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
+            let _cancelled = oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
             data.aggregate_mpdu_returned(&context, 0, mpdu, &mut *events);
             refuse!(context, reason);
         }
@@ -3968,7 +3968,7 @@ type StationPreparation<'k, 'p, 'id, B> = Result<
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::Prepared<
         'k,
         'p,
-        oer_ieee80211_contracts_port::Station,
+        oer_protocols_ieee80211_contracts_port::Station,
         <B as StationPort>::Caps,
     >,
     (
@@ -3992,7 +3992,7 @@ fn prepare_source<
         B::Types<'id>,
         C,
         B::Caps,
-        oer_ieee80211_contracts_port::Station,
+        oer_protocols_ieee80211_contracts_port::Station,
     >,
 ) -> StationPreparation<'k, 'p, 'id, B>
 where
@@ -4092,7 +4092,7 @@ where
     let unplaced =
         tx_contexts::keep(&mut pending.tx_contexts, index, TxContext::Station(context)).err();
     let result = station.submit(
-        (oer_ieee80211_contracts_port::Attempt {
+        (oer_protocols_ieee80211_contracts_port::Attempt {
             context: (),
             ticket,
             source,
@@ -4138,7 +4138,7 @@ fn station_action<
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,
-    events: &mut impl EventSink<oer_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent>,
+    events: &mut impl EventSink<oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent>,
     pending_actions: &mut PendingActions<'id, B>,
     action: StaAction<'_, 'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
@@ -4347,7 +4347,7 @@ where
 enum Served<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     Stop,
     Retune(
-        oer_ieee80211_core_arbiter::PendingRetune<
+        oer_protocols_ieee80211_core_arbiter::PendingRetune<
             'id,
             B::Caps,
             <B::Types<'id> as PhaseTypes<'id>>::GatePath,

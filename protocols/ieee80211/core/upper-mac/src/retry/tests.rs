@@ -1,4 +1,4 @@
-use oer_ieee80211_wire::phy::LegacyRate;
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 use super::*;
 
@@ -43,9 +43,9 @@ fn detached_rate_selection_uses_mpdu_and_short_failures_without_backend_policy()
         None
     );
     let ht = PhyRate::Ht(
-        oer_ieee80211_wire::phy::HtRate::new(
-            oer_ieee80211_wire::phy::HtMcs::new(3).unwrap(),
-            oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+        oer_protocols_ieee80211_wire::phy::HtRate::new(
+            oer_protocols_ieee80211_wire::phy::HtMcs::new(3).unwrap(),
+            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
             true,
         )
         .unwrap(),

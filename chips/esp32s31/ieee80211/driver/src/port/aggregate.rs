@@ -24,7 +24,7 @@ use super::keys::RawKeyIdentity;
 use super::*;
 use crate::lower_mac::ampdu::AmpduBudget;
 use crate::mac::tx::{TxBacking, TxPhyRate};
-use oer_ieee80211_wire::{ccmp::CcmpPacketNumber, sequence::SequenceNumber};
+use oer_protocols_ieee80211_wire::{ccmp::CcmpPacketNumber, sequence::SequenceNumber};
 
 /// Subframes of one aggregate: one per BlockAck bit the hardware window
 /// reports.
@@ -50,7 +50,7 @@ pub(super) struct SubframeRecord<const B: usize, Body> {
 
 /// The subframe records, one place per pool buffer.
 pub(super) type SubframeTable<const B: usize, Body> =
-    oer_memory::ReturnBank<Option<SubframeRecord<B, Body>>, TX_BUFFERS>;
+    oer_portable_memory::ReturnBank<Option<SubframeRecord<B, Body>>, TX_BUFFERS>;
 
 impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
     /// Put `record` at `place`, which holds none.
@@ -521,7 +521,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations, R, K, S: A
 
 /// The sequence number of the MPDU of `len` octets in `dma`.
 fn sequence<const B: usize>(dma: &mut ReturnableBuffer<B>, len: usize) -> Option<SequenceNumber> {
-    oer_ieee80211_wire::frame::sequence_control(dma.mpdu(len)?)
+    oer_protocols_ieee80211_wire::frame::sequence_control(dma.mpdu(len)?)
         .map(SequenceNumber::from_sequence_control)
 }
 

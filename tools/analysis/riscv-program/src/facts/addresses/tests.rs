@@ -212,7 +212,7 @@ fn symbols_sections_addends_and_aliases_keep_their_original_identities() {
         }
         assert_eq!(
             uses[2].symbol.as_ref().unwrap().kind,
-            oer_analysis_elf::SymbolKind::Section
+            oer_tools_analysis_elf::SymbolKind::Section
         );
         assert_eq!(uses[3].relocation.addend, 2);
         assert_eq!(uses[3].function.nearest.unwrap().offset, 2);

@@ -1,11 +1,11 @@
-oer_espressif_interrupt_table::__fake_parts!();
+oer_chips_family_interrupt_table::__fake_parts!();
 pub fn timer(_: &mut TimerIrq) {}
 pub fn radio(_: &mut RadioIrq) {}
 
 // Use literal lines as required by the vector symbol ABI.
 macro_rules! table {
     ($second:literal) => {
-        oer_espressif_interrupt_table::interrupt_table! { // ui-error: E0080
+        oer_chips_family_interrupt_table::interrupt_table! { // ui-error: E0080
             lines: FAKE_LINES,
             handler_attributes: [];
             contexts { radio: 3; }

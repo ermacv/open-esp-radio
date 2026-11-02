@@ -11,14 +11,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_services_load::header::{self, Header};
+use oer_hil_services_load::header::{self, Header};
 
 /// How long the sender sleeps at most between two batches.
 const BATCH: Duration = Duration::from_millis(1);
 
 /// The host's tally: 2^19 sequences, far more than the longest window
 /// sends (60 s at 65 Mbit/s of 1400-byte datagrams is about 350 000).
-pub type Tally = oer_services_load::tally::Tally<8192>;
+pub type Tally = oer_hil_services_load::tally::Tally<8192>;
 const _: () = if Tally::CAPACITY < 60 * 65_000_000 / (1400 * 8) {
     panic!("the host tally covers the longest window");
 };
@@ -82,7 +82,7 @@ impl Endpoint {
                                 .push(now.saturating_sub(header.sent_us));
                         }
                         Some(header) if header.run == run && !header.echo_request => {
-                            use oer_services_load::tally::Arrival;
+                            use oer_hil_services_load::tally::Arrival;
                             let arrival = received.load.count(header.sequence, length as u64);
                             if matches!(arrival, Arrival::New | Arrival::Late) {
                                 received.first.get_or_insert(at);

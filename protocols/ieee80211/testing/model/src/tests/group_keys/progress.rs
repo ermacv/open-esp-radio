@@ -29,7 +29,7 @@ pub(super) fn run_clocked<F: Future>(future: F, clock: &VirtualClock) -> F::Outp
             return value;
         }
         if wakes.count.load(Ordering::SeqCst) == before {
-            clock.advance(oer_time::Duration::from_micros(10)).unwrap();
+            clock.advance(oer_portable_time::Duration::from_micros(10)).unwrap();
         }
     }
     panic!("harness did not honor its independent timer");
@@ -37,7 +37,7 @@ pub(super) fn run_clocked<F: Future>(future: F, clock: &VirtualClock) -> F::Outp
 
 #[derive(Default)]
 pub(super) struct Probe {
-    admitted: Cell<Option<oer_time::Instant>>,
+    admitted: Cell<Option<oer_portable_time::Instant>>,
     deadline_woke: Cell<bool>,
 }
 
@@ -84,7 +84,7 @@ fn admitted(slot: u8, permission: u8) -> Owners {
 }
 fn terminal<'id, Id: SlotIdentity + 'id>(
     event: LowerMacEvent<'id, ModelTypes<ModelBackend<Id>>>,
-    access: &mut oer_ieee80211_contracts_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
+    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
 ) -> Completion {
     let (mutation, owners) = match event {
         LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station {
@@ -191,7 +191,7 @@ impl Exercise<'_> {
             admitted: owners,
             timing: Timing {
                 admitted_at: self.probe.admitted.get().unwrap(),
-                completed_at: oer_time::Instant::from_micros(self.air.monotonic_now().as_micros()),
+                completed_at: oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros()),
             },
             events,
             retained,
@@ -219,7 +219,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
         }
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut owner = owner.enable().await.ok().unwrap();
@@ -250,7 +250,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
                 permission.index(),
             );
             self.air.hold_group_commands(true);
-            self.probe.admitted.set(Some(oer_time::Instant::from_micros(
+            self.probe.admitted.set(Some(oer_portable_time::Instant::from_micros(
                 self.air.monotonic_now().as_micros(),
             )));
             match mutation {
@@ -300,8 +300,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
                 self.record(owned, events, Vec::new(), None);
                 Ended::uninstall(disabled, (), ())
             }
-            Err(oer_radio_port::DisableFailed::Expired(_)) => panic!("no stop deadline"),
-            Err(oer_radio_port::DisableFailed::Poisoned(poisoned)) => {
+            Err(oer_protocols_radio_port::DisableFailed::Expired(_)) => panic!("no stop deadline"),
+            Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) => {
                 assert!(events.is_empty());
                 Ended::uninstall(poisoned, (), ())
             }
@@ -318,9 +318,9 @@ impl Exercise<'_> {
         let access_point_association =
             ModelKeys::<ModelBackend<Id>, AccessPoint>::begin_association(
                 resources.access_point_association,
-                oer_ieee80211_wire::security::Spp::NotNegotiated,
+                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
-        use oer_ieee80211_contracts_port::{AttemptKey, GroupAddress};
+        use oer_protocols_ieee80211_contracts_port::{AttemptKey, GroupAddress};
         let mut owner = owner.enable().await.ok().unwrap();
         {
             let mut phase = owner.phase();
@@ -375,9 +375,9 @@ impl Exercise<'_> {
                     buffer,
                     frame,
                     body: None,
-                    protection: TxProtection::Ccmp(oer_ieee80211_contracts_port::NumberedKey {
+                    protection: TxProtection::Ccmp(oer_protocols_ieee80211_contracts_port::NumberedKey {
                         key: AttemptKey::Group(&key),
-                        packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(1).unwrap(),
+                        packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(1).unwrap(),
                     }),
                 })
                 .check()
@@ -391,14 +391,14 @@ impl Exercise<'_> {
             phase
                 .access_point()
                 .submit(
-                    (oer_ieee80211_contracts_port::Attempt {
+                    (oer_protocols_ieee80211_contracts_port::Attempt {
                         context: (),
                         ticket,
                         source,
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                        coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                     })
                     .admit(),
                 )
@@ -407,7 +407,7 @@ impl Exercise<'_> {
                 yield_now().await;
             }
             assert_eq!(self.air.sent().len(), 1);
-            self.probe.admitted.set(Some(oer_time::Instant::from_micros(
+            self.probe.admitted.set(Some(oer_portable_time::Instant::from_micros(
                 self.air.monotonic_now().as_micros(),
             )));
             phase.access_point().remove_group_key(permission, key);
@@ -449,7 +449,7 @@ pub(super) async fn exercise(
         return crate::conformance::group(
             case,
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
-            oer_ieee80211_wire::phy::LegacyRate::Ofdm6M,
+            oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M,
             clock.clone(),
         )
         .await

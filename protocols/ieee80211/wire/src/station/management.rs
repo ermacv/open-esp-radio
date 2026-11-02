@@ -9,7 +9,7 @@ use crate::address::{Bssid, OwnAddress};
 /// An Open System request distinguishes the transmitter from the BSS.
 ///
 /// ```compile_fail,E0308
-/// use oer_ieee80211_wire::station::OpenAuthenticationRequest;
+/// use oer_protocols_ieee80211_wire::station::OpenAuthenticationRequest;
 /// fn swapped(request: OpenAuthenticationRequest) -> OpenAuthenticationRequest {
 ///     OpenAuthenticationRequest {
 ///         source: request.bssid,
@@ -20,7 +20,7 @@ use crate::address::{Bssid, OwnAddress};
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_wire::station::OpenAuthenticationRequest;
+/// use oer_protocols_ieee80211_wire::station::OpenAuthenticationRequest;
 /// fn unchanged(request: OpenAuthenticationRequest) -> OpenAuthenticationRequest {
 ///     OpenAuthenticationRequest {
 ///         source: request.source,
@@ -327,7 +327,7 @@ pub fn parse_sta_disconnect(
         12 => StaDisconnectKind::Deauthentication,
         _ => return None,
     };
-    let mut reader = oer_wire::Reader::new(header.body());
+    let mut reader = oer_portable_wire::Reader::new(header.body());
     let reason_code = reader.array().ok()?;
     Some(StaDisconnect {
         kind,

@@ -6,14 +6,14 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use oer_ieee80211_contracts_port::*;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_contracts_port::*;
+use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
     frame::FrameControl,
     phy::{LegacyRate, PhyRate},
 };
-use oer_radio_port::{self as radio, PortBackend, PortBody, PortPhase};
-use oer_time::{Clock, Instant, Timer};
+use oer_protocols_radio_port::{self as radio, PortBackend, PortBody, PortPhase};
+use oer_portable_time::{Clock, Instant, Timer};
 use std::{
     boxed::Box,
     cell::{Cell, RefCell},
@@ -22,7 +22,7 @@ use std::{
 };
 
 #[derive(Clone)]
-struct TestTimer(Rc<oer_time_virtual::VirtualClock>, Rc<Cell<bool>>);
+struct TestTimer(Rc<oer_portable_time_virtual::VirtualClock>, Rc<Cell<bool>>);
 impl Clock for TestTimer {
     fn now(&self) -> Instant {
         self.0.now()
@@ -59,7 +59,7 @@ struct Observed {
     publications: usize,
     statuses: Vec<(u8, u8)>,
     starts: usize,
-    start_channels: Vec<oer_ieee80211_wire::channel::WifiChannel>,
+    start_channels: Vec<oer_protocols_ieee80211_wire::channel::WifiChannel>,
     stops: usize,
     abandoned: bool,
     detached: bool,
@@ -242,10 +242,10 @@ impl ReceiveUnit for TestReceive {
     fn bytes(&self) -> &[u8] {
         &self.bytes[self.view.clone()]
     }
-    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_memory::FrameRangeError> {
+    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_portable_memory::FrameRangeError> {
         let start = self.view.start + offset;
         if start + length > self.view.end {
-            return Err(oer_memory::FrameRangeError {
+            return Err(oer_portable_memory::FrameRangeError {
                 offset,
                 length,
                 initialized_offset: self.view.start,
@@ -317,7 +317,7 @@ impl Device<512> for TestDevice {
     fn poll_start(
         &mut self,
         _: &mut Context<'_>,
-        channel: oer_ieee80211_wire::channel::WifiChannel,
+        channel: oer_protocols_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>> {
         self.assert_task_context();
         if self.observed.borrow().hold_start {
@@ -395,11 +395,11 @@ impl Device<512> for TestDevice {
                 .copied()
                 .unwrap_or((0, 0));
             let completion =
-                oer_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail);
+                oer_chips_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail);
             match self.observed.borrow().block_ack {
                 Some((start, bitmap, received)) => {
                     self.hardware.block_ack_completion[usize::from(queue)] = Some(
-                        oer_esp32s31_hal::types::MacHtAmpduCompletionObservation::new_model(
+                        oer_chips_esp32s31_hal::types::MacHtAmpduCompletionObservation::new_model(
                             completion, 0, start, bitmap, received,
                         ),
                     );
@@ -446,7 +446,7 @@ impl Device<512> for TestDevice {
             observed.rx_saturated_polls += usize::from(receive_room == 0);
             self.timer
                 .0
-                .advance(oer_time::Duration::from_micros(10))
+                .advance(oer_portable_time::Duration::from_micros(10))
                 .expect("finite model device step");
         }
         if receive_room == 0 {
@@ -527,7 +527,7 @@ impl Device<512> for TestDevice {
 /// The driver's observation receiver in these tests: it keeps every
 /// contention draw in the fixture's `Observed::draws`.
 struct Draws(Rc<RefCell<Vec<crate::lower_mac::ContentionDraw>>>);
-impl oer_events::EventSink<crate::lower_mac::ContentionDraw> for Draws {
+impl oer_portable_events::EventSink<crate::lower_mac::ContentionDraw> for Draws {
     fn event(&mut self, draw: crate::lower_mac::ContentionDraw) {
         self.0.borrow_mut().push(draw);
     }
@@ -576,7 +576,7 @@ fn installed_with_entropy(
     TestTimer,
 ) {
     let timer = TestTimer(
-        Rc::new(oer_time_virtual::VirtualClock::new()),
+        Rc::new(oer_portable_time_virtual::VirtualClock::new()),
         Rc::new(Cell::new(false)),
     );
     let observed = Rc::new(RefCell::new(Observed {
@@ -751,7 +751,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
             let header = HeaderSpec::new(
-                FrameControl::new(oer_ieee80211_wire::frame::DATA_TO_DS).expect("frame control"),
+                FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("frame control"),
                 0,
                 IndividualAddress::new(BSSID).expect("receiver"),
                 STATION,
@@ -808,7 +808,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
                         context: Tag(71, None),
                         ticket,
                         source: prepared,
-                        access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                        access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).expect("power"),
                         coex_operation: TxOperation::Data,
@@ -910,7 +910,7 @@ async fn installed_pairwise<'p, 'id: 'p, Id: radio::SlotIdentity + 'id>(
         association,
         slot,
         IndividualAddress::new(BSSID).expect("peer"),
-        oer_ieee80211_contracts_security::Ccmp128Key::new(&[material; 16]),
+        oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[material; 16]),
     );
     match phase.next_event().await {
         Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::PairwiseKeyInstalled(
@@ -947,7 +947,7 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
         .expect("rate");
     let header = HeaderSpec::new(
-        FrameControl::new(oer_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
+        FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
         0,
         IndividualAddress::new(BSSID).expect("receiver"),
         STATION,
@@ -979,7 +979,7 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         protection: match key {
             Some(key) => TxProtection::Ccmp(NumberedKey {
                 key,
-                packet_number: oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(7).expect("PN"),
+                packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(7).expect("PN"),
             }),
             None => TxProtection::Open,
         },
@@ -998,7 +998,7 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
                 context: Tag(91, None),
                 ticket,
                 source,
-                access_category: oer_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).expect("power"),
                 coex_operation: TxOperation::Data,
@@ -1053,13 +1053,13 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for SuspendBody {
                 let mut phase = owner.phase();
                 let (start, bank) = resources.station_association.into_parts();
                 let (_, [slot]) = bank.into_parts();
-                let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
+                let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
                 phase.station().install_group_key(
                     &association,
                     resources.station_group_permission,
                     slot,
-                    oer_ieee80211_wire::ccmp::GroupKeyId::new(1).expect("KeyID"),
-                    oer_ieee80211_contracts_security::Ccmp128Key::new(&[3; 16]),
+                    oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).expect("KeyID"),
+                    oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[3; 16]),
                 );
                 let _ = phase.next_event().await;
             }
@@ -1140,14 +1140,14 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
             let mut phase = owner.phase();
             let (start, bank) = resources.station_association.into_parts();
             let (_, [slot]) = bank.into_parts();
-            let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
-            let id = |id| oer_ieee80211_wire::ccmp::GroupKeyId::new(id).expect("KeyID");
+            let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+            let id = |id| oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(id).expect("KeyID");
             phase.station().install_group_key(
                 &association,
                 resources.station_group_permission,
                 slot,
                 id(1),
-                oer_ieee80211_contracts_security::Ccmp128Key::new(&[1; 16]),
+                oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[1; 16]),
             );
             let (key, permission) = match phase.next_event().await {
                 Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(
@@ -1159,7 +1159,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
                 permission,
                 key,
                 id(2),
-                oer_ieee80211_contracts_security::Ccmp128Key::new(&[2; 16]),
+                oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[2; 16]),
             );
             let (key, permission) = match phase.next_event().await {
                 Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyReplaced {
@@ -1239,7 +1239,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for DisableBy {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
         };
-        let step = oer_time::Duration::from_millis(1);
+        let step = oer_portable_time::Duration::from_millis(1);
         let deadline = if self.passes == Passes::Before {
             self.clock.now()
         } else {
@@ -1411,7 +1411,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ReceiveBody {
         Id: 'id,
         'id: 'p,
     {
-        use oer_ieee80211_contracts_port::LentRxBuffer;
+        use oer_protocols_ieee80211_contracts_port::LentRxBuffer;
         let mut owner = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("enable"),
@@ -1599,7 +1599,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
             let mut phase = owner.phase();
             let (start, bank) = resources.station_association.into_parts();
             let ([slot], _) = bank.into_parts();
-            let association = start.begin(oer_ieee80211_wire::security::Spp::NotNegotiated);
+            let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
             phase.station().configure(
                 resources
                     .station_commands
@@ -1705,7 +1705,7 @@ fn emergency_erasure_reaches_the_last_ap_peer_as_well_as_station_and_group_keys(
     let station = install_sta_pairwise_ccmp(&mut hardware, BSSID, &[1; 16]).expect("STA PTK");
     let group = install_sta_group_ccmp(
         &mut hardware,
-        oer_ieee80211_wire::ccmp::GroupKeyId::new(0).expect("KeyID"),
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(0).expect("KeyID"),
         &[2; 16],
     )
     .expect("GTK");
@@ -1809,11 +1809,11 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Tune {
     {
         owner.setup().set_channel(
             SupportedChannel::new(
-                oer_radio_regulatory::RegulatoryDomain::of(
-                    oer_radio_regulatory::Country::new(*b"DE").expect("test country"),
+                oer_protocols_radio_regulatory::RegulatoryDomain::of(
+                    oer_protocols_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(self.0))
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(self.0))
                 .expect("permitted test channel"),
             )
             .expect("supported test channel"),

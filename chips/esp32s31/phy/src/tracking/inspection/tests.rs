@@ -13,7 +13,7 @@ use crate::{
 /// acquisition is due at once and its tracking completes there.
 fn clients(active: &[RadioClient]) -> PhyClientSnapshot {
     let mut owner = PhyClientState::without_registration(1000);
-    let at_zero = oer_time_virtual::VirtualClock::<8>::starting_at(oer_time::Instant::EPOCH);
+    let at_zero = oer_portable_time_virtual::VirtualClock::<8>::starting_at(oer_portable_time::Instant::EPOCH);
     for client in active {
         owner = match available(owner, *client)
             .acquire(&at_zero)
@@ -38,10 +38,10 @@ fn state(temperature: i16) -> PhyState {
 #[test]
 fn due_evaluation_does_not_imply_due_calibration_or_commit_references() {
     let state = state(0);
-    let (mut radio, _partitions) = oer_esp32s31_hal::root::RadioHardware::for_host_test()
+    let (mut radio, _partitions) = oer_chips_esp32s31_hal::root::RadioHardware::for_host_test()
         .split::<crate::test_clocks::TestClockBackend, _>(
             (),
-            oer_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
+            oer_chips_esp32s31_hal::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
     let grant = radio.begin_registration_for_host_test();
@@ -168,8 +168,8 @@ fn inspection_rejects_reversed_clock_and_uses_updated_state_on_reinspection() {
         PhyClientState::without_registration(1000),
         RadioClient::Wifi,
     )
-    .acquire(&oer_time_virtual::VirtualClock::<8>::starting_at(
-        oer_time::Instant::from_micros(2000),
+    .acquire(&oer_portable_time_virtual::VirtualClock::<8>::starting_at(
+        oer_portable_time::Instant::from_micros(2000),
     ))
     .unwrap_or_else(|_| panic!("acquire"))
     .into_owner()

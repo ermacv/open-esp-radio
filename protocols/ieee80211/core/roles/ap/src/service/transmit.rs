@@ -32,28 +32,28 @@ impl<const N: usize> ApEapolTransmit<N> {
 /// retry classification can be substituted at terminal delivery.
 ///
 /// ```compile_fail,E0382
-/// use oer_ieee80211_core_roles_ap::ApEapolTxContext;
+/// use oer_protocols_ieee80211_core_roles_ap::ApEapolTxContext;
 /// fn duplicate(context: ApEapolTxContext) -> (ApEapolTxContext, ApEapolTxContext) {
 ///     (context, context)
 /// }
 /// ```
 ///
 /// ```compile_fail,E0599
-/// use oer_ieee80211_core_roles_ap::ApEapolTxContext;
+/// use oer_protocols_ieee80211_core_roles_ap::ApEapolTxContext;
 /// fn clone_context(context: &ApEapolTxContext) -> ApEapolTxContext {
 ///     ApEapolTxContext::clone(context)
 /// }
 /// ```
 ///
 /// ```
-/// use oer_ieee80211_core_roles_ap::ApEapolTxContext;
+/// use oer_protocols_ieee80211_core_roles_ap::ApEapolTxContext;
 /// fn retain(context: ApEapolTxContext) -> ApEapolTxContext { context }
 /// ```
 #[must_use = "return the context at this transmission's terminal"]
 #[derive(Debug)]
 pub struct ApEapolTxContext {
     pub(super) association: ApAssociationIdentity,
-    pub(super) transmit: oer_ieee80211_core_security_rsn::state::RsnTransmit,
+    pub(super) transmit: oer_protocols_ieee80211_core_security_rsn::state::RsnTransmit,
 }
 
 /// The protocol consequence of an EAPOL publication's terminal. Resource
@@ -72,7 +72,7 @@ impl<S: SppScope> AccessPointService<'_, S> {
     pub(super) fn bind_eapol<const N: usize>(
         &self,
         frame: RsnTxFrame<N>,
-        transmit: oer_ieee80211_core_security_rsn::state::RsnTransmit,
+        transmit: oer_protocols_ieee80211_core_security_rsn::state::RsnTransmit,
     ) -> Result<ApEapolTransmit<N>, ApWpa2Error> {
         let peer = self.checked_peer(*frame.peer())?;
         Ok(ApEapolTransmit {

@@ -11,7 +11,7 @@ use core::{
 
 use crate::layouts::{DmaWindowAddress, WifiRxDmaDescriptorControl};
 use crate::memory::dma_static::Placed;
-use oer_memory::{ExternalRxBuffer, ExternalRxReturnState};
+use oer_portable_memory::{ExternalRxBuffer, ExternalRxReturnState};
 
 use crate::ieee80211::dma::{
     descriptor::RxDescriptor,
@@ -122,7 +122,7 @@ pub struct RxDmaDetachedUnit {
 /// a descriptor count nor a copied cursor can publish descriptors on its own.
 ///
 /// ```compile_fail,E0382
-/// use oer_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::RxDmaRecycleUnit};
+/// use oer_chips_esp32s31_hal::ieee80211::dma::{rx_dma::RxDma, rx_storage::RxDmaRecycleUnit};
 /// fn duplicate(credit: RxDmaRecycleUnit<'_, '_, '_, 4, 16, 16>, mmio: &mut impl RxDma) {
 ///     let _ = credit.append(mmio);
 ///     let _ = credit.append(mmio);
@@ -130,7 +130,7 @@ pub struct RxDmaDetachedUnit {
 /// ```
 ///
 /// ```compile_fail,E0499
-/// use oer_esp32s31_hal::ieee80211::dma::{
+/// use oer_chips_esp32s31_hal::ieee80211::dma::{
 ///     rx_dma::RxDma, rx_ring::{RxRingLive, RxFrozenCursor}, rx_storage::RxDmaStorage,
 /// };
 /// fn change_generation(storage: &RxDmaStorage<4, 16, 16>, ring: &mut RxRingLive<'_, 4>,
@@ -397,7 +397,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// The unique placement owner is consumed even when preparation fails.
     ///
     /// ```compile_fail,E0382
-    /// use oer_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, rx_dma::RxDma};
+    /// use oer_chips_esp32s31_hal::ieee80211::dma::{rx_storage::PlacedRxDma, rx_dma::RxDma};
     /// fn twice<M: RxDma>(placed: PlacedRxDma<2, 16, 16>, mmio: &mut M) {
     ///     let _ = placed.prepare_ring(mmio);
     ///     let _ = placed.prepare_ring(mmio);
@@ -419,12 +419,12 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// The geometry is checked even when construction runs at runtime.
     ///
     /// ```compile_fail,E0080
-    /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
+    /// use oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
     /// let _ = RxDmaStorage::<1, 16, 15>::new();
     /// ```
     ///
     /// ```compile_fail,E0080
-    /// use oer_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
+    /// use oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage;
     /// let _ = RxDmaStorage::<1, 0, 0>::new();
     /// ```
     pub const fn new() -> Self {

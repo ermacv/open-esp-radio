@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 
 use std::vec::Vec;
 
@@ -45,7 +45,7 @@ fn a_short_slice_has_an_already_due_end() {
 
 fn clock(now: u64) -> PmClock {
     PmClock {
-        now: oer_time::Instant::from_micros(now),
+        now: oer_portable_time::Instant::from_micros(now),
     }
 }
 
@@ -349,7 +349,7 @@ fn an_acknowledged_power_save_null_leads_to_rf_sleep_after_the_sleep_delay() {
     });
     assert!(actions.contains(&PmAction::Arm {
         timer: PmTimer::SleepDelay,
-        after: oer_time::Duration::from_micros(u64::from(SLEEP_DELAY_MICROS)),
+        after: oer_portable_time::Duration::from_micros(u64::from(SLEEP_DELAY_MICROS)),
     }));
     let actions = run(|| pm.sleep_delay_timer(clock(7_000), coex, PmTraffic::IDLE));
     assert_eq!(

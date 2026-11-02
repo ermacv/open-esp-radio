@@ -8,10 +8,10 @@
 //! word is written by the bank's owner alone: no task-side owner of either
 //! bank exists.
 
-use oer_esp32s31_pac::{
+use oer_chips_esp32s31_pac::{
     modem_pwr, modem_pwr::WifiMacPowerInterrupt, wifi_mac, wifi_mac::WifiMacInterrupt,
 };
-use oer_mmio::{Bits, Placement};
+use oer_portable_mmio::{Bits, Placement};
 
 use crate::ieee80211::registers::{Chip, MacInterruptMask, MacPlacement, WifiRadioRegisters};
 
@@ -567,7 +567,7 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     /// HW26_S31_TSF_TIMERS23_20261027 (timer2/3).
     pub fn mask_all_power_interrupts(&mut self) {
         mask_mac_power_interrupts(&mut self.power);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Acknowledge every latched WDEVPWR cause: the generated image masks
@@ -576,7 +576,7 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     /// SOURCE: `BLOB_LIBPP_HAL_PWR_INTERRUPT`.
     pub fn clear_all_power_interrupts(&mut self) {
         self.power.clear_all_mac_power_interrupts();
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Enable the station TBTT event, then order the write.
@@ -590,7 +590,7 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
         self.power.modify_enable(|w| {
             w.set_tbtt_0(true);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Sample the complete masked WDEVPWR event image.
@@ -606,7 +606,7 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     /// stores its argument to the clear word.
     pub fn acknowledge_power_interrupts(&mut self, snapshot: MacPowerInterruptSnapshot) {
         self.power.acknowledge_mac_power_interrupt(snapshot.0);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 
@@ -638,13 +638,13 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// SOURCE: `HW18_RX_MASK_STATUS_20261027` in the register model.
     pub fn mask_all_mac_interrupts(&mut self) {
         publish_mac_interrupt_mask(&mut self.mac, MacInterruptMask::NONE);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Publish one reviewed MAC interrupt mask, then order the write.
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         publish_mac_interrupt_mask(&mut self.mac, event_mask);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Read the currently published MAC interrupt mask.
@@ -682,7 +682,7 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
                 .set_rx_success(enabled.success)
                 .set_rx_associated_auxiliary_24(enabled.auxiliary_24);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Sample RAW independently of the delivery mask. The epoch checks the
@@ -697,7 +697,7 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// The caller retains fatal samples instead of acknowledging them.
     pub fn acknowledge_mac_interrupt_raw(&mut self, snapshot: MacInterruptRawSnapshot) {
         self.mac.acknowledge_mac_interrupt_raw(snapshot.0);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Sample the complete MAC interrupt status image.
@@ -716,7 +716,7 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// full-width store to the write-to-clear register.
     pub fn acknowledge_mac_interrupts(&mut self, snapshot: MacInterruptSnapshot) {
         self.mac.acknowledge_mac_interrupt(snapshot.0);
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 
     /// Temporarily suppress the observed RX delivery group without changing
@@ -747,7 +747,7 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
                 .set_rx_success(enabled)
                 .set_rx_associated_auxiliary_24(enabled);
         });
-        oer_riscv::fence();
+        oer_portable_riscv::fence();
     }
 }
 

@@ -1,12 +1,12 @@
-use oer_espressif_ieee802154_mac_values::COEX_DISABLED_PTI;
-use oer_espressif_ieee802154_mac_values::Ieee802154MacPolicyReadback;
-use oer_espressif_ieee802154_mac_values::{
+use oer_chips_family_ieee802154_mac_values::COEX_DISABLED_PTI;
+use oer_chips_family_ieee802154_mac_values::Ieee802154MacPolicyReadback;
+use oer_chips_family_ieee802154_mac_values::{
     Ieee802154AckTimeout, Ieee802154CcaMode, Ieee802154Channel, Ieee802154MacControl,
     Ieee802154MultipanEnableState, Ieee802154PanIdentity,
 };
 use std::vec::Vec;
 
-use oer_espressif_ieee802154_mac_values::Ieee802154FoundationSnapshot;
+use oer_chips_family_ieee802154_mac_values::Ieee802154FoundationSnapshot;
 
 use super::{
     Ieee802154MacPolicy, Ieee802154MacPolicyBackend, Ieee802154MacPolicyCheckpoint,
@@ -436,14 +436,14 @@ fn snapshot_from_policy(policy: Ieee802154MacPolicy) -> Ieee802154MacPolicySnaps
         policy.cca_threshold_code(),
         policy.ack_timeout(),
         policy.control(),
-        oer_espressif_ieee802154_mac_values::Ieee802154MultipanEnableState::new(
+        oer_chips_family_ieee802154_mac_values::Ieee802154MultipanEnableState::new(
             true, false, true, false,
         ),
         policy.identity(),
     )
 }
 
-impl oer_espressif_ieee802154_mac_values::Ieee802154LifecycleBackend for FakeBackend {
+impl oer_chips_family_ieee802154_mac_values::Ieee802154LifecycleBackend for FakeBackend {
     type ResetPort<'a> = PolicyResetPort;
     fn mask_all_events(&mut self) {}
     fn mask_all_rx_aborts(&mut self) {}
@@ -513,13 +513,13 @@ fn typed_policy_recovery_preserves_only_the_phase_supported_by_readback() {
 }
 
 struct PolicyResetPort;
-impl oer_espressif_ieee802154_mac_values::Ieee802154ResetPort for PolicyResetPort {
+impl oer_chips_family_ieee802154_mac_values::Ieee802154ResetPort for PolicyResetPort {
     fn set_ieee802154_mac_reset(&mut self, _: bool) {}
     fn set_ieee802154_apb_reset(&mut self, _: bool) {}
     fn ieee802154_reset_readback(
         &self,
-    ) -> oer_espressif_ieee802154_mac_values::Ieee802154ResetReadback {
-        oer_espressif_ieee802154_mac_values::Ieee802154ResetReadback {
+    ) -> oer_chips_family_ieee802154_mac_values::Ieee802154ResetReadback {
+        oer_chips_family_ieee802154_mac_values::Ieee802154ResetReadback {
             mac_reset_released: true,
             apb_reset_released: true,
         }

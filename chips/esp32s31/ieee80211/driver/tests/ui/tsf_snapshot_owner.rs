@@ -1,6 +1,6 @@
 #![no_std]
-use oer_esp32s31_hal::owner::RadioAccess;
-use oer_esp32s31_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
+use oer_chips_esp32s31_hal::owner::RadioAccess;
+use oer_chips_esp32s31_ieee80211_driver::mac::ap_tsf::AccessPointTsf;
 
 pub fn snapshots(owner: &mut RadioAccess, ap: &AccessPointTsf) -> (u64, u64) {
     let mut sta = owner.wifi_mac_hal();

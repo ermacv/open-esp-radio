@@ -6,7 +6,7 @@
 //! register identities, polling policy, or runtime/protocol state.
 
 #[cfg(target_arch = "riscv32")]
-use oer_esp32s31_hal::{ieee80211::channel::RadioChannelHal, owner::SharedPhyAccess};
+use oer_chips_esp32s31_hal::{ieee80211::channel::RadioChannelHal, owner::SharedPhyAccess};
 
 /// Gate the calibration region around `phy_rf_init` and `phy_bb_init`.
 #[cfg(target_arch = "riscv32")]
@@ -20,13 +20,13 @@ pub(crate) fn set_phy_register_calibration_clock(
 /// Complete rev0 ROM `phy_bb_agc_reg_update`, size `0xa6`.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_bb_agc_register_update(registers: &mut impl SharedPhyAccess) {
-    oer_esp32s31_hal::phy::agc::update_baseband_registers(registers);
+    oer_chips_esp32s31_hal::phy::agc::update_baseband_registers(registers);
 }
 
 /// Complete rev0 ROM `phy_enable_agc`, size `0x28`.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn enable_phy_agc(registers: &mut impl SharedPhyAccess) {
-    oer_esp32s31_hal::phy::agc::set_enabled(registers, true);
+    oer_chips_esp32s31_hal::phy::agc::set_enabled(registers, true);
 }
 
 /// Select the exact AGC state used by `phy_chip_set_chan`.
@@ -37,38 +37,38 @@ pub(crate) fn enable_phy_agc(registers: &mut impl SharedPhyAccess) {
 /// sequence. Both branches are finite and touch no software state.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn set_phy_channel_agc(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    oer_esp32s31_hal::phy::agc::set_enabled(registers, enabled);
+    oer_chips_esp32s31_hal::phy::agc::set_enabled(registers, enabled);
 }
 
 /// Complete both branches of rev0 ROM `phy_rx_11b_opt`, size `0xc4`.
 #[cfg(target_arch = "riscv32")]
 fn configure_phy_rx_11b_optimization(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    oer_esp32s31_hal::phy::agc::configure_rx_11b_optimization(registers, enabled);
+    oer_chips_esp32s31_hal::phy::agc::configure_rx_11b_optimization(registers, enabled);
 }
 
 /// Complete rev0 ROM `phy_reg_init` at `0x2f82_3ef8`, size `0x52`, with
 /// every direct and tail child reproduced by source-owned safe HAL leaves.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_registers(
-    registers: &mut impl oer_esp32s31_hal::owner::PhyInitializationAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::PhyInitializationAccess,
     parameters: crate::calibration::baseband::PhyRegisterInitParameters,
 ) {
-    oer_esp32s31_hal::phy::baseband::enable_iq_correction(registers);
-    oer_esp32s31_hal::phy::agc::initialize_registers(
+    oer_chips_esp32s31_hal::phy::baseband::enable_iq_correction(registers);
+    oer_chips_esp32s31_hal::phy::agc::initialize_registers(
         registers,
         parameters.parameter_121,
         parameters.parameter_120,
     );
-    oer_esp32s31_hal::phy::agc::set_saturation_gain(registers, 0x0008_1825);
-    oer_esp32s31_hal::phy::baseband::initialize_baseband(registers);
-    oer_esp32s31_hal::phy::baseband::configure_watchdog(registers);
-    oer_esp32s31_hal::phy::baseband::configure_tx_pa_on(registers);
+    oer_chips_esp32s31_hal::phy::agc::set_saturation_gain(registers, 0x0008_1825);
+    oer_chips_esp32s31_hal::phy::baseband::initialize_baseband(registers);
+    oer_chips_esp32s31_hal::phy::baseband::configure_watchdog(registers);
+    oer_chips_esp32s31_hal::phy::baseband::configure_tx_pa_on(registers);
     configure_phy_rx_11b_optimization(registers, true);
-    oer_esp32s31_hal::phy::power_detector::configure_background(registers);
-    oer_esp32s31_hal::phy::baseband::configure_noise_floor_auto(registers);
-    oer_esp32s31_hal::phy::agc::configure_antenna(registers);
-    oer_esp32s31_hal::phy::frequency::configure_bt_filter(registers);
-    oer_esp32s31_hal::phy::frequency::enable_mac_baseband(registers);
+    oer_chips_esp32s31_hal::phy::power_detector::configure_background(registers);
+    oer_chips_esp32s31_hal::phy::baseband::configure_noise_floor_auto(registers);
+    oer_chips_esp32s31_hal::phy::agc::configure_antenna(registers);
+    oer_chips_esp32s31_hal::phy::frequency::configure_bt_filter(registers);
+    oer_chips_esp32s31_hal::phy::frequency::enable_mac_baseband(registers);
 }
 
 /// Complete pinned `libphy.a[phy_rx_gain.o]::phy_rx_table_init`, size `0x7c`.
@@ -81,13 +81,13 @@ pub(crate) fn configure_phy_registers(
 /// register-init, AGC-update and AGC-enable suffix.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_rx_table(
-    registers: &mut impl oer_esp32s31_hal::owner::PhyInitializationAccess,
+    registers: &mut impl oer_chips_esp32s31_hal::owner::PhyInitializationAccess,
     parameters: crate::calibration::baseband::PhyRxTableInitParameters,
 ) {
     let mut index = 0_u8;
     while index != crate::calibration::baseband::PHY_RX_TABLE_ENTRY_COUNT {
         let entry = crate::calibration::baseband::phy_rx_table_gain_entry(parameters, index);
-        oer_esp32s31_hal::phy::memory::program_gain_memory_entry(registers, entry);
+        oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(registers, entry);
         index += 1;
     }
     configure_phy_registers(
@@ -215,7 +215,7 @@ pub(crate) fn configure_phy_txiq_correction(registers: &mut impl SharedPhyAccess
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn prepare_phy_txiq_tone_control_restore(
     registers: &mut impl SharedPhyAccess,
-) -> Result<(), oer_esp32s31_hal::types::TxIqToneControlPrepareError> {
+) -> Result<(), oer_chips_esp32s31_hal::types::TxIqToneControlPrepareError> {
     registers.prepare_txiq_tone_control_restore()
 }
 
@@ -223,7 +223,7 @@ pub(crate) fn prepare_phy_txiq_tone_control_restore(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn restore_phy_txiq_tone_control(
     registers: &mut impl SharedPhyAccess,
-) -> Result<(), oer_esp32s31_hal::types::TxIqToneControlRestoreError> {
+) -> Result<(), oer_chips_esp32s31_hal::types::TxIqToneControlRestoreError> {
     registers.restore_txiq_tone_control()
 }
 
@@ -288,7 +288,7 @@ pub(crate) fn configure_phy_rxiq_calibration_mode(registers: &mut impl SharedPhy
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_adc_rate(
     registers: &mut impl SharedPhyAccess,
-    rate: oer_esp32s31_hal::phy::i2c::PhyAdcRate,
+    rate: oer_chips_esp32s31_hal::phy::i2c::PhyAdcRate,
 ) {
     registers.configure_adc_rate(rate);
 }
@@ -301,7 +301,7 @@ pub(crate) fn configure_phy_adc_rate(
 /// loop, callback, or mutable software-state access.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_front_end_registers(registers: &mut impl SharedPhyAccess) {
-    oer_esp32s31_hal::phy::baseband::initialize_front_end(registers);
+    oer_chips_esp32s31_hal::phy::baseband::initialize_front_end(registers);
 }
 
 /// Apply complete pinned `libphy.a[phy_reg.o]::phy_fe_reg_update`.
@@ -313,7 +313,7 @@ pub(crate) fn configure_phy_front_end_registers(registers: &mut impl SharedPhyAc
 /// mutable software-state access.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_front_end_update(registers: &mut impl SharedPhyAccess) {
-    oer_esp32s31_hal::phy::baseband::update_front_end(registers);
+    oer_chips_esp32s31_hal::phy::baseband::update_front_end(registers);
 }
 
 /// Arm one PWDET tone sample before its one-microsecond minimum settle.
@@ -385,7 +385,7 @@ pub(crate) fn clear_phy_tx_dc_measurement(registers: &mut impl SharedPhyAccess) 
 #[cfg(target_arch = "riscv32")]
 trait PhyGainMemory {
     fn table_memory_base_index(&self) -> u8;
-    fn program_gain_memory_entry(&mut self, entry: oer_esp32s31_hal::types::PhyGainMemoryEntry);
+    fn program_gain_memory_entry(&mut self, entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry);
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -396,11 +396,11 @@ struct SharedPhyGainMemory<'registers, T: SharedPhyAccess> {
 #[cfg(target_arch = "riscv32")]
 impl<T: SharedPhyAccess> PhyGainMemory for SharedPhyGainMemory<'_, T> {
     fn table_memory_base_index(&self) -> u8 {
-        oer_esp32s31_hal::phy::memory::read_table_memory_base_index(self.registers)
+        oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(self.registers)
     }
 
-    fn program_gain_memory_entry(&mut self, entry: oer_esp32s31_hal::types::PhyGainMemoryEntry) {
-        oer_esp32s31_hal::phy::memory::program_gain_memory_entry(self.registers, entry);
+    fn program_gain_memory_entry(&mut self, entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry) {
+        oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(self.registers, entry);
     }
 }
 
@@ -410,7 +410,7 @@ impl<P> PhyGainMemory for RadioChannelHal<'_, P> {
         self.table_memory_base_index()
     }
 
-    fn program_gain_memory_entry(&mut self, entry: oer_esp32s31_hal::types::PhyGainMemoryEntry) {
+    fn program_gain_memory_entry(&mut self, entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry) {
         self.program_gain_memory_entry(entry);
     }
 }
@@ -421,13 +421,13 @@ pub(crate) fn tx_gain_memory_entry(
     image: &crate::channel::PhyWifiTxGainImage,
     memory_base: u8,
     entry: u8,
-) -> oer_esp32s31_hal::types::PhyGainMemoryEntry {
+) -> oer_chips_esp32s31_hal::types::PhyGainMemoryEntry {
     let entry_index = usize::from(entry);
     let gain_72 = packed_halfword(&image.output_72, entry_index);
     let gain_64 = packed_halfword(&image.output_64, entry_index);
     let gain_32 = packed_byte(&image.output_32, entry_index);
     let seed_index = tx_baseband_gain_index(gain_64) * 4;
-    oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+    oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
         memory_base.wrapping_add(entry),
         gain_72,
         gain_64,
@@ -484,7 +484,7 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
     registers: &mut impl SharedPhyAccess,
     image: &crate::calibration::bluetooth::PhyBluetoothTxGainImage,
 ) {
-    let hardware_base = oer_esp32s31_hal::phy::memory::read_table_memory_base_index(registers);
+    let hardware_base = oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(registers);
     let memory_base = hardware_base.wrapping_add(32);
     let mut entry = 0_u8;
     while entry != 16 {
@@ -493,7 +493,7 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
         let gain_64 = image.output_64[entry_index];
         let gain_32 = image.output_32[entry_index];
         let seed_index = tx_baseband_gain_index(gain_64) * 4;
-        let memory_entry = oer_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
+        let memory_entry = oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
             memory_base.wrapping_add(entry),
             gain_72,
             gain_64,
@@ -506,7 +506,7 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
             ],
             image.config,
         );
-        oer_esp32s31_hal::phy::memory::program_gain_memory_entry(registers, memory_entry);
+        oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(registers, memory_entry);
         entry += 1;
     }
 }

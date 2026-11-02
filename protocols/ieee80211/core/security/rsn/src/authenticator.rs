@@ -18,11 +18,11 @@ use crate::{
     frames::{RsnFrameError, RsnPlainKeyData, RsnTxFrame, build_ap_action_frame},
     state::{RsnApAction, RsnApPhase, RsnApState, RsnStateError, RsnTicket, RsnTransmit},
 };
-use oer_crypto::{
+use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
     rfc3394::KeyWrapError,
 };
-use oer_ieee80211_core_security_cipher::aes::software_aes128_key_wrap;
+use oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap;
 
 /// Why the authenticator refused a step.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,8 +54,8 @@ impl From<RsnStateError> for RsnAuthenticatorError {
     }
 }
 
-impl From<oer_ieee80211_wire::eapol::EapolParseError> for RsnAuthenticatorError {
-    fn from(error: oer_ieee80211_wire::eapol::EapolParseError) -> Self {
+impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnAuthenticatorError {
+    fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::State(RsnStateError::from(error))
     }
 }

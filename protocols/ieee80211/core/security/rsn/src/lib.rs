@@ -37,12 +37,12 @@ mod test_engine;
 /// Unwrap `request` in the software engine.
 #[cfg(test)]
 fn test_unwrap(
-    request: oer_crypto::KeyUnwrapRequest<
-        { oer_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY },
+    request: oer_portable_crypto::KeyUnwrapRequest<
+        { oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY },
     >,
-) -> Result<oer_ieee80211_core_security_cipher::aes::RsnKeyData, oer_crypto::KeyUnwrapError> {
-    oer_crypto::block::unwrap_now(
-        &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+) -> Result<oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData, oer_portable_crypto::KeyUnwrapError> {
+    oer_portable_crypto::block::unwrap_now(
+        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
         request,
     )
     .into_plaintext()
@@ -53,11 +53,11 @@ fn test_unwrap(
 pub(crate) fn test_unwrap_bytes(
     kek: &[u8; RSN_KEK_LEN],
     wrapped: &[u8],
-) -> Result<oer_ieee80211_core_security_cipher::aes::RsnKeyData, oer_crypto::KeyUnwrapError> {
-    test_unwrap(oer_crypto::KeyUnwrapRequest::new(
-        oer_crypto::Aes128Key::copy_from(kek),
-        oer_ieee80211_core_security_cipher::aes::RsnKeyData::try_copy(wrapped)
-            .map_err(|_| oer_crypto::KeyUnwrapError::InvalidLength)?,
+) -> Result<oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData, oer_portable_crypto::KeyUnwrapError> {
+    test_unwrap(oer_portable_crypto::KeyUnwrapRequest::new(
+        oer_portable_crypto::Aes128Key::copy_from(kek),
+        oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::try_copy(wrapped)
+            .map_err(|_| oer_portable_crypto::KeyUnwrapError::InvalidLength)?,
     ))
 }
 
@@ -92,7 +92,7 @@ pub use eapol::{
     DEFAULT_EAPOL_FRAME_CAPACITY, EapolCopyError, EapolKeyFrame, EapolKeyInfo, EapolKeyMessage,
     OwnedEapolFrame,
 };
-pub(crate) use oer_ieee80211_wire::security::rsn::Akm;
+pub(crate) use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnInterface {

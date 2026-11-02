@@ -67,8 +67,8 @@ prerequisites hold. A forwarding call inside an `unsafe fn` names the
 `#[allow(unsafe_code, ...)]` attribute: Clippy 1.97 does not accept a comment
 above an attribute that spans several lines.
 
-Memory operations move into `oer-memory`, architectural instructions into
-`oer-riscv`, and PSRAM slice creation into its HAL owner. Their unsafe counts
+Memory operations move into `oer-portable-memory`, architectural instructions into
+`oer-portable-riscv`, and PSRAM slice creation into its HAL owner. Their unsafe counts
 may grow only by the relocated operations while the branch total falls and
 no calling crate's count grows. Runtime panic counts never increase. Image
 panic budgets report counts and sites without gating builds; zero reachable
@@ -96,7 +96,7 @@ Conditional branches out of a function count as tail transfers, like direct
 jumps: their destination's bound counts below the source's retained stack
 depth. Missing entries, interior targets and unknown frames remain unresolved.
 
-Only `oer-memory` defines `unsafe impl Sync` or `Send`; the layer test
+Only `oer-portable-memory` defines `unsafe impl Sync` or `Send`; the layer test
 `unsafe_sync_and_send_impls_stay_in_oer_memory` maintains the shrinking
 file-to-count list of existing exceptions and rejects new or stale entries.
 
@@ -127,11 +127,11 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `firmware/bootstrap/`, `hil/probes/` |
 
-`oer-espressif-interrupt-table` owns the Espressif interrupt matrix contract,
+`oer-chips-family-interrupt-table` owns the Espressif interrupt matrix contract,
 vector ABI and staged-runtime symbols. CLIC line encodings live in
-`oer-riscv::clic`, independent of chip geometry. Its narrow unsafe
+`oer-portable-riscv::clic`, independent of chip geometry. Its narrow unsafe
 contracts cover the existing vector/table/exemption slot names and ABI
-types; signal execution proofs belong to `oer-memory`. Every safe `Entry` implementation carries
+types; signal execution proofs belong to `oer-portable-memory`. Every safe `Entry` implementation carries
 `EntryProof<Self>`; root Clippy policy restricts both proof and token
 constructors to the table macro. This policy requires an explicit lint waiver
 to bypass; it cannot validate scheduling metadata supplied under such a waiver.
@@ -146,7 +146,7 @@ symbol-export attributes. Chip crates and firmware consume the bindings directly
 Typed register blocks are generated without `unsafe`: `cargo registers
 generate --chip <chip>` renders every MMIO block type of the chip's register
 model, with the owners of its policy's parts, into the chip PAC's
-`generated.rs`. The unsafe code under a typed block is `oer-mmio`
+`generated.rs`. The unsafe code under a typed block is `oer-portable-mmio`
 (`portable/mmio`) alone, and the PAC root's one claim. A policy
 `register-image-reads` operation reads one side-effect-free 32-bit word
 through its existing owner, including a read-only owner. Every declared
@@ -157,11 +157,11 @@ fields reject the entire word even beside readable fields. FIFO and other
 read side effects also reject it. An admitted read returns the complete
 `u32`, including undeclared and reserved bits, without decoding, masking,
 writing or acknowledging it. Splitting fields grants no additional register
-authority or unsafe access. `oer-mmio` holds
+authority or unsafe access. `oer-portable-mmio` holds
 only volatile register words and their access authority (DMA addresses and
-volatile DMA-memory cells live in `oer-memory`):
+volatile DMA-memory cells live in `oer-portable-memory`):
 
-- `oer_mmio::assume_owned` promises exclusive ownership of the declared
+- `oer_portable_mmio::assume_owned` promises exclusive ownership of the declared
   words, rather than every word of an overlapping address range. The chip's
   PAC takes those words once; the HAL root splits them into domain owners.
   A hart-local instance (the S31 CLIC: each hart reaches its own at one
@@ -193,11 +193,11 @@ volatile DMA-memory cells live in `oer-memory`):
   `Part::write_trigger` stores only the part's bits, zero in the others.
   A device word is not Rust memory, so the parts' stores from several
   contexts are no data race; a host part is `!Send`.
-- `oer_mmio::Reader`, the `Copy` read-only authority a block or part
+- `oer_portable_mmio::Reader`, the `Copy` read-only authority a block or part
   becomes when it gives up its writes: no owner writes the words it took
   over, and every copy only reads.
 - The marker-derived `Sync` of a shared block at a fixed address
-  (`oer_mmio::SharedRegisters`, a policy's `[[shared-blocks]]`) and its
+  (`oer_portable_mmio::SharedRegisters`, a policy's `[[shared-blocks]]`) and its
   `write_shared`: a device word is not Rust memory, and the block's writes
   are whole-word stores that read nothing back, so every execution context
   reaches its one owner through `&self`. `Registers::Sharing` is
@@ -205,13 +205,13 @@ volatile DMA-memory cells live in `oer-memory`):
   owned blocks and parts remain `!Sync`, and host placements also stay
   `!Send`. No unsafe sharing implementation is needed.
 
-`oer-memory::VolatileCell` is the volatile word of generated DMA-memory
+`oer-portable-memory::VolatileCell` is the volatile word of generated DMA-memory
 layouts; both the cell and the layouts derive `Zeroable`. `DmaWindow`,
 `DmaLayout`, `DmaWindowAddress` and `DmaRef` live beside `DmaBytes` in
-`oer-memory`. Their two unsafe constructors preserve the placed-storage
+`oer-portable-memory`. Their two unsafe constructors preserve the placed-storage
 and retention contracts.
 
-`oer-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
+`oer-portable-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
 operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
 debug triggers, waits and barriers, and `illegal_instruction`, the
 illegal-instruction trap a HIL test image raises on request to check its
@@ -224,11 +224,11 @@ constant entry in one block.
 Every instruction site has one narrow `// SAFETY:` proof. Moving instructions
 into this crate may increase its unsafe count only while the branch total
 decreases and no caller's count increases; runtime panic counts never increase.
-Device ordering is `oer_riscv::fence` (`fence iorw, iorw`), `fence_w_o`
+Device ordering is `oer_portable_riscv::fence` (`fence iorw, iorw`), `fence_w_o`
 (memory writes before device outputs: a producer's facts before its
 software-interrupt raise) and `fence_o_rw` (device outputs before memory
 accesses: a handler's lowering before it takes the facts), each with the
-host compiler fence; `oer-mmio` contains no architectural instruction or
+host compiler fence; `oer-portable-mmio` contains no architectural instruction or
 barrier API.
 
 The instruction module and its exports exist only on RISC-V. Staged firmware
@@ -249,7 +249,7 @@ wake on another hart records and resets. `Hart<H>` and
 Installation checks the executing hart and masks local interrupts before
 painting the inactive allocation and installing its trap registers. Its
 memory operations remain in the private `stacks::watermark` module; the
-trap-register writes remain in `oer-riscv::install_trap_stack`, each with
+trap-register writes remain in `oer-portable-riscv::install_trap_stack`, each with
 its narrow safety contract.
 
 The HAL publishes every hart's side-effect-free pending bank at root split.
@@ -310,7 +310,7 @@ no instruction memory and Rust cannot call it as a function. Compile-time
 checks enforce the RV32 slot width and row size. Machine entry/exit code
 remains in `global_asm!`, with frame operands derived from `TrapFrame`.
 
-Outside `oer-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
+Outside `oer-portable-riscv`, firmware assembly is only `global_asm!`/`naked_asm!` for
 entry/trap ABI work: staged-bootstrap's `entry.rs`, staged-runtime's `entry.rs`
 and trap-frame/stack entries in `stacks.rs`, and bootstrap/probe images. The
 layer test
@@ -319,7 +319,7 @@ and rejects inline operations even there. Host compiler fixtures are test
 inputs, not firmware instruction owners.
 
 A generated register writer takes typed field values only: `bool`, a value
-enum, an exact-width integer or `oer_mmio::Bits<WIDTH>`; a reader returns
+enum, an exact-width integer or `oer_portable_mmio::Bits<WIDTH>`; a reader returns
 the same type, so a value read back is written again without a
 conversion. A read-modify-write keeps every other bit, reserved and
 undeclared ones included; a write-one-to-clear register, or the clear
@@ -405,7 +405,7 @@ packet-pool owners without adopting detached DMA storage. Preserve the proof
 at the smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
-`oer_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
+`oer_chips_esp32s31_hal::bluetooth::engine` owns the controller-SRAM protocol.
 One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
 its private components retain graph bindings. The codecs
 and scheduler lists encode the addresses the controller follows: `DmaRef`
@@ -442,7 +442,7 @@ mutation. Unconfirmed stop and reset failure retain the whole graph with its
 register partitions in absorbing quarantine; Drop never returns a placement.
 The P2 engine holds only the task endpoint of `scheduler::interrupt`'s static
 request/reply channel. Its unique P3 endpoint stays beside the IRQ register
-owner. The channel uses `oer-memory::RequestSlot` in `InPlace` mode, with no
+owner. The channel uses `oer-portable-memory::RequestSlot` in `InPlace` mode, with no
 stored wakers. Release/Acquire state transitions transfer exclusive access:
 P2 posts the exchange, P3 borrows it in place and writes its reply, then P2
 validates and consumes the exchange exactly once. A rejected reply stays in
@@ -469,7 +469,7 @@ it.
 
 Each chip's HAL has one module that makes typed DMA addresses,
 `memory::dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
-`DmaRef` constructors of `oer-memory`, which the PAC's generated `layouts`
+`DmaRef` constructors of `oer-portable-memory`, which the PAC's generated `layouts`
 bind to the chip's DMA window (clippy `disallowed-methods` refuses them
 elsewhere). Consuming constructors select the base exclusively through sealed
 Wi-Fi/native or controller address spaces. Only a `cfg(test)` constructor
@@ -668,7 +668,7 @@ RAW/ST, request/reply lengths and invalid-delay values. Numeric foreign-reunion
 identities are observations only, without ownership or dereference authority.
 The HAL declares the direct `link_fn!` binding and exports
 `phy_fault_reporter!` to define that exact signature. Staged images bind it
-to `oer-esp32s31-compose`'s `phy_fault::reset`, which calls
+to `oer-chips-esp32s31-compose`'s `phy_fault::reset`, which calls
 `fatal::reset_recording`. Its common-format record preserves the source
 payload and is cleared only after successful next-boot output.
 Isolated comparison probes supply their own reporter through the same HAL
@@ -679,13 +679,13 @@ normal runtime record/reset path. Host tests use separate seats and catch
 their own reporter's unwind; both payloads remain quarantined there too.
 No new unsafe block or sharing implementation is introduced.
 
-`oer-memory` holds the shared proofs for executor-crossing storage.
+`oer-portable-memory` holds the shared proofs for executor-crossing storage.
 `ExecutionContext` is the unsafe execution-identity contract; its `Sharing`
 marker distinguishes a globally exclusive context from each constructing
 thread's local context. `Entered<X>` has a private constructor, checks
 `X::running()` at entry and rechecks it before every cell access. It is
 !Send/!Sync; retaining it never extends admission beyond its context.
-`oer-memory::signal` owns the signal task cell, pending facts and intrusive
+`oer-portable-memory::signal` owns the signal task cell, pending facts and intrusive
 list, with no Espressif or CLIC dependency. Its service callback runs after
 releasing the cell borrow. `ContextCell<T, P: ContextProof>` holds that state
 and timer slots. A private unchecked owner proof or a checked
@@ -697,7 +697,7 @@ owners. The transferable host raiser contains only an atomic flag reference,
 never a signal, list, task handle or proof; it never services payload or
 invokes a waker. Host/deferred constructors return both halves.
 The cell's sole `Sync` implementation and mutable accessor live in
-`oer-memory`. Its non-atomic borrow flag refuses a nested `with` on the same
+`oer-portable-memory`. Its non-atomic borrow flag refuses a nested `with` on the same
 cell with `None`, without invoking the closure or changing payload; borrowing
 another cell is permitted. A guard ends the borrow on return or unwind.
 Signal reads and registration report refusal through `ForeignContext`;
@@ -818,12 +818,12 @@ value type, including a function's calling convention and complete signature.
 Safe declarations and definitions check all three; private emission arms also
 check the name, so a direct call cannot select another symbol. The former
 unrestricted `define fn` and string-named `export` forms are unavailable.
-`oer-memory::TraceClockSlot` owns `__oer_trace_now_micros: fn() -> u64`;
-`oer-trace` retains `forbid(unsafe_code)` and contains no unsafe site.
+`oer-portable-memory::TraceClockSlot` owns `__oer_trace_now_micros: fn() -> u64`;
+`oer-portable-trace` retains `forbid(unsafe_code)` and contains no unsafe site.
 The HAL's `domain::transaction::PhyFaultSlot` owns
 `__oer_phy_transaction_fault: fn(Fault) -> !`. This one narrow unsafe slot
 implementation is the HAL's permitted one-site caller-count exception.
-`oer-espressif-interrupt-table` owns its table, vector and exemption slot
+`oer-chips-family-interrupt-table` owns its table, vector and exemption slot
 contracts; the memory home emits their attributes, preserving the image ABI.
 Duplicate strong definitions are rejected by the linker. A slot's unsafe owner
 must keep its declared name/type consistent with every foreign reader; safe
@@ -874,19 +874,19 @@ invalid header.
 
 ## The host's operating-system bindings
 
-`oer-os-process` holds the host's raw system calls that rustix does not
+`oer-tools-os-process` holds the host's raw system calls that rustix does not
 make safe: `child_setup` for what a child does between fork and exec,
 `launch_handoff` for the descriptor a fixed launcher passes its
 helper across `exec` (the LAB service adopts the socket systemd hands it the
 same way), and, behind the `linux-socket` feature, `linux_socket` for the
-link-layer, HCI and L2CAP addresses and three socket options. `oer-os-serial`
+link-layer, HCI and L2CAP addresses and three socket options. `oer-tools-os-serial`
 takes an open serial port's descriptor; it is its own crate so that the root
-fixture installer, which links `oer-os-process`, does not link `serialport`.
+fixture installer, which links `oer-tools-os-process`, does not link `serialport`.
 The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
-`oer-espressif-executor::port_slot` binds a nominal port identity to one
+`oer-chips-family-executor::port_slot` binds a nominal port identity to one
 static allocation. `declare_port_slot!` irreversibly claims its private
 `StaticCell` before constructing `SlotClaim<StaticId<Declaration>>` at one
 unsafe site. The claim has only invariant `PhantomData`; its private safe
@@ -996,7 +996,7 @@ The facts image's trap/vector ABI lives inside its own package: `global_asm!`
 uses offsets from its own Rust frame and a generated CPU-line table. All
 nonzero vectors enter the same register-preserving assembly entry and handler.
 It shares no private runtime source; its only trap-register installer is the
-public architectural API in `oer-riscv`.
+public architectural API in `oer-portable-riscv`.
 The facts image takes the PAC once, uses typed accessors, and has no HAL or
 production runtime dependency; production never depends on it. All other
 drivers and adapters reach registers through HAL owners. Check the executable
@@ -1096,7 +1096,7 @@ The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as
 an opaque diagnostic. It quarantines both interrupt banks before returning a
 named `irq::Fault` to the image. The image retains the preempted DMA owners and
 the handler's register owners through the chip composition's
-(`oer-esp32s31-compose`) never-returning shared `wifi_fault::reset`, which
+(`oer-chips-esp32s31-compose`) never-returning shared `wifi_fault::reset`, which
 calls the runtime's `fatal::reset_recording`,
 writes a twelve-byte record through the existing safe retained-cell API, and
 reports it at the next boot. The `wifi-fault` feature selects the one record

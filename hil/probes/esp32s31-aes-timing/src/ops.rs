@@ -7,7 +7,7 @@
 //! (RFC 4493). The host tests check both against the RustCrypto crates the
 //! product's software path uses.
 
-use oer_crypto::block::{Block, BlockCipher};
+use oer_portable_crypto::block::{Block, BlockCipher};
 
 /// CCMP's MIC length.
 pub const MIC: usize = 8;

@@ -3,10 +3,10 @@
 use super::*;
 
 #[cfg(target_arch = "riscv32")]
-impl<R: oer_esp32s31_hal::owner::SharedPhyContext> Hardware for R {
+impl<R: oer_chips_esp32s31_hal::owner::SharedPhyContext> Hardware for R {
     #[inline]
     fn control<D: PhyShortDelay>(&mut self, command: ControlCommand) -> Result<(), RxError> {
-        use oer_esp32s31_hal::phy::{agc, baseband, pbus, rx_dco};
+        use oer_chips_esp32s31_hal::phy::{agc, baseband, pbus, rx_dco};
         match command {
             ControlCommand::PrepareRoot | ControlCommand::PrepareCalibration => {
                 rx_dco::prepare_control_restore(self).map_err(|_| RxError::Hardware)?
@@ -17,14 +17,14 @@ impl<R: oer_esp32s31_hal::owner::SharedPhyContext> Hardware for R {
             ControlCommand::Registers(enabled) => {
                 crate::hardware::configure_phy_rx_gain_dc_registers(self, enabled)
             }
-            ControlCommand::Debug => oer_espressif_phy::pbus::configure_debug_mode(
-                &mut oer_esp32s31_hal::phy::pbus::port(self),
+            ControlCommand::Debug => oer_chips_family_phy::pbus::configure_debug_mode(
+                &mut oer_chips_esp32s31_hal::phy::pbus::port(self),
             ),
             ControlCommand::RxClock(enabled) => pbus::configure_rx_clock(self, enabled),
             ControlCommand::TxClock(enabled) => pbus::configure_tx_clock(self, enabled),
             ControlCommand::WorkMode => {
-                if oer_espressif_phy::pbus::configure_work_mode(
-                    &mut oer_esp32s31_hal::phy::pbus::port(self),
+                if oer_chips_family_phy::pbus::configure_work_mode(
+                    &mut oer_chips_esp32s31_hal::phy::pbus::port(self),
                 ) {
                     settle::<D>(1)?;
                     agc::configure_pbus_work_mode_pulse(self);
@@ -45,13 +45,13 @@ impl<R: oer_esp32s31_hal::owner::SharedPhyContext> Hardware for R {
     }
     #[inline]
     fn read_pbus(&mut self, selector: u8, path: u8) -> Result<u32, RxError> {
-        oer_esp32s31_hal::phy::pbus::read_result(self, selector, path)
+        oer_chips_esp32s31_hal::phy::pbus::read_result(self, selector, path)
             .map(u32::from)
             .ok_or(RxError::Hardware)
     }
     #[inline]
     fn entry(&mut self, command: PhyGainMemoryEntry) -> Result<(), RxError> {
-        oer_esp32s31_hal::phy::memory::program_gain_memory_entry(self, command);
+        oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(self, command);
         Ok(())
     }
     #[inline]

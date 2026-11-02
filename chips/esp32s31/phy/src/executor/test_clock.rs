@@ -1,9 +1,9 @@
 //! Each test owns its virtual clock and synthetic peer readiness.
 use core::{cell::Cell, ops::Deref};
-use oer_time::{Clock, Instant, Timer};
+use oer_portable_time::{Clock, Instant, Timer};
 
 pub(crate) struct VirtualClock<const N: usize = 8> {
-    clock: oer_time_virtual::VirtualClock<N>,
+    clock: oer_portable_time_virtual::VirtualClock<N>,
     peers: Cell<bool>,
     peer_at: Cell<Option<Instant>>,
 }
@@ -13,7 +13,7 @@ impl<const N: usize> VirtualClock<N> {
     }
     pub(crate) fn starting_at(at: Instant) -> Self {
         Self {
-            clock: oer_time_virtual::VirtualClock::starting_at(at),
+            clock: oer_portable_time_virtual::VirtualClock::starting_at(at),
             peers: Cell::new(true),
             peer_at: Cell::new(None),
         }
@@ -26,7 +26,7 @@ impl<const N: usize> VirtualClock<N> {
     }
 }
 impl<const N: usize> Deref for VirtualClock<N> {
-    type Target = oer_time_virtual::VirtualClock<N>;
+    type Target = oer_portable_time_virtual::VirtualClock<N>;
     fn deref(&self) -> &Self::Target {
         &self.clock
     }
@@ -41,7 +41,7 @@ impl<const N: usize> Timer for VirtualClock<N> {
         self.clock.wait_until(at)
     }
 }
-impl<const N: usize> oer_cooperate::CooperativeTimer for VirtualClock<N> {
+impl<const N: usize> oer_portable_cooperate::CooperativeTimer for VirtualClock<N> {
     fn should_yield(&self) -> bool {
         self.peers.get() || self.peer_at.get().is_some_and(|at| self.clock.now() >= at)
     }

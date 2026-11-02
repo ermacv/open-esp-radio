@@ -5,10 +5,10 @@ use object::{
     Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
     write::{Object, Symbol, SymbolSection},
 };
-use oer_analysis_blobray_application::in_process::Executable;
-use oer_analysis_blobray_application::library::{Assumptions, register_accesses};
-use oer_analysis_blobray_domain::*;
-use oer_analysis_riscv_model::*;
+use oer_tools_analysis_blobray_application::in_process::Executable;
+use oer_tools_analysis_blobray_application::library::{Assumptions, register_accesses};
+use oer_tools_analysis_blobray_domain::*;
+use oer_tools_analysis_riscv_model::*;
 
 struct WorkBudget {
     units: u64,
@@ -76,7 +76,7 @@ fn accesses_with(
         inputs,
         assumptions,
         ranges,
-        &oer_analysis_riscv_lift::RiscvDecoder,
+        &oer_tools_analysis_riscv_lift::RiscvDecoder,
         &memory,
         &mut control,
         &mut |record, _| {
@@ -878,7 +878,7 @@ fn independent_inputs_merge_typed_local_exhaustion_without_reanalysis() {
             inputs,
             Assumptions::default(),
             &ranges,
-            &oer_analysis_riscv_lift::RiscvDecoder,
+            &oer_tools_analysis_riscv_lift::RiscvDecoder,
             &memory,
             &mut WorkBudget::new(),
             &mut |_, _| Ok(()),

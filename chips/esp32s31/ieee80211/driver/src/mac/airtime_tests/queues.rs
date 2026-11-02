@@ -4,7 +4,7 @@ use crate::mac::{
     tx_work::MacTxWork,
 };
 use core::num::NonZeroU16;
-use oer_embassy_net::datapath::TxQueues;
+use oer_portable_embassy_net::datapath::TxQueues;
 
 fn data_phy(peer: u8) -> PpduTiming {
     PpduTiming::BccOfdm {

@@ -1,5 +1,5 @@
 use super::*;
-use oer_ieee80211_contracts_port::{AggregateAttempt, LayoutError, MpduStartSpacing, PoolSource};
+use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, LayoutError, MpduStartSpacing, PoolSource};
 // The fixture classifies port refusals; no station transition is involved.
 #[derive(Debug, Eq, PartialEq)]
 enum TxRefusal {
@@ -59,14 +59,14 @@ fn try_source<'k, 'p, 'id: 'p + 'k, Id: SlotIdentity + 'id>(
     phase
         .station()
         .submit(
-            (oer_ieee80211_contracts_port::Attempt {
+            (oer_protocols_ieee80211_contracts_port::Attempt {
                 context: (),
                 ticket,
                 source,
                 access_category: WmmAccessCategory::BestEffort,
                 protection: Protection::None,
                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
             })
             .admit(),
         )
@@ -83,7 +83,7 @@ impl Work for Boundaries {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -263,7 +263,7 @@ impl Work for BodyView {
                     TxProtection::Open,
                 );
                 let source: SubframeSource<_, (), _, _> = SubframeSource::Fresh {
-                    numbering: oer_ieee80211_contracts_port::TxNumbering::Open,
+                    numbering: oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
                     buffer,
                     frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
                         .ok()
@@ -272,7 +272,7 @@ impl Work for BodyView {
                 };
                 let checked = CheckedAggregate::new(aggregate, source).ok().unwrap();
                 let (aggregate, source) = checked.into_parts();
-                let oer_ieee80211_contracts_port::CheckedSubframe::Fresh(source) = source else {
+                let oer_protocols_ieee80211_contracts_port::CheckedSubframe::Fresh(source) = source else {
                     panic!("fresh subframe stays fresh before backend preparation");
                 };
                 let (source, layout) = source.into_parts();
@@ -286,7 +286,7 @@ impl Work for BodyView {
                     protection: TxProtection::Open,
                 };
                 let checked = source.check().ok().unwrap();
-                let oer_ieee80211_contracts_port::CheckedTxSource::Fresh(source) = checked else {
+                let oer_protocols_ieee80211_contracts_port::CheckedTxSource::Fresh(source) = checked else {
                     panic!("fresh source stays fresh before backend preparation");
                 };
                 let (source, layout) = source.into_parts();
@@ -322,9 +322,9 @@ fn an_aggregate_copies_exactly_the_body_view_whose_length_it_checked() {
 fn aggregate_rate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
 ) -> AmpduRate<'p, 'id, ModelCaps> {
-    let ht = oer_ieee80211_wire::phy::HtRate::new(
+    let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
         HtMcs::new(7).unwrap(),
-        oer_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+        oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
         false,
     )
     .unwrap();
@@ -340,7 +340,7 @@ impl Work for RetryIdentity {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -489,7 +489,7 @@ impl Work for AggregateBoundaries {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -525,10 +525,10 @@ impl Work for AggregateBoundaries {
             let body = ModelBody(alloc::vec![0x99;16]);
             let body_pointer = body.0.as_ptr();
             let numbering = if protected {
-                oer_ieee80211_contracts_port::TxNumbering::Open
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Open
             } else {
-                oer_ieee80211_contracts_port::TxNumbering::Ccmp(
-                    oer_ieee80211_wire::ccmp::CcmpPacketNumber::new(55).unwrap(),
+                oer_protocols_ieee80211_contracts_port::TxNumbering::Ccmp(
+                    oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(55).unwrap(),
                 )
             };
             let source: ModelSubframe<'id, ModelBackend<Id>, ModelSmall, ModelCaps> =
@@ -646,7 +646,7 @@ impl Work for PreparedRemoval {
     ) {
         let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
             resources.station_association,
-            oer_ieee80211_wire::security::Spp::NotNegotiated,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         );
 
         let mut terminal_access = resources.terminal_access;
@@ -712,14 +712,14 @@ impl Work for PreparedRemoval {
             phase
                 .station()
                 .submit(
-                    (oer_ieee80211_contracts_port::Attempt {
+                    (oer_protocols_ieee80211_contracts_port::Attempt {
                         context: (),
                         ticket,
                         source: prepared,
                         access_category: WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                        coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                     })
                     .admit(),
                 )
@@ -730,7 +730,7 @@ impl Work for PreparedRemoval {
             else {
                 panic!("terminal before removal")
             };
-            let oer_ieee80211_contracts_port::TerminalParts {
+            let oer_protocols_ieee80211_contracts_port::TerminalParts {
                 outcome: completion,
                 payload,
                 ..
@@ -792,14 +792,14 @@ impl Work for RetryRole {
         phase
             .access_point()
             .submit(
-                (oer_ieee80211_contracts_port::Attempt {
+                (oer_protocols_ieee80211_contracts_port::Attempt {
                     context: (),
                     ticket: tickets.remove(0),
                     source,
                     access_category: WmmAccessCategory::BestEffort,
                     protection: Protection::None,
                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                    coex_operation: oer_ieee80211_contracts_port::TxOperation::Data,
+                    coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                 })
                 .admit(),
             )

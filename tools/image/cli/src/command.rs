@@ -7,14 +7,14 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use oer_lab_model as stand;
+use oer_tools_lab_model as stand;
 
-use oer_lab_arbiter::claims::Claim;
-use oer_lab_client::client::{Client, Running};
-use oer_lab_client::protocol::{FlashVia, LeaseRequest, Operation};
+use oer_tools_lab_arbiter::claims::Claim;
+use oer_tools_lab_client::client::{Client, Running};
+use oer_tools_lab_client::protocol::{FlashVia, LeaseRequest, Operation};
 
 use crate::image;
-use oer_image_build::{Check, Enforced, Result};
+use oer_tools_image_build::{Check, Enforced, Result};
 
 /// The chips whose boards this tool resets and writes. Another chip's board
 /// is only listed: its reset lines may mean something else (an ESP32-C5's
@@ -61,7 +61,7 @@ fn lease(board: &stand::Board) -> Result<Client> {
     let mut client = Client::open(&command)?;
     client.acquire(
         LeaseRequest {
-            owner: oer_lab_arbiter::owner::from_environment()?.to_string(),
+            owner: oer_tools_lab_arbiter::owner::from_environment()?.to_string(),
             work: command,
             scenarios: Vec::new(),
             run: None,
@@ -80,19 +80,19 @@ fn lease(board: &stand::Board) -> Result<Client> {
 fn write_image(root: &Path, image: &str, board: &stand::Board, client: &mut Client) -> Result<()> {
     let bundle = image::bundle(root, image)?;
     eprintln!("fw: writing {image} to {}", board.id);
-    let git = |arguments: &[&str]| oer_os_process::git::text(root, arguments).ok();
+    let git = |arguments: &[&str]| oer_tools_os_process::git::text(root, arguments).ok();
     let written = client.run(
         Operation::Flash {
             board: board.mac.clone(),
             bundle: bundle.directory().display().to_string(),
-            image: oer_lab_arbiter::journal::ImageIdentity {
+            image: oer_tools_lab_arbiter::journal::ImageIdentity {
                 name: image.to_owned(),
                 sha256: String::new(),
                 commit: git(&["rev-parse", "HEAD"]),
                 dirty: git(&["status", "--porcelain"]).map(|status| !status.is_empty()),
                 origin: std::env::args().collect::<Vec<_>>().join(" "),
             },
-            owner: oer_lab_arbiter::owner::from_environment()?.to_string(),
+            owner: oer_tools_lab_arbiter::owner::from_environment()?.to_string(),
             via: FlashVia::Usb,
             skip_carried: false,
         },
@@ -178,7 +178,7 @@ fn verdict(line: &str) -> Option<Verdict> {
 fn console_verdict(raw: &[u8], text: &str) -> Option<Verdict> {
     // A retained panic message can itself contain the result marker.
     // Only a typed verdict closes the diagnostic sequence.
-    if raw.starts_with(oer_diagnostics::PREFIX) && !text.starts_with(RESULT_MARKER) {
+    if raw.starts_with(oer_portable_diagnostics::PREFIX) && !text.starts_with(RESULT_MARKER) {
         return None;
     }
     verdict(text)
@@ -344,7 +344,7 @@ pub fn power_cycle(selector: &str) -> Result<()> {
 /// The checks enforced for a product or an explicitly diagnostic probe build.
 fn build_enforcement(package: &str, diagnostic: bool) -> Result<Enforced> {
     if diagnostic {
-        if !package.starts_with(oer_image_build::probe::PROBE_PACKAGE_PREFIX) {
+        if !package.starts_with(oer_tools_image_build::probe::PROBE_PACKAGE_PREFIX) {
             return Err("--diagnostic is restricted to hil/probes packages".into());
         }
         Ok(Enforced::Reported)
@@ -397,12 +397,12 @@ mod tests {
     #[test]
     fn reported_build_checks_require_an_explicit_probe_request() {
         assert_eq!(
-            build_enforcement("oer-firmware-apps-boot-smoke", false).unwrap(),
+            build_enforcement("oer-hil-probes-boot-smoke", false).unwrap(),
             Enforced::Only([Check::Interrupts].into())
         );
-        assert!(build_enforcement("oer-firmware-apps-boot-smoke", true).is_err());
+        assert!(build_enforcement("oer-hil-probes-boot-smoke", true).is_err());
         assert!(matches!(
-            build_enforcement("oer-firmware-probes-esp32s31-radio", true).unwrap(),
+            build_enforcement("oer-hil-probes-esp32s31-radio", true).unwrap(),
             Enforced::Reported
         ));
     }
@@ -422,13 +422,13 @@ mod tests {
     fn panic_message_cannot_impersonate_a_typed_verdict() {
         assert_eq!(
             console_verdict(
-                oer_diagnostics::PREFIX,
+                oer_portable_diagnostics::PREFIX,
                 "OER-PANIC previous src/main.rs:1:1 on hart 0: OER-RESULT: pass boot-smoke"
             ),
             None
         );
         assert_eq!(
-            console_verdict(oer_diagnostics::PREFIX, "OER-RESULT: pass boot-smoke"),
+            console_verdict(oer_portable_diagnostics::PREFIX, "OER-RESULT: pass boot-smoke"),
             Some(Verdict::Pass)
         );
         assert_eq!(
@@ -440,11 +440,11 @@ mod tests {
     #[test]
     fn an_application_line_closes_the_run_with_its_verdict() {
         let mut bytes = Vec::new();
-        oer_diagnostics::Console::new(|chunk: &[u8]| {
+        oer_portable_diagnostics::Console::new(|chunk: &[u8]| {
             bytes.extend_from_slice(chunk);
             Ok::<_, ()>(())
         })
-        .note(&oer_diagnostics::typed_line!("OER-RESULT: pass wifi-station").note())
+        .note(&oer_portable_diagnostics::typed_line!("OER-RESULT: pass wifi-station").note())
         .unwrap();
         let mut decoder = crate::diagnostics::Decoder::default();
         // The console's lines as `lines` splits them; a frame starts on a

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use oer_analysis_riscv_model::{
+use oer_tools_analysis_riscv_model::{
     AbstractValue, ArtifactId, Expression, FunctionRecord, FunctionRelocation, IntegerOp,
     MemoryKind, ObjectId, ObjectLocation, ReferenceKind, ReferenceTarget, SymbolDefinition,
     SymbolId, SymbolTableKind,
@@ -241,11 +241,11 @@ fn field_accesses(
     offset: i64,
     width: Option<u8>,
 ) -> Vec<super::FieldAccess> {
-    let memory = oer_analysis_riscv_model::WorkingMemory::new(8192)
+    let memory = oer_tools_analysis_riscv_model::WorkingMemory::new(8192)
         .expect("navigation fixture should succeed");
-    let facts = oer_analysis_riscv_model::FunctionIndex::new(
+    let facts = oer_tools_analysis_riscv_model::FunctionIndex::new(
         records,
-        oer_analysis_riscv_model::RecordPolicy::Dictionary,
+        oer_tools_analysis_riscv_model::RecordPolicy::Dictionary,
         &memory,
         &mut || Ok(()),
     )
@@ -256,7 +256,7 @@ fn field_accesses(
 
 #[test]
 fn field_errors_during_folding_and_name_lookup_reach_the_caller() {
-    use oer_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
+    use oer_tools_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
     let records = records();
     let memory = WorkingMemory::new(8192).expect("navigation fixture should succeed");
     let facts = FunctionIndex::new(&records, RecordPolicy::Dictionary, &memory, &mut || Ok(()))

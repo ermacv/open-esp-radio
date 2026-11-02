@@ -1,5 +1,5 @@
 #![no_std]
-use oer_espressif_executor::{Binding, TimeDriverReady};
+use oer_chips_family_executor::{Binding, TimeDriverReady};
 pub fn startup<B: Binding>(ready: TimeDriverReady<B>) {
     #[cfg(not(ui_reject))]
     let _: TimeDriverReady<B> = ready;

@@ -1,13 +1,13 @@
 //! CCMP packet-number allocation and receive replay owners.
 
 #[cfg(test)]
-use oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
+use oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
 
 use core::num::NonZeroU8;
 
 use crate::packet_number::{PacketNumberCandidate, PacketNumberFrontier, advance};
 
-use oer_ieee80211_wire::ccmp::{
+use oer_protocols_ieee80211_wire::ccmp::{
     CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId, CcmpPacketNumber, CcmpReceiveSequenceError, GroupKeyId,
 };
 
@@ -21,7 +21,7 @@ pub use replay::{CcmpRxProtection, CcmpRxReplayEpoch, CcmpRxReplayError};
 /// consecutive PNs; one is the ordinary step. A backend or vendor profile
 /// that must stay compatible with a peer implementation's numbering supplies
 /// its own step: the Espressif `net80211` stack advances by three
-/// (`oer-espressif-ieee80211-policy`).
+/// (`oer-chips-family-ieee80211-policy`).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CcmpPacketNumberStep(NonZeroU8);
 
@@ -48,7 +48,7 @@ pub const CCMP_REPLAY_LANE_COUNT: usize = 17;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CcmpTxPacketNumberError {
     /// The next PN would exceed
-    /// [`CCMP_PACKET_NUMBER_MAX`](oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX); the key must be
+    /// [`CCMP_PACKET_NUMBER_MAX`](oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX); the key must be
     /// replaced.
     Exhausted,
 }
@@ -75,9 +75,9 @@ impl<K> InstalledCcmpTxKey<K> {
     /// Number one protected MPDU: the key and its next CCMP packet number,
     /// or `None` once its packet numbers are exhausted. A retransmission
     /// keeps the number of its first transmission and does not call this.
-    pub fn number(&self) -> Option<oer_ieee80211_contracts_port::NumberedKey<&K>> {
+    pub fn number(&self) -> Option<oer_protocols_ieee80211_contracts_port::NumberedKey<&K>> {
         let packet_number = self.packet_numbers.allocate().ok()?;
-        Some(oer_ieee80211_contracts_port::NumberedKey {
+        Some(oer_protocols_ieee80211_contracts_port::NumberedKey {
             key: &self.key,
             packet_number,
         })
@@ -113,14 +113,14 @@ impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
 /// This does not accept an already installed backend key or an initial PN.
 pub fn request_ccmp_pairwise_key<'p, 'id: 'p, P>(
     phase: &mut P,
-    association: &<oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::Association,
-    slot: <oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::PairwiseSlot,
-    peer: oer_ieee80211_wire::address::IndividualAddress,
-    key: oer_ieee80211_contracts_security::Ccmp128Key,
+    association: &<oer_protocols_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_protocols_ieee80211_contracts_port::KeyTypes<'id>>::Association,
+    slot: <oer_protocols_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_protocols_ieee80211_contracts_port::KeyTypes<'id>>::PairwiseSlot,
+    peer: oer_protocols_ieee80211_wire::address::IndividualAddress,
+    key: oer_protocols_ieee80211_contracts_security::Ccmp128Key,
     step: CcmpPacketNumberStep,
-) -> PendingCcmpTxKey<<oer_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_ieee80211_contracts_port::KeyTypes<'id>>::Identity>
+) -> PendingCcmpTxKey<<oer_protocols_ieee80211_contracts_port::InterfaceKeys<'p, 'id, P> as oer_protocols_ieee80211_contracts_port::KeyTypes<'id>>::Identity>
 where
-    P: oer_ieee80211_contracts_port::InterfacePhase<'p, 'id>,
+    P: oer_protocols_ieee80211_contracts_port::InterfacePhase<'p, 'id>,
 {
     let installation = phase.install_pairwise_key(association, slot, peer, key);
     PendingCcmpTxKey { step, installation }
@@ -148,7 +148,7 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Pair the key the installation terminal returned with its new PN
     /// allocator; the token is spent. A key of another installation, which
     /// may already own a numbering, is refused with both owners.
-    pub fn installed<'id, Keys: oer_ieee80211_contracts_port::KeyTypes<'id, Identity = I>>(
+    pub fn installed<'id, Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>>(
         self,
         key: Keys::PairwiseKey,
     ) -> Result<InstalledCcmpTxKey<Keys::PairwiseKey>, ForeignCcmpTxKey<I, Keys::PairwiseKey>> {
@@ -167,7 +167,7 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
 /// A new key has emitted no PN; its first MPDU carries `step`. Each call
 /// hands out the next PN exactly once, so a retransmission of the same MPDU
 /// reuses the header it was first encoded with instead of allocating again.
-/// Once [`CCMP_PACKET_NUMBER_MAX`](oer_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX) could be exceeded, every later call fails
+/// Once [`CCMP_PACKET_NUMBER_MAX`](oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX) could be exceeded, every later call fails
 /// without wrapping or changing state.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CcmpTxPacketNumber {

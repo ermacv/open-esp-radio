@@ -1,7 +1,7 @@
 warning: unused import: `StaSaeEvent`
  --> tests/ui/sae_terminal_owner.rs:2:69
   |
-2 | use oer_ieee80211_core_roles_sta::join::sae::{StaSaeAuthentication, StaSaeEvent};
+2 | use oer_protocols_ieee80211_core_roles_sta::join::sae::{StaSaeAuthentication, StaSaeEvent};
   |                                                                     ^^^^^^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

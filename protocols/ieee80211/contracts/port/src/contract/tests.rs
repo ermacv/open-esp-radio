@@ -88,7 +88,7 @@ fn terminal_status_distinguishes_an_exchange_from_one_attempt() {
 fn receive_metadata_keeps_absence_and_provenance_distinct() {
     let staged = MacRxMetadata {
         channel: RxEvidence::HardwareObserved(
-            Channel::ghz2_4(6, oer_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+            Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
         ),
         rate: RxEvidence::HardwareObserved(11_u8),
         rssi_dbm: RxEvidence::HardwareObserved(-47),
@@ -171,7 +171,7 @@ fn hardware_owned_operations_become_the_port_services() {
 
 #[test]
 fn a_chip_rate_maps_to_the_portable_rate_with_its_provenance() {
-    use oer_ieee80211_wire::phy::LegacyRate;
+    use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
     let chip = MacRxMetadata {
         rate: RxEvidence::HardwareObserved(0x0b_u8),

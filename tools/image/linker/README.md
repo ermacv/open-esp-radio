@@ -1,6 +1,6 @@
 # Image linker
 
-`oer-tool-image-linker` checks zeroed input sections, runs LLD, and reuses the
+`oer-tools-image-linker` checks zeroed input sections, runs LLD, and reuses the
 interrupt analysis to select strict SRAM code and each hart's IRQ allocation.
 Every staged runtime link needs the fingerprinted `image-linker.toml` supplied
 by `cargo fw` or `cargo hil`; ordinary and bootstrap links are unaffected.
@@ -13,7 +13,7 @@ including `--icf=none`; LLD's default remains off. LLVM options passed through
 `-mllvm` or `--plugin-opt` cannot enable machine outlining or set
 `pick-merged-source-locations`. An explicit LTO pass pipeline cannot
 re-enable MergeFunctions or machine outlining. Violations return the typed
-`oer_image_checks::codegen::CodegenPrecondition` with the offending option
+`oer_tools_image_checks::codegen::CodegenPrecondition` with the offending option
 and its consequence for the stack proof. Build-script link arguments pass
 through the same checks.
 
@@ -113,4 +113,4 @@ zero allocation reserves no storage. The runtime's generated address tables
 use that same geometry. `strict-placement.toml` keys task selections by hart,
 and the final pass verifies the complete inventory and each bound separately.
 Regenerate exact vector coverage with
-`cargo run -p oer-chip-profile --example stack-coverage`.
+`cargo run -p oer-tools-chip-profile --example stack-coverage`.

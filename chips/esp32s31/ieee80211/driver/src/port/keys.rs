@@ -1,6 +1,6 @@
 use super::*;
-use oer_ieee80211_contracts_port::association::{self as association, *};
-use oer_ieee80211_wire::security::Spp;
+use oer_protocols_ieee80211_contracts_port::association::{self as association, *};
+use oer_protocols_ieee80211_wire::security::Spp;
 
 #[derive(Clone, Copy, Debug)]
 pub struct RawKeyIdentity {

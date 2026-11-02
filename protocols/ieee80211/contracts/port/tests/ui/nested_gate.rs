@@ -1,6 +1,6 @@
 #![no_std]
-use oer_ieee80211_contracts_port::GatePool;
-use oer_radio_port::{Mint, PoolBuilder, PoolPath, PoolSet, Pools};
+use oer_protocols_ieee80211_contracts_port::GatePool;
+use oer_protocols_radio_port::{Mint, PoolBuilder, PoolPath, PoolSet, Pools};
 
 pub struct Wrapped;
 impl PoolSet for Wrapped {

@@ -6,8 +6,8 @@
 
 #![forbid(unsafe_code)]
 
-use oer_esp32s31_pac::modem_syscon::ModemSysconClockReset;
-use oer_mmio::Placement;
+use oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset;
+use oer_portable_mmio::Placement;
 
 use crate::{
     modem::values::{
@@ -51,67 +51,67 @@ fn restore_calibration_clocks<P: Placement>(
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_wifibb_22m_en(if clocks[0] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Disabled
         })
         .set_clk_wifibb_40m_en(if clocks[1] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Disabled
         })
         .set_clk_wifibb_44m_en(if clocks[2] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Disabled
         })
         .set_clk_wifibb_80m_en(if clocks[3] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Disabled
         })
         .set_clk_wifibb_40x_en(if clocks[4] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Disabled
         })
         .set_clk_wifibb_80x_en(if clocks[5] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Disabled
         })
         .set_clk_wifibb_40x1_en(if clocks[6] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Disabled
         })
         .set_clk_wifibb_80x1_en(if clocks[7] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled
         })
         .set_clk_wifibb_160x1_en(if clocks[8] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Disabled
         })
         .set_clk_wifi_apb_en(if clocks[9] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Disabled
         })
         .set_clk_fe_80m_en(clocks[10])
         .set_clk_fe_160m_en(clocks[11])
         .set_clk_fe_apb_en(clocks[12])
         .set_clk_bt_apb_en(if clocks[13] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Disabled
         })
         .set_clk_btbb_en(if clocks[14] {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Disabled
         })
         .set_clk_fe_pwdet_adc_en(clocks[15])
         .set_clk_fe_adc_en(clocks[16])
@@ -127,29 +127,29 @@ fn restore_bluetooth_peripheral_clocks<P: Placement>(
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_modem_sec_en(if security {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Disabled
         })
         .set_clk_modem_sec_ecb_en(if ecb {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Disabled
         })
         .set_clk_modem_sec_ccm_en(if ccm {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled
         })
         .set_clk_modem_sec_bah_en(if bah {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Disabled
         })
         .set_clk_ble_timer_en(if ble_timer {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled
         } else {
-            oer_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled
         });
     });
 }

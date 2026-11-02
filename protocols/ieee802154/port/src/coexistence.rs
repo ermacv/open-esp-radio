@@ -1,6 +1,6 @@
 //! What the radio is doing, for the radios it shares the air with.
 
-use oer_radio_coex::{AirClass, Operation, RadioClient};
+use oer_protocols_radio_coex::{AirClass, Operation, RadioClient};
 
 /// An operation of the IEEE 802.15.4 radio on the shared air.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

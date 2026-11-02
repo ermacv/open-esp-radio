@@ -1,10 +1,10 @@
 //! The eFuse controller's factory identity: the read words of the factory
 //! MAC, which the controller mirrors after reset.
 
-pub use oer_espressif_efuse::{FactoryMac, Interface, MacAddress};
-use oer_mmio::{Fixed, Placement};
+pub use oer_chips_family_efuse::{FactoryMac, Interface, MacAddress};
+use oer_portable_mmio::{Fixed, Placement};
 
-use oer_esp32s31_pac::{efuse::Efuse, instances, ownership::EfusePeripherals};
+use oer_chips_esp32s31_pac::{efuse::Efuse, instances, ownership::EfusePeripherals};
 
 #[cfg(test)]
 mod tests;
@@ -59,9 +59,9 @@ impl FactoryIdentity {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a> EfuseRegisters<oer_mmio::Host<'a>> {
+impl<'a> EfuseRegisters<oer_portable_mmio::Host<'a>> {
     /// The eFuse words over host memory from the instance's base.
-    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_mmio::HostTooSmall> {
+    pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Efuse::host(words).map(Self)
     }
 }

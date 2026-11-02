@@ -1,9 +1,9 @@
 # Chip facts
 
-`oer-espressif-facts` resolves the facts of an Espressif chip from TOML
+`oer-chips-family-facts` resolves the facts of an Espressif chip from TOML
 layers into one checked model, [`Facts`](src/lib.rs). It touches no hardware
 and no file system (a `Source` reads the files) and builds for the chip
-targets; `oer-chip-profile` adds the image registry and is what the host
+targets; `oer-tools-chip-profile` adds the image registry and is what the host
 tools load.
 
 ## Layers
@@ -80,13 +80,13 @@ reported by the image checks.
 register code or a property of the board. Its supported value is `xtal`;
 `rc-fast` is refused because no RC_FAST power/readiness policy is supported.
 `generate::lp_fast_source` requires this key and renders a typed constant for
-`oer-esp32s31-boot`, using the HAL port's named source type. Encodings remain solely in the register model.
+`oer-chips-esp32s31-boot`, using the HAL port's named source type. Encodings remain solely in the register model.
 
 `generate` turns the facts into the sources a person writing them could get
 wrong, each a pure function of the facts; build scripts call it, and nothing
 it writes is in git:
 
-- `tracked_layout`: a chip's `LAYOUT` (`oer-espressif-staged-layout`), from
+- `tracked_layout`: a chip's `LAYOUT` (`oer-chips-family-staged-layout`), from
   its facts and its stack policy's `default_task_stack_bytes`
   (`chips/<id>/platform/stack.toml`), which its layout crate's build writes
   and every `--defsym` of the linker scripts comes from;

@@ -1,5 +1,5 @@
 [package]
-name = "oer-esp32s31-pac"
+name = "oer-chips-esp32s31-pac"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +8,10 @@ repository.workspace = true
 description = "The ESP32-S31 PAC: the exact hardware model generated from the chip's register model"
 
 [dependencies]
-oer-espressif-analog = { path = "../../family/analog" }
+oer-chips-family-analog = { path = "../../family/analog" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
-oer-memory = { path = "../../../portable/memory" }
-oer-mmio = { path = "../../../portable/mmio" }
+oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-mmio = { path = "../../../portable/mmio" }
 
 
 [lints]

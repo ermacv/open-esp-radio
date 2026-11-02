@@ -1,12 +1,12 @@
 //! The arbiter on a host port it plays itself.
 
 use super::*;
-use oer_ieee80211_contracts_port::{
+use oer_protocols_ieee80211_contracts_port::{
     ArbiterPool, BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices,
     LowerMacCapabilities, PhyFormatSet, RateSupport, ReceiveFilter, WidthSet,
 };
-use oer_ieee80211_wire::phy::{HeMcs, HtMcs};
-use oer_radio_port::{Mint, branded};
+use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
+use oer_protocols_radio_port::{Mint, branded};
 use std::vec::Vec;
 
 mod regressions;
@@ -25,7 +25,7 @@ fn installed<R>(body: impl for<'id> FnOnce(Mint<'id, ArbiterPool>) -> R) -> R {
 pub(super) struct Caps;
 
 impl Ieee80211Capabilities for Caps {
-    type SppScope = oer_ieee80211_wire::security::spp::Association;
+    type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4.union(BandSet::GHZ5),
         widths: WidthSet::MHZ20,
@@ -60,8 +60,8 @@ type TestArbiter<'id, R = NoReservation> = Arbiter<'id, Caps, R>;
 
 fn channel(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
-        oer_radio_regulatory::TEST_DOMAIN
-            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+        oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
                 Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
             ))
             .unwrap(),
@@ -931,8 +931,8 @@ fn a_join_where_the_access_point_may_not_follow_stops_it_by_the_default_policy()
     installed(|mint| {
         let (mut arbiter, place, mut port) = beside_access_point::<NoReservation>(mint);
         let five = SupportedChannel::new(
-            oer_radio_regulatory::TEST_DOMAIN
-                .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+            oer_protocols_radio_regulatory::TEST_DOMAIN
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
                     Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
                 ))
                 .unwrap(),
@@ -1450,8 +1450,8 @@ fn a_cancelled_starting_absence_delivers_its_pending_leave_and_both_places() {
                 at(53),
                 UpstreamFact::SwitchAnnounced {
                     target: SupportedChannel::new(
-                        oer_radio_regulatory::TEST_DOMAIN
-                            .permit(oer_ieee80211_contracts_port::RegulatedChannel::from(
+                        oer_protocols_radio_regulatory::TEST_DOMAIN
+                            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
                                 Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
                             ))
                             .unwrap(),

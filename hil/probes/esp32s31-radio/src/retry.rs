@@ -1,11 +1,11 @@
 //! Retry-rate admission at the comparison probe's descriptor boundary.
 
-use oer_esp32s31_ieee80211_driver::mac::{
+use oer_chips_esp32s31_ieee80211_driver::mac::{
     portable::UnsupportedTxRate,
     tx::{HtChannelWidth, TxPhyRate},
 };
-use oer_ieee80211_contracts_port::{PhyRate, backend::RetryCounters};
-use oer_ieee80211_core_upper_mac::retry::{RateLadder, select_ordinary_retry_rate};
+use oer_protocols_ieee80211_contracts_port::{PhyRate, backend::RetryCounters};
+use oer_protocols_ieee80211_core_upper_mac::retry::{RateLadder, select_ordinary_retry_rate};
 
 /// Return word of the rate-selection probe; the vendor comparison observes
 /// descriptor writes and does not compare this additional refusal report.
@@ -77,9 +77,9 @@ pub(crate) fn select(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oer_esp32s31_hal::types::MacLegacyRate;
-    use oer_espressif_ieee80211_policy::retry_ladder::EspressifRetryLadder;
-    use oer_ieee80211_wire::phy::{
+    use oer_chips_esp32s31_hal::types::MacLegacyRate;
+    use oer_chips_family_ieee80211_policy::retry_ladder::EspressifRetryLadder;
+    use oer_protocols_ieee80211_wire::phy::{
         FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
     };
 

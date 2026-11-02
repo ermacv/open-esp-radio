@@ -461,7 +461,7 @@ fn reorder_scripts(count: usize) {
         ),
     ];
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
-    oer_ieee80211_wire::fuzz::inputs(&seeds, count, 96, |bytes| {
+    oer_protocols_ieee80211_wire::fuzz::inputs(&seeds, count, 96, |bytes| {
         run_script::<WINDOW, SLOTS>(bytes);
         // A capacity that does not divide the sequence space.
         run_script::<7, 9>(bytes);
@@ -470,13 +470,13 @@ fn reorder_scripts(count: usize) {
 
 #[test]
 fn received_sequences_never_panic() {
-    reorder_scripts(oer_ieee80211_wire::fuzz::QUICK);
+    reorder_scripts(oer_protocols_ieee80211_wire::fuzz::QUICK);
 }
 
 #[test]
 #[ignore = "the full run"]
 fn received_sequences_never_panic_full() {
-    reorder_scripts(oer_ieee80211_wire::fuzz::FULL);
+    reorder_scripts(oer_protocols_ieee80211_wire::fuzz::FULL);
 }
 
 #[test]

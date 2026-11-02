@@ -5,9 +5,9 @@ use crate::{
     Function, Load, Transfer, TransferKind,
     image::{self, Observation},
 };
-use oer_analysis_riscv_lift::RiscvDecoder;
-use oer_analysis_riscv_model::*;
-use oer_analysis_riscv_program::facts::ImageFacts;
+use oer_tools_analysis_riscv_lift::RiscvDecoder;
+use oer_tools_analysis_riscv_model::*;
+use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// An earlier register value equal to a callback load's address base.

@@ -3,10 +3,10 @@
 //! by the service through the lower-MAC port.
 
 use super::*;
-use oer_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier;
-use oer_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
-use oer_ieee80211_wire::management::ManagementHeader;
-use oer_ieee80211_wire::{
+use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier;
+use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_protocols_ieee80211_wire::management::ManagementHeader;
+use oer_protocols_ieee80211_wire::{
     ap::ApManagementSubtype, ccmp::CcmpPacketNumber, management_protection::SaQuery,
 };
 
@@ -84,7 +84,7 @@ pub enum ApGroupManagementError {
     PacketNumbersExhausted,
     InvalidKey(RsnFrameError),
     /// The AES engine refused the IGTK or a block.
-    Engine(oer_crypto::block::BlockError),
+    Engine(oer_portable_crypto::block::BlockError),
 }
 
 impl<S: SppScope> AccessPointService<'_, S> {
@@ -202,18 +202,18 @@ impl<S: SppScope> AccessPointService<'_, S> {
             .ok_or(ApGroupManagementError::NoManagementKey)?;
         let protected = sender
             .protect(
-                &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
                 frame,
                 length,
             )
             .map_err(|error| match error {
-                oer_ieee80211_core_security_rsn::bip::BipTransmitError::Exhausted => {
+                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitError::Exhausted => {
                     ApGroupManagementError::PacketNumbersExhausted
                 }
-                oer_ieee80211_core_security_rsn::bip::BipTransmitError::InvalidFrame => {
+                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitError::InvalidFrame => {
                     ApGroupManagementError::InvalidFrame
                 }
-                oer_ieee80211_core_security_rsn::bip::BipTransmitError::Engine(error) => {
+                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitError::Engine(error) => {
                     ApGroupManagementError::Engine(error)
                 }
             })?;

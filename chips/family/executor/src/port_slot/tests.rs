@@ -1,7 +1,7 @@
-use oer_radio_port::conformance::registration::{MockCleanup, MockRegistration};
+use oer_protocols_radio_port::conformance::registration::{MockCleanup, MockRegistration};
 extern crate std;
 
-use oer_radio_port::{Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped};
+use oer_protocols_radio_port::{Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped};
 
 struct Owner;
 
@@ -23,14 +23,14 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Owner {
     fn prepare_queues(
         &mut self,
         _: &mut Self::Queues,
-        mint: oer_radio_port::Mint<'static, (), Id>,
+        mint: oer_protocols_radio_port::Mint<'static, (), Id>,
     ) {
         mint.into_pools();
     }
     fn split<'s>(
         _: &'s mut (),
-        _: oer_radio_port::SlotWakes<'s, Id>,
-    ) -> Result<((), ()), oer_radio_port::SlotInitError>
+        _: oer_protocols_radio_port::SlotWakes<'s, Id>,
+    ) -> Result<((), ()), oer_protocols_radio_port::SlotInitError>
     where
         Self: 's,
         Id: 's,

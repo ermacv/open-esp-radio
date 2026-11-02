@@ -1,15 +1,15 @@
 //! The service's answers from the product station runtime's values
-//! (`oer-ieee80211-runtime`), and the numbering of [`StationError::Failed`].
+//! (`oer-protocols-ieee80211-runtime`), and the numbering of [`StationError::Failed`].
 //!
 //! A code is four bytes, most significant first: its class ([`class`]), a
 //! kind within the class and a 16-bit detail. The image fills the classes
 //! whose values only its facade knows.
 
-use oer_ieee80211_runtime::station::{
+use oer_protocols_ieee80211_runtime::station::{
     ControlError, Status,
     contract::{CommandOutcome, CommandRefusal, DisconnectReason, Notice, SaeFailure},
 };
-use oer_network_port::LinkState;
+use oer_protocols_network_port::LinkState;
 
 use crate::{Joined, Link, StationError};
 

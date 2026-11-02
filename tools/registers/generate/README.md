@@ -1,6 +1,6 @@
 # Register outputs and checks
 
-`oer-registers-generate` is the service behind `cargo registers`. It renders
+`oer-tools-registers-generate` is the service behind `cargo registers`. It renders
 a chip's generated outputs from its register model
 (`chips/<chip>/registers/`: the root `chip.toml`, the block types and
 layouts it includes, every evidence catalog of `evidence/` and the ownership
@@ -23,7 +23,7 @@ cargo registers generate --chip esp32s31 --check
 Every output is rendered before any is written; each file is replaced
 atomically. `--check` writes nothing and fails if an output is missing or
 differs. Host tools read the register model itself
-(`oer_registers_model::Chip::load`), each register's address, width and
+(`oer_tools_registers_model::Chip::load`), each register's address, width and
 fields from `ChipModel::registers()`.
 
 ## Register checks
@@ -36,7 +36,7 @@ inside the chip root's MMIO instance windows, with `--abi riscv-integer
 arrives, without a child process or a `registers.json` corpus. It requires a
 complete `reads: ReadUses`
 classification for each integer or floating load, using the shared
-`oer-analysis-blobray-domain` types. A `CallArgument` to an exact name in the
+`oer-tools-analysis-blobray-domain` types. A `CallArgument` to an exact name in the
 checker's [chip-specific cited diagnostic lists](src/checks/inventory/uses/read_policy.rs)
 does not count as use. Other sinks, including unresolved calls and behavior
 parameters such as `ets_delay_us`, count with both `Exact` and `May` precision;

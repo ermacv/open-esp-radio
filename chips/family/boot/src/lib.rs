@@ -27,7 +27,7 @@
 //! through the sequences:
 //!
 //! ```compile_fail,E0624
-//! # use oer_espressif_boot::{Access, cache::FetchSuspendRegisters};
+//! # use oer_chips_family_boot::{Access, cache::FetchSuspendRegisters};
 //! fn shut<R: FetchSuspendRegisters>(registers: &mut R) {
 //!     registers.shut_fetch(Access::new(), true); // only this crate calls the traits
 //! }
@@ -56,7 +56,7 @@
 #![forbid(unsafe_code)]
 
 #[cfg(test)]
-extern crate self as oer_espressif_boot;
+extern crate self as oer_chips_family_boot;
 #[cfg(test)]
 extern crate std;
 

@@ -178,16 +178,16 @@ trait BluetoothSchedulerLockModifyControl {
     fn order_after_publication(&mut self);
 }
 
-struct HardwareBluetoothSchedulerLockModifyControl<'registers, B: oer_mmio::Placement> {
-    registers: &'registers mut oer_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
+struct HardwareBluetoothSchedulerLockModifyControl<'registers, B: oer_portable_mmio::Placement> {
+    registers: &'registers mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
 }
 
-impl<B: oer_mmio::Placement> BluetoothSchedulerLockModifyControl
+impl<B: oer_portable_mmio::Placement> BluetoothSchedulerLockModifyControl
     for HardwareBluetoothSchedulerLockModifyControl<'_, B>
 {
     fn clear_hardware_list_index(&mut self) {
         self.registers.modify_word_036c_opaque(|w| {
-            w.set_lock_modify_hardware_list_index(oer_mmio::Bits::constant::<0x0>());
+            w.set_lock_modify_hardware_list_index(oer_portable_mmio::Bits::constant::<0x0>());
         });
     }
 
@@ -202,8 +202,8 @@ impl<B: oer_mmio::Placement> BluetoothSchedulerLockModifyControl
         // word is written zero.
         self.registers.modify_scheduler_lock_modify_request(|w| {
             w.set_compressed_sram_pointer(address);
-            w.set_zero_image_20_26(oer_mmio::Bits::constant::<0>());
-            w.set_result(oer_mmio::Bits::constant::<0>());
+            w.set_zero_image_20_26(oer_portable_mmio::Bits::constant::<0>());
+            w.set_result(oer_portable_mmio::Bits::constant::<0>());
             w.set_start(true);
         });
     }
