@@ -221,6 +221,7 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
     end.bridge.tx.turns = 4;
     end.bridge.tx.starved = 2;
     end.bridge.tx.station_sum = 90;
+    end.bridge.tx.freed_sum = 30;
     end.cache.ibus0.hits = 9;
     end.cache_geometry.l2_bypassed = true;
     let window = counters(&start, &end);
@@ -238,6 +239,7 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
         (tx.turns, tx.starved, tx.station_sum, tx.moved),
         (5, 2, 90, 0)
     );
+    assert_eq!((tx.freed_sum, tx.owed_sum), (30, 0));
     assert_eq!(window.cache.ibus0.hits, 4);
     assert!(window.cache.dbus1.overflowed);
     assert!(window.cache_geometry.l2_bypassed);

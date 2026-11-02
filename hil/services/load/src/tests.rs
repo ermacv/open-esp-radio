@@ -77,6 +77,11 @@ fn the_largest_reports_fit_one_response() {
             starved: u32::MAX,
             queued_sum: u32::MAX,
             station_sum: u32::MAX,
+            incoming_sum: u32::MAX,
+            owed_sum: u32::MAX,
+            members_sum: u32::MAX,
+            freed_sum: u32::MAX,
+            returning_sum: u32::MAX,
         },
     });
     assert!(postcard::to_slice(&report, &mut buffer).unwrap().len() <= 512);

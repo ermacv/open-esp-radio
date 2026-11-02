@@ -336,6 +336,15 @@ pub struct BridgeTx {
     /// The network transmit buffers the station held, summed over the
     /// turns.
     pub station_sum: u32,
+    /// Of those, summed likewise by where the station's latest pass saw
+    /// them: in the queue to the station, owed by its data machine, members
+    /// of aggregates out at the port, freed and not yet given back, and in
+    /// the queue back to the network.
+    pub incoming_sum: u32,
+    pub owed_sum: u32,
+    pub members_sum: u32,
+    pub freed_sum: u32,
+    pub returning_sum: u32,
 }
 
 /// Counts within one run's measuring window.

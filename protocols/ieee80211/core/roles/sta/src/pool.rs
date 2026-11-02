@@ -109,6 +109,11 @@ impl<X, const N: usize> Fifo<X, N> {
         }
     }
 
+    /// The items queued.
+    pub(crate) const fn len(&self) -> usize {
+        self.len
+    }
+
     /// The cell of the item `offset` places after the head; `None` only
     /// for a queue of no cells.
     fn cell(&self, offset: usize) -> Option<usize> {

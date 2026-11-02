@@ -1666,6 +1666,12 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
         )
         .unwrap();
     }
+    let held = |owed, members, freed| HeldMemory {
+        owed,
+        members,
+        freed,
+    };
+    assert_eq!(data.held_memory(), held(5, 0, 0), "every MPDU is owed");
     // Without an agreement the first MPDU goes alone.
     let alone = match data.poll_attempt(|_| None, &mut events) {
         Some(DataAttempt::Single(single)) => single,
@@ -1674,6 +1680,11 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
     // Three subframes at most: 1, 2 and 3; 4 waits.
     let first = aggregate(data.poll_attempt(|_| window(1, 3, u32::MAX), &mut events));
     assert_eq!(first.context.len(), 3);
+    assert_eq!(
+        data.held_memory(),
+        held(1, 3, 0),
+        "the single is out, three are members, one is owed"
+    );
     // Each member's memory waits in the bank for the port's builder.
     let memory = data.aggregate_mpdu(&first.context, 2).unwrap();
     assert!(data.aggregate_mpdu(&first.context, 2).is_none());
@@ -1694,6 +1705,11 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
         oer_portable_time::Instant::from_micros(2_000),
         Some(RETRY),
         &mut events,
+    );
+    assert_eq!(
+        data.held_memory(),
+        held(2, 0, 2),
+        "2 is owed again, the memory of 1 and 3 is freed"
     );
     assert_eq!(
         marks,
