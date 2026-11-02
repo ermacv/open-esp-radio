@@ -420,19 +420,8 @@ where
         self.cut = false;
         Poll::Ready(Ok(()))
     }
-    fn poll_receive(
-        &mut self,
-        receive_room: usize,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<DeviceEvent<Self::Receive>, Fault>> {
-        suspend_rx_continuation(receive_room, &mut self.continuation);
-        let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
+    fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>> {
         let session = self.session.as_mut().map_err(|e| *e)?;
-        if receive_room != 0 {
-            if let Some(frame) = self.received.0.get_mut().pop_front() {
-                return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(frame))));
-            }
-        }
         if self.cut || self.pausing {
             return Poll::Pending;
         }
@@ -455,42 +444,6 @@ where
                 }
             }
         }
-        if self.rx_pending
-            && receive_room != 0
-            && self.continuation.is_none_or(|at| self.timer.now() >= at)
-        {
-            self.continuation = None;
-            let progress = session
-                .port_service(
-                    &mut active.registers,
-                    &self.doorbell,
-                    &self.timer,
-                    &self.received,
-                )
-                .map_err(Fault::Receive)?;
-            use crate::datapath::DatapathRxProgress as Progress;
-            match progress {
-                Progress::Drained | Progress::UpperLayerBlockedButDroppable => {
-                    self.rx_pending = false;
-                    self.streak = 0;
-                    session.port_unmask(&self.doorbell);
-                }
-                Progress::StageCapacityBlocked => {}
-                _ => {
-                    if self.streak < IMMEDIATE_CONTINUATIONS {
-                        self.streak += 1;
-                        cx.waker().wake_by_ref();
-                    } else {
-                        self.streak = 0;
-                        self.continuation =
-                            Some(self.timer.now().saturating_add(CONTINUATION_WAIT));
-                    }
-                }
-            }
-            if let Some(frame) = self.received.0.get_mut().pop_front() {
-                return Poll::Ready(Ok(DeviceEvent::Receive(StagedReceive(frame))));
-            }
-        }
         if self.tx_pending != 0 {
             let events = core::mem::take(&mut self.tx_pending);
             return Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
@@ -501,6 +454,60 @@ where
             return Poll::Ready(Ok(DeviceEvent::Tbtt));
         }
         Poll::Pending
+    }
+    fn receive_due(&mut self) -> bool {
+        !self.cut
+            && !self.pausing
+            && (!self.received.0.get_mut().is_empty()
+                || (self.rx_pending && self.continuation.is_none_or(|at| self.timer.now() >= at)))
+    }
+    fn pull_received(
+        &mut self,
+        receive_room: usize,
+        cx: &mut Context<'_>,
+    ) -> Result<Option<Self::Receive>, Fault> {
+        suspend_rx_continuation(receive_room, &mut self.continuation);
+        if receive_room == 0 || self.cut || self.pausing {
+            return Ok(None);
+        }
+        if let Some(frame) = self.received.0.get_mut().pop_front() {
+            return Ok(Some(StagedReceive(frame)));
+        }
+        if !self.rx_pending || self.continuation.is_some_and(|at| self.timer.now() < at) {
+            return Ok(None);
+        }
+        let active = self.active.as_mut().ok_or(Fault::Abandoned)?;
+        let session = self.session.as_mut().map_err(|e| *e)?;
+        self.continuation = None;
+        let progress = session
+            .port_service(
+                &mut active.registers,
+                &self.doorbell,
+                &self.timer,
+                &self.received,
+            )
+            .map_err(Fault::Receive)?;
+        use crate::datapath::DatapathRxProgress as Progress;
+        match progress {
+            Progress::Drained | Progress::UpperLayerBlockedButDroppable => {
+                self.rx_pending = false;
+                self.streak = 0;
+                session.port_unmask(&self.doorbell);
+            }
+            Progress::StageCapacityBlocked => {}
+            _ => {
+                if self.streak < IMMEDIATE_CONTINUATIONS {
+                    self.streak += 1;
+                    cx.waker().wake_by_ref();
+                } else {
+                    // The driver's deadline covers the continuation; it
+                    // wakes the body when the ring is due again.
+                    self.streak = 0;
+                    self.continuation = Some(self.timer.now().saturating_add(CONTINUATION_WAIT));
+                }
+            }
+        }
+        Ok(self.received.0.get_mut().pop_front().map(StagedReceive))
     }
     fn poll_rx_cut(
         &mut self,

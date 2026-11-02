@@ -771,7 +771,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
                 slot: <PortKeys<Id, Station> as KeyTypes<'id>>::group_slot_identity(&key),
                 counter: FRONTIER,
             };
-            // Software stage: already in the port's event queue.
+            // Ring stage: staged for the body's pull. The driver's turns run
+            // meanwhile; they leave it for the body.
             self.observed
                 .borrow_mut()
                 .received
@@ -779,9 +780,10 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
             for _ in 0..4 {
                 barriers::yield_once().await;
             }
-            assert!(
-                self.observed.borrow().received.is_empty(),
-                "delivered to software"
+            assert_eq!(
+                self.observed.borrow().received.len(),
+                1,
+                "staged for the body"
             );
             {
                 let mut observed = self.observed.borrow_mut();

@@ -100,12 +100,10 @@ impl<D: QueueNotify + 'static, R: QueueNotify + 'static> LentNotifies for Networ
 pub(super) struct NetworkCredit<P = SameHart> {
     /// Units lent and not yet dropped.
     held: AtomicUsize,
-    /// Lends the driver has not yet taken off its receive count.
+    /// Lends not yet taken off the body's receive count.
     transferred: AtomicUsize,
     /// A lent unit was dropped since the driver last looked.
     returned: AtomicBool,
-    /// The driver ran out of receive room: the next lend wakes it.
-    wants_room: AtomicBool,
     /// The network holds many units: the next return wakes the driver.
     wants_units: AtomicBool,
     /// How a return tells the waiting task and the driver. The units'
@@ -121,7 +119,6 @@ impl<P: LentNotifies> NetworkCredit<P> {
             held: AtomicUsize::new(0),
             transferred: AtomicUsize::new(0),
             returned: AtomicBool::new(false),
-            wants_room: AtomicBool::new(false),
             wants_units: AtomicBool::new(false),
             notifies,
         }
@@ -132,7 +129,7 @@ impl<P: LentNotifies> NetworkCredit<P> {
         self.held.load(Ordering::Acquire)
     }
 
-    /// Lends since the last call, for the driver's receive count.
+    /// Lends since the last call, for the body's receive count.
     pub(super) fn take_transferred(&self) -> usize {
         self.transferred.swap(0, Ordering::AcqRel)
     }
@@ -164,13 +161,6 @@ impl<P: LentNotifies> NetworkCredit<P> {
         }
     }
 
-    /// Ask the next lend to wake the driver, which has no receive room.
-    /// Whether a lend came first: the driver then polls again itself.
-    pub(super) fn want_room(&self) -> bool {
-        self.wants_room.store(true, Ordering::Release);
-        self.transferred.load(Ordering::Acquire) != 0
-    }
-
     /// Ask the next return to wake the driver, while the network holds many
     /// units. Whether a return came first: the driver then polls again.
     ///
@@ -188,7 +178,6 @@ impl<P: LentNotifies> NetworkCredit<P> {
     pub(super) fn reset(&self) {
         self.transferred.store(0, Ordering::Release);
         self.returned.store(false, Ordering::Release);
-        self.wants_room.store(false, Ordering::Release);
         self.wants_units.store(false, Ordering::Release);
     }
 }
@@ -263,13 +252,10 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
         }
         // Credit first: the network counts the unit before the driver stops.
         credit.held.fetch_add(1, Ordering::AcqRel);
-        // The driver takes the count on its next poll: a lend wakes it only
-        // when it asked, out of receive room.
+        // The body lends in its own turn and takes the count at its next
+        // pull, before it reads its receive room.
         credit.transferred.fetch_add(1, Ordering::AcqRel);
         let (unit, driver) = self.into_unit();
-        if credit.wants_room.swap(false, Ordering::AcqRel) {
-            driver.wake();
-        }
         Ok(LentReceive {
             unit,
             returned: ReturnOnDrop { credit, driver },

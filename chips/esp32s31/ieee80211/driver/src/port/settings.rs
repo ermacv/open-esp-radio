@@ -2,7 +2,7 @@
 
 use super::*;
 use atomic_words::AtomicWords;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
 use oer_ieee80211_wire::{
     channel::ChannelWidth,
     extensions::wmm::{WmmAcParameters, WmmParameterSet},
@@ -23,58 +23,6 @@ impl Flag {
     }
     pub(super) fn replace(&self, value: bool) -> bool {
         self.0.swap(value, Ordering::SeqCst)
-    }
-}
-
-/// The received units the driver queued for the body that the body has not taken, and whether
-/// The driver waits for the body to take them down to a mark. The driver asks before it reads the
-/// count again, and the body takes before it reads the ask, so the take that
-/// reaches the mark after the driver saw the queue above it always finds the ask,
-/// on one hart or across two.
-pub(super) struct ReceivedInFlight {
-    queued: AtomicUsize,
-    wanted: AtomicBool,
-}
-impl ReceivedInFlight {
-    pub(super) const fn new() -> Self {
-        Self {
-            queued: AtomicUsize::new(0),
-            wanted: AtomicBool::new(false),
-        }
-    }
-    /// The driver queued one unit.
-    pub(super) fn queue(&self) {
-        self.queued.fetch_add(1, Ordering::SeqCst);
-    }
-    /// The units the driver may still queue under `bound`.
-    pub(super) fn room(&self, bound: usize) -> usize {
-        bound.saturating_sub(self.queued.load(Ordering::SeqCst))
-    }
-    /// The driver waits for the body to take units until at most `wake_at` stay queued:
-    /// the take that leaves that many wakes it. Whether they already are:
-    /// The driver then polls again itself.
-    pub(super) fn want(&self, wake_at: usize) -> bool {
-        self.wanted.store(true, Ordering::SeqCst);
-        self.queued.load(Ordering::SeqCst) <= wake_at
-    }
-    /// The body took one unit: whether it left at most `wake_at` queued while the driver
-    /// waits; a take above the mark leaves the ask for a later one. A take
-    /// of a unit never queued is refused and leaves the count as it was.
-    pub(super) fn take(&self, wake_at: usize) -> Result<bool, SettingFault> {
-        let Some(left) = self.queued.fetch_sub(1, Ordering::SeqCst).checked_sub(1) else {
-            // The count wrapped below zero for one step; the driver read no room.
-            self.queued.fetch_add(1, Ordering::SeqCst);
-            return Err(SettingFault::ReceivedUnqueued);
-        };
-        if left > wake_at {
-            return Ok(false);
-        }
-        Ok(self.wanted.swap(false, Ordering::SeqCst))
-    }
-    /// A new installation queued nothing yet.
-    pub(super) fn reset(&self) {
-        self.queued.store(0, Ordering::SeqCst);
-        self.wanted.store(false, Ordering::SeqCst);
     }
 }
 
@@ -104,8 +52,6 @@ pub enum SettingFault {
     EdcaLifetime,
     /// A published Block Ack record holds no sequence number.
     BlockAckSequence,
-    /// The body took a received unit the driver never queued.
-    ReceivedUnqueued,
 }
 
 /// One 2.4 GHz channel, 20 or 40 MHz wide: its number and its width in
@@ -403,44 +349,6 @@ mod tests {
         let five_ghz = Channel::ghz5(36, ChannelWidth::Mhz20).expect("channel 36");
         assert_eq!(setting.set(five_ghz), Err(SettingFault::UnsupportedChannel));
         assert_eq!(setting.get(), Ok(six));
-    }
-
-    #[test]
-    fn a_take_reports_a_waiting_driver_once_and_refuses_a_unit_never_queued() {
-        let received = ReceivedInFlight::new();
-        assert_eq!(received.take(8), Err(SettingFault::ReceivedUnqueued));
-        assert_eq!(received.room(8), 8);
-        for _ in 0..8 {
-            received.queue();
-        }
-        assert_eq!(received.room(8), 0);
-        assert_eq!(received.take(8), Ok(false));
-        assert!(!received.want(6), "seven queued, above the mark");
-        assert_eq!(received.take(8), Ok(true));
-        assert_eq!(received.take(8), Ok(false));
-        assert_eq!(received.room(8), 3);
-        received.reset();
-        assert_eq!(received.room(8), 8);
-        assert_eq!(received.take(8), Err(SettingFault::ReceivedUnqueued));
-        assert_eq!(received.room(8), 8);
-    }
-
-    #[test]
-    fn a_waiting_driver_wakes_once_per_half_queue_not_per_take() {
-        let received = ReceivedInFlight::new();
-        for _ in 0..8 {
-            received.queue();
-        }
-        assert!(!received.want(4), "a full queue is above the mark");
-        let wakes: std::vec::Vec<bool> = (0..8).map(|_| received.take(4).unwrap()).collect();
-        // Only the take that reaches the mark wakes; the ask is spent.
-        assert_eq!(
-            wakes,
-            [false, false, false, true, false, false, false, false]
-        );
-        // An ask at or below the mark tells the driver to poll again itself.
-        received.queue();
-        assert!(received.want(4));
     }
 
     #[test]

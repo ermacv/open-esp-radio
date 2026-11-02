@@ -189,10 +189,39 @@ impl TestDevice {
     }
 }
 impl TestDevice {
-    fn assert_driver_context(&self) {
+    /// The driver (context 2) and the body (context 1) both reach the
+    /// device, each in its own task on the station's executor.
+    fn assert_task_context(&self) {
         let observed = self.observed.borrow();
         if observed.check_context {
-            assert_eq!(observed.context, 2, "device access belongs to P2");
+            assert!(
+                matches!(observed.context, 1 | 2),
+                "device access belongs to the station's executor tasks"
+            );
+        }
+    }
+    /// What the air delivered reaches the ring under the key material
+    /// active at capture.
+    fn capture(&self) {
+        let mut observed = self.observed.borrow_mut();
+        observed.key_writes = self
+            .hardware
+            .crypto_order
+            .iter()
+            .filter(|operation| matches!(operation, super::CryptoOperation::Install(_)))
+            .count();
+        while let Some((frame, material)) = observed.air.pop_front() {
+            if material == 0
+                || self
+                    .hardware
+                    .key_material
+                    .iter()
+                    .any(|(_, installed)| *installed == [material; 16])
+            {
+                observed.received.push_back(frame);
+            } else {
+                observed.undecryptable += 1;
+            }
         }
     }
 }
@@ -250,7 +279,7 @@ impl Device<512> for TestDevice {
     type OwnedConfigureContext<Id: radio::SlotIdentity> = Tag;
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
     fn hardware(&mut self) -> Result<&mut Hardware, Fault> {
-        self.assert_driver_context();
+        self.assert_task_context();
         if self.observed.borrow().hardware_unavailable {
             return Err(Fault::HardwareUnavailable);
         }
@@ -268,7 +297,7 @@ impl Device<512> for TestDevice {
         None
     }
     fn radio_now(&mut self) -> Result<Ieee80211Instant, radio::ClockError> {
-        self.assert_driver_context();
+        self.assert_task_context();
         // A held start models a retune: the radio actor holds the registers.
         if self.observed.borrow().hold_start {
             return Err(radio::ClockError::Unavailable);
@@ -282,7 +311,7 @@ impl Device<512> for TestDevice {
         _: &mut Context<'_>,
         channel: oer_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>> {
-        self.assert_driver_context();
+        self.assert_task_context();
         if self.observed.borrow().hold_start {
             return Poll::Pending;
         }
@@ -295,7 +324,7 @@ impl Device<512> for TestDevice {
         Poll::Ready(Ok(()))
     }
     fn poll_stop(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Fault>> {
-        self.assert_driver_context();
+        self.assert_task_context();
         if self.observed.borrow().hold_stop {
             return Poll::Pending;
         }
@@ -305,70 +334,14 @@ impl Device<512> for TestDevice {
         }
         Poll::Ready(Ok(()))
     }
-    fn poll_receive(
-        &mut self,
-        receive_room: usize,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<DeviceEvent<TestReceive>, Fault>> {
-        self.assert_driver_context();
+    fn poll_event(&mut self, _: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>> {
+        self.assert_task_context();
         if let Some(fault) = self.observed.borrow_mut().fail_poll.take() {
             return Poll::Ready(Err(fault));
         }
+        self.capture();
         let mut observed = self.observed.borrow_mut();
-        observed.key_writes = self
-            .hardware
-            .crypto_order
-            .iter()
-            .filter(|operation| matches!(operation, super::CryptoOperation::Install(_)))
-            .count();
-        while let Some((frame, material)) = observed.air.pop_front() {
-            if material == 0
-                || self
-                    .hardware
-                    .key_material
-                    .iter()
-                    .any(|(_, installed)| *installed == [material; 16])
-            {
-                observed.received.push_back(frame);
-            } else {
-                observed.undecryptable += 1;
-            }
-        }
         observed.device_polls += 1;
-        suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
-        if observed.continuous_rx {
-            observed.rx_poll_steps += 1;
-            assert!(
-                observed.rx_poll_steps <= 32,
-                "P2 must return to its executor"
-            );
-            observed.rx_saturated_polls += usize::from(receive_room == 0);
-            self.timer
-                .0
-                .advance(oer_time::Duration::from_micros(10))
-                .expect("finite model device step");
-        }
-        if receive_room != 0 {
-            if let Some(frame) = observed.received.pop_front() {
-                if observed.continuous_rx {
-                    observed.rx_delivered += 1;
-                    if observed.rx_delivered.is_multiple_of(4) {
-                        observed.rx_continuation = Some(
-                            self.timer
-                                .now()
-                                .saturating_add(crate::rx::receive::CONTINUATION_WAIT),
-                        );
-                    }
-                }
-                return Poll::Ready(Ok(DeviceEvent::Receive(frame)));
-            }
-            if observed
-                .rx_continuation
-                .is_some_and(|at| self.timer.now() >= at)
-            {
-                observed.rx_continuation = None;
-            }
-        }
         drop(observed);
         let publications = self.hardware.publications();
         self.observed.borrow_mut().backoffs = self
@@ -427,12 +400,62 @@ impl Device<512> for TestDevice {
             Poll::Pending
         }
     }
+    fn receive_due(&mut self) -> bool {
+        self.capture();
+        let observed = self.observed.borrow();
+        !observed.received.is_empty()
+    }
+    fn pull_received(
+        &mut self,
+        receive_room: usize,
+        _: &mut Context<'_>,
+    ) -> Result<Option<TestReceive>, Fault> {
+        self.assert_task_context();
+        self.capture();
+        let mut observed = self.observed.borrow_mut();
+        suspend_rx_continuation(receive_room, &mut observed.rx_continuation);
+        if observed.continuous_rx {
+            observed.rx_poll_steps += 1;
+            assert!(
+                observed.rx_poll_steps <= 32,
+                "the body's pull must return to its executor"
+            );
+            observed.rx_saturated_polls += usize::from(receive_room == 0);
+            self.timer
+                .0
+                .advance(oer_time::Duration::from_micros(10))
+                .expect("finite model device step");
+        }
+        if receive_room == 0 {
+            return Ok(None);
+        }
+        if observed
+            .rx_continuation
+            .is_some_and(|at| self.timer.now() >= at)
+        {
+            observed.rx_continuation = None;
+        }
+        let Some(frame) = observed.received.pop_front() else {
+            return Ok(None);
+        };
+        if observed.continuous_rx {
+            observed.rx_delivered += 1;
+            if observed.rx_delivered.is_multiple_of(4) {
+                observed.rx_continuation = Some(
+                    self.timer
+                        .now()
+                        .saturating_add(crate::rx::receive::CONTINUATION_WAIT),
+                );
+            }
+        }
+        Ok(Some(frame))
+    }
     fn poll_rx_cut(
         &mut self,
         _: usize,
         _: &mut Context<'_>,
     ) -> Poll<Result<Option<TestReceive>, Fault>> {
-        self.assert_driver_context();
+        self.assert_task_context();
         self.observed.borrow_mut().cut_calls += 1;
         if self.observed.borrow().hold_cut {
             return Poll::Pending;
@@ -447,20 +470,20 @@ impl Device<512> for TestDevice {
         Poll::Ready(Ok(frame))
     }
     fn finish_rx_cut(&mut self) -> Result<(), Fault> {
-        self.assert_driver_context();
+        self.assert_task_context();
         self.observed.borrow_mut().resumed_cuts += 1;
         Ok(())
     }
     fn recycle(&mut self, frame: TestReceive) {
-        self.assert_driver_context();
+        self.assert_task_context();
         drop(frame);
     }
     fn returned(&mut self) {
-        self.assert_driver_context();
+        self.assert_task_context();
         self.observed.borrow_mut().returned += 1;
     }
     fn abandon(&mut self) -> bool {
-        self.assert_driver_context();
+        self.assert_task_context();
         let keys = self.hardware.installed_keys.len();
         self.observed.borrow_mut().material_at_abandon = self.hardware.key_material.clone();
         crate::mac::crypto::erase_lower_mac_keys(&mut self.hardware);
@@ -474,7 +497,7 @@ impl Device<512> for TestDevice {
         false
     }
     fn detach(&mut self) {
-        self.assert_driver_context();
+        self.assert_task_context();
         self.observed.borrow_mut().detached = true;
     }
 }

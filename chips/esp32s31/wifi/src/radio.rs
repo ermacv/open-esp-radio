@@ -448,12 +448,8 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>> {
         <Inner<W> as port::Device<TX>>::poll_stop(&mut self.0, cx)
     }
-    fn poll_receive(
-        &mut self,
-        room: usize,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<DeviceEvent<Self::Receive>, Fault>> {
-        let result = <Inner<W> as port::Device<TX>>::poll_receive(&mut self.0, room, cx);
+    fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>> {
+        let result = <Inner<W> as port::Device<TX>>::poll_event(&mut self.0, cx);
         #[cfg(oer_trace)]
         if let Poll::Ready(Ok(DeviceEvent::Tx(
             oer_esp32s31_ieee80211_driver::tx::WifiTxWake::Interrupt { .. },
@@ -475,6 +471,16 @@ impl<W: Binding> port::Device<TX> for Device<W> {
             }
         }
         result
+    }
+    fn receive_due(&mut self) -> bool {
+        <Inner<W> as port::Device<TX>>::receive_due(&mut self.0)
+    }
+    fn pull_received(
+        &mut self,
+        room: usize,
+        cx: &mut Context<'_>,
+    ) -> Result<Option<Self::Receive>, Fault> {
+        <Inner<W> as port::Device<TX>>::pull_received(&mut self.0, room, cx)
     }
     fn poll_rx_cut(
         &mut self,

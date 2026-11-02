@@ -1,4 +1,5 @@
-//! The real driver lifecycle under strict P2-before-P1 scheduling.
+//! The real driver and body tasks on one executor, the driver's task polled
+//! first when both are ready.
 use super::*;
 use oer_time::Duration;
 use std::sync::{
@@ -9,6 +10,8 @@ use std::task::Wake;
 
 const FRAMES: usize = 256;
 const RETURN_BOUND: Duration = Duration::from_micros(250);
+/// The units the body takes before it yields, as the station's turn does.
+const TURN: usize = 32;
 
 struct Ready(AtomicBool);
 impl Wake for Ready {
@@ -67,7 +70,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
             }
             self.rx_interrupt.wake_by_ref();
             let mut last_return = self.clock.now();
-            for _ in 0..FRAMES {
+            for taken in 1..=FRAMES {
                 let frame = match phase.next_event().await {
                     Ok(Ok(LowerMacEvent::Received { frame, .. })) => frame,
                     _ => panic!("continuous RX frame"),
@@ -76,11 +79,14 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
                 let gap = now.saturating_duration_since(last_return);
                 assert!(
                     gap <= RETURN_BOUND,
-                    "P1 must return RX within its model bound"
+                    "the body must return RX within its model bound"
                 );
                 longest_gap = longest_gap.max(gap);
                 last_return = now;
                 phase.recycle(frame);
+                if taken % TURN == 0 {
+                    rx_capacity_yield().await;
+                }
             }
             let mut observed = self.observed.borrow_mut();
             assert!(observed.received.is_empty());
@@ -101,7 +107,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ContinuousReceive {
 }
 
 #[test]
-fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() {
+fn a_burst_reaches_the_body_through_its_own_pulls_within_a_virtual_time_bound() {
     let (parts, observed, clock) = installed(Vec::new());
     clock.1.set(true);
     observed.borrow_mut().check_context = true;
@@ -111,6 +117,8 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
     let p2_ready = Arc::new(Ready(AtomicBool::new(true)));
     let p1_waker = Waker::from(p1_ready.clone());
     let p2_waker = Waker::from(p2_ready.clone());
+    let mut driver_polls = 0;
+    let mut driver_took = 0;
     block_on(radio::with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (front, registration) = slot
@@ -130,22 +138,25 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
         let (mut p1_done, mut p2_done) = (false, false);
         for _ in 0..2000 {
             if !p2_done && p2_ready.0.swap(false, Ordering::Relaxed) {
-                // P1 may only run after P2 has no ready work. A stale ready
-                // timer must fail this finite device-step budget, not hang.
+                // A stale ready timer must fail this finite step budget, not
+                // hang.
                 observed.borrow_mut().context = 2;
-                observed.borrow_mut().rx_poll_steps = 0;
-                if let Poll::Ready(retired) = p2
+                driver_polls += 1;
+                let before = observed.borrow().rx_delivered;
+                let polled = p2
                     .as_mut()
                     .expect("registered P2 task")
                     .as_mut()
-                    .poll(&mut Context::from_waker(&p2_waker))
-                {
+                    .poll(&mut Context::from_waker(&p2_waker));
+                driver_took += observed.borrow().rx_delivered - before;
+                if let Poll::Ready(retired) = polled {
                     drop(p2.take());
                     retired.expect("clean driver retirement").unregistered();
                     p2_done = true;
                 }
             } else if !p1_done && p1_ready.0.swap(false, Ordering::Relaxed) {
                 observed.borrow_mut().context = 1;
+                observed.borrow_mut().rx_poll_steps = 0;
                 if let Poll::Ready(end) = p1.as_mut().poll(&mut Context::from_waker(&p1_waker)) {
                     let (joined, output) = match end {
                         radio::PortEnd::Uninstalled { joined, output, .. } => (joined, output),
@@ -172,18 +183,18 @@ fn continuous_rx_yields_p2_and_returns_p1_buffers_within_a_virtual_time_bound() 
                 break;
             }
         }
-        assert!(
-            p1_done && p2_done,
-            "both priorities finish in bounded steps"
-        );
+        assert!(p1_done && p2_done, "both tasks finish in bounded steps");
     }));
     assert_eq!(observed.borrow().rx_delivered, FRAMES);
-    assert!(observed.borrow().rx_saturated_polls > 0);
+    assert_eq!(driver_took, 0, "the driver's turn takes no unit");
+    assert!(
+        driver_polls < FRAMES / 4,
+        "{driver_polls} driver turns for {FRAMES} units"
+    );
     assert_eq!(super::count(&released), FRAMES);
 }
-
-/// P1 keeps every received unit, as a reorder window with a hole does,
-/// until it holds `RX_HELD`, then returns them all.
+/// The body keeps every received unit, as a reorder window with a hole
+/// does, until it holds `RX_HELD`, then returns them all.
 struct RetainingReceive {
     observed: Rc<RefCell<Observed>>,
     released: super::Released,
@@ -235,7 +246,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RetainingReceive {
                     _ => panic!("a retained RX frame"),
                 }
             }
-            // P1 holds its bound: the last unit stays with the radio.
+            // The body holds its bound: the last unit stays in the ring.
             assert_eq!(self.observed.borrow().received.len(), 1);
             for frame in kept {
                 phase.recycle(frame);
@@ -258,7 +269,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for RetainingReceive {
 }
 
 #[test]
-fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
+fn the_body_holds_at_most_its_bound_and_the_rest_waits_in_the_ring() {
     let (parts, observed, clock) = installed(Vec::new());
     clock.1.set(true);
     observed.borrow_mut().check_context = true;
@@ -268,7 +279,7 @@ fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
     let p2_ready = Arc::new(Ready(AtomicBool::new(true)));
     let p1_waker = Waker::from(p1_ready.clone());
     let p2_waker = Waker::from(p2_ready.clone());
-    let mut most_untaken = 0;
+    let mut driver_took = 0;
     block_on(radio::with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (front, registration) = slot
@@ -288,7 +299,6 @@ fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
         for _ in 0..2000 {
             if !p2_done && p2_ready.0.swap(false, Ordering::Relaxed) {
                 observed.borrow_mut().context = 2;
-                observed.borrow_mut().rx_poll_steps = 0;
                 let before = observed.borrow().rx_delivered;
                 if let Poll::Ready(retired) = p2
                     .as_mut()
@@ -300,11 +310,10 @@ fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
                     retired.expect("clean driver retirement").unregistered();
                     p2_done = true;
                 }
-                // P1 takes nothing while P2 runs: one P2 poll queues what
-                // P1 has not taken.
-                most_untaken = most_untaken.max(observed.borrow().rx_delivered - before);
+                driver_took += observed.borrow().rx_delivered - before;
             } else if !p1_done && p1_ready.0.swap(false, Ordering::Relaxed) {
                 observed.borrow_mut().context = 1;
+                observed.borrow_mut().rx_poll_steps = 0;
                 if let Poll::Ready(end) = p1.as_mut().poll(&mut Context::from_waker(&p1_waker)) {
                     let radio::PortEnd::Uninstalled { joined, .. } = end else {
                         panic!("clean RX uninstall");
@@ -324,19 +333,16 @@ fn p1_retains_a_32_unit_reorder_window_while_p2_queues_at_most_eight_untaken() {
                 break;
             }
         }
-        assert!(
-            p1_done && p2_done,
-            "both priorities finish in bounded steps"
-        );
+        assert!(p1_done && p2_done, "both tasks finish in bounded steps");
     }));
     assert_eq!(observed.borrow().rx_delivered, RX_HELD + 1);
     assert_eq!(super::count(&released), RX_HELD + 1);
-    assert!(most_untaken <= 8, "{most_untaken} units queued untaken");
+    assert_eq!(driver_took, 0, "the driver's turn takes no unit");
 }
 
-/// P1 lends every received unit to a network that returns it at once, as a
-/// station delivering UDP does; it takes each event only after the driver's
-/// turn, which queued it, has ended.
+/// The body lends every received unit to a network that returns it at
+/// once, as a station delivering UDP does, and lets the driver's turn run
+/// between each take and its lend.
 struct LendingReceive {
     observed: Rc<RefCell<Observed>>,
     released: super::Released,
@@ -384,8 +390,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for LendingReceive {
             for _ in 0..LENT_FRAMES {
                 match phase.next_event().await {
                     Ok(Ok(LowerMacEvent::Received { frame, .. })) => {
-                        // P2 preempts P1 as soon as a take wakes it: the
-                        // driver runs between the take and the lend.
+                        // The driver's turn runs between the take and the
+                        // lend.
                         yield_once().await;
                         let Ok(lent) = phase.lend(frame) else {
                             panic!("the network takes the unit");
@@ -406,6 +412,11 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for LendingReceive {
     }
 }
 
+/// The body's turn ends: the executor runs whatever else is ready first.
+async fn rx_capacity_yield() {
+    yield_once().await;
+}
+
 /// Pending once, after waking its task: the executor runs whatever else
 /// is ready first.
 async fn yield_once() {
@@ -421,11 +432,11 @@ async fn yield_once() {
     .await;
 }
 
-/// More units than P2 queues untaken.
+/// More units than the body holds at once.
 const LENT_FRAMES: usize = 64;
 
 #[test]
-fn units_beyond_the_untaken_bound_reach_p1_through_wakes_alone() {
+fn lent_units_beyond_the_bodys_bound_reach_it_through_wakes_alone() {
     let (parts, observed, clock) = installed(Vec::new());
     clock.1.set(true);
     let released = super::Released::default();
@@ -488,10 +499,7 @@ fn units_beyond_the_untaken_bound_reach_p1_through_wakes_alone() {
                 break;
             }
         }
-        assert!(
-            p1_done && p2_done,
-            "both priorities finish in bounded steps"
-        );
+        assert!(p1_done && p2_done, "both tasks finish in bounded steps");
     }));
     assert_eq!(taken.get(), LENT_FRAMES);
     assert_eq!(super::count(&released), LENT_FRAMES);

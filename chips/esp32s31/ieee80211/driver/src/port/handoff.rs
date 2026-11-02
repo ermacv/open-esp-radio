@@ -132,12 +132,9 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
         { TERMINAL_CAPACITY + RX_HELD },
         oer_memory::CompactSpscCursor,
     >,
+    /// The received units the body holds: admitted to it and not yet
+    /// returned to the ring or lent to the network.
     pub(super) rx_out: Cell<usize>,
-    pub(super) recycled: oer_memory::AffineSpscQueue<
-        ReceiveBuffer<'id, Id, D::Receive>,
-        RX_HELD,
-        oer_memory::CompactSpscCursor,
-    >,
     pub(super) failed_command: oer_memory::OnceValue<driver::Command<'id, Id, D, B, O>>,
     pub(super) failed_terminal: FailedTerminal<'id, Id, D, B, O>,
     pub(super) completions: Completions<'id, Id, D, B, O>,
@@ -153,7 +150,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             attached: None,
             commands: oer_memory::AffineSpscQueue::new(),
             events: oer_memory::AffineSpscQueue::new(),
-            recycled: oer_memory::AffineSpscQueue::new(),
             rx_out: Cell::new(0),
             failed_command: oer_memory::OnceValue::new(),
             failed_terminal: oer_memory::OnceValue::new(),
@@ -167,7 +163,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn drained(&mut self) -> bool {
         self.commands.split().0.is_empty()
             && self.events.split().0.is_empty()
-            && self.recycled.split().0.is_empty()
             && !self.failed_command.is_requested()
             && !self.failed_terminal.is_requested()
             && completions_vacant(&self.completions)
@@ -209,7 +204,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         }
         storage.shared.network.reset();
-        storage.shared.received.reset();
         let settings = &storage.shared.settings;
         settings.clock_requested.set(false);
         settings.enabled.set(false);
@@ -241,7 +235,6 @@ pub(super) struct Held<'s, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
     pub(super) storage: &'static PortStorage<D, B>,
     pub(super) commands: Incoming<'s, Cmd<'id, Id, D, B, O>, COMMANDS>,
     pub(super) events: Outgoing<'s, Msg<'id, Id, D, B>, { TERMINAL_CAPACITY + RX_HELD }>,
-    pub(super) recycled: Incoming<'s, ReceiveBuffer<'id, Id, D::Receive>, RX_HELD>,
     pub(super) rx_out: &'s Cell<usize>,
     pub(super) gate: &'s GateIssuer<'id, Part<Id, 1>>,
     pub(super) failed_terminal: &'s FailedTerminal<'id, Id, D, B, O>,
@@ -335,8 +328,12 @@ pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, 
         { TERMINAL_CAPACITY + RX_HELD },
         CompactSpscCursor,
     >,
-    pub(super) recycled:
-        LocalSpscSender<'p, ReceiveBuffer<'static, Id, D::Receive>, RX_HELD, CompactSpscCursor>,
+    /// The device and the driver's state, for the body's receive pull and
+    /// returns: both tasks run on the station's executor, and each borrows
+    /// them only within one synchronous step.
+    pub(super) port: &'static PortStorage<D, B>,
+    pub(super) driver: &'p RefCell<driver::Driver<'static, Id, D, B, O>>,
+    pub(super) rx_out: &'p Cell<usize>,
     pub(super) failed_command: &'p FailedCommand<'static, Id, D, B, O>,
     pub(super) failed_terminal: &'p FailedTerminal<'static, Id, D, B, O>,
     pub(super) completions: &'p Completions<'static, Id, D, B, O>,
@@ -374,6 +371,55 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
             self.storage.poison(Fault::Capacity);
         }
         self.storage.driver.wake();
+    }
+}
+
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<'_, Id, D, B, O> {
+    /// Return a unit the body held to the ring, in the body's own turn.
+    pub(super) fn recycle(&self, buffer: ReceiveBuffer<'static, Id, D::Receive>) {
+        let (unit, _) = buffer.into_unit();
+        let returned = self.port.device().and_then(|mut device| {
+            device.recycle(unit);
+            self.rx_out
+                .get()
+                .checked_sub(1)
+                .map(|held| self.rx_out.set(held))
+                .ok_or(Fault::Capacity)
+        });
+        if let Err(fault) = returned {
+            self.storage.poison(fault);
+        }
+    }
+    /// The body's receive pull: the next received unit the ring holds and
+    /// a receive rule admits, serviced in the body's own turn. `None` once
+    /// the ring has none now: the driver wakes the body when its interrupt
+    /// leaves ring work, and `cx` when the ring has more at once.
+    pub(super) fn pull(
+        &self,
+        cx: &mut Context<'_>,
+    ) -> Result<Option<owned::OwnedEvent<'static, Id, D, B>>, Fault> {
+        if !self.enabled.get() {
+            return Ok(None);
+        }
+        let mut device = self.port.device()?;
+        let mut driver = self
+            .driver
+            .try_borrow_mut()
+            .map_err(|_| Fault::HardwareUnavailable)?;
+        driver::settle_lent(&self.storage.network, self.rx_out, &mut **device)?;
+        // A unit no rule admits goes back to the ring and the pull takes
+        // the next, up to one driver turn's worth.
+        for _ in 0..EVENTS_PER_POLL {
+            let room = RX_HELD.saturating_sub(self.rx_out.get());
+            let Some(unit) = device.pull_received(room, cx)? else {
+                return Ok(None);
+            };
+            if let Some(event) = driver.admit(&mut **device, self.rx_out, self.storage, unit)? {
+                return Ok(Some(event));
+            }
+        }
+        cx.waker().wake_by_ref();
+        Ok(None)
     }
 }
 
