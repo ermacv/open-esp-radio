@@ -182,7 +182,9 @@ Module map:
   (`AmpduCapabilities::max_length`), and the rate's PPDU time limit
   (`PhyRate::max_txtime_micros`, 5484 us for HT-mixed), counted before any
   MSDU leaves its queue; one ticket and
-  one admission permission serve the aggregate. Each member's description
+  one admission permission serve the aggregate. A first owed MPDU beyond
+  the window's end goes neither alone nor aggregated: it waits until the
+  terminals of the MPDUs before it move the window. Each member's description
   waits in the machine's member bank (one place per buffer, `CAP`) while
   the aggregate is out; its context carries only the places, in subframe
   order, so it is no larger than a single MPDU's. Each member's memory

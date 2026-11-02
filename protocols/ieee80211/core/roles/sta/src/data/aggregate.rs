@@ -72,6 +72,20 @@ impl AggregateWindow {
         oer_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence) < self.size
     }
 
+    /// Whether `sequence` lies beyond the window's end: after its head in
+    /// modulo-4096 order, but not inside it. The originator sends no MPDU
+    /// there, alone or aggregated, until the window moves over the MPDUs
+    /// before it; settling one sent there would move no window.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 10.25.6 (HT-immediate block ack: the
+    /// originator transmits within WinStartO to WinStartO + WinSizeO - 1)
+    /// and 10.24.7 (the half-space horizon of sequence comparisons).
+    fn ahead(&self, sequence: SequenceNumber) -> bool {
+        use oer_ieee80211_core_upper_mac::sequence::SequenceSpace;
+        let distance = self.start.forward_distance(sequence);
+        distance >= self.size && distance < SequenceNumber::HALF_SPACE
+    }
+
     /// Whether an aggregate of `octets` stays within the window's length
     /// and its rate's PPDU time limit. The time bound counts the whole
     /// aggregate at the rate (IEEE Std 802.11-2020 19.4.3, through
@@ -422,9 +436,11 @@ impl<
     /// The next attempt whose category owns a free admission permission and
     /// which finds a free ticket: an aggregate of the chosen TID when
     /// `window` gives it one and its first owed MPDU lies inside it,
-    /// otherwise that MPDU alone. The earliest MSDU of an admitted category
-    /// goes first, whatever its TID. `window` is asked once, for the chosen
-    /// TID, and only when an MPDU of it is owed.
+    /// otherwise that MPDU alone. A first MPDU beyond the window waits,
+    /// with its TID, for the terminals of the MPDUs before it to move the
+    /// window. The earliest MSDU of an admitted category goes first,
+    /// whatever its TID. `window` is asked once, for the chosen TID, and
+    /// only when an MPDU of it is owed.
     pub fn poll_attempt(
         &mut self,
         window: impl FnOnce(WmmUserPriority) -> Option<AggregateWindow>,
@@ -432,7 +448,11 @@ impl<
     ) -> Option<DataAttempt<'id, D, K>> {
         let tid = self.next_tid()?;
         let front = self.owed.first(|owed| owed.context.tid == tid)?;
-        let Some(window) = window(tid).filter(|window| window.holds(front.context.sequence)) else {
+        let window = window(tid);
+        if window.is_some_and(|window| window.ahead(front.context.sequence)) {
+            return None;
+        }
+        let Some(window) = window.filter(|window| window.holds(front.context.sequence)) else {
             return self.poll_action().map(DataAttempt::Single);
         };
         let category = front.context.access_category;
