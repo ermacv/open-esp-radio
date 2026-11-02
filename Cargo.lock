@@ -1526,6 +1526,7 @@ dependencies = [
  "oer-chips-family-modem-clock",
  "oer-chips-family-phy",
  "oer-chips-family-platform-port",
+ "oer-chips-family-power",
  "oer-chips-family-radio",
  "oer-chips-family-usb-serial-jtag",
  "oer-chips-family-watchdog",
@@ -1877,6 +1878,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-chips-family-power"
+version = "0.1.0"
+
+[[package]]
 name = "oer-chips-family-radio"
 version = "0.1.0"
 dependencies = [
@@ -2050,6 +2055,25 @@ dependencies = [
  "oer-portable-mmio",
  "oer-portable-riscv",
  "toml",
+]
+
+[[package]]
+name = "oer-hil-probes-esp32s31-light-sleep"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-power",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-riscv",
+ "oer-portable-time",
 ]
 
 [[package]]

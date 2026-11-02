@@ -24,7 +24,7 @@ handoff. Hart 0's level bits are set when the root splits the partition on
 the boot hart, hart 1's when hart 1 makes its controller. `fatal_view`
 observes hart 0's routes and lines in hart 0's fatal path only: hart 1's
 routes have no claimed observer and its lines are reachable only from it. Ordinary blocks are `peripherals::<block>`:
-`aes`, `cache_counters`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`,
+`aes`, `cache_counters`, `efuse`, `entropy`, `reset_cause`, `sleep`, `software_interrupt`,
 `system_timer`, `timg0_alarm`, `timg1_alarm`, `usb_serial_jtag` and `watchdog`. `memory` is
 the DMA memory core (`dma_address`, `dma_static`); the `dma_static!` macro is
 exported at the crate root. `boot` holds the bootstrap's owners; the radio modules are

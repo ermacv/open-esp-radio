@@ -59,7 +59,7 @@ fn state(s: &Session<'_>, tag: u32) {
         u32::from(oer_portable_riscv::take_interrupts()),
     );
     let w = &s.wake_status;
-    let r = w.read_int_raw();
+    let r = s.sleep_control.read_int_raw();
     use pac::pmu::int_raw as f;
     let raw = (u32::from(r.lp_cpu_exc_int_raw()) * f::LP_CPU_EXC_INT_RAW_MASK)
         | (u32::from(r.sdio_idle_int_raw()) * f::SDIO_IDLE_INT_RAW_MASK)
@@ -73,7 +73,7 @@ fn state(s: &Session<'_>, tag: u32) {
             .modem_intr_vector()
             .get(),
         raw,
-        w.read_slp_wakeup_status0().wakeup_cause(),
+        s.sleep_control.read_slp_wakeup_status0().wakeup_cause(),
     );
     emit(
         tag + 4,

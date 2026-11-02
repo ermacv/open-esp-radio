@@ -196,6 +196,7 @@ impl Root {
             axi_dma,
             secondary_launch,
             cache_counters,
+            sleep,
         } = self.partitions;
         let WatchdogRegisters {
             main0,
@@ -258,6 +259,7 @@ impl Root {
                 interrupt_matrix,
                 efuse: EfuseRegisters::new(efuse),
                 entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
+                sleep: crate::peripherals::sleep::SleepRegisters::new(sleep),
                 reset_cause: ResetCauseRegisters::new(reset_cause),
                 hart1: crate::cores::LaunchPermit::new(secondary_launch, clic1, clic_observer1),
                 wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),

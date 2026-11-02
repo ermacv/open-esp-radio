@@ -29,6 +29,7 @@ pub struct RuntimeResources {
     pub(super) interrupt_matrix: crate::platform::interrupt_controller::MatrixParts,
     pub(super) efuse: EfuseRegisters,
     pub(super) entropy: EntropyRegisters,
+    pub(super) sleep: crate::peripherals::sleep::SleepRegisters,
     pub(super) reset_cause: ResetCauseRegisters,
     pub(super) hart1: crate::cores::LaunchPermit,
     pub(super) wifi_interrupts: WifiInterruptBanks,
@@ -64,6 +65,8 @@ pub struct Hardware {
     pub software_interrupts: SoftwareInterrupts,
     pub efuse: EfuseRegisters,
     pub entropy: EntropyRegisters,
+    /// The PMU's light-sleep request and the LP timer that wakes it.
+    pub sleep: crate::peripherals::sleep::SleepRegisters,
     pub reset_cause: ResetCauseRegisters,
     /// The one-shot authority to start hart 1 (`Cores::start_secondary`):
     /// hart 1's interrupt grant (its route bank and CLIC parts), the ROM
@@ -123,6 +126,7 @@ impl Port for RuntimePort {
             interrupt_matrix,
             efuse,
             entropy,
+            sleep,
             reset_cause,
             hart1,
             wifi_interrupts,
@@ -141,6 +145,7 @@ impl Port for RuntimePort {
                 software_interrupts,
                 efuse,
                 entropy,
+                sleep,
                 reset_cause,
                 hart1,
                 wifi_interrupts,

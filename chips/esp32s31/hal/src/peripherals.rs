@@ -6,6 +6,7 @@
 //! - [`efuse`]: the factory identity from eFuse;
 //! - [`entropy`]: the true random number generator;
 //! - [`reset_cause`]: why each HP core last left reset;
+//! - [`sleep`]: the PMU's light-sleep request and the LP timer that wakes it;
 //! - [`software_interrupt`]: the FROM_CPU software interrupt lines;
 //! - [`system_timer`]: the SYSTIMER counter and comparators;
 //! - [`timg0_alarm`]: TIMG0 timer 0 as a one-shot alarm;
@@ -19,6 +20,7 @@ pub mod cache_counters;
 pub mod efuse;
 pub mod entropy;
 pub mod reset_cause;
+pub mod sleep;
 pub mod software_interrupt;
 pub mod system_timer;
 pub mod timg0_alarm;

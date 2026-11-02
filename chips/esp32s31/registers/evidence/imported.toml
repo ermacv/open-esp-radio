@@ -1044,6 +1044,14 @@ id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L96"
 description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:96 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: the line an imported fact cites."
 
 [[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L97"
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:97 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: DR_REG_RTC_TIMER_BASE is 0x20800000."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/rtc_timer_reg.h, sha256 fa93613bccb20826ebccc1e453820c0ee019be6a5721757ae082780386c82cf4, Apache-2.0: the register header whose definitions, field bit positions, access classes and defaults the RTC_TIMER registers and fields take."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L98"
 description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in artifacts.toml, esp-idf:components/soc/esp32s31/register/soc/reg_base.h:98 (file sha256 24a0c98ca63b042ed32d42c5566b979d412e04ec7b1b9d305bb7addc12577f9d), Apache-2.0: the line an imported fact cites."
 

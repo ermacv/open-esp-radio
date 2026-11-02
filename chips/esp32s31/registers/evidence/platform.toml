@@ -252,3 +252,11 @@ description = "Official ESP-IDF commit 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d:
 [[sources]]
 id = "ESP_IDF_4D59230D_S31_BUS_MONITOR_RECORD"
 description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/soc/esp32s31/register/soc/bus_monitor_reg.h:502-551,1170-1219. Per-HP-hart record enable at +0x44/+0xcc (R/W bits 0 record enable, 1 debug-record enable); sampled PC at +0x48/+0xd0 and SP at +0x4c/+0xd4 (32-bit RO), reset zero. The per-hart stride is 0x88. These are register semantics, not evidence of running-peer sampling or bus drain."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_PMU_SLEEP_CODES"
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/esp_hal_pmu/include/hal/pmu_types.h:34 (sha256 a33d59247fb46ede4a53bcbf1402498d343f8cffda2216c0bdb55a39531df5ed): PMU_HP_ICG_MODEM_CODE_SLEEP is bitmap position 0; components/soc/esp32s31/include/soc/clk_tree_defs.h:89 (sha256 abeefd87c7492d37bd0873d637b74c47fdcbde91c3e9aae63a0c6a823ec5412f): SOC_CPU_CLK_SRC_XTAL is 0; components/esp_hw_support/port/esp32s31/pmu_param.c:160-173 writes them as the HP_SLEEP modem ICG code and system clock (PMU_HP_SLEEP_CLOCK_CONFIG_DEFAULT)."
+
+[[sources]]
+id = "ESP_IDF_4D59230D_S31_PMU_SLEEP_PROTECT"
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d components/esp_hw_support/include/esp_private/esp_pmu.h:221-224 (sha256 48a1a6238dde27baeb99f5164178aa038e2664da4f816733d431bb0bdb09b183): the sleep protect modes HP_SLEEP 0, XTAL 1, HP_LP_SLEEP 2, DISABLE 3; components/esp_hw_support/port/esp32s31/pmu_init.c:141 selects HP_LP_SLEEP in SLP_WAKEUP_CNTL3.SLEEP_PRT_SEL."

@@ -53,6 +53,7 @@ types = [
     "types/mpll.toml",
     "types/pmu.toml",
     "types/rfpll.toml",
+    "types/rtc-timer.toml",
     "types/rtc-wdt.toml",
     "types/sar-master.toml",
     "types/sar-slave.toml",
@@ -646,6 +647,13 @@ clocks = [
 resets = [
   { role = "block", field = "LP_PERICLKRST.EFUSE_CTRL.LP_EFUSE_RST_EN", sources = ["ESP_IDF_4D59230D_S31_LP_PERI_CLKRST_STRUCT_H_L195"] },
 ]
+
+[[instances]]
+name = "RTC_TIMER"
+type = "RTC_TIMER"
+base = 0x20800000
+extent = { size = 0x400 }
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_REG_BASE_H_L97", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_RTC_TIMER_REG_H"]
 
 [[instances]]
 name = "LP_WDT"
