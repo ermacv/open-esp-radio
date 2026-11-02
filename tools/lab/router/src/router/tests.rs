@@ -175,6 +175,7 @@ impl Remote for Canned {
 const CHANGES_PREFIX: &str = "changes=";
 const SHOW_PREFIX: &str = "config=";
 const CHANNELS_PREFIX: &str = "phy=";
+const REGULATORY_PREFIX: &str = "iw reg set";
 const SET_PREFIX: &str = "uci set";
 const IW_PREFIX: &str = "info=";
 
@@ -183,6 +184,7 @@ fn first_run() -> Canned {
     Canned::new(vec![
         (CHANGES_PREFIX, vec![Ok("\n".to_owned())]),
         (SHOW_PREFIX, vec![Ok(show_before()), Ok(show_profiled())]),
+        (REGULATORY_PREFIX, vec![Ok(String::new())]),
         (CHANNELS_PREFIX, vec![Ok(CHANNELS.to_owned())]),
         (SET_PREFIX, vec![Ok(String::new())]),
         (
@@ -201,6 +203,7 @@ fn profiled_router() -> Canned {
     Canned::new(vec![
         (CHANGES_PREFIX, vec![Ok("\n".to_owned())]),
         (SHOW_PREFIX, vec![Ok(show_profiled())]),
+        (REGULATORY_PREFIX, vec![Ok(String::new())]),
         (CHANNELS_PREFIX, vec![Ok(CHANNELS.to_owned())]),
         (SET_PREFIX, vec![Ok(String::new())]),
         (IW_PREFIX, vec![Ok(iw(6, "20 MHz", SSID))]),
@@ -228,6 +231,7 @@ fn the_profile_is_applied_verified_and_settles() {
         [
             CHANGES.to_owned(),
             show_script(),
+            regulatory_script("DE").unwrap(),
             profile().channels_script().unwrap(),
             APPLY.to_owned(),
             show_script(),
@@ -244,7 +248,7 @@ fn the_profile_enables_the_radio_and_shows_the_ssid() {
     // and the committed configuration must show them set.
     let mut remote = first_run();
     apply(&mut remote, &profile()).unwrap();
-    let set = &remote.scripts[3];
+    let set = &remote.scripts[4];
     assert!(set.contains("'wireless.radio9.disabled=0'"), "{set}");
     assert!(set.contains("'wireless.lab_ap.hidden=0'"), "{set}");
     for (radio, ap, reason) in [
@@ -287,16 +291,21 @@ fn a_second_apply_changes_nothing_and_verifies_the_same() {
 #[test]
 fn the_plan_lists_placeholders_only() {
     let plan = plan().unwrap();
-    assert_eq!(plan.len(), 6);
+    assert_eq!(plan.len(), 7);
     assert_eq!(
-        plan[3],
+        plan[2],
+        "iw reg set <country> && attempt=0 && until iw reg get | grep -q '^country <country>:'; \
+         do attempt=$((attempt + 1)) && test \"$attempt\" -lt 10 && sleep 1 || exit 1; done"
+    );
+    assert_eq!(
+        plan[4],
         "uci set 'wireless.<radio>.channel=<channel>' && uci set 'wireless.<radio>.htmode=HT20' \
          && uci set 'wireless.<radio>.beacon_int=100' && uci set 'wireless.<radio>.disabled=0' \
          && uci set 'wireless.<ap_section>.ssid=<ssid>' && uci set 'wireless.<ap_section>.disabled=0' \
          && uci set 'wireless.<ap_section>.hidden=0' && uci commit wireless && wifi reload"
     );
     assert_eq!(
-        plan[5],
+        plan[6],
         "info=$(iw dev '<wireless_interface>' info) && printf '%s\\n' \"$info\" | grep -E \
          '^[[:space:]]*(addr|ssid|type|channel) '"
     );
@@ -487,6 +496,7 @@ fn station_wpa2_remote_failures_never_repeat_the_key_in_errors_or_debug() {
     for prefix in [
         CHANGES_PREFIX,
         SHOW_PREFIX,
+        REGULATORY_PREFIX,
         CHANNELS_PREFIX,
         "set +x\n",
         IW_PREFIX,
@@ -560,6 +570,50 @@ fn staged_changes_refuse_before_anything_is_set() {
         "{error}"
     );
     assert_eq!(remote.scripts.len(), 1);
+}
+
+#[test]
+fn the_radio_s_country_is_set_as_the_regulatory_domain_before_its_channels_are_read() {
+    // A freshly booted router keeps the world domain, where channels 12
+    // and 13 are no-IR, until a radio starts with its country.
+    let mut remote = first_run();
+    apply(&mut remote, &profile()).unwrap();
+    let regulatory = remote
+        .scripts
+        .iter()
+        .position(|script| script.starts_with(REGULATORY_PREFIX))
+        .expect("the regulatory domain is set");
+    let channels = remote
+        .scripts
+        .iter()
+        .position(|script| script.starts_with(CHANNELS_PREFIX))
+        .expect("the channels are read");
+    assert!(regulatory < channels);
+    assert!(remote.scripts[regulatory].starts_with("iw reg set DE && "));
+    // A domain that never takes refuses before anything is set.
+    let mut remote = first_run();
+    remote.answer(
+        REGULATORY_PREFIX,
+        vec![Err("the remote command exited with 1".to_owned())],
+    );
+    let error = apply(&mut remote, &profile()).unwrap_err();
+    assert!(error.contains("regulatory domain"), "{error}");
+    assert!(
+        !remote
+            .scripts
+            .iter()
+            .any(|script| script.starts_with(SET_PREFIX) || script.starts_with(CHANNELS_PREFIX)),
+        "{:?}",
+        remote.scripts
+    );
+}
+
+#[test]
+fn a_country_that_is_not_two_uppercase_letters_is_refused() {
+    regulatory_script("DE").unwrap();
+    for country in ["de", "D", "DEU", "D;", "$(x)", ""] {
+        assert!(regulatory_script(country).is_err(), "{country}");
+    }
 }
 
 #[test]

@@ -12,8 +12,12 @@
 //!    the radio is a 2.4 GHz `wifi-device`; the AP section an AP
 //!    `wifi-iface` of it; no other enabled `wifi-iface` of the radio
 //!    carries the stand's SSID;
-//! 3. the radio's channels as its PHY lists them: the profile's channel is
-//!    offered and neither disabled nor no-IR in the regulatory domain;
+//! 3. the regulatory domain of the radio's UCI `country`, set and awaited
+//!    up to [`REGULATORY_ATTEMPTS`] seconds: a freshly booted router keeps
+//!    the world domain (`00`, no-IR on channels 12 and 13) until a radio
+//!    starts with its country; then the radio's channels as its PHY lists
+//!    them: the profile's channel is offered and neither disabled nor no-IR
+//!    in the regulatory domain;
 //! 4. the profile: on the radio `channel`, `htmode` (its [`ChannelWidth`]),
 //!    `beacon_int` [`BEACON_INTERVAL_TU`] and `disabled=0`, on the AP
 //!    section `ssid`, `disabled=0` and `hidden=0`; `uci commit wireless`;
@@ -120,6 +124,26 @@ pub fn quote(text: &str) -> Result<String> {
     shlex::try_quote(text)
         .map(|word| word.into_owned())
         .map_err(|error| error.to_string())
+}
+
+/// Step 3's checks of the regulatory domain, one second apart.
+pub const REGULATORY_ATTEMPTS: u8 = 10;
+
+/// Step 3, first: set the regulatory domain of `country` (two uppercase
+/// letters) and wait until the router reports it.
+///
+/// # Errors
+///
+/// A country that is not two uppercase ASCII letters.
+pub fn regulatory_script(country: &str) -> Result<String> {
+    if country.len() != 2 || !country.bytes().all(|byte| byte.is_ascii_uppercase()) {
+        return Err("the radio's UCI country is not two uppercase letters".to_owned());
+    }
+    Ok(format!(
+        "iw reg set {country} && attempt=0 && until iw reg get | grep -q '^country {country}:'; \
+         do attempt=$((attempt + 1)) && test \"$attempt\" -lt {REGULATORY_ATTEMPTS} && sleep 1 \
+         || exit 1; done"
+    ))
 }
 
 /// Step 1: the staged changes, cut to their option paths on the router.
@@ -383,6 +407,7 @@ pub fn plan() -> Result<Vec<String>> {
     Ok(vec![
         CHANGES.to_owned(),
         show_script(),
+        regulatory_script("DE")?.replace("DE", "<country>"),
         profile.channels_script()?,
         profile
             .apply_script()?
@@ -439,6 +464,11 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         &profile.ssid,
     )?;
     let radio = before.check_before(profile)?;
+    if let Some(country) = radio.option("country") {
+        remote
+            .run(&regulatory_script(country)?)
+            .map_err(step("setting the radio's regulatory domain"))?;
+    }
     let channels = remote
         .run(&profile.channels_script()?)
         .map_err(step("reading the radio's channels"))?;
