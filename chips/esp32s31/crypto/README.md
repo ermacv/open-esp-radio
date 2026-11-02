@@ -4,8 +4,8 @@
 is a synchronous AES-128 engine (`oer_crypto::block::Aes128Engine`): loading
 a key sets the accelerator up, and each block is written, started and waited
 for in place on the `STATE` flag, its output read back before the call
-returns. `oer_crypto::block::unwrap_now` runs the sole RFC 3394 machine of
-`oer-crypto` over it; the machine contains no async code. The engine runs on
+returns. `oer_crypto::block::unwrap_now` runs `oer-crypto`'s one RFC 3394
+unwrap over it, in place in the request's buffer. The engine runs on
 the hart its composition places the AES owner on and never yields.
 `compose::crypto::aes_engine` builds it for its owner: the Wi-Fi station,
 which unwraps its EAPOL-Key data in its own step; the library's AES service
