@@ -98,10 +98,10 @@ use oer_ieee80211_core_security_rsn::{
     sae::{SaeCommit, SaePassword, SaePasswordElement, SaePasswordToken},
     supplicant::{
         RsnConnectedAction, RsnConnectedProcessError, RsnConnectedSupplicant,
-        RsnConnectedSupplicantError, RsnGroupKeyDataRequest, RsnGroupKeyInstallRequest,
-        RsnKeyUnwrapRequestError, RsnStaDeadlineEvent, RsnStaKeyDataRequest,
-        RsnStaKeyInstallRequest, RsnStaReady, RsnStaResponseDeadline, RsnStaResponseWait,
-        RsnStaRetryInstall, RsnStaSupplicant, RsnStaSupplicantAction, RsnStaSupplicantError,
+        RsnConnectedSupplicantError, RsnGroupKeyFrame, RsnGroupKeyInstallRequest,
+        RsnStaDeadlineEvent, RsnStaKeyInstallRequest, RsnStaProcessError, RsnStaReady,
+        RsnStaResponseDeadline, RsnStaResponseWait, RsnStaRetryInstall, RsnStaSupplicant,
+        RsnStaSupplicantError,
     },
 };
 use oer_ieee80211_core_upper_mac::protection::HePacketPadding;
@@ -156,7 +156,6 @@ mod block_ack;
 mod commands;
 mod deferred_eapol;
 mod group_keys;
-mod key_unwrap;
 mod management;
 mod tx_block_ack;
 use crate::power_save::{NullOutcome, PowerSaveDecision, PowerSaveView};
@@ -881,7 +880,7 @@ pub enum StaTraffic {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaRxError {
     Frame(oer_ieee80211_core_upper_mac::receive::RxDropReason),
-    Security(RsnConnectedProcessError<oer_crypto::KeyUnwrapError>),
+    Security(RsnConnectedProcessError),
 }
 
 impl From<oer_ieee80211_core_upper_mac::receive::RxDropReason> for StaRxError {
@@ -2282,7 +2281,7 @@ impl ConnectedRsn {
                     Ok(())
                 }
             }
-            Ok(RsnConnectedAction::UnwrapGroupKeyData(request)) => {
+            Ok(RsnConnectedAction::GroupKeyData(request)) => {
                 let current = match &self.rekey {
                     Rekey::Install(current, _) | Rekey::AwaitInstalled(current, _) => {
                         current.replay_counter()
@@ -2367,22 +2366,18 @@ impl ConnectedRsn {
         self.rekey = Rekey::Unwrap(request, protection);
     }
 
-    /// Prepare the installation of unwrapped key data. Invalid key data is a
-    /// counted protocol drop; the next deferred frame follows.
-    fn complete_unwrap(
+    /// Unwrap the key data of an authenticated frame over `engine` and
+    /// prepare its installation. Key data that is too long, does not unwrap
+    /// or does not parse is a counted protocol drop; the next deferred frame
+    /// follows.
+    fn prepare_install(
         &mut self,
-        request: RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        frame: RsnGroupKeyFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
-        unwrapped: Result<
-            oer_ieee80211_core_security_cipher::aes::RsnKeyData,
-            oer_crypto::KeyUnwrapError,
-        >,
+        engine: &mut impl oer_crypto::block::Aes128Engine,
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), StaDisconnectReason> {
-        match self
-            .supplicant
-            .complete_group_key_data_unwrap(request, unwrapped)
-        {
+        match self.supplicant.prepare_group_key_install(frame, engine) {
             Ok(install) => {
                 self.rekey = Rekey::Install(install, protection);
                 return Ok(());
@@ -2395,6 +2390,9 @@ impl ConnectedRsn {
             }
             Err(RsnConnectedProcessError::KeyUnwrap(_)) => report(events, || {
                 StaEvent::RsnInputDropped(RsnDrop::KeyUnwrapFailed)
+            }),
+            Err(RsnConnectedProcessError::KeyDataTooLong) => report(events, || {
+                StaEvent::RsnInputDropped(RsnDrop::KeyDataTooLong)
             }),
         }
         self.advance_deferred();
@@ -2460,7 +2458,7 @@ enum Rekey {
     /// An authenticated M3 or GM1 whose key data the station unwraps in its
     /// next action turn.
     Unwrap(
-        RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
+        RsnGroupKeyFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         EapolProtection,
     ),
     /// The new key to install in a free slot or replace in an occupied slot.
@@ -5450,64 +5448,27 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         ) {
             return Change::Keep;
         }
+        // Message 3's key data is unwrapped here, in the step that takes it.
         let received = match handshake.supplicant.as_mut() {
-            Some(supplicant) => supplicant.on_frame(eapol, &handshake.pmk),
-            None => Err(RsnStaSupplicantError::UnexpectedAction),
+            Some(supplicant) => supplicant.on_frame(
+                eapol,
+                &handshake.pmk,
+                self.config.callbacks.key_unwrap_engine(),
+            ),
+            None => Err(RsnStaSupplicantError::UnexpectedAction.into()),
         };
         let action = match received {
-            // Message 3's key data, unwrapped here in the step.
-            Ok(RsnStaSupplicantAction::UnwrapKeyData(request)) => {
-                return self.handshake_unwrap(handshake, now, request, protection);
-            }
-            Ok(RsnStaSupplicantAction::Ready(action)) => action,
-            Err(RsnStaSupplicantError::RetainedSecurityIes(error)) => {
+            Ok(action) => action,
+            Err(RsnStaProcessError::Supplicant(RsnStaSupplicantError::RetainedSecurityIes(
+                error,
+            ))) => {
                 return leave_keyed(StaDisconnectReason::RetainedSecurityIes(error), None);
             }
-            Err(RsnStaSupplicantError::InvalidFrame(error)) => {
+            Err(RsnStaProcessError::Supplicant(RsnStaSupplicantError::InvalidFrame(error))) => {
                 return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
             }
             // A peer frame the supplicant rejects changes nothing.
             Err(error) if error.is_peer_input_rejection() => RsnStaReady::None,
-            Err(_) => return leave_handshake(handshake, reason_code::UNSPECIFIED),
-        };
-        handshake_ready(handshake, now, action, protection)
-    }
-
-    /// Unwrap Message 3's key data in the step and continue the handshake
-    /// with its plaintext. Key data beyond the station's bound fails as an
-    /// unusable Message 3.
-    #[inline(never)]
-    fn handshake_unwrap(
-        &mut self,
-        handshake: &mut Handshake<T, K>,
-        now: Instant,
-        request: RsnStaKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>,
-        protection: EapolProtection,
-    ) -> Change<T, K> {
-        let unwrapped = match request.key_unwrap() {
-            Ok(unwrap) => key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_engine(), unwrap)
-                .into_plaintext(),
-            Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
-                return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
-            }
-            Err(RsnKeyUnwrapRequestError::CapacityExceeded) => {
-                return leave_handshake(handshake, reason_code::UNSPECIFIED);
-            }
-        };
-        let action = match handshake
-            .supplicant()
-            .map_err(oer_ieee80211_core_security_rsn::supplicant::RsnStaProcessError::from)
-            .and_then(|supplicant| supplicant.complete_key_data_unwrap(request, unwrapped))
-        {
-            Ok(action) => action,
-            Err(oer_ieee80211_core_security_rsn::supplicant::RsnStaProcessError::Supplicant(
-                RsnStaSupplicantError::RetainedSecurityIes(error),
-            )) => {
-                return leave_keyed(StaDisconnectReason::RetainedSecurityIes(error), None);
-            }
-            Err(oer_ieee80211_core_security_rsn::supplicant::RsnStaProcessError::Supplicant(
-                RsnStaSupplicantError::InvalidFrame(error),
-            )) => return leave_keyed(StaDisconnectReason::InvalidEapol(error), None),
             Err(_) => return leave_handshake(handshake, reason_code::UNSPECIFIED),
         };
         handshake_ready(handshake, now, action, protection)
@@ -6161,34 +6122,16 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             let (rekey, owed) = match core::mem::replace(&mut rsn.rekey, Rekey::None) {
                 // The key data is unwrapped here, in the step; its install
                 // follows in the next turn of this loop.
-                Rekey::Unwrap(request, protection) => {
-                    match request.key_unwrap() {
-                        Ok(unwrap) => {
-                            let unwrapped = key_unwrap::unwrap_now(
-                                self.config.callbacks.key_unwrap_engine(),
-                                unwrap,
-                            )
-                            .into_plaintext();
-                            if let Err(reason) =
-                                rsn.complete_unwrap(request, protection, unwrapped, events)
-                            {
-                                return Some(Err(reason));
-                            }
-                            continue;
-                        }
-                        Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
-                            return Some(Err(StaDisconnectReason::InvalidEapol(error)));
-                        }
-                        // Key data beyond the station's bound is a counted
-                        // protocol drop; the next deferred frame follows.
-                        Err(RsnKeyUnwrapRequestError::CapacityExceeded) => {
-                            report(events, || {
-                                StaEvent::RsnInputDropped(RsnDrop::KeyDataTooLong)
-                            });
-                            rsn.advance_deferred();
-                            continue;
-                        }
+                Rekey::Unwrap(frame, protection) => {
+                    if let Err(reason) = rsn.prepare_install(
+                        frame,
+                        protection,
+                        self.config.callbacks.key_unwrap_engine(),
+                        events,
+                    ) {
+                        return Some(Err(reason));
                     }
+                    continue;
                 }
                 Rekey::Install(request, protection) => {
                     match self.begin_group_change(request.group(), events) {
