@@ -3,7 +3,8 @@
 `oer-ieee80211-core-security-rsn` holds the allocation-free, hardware-independent RSN (IEEE 802.11
 robust security network) protocol shared by WPA2 and WPA3 suites. It is
 sans-IO and owns no executor, timer, key slot or transmit path: chip role
-crates execute its typed key-data unwrap, transmit and key-install requests.
+crates lend it a synchronous AES-128 engine for the key-data unwrap and
+execute its typed transmit and key-install requests.
 
 | Module | Responsibility |
 | --- | --- |
@@ -16,7 +17,7 @@ crates execute its typed key-data unwrap, transmit and key-install requests.
 | `eapol` | Message classification and MIC verification of EAPOL-Key packets the codec checked (`oer_ieee80211_wire::eapol::EapolKey`), and their owned copies |
 | `frames` | Which EAPOL-Key fields each handshake message sends, the MIC it computes, which elements and KDEs a Key Data carries, and owned security elements; the EAPOL-Key layout and its MIC field, GTK/IGTK KDEs, Key Data elements and padding, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
-| `supplicant` | Station orchestration: typed key-data unwrap and key-install requests and their completions, response deadlines; each key-data request yields an owned `oer_crypto::KeyUnwrapRequest` (`RsnKeyUnwrapRequest`) |
+| `supplicant` | Station orchestration: the RFC 3394 key-data unwrap over the caller's synchronous `oer_crypto::block::Aes128Engine` (in `RsnStaSupplicant::on_frame` and `RsnConnectedSupplicant::prepare_group_key_install`), typed key-install requests and their completions, response deadlines |
 | `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification, the binding of the station's security IEs and the Message 3 wrap and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
 | `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
@@ -87,16 +88,20 @@ M4 delivery. `RsnStaSupplicant` authenticates a repeated M3 before advancing its
 counter. The station retains the installed PTK and processes only changed GTK
 material from a newer M3; an exact repeat produces M4 without an install.
 `RsnStaReady::RetryInstall` carries `RsnStaRetryInstall`, which has no pairwise
-field. `RsnConnectedSupplicant::on_message3` authenticates exact and newer
-repeats with the retained PTK and produces only M4 or a group unwrap request.
-The request binds the authenticated M3, including its full ANonce; its GTK/IGTK
-completion cannot install PTK. Unwrap completion yields `RsnStaReady`, a type
-without another KEK request, so callers exhaustively handle all remaining work.
-A connected unwrap request owns its authenticated frame and a zeroizing KEK
-copy. It has no busy latch or wrapping ticket: validation of a successor can
-proceed while the station holds the current TX. Unwrap and install completions
-check the committed replay frontier, so an overtaken request cannot roll it
-back. The station owns the bounded deferred-frame policy and TX ordering.
+field. `RsnStaSupplicant::on_frame` unwraps an authenticated Message 3's key
+data over the engine it is lent and returns `RsnStaReady`, so callers
+exhaustively handle all remaining work; key data that does not fit or unwrap
+fails the handshake (`RsnStaProcessError::KeyDataTooLong`, `KeyUnwrap`).
+`RsnConnectedSupplicant::on_message3` authenticates exact and newer repeats
+with the retained PTK and produces only M4 or an `RsnGroupKeyFrame`, which
+binds the authenticated M3, including its full ANonce; its GTK/IGTK
+preparation cannot install PTK. An `RsnGroupKeyFrame` owns its authenticated
+frame and no key. It has no busy latch or wrapping ticket: validation of a
+successor can proceed while the station holds the current TX.
+`prepare_group_key_install` unwraps its key data over the lent engine and,
+like install completion, checks the committed replay frontier, so an overtaken
+frame cannot roll it back. The station owns the bounded deferred-frame policy
+and TX ordering.
 
 
 `BipTransmitter` retains the last protected `BipPacketNumber`, a distinct

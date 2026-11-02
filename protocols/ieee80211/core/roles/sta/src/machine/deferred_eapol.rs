@@ -27,9 +27,9 @@
 //! [`wpa_sm_cancel_auth_timeout`]: https://github.com/espressif/esp-idf/blob/7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe/components/wpa_supplicant/src/rsn_supp/wpa.c#L79-L82
 
 use super::{DEFAULT_EAPOL_FRAME_CAPACITY, EapolProtection, RsnConnectedSupplicantError};
-use oer_ieee80211_core_security_rsn::supplicant::RsnGroupKeyDataRequest;
+use oer_ieee80211_core_security_rsn::supplicant::RsnGroupKeyFrame;
 
-type VerifiedFrame = RsnGroupKeyDataRequest<DEFAULT_EAPOL_FRAME_CAPACITY>;
+type VerifiedFrame = RsnGroupKeyFrame<DEFAULT_EAPOL_FRAME_CAPACITY>;
 
 /// The sole deferred, authenticated pairwise Message 3. It cannot grant PTK
 /// installation authority, be copied, or be fabricated from unchecked bytes.

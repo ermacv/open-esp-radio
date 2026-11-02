@@ -32,15 +32,17 @@ extern crate std;
 #[cfg(test)]
 mod fuzz;
 
-/// Unwrap `request` in the software engine, as a test's station would.
+/// Unwrap `request` in the software engine.
 #[cfg(test)]
-pub(crate) fn test_unwrap(
-    request: supplicant::RsnKeyUnwrapRequest,
+fn test_unwrap(
+    request: oer_crypto::KeyUnwrapRequest<
+        { oer_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY },
+    >,
 ) -> Result<oer_ieee80211_core_security_cipher::aes::RsnKeyData, oer_crypto::KeyUnwrapError> {
-    oer_ieee80211_core_security_cipher::aes::SoftwareKeyUnwrap::new(
-        oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+    oer_crypto::block::unwrap_now(
+        &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        request,
     )
-    .unwrap_now(request)
     .into_plaintext()
 }
 
