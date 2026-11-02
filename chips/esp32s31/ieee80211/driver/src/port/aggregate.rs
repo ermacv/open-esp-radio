@@ -26,12 +26,12 @@ use crate::lower_mac::ampdu::AmpduBudget;
 use crate::mac::tx::{TxBacking, TxPhyRate};
 use oer_protocols_ieee80211_wire::{ccmp::CcmpPacketNumber, sequence::SequenceNumber};
 
-/// Subframes of one aggregate: one per BlockAck bit the hardware window
-/// reports.
+/// Subframes of one aggregate: the DMA chain's slots, at most the BlockAck
+/// window, which may hold more than one aggregate.
 pub const TX_AMPDU_SUBFRAMES: usize = crate::mac::tx::ampdu::TX_AMPDU_SLOT_CAPACITY;
 
 const _: () = {
-    if TX_AMPDU_SUBFRAMES != crate::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW as usize
+    if TX_AMPDU_SUBFRAMES > crate::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW as usize
         || TX_AMPDU_SUBFRAMES > BlockAckReport::BITMAP_BITS as usize
     {
         panic!("an aggregate's subframes fit its BlockAck window and report");

@@ -89,17 +89,20 @@ pub enum InitializationError {
     TxBlockAck,
 }
 
-/// The station's transmit Block Ack agreements: a window of the port's 32
-/// aggregate subframes, three requests a second apart, each answered within
+/// The station's transmit Block Ack agreements: the widest window the S31
+/// serves, which holds two aggregates of the port's subframes, so that the
+/// next aggregate waits in the port while one is on the air; three requests
+/// a second apart, each answered within
 /// a second, ended after five idle seconds. A missing aggregate member goes
 /// again until its MSDU's aggregate lifetime or the LMAC's long retry limit
 /// of aggregates on the air.
 ///
 /// SOURCE(esp32s31): member lifetime `oer_chips_family_ieee80211_policy::lmac::
 /// AMPDU_MSDU_LIFETIME_MICROS` and attempts `lmac::LONG_RETRY_LIMIT`
-/// (`libpp[lmac.o]::lmacInit`). The window is the driver's
-/// `TX_BLOCK_ACK_MAX_WINDOW`; negotiation timing and inactivity are this
-/// composition's policy.
+/// (`libpp[lmac.o]::lmacInit`). The window is this composition's policy:
+/// the driver's `TX_BLOCK_ACK_MAX_WINDOW`, as the vendor's HT ADDBA Request
+/// asks 64 (`libnet80211[ieee80211_ht.o]::ieee80211_ampdu_request`);
+/// negotiation timing and inactivity are this composition's policy too.
 const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy =
     oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
         window: oer_chips_esp32s31_ieee80211_driver::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW,

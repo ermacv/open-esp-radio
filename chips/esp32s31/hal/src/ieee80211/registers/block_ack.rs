@@ -9,6 +9,16 @@ use super::{
     byte, element, halfword,
 };
 
+/// The BlockAck positions one TX queue's result bank captures: the
+/// `BITMAP` fields of its low and its high word.
+///
+/// SOURCE: register model `TX_BLOCK_ACK_BITMAP_LOW_Qn` and
+/// `TX_BLOCK_ACK_BITMAP_HIGH_Qn` (`BLOB_LIBPP_DBG_READ_RX_BA`), both read by
+/// `libpp[hal_mac_tx.o]::hal_mac_tx_get_blockack`.
+pub const TX_BLOCK_ACK_BITMAP_BITS: u32 =
+    oer_chips_esp32s31_pac::wifi_mac::tx_block_ack_bitmap_low_q0::BITMAP_WIDTH
+        + oer_chips_esp32s31_pac::wifi_mac::tx_block_ack_bitmap_high_q0::BITMAP_WIDTH;
+
 /// Result sampled for one completed TX hardware queue.
 ///
 /// SOURCE: complete `libpp[hal_debug.o]::dbg_read_rx_ba`.
