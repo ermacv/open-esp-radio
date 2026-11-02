@@ -39,7 +39,9 @@ use oer_protocols_radio_port::{
 };
 
 mod aggregate;
-pub use aggregate::{Aggregate, AggregateExecution, SubframeMpdus, Subframes, TX_AMPDU_SUBFRAMES};
+pub use aggregate::{
+    Aggregate, AggregateExecution, OpenAggregate, SubframeMpdus, Subframes, TX_AMPDU_SUBFRAMES,
+};
 mod atomic_words;
 use atomic_words::KeyActivity;
 mod buffer;

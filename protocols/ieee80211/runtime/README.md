@@ -85,7 +85,12 @@ plan, coexistence class, access category, protection exchange and power from
 `sta`'s action, its CCMP packet number from the station's pairwise key, and a
 data MPDU's from `sta::data`. The service prepares the port's source in the
 buffer pool, submits it and routes each terminal back; a terminal's rate
-sample reaches `RateSelection::learn` with its frame class. The station's
+sample reaches `RateSelection::learn` with its frame class. Before each
+data attempt, owed MPDUs join the data aggregate of their category the port
+holds open (`AmpduPhase::open_ampdu`), with no ticket; the service keeps
+each category's last aggregate ticket for it, which the port's `None`, a
+refused member, a later submission of the category or the terminal clears.
+The station's
 PTK installation is pending until its `PairwiseKeyInstalled` terminal: only
 then does `sta` receive `PairwiseKeyInstalled` with the key numbered from the
 request's packet-number step.

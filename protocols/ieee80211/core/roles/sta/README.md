@@ -184,7 +184,11 @@ Module map:
   MSDU leaves its queue; one ticket and
   one admission permission serve the aggregate. A first owed MPDU beyond
   the window's end goes neither alone nor aggregated: it waits until the
-  terminals of the MPDUs before it move the window. Each member's description
+  terminals of the MPDUs before it move the window. An aggregate goes as
+  soon as a ticket and a permission are free; while the port holds it open,
+  owed MPDUs that follow its last member inside the window join it with no
+  ticket (`StaData::extend_aggregate`), and one the port refuses goes back
+  to its queue (`StaData::unbuilt`). Each member's description
   waits in the machine's member bank (one place per buffer, `CAP`) while
   the aggregate is out; its context carries only the places, in subframe
   order, so it is no larger than a single MPDU's. Each member's memory

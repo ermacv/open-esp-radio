@@ -584,7 +584,7 @@ fn sequence_and_retry(frame: &AirFrame) -> (u16, bool) {
 }
 
 #[test]
-fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
+fn msdus_queued_while_an_aggregate_is_out_join_the_open_one_and_a_missing_member_retries() {
     run_with(tx_block_ack_config(ht_config()), |world| {
         Box::pin(async move {
             let mut seen = 0;
@@ -599,8 +599,8 @@ fn an_agreement_aggregates_waiting_msdus_and_retries_a_missing_member() {
                 .air
                 .receive(&addba_response(dialog_token, 0, 32), meta());
             assert!(world.delivered().await.is_empty());
-            // Sequence number 1 goes at once; 2, 3 and 4 wait while it is
-            // out, to go together.
+            // Sequence number 1 goes at once; 2 opens the next aggregate,
+            // which 3 and 4 join while 1 is out.
             world.air.hold(WmmAccessCategory::BestEffort, true);
             for _ in 0..4 {
                 assert!(world.try_send_msdu(BSSID));

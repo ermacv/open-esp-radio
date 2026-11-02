@@ -164,6 +164,82 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         })
     }
 
+    /// Hold `pending` open as its category's last submission. Whether it
+    /// would go next, nothing of its category published or queued, so the
+    /// driver's next turn takes it; an open one already there refuses it.
+    #[allow(clippy::result_large_err, reason = "a refusal returns the aggregate")]
+    pub(in crate::port) fn hold_open(
+        &mut self,
+        pending: PendingAggregate<'id, Id, D, B, O>,
+    ) -> Result<bool, PendingAggregate<'id, Id, D, B, O>> {
+        let index = queue(pending.category);
+        match self.open.get_mut(index) {
+            Some(open @ None) => {
+                *open = Some(pending);
+                Ok(self.running.get(index).is_some_and(Option::is_none)
+                    && self
+                        .queues
+                        .get(index)
+                        .is_some_and(heapless::Deque::is_empty))
+            }
+            _ => Err(pending),
+        }
+    }
+
+    /// The open aggregate of queue `index`, which is no longer open.
+    pub(in crate::port) fn take_open(
+        &mut self,
+        index: usize,
+    ) -> Option<PendingAggregate<'id, Id, D, B, O>> {
+        self.open.get_mut(index)?.take()
+    }
+
+    /// The queue whose open aggregate holds the ticket of index `ticket`.
+    pub(in crate::port) fn open_queue(&self, ticket: u8) -> Option<usize> {
+        self.open.iter().position(|open| {
+            open.as_ref()
+                .is_some_and(|pending| pending.operation.ticket().index() == ticket)
+        })
+    }
+
+    /// The open aggregate of queue `index`.
+    pub(in crate::port) fn open_mut(
+        &mut self,
+        index: usize,
+    ) -> Option<&mut PendingAggregate<'id, Id, D, B, O>> {
+        self.open.get_mut(index)?.as_mut()
+    }
+
+    /// Take each open aggregate that would go next, its category publishing
+    /// nothing and queueing nothing, or every one while stopping, into its
+    /// queue. Every command sent before it is in: the front sends no
+    /// command while one is open.
+    pub(super) fn take_idle_open(
+        &mut self,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        stopping: bool,
+    ) -> Result<(), Fault> {
+        if self.pending_command.is_some() || !held.commands.empty() {
+            return Ok(());
+        }
+        for ((open, queue), running) in self
+            .open
+            .iter_mut()
+            .zip(&mut self.queues)
+            .zip(&self.running)
+        {
+            if !stopping && (running.is_some() || !queue.is_empty()) {
+                continue;
+            }
+            if let Some(pending) = open.take()
+                && queue.push_back(Queued::Aggregate(pending)).is_err()
+            {
+                return Err(Fault::Capacity);
+            }
+        }
+        Ok(())
+    }
+
     /// Whether a descriptor chain is free for the next aggregate.
     pub(super) fn chain_free(&self) -> bool {
         self.chains.iter().any(Option::is_some)

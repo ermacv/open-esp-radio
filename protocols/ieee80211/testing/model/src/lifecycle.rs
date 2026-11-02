@@ -202,6 +202,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             gate_issuer,
             draining: Cell::new(false),
             returned: Cell::new(true),
+            open: core::cell::RefCell::new([const { None }; 4]),
         };
         let resources = ModelResources {
             station_association,

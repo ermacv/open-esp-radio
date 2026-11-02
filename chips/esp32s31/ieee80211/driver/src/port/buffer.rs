@@ -416,6 +416,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     {
         super::aggregate::push(operation)
     }
+    fn extend_aggregate<K: Ieee80211Capabilities>(
+        open: &mut Self::OpenAggregate<'_>,
+        subframe: PoolSubframe<'id, Self, BufferClass<B>, K>,
+    ) -> Result<(), ExtendRefused<PoolSubframe<'id, Self, BufferClass<B>, K>>> {
+        super::aggregate::extend(open, subframe)
+    }
     fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B, O> {
         AnyBuffer::Fresh(buffer)
     }
@@ -475,6 +481,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         K: Ieee80211Capabilities,
         S: AggregateState,
         'id: 'k;
+    type OpenAggregate<'a>
+        = super::aggregate::OpenAggregate<'a, 'id, Id, D, B, O>
+    where
+        Self: 'a;
     type TxBody = D::Body;
     type TicketKind = Tickets;
     type AckEvidence = Ack;

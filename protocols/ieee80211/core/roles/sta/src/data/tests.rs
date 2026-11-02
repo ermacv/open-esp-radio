@@ -1877,7 +1877,7 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
 }
 
 #[test]
-fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
+fn an_aggregate_goes_at_once_while_its_category_has_an_attempt_out() {
     let mut inputs = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2],
@@ -1886,34 +1886,106 @@ fn a_growing_aggregate_waits_while_its_category_has_an_attempt_out() {
     );
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
-    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>, count: usize| {
-        for _ in 0..count {
-            data.input(
-                DataInput {
-                    msdu: msdu(0),
-                    link: &mut link,
-                },
-                &mut inputs,
-            )
-            .unwrap();
-        }
+    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>| {
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut link,
+            },
+            &mut inputs,
+        )
+        .unwrap();
     };
     let mut events = Kept::default();
-    input(&mut data, 1);
-    // Nothing is out: the one owed MPDU goes at once.
+    input(&mut data);
     let first = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
     assert_eq!(first.context.len(), 1);
-    // Another arrives while it is out: it waits to grow.
-    input(&mut data, 1);
-    assert!(
-        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events)
-            .is_none()
+    // Another arrives while it is out: it goes at once, in an aggregate the
+    // port may hold open for more.
+    input(&mut data);
+    let second = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
+    assert_eq!(second.context.len(), 1);
+    drop((first, second));
+}
+
+#[test]
+fn an_owed_mpdu_that_follows_an_open_aggregate_joins_it_without_a_ticket() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(1).unwrap(),
     );
-    // A full aggregate goes even with one out.
-    input(&mut data, 3);
-    let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut events));
-    assert_eq!(full.context.len(), 4);
-    drop((first, full));
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>, priority: u8| {
+        data.input(
+            DataInput {
+                msdu: msdu(priority),
+                link: &mut link,
+            },
+            &mut Kept::default(),
+        )
+        .unwrap();
+    };
+    input(&mut data, 0);
+    let mut open = aggregate(data.poll_attempt(|_| window(0, 3, u32::MAX), &mut events));
+    assert_eq!(open.context.len(), 1);
+    // Nothing owed: nothing joins.
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, || window(0, 3, u32::MAX), &mut events),
+        None
+    );
+    // Sequence number 1 follows 0: it joins with no ticket, its memory
+    // waiting in the bank for the port.
+    input(&mut data, 0);
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, || window(0, 3, u32::MAX), &mut events),
+        Some(1)
+    );
+    assert_eq!(open.context.len(), 2);
+    // An MSDU of another TID does not join, nor does one past the
+    // aggregate's length.
+    input(&mut data, 6);
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, || window(0, 3, u32::MAX), &mut events),
+        None
+    );
+    input(&mut data, 0);
+    let short = || window(0, 3, 0);
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, short, &mut events),
+        None
+    );
+    // The port refused it: it goes back to its queue and joins again.
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, || window(0, 3, u32::MAX), &mut events),
+        Some(2)
+    );
+    data.unbuilt(&mut open.context, 2, &mut events);
+    assert_eq!(open.context.len(), 2);
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, || window(0, 3, u32::MAX), &mut events),
+        Some(2)
+    );
+    // The window's subframes are its limit.
+    input(&mut data, 0);
+    assert_eq!(
+        data.extend_aggregate(&mut open.context, || window(0, 3, u32::MAX), &mut events),
+        None
+    );
+    let marks = data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: open.context,
+            ticket: open.ticket,
+            completion: block_ack(0, 0b111),
+        },
+        oer_portable_time::Instant::from_micros(2_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert_eq!(marks.map(|marks| marks.delivered), Some(0b111));
+    assert_eq!(tokens_lost(&events), 0);
 }
 
 #[test]
@@ -1963,7 +2035,7 @@ fn an_mpdu_beyond_the_window_waits_for_the_window_to_move() {
 }
 
 #[test]
-fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
+fn only_a_missing_ticket_makes_msdus_leave_the_attempt_wait() {
     let mut data = StaData::<Data, Caps, 8>::new(
         [1, 2],
         core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
@@ -1972,10 +2044,10 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
     let mut replay = epoch();
     let mut link = qos_link(&(), &mut replay);
     let mut events = Kept::default();
-    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>, priority: u8| {
+    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>| {
         data.input(
             DataInput {
-                msdu: msdu(priority),
+                msdu: msdu(0),
                 link: &mut link,
             },
             &mut events,
@@ -1983,33 +2055,19 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
         .unwrap();
     };
     let mut attempts = Kept::default();
-    input(&mut data, 0);
+    input(&mut data);
     let first = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
-    assert!(!data.attempts_wait(), "an attempt went");
-    // 1 waits to grow behind the attempt out: the pass made none.
-    input(&mut data, 0);
-    assert!(
-        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts)
-            .is_none()
-    );
-    assert!(data.attempts_wait());
-    // 2 and 3 join it, and an MSDU of another category queues behind it.
-    input(&mut data, 0);
-    input(&mut data, 6);
-    input(&mut data, 0);
-    assert!(data.attempts_wait(), "the aggregate still grows");
-    // 4 fills it: the next pass sends it, full, at once.
-    input(&mut data, 0);
-    assert!(!data.attempts_wait());
-    let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
-    assert_eq!(full.context.len(), 4);
+    input(&mut data);
+    let second = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
+    assert!(!data.attempts_wait(), "each pass made an attempt");
     // Both tickets are out: no MSDU makes an attempt before a terminal.
+    input(&mut data);
     assert!(
         data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts)
             .is_none()
     );
     assert!(data.attempts_wait());
-    input(&mut data, 0);
+    input(&mut data);
     assert!(data.attempts_wait());
     // A terminal ends the wait.
     let _marks = data.aggregate_returned(
@@ -2023,7 +2081,7 @@ fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
         &mut attempts,
     );
     assert!(!data.attempts_wait());
-    drop(full);
+    drop(second);
     assert_eq!(tokens_lost(&attempts), 0);
 }
 
