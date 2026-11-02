@@ -108,7 +108,7 @@ fn scan(directory: &Path, declarations: &mut Declarations) {
 fn every_declared_rom_function_and_only_those_functions_has_a_fact() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut declarations = Declarations::default();
-    for directory in ["chips/esp32s31", "chips/family", "firmware"] {
+    for directory in ["chips/esp32s31", "chips/family", "oer", "examples", "hil"] {
         scan(&root.join(directory), &mut declarations);
     }
     let (facts, _) = oer_chips_family_facts::generate::tracked("esp32s31").expect("S31 facts");

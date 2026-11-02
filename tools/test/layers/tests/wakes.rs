@@ -34,7 +34,7 @@ fn visit(directory: &Path, files: &mut Vec<std::path::PathBuf>) -> std::io::Resu
 fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut files = Vec::new();
-    for directory in ["chips", "portable", "protocols", "firmware"] {
+    for directory in ["chips", "portable", "protocols", "oer", "examples", "hil"] {
         visit(&root.join(directory), &mut files).expect("source inventory is readable");
     }
     let actual = files
