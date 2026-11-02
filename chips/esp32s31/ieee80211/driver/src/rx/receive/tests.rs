@@ -384,6 +384,7 @@ fn host_signals()
 -> crate::rx::arena::WifiIrqSignals<oer_espressif_interrupt_table::signal::host::Host> {
     crate::rx::arena::WifiIrqSignals {
         mac: oer_espressif_interrupt_table::signal::host::signal().0,
+        receive: oer_espressif_interrupt_table::signal::host::signal().0,
         power: oer_espressif_interrupt_table::signal::host::signal().0,
     }
 }
@@ -1050,6 +1051,7 @@ fn cold_start_refuses_an_occupied_cell_without_opening_mac() {
         oer_esp32s31_hal::memory::dma_static::Placed::host(arena),
         crate::rx::arena::WifiIrqSignals {
             mac: oer_espressif_interrupt_table::signal::host::signal().0,
+            receive: oer_espressif_interrupt_table::signal::host::signal().0,
             power: oer_espressif_interrupt_table::signal::host::signal().0,
         },
     )
@@ -2070,6 +2072,7 @@ fn a_runner_outside_its_signals_executor_ends_instead_of_waiting_forever() {
     let mut harness = harness_staged_with::<SLOTS, _, _, _>(
         crate::rx::arena::WifiIrqSignals {
             mac: oer_espressif_interrupt_table::signal::host::foreign_signal(),
+            receive: oer_espressif_interrupt_table::signal::host::foreign_signal(),
             power: oer_espressif_interrupt_table::signal::host::foreign_signal(),
         },
         |counters, _, _, _| {

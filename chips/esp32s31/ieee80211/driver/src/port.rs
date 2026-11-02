@@ -238,13 +238,18 @@ pub trait Device<const B: usize>: Sized + 'static {
         channel: oer_ieee80211_wire::channel::WifiChannel,
     ) -> Poll<Result<(), Fault>>;
     fn poll_stop(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Fault>>;
-    /// The driver's turn: take the interrupt facts and return a transmit
-    /// or TBTT event. Receive facts only mark ring work for the body's
-    /// pull ([`Self::receive_due`]); this never services the ring.
+    /// The driver's turn: take the interrupt facts but the receive ones,
+    /// which wake the body ([`Self::poll_received_facts`]), and return a
+    /// transmit or TBTT event. This never services the ring.
     fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>>;
     /// Whether the body's pull has a staged unit to take or ring work to
     /// service now. The driver wakes the body when it has.
     fn receive_due(&mut self) -> bool;
+    /// The body's turn: take the receive interrupt facts, registering the
+    /// body alone on their signal, and report [`Self::receive_due`]. While a
+    /// cut or a stop holds the ring the driver takes them; this returns
+    /// `false` without polling.
+    fn poll_received_facts(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault>;
     /// The body's pull, in its own turn: a staged unit, or the ring
     /// serviced once when its interrupt left work and the body has
     /// `receive_room`. It never polls the interrupt facts, which stay the

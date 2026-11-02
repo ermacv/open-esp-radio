@@ -111,6 +111,8 @@ pub(crate) struct Boot<W: Binding> {
     pub entropy: u32,
     pub interrupts: &'static Interrupts,
     pub mac: &'static oer_espressif_interrupt_table::signal::IrqSignal<DriverExecutor>,
+    /// The MAC's receive facts, which wake the station's task.
+    pub receive: &'static oer_espressif_interrupt_table::signal::IrqSignal<DriverExecutor>,
     pub power: &'static oer_espressif_interrupt_table::signal::IrqSignal<DriverExecutor>,
     pub rx: oer_esp32s31_hal::memory::dma_static::Placed<
         oer_esp32s31_ieee80211_driver::rx::arena::WifiRxStatic<N, B, S, Q, DriverExecutor>,
@@ -300,6 +302,7 @@ async fn install<W: Binding>(
             arena,
             WifiIrqSignals {
                 mac: boot.mac,
+                receive: boot.receive,
                 power: boot.power,
             },
         )
@@ -474,6 +477,9 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     }
     fn receive_due(&mut self) -> bool {
         <Inner<W> as port::Device<TX>>::receive_due(&mut self.0)
+    }
+    fn poll_received_facts(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
+        <Inner<W> as port::Device<TX>>::poll_received_facts(&mut self.0, cx)
     }
     fn pull_received(
         &mut self,

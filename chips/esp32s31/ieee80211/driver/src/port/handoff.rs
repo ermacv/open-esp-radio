@@ -401,10 +401,17 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         &self,
         cx: &mut Context<'_>,
     ) -> Result<Option<owned::OwnedEvent<'static, Id, D, B>>, Fault> {
-        if !self.enabled.get() || !self.receive_due.get() {
+        if !self.enabled.get() {
             return Ok(None);
         }
         let mut device = self.port.device()?;
+        // The receive facts wake the body itself; taking them registers it.
+        if device.poll_received_facts(cx)? {
+            self.receive_due.set(true);
+        }
+        if !self.receive_due.get() {
+            return Ok(None);
+        }
         let mut driver = self
             .driver
             .try_borrow_mut()

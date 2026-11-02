@@ -143,12 +143,21 @@ where
         Ok(())
     }
 
-    /// Every MAC fact is returned, including TX completion/timeout/color facts.
-    /// The caller services TX in the same task before discarding the batch.
+    /// Every MAC fact but the receive ones: TX completion/timeout/color
+    /// facts. The caller services TX in the same task before discarding the
+    /// batch.
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, WifiRxCause>> {
         while let Poll::Ready(Ok(_)) = self.power.poll(cx) {}
         self.irq
-            .poll_batch(cx)
+            .poll_mac(cx)
+            .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))
+    }
+
+    /// The receive facts alone, for the task that takes received units: it
+    /// alone waits on their signal.
+    pub fn poll_received(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, WifiRxCause>> {
+        self.irq
+            .poll_received(cx)
             .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))
     }
 

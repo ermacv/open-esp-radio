@@ -486,6 +486,8 @@ pub struct Resources<W: Binding> {
     pub entropy: u32,
     pub interrupts: &'static Interrupts,
     pub mac: &'static IrqSignal<DriverExecutor>,
+    /// The MAC's receive facts, which wake the station's task.
+    pub receive: &'static IrqSignal<DriverExecutor>,
     pub power: &'static IrqSignal<DriverExecutor>,
     pub dma: crate::DmaResources,
 }
@@ -558,6 +560,7 @@ pub fn station<W: Binding>(
         entropy,
         interrupts,
         mac,
+        receive,
         power,
         dma,
     } = resources;
@@ -612,6 +615,7 @@ pub fn station<W: Binding>(
                     entropy,
                     interrupts,
                     mac,
+                    receive,
                     power,
                     rx,
                     tx,

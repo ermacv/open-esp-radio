@@ -58,7 +58,8 @@ oer_memory::zeroed_static! {
     static LINE: wifi::Interrupts = zeroed in ".critical.bss.wifi_rx_line";
 }
 oer_espressif_staged_runtime::placed_static! {
-    static MAC_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(FromHandler<WifiToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "wifi_station";
+    static MAC_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<FromHandler<WifiToken>, WakeToken>(), in critical_data "wifi_station";
+    static MAC_RX_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(FromHandler<WifiToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "wifi_station";
     static POWER_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<FromHandler<WifiToken>, WakeToken>(), in critical_data "wifi_station";
     static PILOT: pilot::Storage<PhyToken> = pilot::Storage::new::<RadioToken>(), in critical_data "phy_pilot";
 }
@@ -602,6 +603,7 @@ impl Station {
                 entropy: u32::from_le_bytes([t0, t1, t2, t3]),
                 interrupts: &LINE,
                 mac: &MAC_SIGNAL,
+                receive: &MAC_RX_SIGNAL,
                 power: &POWER_SIGNAL,
                 dma,
             },
