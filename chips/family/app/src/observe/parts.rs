@@ -30,9 +30,9 @@ pub enum LibraryPart {
     /// The radio executor's tasks: the shared RF actor and the Wi-Fi driver.
     RadioActor,
     Driver,
-    /// The second boot's IP service and future.
+    /// The group's IP service and future.
     Ip,
-    Second,
+    Group,
     /// Inside the station: its service's spans.
     Step,
     Pending,
@@ -53,7 +53,7 @@ impl LibraryPart {
         LibraryPart::RadioActor,
         LibraryPart::Driver,
         LibraryPart::Ip,
-        LibraryPart::Second,
+        LibraryPart::Group,
         LibraryPart::Step,
         LibraryPart::Pending,
         LibraryPart::Sources,
@@ -73,7 +73,7 @@ impl LibraryPart {
             LibraryPart::RadioActor => "radio-actor",
             LibraryPart::Driver => "driver",
             LibraryPart::Ip => "ip",
-            LibraryPart::Second => "second",
+            LibraryPart::Group => "group",
             LibraryPart::Step => "step",
             LibraryPart::Pending => "pending",
             LibraryPart::Sources => "sources",

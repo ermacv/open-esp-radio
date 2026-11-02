@@ -60,6 +60,27 @@ impl fmt::Display for InitializedZeroSection {
     }
 }
 
+/// A file of linker arguments, one per line, that the image pipeline hands
+/// the link of an image on the application entry: its chip's runtime layout,
+/// which such an image's own build script does not set.
+pub const RUNTIME_LINK_ENV: &str = "OER_IMAGE_RUNTIME_LINK";
+
+/// The arguments of [`RUNTIME_LINK_ENV`]'s file, after the link's own.
+fn runtime_link(arguments: &mut Vec<OsString>) -> std::result::Result<(), String> {
+    let Some(path) = std::env::var_os(RUNTIME_LINK_ENV) else {
+        return Ok(());
+    };
+    let path = PathBuf::from(path);
+    let text =
+        std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+    arguments.extend(
+        text.lines()
+            .filter(|line| !line.is_empty())
+            .map(OsString::from),
+    );
+    Ok(())
+}
+
 /// Run the link: check its inputs, then the real linker. Returns the exit
 /// code.
 pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
@@ -70,6 +91,10 @@ pub fn run(arguments: Vec<OsString>, zeroed: &[String]) -> i32 {
             return 1;
         }
     };
+    if let Err(error) = runtime_link(&mut arguments) {
+        eprintln!("oer-image-linker: {error}");
+        return 1;
+    }
     let (violations, sections) = match inspect_inputs(&arguments, zeroed) {
         Ok(inputs) => inputs,
         Err(error) => {

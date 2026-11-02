@@ -15,9 +15,9 @@ these differences: the `observe` feature with the `trace` instrumentation
 feature (the load's socket), the `console` feature and `Console::open`, every
 channel scanned (`wifi::Config::all_channels`) in place of the profile's
 one, and its own IP pools, 32 receive, 16 transmit and 32 general frames
-(`Net::start_with` with a static `wifi::Pools` in the second boot), in
-place of the library's 8, 8 and 8. Like the example, its second boot
-(`entry!(boot, hart1 = network)`) starts the IP service and runs the line
+(`Net::start_with` with a static `wifi::Pools` in the group), in
+place of the library's 8, 8 and 8. Like the example, its group
+(`entry!(boot, group = network)`) starts the IP service and runs the line
 exchanges and the load server on its sockets; the worker reaches them over
 a `Channel` each, and the load server reaches the boot hart's counters and
 sampler over a third. The fault service is a handler, not a change to the boot. Review keeps the two boots in step; `oer-tools-test-layers` checks only that
@@ -29,7 +29,7 @@ the image takes nothing the SDK places.
 | [SDK station](../../services/sdk-station/src/lib.rs) | One worker on the application executor answers the requests in order; a request while one waits is refused as `Busy` |
 | [Wi-Fi station](../../services/wifi-station/src/lib.rs) | The same worker, after the service's phases (`oer_hil_services_wifi_station::phase`): one join per boot, a leave of the joined station once |
 | [Fault](../../services/fault/src/lib.rs) | The same worker answers `RaiseException`, waits until the console wrote the answer and traps on an illegal instruction (`answer_then_trap`); a write the console cannot confirm ends the application with `sdk-console`, recorded and reset, without the trap |
-| [Load](../../services/load/src/lib.rs) | The same worker hands each request to the load server in the second boot and publishes its answer (`src/load`) |
+| [Load](../../services/load/src/lib.rs) | The same worker hands each request to the load server in the group and publishes its answer (`src/load`) |
 
 The application is the agent's `serve`: the console and the worker side by
 side. The boot identity is the library's (`oer::boot_id`).
@@ -43,7 +43,7 @@ side. The boot identity is the library's (`oer::boot_id`).
   link leaves it idle for the next one.
 - **WaitIpv4** and **WaitLinkDown** bound the IP service's waits by the
   request's timeout.
-- **Exchange** goes to the second boot's future over the channel, which
+- **Exchange** goes to the group's future over the channel, which
   opens one TCP socket (128-byte buffers) on the IP stack, sends the line,
   reads as many bytes back and closes, within the request's timeout;
   without an address it answers `NoAddress`. The worker waits for its
@@ -68,7 +68,7 @@ The Wi-Fi station service's requests go to the same station:
 
 ## Load
 
-The load server runs in the second boot on hart 1, beside the IP stack;
+The load server runs in the group on hart 1, beside the IP stack;
 the boot hart's relay, a part of the application beside the worker, serves
 what it needs there: the boot hart's cycle, instruction and cache counters
 (`Boot::observe`) with the library's counts (`observe::counters`), read

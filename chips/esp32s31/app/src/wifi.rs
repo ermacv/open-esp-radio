@@ -47,7 +47,7 @@ pub use oer_protocols_ieee80211_runtime::station::contract::{CommandRefusal, Dis
 pub use oer_protocols_network_port::{LinkSnapshot, LinkState};
 
 use super::{
-    AesPeripheral, Boot, Error, Hart1Boot, PhyToken, RadioAlarmToken, RadioToken, WakeToken,
+    AesPeripheral, Boot, Error, GroupBoot, PhyToken, RadioAlarmToken, RadioToken, WakeToken,
     WifiToken,
 };
 use crate::net::{NetError, Published, Watchers};
@@ -161,24 +161,24 @@ fn failure(error: wifi::InitializationError) -> ! {
     }
 }
 
-#[cfg(not(feature = "hart1"))]
+#[cfg(not(feature = "group"))]
 wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure}}
-// The station's network end runs on hart 1, with the second boot's IP
+// The station's network end runs on hart 1, with the group's IP
 // service.
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,fail:failure,across_harts:{network:NetworkNotify=&NETWORK,station:StationNotify=&STATION,driver:DriverNotify=&DRIVER}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.
 type Notifies = <binding::Binding as wifi::Binding>::Notifies;
 
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 type NetworkNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::Hart1Executor>;
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 type StationNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<super::hart1::AppExecutor>;
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 type DriverNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<wifi::DriverExecutor>;
 
@@ -186,7 +186,7 @@ type DriverNotify =
 // and the network's stop), the station runner's on hart 0 (every station
 // end, the stop's answer and the lent buffers' return) and the radio
 // driver's (its request for its lent buffers).
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 oer_chips_family_staged_runtime::placed_static! {
     static NETWORK_SIGNAL: IrqSignal<super::hart1::Hart1Executor> = IrqSignal::new::<oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::AppExecutor, WakeToken>, super::Hart1WakeToken>(), in critical_data "hart_peers";
     static STATION_SIGNAL: IrqSignal<super::hart1::AppExecutor> = IrqSignal::new::<oer_chips_family_interrupt_table::signal::FromPeerHart<super::hart1::Hart1Executor, super::Hart1WakeToken>, WakeToken>(), in critical_data "hart_peers";
@@ -508,8 +508,8 @@ pub enum StopError {
     Failed,
 }
 
-/// The station's network device: the boot hands it to the second boot
-/// ([`super::Hart1Peripherals`]), where [`Net::start`] takes it. Dropped
+/// The station's network device: the boot hands it to the group
+/// ([`super::GroupPeripherals`]), where [`Net::start`] takes it. Dropped
 /// without it, it tells the station that no network takes its frames.
 pub struct Device {
     network: Option<(
@@ -564,11 +564,11 @@ impl Station {
             app_alarm,
             radio.radio_alarm,
         );
-        #[cfg(feature = "hart1")]
+        #[cfg(feature = "group")]
         {
             boot.timers = Some(timers);
         }
-        #[cfg(not(feature = "hart1"))]
+        #[cfg(not(feature = "group"))]
         let _ = timers;
         let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(radio.line3);
         let bound = boot
@@ -750,10 +750,10 @@ pub const RX: usize = 8;
 pub const TX: usize = 8;
 pub const GENERAL: usize = 8;
 
-#[cfg(not(feature = "hart1"))]
+#[cfg(not(feature = "group"))]
 type Context = ThreadContext<0>;
-/// The IP service's executor: hart 1's with the second boot there.
-#[cfg(feature = "hart1")]
+/// The IP service's executor: hart 1's with the group there.
+#[cfg(feature = "group")]
 type Context = ThreadContext<1>;
 type IpResources<const RX: usize, const TX: usize, const GENERAL: usize> =
     Resources<Context, RX, TX, GENERAL>;
@@ -820,7 +820,7 @@ static WATCHERS: Watchers<Context, 4> = Watchers::new();
 static STATUS: Published = Published::new();
 
 /// The IP service's status as the application sees it: the boot's
-/// [`Station::start`] returns it, before the second boot starts the
+/// [`Station::start`] returns it, before the group starts the
 /// service. It stays with the application's future (`!Send`), the one task
 /// its waits wake; until the service starts it reads a running service
 /// without link or address.
@@ -872,7 +872,7 @@ pub struct Net<const RX: usize = { self::RX }, const TX: usize = { self::TX }> {
 impl Net {
     /// Start the IP service over `device` with `configuration`
     /// (`NetConfig::Dhcpv4` or a static address) and the library's pools,
-    /// in the second boot; it returns with the service, whose task runs
+    /// in the group; it returns with the service, whose task runs
     /// once the executor does.
     ///
     /// # Errors
@@ -880,8 +880,8 @@ impl Net {
     pub fn start(
         device: Device,
         configuration: Configuration,
-        boot: Hart1Boot,
-    ) -> Result<(Self, Hart1Boot<IpStart<RX, TX>>), Error> {
+        boot: GroupBoot,
+    ) -> Result<(Self, GroupBoot<IpStart<RX, TX>>), Error> {
         Self::start_with(device, &POOLS, configuration, boot)
     }
 }
@@ -895,8 +895,8 @@ impl<const RX: usize, const TX: usize> Net<RX, TX> {
         mut device: Device,
         pools: &'static Pools<RX, TX, GENERAL>,
         configuration: Configuration,
-        boot: Hart1Boot,
-    ) -> Result<(Self, Hart1Boot<IpStart<RX, TX>>), Error> {
+        boot: GroupBoot,
+    ) -> Result<(Self, GroupBoot<IpStart<RX, TX>>), Error> {
         let (network, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
         let resources = pools
             .resources

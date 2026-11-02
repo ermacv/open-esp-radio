@@ -157,17 +157,17 @@ oer_chips_family_staged_runtime::interrupt_table! {
     /// The PC sampler (TIMG1 T0), above every other level of hart 0 so that
     /// it sees what it interrupts; it ticks only while a session runs.
     sampler: SamplerToken = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, line 22, context profile, hart 0, Hardware;
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     /// Hart 1's executor's wake (thread mode).
     hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     /// Hart 1's executor's alarm (system timer comparator 2).
     hart1_alarm: Hart1AlarmToken = oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2 => oer_chips_family_executor::alarm_interrupt::<hart1::Hart1Tasks, 2, oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2>, line 41, context hart1_app, hart 1, Hardware;
 }
 
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 mod hart1;
-#[cfg(feature = "hart1")]
+#[cfg(feature = "group")]
 #[doc(hidden)]
 pub use hart1::{Hart1Parts, hart1_main};
 
@@ -226,12 +226,12 @@ pub struct Boot {
     /// The boot's identity, once a station drew it.
     pub(crate) boot_id: Option<u64>,
     evidence: Evidence,
-    /// The station's network device, for the second boot.
+    /// The station's network device, for the group.
     #[cfg(feature = "wifi")]
     pub(crate) device: Option<wifi::Device>,
     /// The time driver's authority and the comparator for hart 1's
     /// executor, once a station installed the time driver.
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     pub(crate) timers: Option<(
         oer_chips_family_executor::TimeDriverReady<Esp32s31>,
         oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
@@ -241,7 +241,7 @@ pub struct Boot {
     observe: Option<observed::Hart0>,
 }
 
-/// No IP service: the second boot started none.
+/// No IP service: the group started none.
 pub struct NoNet;
 
 impl Boot {
@@ -356,55 +356,55 @@ where
     }
 }
 
-/// What the boot hands the second boot: the station's network device when
+/// What the boot hands the group: the station's network device when
 /// the boot started a station.
-pub struct Hart1Peripherals {
+pub struct GroupPeripherals {
     /// The station's network device, which [`wifi::Net::start`] takes.
     #[cfg(feature = "wifi")]
     pub device: Option<wifi::Device>,
 }
 
-/// The second boot's context: `entry!(boot, hart1 = boot1)` calls `boot1`
+/// The group's context: `entry!(boot, group = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
 /// ends with beside the IP service it started. Both run where the second
 /// boot runs: on hart 0, the application's executor, or with the `hart1`
 /// feature on hart 1's own executor, which hart 1 runs alone.
 ///
-/// `N` is the IP service the second boot started, whose pool sizes are the
+/// `N` is the IP service the group started, whose pool sizes are the
 /// image's: [`NoNet`] until `wifi::Net::start` consumes the context and
 /// returns it with the service.
-pub struct Hart1Boot<N = NoNet> {
+pub struct GroupBoot<N = NoNet> {
     net: N,
 }
 
-impl Hart1Boot {
+impl GroupBoot {
     /// The same context with `net` as its IP service.
     #[cfg(feature = "wifi")]
-    pub(crate) fn with_net<M>(self, net: M) -> Hart1Boot<M> {
+    pub(crate) fn with_net<M>(self, net: M) -> GroupBoot<M> {
         let Self { net: NoNet } = self;
-        Hart1Boot { net }
+        GroupBoot { net }
     }
 }
 
-impl<N: NetTask> Hart1Boot<N> {
-    /// End the second boot: run the future `future` builds beside its IP
+impl<N: NetTask> GroupBoot<N> {
+    /// End the group: run the future `future` builds beside its IP
     /// service. The library calls `future` where the future stays, so the
     /// future is never moved.
-    pub fn run<C, F>(self, future: C) -> Hart1Run<C, N>
+    pub fn run<C, F>(self, future: C) -> GroupRun<C, N>
     where
         C: FnOnce() -> F,
         F: core::future::Future<Output = AppResult>,
     {
-        Hart1Run {
+        GroupRun {
             net: self.net,
             future,
         }
     }
 }
 
-/// A finished second boot: what `boot1` returns, as `impl Hart1Started`.
-pub trait Hart1Started: started::Sealed {
-    /// The second boot's future.
+/// A finished group: what `boot1` returns, as `impl GroupStarted`.
+pub trait GroupStarted: started::Sealed {
+    /// The group's future.
     type Future: core::future::Future<Output = AppResult>;
     /// What builds it, where it stays.
     type Build: FnOnce() -> Self::Future;
@@ -414,15 +414,15 @@ pub trait Hart1Started: started::Sealed {
     fn into_parts(self) -> (Self::Net, Self::Build);
 }
 
-/// The finished second boot [`Hart1Boot::run`] returns.
-pub struct Hart1Run<C, N> {
+/// The finished group [`GroupBoot::run`] returns.
+pub struct GroupRun<C, N> {
     net: N,
     future: C,
 }
 
-impl<C, N> started::Sealed for Hart1Run<C, N> {}
+impl<C, N> started::Sealed for GroupRun<C, N> {}
 
-impl<C, F, N> Hart1Started for Hart1Run<C, N>
+impl<C, F, N> GroupStarted for GroupRun<C, N>
 where
     C: FnOnce() -> F,
     F: core::future::Future<Output = AppResult>,
@@ -438,48 +438,48 @@ where
 
 pub use crate::channel::ChannelError;
 
-/// A channel between the application's future and the second boot's
+/// A channel between the application's future and the group's
 /// (`oer_chips_family_app::channel`), its ends waking through [`AppNotify`] and
-/// [`SecondNotify`].
+/// [`GroupNotify`].
 pub struct Channel<A: 'static, B: 'static, const N: usize>(
-    crate::channel::Channel<A, B, N, AppNotify, SecondNotify>,
+    crate::channel::Channel<A, B, N, AppNotify, GroupNotify>,
 );
 /// The application's end of a [`Channel`]: it sends `A` and receives `B`.
 pub type ApplicationEnd<A, B, const N: usize> =
-    crate::channel::End<A, B, N, AppNotify, SecondNotify>;
-/// The second boot's end of a [`Channel`]: it sends `B` and receives `A`.
-pub type SecondEnd<A, B, const N: usize> = crate::channel::End<B, A, N, SecondNotify, AppNotify>;
+    crate::channel::End<A, B, N, AppNotify, GroupNotify>;
+/// The group's end of a [`Channel`]: it sends `B` and receives `A`.
+pub type GroupEnd<A, B, const N: usize> = crate::channel::End<B, A, N, GroupNotify, AppNotify>;
 
 /// How a wait of the application's future is told: on one hart its waker,
-/// with the second boot on hart 1 the application's executor signal, which
+/// with the group on hart 1 the application's executor signal, which
 /// hart 1 raises.
-#[cfg(not(feature = "hart1"))]
+#[cfg(not(feature = "group"))]
 pub type AppNotify = atomic_waker::AtomicWaker;
-/// How a wait of the second boot's future is told, likewise.
-#[cfg(not(feature = "hart1"))]
-pub type SecondNotify = atomic_waker::AtomicWaker;
-#[cfg(feature = "hart1")]
+/// How a wait of the group's future is told, likewise.
+#[cfg(not(feature = "group"))]
+pub type GroupNotify = atomic_waker::AtomicWaker;
+#[cfg(feature = "group")]
 pub type AppNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 0>>;
-#[cfg(feature = "hart1")]
-pub type SecondNotify =
+#[cfg(feature = "group")]
+pub type GroupNotify =
     &'static oer_chips_family_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
 
 /// The application's notify, which the IP status publication tells.
-#[cfg(all(feature = "wifi", not(feature = "hart1")))]
+#[cfg(all(feature = "wifi", not(feature = "group")))]
 pub(crate) static APPLICATION: AppNotify = atomic_waker::AtomicWaker::new();
-#[cfg(all(feature = "wifi", feature = "hart1"))]
+#[cfg(all(feature = "wifi", feature = "group"))]
 pub(crate) static APPLICATION: AppNotify = &hart1::APPLICATION;
 
 impl<A, B, const N: usize> Channel<A, B, N> {
-    /// A channel between the application's future and the second boot's.
-    #[cfg(not(feature = "hart1"))]
+    /// A channel between the application's future and the group's.
+    #[cfg(not(feature = "group"))]
     pub const fn new() -> Self {
         Self(crate::channel::Channel::new())
     }
 
-    /// A channel between hart 0's application and hart 1's second boot.
-    #[cfg(feature = "hart1")]
+    /// A channel between hart 0's application and hart 1's group.
+    #[cfg(feature = "group")]
     pub const fn new() -> Self {
         Self(crate::channel::Channel::across_harts(
             &hart1::APPLICATION,
@@ -504,23 +504,23 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
         self.0.take_application().map_err(Error::Channel)
     }
 
-    /// The second boot's end, taken once in the second boot after the
+    /// The group's end, taken once in the group after the
     /// boot took the application's.
     ///
     /// # Errors
     /// [`Error::Channel`]: the end was taken already, or the boot took no
     /// application end.
-    pub fn second<M>(&'static self, boot: &mut Hart1Boot<M>) -> Result<SecondEnd<A, B, N>, Error> {
+    pub fn group<M>(&'static self, boot: &mut GroupBoot<M>) -> Result<GroupEnd<A, B, N>, Error> {
         let _ = boot;
         self.0.take_second().map_err(Error::Channel)
     }
 }
 
-/// The second boot of an image that declares none: it drops what the boot
+/// The group of an image that declares none: it drops what the boot
 /// handed it (a station's device tells the station that no network takes
 /// its frames) and runs nothing.
 #[doc(hidden)]
-pub fn no_hart1(_handed: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
+pub fn no_group(_handed: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     Ok(boot.run(core::future::pending::<AppResult>))
 }
 
@@ -574,7 +574,7 @@ pub enum Error {
     /// A wait on the IP service ended without its condition.
     #[cfg(feature = "wifi")]
     NetWait(crate::net::NetError),
-    /// The second boot asked for the station's device, and the boot started
+    /// The group asked for the station's device, and the boot started
     /// no station.
     #[cfg(feature = "wifi")]
     NoDevice,
@@ -646,11 +646,11 @@ pub type AppResult = Result<core::convert::Infallible, Error>;
 /// boot's IP service and future, and the application's future. Any error
 /// records and resets.
 #[doc(hidden)]
-pub fn start<S: Started, H: Hart1Started>(
+pub fn start<S: Started, H: GroupStarted>(
     handoff: Handoff<Port>,
     boot: fn(Peripherals, Boot) -> Result<S, Error>,
-    hart1: fn(Hart1Peripherals, Hart1Boot) -> Result<H, Error>,
-    #[cfg_attr(not(feature = "hart1"), allow(unused_variables))] mailbox: Hart1Mailbox,
+    hart1: fn(GroupPeripherals, GroupBoot) -> Result<H, Error>,
+    #[cfg_attr(not(feature = "group"), allow(unused_variables))] mailbox: GroupMailbox,
 ) -> ! {
     let previous = oer_chips_family_staged_runtime::panic::peek_previous();
     // Read before adoption prints and clears them.
@@ -694,9 +694,9 @@ pub fn start<S: Started, H: Hart1Started>(
                     system_timer: hardware.system_timer,
                     software: hardware.software_interrupts,
                     watchdog: hardware.watchdogs.rtc,
-                    #[cfg(feature = "hart1")]
+                    #[cfg(feature = "group")]
                     hart1: hardware.hart1,
-                    #[cfg(feature = "hart1")]
+                    #[cfg(feature = "group")]
                     causes,
                     #[cfg(feature = "observe")]
                     timg1_alarm: hardware.timg1_alarm,
@@ -749,7 +749,7 @@ pub fn start<S: Started, H: Hart1Started>(
         },
         #[cfg(feature = "wifi")]
         device: None,
-        #[cfg(feature = "hart1")]
+        #[cfg(feature = "group")]
         timers: None,
         #[cfg(feature = "observe")]
         observe: None,
@@ -774,16 +774,16 @@ pub fn start<S: Started, H: Hart1Started>(
     let (mut setup, app) = boot(peripherals, setup)
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
-    let handed = Hart1Peripherals {
+    let handed = GroupPeripherals {
         #[cfg(feature = "wifi")]
         device: setup.device.take(),
     };
-    // On hart 0 the second boot runs here; with `hart1` on hart 1, below.
-    #[cfg(not(feature = "hart1"))]
-    let (net, second) = hart1(handed, Hart1Boot { net: NoNet })
+    // On hart 0 the group runs here; with `hart1` on hart 1, below.
+    #[cfg(not(feature = "group"))]
+    let (net, second) = hart1(handed, GroupBoot { net: NoNet })
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     let _ = hart1;
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
@@ -797,11 +797,11 @@ pub fn start<S: Started, H: Hart1Started>(
             timer.alarm1,
         )
         .unwrap_or_else(|failure| failure.reset());
-        #[cfg(feature = "hart1")]
+        #[cfg(feature = "group")]
         {
             setup.timers = Some((ready, timer.alarm2));
         }
-        #[cfg(not(feature = "hart1"))]
+        #[cfg(not(feature = "group"))]
         let _ = ready;
     }
     // A station drew the identity with the entropy source it took; otherwise
@@ -819,8 +819,8 @@ pub fn start<S: Started, H: Hart1Started>(
         (None, None) => fail(Error::Entropy.name()),
     };
     BOOT_ID.publish(id);
-    // Hart 1 runs the second boot; this hart waits until it ended.
-    #[cfg(feature = "hart1")]
+    // Hart 1 runs the group; this hart waits until it ended.
+    #[cfg(feature = "group")]
     let _hart1 = {
         let Some(timers) = setup.timers.take() else {
             fail(oer_portable_diagnostics::name!("hart1-timer"; 32));
@@ -855,20 +855,20 @@ pub fn start<S: Started, H: Hart1Started>(
     };
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
-    #[cfg(not(feature = "hart1"))]
+    #[cfg(not(feature = "group"))]
     let mut net = core::pin::pin!(run_net(net));
-    #[cfg(not(feature = "hart1"))]
+    #[cfg(not(feature = "group"))]
     observed_root!(net, Ip);
-    #[cfg(not(feature = "hart1"))]
+    #[cfg(not(feature = "group"))]
     let mut second = core::pin::pin!(second());
-    #[cfg(not(feature = "hart1"))]
+    #[cfg(not(feature = "group"))]
     let mut second = core::pin::pin!(run_app(second.as_mut()));
-    #[cfg(not(feature = "hart1"))]
-    observed_root!(second, Second);
+    #[cfg(not(feature = "group"))]
+    observed_root!(second, Group);
     let mut app = core::pin::pin!(app());
     let mut app = core::pin::pin!(run_app(app.as_mut()));
     observed_root!(app, Application);
-    #[cfg(not(feature = "hart1"))]
+    #[cfg(not(feature = "group"))]
     let roots = (
         (
             oer_chips_family_executor::Root::new(net.as_mut()),
@@ -876,7 +876,7 @@ pub fn start<S: Started, H: Hart1Started>(
         ),
         oer_chips_family_executor::Root::new(app.as_mut()),
     );
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     let roots = oer_chips_family_executor::Root::new(app.as_mut());
     #[cfg(feature = "wifi")]
     if let Some(urgent) = urgent {
@@ -941,9 +941,9 @@ struct Owned {
     system_timer: SystemTimer,
     software: SoftwareInterrupts,
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     hart1: oer_chips_esp32s31_hal::cores::LaunchPermit,
-    #[cfg(feature = "hart1")]
+    #[cfg(feature = "group")]
     causes: oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses,
     #[cfg(feature = "observe")]
     timg1_alarm: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
@@ -956,14 +956,14 @@ struct Owned {
 /// Where hart 1 takes its parts: the mailbox `entry!` declares with the
 /// `hart1` feature, nothing without it. Not an API.
 #[doc(hidden)]
-#[cfg(feature = "hart1")]
-pub type Hart1Mailbox = &'static oer_chips_family_staged_runtime::Mailbox<
+#[cfg(feature = "group")]
+pub type GroupMailbox = &'static oer_chips_family_staged_runtime::Mailbox<
     oer_chips_esp32s31_hal::platform::Hart1Grant,
     Hart1Parts,
 >;
 #[doc(hidden)]
-#[cfg(not(feature = "hart1"))]
-pub type Hart1Mailbox = ();
+#[cfg(not(feature = "group"))]
+pub type GroupMailbox = ();
 
 /// Run the application's future, pinned where its root lives: an async
 /// function that took it by value would keep a second copy beside the one
@@ -995,7 +995,7 @@ pub(crate) fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) ->
 /// What [`main!`](crate::main) expands to needs; not an API.
 #[doc(hidden)]
 pub mod __private {
-    pub use super::{no_hart1, start};
+    pub use super::{no_group, start};
     pub use oer_chips_esp32s31_compose::exception::capture as exception;
     pub use oer_chips_esp32s31_hal::platform::Port;
     pub use oer_chips_family_staged_runtime::{Handoff, entry};
@@ -1016,4 +1016,37 @@ pub(crate) fn whole(bytes: &[u8]) -> Result<(), ()> {
 #[doc(hidden)]
 pub fn console_line(line: oer_portable_diagnostics::Line) -> bool {
     oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_note(&line.note()).is_whole()
+}
+
+/// The ESP32-S31 places a task group on hart 1: its mailbox and root, which
+/// call the group's setup there. What `oer::entry!` expands to with the
+/// `group` feature. Not an API.
+#[cfg(feature = "group")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __group_entry {
+    ($group:path) => {
+        $crate::__private::secondary_entry!(
+            1,
+            __OER_HART1: $crate::__private::Port,
+            $crate::Hart1Parts => __oer_hart1_main
+        );
+
+        fn __oer_hart1_main(
+            handoff: $crate::__private::SecondaryHandoff<$crate::__private::Port, 1>,
+            parts: $crate::Hart1Parts,
+        ) -> ! {
+            $crate::hart1_main(handoff, parts, $group)
+        }
+    };
+}
+
+/// The mailbox `oer::entry!` passes the library. Not an API.
+#[cfg(feature = "group")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __group_mailbox {
+    () => {
+        &__OER_HART1
+    };
 }

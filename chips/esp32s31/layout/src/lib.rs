@@ -55,8 +55,23 @@ pub mod build {
         )
     }
 
+    /// The linker arguments of a stage-two runtime of this board, for the
+    /// image pipeline to hand the image linker; `variable` reads the image's
+    /// stack allocations and layout seed.
+    pub fn runtime_link_arguments(
+        variable: &dyn Fn(&str) -> Option<std::string::String>,
+    ) -> Result<std::vec::Vec<std::string::String>, std::boxed::Box<dyn std::error::Error>> {
+        Ok(oer_chips_family_staged_layout::build::runtime(
+            &super::LAYOUT,
+            const { super::LAYOUT.runtime_psram().expect("runtime PSRAM fits") },
+            &linker_dir(),
+            variable,
+        )?
+        .linker_arguments())
+    }
+
     /// Link binary `bin` as this board's Flash-resident bootstrap.
-    pub fn configure_bootstrap(bin: &str) {
+    pub fn configure_bootstrap(bin: &str) -> Result<(), std::string::String> {
         oer_chips_family_staged_layout::build::configure_bootstrap(
             bin,
             &super::LAYOUT,
@@ -67,7 +82,7 @@ pub mod build {
                     .expect("bootstrap Flash text fits")
             },
             &linker_dir(),
-        );
+        )
     }
 }
 

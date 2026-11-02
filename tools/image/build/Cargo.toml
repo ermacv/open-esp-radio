@@ -15,6 +15,9 @@ oer-tools-image-checks = { path = "../checks" }
 oer-tools-image-esp-idf = { path = "../esp-idf" }
 oer-tools-chip-profile = { path = "../../chip/profile" }
 oer-chips-family-facts = { path = "../../../chips/family/facts" }
+# The chips' runtime layouts the image linker gets for an image on the
+# application entry.
+oer-chips-esp32s31-layout = { path = "../../../chips/esp32s31/layout", features = ["build"] }
 oer-tools-os-toolchain = { path = "../../os/toolchain" }
 oer-tools-os-durable = { path = "../../os/durable" }
 oer-tools-os-process = { path = "../../os/process" }

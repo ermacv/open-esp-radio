@@ -1,10 +1,10 @@
-//! A typed channel between the application's future and the second boot's:
-//! `A` values go from the application to the second boot's future, `B`
+//! A typed channel between the application's future and the group's:
+//! `A` values go from the application to the group's future, `B`
 //! values back, each way a queue of `N`.
 //!
 //! The image declares the channel once as a static. The boot takes the
 //! application's end, which splits both queues and keeps the other end;
-//! the second boot takes that end. Each end is taken once. An end stays
+//! the group takes that end. Each end is taken once. An end stays
 //! with the future that polls it (`!Send`): its waits wake that one task.
 
 use core::marker::PhantomData;
@@ -26,7 +26,7 @@ type SecondHalves<A, B, const N: usize, C, S> = (
     WakingSpscSender<'static, B, N, C, S>,
 );
 
-/// A channel of `A` to the second boot and `B` back, `N` deep each way.
+/// A channel of `A` to the group and `B` back, `N` deep each way.
 pub struct Channel<
     A: 'static,
     B: 'static,
@@ -60,7 +60,7 @@ impl<A, B, const N: usize> Channel<A, B, N> {
 
 impl<A, B, const N: usize, C: QueueNotify + Copy, S: QueueNotify + Copy> Channel<A, B, N, C, S> {
     /// A channel whose ends run on two harts: `application` tells the
-    /// application's end, `second` the second boot's, each the waiting
+    /// application's end, `second` the group's, each the waiting
     /// task's executor signal.
     pub const fn across_harts(application: C, second: S) -> Self {
         Self {
@@ -98,7 +98,7 @@ where
         })
     }
 
-    /// The second boot's end.
+    /// The group's end.
     pub fn take_second(&'static self) -> Result<End<B, A, N, S, C>, ChannelError> {
         let (receive, send) = self.second.take().map_err(|refusal| match refusal {
             oer_portable_memory::Claim::Empty => ChannelError::NotSplit,

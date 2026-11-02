@@ -10,7 +10,7 @@
 use core::convert::Infallible;
 
 use oer::observe::{self, Hart0, Sampler};
-use oer::{ApplicationEnd, Channel, SecondEnd};
+use oer::{ApplicationEnd, Channel, GroupEnd};
 use oer_hil_services_load::{LoadError, SamplesCollected};
 use oer_protocols_hil_protocol::RequestIdentity;
 
@@ -52,7 +52,7 @@ pub(crate) static RELAY: Channel<Reply, Command, 1> = Channel::new();
 /// The relay's end, on the boot hart.
 pub(crate) type Relay = ApplicationEnd<Reply, Command, 1>;
 /// The load server's end, on hart 1.
-pub(crate) type Client = SecondEnd<Reply, Command, 1>;
+pub(crate) type Client = GroupEnd<Reply, Command, 1>;
 
 /// Serve the load server's commands with the boot hart's `hart0` until the
 /// chip resets.

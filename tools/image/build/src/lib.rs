@@ -117,7 +117,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
     let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
     let critical_section_hart =
         critical_section::declared(&spec.root, &spec.application.package, &profile)?;
-    let harts = harts::declared(&spec.root, &spec.application.package, &profile)?;
+    let harts = harts::declared(&spec.root, &spec.application, &profile)?;
     let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
     staged::build(
         spec,
@@ -157,7 +157,7 @@ pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
         return Err("a runtime check builds no image; its gates need a build".into());
     }
     let profile = profile(&spec.root, &spec.chip)?;
-    let harts = harts::declared(&spec.root, &spec.application.package, &profile)?;
+    let harts = harts::declared(&spec.root, &spec.application, &profile)?;
     let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?.for_image(&harts)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
@@ -237,6 +237,7 @@ fn runtime_command(
         command.env(LAYOUT_SEED_ENV, seed.to_string());
     }
     zeroed_inputs(&mut command, profile);
+    runtime_link(&mut command, spec)?;
     crate::compiler::configure(
         &mut command,
         &crate::compiler::of_policy(
@@ -248,6 +249,42 @@ fn runtime_command(
         ),
     )?;
     Ok(command)
+}
+
+/// Hand the image linker the chip's runtime layout of an image on the
+/// application entry, whose build script names no chip: the arguments a
+/// chip's layout crate prints for a probe or the bootstrap.
+fn runtime_link(command: &mut std::process::Command, spec: &ImageSpec) -> Result<()> {
+    let entry_feature = format!("oer/{}", spec.chip);
+    if !spec.application.features.contains(&entry_feature) {
+        return Ok(());
+    }
+    let variable = |name: &str| {
+        if name == LAYOUT_SEED_ENV {
+            return spec.layout_seed.map(|seed| seed.to_string());
+        }
+        spec.runtime_environment
+            .iter()
+            .find(|(key, _)| key == name)
+            .and_then(|(_, value)| value.clone())
+    };
+    let arguments = match spec.chip.as_str() {
+        "esp32s31" => oer_chips_esp32s31_layout::build::runtime_link_arguments(&variable)
+            .map_err(|error| format!("{}: {error}", spec.chip))?,
+        chip => return Err(format!("no runtime layout of chip `{chip}`").into()),
+    };
+    let path = spec
+        .root
+        .join("target/fw/runtime-link")
+        .join(format!("{}.args", spec.application.package));
+    if let Some(directory) = path.parent() {
+        std::fs::create_dir_all(directory)
+            .map_err(|error| format!("{}: {error}", directory.display()))?;
+    }
+    std::fs::write(&path, arguments.join("\n"))
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    command.env(oer_tools_image_checks::linker::RUNTIME_LINK_ENV, &path);
+    Ok(())
 }
 
 /// Hand the image linker the input sections the chip's staged boot zeroes,

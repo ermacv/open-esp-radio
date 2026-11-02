@@ -4,8 +4,8 @@
 mod profile;
 
 use oer::{
-    AppResult, ApplicationEnd, Boot, Channel, Error, Hart1Boot, Hart1Peripherals,
-    Hart1Started, Peripherals, SecondEnd, Started,
+    AppResult, ApplicationEnd, Boot, Channel, Error, GroupBoot, GroupPeripherals,
+    GroupStarted, Peripherals, GroupEnd, Started,
     print::{DiagPath, DiagnosticPath, Ipv4},
     println,
     time::{Duration, Timer, with_timeout},
@@ -17,7 +17,7 @@ use profile::{PROFILE, Security};
 /// gateway and hears how it ended.
 static EXCHANGES: Channel<[u8; 4], Result<(), Exchange>, 1> = Channel::new();
 
-oer::entry!(boot, hart1 = network);
+oer::entry!(boot, group = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;
@@ -26,17 +26,17 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     Ok(boot.run(move || app(station, status, exchanges)))
 }
 
-/// The second boot: the IP service over the station's device, and the
+/// The group: the IP service over the station's device, and the
 /// exchanges on its sockets.
-fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
+fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let (net, mut boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
-    let requests = EXCHANGES.second(&mut boot)?;
+    let requests = EXCHANGES.group(&mut boot)?;
     Ok(boot.run(move || exchanges(net, requests)))
 }
 
 /// Exchange one line with each gateway the application names.
-async fn exchanges(net: Net, mut requests: SecondEnd<[u8; 4], Result<(), Exchange>, 1>) -> AppResult {
+async fn exchanges(net: Net, mut requests: GroupEnd<[u8; 4], Result<(), Exchange>, 1>) -> AppResult {
     loop {
         let gateway = requests.receive().await;
         let result = exchange(&net, gateway).await;

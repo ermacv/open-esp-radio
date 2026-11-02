@@ -2,15 +2,15 @@
 // the console added and every channel scanned, the HIL agent serving the
 // base module, the SDK station, Wi-Fi station, fault and load services, and
 // one worker that answers their requests in order beside the load server's
-// relay. The second boot runs the IP service, the line exchanges and the
+// relay. The group runs the IP service, the line exchanges and the
 // load server on its sockets.
 
 use core::pin::pin;
 
 use embassy_futures::select::{Either as Raced, select};
 use oer::{
-    AppResult, ApplicationEnd, Boot, Channel, Console, Error, Hart1Boot, Hart1Peripherals,
-    Hart1Started, Peripherals, SecondEnd, Started, observe,
+    AppResult, ApplicationEnd, Boot, Channel, Console, Error, GroupBoot, GroupPeripherals,
+    GroupStarted, Peripherals, GroupEnd, Started, observe,
     time::{Duration, with_timeout},
     wifi::{
         self, ConnectError, Ipv4Configuration, Ipv4Status, LinkState, Net, NetConfig, NetStatus,
@@ -52,11 +52,11 @@ const RX: usize = 32;
 const TX: usize = 16;
 static POOLS: wifi::Pools<RX, TX, 32> = wifi::Pools::new();
 
-/// The worker hands each line exchange to the second boot's future and
+/// The worker hands each line exchange to the group's future and
 /// hears how it ended.
 static EXCHANGES: Channel<Exchange, Exchanged, 1> = Channel::new();
 
-oer::entry!(boot, hart1 = network);
+oer::entry!(boot, group = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     // The load scenario measures the station at HT 40 MHz where the stand's
@@ -104,14 +104,14 @@ async fn application(
     }
 }
 
-/// The second boot: the IP service with the image's pools over the
+/// The group: the IP service with the image's pools over the
 /// station's device, the line exchanges and the load server on its sockets.
-fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Error> {
+fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let (net, mut boot) = Net::start_with(device, &POOLS, NetConfig::Dhcpv4, boot)?;
-    let exchanges = EXCHANGES.second(&mut boot)?;
-    let load = load::serve::LOAD.second(&mut boot)?;
-    let relay = load::relay::RELAY.second(&mut boot)?;
+    let exchanges = EXCHANGES.group(&mut boot)?;
+    let load = load::serve::LOAD.group(&mut boot)?;
+    let relay = load::relay::RELAY.group(&mut boot)?;
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
     let part = observe::Part::claim("load")?;
     Ok(boot.run(move || sockets(net, exchanges, load, relay, tally, part)))
@@ -120,7 +120,7 @@ fn network(p: Hart1Peripherals, boot: Hart1Boot) -> Result<impl Hart1Started, Er
 /// The line exchanges beside the load server, which never ends.
 async fn sockets(
     net: Net<RX, TX>,
-    exchanges: SecondEnd<Exchange, Exchanged, 1>,
+    exchanges: GroupEnd<Exchange, Exchanged, 1>,
     load: load::serve::Requests,
     relay: load::relay::Client,
     tally: load::serve::RunTally,
@@ -136,7 +136,7 @@ async fn sockets(
 /// Answer each line exchange the worker asks for.
 async fn exchange_lines(
     net: &Net<RX, TX>,
-    mut requests: SecondEnd<Exchange, Exchanged, 1>,
+    mut requests: GroupEnd<Exchange, Exchanged, 1>,
 ) -> AppResult {
     loop {
         let exchange = requests.receive().await;
@@ -191,7 +191,7 @@ impl Worker {
                 Either::First(Either::Second(oer_hil_services_fault::Request::RaiseException(_))) => {
                     match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {}
                 }
-                // The load server in the second boot answers it.
+                // The load server in the group answers it.
                 Either::Second(request) => {
                     self.load.send((identity, request)).await;
                     self.load.receive().await.publish(identity);
@@ -300,7 +300,7 @@ impl Worker {
         }
     }
 
-    /// The second boot's future runs the exchange on its sockets.
+    /// The group's future runs the exchange on its sockets.
     async fn exchange(&mut self, exchange: Exchange) -> Exchanged {
         self.exchanges.send(exchange).await;
         self.exchanges.receive().await

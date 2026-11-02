@@ -135,12 +135,14 @@ jobs:
           # The crates that declare tasks take `type_alias_impl_trait`
           # through RUSTC_BOOTSTRAP in .cargo/config.toml; SDK images declare
           # none.
-          cargo clippy --locked --target riscv32imafc-unknown-none-elf $(firmware)
+          # The image pipeline selects the chip of the application entry; a
+          # type-check names it here.
+          cargo clippy --locked --target riscv32imafc-unknown-none-elf --features oer/esp32s31 $(firmware)
           # Each in a target directory of its own, as `cargo fw` keeps the
           # plain cache free of the cfgs.
           while read -r package target cfgs; do
             RUSTFLAGS="$cfgs" CARGO_TARGET_DIR="target/instrumented/$package" \
-              cargo clippy --locked --target "$target" -p "$package"
+              cargo clippy --locked --target "$target" -p "$package" --features oer/esp32s31
           done < <(instrumented)
       - name: Firmware packages for the chip target
         run: |
@@ -156,7 +158,7 @@ jobs:
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
-          cargo check --locked --target riscv32imafc-unknown-none-elf $(firmware)
+          cargo check --locked --target riscv32imafc-unknown-none-elf --features oer/esp32s31 $(firmware)
       - name: Image build
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |

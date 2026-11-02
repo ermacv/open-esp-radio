@@ -17,37 +17,79 @@ fn shared_linker_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("linker")
 }
 
-fn defsym(bin: &str, name: &str, value: u32) {
-    println!("cargo:rustc-link-arg-bin={bin}=--defsym={name}={value}");
+/// What linking a binary of a layout takes: its linker arguments and search
+/// directories, and the files and environment variables a build script
+/// reruns on. A build script prints it ([`Link::print`]); the image
+/// pipeline hands its arguments to the image linker
+/// ([`Link::linker_arguments`]).
+#[derive(Debug, Default)]
+pub struct Link {
+    arguments: std::vec::Vec<std::string::String>,
+    search: std::vec::Vec<std::path::PathBuf>,
+    files: std::vec::Vec<std::path::PathBuf>,
+    variables: std::vec::Vec<std::string::String>,
+}
+
+impl Link {
+    fn defsym(&mut self, name: &str, value: u32) {
+        self.arguments.push(std::format!("--defsym={name}={value}"));
+    }
+
+    /// The build script's directives for binary `bin`.
+    pub fn print(&self, bin: &str) {
+        for file in &self.files {
+            println!("cargo:rerun-if-changed={}", file.display());
+        }
+        for variable in &self.variables {
+            println!("cargo:rerun-if-env-changed={variable}");
+        }
+        for directory in &self.search {
+            println!("cargo:rustc-link-search={}", directory.display());
+        }
+        for argument in &self.arguments {
+            println!("cargo:rustc-link-arg-bin={bin}={argument}");
+        }
+    }
+
+    /// The linker's arguments alone, the search directories as `-L`.
+    pub fn linker_arguments(&self) -> std::vec::Vec<std::string::String> {
+        self.search
+            .iter()
+            .map(|directory| std::format!("-L{}", directory.display()))
+            .chain(self.arguments.iter().cloned())
+            .collect()
+    }
 }
 
 fn link(
-    bin: &str,
+    out: &mut Link,
     layout: &Layout,
     runtime_psram: Region,
     chip_linker_dir: &Path,
     scripts: &[&str],
     entry: &str,
-) {
+) -> Result<(), std::string::String> {
     let shared = shared_linker_dir();
     let rom = chip_linker_dir.join(layout.rom_script);
-    assert!(
-        rom.is_file(),
-        "the chip's ROM script {} is missing; pass the chip's `linker` directory",
-        rom.display()
-    );
-    println!("cargo:rerun-if-changed={}", rom.display());
+    if !rom.is_file() {
+        return Err(std::format!(
+            "the chip's ROM script {} is missing; pass the chip's `linker` directory",
+            rom.display()
+        ));
+    }
+    out.files.push(rom);
     for script in std::iter::once(&"dwarf.x").chain(scripts) {
         let path = shared.join(script);
-        assert!(
-            path.is_file(),
-            "shared linker script {} is missing",
-            path.display()
-        );
-        println!("cargo:rerun-if-changed={}", path.display());
+        if !path.is_file() {
+            return Err(std::format!(
+                "shared linker script {} is missing",
+                path.display()
+            ));
+        }
+        out.files.push(path);
     }
-    println!("cargo:rustc-link-search={}", shared.display());
-    println!("cargo:rustc-link-search={}", chip_linker_dir.display());
+    out.search.push(shared);
+    out.search.push(chip_linker_dir.to_path_buf());
     // `--emit-relocs` keeps the link's relocations in the ELF: the stack
     // analysis reads jump tables, function addresses and calls from them
     // instead of reconstructing them from machine code.
@@ -59,62 +101,91 @@ fn link(
         "--nmagic",
         "--emit-relocs",
     ] {
-        println!("cargo:rustc-link-arg-bin={bin}={argument}");
+        out.arguments.push(argument.into());
     }
-    defsym(bin, "MMU_PAGE_BYTES", layout.mmu_page_bytes);
+    out.defsym("MMU_PAGE_BYTES", layout.mmu_page_bytes);
     for (name, region) in [
         ("SRAM", layout.sram),
         ("PSRAM", layout.psram),
         ("RUNTIME_PSRAM", runtime_psram),
         ("RETAINED", layout.retained),
     ] {
-        defsym(bin, &std::format!("{name}_ORIGIN"), region.origin());
-        defsym(bin, &std::format!("{name}_LENGTH"), region.length());
+        out.defsym(&std::format!("{name}_ORIGIN"), region.origin());
+        out.defsym(&std::format!("{name}_LENGTH"), region.length());
     }
+    Ok(())
 }
 
-/// Links binary `bin` as a stage-two runtime of `layout`: code, data and task
-/// stacks in PSRAM, interrupt entries, stacks and DMA state in internal SRAM.
-/// The chip binding evaluates `layout.runtime_psram()` in a const initializer
-/// and passes that admitted subregion as `runtime_psram`.
+/// Links binary `bin` as a stage-two runtime of `layout` from its build
+/// script ([`runtime`] with the build's environment).
 pub fn configure_runtime(
     bin: &str,
     layout: &Layout,
     runtime_psram: Region,
     chip_linker_dir: &Path,
 ) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    runtime(layout, runtime_psram, chip_linker_dir, &|variable| {
+        std::env::var(variable).ok()
+    })?
+    .print(bin);
+    Ok(())
+}
+
+/// What linking a stage-two runtime of `layout` takes: code, data and task
+/// stacks in PSRAM, interrupt entries, stacks and DMA state in internal
+/// SRAM. The chip binding evaluates `layout.runtime_psram()` in a const
+/// initializer and passes that admitted subregion as `runtime_psram`;
+/// `variable` reads the image's stack allocations and layout seed.
+pub fn runtime(
+    layout: &Layout,
+    runtime_psram: Region,
+    chip_linker_dir: &Path,
+    variable: &dyn Fn(&str) -> Option<std::string::String>,
+) -> Result<Link, std::boxed::Box<dyn std::error::Error>> {
+    let mut out = Link::default();
     for (hart, &default_task) in layout.task_stack_bytes.iter().enumerate() {
-        let task = stack_allocation("TASK", hart, default_task, layout.psram.length())?;
+        let task = stack_allocation(
+            &mut out,
+            variable,
+            "TASK",
+            hart,
+            default_task,
+            layout.psram.length(),
+        )?;
         let irq = stack_allocation(
+            &mut out,
+            variable,
             "IRQ",
             hart,
             irq_default(task, layout.irq_stack_bytes),
             layout.sram.length(),
         )?;
-        defsym(bin, &std::format!("TASK_STACK_HART{hart}_BYTES"), task);
-        defsym(bin, &std::format!("IRQ_STACK_HART{hart}_BYTES"), irq);
+        out.defsym(&std::format!("TASK_STACK_HART{hart}_BYTES"), task);
+        out.defsym(&std::format!("IRQ_STACK_HART{hart}_BYTES"), irq);
     }
     link(
-        bin,
+        &mut out,
         layout,
         runtime_psram,
         chip_linker_dir,
         &["runtime/link.x", "runtime/memory.x", "runtime/sections.x"],
         "-Truntime/link.x",
-    );
+    )?;
     // The DMA window and address width the runtime's `sections.x` includes,
     // generated from the chip's register model.
     let window = chip_linker_dir.join("dma-window.x");
-    assert!(
-        window.is_file(),
-        "the chip's generated {} is missing; run `cargo registers generate`",
-        window.display()
-    );
-    println!("cargo:rerun-if-changed={}", window.display());
+    if !window.is_file() {
+        return Err(std::format!(
+            "the chip's generated {} is missing; run `cargo registers generate`",
+            window.display()
+        )
+        .into());
+    }
+    out.files.push(window);
     // A section no rule places is an error, not an orphan the linker puts
     // somewhere: a mistyped `.dma.bss.*` name would otherwise leave a DMA
     // static outside the checked range.
-    println!("cargo:rustc-link-arg-bin={bin}=--orphan-handling=error");
+    out.arguments.push("--orphan-handling=error".into());
     for (name, value) in [
         ("STAGE_TWO_MAGIC", stage_two::MAGIC),
         ("STAGE_TWO_ABI_VERSION", stage_two::ABI_VERSION),
@@ -126,15 +197,12 @@ pub fn configure_runtime(
             layout.handoff_sram_margin_bytes,
         ),
     ] {
-        defsym(bin, name, value);
+        out.defsym(name, value);
     }
-    println!("cargo:rerun-if-env-changed={LAYOUT_SEED_ENV}");
-    let seed = std::env::var(LAYOUT_SEED_ENV).ok();
-    let seed = layout_seed(seed.as_deref())?;
-    for argument in shuffle_arguments(seed) {
-        println!("cargo:rustc-link-arg-bin={bin}={argument}");
-    }
-    Ok(())
+    out.variables.push(LAYOUT_SEED_ENV.into());
+    let seed = layout_seed(variable(LAYOUT_SEED_ENV).as_deref())?;
+    out.arguments.extend(shuffle_arguments(seed));
+    Ok(out)
 }
 
 /// A hart's interrupt allocation without an explicit one: the contract
@@ -145,19 +213,21 @@ fn irq_default(task: u32, maximum: u32) -> u32 {
 }
 
 fn stack_allocation(
+    out: &mut Link,
+    variable: &dyn Fn(&str) -> Option<std::string::String>,
     kind: &str,
     hart: usize,
     default: u32,
     memory: u32,
 ) -> Result<u32, std::boxed::Box<dyn std::error::Error>> {
     let key = std::format!("OPEN_RADIO_{kind}_STACK_HART{hart}_BYTES");
-    println!("cargo:rerun-if-env-changed={key}");
-    match std::env::var(&key) {
-        Ok(value) => Ok(
+    let value = variable(&key);
+    out.variables.push(key.clone());
+    match value {
+        Some(value) => Ok(
             image_stack_bytes(&value, memory).map_err(|error| std::format!("{key}: {error}"))?
         ),
-        Err(std::env::VarError::NotPresent) => Ok(default),
-        Err(error) => Err(error.into()),
+        None => Ok(default),
     }
 }
 
@@ -214,9 +284,10 @@ pub fn configure_bootstrap(
     runtime_psram: Region,
     flash_text: Region,
     chip_linker_dir: &Path,
-) {
+) -> Result<(), std::string::String> {
+    let mut out = Link::default();
     link(
-        bin,
+        &mut out,
         layout,
         runtime_psram,
         chip_linker_dir,
@@ -227,24 +298,23 @@ pub fn configure_bootstrap(
             "bootstrap/flash-sections.x",
         ],
         "-Tbootstrap/link.x",
-    );
-    defsym(bin, "BOOTSTRAP_FLASH_TEXT_ORIGIN", flash_text.origin());
-    defsym(bin, "BOOTSTRAP_FLASH_TEXT_LENGTH", flash_text.length());
-    defsym(
-        bin,
+    )?;
+    out.defsym("BOOTSTRAP_FLASH_TEXT_ORIGIN", flash_text.origin());
+    out.defsym("BOOTSTRAP_FLASH_TEXT_LENGTH", flash_text.length());
+    out.defsym(
         "IMAGE_SEGMENT_HEADER_BYTES",
         layout.image_segment_header_bytes,
     );
-    defsym(
-        bin,
+    out.defsym(
         "SECOND_STAGE_LOADER_START",
         layout.second_stage_loader_start,
     );
-    defsym(
-        bin,
+    out.defsym(
         "FLASH_TUNING_REFERENCE_BYTES",
         layout.flash_tuning_reference_bytes,
     );
+    out.print(bin);
+    Ok(())
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@
 //! - `AesEngine` (`esp32s31`): the AES accelerator as one synchronous
 //!   AES-128 engine, owned by the image or by the Wi-Fi station;
 //! - [`channel`]: a typed channel between the application's future and the
-//!   second boot's;
+//!   group's;
 //! - [`net`]: waiting on the IP service for an address or a link loss;
 //! - `observe` (`observe` feature): what the library observes of its own
 //!   work, for an image that measures it.
@@ -41,72 +41,48 @@ compile_error!("select the application's chip: the `esp32s31` feature");
 
 #[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
 pub use oer_chips_esp32s31_app::*;
+// The chip's placement of a task group, which `entry!` expands.
+#[cfg(all(feature = "esp32s31", feature = "group", target_arch = "riscv32"))]
+#[doc(hidden)]
+pub use oer_chips_esp32s31_app::{__group_entry, __group_mailbox};
 
+#[cfg(not(feature = "group"))]
 #[macro_export]
 macro_rules! entry {
-    ($boot:path) => {
-        $crate::entry!($boot, hart1 = $crate::__private::no_hart1);
-    };
-    ($boot:path, hart1 = $hart1:path) => {
+    ($main:path) => {
         $crate::__private::entry!(
             __oer_main,
             $crate::__private::Port,
             exception = $crate::__private::exception
         );
-        $crate::__hart1_entry!($hart1);
 
         fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
-            $crate::__private::start(handoff, $boot, $hart1, $crate::__hart1_mailbox!())
+            $crate::__private::start(handoff, $main, $crate::__private::no_group, ())
         }
+    };
+    ($main:path, group = $group:path) => {
+        compile_error!("an image with a task group selects the `group` feature of `oer`");
     };
 }
 
-/// Hart 1's mailbox and root, which call the second boot on hart 1: what
-/// [`entry!`] expands to with the `hart1` feature. Not an API.
-#[cfg(feature = "hart1")]
-#[doc(hidden)]
+/// The application's entry with a task group: what [`entry!`] is with the
+/// `group` feature.
+#[cfg(feature = "group")]
 #[macro_export]
-macro_rules! __hart1_entry {
-    ($hart1:path) => {
-        $crate::__private::secondary_entry!(
-            1,
-            __OER_HART1: $crate::__private::Port,
-            $crate::Hart1Parts => __oer_hart1_main
+macro_rules! entry {
+    ($main:path) => {
+        compile_error!("the `group` feature needs a task group: `entry!(main, group = setup)`");
+    };
+    ($main:path, group = $group:path) => {
+        $crate::__private::entry!(
+            __oer_main,
+            $crate::__private::Port,
+            exception = $crate::__private::exception
         );
+        $crate::__group_entry!($group);
 
-        fn __oer_hart1_main(
-            handoff: $crate::__private::SecondaryHandoff<$crate::__private::Port, 1>,
-            parts: $crate::Hart1Parts,
-        ) -> ! {
-            $crate::hart1_main(handoff, parts, $hart1)
+        fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
+            $crate::__private::start(handoff, $main, $group, $crate::__group_mailbox!())
         }
-    };
-}
-
-/// Without the `hart1` feature: nothing. Not an API.
-#[cfg(not(feature = "hart1"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __hart1_entry {
-    ($hart1:path) => {};
-}
-
-/// The mailbox `entry!` passes the library. Not an API.
-#[cfg(feature = "hart1")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __hart1_mailbox {
-    () => {
-        &__OER_HART1
-    };
-}
-
-/// Without the `hart1` feature: none. Not an API.
-#[cfg(not(feature = "hart1"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __hart1_mailbox {
-    () => {
-        ()
     };
 }

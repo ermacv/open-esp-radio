@@ -1,4 +1,4 @@
-//! The load server in the second boot: one run at a time on one UDP
+//! The load server in the group: one run at a time on one UDP
 //! socket bound to the station's DHCP address, on hart 1 beside the IP
 //! stack.
 //!
@@ -26,7 +26,7 @@ use oer::wifi::embassy_net::TryError;
 use oer::wifi::embassy_net::udp::UdpSocket;
 use oer::wifi::embassy_net::wire::{ListenSocketAddr, SocketAddr};
 use oer::wifi::{IpDevice, Ipv4Status, Net};
-use oer::{Channel, SecondEnd};
+use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
@@ -50,14 +50,14 @@ const TALLY_WORDS: usize = 8192;
 /// The one tally, in place in a static: it is far larger than a value the
 /// image may move, so each run clears it in place.
 pub(crate) static TALLY: ConstStaticCell<Tally<TALLY_WORDS>> = ConstStaticCell::new(Tally::new());
-/// The tally the second boot takes once.
+/// The tally the group takes once.
 pub(crate) type RunTally = &'static mut Tally<TALLY_WORDS>;
 
 /// The load requests the worker hands the server, each with its identity,
 /// and the server's answers.
 pub(crate) static LOAD: Channel<(RequestIdentity, Request), Answer, 1> = Channel::new();
-/// The server's end, in the second boot.
-pub(crate) type Requests = SecondEnd<(RequestIdentity, Request), Answer, 1>;
+/// The server's end, in the group.
+pub(crate) type Requests = GroupEnd<(RequestIdentity, Request), Answer, 1>;
 
 /// An answer of the load server, which the worker publishes.
 pub(crate) enum Answer {

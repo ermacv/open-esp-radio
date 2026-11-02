@@ -16,9 +16,10 @@ esp32s31 = ["dep:oer-chips-esp32s31-app"]
 wifi = ["oer-chips-esp32s31-app?/wifi"]
 ## The USB Serial/JTAG console as the application's byte stream.
 console = ["oer-chips-esp32s31-app?/console"]
-## The second boot on hart 1: its IP service and future run on hart 1's
-## executor. The image declares `harts = ["boot", 1]`.
-hart1 = ["oer-chips-esp32s31-app?/hart1"]
+## A task group beside the application (`entry!(main, group = setup)`):
+## on a chip with a second core it runs there on its own executor,
+## otherwise on the application's executor.
+group = ["oer-chips-esp32s31-app?/group"]
 ## What the library observes of its own work (`observe`): the executors'
 ## CPU, named parts' polls, the station's, the bridge's and the PHY
 ## tracking's counts, and on the boot hart its counters and a PC sampler on

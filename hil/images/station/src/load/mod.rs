@@ -5,7 +5,7 @@
 //! [`action`] decides each request, [`receive`] counts received load,
 //! [`pace`] schedules paced transmission and [`report`] puts the library's
 //! observations (`oer::observe`) in the service's vocabulary;
-//! `serve` runs a run in the second boot on hart 1 beside the IP stack, and
+//! `serve` runs a run in the group on hart 1 beside the IP stack, and
 //! `relay` serves what it needs of the boot hart: its counters and the PC
 //! sampler.
 

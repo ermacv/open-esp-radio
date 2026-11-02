@@ -1,4 +1,4 @@
-//! The runtime's layout, and the station profile `OER_WIFI_STATION_PROFILE`
+//! The station profile `OER_WIFI_STATION_PROFILE`
 //! names: a TOML file kept outside git. Unset builds the NotConfigured image,
 //! which starts no RF and links no Wi-Fi; a profile needs the `station`
 //! feature, and the feature a profile. A profile that does not validate fails the build; no
@@ -18,9 +18,6 @@ type Error = Box<dyn std::error::Error>;
 fn main() -> Result<(), Error> {
     println!("cargo:rustc-check-cfg=cfg(oer_wifi_station_configured)");
     println!("cargo:rerun-if-env-changed={PROFILE}");
-    if env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("riscv32") {
-        oer_chips_esp32s31_layout::build::configure_runtime("oer-examples-wifi-station")?;
-    }
     let station = env::var_os("CARGO_FEATURE_STATION").is_some();
     profile::composition(env::var_os(PROFILE).is_some(), station)?;
     let generated = match env::var_os(PROFILE) {

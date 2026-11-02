@@ -21,5 +21,6 @@ fn main() {
     let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
     std::fs::write(out.join("flash-capacity.rs"), format!("{bytes}u32\n"))
         .expect("write flash capacity from module facts");
-    oer_chips_esp32s31_layout::build::configure_bootstrap("oer-chips-esp32s31-bootstrap");
+    oer_chips_esp32s31_layout::build::configure_bootstrap("oer-chips-esp32s31-bootstrap")
+        .expect("link the bootstrap with the shared scripts");
 }

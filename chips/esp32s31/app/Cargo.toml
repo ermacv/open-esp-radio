@@ -13,9 +13,10 @@ description = "The ESP32-S31's application entry: its boot sequence, interrupt l
 wifi = []
 ## The USB Serial/JTAG console as the application's byte stream.
 console = []
-## The second boot on hart 1: its IP service and future run on hart 1's
-## executor.
-hart1 = []
+## A task group beside the application (`entry!(main, group = setup)`):
+## on a chip with a second core it runs there on its own executor,
+## otherwise on the application's executor.
+group = []
 ## What the library observes of its own work.
 observe = ["oer-chips-family-app/observe"]
 ## UDP sockets on the IP stack, each queueing up to 16 received datagrams.
