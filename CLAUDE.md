@@ -146,7 +146,8 @@ system these rules serve.
   pilot uses TIMG0 T0 at P2 on line 16, below the radio executor's line 17;
   it advances one explicit conversion step per event with owned PHY custody.
   Driver code never blocks or spins; it yields to its executor. The one exception is a
-  named settle of a known length up to 20 µs. Before an executor exists
+  named settle of a known length up to 20 µs; the AES driver waits for a
+  Typical block on its `STATE` flag in one, a typed timeout otherwise. Before an executor exists
   (the bootstrap and early boot) there is nothing to yield to: console
   output there may wait for room in the USB FIFO up to a bounded budget per
   record, and hardware bring-up (PLL, RC calibration, cache, MSPI, PSRAM)

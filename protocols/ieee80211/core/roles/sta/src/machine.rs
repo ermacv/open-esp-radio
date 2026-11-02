@@ -1016,14 +1016,15 @@ const QOS_SEQUENCES: [SequenceCounter; 8] = [SequenceCounter::new(SequenceNumber
 /// The provider owns its entropy state; each nonce request must be fresh for
 /// protected handshakes and PMF. Open-only compositions never request one.
 pub trait StaCallbacks {
-    /// The synchronous AES-128 block primitive the station unwraps EAPOL-Key
-    /// data with (RFC 3394), in its step: the composition chooses it, a
-    /// software block or the chip's accelerator.
-    type KeyUnwrapBlocks: oer_crypto::block::Aes128Blocks;
+    /// The synchronous AES-128 engine the station unwraps EAPOL-Key data
+    /// with (RFC 3394), in its step: the composition chooses it, a software
+    /// block or the chip's accelerator. A refused key or block fails the
+    /// unwrap like corrupted key data.
+    type KeyUnwrapEngine: oer_crypto::block::Aes128Engine;
     /// Fresh randomness for each handshake and PMF SA Query procedure.
     fn nonce(&mut self) -> [u8; 32];
-    /// The block primitive for the next key-data unwrap.
-    fn key_unwrap_blocks(&mut self) -> &mut Self::KeyUnwrapBlocks;
+    /// The engine for the next key-data unwrap.
+    fn key_unwrap_engine(&mut self) -> &mut Self::KeyUnwrapEngine;
     /// Composition policy for the peer's complete HE Capabilities element.
     fn he_packet_padding(&self, capability: &[u8]) -> HePacketPadding;
 }
@@ -5484,7 +5485,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         protection: EapolProtection,
     ) -> Change<T, K> {
         let unwrapped = match request.key_unwrap() {
-            Ok(unwrap) => key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_blocks(), unwrap)
+            Ok(unwrap) => key_unwrap::unwrap_now(self.config.callbacks.key_unwrap_engine(), unwrap)
                 .into_plaintext(),
             Err(RsnKeyUnwrapRequestError::InvalidFrame(error)) => {
                 return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
@@ -6164,7 +6165,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     match request.key_unwrap() {
                         Ok(unwrap) => {
                             let unwrapped = key_unwrap::unwrap_now(
-                                self.config.callbacks.key_unwrap_blocks(),
+                                self.config.callbacks.key_unwrap_engine(),
                                 unwrap,
                             )
                             .into_plaintext();

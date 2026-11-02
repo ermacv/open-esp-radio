@@ -21,7 +21,7 @@ oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(PROFILE.country, PROFILE.channel, PROFILE.cap_dbm)?;
-    let (station, status) = Station::start(p.wifi, config, &mut boot)?;
+    let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;
     Ok(boot.run(app(station, status, exchanges)))
 }

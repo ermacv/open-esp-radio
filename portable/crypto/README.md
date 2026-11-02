@@ -21,11 +21,14 @@ the mode advance. A pending continuation and each block erase their secret
 state on drop. There is no async code inside the machine. Engine failures
 become `KeyUnwrapError::Engine` and clear the response buffer.
 
-`BlockKeyUnwrap` decrypts every issued block immediately through the synchronous
-`BlockCipher`, so its operation is ready on the first poll; `Aes128Blocks`
-loads a key for the run and erases it when its keyed view drops. `wrap` uses
-the same synchronous primitive. Hardware engines can instead yield between
-submission and completion without copying the mode algorithm.
+`block::unwrap_now` decrypts every issued block immediately through a
+synchronous `Aes128Engine`, which loads a key for the run and erases it when
+its keyed view drops; a refused key or block (`BlockError`) ends the
+operation as `KeyUnwrapError::Engine`. Every infallible `Aes128Blocks`
+primitive (software, its `BlockCipher` blocks) is an engine that never
+refuses; a hardware engine implements `Aes128Engine` itself.
+`BlockKeyUnwrap` owns an engine and runs `unwrap_now`, so its `KeyUnwrap`
+operation is ready on the first poll. `wrap` uses the infallible primitive.
 
 With `test-support`, `conformance::key_unwrap_rfc3394` runs an engine through
 the RFC 3394 §4.1 vector, a changed ciphertext, two invalid lengths and a

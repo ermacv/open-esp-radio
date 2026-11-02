@@ -179,14 +179,13 @@ launches hart 1 moves `AesParts` into hart 1's launch parts and builds the
 engine there over hart 1's router (boot-smoke). Its `Silent` proof holds on
 either hart: the proof checks the table's entries of every hart and that
 router's own bank, and every hart's router silences its own bank at install,
-before that hart first unmasks. The station runner retains the engine from
-construction; images supply no separate engine when starting it. It owns AES by value,
-retains IRQ55 with `Silent`, uses timer-woken completion samples and erases
-the hardware key and intermediates on completion or cancellation. A failed
-engine retains its owner and refuses further requests with a typed error.
-A core asks for an operation as an action and takes its response as an input, holding no future; the runtime runs the engine in one slot of its
-select. An engine whose hardware may still reach a request's buffers keeps
-them until it confirmed the stop.
+before that hart first unmasks. The engine (`oer-esp32s31-crypto::AesBlocks`)
+is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
+`Silent`, waits for each Typical block on its `STATE` flag within a named
+settle and erases the hardware key and intermediates when its keyed view
+drops. A failed engine retains its owner and refuses further keys with a
+typed error. Its one owner is the Wi-Fi station, the library's AES service
+or boot-smoke's hart-1 task.
 
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
@@ -213,9 +212,9 @@ admission refusal. Runner selects inputs over the generic port and executes
 the existing cores. The chip facade `oer-esp32s31-wifi` assembles the S31 backend,
 arbiter, station and runtime as `station(resources, config) -> (Control,
 NetDevice, Runners)`. The station unwraps EAPOL-Key data synchronously in
-its step over the block primitive its callbacks supply
-(`StaCallbacks::KeyUnwrapBlocks`); the facade's is the software AES-128
-block. Images select the interrupt entries, callbacks and observers, and
+its step over the engine its callbacks supply
+(`StaCallbacks::KeyUnwrapEngine`); the facade's is the AES accelerator,
+which the image hands to the station's `Profile`. Images select the interrupt entries, callbacks and observers, and
 spawn the returned runners.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
@@ -490,6 +489,9 @@ run its own executor.
 - Drivers never block or spin. A named settle of a known length up to 20 µs
   may busy-wait and counts against its context's step bound; a wait of
   unknown length is a timer-woken step with a deadline.
+  The AES driver waits for each Typical block synchronously on its `STATE`
+  flag within such a settle, sourced from the measured block time; a block
+  still working at its end is a typed timeout.
   PHY short busy-wait settles count `mcycle` through `oer-riscv`, at the stable CPU
   frequency the clock owner adopts from its register state during runtime
   handover. They require neither a ROM delay nor ROM clock calibration.

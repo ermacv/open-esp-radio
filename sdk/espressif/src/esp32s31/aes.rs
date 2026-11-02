@@ -9,7 +9,8 @@ use static_cell::StaticCell;
 use super::{AesPeripheral, Boot, Error};
 use crate::aes::AesService;
 
-/// The engine the service owns: the polled CPU AES, IRQ55 held silent.
+/// The engine the service owns: the accelerator, each block waited for on
+/// its `STATE` flag, IRQ55 held silent.
 pub(crate) type Engine = oer_esp32s31_compose::crypto::KeyUnwrapEngine;
 
 /// Key data capacity of every request: the largest RSN key data.

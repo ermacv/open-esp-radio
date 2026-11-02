@@ -1,5 +1,7 @@
-//! The synchronous AES-128 block primitive under the mode algorithms, and the
-//! engine of a primitive that completes each block at once.
+//! The synchronous AES-128 block primitives under the mode algorithms, and the
+//! engine of a primitive that completes each block at once: an infallible
+//! one ([`Aes128Blocks`], software) and one that may refuse a key or a block
+//! ([`Aes128Engine`], hardware), which every infallible one also is.
 
 use crate::{
     Aes128Key, KeyUnwrap, KeyUnwrapDone, KeyUnwrapRequest, KeyUnwrapResponse,
@@ -68,13 +70,89 @@ impl<P: Aes128Blocks> Aes128Blocks for &mut P {
     }
 }
 
-/// The [`KeyUnwrap`] engine of a synchronous primitive: the operation is
-/// ready on its first poll.
+/// A keyed block engine that may refuse a block: one block in place per call,
+/// finished on return, or the engine's [`BlockError`].
+pub trait BlockEngine {
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError>;
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError>;
+}
+
+/// Every infallible block cipher is an engine that never refuses.
+impl<C: BlockCipher> BlockEngine for C {
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        self.encrypt_block(block);
+        Ok(())
+    }
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        self.decrypt_block(block);
+        Ok(())
+    }
+}
+
+/// An AES-128 block engine that loads a key for a run of blocks and may
+/// refuse the key or a block (a hardware engine's state or timeout).
+pub trait Aes128Engine {
+    /// The engine with its key loaded. Dropping it erases the key from the
+    /// engine.
+    type Keyed<'a>: BlockEngine
+    where
+        Self: 'a;
+
+    fn load(&mut self, key: &Aes128Key) -> Result<Self::Keyed<'_>, BlockError>;
+}
+
+/// Every infallible primitive is an engine that never refuses.
+impl<P: Aes128Blocks> Aes128Engine for P {
+    type Keyed<'a>
+        = P::Keyed<'a>
+    where
+        Self: 'a;
+
+    fn load(&mut self, key: &Aes128Key) -> Result<Self::Keyed<'_>, BlockError> {
+        Ok(self.load_key(key))
+    }
+}
+
+/// Unwrap `request` to completion over `engine`: each issued block is
+/// decrypted at once, and a refused key or block ends the operation with
+/// [`crate::KeyUnwrapError::Engine`]. The key is erased from the request
+/// before the first block and from the engine after the last.
+pub fn unwrap_now<E: Aes128Engine, const N: usize>(
+    engine: &mut E,
+    request: KeyUnwrapRequest<N>,
+) -> KeyUnwrapResponse<N> {
+    let (kek, wrapped) = request.into_parts();
+    let machine = match Rfc3394Unwrap::start(wrapped) {
+        Ok(machine) => machine,
+        Err(refused) => return refused,
+    };
+    let loaded = engine.load(&kek);
+    drop(kek);
+    let mut cipher = match loaded {
+        Ok(cipher) => cipher,
+        Err(error) => return machine.fail(error),
+    };
+    let mut step = machine.next_block();
+    loop {
+        step = match step {
+            Rfc3394Step::Block { mut input, pending } => {
+                match cipher.decrypt(input.as_mut_bytes()) {
+                    Ok(()) => pending.complete(Ok(input)),
+                    Err(error) => pending.complete(Err(error)),
+                }
+            }
+            Rfc3394Step::Complete(response) => return response,
+        };
+    }
+}
+
+/// The [`KeyUnwrap`] engine of a synchronous primitive or engine: the
+/// operation is ready on its first poll.
 pub struct BlockKeyUnwrap<P> {
     blocks: P,
 }
 
-impl<P: Aes128Blocks> BlockKeyUnwrap<P> {
+impl<P: Aes128Engine> BlockKeyUnwrap<P> {
     pub const fn new(blocks: P) -> Self {
         Self { blocks }
     }
@@ -83,33 +161,16 @@ impl<P: Aes128Blocks> BlockKeyUnwrap<P> {
         self.blocks
     }
 
-    /// Unwrap `request` to completion. The key is erased from the request
-    /// before the first block and from the primitive after the last.
+    /// Unwrap `request` to completion ([`unwrap_now`]).
     pub fn unwrap_now<const N: usize>(
         &mut self,
         request: KeyUnwrapRequest<N>,
     ) -> KeyUnwrapResponse<N> {
-        let (kek, wrapped) = request.into_parts();
-        let machine = match Rfc3394Unwrap::start(wrapped) {
-            Ok(machine) => machine,
-            Err(refused) => return refused,
-        };
-        let mut cipher = self.blocks.load_key(&kek);
-        drop(kek);
-        let mut step = machine.next_block();
-        loop {
-            step = match step {
-                Rfc3394Step::Block { mut input, pending } => {
-                    cipher.decrypt_block(input.as_mut_bytes());
-                    pending.complete(Ok(input))
-                }
-                Rfc3394Step::Complete(response) => return response,
-            };
-        }
+        unwrap_now(&mut self.blocks, request)
     }
 }
 
-impl<P: Aes128Blocks, const N: usize> KeyUnwrap<N> for BlockKeyUnwrap<P> {
+impl<P: Aes128Engine, const N: usize> KeyUnwrap<N> for BlockKeyUnwrap<P> {
     type Operation = core::future::Ready<KeyUnwrapDone<Self, N>>;
 
     fn unwrap_key(mut self, request: KeyUnwrapRequest<N>) -> Self::Operation {

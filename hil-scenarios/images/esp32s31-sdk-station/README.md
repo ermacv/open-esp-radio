@@ -5,7 +5,7 @@ The image of the [SDK station](../../sdk-station/README.md),
 [Wi-Fi load](../../wifi-load/README.md) scenarios: an
 application of the entry `oer-espressif` (`sdk/espressif`, features
 `esp32s31`, `wifi`, `console`, `hart1`, `observe` and `udp`). Its boot takes the Wi-Fi
-station and its IP service with the library's defaults and the USB
+station (on the AES accelerator) and its IP service with the library's defaults and the USB
 Serial/JTAG console; the library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
 declares no interrupt, DMA or service task of its own. Its boot is the

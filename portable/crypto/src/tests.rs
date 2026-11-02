@@ -192,6 +192,91 @@ fn an_engine_that_ran_nothing_returns_an_empty_engine_refusal() {
     );
 }
 
+/// A hardware-like engine: RustCrypto blocks until it refuses, either the
+/// key or the block numbered `refuse_block`.
+struct Refusing {
+    refuse_key: Option<crate::block::BlockError>,
+    refuse_block: usize,
+    blocks: usize,
+}
+struct RefusingKeyed<'a> {
+    engine: &'a mut Refusing,
+    cipher: RustKeyed,
+}
+impl crate::block::BlockEngine for RefusingKeyed<'_> {
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+        self.decrypt(block)
+    }
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+        self.engine.blocks += 1;
+        if self.engine.blocks == self.engine.refuse_block {
+            return Err(crate::block::BlockError::Timeout { observation: 1 });
+        }
+        self.cipher.decrypt_block(block);
+        Ok(())
+    }
+}
+impl crate::block::Aes128Engine for Refusing {
+    type Keyed<'a> = RefusingKeyed<'a>;
+    fn load(&mut self, key: &Aes128Key) -> Result<RefusingKeyed<'_>, crate::block::BlockError> {
+        if let Some(error) = self.refuse_key {
+            return Err(error);
+        }
+        let cipher = Rust.load_key(key);
+        Ok(RefusingKeyed {
+            engine: self,
+            cipher,
+        })
+    }
+}
+
+fn rfc3394_request() -> KeyUnwrapRequest<32> {
+    KeyUnwrapRequest::new(
+        Aes128Key::copy_from(&RFC3394_4_1_KEK),
+        KeyData::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap(),
+    )
+}
+
+#[test]
+fn a_fallible_engine_unwraps_in_place_and_its_refusals_are_typed_engine_failures() {
+    let mut engine = Refusing {
+        refuse_key: None,
+        refuse_block: usize::MAX,
+        blocks: 0,
+    };
+    let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
+    assert_eq!(response.plaintext(), Ok(&RFC3394_4_1_KEY_DATA[..]));
+    assert_eq!(engine.blocks, 12, "two 64-bit blocks: six rounds of two");
+
+    let mut engine = Refusing {
+        refuse_key: None,
+        refuse_block: 3,
+        blocks: 0,
+    };
+    let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
+    assert_eq!(
+        response.plaintext(),
+        Err(KeyUnwrapError::Engine(crate::block::BlockError::Timeout {
+            observation: 1
+        }))
+    );
+    assert_eq!(engine.blocks, 3, "no block after the refused one");
+
+    let mut engine = BlockKeyUnwrap::new(Refusing {
+        refuse_key: Some(crate::block::BlockError::InvalidState { observation: 2 }),
+        refuse_block: usize::MAX,
+        blocks: 0,
+    });
+    let response = engine.unwrap_now(rfc3394_request());
+    assert_eq!(
+        response.plaintext(),
+        Err(KeyUnwrapError::Engine(
+            crate::block::BlockError::InvalidState { observation: 2 }
+        ))
+    );
+    assert_eq!(engine.into_blocks().blocks, 0);
+}
+
 #[test]
 fn key_data_refuses_more_than_its_capacity() {
     assert_eq!(

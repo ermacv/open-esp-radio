@@ -11,69 +11,59 @@
     clippy::arithmetic_side_effects
 )]
 
-//! Value-owned Typical AES. No DMA, AES ISR, allocation or software fallback.
-//! Each block yields through an owned timer wait before sampling completion.
-//! SOURCE: TRM_S31_V01_AES §10.5.3 and ESP-IDF 4d80c1b2 aes_ll.h/aes_hal.c.
-//! Neither source establishes a <=20 us bound, so there is no busy settle.
+//! Value-owned Typical AES as a synchronous AES-128 engine
+//! ([`oer_crypto::block::Aes128Engine`]). No DMA, AES ISR, allocation or
+//! software fallback. Each block is written, started and waited for on the
+//! `STATE` flag in place, within the named settle [`BLOCK_SETTLE`]
+//! (`oer_time::settle`); a block still working at its end is a typed
+//! timeout.
+//! SOURCE: TRM_S31_V01_AES §10.5.3 and ESP-IDF 4d80c1b2 aes_ll.h/aes_hal.c
+//! for the sequence; neither states a block latency.
 
-use core::{
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
-};
 use oer_crypto::{
-    KeyUnwrap, KeyUnwrapDone, KeyUnwrapRequest, KeyUnwrapResponse,
-    block::{BlockError, CipherBlock},
-    rfc3394::{Rfc3394Pending, Rfc3394Step, Rfc3394Unwrap},
+    Aes128Key,
+    block::{Aes128Engine, Block, BlockEngine, BlockError},
 };
 use oer_esp32s31_hal::peripherals::aes::{BlockWords, IDLE, KeyWords, Registers, WORK};
-use oer_time::{Clock, Duration, Instant};
+use oer_time::{
+    Clock, Duration,
+    settle::{Settle, SettleLimit, settle},
+};
 use zeroize::Zeroize;
 
-/// Scheduling policy, not a hardware latency claim: sample on timer-woken
-/// 1 us steps and refuse a block still working after 1 ms.
-const SAMPLE_PERIOD: Duration = Duration::from_micros(1);
-const BLOCK_BUDGET: Duration = Duration::from_millis(1);
+/// The named settle of one Typical block, from its start to `STATE`
+/// reading idle.
+///
+/// SOURCE: the `esp32s31-aes-timing` probe on s31-c (leases #225 and #227,
+/// 2026-11-02, 320.3 MHz CPU): the start to `STATE` reading idle, polled
+/// back to back, took 270–279 cycles (0.87 µs) over 256 blocks. The settle
+/// allows ten times that and stays under [`SettleLimit::MAX`].
+pub const BLOCK_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_micros(10)) {
+    Some(limit) => limit,
+    None => panic!("a block's settle lies within the longest a settle may wait"),
+};
 
-/// Constructs a movable wait without borrowing the engine. A concrete
-/// factory type keeps the image's call graph static for stack analysis.
-pub trait WaitFactory {
-    type Wait: Future<Output = ()> + Unpin;
-    fn wait_until(&self, at: Instant) -> Self::Wait;
-}
-
-impl<F, W> WaitFactory for F
-where
-    F: Fn(Instant) -> W,
-    W: Future<Output = ()> + Unpin,
-{
-    type Wait = W;
-    fn wait_until(&self, at: Instant) -> W {
-        self(at)
-    }
-}
-
-/// One client owns the engine by value; a failed engine retains its port
-/// and refuses subsequent requests without touching hardware again.
-pub struct AesKeyUnwrap<R: Registers, C, F> {
+/// The accelerator as one owner's synchronous AES-128 engine, its settles
+/// measured on `clock`. A failed engine retains its port and refuses later
+/// keys without touching the hardware again.
+pub struct AesBlocks<R: Registers, C: Clock> {
     registers: R,
     clock: C,
-    wait: F,
     active: bool,
     poisoned: bool,
 }
 
-impl<R: Registers, C, F> AesKeyUnwrap<R, C, F> {
-    pub const fn new(registers: R, clock: C, wait: F) -> Self {
+impl<R: Registers, C: Clock> AesBlocks<R, C> {
+    pub const fn new(registers: R, clock: C) -> Self {
         Self {
             registers,
             clock,
-            wait,
             active: false,
             poisoned: false,
         }
     }
 
+    /// Erase the key and the blocks and gate the clock.
     fn clear(&mut self) {
         if self.active {
             // SOURCE: aes_ll_reset_register and the AES register reset values.
@@ -88,7 +78,7 @@ impl<R: Registers, C, F> AesKeyUnwrap<R, C, F> {
         }
     }
 
-    fn initialize(&mut self, key: &oer_crypto::Aes128Key) -> Result<(), BlockError> {
+    fn initialize(&mut self, key: &Aes128Key) -> Result<(), BlockError> {
         if self.poisoned {
             return Err(BlockError::Unavailable);
         }
@@ -99,7 +89,6 @@ impl<R: Registers, C, F> AesKeyUnwrap<R, C, F> {
         self.registers.release_parent_resets();
         self.registers.disable_interrupt();
         self.registers.disable_dma();
-        self.registers.decrypt128();
         self.registers.disable_pseudo_rounds();
         self.registers.hold();
         let observation = self.registers.state();
@@ -119,158 +108,93 @@ impl<R: Registers, C, F> AesKeyUnwrap<R, C, F> {
     }
 }
 
-impl<R: Registers, C, F> Drop for AesKeyUnwrap<R, C, F> {
+impl<R: Registers, C: Clock> Drop for AesBlocks<R, C> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-/// A movable operation: even dropping it before its first poll erases KEK;
-/// dropping it during a wait resets/erases the owned block before release.
-pub struct Operation<R: Registers, C, F, W, const N: usize> {
-    engine: Option<AesKeyUnwrap<R, C, F>>,
-    request: Option<KeyUnwrapRequest<N>>,
-    step: Option<Rfc3394Step<N>>,
-    pending: Option<Rfc3394Pending<N>>,
-    wait: Option<W>,
-    end: Instant,
-}
+impl<R: Registers, C: Clock> Aes128Engine for AesBlocks<R, C> {
+    type Keyed<'a>
+        = Keyed<'a, R, C>
+    where
+        Self: 'a;
 
-impl<
-    R: Registers + Unpin,
-    C: Clock + Unpin,
-    F: WaitFactory<Wait = W> + Unpin,
-    W: Future<Output = ()> + Unpin,
-    const N: usize,
-> KeyUnwrap<N> for AesKeyUnwrap<R, C, F>
-{
-    type Operation = Operation<R, C, F, W, N>;
-    fn unwrap_key(self, request: KeyUnwrapRequest<N>) -> Self::Operation {
-        Operation {
-            engine: Some(self),
-            request: Some(request),
-            step: None,
-            pending: None,
-            wait: None,
-            end: Instant::EPOCH,
+    fn load(&mut self, key: &Aes128Key) -> Result<Keyed<'_, R, C>, BlockError> {
+        if let Err(error) = self.initialize(key) {
+            self.clear();
+            return Err(error);
         }
+        Ok(Keyed {
+            engine: self,
+            encrypting: None,
+        })
     }
 }
 
-impl<
-    R: Registers + Unpin,
-    C: Clock + Unpin,
-    F: WaitFactory<Wait = W> + Unpin,
-    W: Future<Output = ()> + Unpin,
-    const N: usize,
-> Operation<R, C, F, W, N>
-{
-    fn finish(
-        &mut self,
-        response: KeyUnwrapResponse<N>,
-    ) -> Poll<KeyUnwrapDone<AesKeyUnwrap<R, C, F>, N>> {
-        match self.engine.take() {
-            Some(mut engine) => {
-                engine.clear();
-                Poll::Ready(KeyUnwrapDone { engine, response })
-            }
-            None => Poll::Pending,
-        }
-    }
-
-    /// Arm/poll a real timer once. If already elapsed, request exactly one
-    /// scheduling turn; never self-wake to repeatedly sample hardware.
-    fn yield_wait(&mut self, cx: &mut Context<'_>) {
-        if let Some(wait) = self.wait.as_mut()
-            && Pin::new(wait).poll(cx).is_ready()
-        {
-            self.wait = None;
-            cx.waker().wake_by_ref();
-        }
-    }
+/// The engine with a key loaded, in the direction of its last block.
+/// Dropping it erases the key and gates the clock.
+pub struct Keyed<'a, R: Registers, C: Clock> {
+    engine: &'a mut AesBlocks<R, C>,
+    encrypting: Option<bool>,
 }
 
-impl<
-    R: Registers + Unpin,
-    C: Clock + Unpin,
-    F: WaitFactory<Wait = W> + Unpin,
-    W: Future<Output = ()> + Unpin,
-    const N: usize,
-> Future for Operation<R, C, F, W, N>
-{
-    type Output = KeyUnwrapDone<AesKeyUnwrap<R, C, F>, N>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        let Some(engine) = this.engine.as_mut() else {
-            return Poll::Pending;
-        };
-        if let Some(request) = this.request.take() {
-            let (kek, wrapped) = request.into_parts();
-            this.step = Some(match Rfc3394Unwrap::start(wrapped) {
-                Ok(machine) => match engine.initialize(&kek) {
-                    Ok(()) => machine.next_block(),
-                    Err(error) => Rfc3394Step::Complete(machine.fail(error)),
-                },
-                Err(response) => Rfc3394Step::Complete(response),
-            });
-            drop(kek);
+impl<R: Registers, C: Clock> Keyed<'_, R, C> {
+    /// Write `block`, start it and wait for it on `STATE` within
+    /// [`BLOCK_SETTLE`]; the output replaces `block`. A refusal poisons the
+    /// engine.
+    fn run(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        let engine = &mut *self.engine;
+        if engine.poisoned {
+            return Err(BlockError::Unavailable);
         }
-        if let Some(wait) = this.wait.as_mut() {
-            if Pin::new(wait).poll(cx).is_pending() {
-                return Poll::Pending;
-            }
-            this.wait = None;
-        }
-        if let Some(pending) = this.pending.take() {
-            let observation = engine.registers.state();
-            let result = if observation == IDLE {
+        let mut words = to_words(block);
+        engine.registers.write_block(&words);
+        words.zeroize();
+        engine.registers.start();
+        let registers = &engine.registers;
+        let mut observation = WORK;
+        let settled = settle(Settle::new(BLOCK_SETTLE, &engine.clock), || {
+            observation = registers.state();
+            (observation != WORK).then_some(())
+        });
+        let result = match settled {
+            Ok(()) if observation == IDLE => {
                 let mut words = engine.registers.read_block();
-                let output = from_words(&words);
+                from_words(&words, block);
                 words.zeroize();
-                Ok(output)
-            } else if observation == WORK && engine.clock.now() < this.end {
-                let next = engine
-                    .clock
-                    .now()
-                    .saturating_add(SAMPLE_PERIOD)
-                    .min(this.end);
-                this.pending = Some(pending);
-                this.wait = Some(engine.wait.wait_until(next));
-                this.yield_wait(cx);
-                return Poll::Pending;
-            } else {
-                engine.poisoned = true;
-                Err(if observation == WORK {
-                    BlockError::Timeout { observation }
-                } else {
-                    BlockError::InvalidState { observation }
-                })
-            };
-            this.step = Some(pending.complete(result));
-        }
-        match this.step.take() {
-            Some(Rfc3394Step::Complete(response)) => this.finish(response),
-            Some(Rfc3394Step::Block { input, pending }) => {
-                let now = engine.clock.now();
-                let (Some(end), Some(next)) = (
-                    now.checked_add(BLOCK_BUDGET),
-                    now.checked_add(SAMPLE_PERIOD),
-                ) else {
-                    return this.finish(pending.fail(BlockError::TimeOverflow));
-                };
-                let mut words = to_words(input.as_bytes());
-                engine.registers.write_block(&words);
-                words.zeroize();
-                drop(input);
-                engine.registers.start();
-                this.end = end;
-                this.pending = Some(pending);
-                this.wait = Some(engine.wait.wait_until(next));
-                this.yield_wait(cx);
-                Poll::Pending
+                return Ok(());
             }
-            None => Poll::Pending,
+            Ok(()) => BlockError::InvalidState { observation },
+            Err(_unsettled) => BlockError::Timeout { observation },
+        };
+        engine.poisoned = true;
+        block.zeroize();
+        Err(result)
+    }
+}
+
+impl<R: Registers, C: Clock> BlockEngine for Keyed<'_, R, C> {
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        if self.encrypting != Some(true) {
+            self.engine.registers.encrypt128();
+            self.encrypting = Some(true);
         }
+        self.run(block)
+    }
+
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        if self.encrypting != Some(false) {
+            self.engine.registers.decrypt128();
+            self.encrypting = Some(false);
+        }
+        self.run(block)
+    }
+}
+
+impl<R: Registers, C: Clock> Drop for Keyed<'_, R, C> {
+    fn drop(&mut self) {
+        self.engine.clear();
     }
 }
 
@@ -284,14 +208,12 @@ fn to_words(bytes: &[u8; 16]) -> BlockWords {
     ]
 }
 
-fn from_words(words: &BlockWords) -> CipherBlock {
-    let mut bytes = [0; 16];
+fn from_words(words: &BlockWords, bytes: &mut Block) {
     for (chunk, word) in bytes.chunks_exact_mut(4).zip(words) {
         for (out, byte) in chunk.iter_mut().zip(word.to_le_bytes()) {
             *out = byte;
         }
     }
-    CipherBlock::new(bytes)
 }
 
 #[cfg(test)]

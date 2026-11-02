@@ -244,19 +244,20 @@ impl Config {
         })
     }
 }
-/// The image's callbacks and the block primitive the station unwraps
-/// EAPOL-Key data with in its step: the software AES-128 block.
+/// The image's callbacks and the engine the station unwraps EAPOL-Key data
+/// with in its step: the AES accelerator, each block waited for on its
+/// `STATE` flag.
 pub(crate) struct CoreCallbacks<C> {
     callbacks: C,
-    blocks: oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+    aes: oer_esp32s31_compose::crypto::AesEngine,
 }
 impl<C: crate::Callbacks> StaCallbacks for CoreCallbacks<C> {
-    type KeyUnwrapBlocks = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    type KeyUnwrapEngine = oer_esp32s31_compose::crypto::AesEngine;
     fn nonce(&mut self) -> [u8; 32] {
         self.callbacks.nonce()
     }
-    fn key_unwrap_blocks(&mut self) -> &mut Self::KeyUnwrapBlocks {
-        &mut self.blocks
+    fn key_unwrap_engine(&mut self) -> &mut Self::KeyUnwrapEngine {
+        &mut self.aes
     }
     fn he_packet_padding(
         &self,
@@ -274,10 +275,13 @@ pub struct Profile<W: Binding> {
     pub(crate) sink: W::Sink,
 }
 impl<W: Binding> Profile<W> {
+    /// The station's profile; `aes` is the accelerator the station unwraps
+    /// its EAPOL-Key data with.
     pub fn new(
         config: &Config,
         address: [u8; 6],
         callbacks: W::Callbacks,
+        aes: oer_esp32s31_compose::crypto::AesEngine,
         observer: W::Observer,
         sink: W::Sink,
     ) -> Result<Self, InitializationError> {
@@ -350,10 +354,7 @@ impl<W: Binding> Profile<W> {
                     oer_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(TX_BLOCK_ACK)
                         .map_err(|_| InitializationError::TxBlockAck)?,
                 ),
-                callbacks: CoreCallbacks {
-                    callbacks,
-                    blocks: oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
-                },
+                callbacks: CoreCallbacks { callbacks, aes },
             },
             observer,
             sink,
