@@ -1,28 +1,46 @@
 //! Hierarchical queues sharing one bounded owner arena.
 //!
-//! Packet and inner-flow metadata live together: an occupied entry always
-//! owns its value. Outer key slots retain selection order, without links
-//! to separately optional owners.
-//! The caller selects an outer key; each take serves the next inner flow.
-//! Operations scan the bounded arena, without inspecting packet bytes.
+//! Each outer key holds a ring of inner flows; each flow is a FIFO of
+//! entries linked by index in the arena, as the archive's indexed lease
+//! arena and round-robin queues did. Publication appends to its flow's
+//! tail (a new flow joins the ring's end); a take serves the head of the
+//! ring's first flow and moves that flow to the ring's end while it holds
+//! more. Neither moves an owner: no operation shifts slots or rescans the
+//! arena per packet. Outer key slots keep their selection order.
 
-struct Entry<K, T, F> {
-    key: K,
-    flow: F,
+/// One queued owner and the next entry of its flow, by arena index.
+struct Entry<T> {
     value: T,
-    turn: usize,
-    first: bool,
+    next: Option<u8>,
+}
+
+/// One inner flow: its FIFO's ends and the next flow of its key's ring.
+struct Flow<F> {
+    flow: F,
+    head: u8,
+    tail: u8,
+    next: Option<u8>,
+}
+
+/// One outer key: its ring of flows and its backlog.
+struct Key<K> {
+    key: K,
+    first: u8,
+    last: u8,
+    len: usize,
 }
 
 /// One owner arena, with outer queues of round-robin inner FIFOs.
 ///
 /// A free owner slot always permits publication, including a new outer key
-/// or flow. Default `F = ()` gives one FIFO per key. Entries remain in
-/// admission order; bounded flow ranks select the next inner FIFO.
+/// or flow. Default `F = ()` gives one FIFO per key. Each take serves the
+/// next inner flow of its key in turn.
 /// This policy does not account for bytes, airtime or admission fairness.
 pub struct TxQueues<K, T, const CAPACITY: usize, F = ()> {
-    entries: [Option<Entry<K, T, F>>; CAPACITY],
-    keys: [Option<K>; CAPACITY],
+    entries: [Option<Entry<T>>; CAPACITY],
+    flows: [Option<Flow<F>>; CAPACITY],
+    keys: [Option<Key<K>>; CAPACITY],
+    len: usize,
 }
 
 impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACITY, F> {
@@ -32,133 +50,207 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACI
     /// use oer_portable_embassy_net::datapath::TxQueues;
     /// let _ = TxQueues::<u8, u8, 0>::new();
     /// ```
+    /// ```compile_fail,E0080
+    /// use oer_portable_embassy_net::datapath::TxQueues;
+    /// let _ = TxQueues::<u8, u8, 257>::new();
+    /// ```
     pub const fn new() -> Self {
         const {
             if CAPACITY == 0 {
                 panic!("TX queues need at least one owner slot");
             }
+            if CAPACITY > u8::MAX as usize + 1 {
+                panic!("TX queues index their owner slots by u8");
+            }
         }
         Self {
             entries: [const { None }; CAPACITY],
-            keys: [None; CAPACITY],
+            flows: [const { None }; CAPACITY],
+            keys: [const { None }; CAPACITY],
+            len: 0,
         }
     }
 
     pub fn len(&self) -> usize {
-        self.entries.iter().flatten().count()
+        self.len
     }
     pub fn is_empty(&self) -> bool {
-        self.entries.iter().all(Option::is_none)
+        self.len == 0
     }
     pub fn is_full(&self) -> bool {
-        self.entries.iter().all(Option::is_some)
+        self.len >= CAPACITY
     }
 
     /// Total frames across every flow of the selected outer key.
     pub fn len_for(&self, key: K) -> usize {
-        self.entries
+        self.key(key).map_or(0, |(_, slot)| slot.len)
+    }
+
+    /// The key's slot index and slot.
+    fn key(&self, key: K) -> Option<(usize, &Key<K>)> {
+        self.keys.iter().enumerate().find_map(|(index, slot)| {
+            slot.as_ref()
+                .filter(|slot| slot.key == key)
+                .map(|slot| (index, slot))
+        })
+    }
+
+    /// The first free slot of `slots`, as an arena index.
+    fn free<S>(slots: &[Option<S>]) -> Option<u8> {
+        slots
             .iter()
-            .flatten()
-            .filter(|entry| entry.key == key)
-            .count()
+            .position(Option::is_none)
+            .and_then(|index| u8::try_from(index).ok())
     }
 
     /// Append to one flow, returning the unchanged owner on exhaustion.
-    /// Stable queue slots preserve outer cursor order across packet removal.
     pub fn push_flow(&mut self, key: K, flow: F, value: T) -> Result<(), T> {
-        let Some(queue_slot) = self
-            .keys
-            .iter_mut()
-            .filter(|slot| slot.is_none_or(|existing| existing == key))
-            .min_by_key(|slot| slot.is_none())
-        else {
+        let Some(entry) = Self::free(&self.entries) else {
             return Err(value);
         };
-        let existing = self
-            .entries
-            .iter()
-            .flatten()
-            .find(|entry| entry.key == key && entry.flow == flow);
-        let first = existing.is_none();
-        // One first marker per flow; new flows follow every existing turn.
-        let turn = existing.map_or_else(
-            || {
-                self.entries
-                    .iter()
-                    .flatten()
-                    .filter(|entry| entry.key == key && entry.first)
-                    .count()
-            },
-            |entry| entry.turn,
-        );
-        let Some(slot) = self.entries.iter_mut().find(|slot| slot.is_none()) else {
+        // A free entry proves fewer flows and keys than entries: a new
+        // flow and a new key each find a free slot.
+        let existing = self.key(key).map(|(index, slot)| (index, slot.first));
+        let mut found = None;
+        if let Some((_, first)) = existing {
+            let mut at = Some(first);
+            while let Some(index) = at {
+                let Some(candidate) = self.flows.get(usize::from(index)).and_then(Option::as_ref)
+                else {
+                    break;
+                };
+                if candidate.flow == flow {
+                    found = Some(index);
+                    break;
+                }
+                at = candidate.next;
+            }
+        }
+        let new_flow = if found.is_none() {
+            let Some(index) = Self::free(&self.flows) else {
+                return Err(value);
+            };
+            Some(index)
+        } else {
+            None
+        };
+        let new_key = if existing.is_none() {
+            let Some(index) = self.keys.iter().position(Option::is_none) else {
+                return Err(value);
+            };
+            Some(index)
+        } else {
+            None
+        };
+        let Some(entry_slot) = self.entries.get_mut(usize::from(entry)) else {
             return Err(value);
         };
-        *queue_slot = Some(key);
-        *slot = Some(Entry {
-            key,
-            flow,
-            value,
-            turn,
-            first,
-        });
+        *entry_slot = Some(Entry { value, next: None });
+        if let Some(index) = found {
+            // Link behind the flow's tail.
+            let tail = self
+                .flows
+                .get_mut(usize::from(index))
+                .and_then(Option::as_mut)
+                .map(|flow| core::mem::replace(&mut flow.tail, entry));
+            if let Some(last) = tail
+                .and_then(|tail| self.entries.get_mut(usize::from(tail)))
+                .and_then(Option::as_mut)
+            {
+                last.next = Some(entry);
+            }
+        } else if let Some(index) = new_flow {
+            if let Some(slot) = self.flows.get_mut(usize::from(index)) {
+                *slot = Some(Flow {
+                    flow,
+                    head: entry,
+                    tail: entry,
+                    next: None,
+                });
+            }
+            match (existing, new_key) {
+                (Some((key_index, _)), _) => {
+                    // The new flow joins the end of its key's ring.
+                    let last = self
+                        .keys
+                        .get_mut(key_index)
+                        .and_then(Option::as_mut)
+                        .map(|slot| core::mem::replace(&mut slot.last, index));
+                    if let Some(Some(Some(last))) =
+                        last.map(|last| self.flows.get_mut(usize::from(last)).map(Option::as_mut))
+                    {
+                        last.next = Some(index);
+                    }
+                }
+                (None, Some(key_index)) => {
+                    if let Some(slot) = self.keys.get_mut(key_index) {
+                        *slot = Some(Key {
+                            key,
+                            first: index,
+                            last: index,
+                            len: 0,
+                        });
+                    }
+                }
+                (None, None) => {}
+            }
+        }
+        let key_index = existing.map(|(index, _)| index).or(new_key);
+        if let Some(slot) = key_index
+            .and_then(|index| self.keys.get_mut(index))
+            .and_then(Option::as_mut)
+        {
+            // At most CAPACITY entries: the backlog fits.
+            slot.len = slot.len.saturating_add(1);
+        }
+        self.len = self.len.saturating_add(1);
         Ok(())
     }
 
-    /// Serve the oldest packet of the next flow, then rotate that flow.
-    /// Shifting the remaining slots preserves admission order for every key.
+    /// Serve the oldest packet of the key's next flow, then move that flow
+    /// to the end of the key's ring while it holds more.
     pub fn pop(&mut self, key: K) -> Option<T> {
-        let turn = self
-            .entries
-            .iter()
-            .flatten()
-            .filter(|entry| entry.key == key)
-            .map(|entry| entry.turn)
-            .min()?;
-        let flow_count = self
-            .entries
-            .iter()
-            .flatten()
-            .filter(|entry| entry.key == key && entry.first)
-            .count();
-        let mut slots = self.entries.iter_mut();
-        let mut hole = slots.find(|slot| {
-            slot.as_ref()
-                .is_some_and(|entry| entry.key == key && entry.turn == turn)
-        })?;
-        let entry = hole.take()?;
-        for next in slots {
-            core::mem::swap(hole, next);
-            hole = next;
-        }
-        if let Some(next) = self
-            .entries
-            .iter_mut()
-            .flatten()
-            .find(|next| next.key == key && next.flow == entry.flow)
-        {
-            next.first = true;
-        }
-        for next in self
-            .entries
-            .iter_mut()
-            .flatten()
-            .filter(|next| next.key == key)
-        {
-            if next.flow == entry.flow {
-                // The selected entry proves flow_count >= 1. Ranks remain
-                // below the number of flows, which cannot exceed CAPACITY.
-                next.turn = flow_count.saturating_sub(1);
-            } else if next.turn > turn {
-                // This is a bounded rank decrement, never a truncated value.
-                next.turn = next.turn.saturating_sub(1);
+        let (key_index, first) = self.key(key).map(|(index, slot)| (index, slot.first))?;
+        let flow = self.flows.get_mut(usize::from(first))?.as_mut()?;
+        let entry_index = flow.head;
+        let entry = self.entries.get_mut(usize::from(entry_index))?.take()?;
+        let rest = flow.next;
+        let emptied = match entry.next {
+            Some(next) => {
+                flow.head = next;
+                false
             }
-        }
-        if !self.entries.iter().flatten().any(|next| next.key == key)
-            && let Some(slot) = self.keys.iter_mut().find(|slot| **slot == Some(key))
-        {
+            None => true,
+        };
+        if emptied && let Some(slot) = self.flows.get_mut(usize::from(first)) {
             *slot = None;
         }
+        let key_slot = self.keys.get_mut(key_index)?;
+        let done = {
+            let slot = key_slot.as_mut()?;
+            slot.len = slot.len.saturating_sub(1);
+            slot.len == 0
+        };
+        if done {
+            *key_slot = None;
+        } else if let Some(next) = rest {
+            let slot = key_slot.as_mut()?;
+            slot.first = next;
+            if !emptied {
+                // The served flow moves behind the ring's last.
+                let last = core::mem::replace(&mut slot.last, first);
+                if let Some(Some(last)) = self.flows.get_mut(usize::from(last)).map(Option::as_mut)
+                {
+                    last.next = Some(first);
+                }
+                if let Some(Some(served)) =
+                    self.flows.get_mut(usize::from(first)).map(Option::as_mut)
+                {
+                    served.next = None;
+                }
+            }
+        }
+        self.len = self.len.saturating_sub(1);
         Some(entry.value)
     }
 
@@ -167,18 +259,22 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACI
         self.keys
             .iter()
             .flatten()
-            .filter_map(|key| self.head(*key).map(|(value, _)| (*key, value)))
+            .filter_map(|slot| self.head_of(slot).map(|value| (slot.key, value)))
+    }
+
+    /// The value at the head of `slot`'s first flow.
+    fn head_of(&self, slot: &Key<K>) -> Option<&T> {
+        let flow = self.flows.get(usize::from(slot.first))?.as_ref()?;
+        self.entries
+            .get(usize::from(flow.head))?
+            .as_ref()
+            .map(|entry| &entry.value)
     }
 
     /// Borrow the next selected inner-flow packet and total outer backlog.
     pub fn head(&self, key: K) -> Option<(&T, usize)> {
-        let entry = self
-            .entries
-            .iter()
-            .flatten()
-            .filter(|entry| entry.key == key)
-            .min_by_key(|entry| entry.turn)?;
-        Some((&entry.value, self.len_for(key)))
+        let (_, slot) = self.key(key)?;
+        Some((self.head_of(slot)?, slot.len))
     }
 
     /// First nonempty key strictly after `after`, wrapping to the lowest key.
@@ -186,14 +282,12 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACI
     where
         K: Ord,
     {
-        let entry = self.entries.iter().flatten().min_by_key(|entry| {
-            (
-                after.is_some_and(|after| entry.key <= after),
-                entry.key,
-                entry.turn,
-            )
-        })?;
-        Some((entry.key, &entry.value, self.len_for(entry.key)))
+        let slot = self
+            .keys
+            .iter()
+            .flatten()
+            .min_by_key(|slot| (after.is_some_and(|after| slot.key <= after), slot.key))?;
+        Some((slot.key, self.head_of(slot)?, slot.len))
     }
 
     /// Enumerate outer keys, once per key regardless of its inner flow count.
@@ -203,7 +297,7 @@ impl<K: Copy + Eq, T, const CAPACITY: usize, F: Copy + Eq> TxQueues<K, T, CAPACI
             .keys
             .iter()
             .enumerate()
-            .filter_map(|(slot, key)| key.map(|key| (slot, key)))
+            .filter_map(|(slot, key)| key.as_ref().map(|key| (slot, key.key)))
             .min_by_key(|(slot, _)| (*slot < start, *slot))?;
         // The cursor is modular, including externally supplied values.
         *cursor = slot.wrapping_add(1).checked_rem(CAPACITY)?;
