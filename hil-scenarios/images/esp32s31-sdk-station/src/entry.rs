@@ -59,7 +59,9 @@ static EXCHANGES: Channel<Exchange, Exchanged, 1> = Channel::new();
 oer_espressif::entry!(boot, hart1 = network);
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
-    let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?;
+    // The load scenario measures the station at HT 40 MHz where the stand's
+    // access point offers it.
+    let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?.with_ht40();
     let (station, net) = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let exchanges = EXCHANGES.application(&mut boot)?;

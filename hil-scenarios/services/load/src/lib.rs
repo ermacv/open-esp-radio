@@ -653,15 +653,16 @@ pub struct RxLink {
     pub containment_unknown: u32,
 }
 
-/// The station's single data MPDU transmissions that ended: by the rate of
-/// each one's last transmission, the transmissions they took, and how they
-/// ended. Aggregates count in [`TxAmpdu`] instead.
+/// The station's data MPDUs sent, by rate, and its single data MPDU
+/// transmissions that ended: the transmissions they took and how they
+/// ended. The aggregates themselves count in [`TxAmpdu`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct TxLink {
-    /// Ended MPDUs by their last transmission's rate; one that reports no
-    /// transmission counts as unknown.
+    /// A single MPDU by its last transmission's rate, one that reports no
+    /// transmission as unknown; an aggregate's subframes by the rate of
+    /// the aggregate's last transmission.
     pub mpdus: Rates,
-    /// Their transmissions, retries included.
+    /// The single MPDUs' transmissions, retries included.
     pub transmissions: u32,
     pub delivered: u32,
     pub ack_timeouts: u32,

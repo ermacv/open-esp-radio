@@ -517,7 +517,7 @@ impl core::fmt::Display for StationRx {
 /// What the station's transmit agreements settled: one data aggregate's
 /// members by outcome, or one BlockAckReq the station sent
 /// (`members` zero and `block_ack_request` set).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StationTxAmpdu {
     /// The aggregate's members: the subframes it went with.
     pub members: u8,
@@ -531,6 +531,22 @@ pub struct StationTxAmpdu {
     pub refused: bool,
     /// One BlockAckReq the station sent, instead of an aggregate.
     pub block_ack_request: bool,
+    /// The rate the aggregate's last transmission went at.
+    pub rate: RateClass,
+}
+
+impl Default for StationTxAmpdu {
+    fn default() -> Self {
+        Self {
+            members: 0,
+            acknowledged: 0,
+            retried: 0,
+            dropped: 0,
+            refused: false,
+            block_ack_request: false,
+            rate: RateClass::Unknown,
+        }
+    }
 }
 
 impl Event for StationTxAmpdu {
@@ -540,22 +556,23 @@ impl Event for StationTxAmpdu {
     fn encode(&self) -> [u32; 2] {
         [
             u32::from_le_bytes([self.members, self.acknowledged, self.retried, self.dropped]),
-            u32::from(self.refused) | (u32::from(self.block_ack_request) << 1),
+            // The rate's word takes 18 bits above the two flags.
+            u32::from(self.refused)
+                | (u32::from(self.block_ack_request) << 1)
+                | (self.rate.encode() << 2),
         ]
     }
 
-    fn decode([counts, flags]: [u32; 2]) -> Option<Self> {
-        if flags > 0b11 {
-            return None;
-        }
+    fn decode([counts, word]: [u32; 2]) -> Option<Self> {
         let [members, acknowledged, retried, dropped] = counts.to_le_bytes();
         Some(Self {
             members,
             acknowledged,
             retried,
             dropped,
-            refused: flags & 1 != 0,
-            block_ack_request: flags & 0b10 != 0,
+            refused: word & 1 != 0,
+            block_ack_request: word & 0b10 != 0,
+            rate: RateClass::decode(word >> 2)?,
         })
     }
 }
@@ -567,11 +584,12 @@ impl core::fmt::Display for StationTxAmpdu {
         }
         write!(
             f,
-            "station.tx ampdu {} acked {} retried {} dropped {}{}",
+            "station.tx ampdu {} acked {} retried {} dropped {} {:?}{}",
             self.members,
             self.acknowledged,
             self.retried,
             self.dropped,
+            self.rate,
             if self.refused { " refused" } else { "" }
         )
     }
@@ -748,6 +766,7 @@ impl<O: oer_trace::Observer> oer_events::EventSink<oer_ieee80211_core_roles_sta:
                 dropped: settled.dropped,
                 refused: settled.refused,
                 block_ack_request: false,
+                rate: RateClass::of(settled.rate),
             }),
             StaEvent::BlockAckRequestSent => self.report_tx(StationTxAmpdu {
                 block_ack_request: true,
@@ -771,6 +790,11 @@ mod tests {
             dropped: 1,
             refused: false,
             block_ack_request: false,
+            rate: RateClass::Ht {
+                mcs: 7,
+                width40: true,
+                short_gi: true,
+            },
         };
         assert_eq!(StationTxAmpdu::decode(settled.encode()), Some(settled));
         let bar = StationTxAmpdu {
@@ -778,7 +802,8 @@ mod tests {
             ..StationTxAmpdu::default()
         };
         assert_eq!(StationTxAmpdu::decode(bar.encode()), Some(bar));
-        assert_eq!(StationTxAmpdu::decode([0, 4]), None);
+        // A word above the flags that names no rate is refused.
+        assert_eq!(StationTxAmpdu::decode([0, 5 << 2]), None);
     }
 
     #[test]

@@ -1661,6 +1661,14 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
             expired: 0,
         })
     );
+    // Its settlement names the rate the aggregate went at.
+    assert!(events.0.iter().any(|event| matches!(
+        event,
+        StaEvent::AggregateSettled(settled)
+            if settled.members == 3
+                && settled.acknowledged == 2
+                && settled.rate == Some(PhyRate::Legacy(LegacyRate::Ofdm6M))
+    )));
     // One subframe's octets: only 2 fits a length below two of them.
     let short = aggregate(data.poll_attempt(|_| window(2, 8, 200), &mut events));
     assert_eq!(short.context.len(), 1);

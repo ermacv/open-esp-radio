@@ -664,9 +664,21 @@ impl<
             .first()
             .and_then(|place| self.members.get(*place))
             .map(|member| BlockAckMarks::new(tid, member.sequence));
+        let aired = match &completion {
+            Some(TxOutcome::Ended(
+                AggregateEnd::Delivered { air, .. } | AggregateEnd::AckTimeout(air),
+            )) => Some(air),
+            Some(TxOutcome::Ended(
+                AggregateEnd::CtsTimeout(air)
+                | AggregateEnd::ContentionLimit(air)
+                | AggregateEnd::AirDenied { air, .. },
+            )) => air.as_ref(),
+            _ => None,
+        };
         let mut settlement = crate::events::AggregateSettled {
             members: u8::try_from(places.len()).unwrap_or(u8::MAX),
             refused: completion.is_none(),
+            rate: aired.map(|air| air.rate),
             ..crate::events::AggregateSettled::default()
         };
         // From the back: each member settles with its memory, waiting at its
