@@ -8,6 +8,7 @@
 //! interrupt, and as the Wi-Fi station's engine waits (timer-woken samples).
 //! See the README.
 
+#[cfg(any(target_arch = "riscv32", test))]
 mod ops;
 
 #[cfg(target_arch = "riscv32")]

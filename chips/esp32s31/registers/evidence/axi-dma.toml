@@ -1,0 +1,25 @@
+schema = 1
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_AXI_DMA"
+description = "SOURCE: ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d pinned in vendor/artifacts.toml, components/soc/esp32s31/register/soc/axi_dma_reg.h (sha256 61f69749d2057253f3f7c5500e9a57016a78edce7444c0c113e095f77c31e9c8) and axi_dma_struct.h (sha256 b642e76868647064dcd7c64f822021da59b33fecd0e057756b953bb8fac05c6a), Apache-2.0; components/soc/esp32s31/register/soc/reg_base.h:15 supplies DR_REG_AXI_DMA_BASE=0x20348000. Channel 0's register offsets, field bit positions, access classes and reset values, the common memory-range and miscellaneous configuration words, three IN and three OUT channels (axi_dma_dev_t, 0x2e0 bytes)."
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_AXI_DMA_LL"
+description = "SOURCE: ESP-IDF 4d80c1b2, components/esp_hal_dma/esp32s31/include/hal/axi_dma_ll.h:42-83,165-300,426-575 and gdma_ll.h:124-165: the register clock (MISC_CONF.CLK_EN), the default access ranges (internal 0x2F000000-0x2F07FFFF, external 0x40000000-0x53FFFFFF), the channel reset as a set-then-clear of IN/OUT_RST, descriptor link address, START/STOP strobes, peripheral connection through PERI_IN/OUT_SEL with MEM_TRANS_EN cleared and 0x3F as disconnected, and the AXI-PDMA bus clock and reset in HP_SYS_CLKRST.AXI_PDMA_CTRL0."
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_GDMA_AES_TRIGGER"
+description = "SOURCE: ESP-IDF 4d80c1b2, components/esp_hal_dma/esp32s31/include/hal/gdma_channel.h:31,63: the AES peripheral's GDMA trigger is 4 (SOC_GDMA_TRIG_PERIPH_AES0) on the AXI bus."
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_AXI_DMA_DESCRIPTOR"
+description = "SOURCE: ESP-IDF 4d80c1b2, components/esp_hal_dma/include/hal/dma_types.h:38-57 and gdma_ll.h:58 (GDMA_LL_AXI_DESC_ALIGNMENT 8), mbedtls/port/include/esp_crypto_dma.h:34-37: the AXI-DMA descriptor (dma_descriptor_align8_t), 16 bytes aligned to 8: word 0 SIZE[11:0], LENGTH[23:12], ERR_EOF[28], SUC_EOF[30], OWNER[31] (1 = DMA), then the buffer and next-descriptor addresses; at most 4095 bytes per descriptor."
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_AES_DMA"
+description = "SOURCE: ESP-IDF 4d80c1b2, components/esp_hal_security/aes_hal.c:53-94, components/esp_hal_security/esp32s31/include/hal/aes_ll.h:161-255, components/mbedtls/port/aes/dma/esp_aes_dma_core.c:231-274,632-774, esp_aes_gdma_impl.c:12-23 and components/mbedtls/port/crypto_shared_gdma/esp_crypto_shared_gdma.c:64-180: the DMA-AES sequence. Block mode and, for CBC/CTR, IV and INC_SEL; the TX and RX AXI-DMA channels connected to the AES trigger, both reset, linked and started; DMA_ENABLE set, BLOCK_NUM written and TRIGGER strobed; completion when STATE reads DONE and, with internal memory outside L1 cache (SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE undefined on the S31), when the last output descriptor's OWNER reads 0; then DMA_EXIT and DMA_ENABLE cleared. INT_ENA raises the AES interrupt at completion; ESP-IDF waits on it only above 2000 bytes."
+
+[[sources]]
+id = "ESP_IDF_4D80C1B2_S31_SOC_CAPS_CACHE"
+description = "SOURCE: ESP-IDF 4d80c1b2, components/soc/esp32s31/include/soc/soc_caps.h:174-177,398-404: the S31 defines no SOC_CACHE_INTERNAL_MEM_VIA_L1CACHE; internal SRAM is not reached through the L1 cache, so DMA buffers and descriptors in internal SRAM need no cache write-back or invalidation (the cache sync esp_aes_dma_core.c:752-772 performs is compiled out)."
