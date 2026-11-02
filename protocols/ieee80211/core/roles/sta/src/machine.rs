@@ -1015,15 +1015,18 @@ const QOS_SEQUENCES: [SequenceCounter; 8] = [SequenceCounter::new(SequenceNumber
 /// The provider owns its entropy state; each nonce request must be fresh for
 /// protected handshakes and PMF. Open-only compositions never request one.
 pub trait StaCallbacks {
-    /// The synchronous AES-128 engine the station unwraps EAPOL-Key data
-    /// with (RFC 3394), in its step: the composition chooses it, a software
-    /// block or the chip's accelerator. A refused key or block fails the
-    /// unwrap like corrupted key data.
-    type KeyUnwrapEngine: oer_crypto::block::Aes128Engine;
+    /// The synchronous AES-128 engine of every AES operation of the station,
+    /// in its step: the EAPOL-Key data unwrap (RFC 3394), the AES-CMAC
+    /// EAPOL-Key MIC (PSK-SHA256, SAE), and the CCMP and BIP of protected
+    /// management frames. The composition chooses it, a software block or
+    /// the chip's accelerator. A refused key or block fails the operation as
+    /// a handled error: an unwrap like corrupted key data, a received
+    /// management frame like one that does not verify.
+    type AesEngine: oer_crypto::block::Aes128Engine;
     /// Fresh randomness for each handshake and PMF SA Query procedure.
     fn nonce(&mut self) -> [u8; 32];
-    /// The engine for the next key-data unwrap.
-    fn key_unwrap_engine(&mut self) -> &mut Self::KeyUnwrapEngine;
+    /// The engine for the next AES operation.
+    fn aes_engine(&mut self) -> &mut Self::AesEngine;
     /// Composition policy for the peer's complete HE Capabilities element.
     fn he_packet_padding(&self, capability: &[u8]) -> HePacketPadding;
 }
@@ -2208,15 +2211,16 @@ impl ConnectedRsn {
     }
 
     #[inline(never)]
-    fn receive(
+    fn receive<E: oer_crypto::block::Aes128Engine>(
         &mut self,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
+        engine: &mut E,
     ) -> Result<(), StaRxError> {
         if self.fault.is_some() {
             return Ok(());
         }
-        match self.receive_eapol(eapol, protection) {
+        match self.receive_eapol(eapol, protection, engine) {
             Err(error) => match connected_rsn_fault(error) {
                 Some(reason) => {
                     self.fault = Some(reason);
@@ -2228,10 +2232,11 @@ impl ConnectedRsn {
         }
     }
 
-    fn receive_eapol(
+    fn receive_eapol<E: oer_crypto::block::Aes128Engine>(
         &mut self,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
+        engine: &mut E,
     ) -> Result<(), RsnConnectedSupplicantError> {
         use oer_ieee80211_core_security_rsn::EapolKeyMessage;
         let message = eapol
@@ -2239,9 +2244,9 @@ impl ConnectedRsn {
             .map_err(RsnConnectedSupplicantError::from)?
             .message();
         let action = match (message, protection) {
-            (EapolKeyMessage::PairwiseMessage3, _) => self.supplicant.on_message3(eapol),
+            (EapolKeyMessage::PairwiseMessage3, _) => self.supplicant.on_message3(eapol, engine),
             (EapolKeyMessage::GroupMessage1, EapolProtection::Pairwise) => {
-                self.supplicant.on_group_message1(eapol)
+                self.supplicant.on_group_message1(eapol, engine)
             }
             _ => Err(RsnConnectedSupplicantError::UnsupportedMessage),
         };
@@ -3926,7 +3931,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             State::Handshake(handshake) if self.keys.installed() => {
                 match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
                     HandshakeStep::AwaitInstalled(request, replay, protection) => {
-                        finish_handshake_install(handshake, request, replay, protection)
+                        finish_handshake_install(
+                            handshake,
+                            request,
+                            replay,
+                            protection,
+                            self.config.callbacks.aes_engine(),
+                        )
                     }
                     step => {
                         handshake.step = step;
@@ -4931,7 +4942,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         self.handshake_eapol(handshake, now, eapol, protection)
                     }
                     State::Connected(connected) => {
-                        Self::connected_eapol(connected, eapol, protection)?;
+                        Self::connected_eapol(
+                            connected,
+                            eapol,
+                            protection,
+                            self.config.callbacks.aes_engine(),
+                        )?;
                         Change::Keep
                     }
                     _ => Change::Keep,
@@ -5083,7 +5099,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 };
                 let disconnect = if protected {
                     handshake.management.as_mut().and_then(|management| {
-                        match management.receive(frame, self.config.address, handshake.bssid) {
+                        match management.receive(
+                            self.config.callbacks.aes_engine(),
+                            frame,
+                            self.config.address,
+                            handshake.bssid,
+                        ) {
                             Some(ManagementEvent::Disconnect(reason)) => Some(reason),
                             _ => None,
                         }
@@ -5123,7 +5144,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             .and_then(|rsn| rsn.management.as_mut())
         {
             Some(management) => {
-                match management.receive(frame, self.config.address, connected.bssid) {
+                match management.receive(
+                    self.config.callbacks.aes_engine(),
+                    frame,
+                    self.config.address,
+                    connected.bssid,
+                ) {
                     Some(ManagementEvent::Disconnect(reason)) => Some(reason),
                     Some(ManagementEvent::Query(query)) => {
                         management.received_query(query);
@@ -5207,11 +5233,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
+        engine: &mut C::AesEngine,
     ) -> Result<(), StaRxError> {
         let Some(rsn) = connected.rsn.as_mut() else {
             return Err(oer_ieee80211_core_upper_mac::receive::RxDropReason::Protection.into());
         };
-        rsn.receive(eapol, protection)
+        rsn.receive(eapol, protection, engine)
     }
 
     fn configure(&mut self, receive: StationReceive<K>) -> Option<Owed<'id, T, K>> {
@@ -5450,11 +5477,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         }
         // Message 3's key data is unwrapped here, in the step that takes it.
         let received = match handshake.supplicant.as_mut() {
-            Some(supplicant) => supplicant.on_frame(
-                eapol,
-                &handshake.pmk,
-                self.config.callbacks.key_unwrap_engine(),
-            ),
+            Some(supplicant) => {
+                supplicant.on_frame(eapol, &handshake.pmk, self.config.callbacks.aes_engine())
+            }
             None => Err(RsnStaSupplicantError::UnexpectedAction.into()),
         };
         let action = match received {
@@ -5569,7 +5594,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 match self.begin_group_change(request.group(), events) {
                     Ok(ActionProgress::Transition) => {
                         return (
-                            finish_handshake_install(handshake, request, replay, protection),
+                            finish_handshake_install(
+                                handshake,
+                                request,
+                                replay,
+                                protection,
+                                self.config.callbacks.aes_engine(),
+                            ),
                             ActionProgress::Transition,
                         );
                     }
@@ -6126,7 +6157,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     if let Err(reason) = rsn.prepare_install(
                         frame,
                         protection,
-                        self.config.callbacks.key_unwrap_engine(),
+                        self.config.callbacks.aes_engine(),
                         events,
                     ) {
                         return Some(Err(reason));
@@ -7158,17 +7189,18 @@ fn finish_connected_install<T: StaTokens, K>(
     }
 }
 
-fn finish_handshake_install<T: StaTokens, K>(
+fn finish_handshake_install<T: StaTokens, K, E: oer_crypto::block::Aes128Engine>(
     handshake: &mut Handshake<T, K>,
     request: RsnStaRetryInstall,
     replay: CcmpRxReplayEpoch,
     protection: EapolProtection,
+    engine: &mut E,
 ) -> Change<T, K> {
     if let (Some(management), Some(igtk)) = (&mut handshake.management, request.igtk()) {
         management.install_igtk(igtk);
     }
     match handshake.supplicant().and_then(|supplicant| {
-        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY>(request, true)
+        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request, true, engine)
     }) {
         Ok(RsnStaReady::Transmit(message)) => Change::Confirm {
             replay,

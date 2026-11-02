@@ -966,7 +966,11 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
                 air.associations
                     .get()
                     .get(identity.0.role)
-                    .seal(&material.key, &mut wire)
+                    .seal(
+                        &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                        &material.key,
+                        &mut wire,
+                    )
                     .map_err(|_| ModelFault)
             })();
             air.key_installations.set(installations);
@@ -2034,7 +2038,11 @@ impl ModelAir {
             self.associations
                 .get()
                 .get(identity.role)
-                .open(&material.key, &mut plaintext)
+                .open(
+                    &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                    &material.key,
+                    &mut plaintext,
+                )
                 .map_err(ModelCcmpError::Authentication)?;
             Ok(plaintext)
         })();

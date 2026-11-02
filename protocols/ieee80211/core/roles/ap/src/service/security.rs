@@ -2,6 +2,7 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
@@ -299,7 +300,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             return Err(ApServiceError::SecurityModeMismatch.into());
         }
         let (authenticator, pmk) = self.authenticator_and_pmk(peer)?;
-        let step = match authenticator.on_frame(pmk, frame) {
+        let step = match authenticator.on_frame(pmk, frame, &mut SoftwareAes128) {
             Ok(step) => step,
             // Unsupported, stale and otherwise unauthenticated EAPOL is a
             // peer-local receive reject, not a role-control failure.
@@ -322,7 +323,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                     .authenticator
                     .as_mut()
                     .ok_or(ApServiceError::WrongPeerPhase)?
-                    .complete_message3(preparation, &plain)?;
+                    .complete_message3(preparation, &plain, &mut SoftwareAes128)?;
                 // Valid M2 closes the Message-1 response window. Message 3
                 // receives a fresh schedule only after its own terminal TX
                 // completion.
@@ -354,7 +355,9 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             return Err(ApWpa2Error::MissingPairwiseKey);
         }
         let plain = self.message3_key_data(peer)?;
-        let frame = self.authenticator(peer)?.message3(transmit, &plain)?;
+        let frame = self
+            .authenticator(peer)?
+            .message3(transmit, &plain, &mut SoftwareAes128)?;
         self.bind_eapol(frame, transmit)
     }
 

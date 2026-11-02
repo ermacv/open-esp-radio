@@ -99,7 +99,8 @@ fn associated<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
             .unwrap();
     let m3 = RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
     (world, ptk, eapol_frame(m3.as_bytes()))
 }
 
@@ -120,7 +121,8 @@ fn rekey(ptk: &Ptk, counter: u64, gtk: u8, igtk: u8) -> Vec<u8> {
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, counter, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(ptk);
+            .authenticate(ptk, &mut SoftwareAes128)
+            .unwrap();
     protected_received(eapol_frame(message.as_bytes()), counter)
 }
 
@@ -205,6 +207,29 @@ fn only_authenticated_management_disconnects_end_the_negotiated_link() {
 }
 
 #[test]
+fn a_refused_engine_drops_a_protected_disconnect_without_advancing_its_replay_state() {
+    for vector in [DEAUTH, GROUP_DEAUTH] {
+        installed(|mint| {
+            let (mut world, _, _) = connected(mint);
+            let valid = wire(vector);
+            let loads = world.station.config.callbacks.blocks.loads;
+            world.station.config.callbacks.blocks.refuse =
+                Some(oer_crypto::block::BlockError::Timeout { observation: 1 });
+            world.receive_verified(at(40), &valid);
+            assert!(world.station.is_connected(), "a refused CCMP or BIP key");
+            assert_eq!(world.station.config.callbacks.blocks.loads, loads + 1);
+            world.station.config.callbacks.blocks.refuse = None;
+            world.receive(at(50), &valid);
+            assert!(
+                !world.station.is_connected(),
+                "the same packet number still verifies"
+            );
+            assert_released(&mut world);
+        });
+    }
+}
+
+#[test]
 fn query_requests_are_protected_and_replays_cannot_create_another_response() {
     installed(|mint| {
         let (mut world, _, m3) = connected(mint);
@@ -266,7 +291,11 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(
             oer_ieee80211_wire::security::Spp::NotNegotiated,
         )
-        .seal(&Ccmp128Key::new(ptk.temporal_key()), &mut request)
+        .seal(
+            &mut SoftwareAes128,
+            &Ccmp128Key::new(ptk.temporal_key()),
+            &mut request,
+        )
         .unwrap();
         let mut damaged = request.clone();
         *damaged.last_mut().unwrap() ^= 1;

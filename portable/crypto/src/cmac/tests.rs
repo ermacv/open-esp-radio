@@ -1,7 +1,7 @@
 use super::*;
-use std::vec::Vec;
 use crate::test_engine::{Engine, REFUSAL};
 use cmac::Mac;
+use std::vec::Vec;
 
 /// RFC 4493 §4 key.
 const RFC4493_KEY: [u8; 16] = [

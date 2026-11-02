@@ -20,7 +20,8 @@
 )]
 
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
-use oer_ieee80211_core_security_cipher::bip::{self, BipError, BipFrame};
+use oer_crypto::block::{Aes128Engine, BlockError};
+use oer_ieee80211_core_security_cipher::bip::{self, BipError, BipFrame, BipProtectError};
 use oer_ieee80211_core_upper_mac::packet_number::{PacketNumber48, PacketNumberFrontier};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -85,8 +86,12 @@ impl BipReceiver {
 
     /// Verify one received group-addressed robust management frame, from its
     /// Frame Control field to the end of its body, and advance the replay
-    /// state when it verifies.
-    pub fn verify(&mut self, frame: &[u8]) -> Result<(), BipReceiveError> {
+    /// state when it verifies. The MIC runs on `engine`.
+    pub fn verify<E: Aes128Engine>(
+        &mut self,
+        engine: &mut E,
+        frame: &[u8],
+    ) -> Result<(), BipReceiveError> {
         let frame = BipFrame::parse(frame, self.key_id)?;
         // BipFrame::parse decodes exactly six octets, so this is already bounded.
         let received = BipPacketNumber(frame.packet_number());
@@ -94,7 +99,7 @@ impl BipReceiver {
             .replay
             .prepare(received)
             .map_err(|_| BipReceiveError::Replay)?;
-        frame.verify(&self.key)?;
+        frame.verify(engine, &self.key)?;
         candidate.commit();
         Ok(())
     }
@@ -131,6 +136,9 @@ pub enum BipTransmitError {
     Exhausted,
     /// The supplied length or output capacity cannot hold the frame and MMIE.
     InvalidFrame,
+    /// The AES engine refused the key or a block. The frame's first `length`
+    /// bytes are unchanged; the bytes after them are not a valid MMIE.
+    Engine(BlockError),
 }
 
 impl BipTransmitter {
@@ -150,21 +158,31 @@ impl BipTransmitter {
         self.packet_numbers.highest().to_bytes()
     }
 
-    /// Protect once and commit its IPN only on success. Every refusal leaves
-    /// both the IPN frontier and the output unchanged.
-    pub fn protect(&mut self, frame: &mut [u8], length: usize) -> Result<usize, BipTransmitError> {
+    /// Protect once on `engine` and commit its IPN only on success. Every
+    /// refusal leaves the IPN frontier unchanged; every refusal but the
+    /// engine's leaves the output unchanged as well.
+    pub fn protect<E: Aes128Engine>(
+        &mut self,
+        engine: &mut E,
+        frame: &mut [u8],
+        length: usize,
+    ) -> Result<usize, BipTransmitError> {
         let candidate = self
             .packet_numbers
             .prepare_next(core::num::NonZeroU8::MIN)
             .map_err(|_| BipTransmitError::Exhausted)?;
         let protected = bip::protect(
+            engine,
             self.key_id,
             &self.key,
             candidate.packet_number().0,
             frame,
             length,
         )
-        .ok_or(BipTransmitError::InvalidFrame)?;
+        .map_err(|error| match error {
+            BipProtectError::InvalidFrame => BipTransmitError::InvalidFrame,
+            BipProtectError::Engine(error) => BipTransmitError::Engine(error),
+        })?;
         candidate.commit();
         Ok(protected)
     }

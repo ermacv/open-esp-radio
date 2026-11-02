@@ -13,6 +13,7 @@ use oer_ieee80211_contracts_port::{
 use oer_ieee80211_core_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterPolicy, NoReservation,
 };
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_wire::channel_switch::ChannelSwitchMode;
 use oer_ieee80211_wire::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
 use oer_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
@@ -207,12 +208,12 @@ struct Callbacks {
     blocks: CountingBlocks,
 }
 impl StaCallbacks for Callbacks {
-    type KeyUnwrapEngine = CountingBlocks;
+    type AesEngine = CountingBlocks;
     fn nonce(&mut self) -> [u8; 32] {
         self.nonce_calls += 1;
         SNONCE
     }
-    fn key_unwrap_engine(&mut self) -> &mut CountingBlocks {
+    fn aes_engine(&mut self) -> &mut CountingBlocks {
         &mut self.blocks
     }
     fn he_packet_padding(
@@ -2172,7 +2173,8 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
-                    .authenticate(&ptk);
+                    .authenticate(&ptk, &mut SoftwareAes128)
+                    .unwrap();
             world.receive(at(33), &eapol_frame(message3.as_bytes()));
             let seen = world.take();
             assert!(matches!(seen[0], Seen::InstallPairwise(_)));
@@ -2288,7 +2290,8 @@ fn wpa2_connected_by<'id, const G: usize>(
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(&ptk);
+            .authenticate(&ptk, &mut SoftwareAes128)
+            .unwrap();
     world.receive(at(33), &eapol_frame(message3.as_bytes()));
     assert!(world.station.is_connected());
     world.take();
@@ -2355,7 +2358,8 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
         let message3 =
             RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                 .unwrap()
-                .authenticate(&ptk);
+                .authenticate(&ptk, &mut SoftwareAes128)
+                .unwrap();
         world.unsend_next = true;
         world.receive(at(33), &eapol_frame(message3.as_bytes()));
         let seen = world.take();
@@ -2415,7 +2419,8 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
             wrapped.as_bytes(),
         )
         .unwrap()
-        .authenticate(&ptk);
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap();
         world.receive(at(33), &eapol_frame(message3.as_bytes()));
         assert!(world.station.is_connected());
         assert!(world.take().contains(&Seen::InstallGroup(0)));
@@ -2449,7 +2454,8 @@ fn group_message1(
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(ptk);
+            .authenticate(ptk, &mut SoftwareAes128)
+            .unwrap();
     protected_received(eapol_frame(message.as_bytes()), replay)
 }
 
@@ -2753,7 +2759,8 @@ fn a_message_3_whose_key_data_does_not_unwrap_deauthenticates() {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         let message3 = RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], &[0x55; 24])
             .unwrap()
-            .authenticate(&ptk);
+            .authenticate(&ptk, &mut SoftwareAes128)
+            .unwrap();
         world.receive(at(33), &eapol_frame(message3.as_bytes()));
         assert_eq!(world.deauthentications, [reason_code::UNSPECIFIED]);
     });
@@ -2950,7 +2957,8 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
-                    .authenticate(&ptk);
+                    .authenticate(&ptk, &mut SoftwareAes128)
+                    .unwrap();
             world.hold_key_installs = true;
             world.receive(at(33), &eapol_frame(message3.as_bytes()));
             assert_eq!(world.pending_installs.len(), 1);
@@ -3600,7 +3608,8 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     wrapped.as_bytes(),
                 )
                 .unwrap()
-                .authenticate(&ptk);
+                .authenticate(&ptk, &mut SoftwareAes128)
+                .unwrap();
                 let _ = world.station.receive(
                     at(33),
                     &eapol_frame(message3.as_bytes()),
@@ -4038,7 +4047,8 @@ fn retry_message3(
     let message =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, counter, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(ptk);
+            .authenticate(ptk, &mut SoftwareAes128)
+            .unwrap();
     eapol_frame(message.as_bytes())
 }
 
@@ -4978,7 +4988,8 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
         let m3 =
             RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                 .unwrap()
-                .authenticate(&ptk);
+                .authenticate(&ptk, &mut SoftwareAes128)
+                .unwrap();
         world.receive(at(33), &eapol_frame(m3.as_bytes()));
         assert!(
             world.station.is_connected(),
@@ -5035,7 +5046,8 @@ fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
-                    .authenticate(&ptk);
+                    .authenticate(&ptk, &mut SoftwareAes128)
+                    .unwrap();
             world.hold_key_installs = true;
             world.receive(at(33), &eapol_frame(message3.as_bytes()));
             assert_eq!(

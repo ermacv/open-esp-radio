@@ -5,6 +5,7 @@
     clippy::unreachable
 )]
 use super::*;
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 
 use std::vec::Vec;
@@ -34,10 +35,13 @@ fn receiver(ipn: u8) -> BipReceiver {
 #[test]
 fn a_frame_under_the_igtk_verifies_once() {
     let mut bip = receiver(8);
-    assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));
+    assert_eq!(
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
+        Ok(())
+    );
     // The same IPN again is a replay.
     assert_eq!(
-        bip.verify(&deauthentication(MIC, 9)),
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
         Err(BipReceiveError::Replay)
     );
 }
@@ -48,24 +52,27 @@ fn a_changed_frame_or_mic_fails() {
     let mut frame = deauthentication(MIC, 9);
     frame[24] = 8;
     assert_eq!(
-        bip.verify(&frame),
+        bip.verify(&mut SoftwareAes128, &frame),
         Err(BipReceiveError::Frame(BipError::InvalidMic))
     );
     let mut mic = MIC;
     mic[0] ^= 1;
     assert_eq!(
-        bip.verify(&deauthentication(mic, 9)),
+        bip.verify(&mut SoftwareAes128, &deauthentication(mic, 9)),
         Err(BipReceiveError::Frame(BipError::InvalidMic))
     );
     // A failed frame advances nothing.
-    assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));
+    assert_eq!(
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
+        Ok(())
+    );
 }
 
 #[test]
 fn an_ipn_not_above_the_kde_ipn_is_a_replay() {
     let mut bip = receiver(9);
     assert_eq!(
-        bip.verify(&deauthentication(MIC, 9)),
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
         Err(BipReceiveError::Replay)
     );
 }
@@ -76,17 +83,17 @@ fn a_frame_without_its_mic_element_or_another_key_fails() {
     let mut frame = deauthentication(MIC, 9);
     frame[26] = 75;
     assert_eq!(
-        bip.verify(&frame),
+        bip.verify(&mut SoftwareAes128, &frame),
         Err(BipReceiveError::Frame(BipError::MissingManagementMic))
     );
     let mut frame = deauthentication(MIC, 9);
     frame[28] = 5;
     assert_eq!(
-        bip.verify(&frame),
+        bip.verify(&mut SoftwareAes128, &frame),
         Err(BipReceiveError::Frame(BipError::UnknownKeyId))
     );
     assert_eq!(
-        bip.verify(&[0; 30]),
+        bip.verify(&mut SoftwareAes128, &[0; 30]),
         Err(BipReceiveError::Frame(BipError::Truncated))
     );
 }
@@ -97,20 +104,26 @@ fn a_data_frame_with_a_management_mic_tail_is_refused_without_advancing_the_ipn(
     let mut data = deauthentication(MIC, 9);
     data[0] = 0x08;
     assert_eq!(
-        bip.verify(&data),
+        bip.verify(&mut SoftwareAes128, &data),
         Err(BipReceiveError::Frame(BipError::NotManagement))
     );
-    assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));
+    assert_eq!(
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
+        Ok(())
+    );
 }
 
 #[test]
 fn a_repeated_igtk_keeps_its_replay_state_and_a_new_one_resets_it() {
     let mut bip = receiver(8);
-    assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));
+    assert_eq!(
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
+        Ok(())
+    );
     // The same IGTK redelivered with an older IPN.
     bip.rekey(&RsnIgtk::new(4, [2, 0, 0, 0, 0, 0], &[0x77; 16]).unwrap());
     assert_eq!(
-        bip.verify(&deauthentication(MIC, 9)),
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
         Err(BipReceiveError::Replay)
     );
     // Another IGTK starts from its own IPN.
@@ -125,18 +138,23 @@ fn a_transmitter_reproduces_the_independent_mic_and_advances_its_ipn() {
     let expected = deauthentication(MIC, 9);
     let mut frame = [0_u8; 26 + MANAGEMENT_MIC_ELEMENT_LEN];
     frame[..26].copy_from_slice(&expected[..26]);
-    assert_eq!(transmitter.protect(&mut frame, 26), Ok(expected.len()));
+    assert_eq!(
+        transmitter.protect(&mut SoftwareAes128, &mut frame, 26),
+        Ok(expected.len())
+    );
     assert_eq!(frame[..], expected[..]);
 
     let mut receiver = BipReceiver::new(&igtk);
-    assert_eq!(receiver.verify(&frame), Ok(()));
+    assert_eq!(receiver.verify(&mut SoftwareAes128, &frame), Ok(()));
     let mut next = [0_u8; 26 + MANAGEMENT_MIC_ELEMENT_LEN];
     next[..26].copy_from_slice(&expected[..26]);
-    transmitter.protect(&mut next, 26).unwrap();
+    transmitter
+        .protect(&mut SoftwareAes128, &mut next, 26)
+        .unwrap();
     assert_eq!(next[30], 10);
-    assert_eq!(receiver.verify(&next), Ok(()));
+    assert_eq!(receiver.verify(&mut SoftwareAes128, &next), Ok(()));
     assert_eq!(
-        transmitter.protect(&mut next[..30], 26),
+        transmitter.protect(&mut SoftwareAes128, &mut next[..30], 26),
         Err(BipTransmitError::InvalidFrame)
     );
     assert_eq!(transmitter.packet_number(), [10, 0, 0, 0, 0, 0]);
@@ -155,23 +173,28 @@ fn transmit_ipns_never_wrap_and_failed_capacity_checks_consume_nothing() {
     packet[24..26].copy_from_slice(&[0, 4]);
     let original = packet;
     assert_eq!(
-        sender.protect(&mut packet[..26], 26),
+        sender.protect(&mut SoftwareAes128, &mut packet[..26], 26),
         Err(BipTransmitError::InvalidFrame)
     );
     assert_eq!(packet, original);
     assert_eq!(sender.packet_number(), igtk.packet_number());
-    let length = sender.protect(&mut packet, 26).unwrap();
+    let length = sender
+        .protect(&mut SoftwareAes128, &mut packet, 26)
+        .unwrap();
     assert_eq!(sender.packet_number(), [0xff; 6]);
     assert_eq!(&packet[30..36], &[0xff; 6]);
-    assert_eq!(receiver.verify(&packet[..length]), Ok(()));
     assert_eq!(
-        receiver.verify(&packet[..length]),
+        receiver.verify(&mut SoftwareAes128, &packet[..length]),
+        Ok(())
+    );
+    assert_eq!(
+        receiver.verify(&mut SoftwareAes128, &packet[..length]),
         Err(BipReceiveError::Replay)
     );
     let saved = packet;
     for _ in 0..2 {
         assert_eq!(
-            sender.protect(&mut packet, 26),
+            sender.protect(&mut SoftwareAes128, &mut packet, 26),
             Err(BipTransmitError::Exhausted)
         );
         assert_eq!(sender.packet_number(), [0xff; 6]);
@@ -180,10 +203,10 @@ fn transmit_ipns_never_wrap_and_failed_capacity_checks_consume_nothing() {
     // A correctly authenticated, older IPN cannot roll back the maximum frontier.
     let older = RsnIgtk::new(4, [0xfd, 0xff, 0xff, 0xff, 0xff, 0xff], &[0x66; 16]).unwrap();
     let length = BipTransmitter::new(&older)
-        .protect(&mut packet, 26)
+        .protect(&mut SoftwareAes128, &mut packet, 26)
         .unwrap();
     assert_eq!(
-        receiver.verify(&packet[..length]),
+        receiver.verify(&mut SoftwareAes128, &packet[..length]),
         Err(BipReceiveError::Replay)
     );
 
@@ -192,7 +215,7 @@ fn transmit_ipns_never_wrap_and_failed_capacity_checks_consume_nothing() {
     let saved = packet;
     for _ in 0..2 {
         assert_eq!(
-            sender.protect(&mut packet, 26),
+            sender.protect(&mut SoftwareAes128, &mut packet, 26),
             Err(BipTransmitError::Exhausted)
         );
         assert_eq!(sender.packet_number(), exhausted.packet_number());
@@ -207,7 +230,7 @@ fn invalid_lengths_do_not_mutate_the_frame_or_consume_an_ipn() {
     let mut frame = [0xab; 64];
     for length in [0, 23, 64, usize::MAX] {
         assert_eq!(
-            sender.protect(&mut frame, length),
+            sender.protect(&mut SoftwareAes128, &mut frame, length),
             Err(BipTransmitError::InvalidFrame)
         );
         assert_eq!(frame, [0xab; 64]);
@@ -231,24 +254,30 @@ fn ipn_advancement_carries_octets_and_refuses_both_domain_and_integer_overflow()
 fn forged_higher_ipns_and_repeated_key_delivery_cannot_roll_back_the_frontier() {
     let mut bip = receiver(8);
     assert_eq!(
-        bip.verify(&deauthentication(MIC, 100)),
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 100)),
         Err(BipReceiveError::Frame(BipError::InvalidMic))
     );
-    assert_eq!(bip.verify(&deauthentication(MIC, 9)), Ok(()));
+    assert_eq!(
+        bip.verify(&mut SoftwareAes128, &deauthentication(MIC, 9)),
+        Ok(())
+    );
     bip.rekey(&RsnIgtk::new(4, [10, 0, 0, 0, 0, 0], &[0x77; 16]).unwrap());
     bip.rekey(&RsnIgtk::new(4, [0; 6], &[0x77; 16]).unwrap());
     let igtk = RsnIgtk::new(4, [9, 0, 0, 0, 0, 0], &[0x77; 16]).unwrap();
     let mut sender = BipTransmitter::new(&igtk);
     let mut frame = deauthentication(MIC, 9);
-    let length = sender.protect(&mut frame, 26).unwrap();
-    assert_eq!(bip.verify(&frame[..length]), Err(BipReceiveError::Replay));
-    let length = sender.protect(&mut frame, 26).unwrap();
-    assert_eq!(bip.verify(&frame[..length]), Ok(()));
+    let length = sender.protect(&mut SoftwareAes128, &mut frame, 26).unwrap();
+    assert_eq!(
+        bip.verify(&mut SoftwareAes128, &frame[..length]),
+        Err(BipReceiveError::Replay)
+    );
+    let length = sender.protect(&mut SoftwareAes128, &mut frame, 26).unwrap();
+    assert_eq!(bip.verify(&mut SoftwareAes128, &frame[..length]), Ok(()));
     // New material starts its own epoch, even when it reuses the Key ID.
     let replacement = RsnIgtk::new(4, [0; 6], &[0x11; 16]).unwrap();
     bip.rekey(&replacement);
     let length = BipTransmitter::new(&replacement)
-        .protect(&mut frame, 26)
+        .protect(&mut SoftwareAes128, &mut frame, 26)
         .unwrap();
-    assert_eq!(bip.verify(&frame[..length]), Ok(()));
+    assert_eq!(bip.verify(&mut SoftwareAes128, &frame[..length]), Ok(()));
 }

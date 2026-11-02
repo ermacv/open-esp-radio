@@ -12,6 +12,7 @@
 
 use crate::AkmKeys;
 use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
+use oer_crypto::block::{Aes128Engine, BlockError};
 use oer_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
 
 pub const DEFAULT_EAPOL_FRAME_CAPACITY: usize = 512;
@@ -167,18 +168,33 @@ impl<'a> EapolKeyFrame<'a> {
         self.0.key_data()
     }
 
-    pub fn verify_mic(self, ptk: &Ptk) -> bool {
-        self.verify_mic_with_kck(ptk.akm(), ptk.kck())
+    /// Whether the MIC verifies under the PTK's KCK. An AES-CMAC suite runs
+    /// on `engine`; its refusal is the error.
+    pub fn verify_mic<E: Aes128Engine>(
+        self,
+        ptk: &Ptk,
+        engine: &mut E,
+    ) -> Result<bool, BlockError> {
+        self.verify_mic_with_kck(ptk.akm(), ptk.kck(), engine)
     }
 
-    pub(crate) fn verify_mic_with_confirmation_key(self, key: &RsnKeyConfirmationKey) -> bool {
-        self.verify_mic_with_kck(key.akm(), key.as_bytes())
+    pub(crate) fn verify_mic_with_confirmation_key<E: Aes128Engine>(
+        self,
+        key: &RsnKeyConfirmationKey,
+        engine: &mut E,
+    ) -> Result<bool, BlockError> {
+        self.verify_mic_with_kck(key.akm(), key.as_bytes(), engine)
     }
 
-    fn verify_mic_with_kck(self, akm: Akm, kck: &[u8; RSN_KCK_LEN]) -> bool {
-        let mut mac = akm.mic(kck);
+    fn verify_mic_with_kck<E: Aes128Engine>(
+        self,
+        akm: Akm,
+        kck: &[u8; RSN_KCK_LEN],
+        engine: &mut E,
+    ) -> Result<bool, BlockError> {
+        let mut mac = akm.mic(kck, engine)?;
         for part in self.0.mic_input() {
-            mac.update(part);
+            mac.update(part)?;
         }
         mac.verify(self.0.mic())
     }

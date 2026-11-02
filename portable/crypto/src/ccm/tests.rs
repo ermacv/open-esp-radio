@@ -1,11 +1,11 @@
 use super::*;
-use std::{vec, vec::Vec};
 use crate::test_engine::{Engine, REFUSAL};
 use ccm::{
     Ccm,
     aead::{AeadInPlace, KeyInit},
     consts::{U4, U8, U13, U16},
 };
+use std::{vec, vec::Vec};
 
 const KEY: [u8; 16] = *b"0123456789abcdef";
 const NONCE: [u8; NONCE_LEN] = [0x5a; NONCE_LEN];
@@ -52,7 +52,11 @@ macro_rules! matches_rustcrypto {
 
 matches_rustcrypto!(an_eight_byte_mic_seals_and_opens_as_rustcrypto_ccm, 8, U8);
 matches_rustcrypto!(a_four_byte_mic_seals_and_opens_as_rustcrypto_ccm, 4, U4);
-matches_rustcrypto!(a_sixteen_byte_mic_seals_and_opens_as_rustcrypto_ccm, 16, U16);
+matches_rustcrypto!(
+    a_sixteen_byte_mic_seals_and_opens_as_rustcrypto_ccm,
+    16,
+    U16
+);
 
 #[test]
 fn a_changed_mic_aad_or_body_erases_the_body_and_fails() {

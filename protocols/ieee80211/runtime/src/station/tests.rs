@@ -200,11 +200,11 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
 
 struct Callbacks(oer_ieee80211_core_security_cipher::aes::SoftwareAes128);
 impl oer_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
-    type KeyUnwrapEngine = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    type AesEngine = oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
         SNONCE
     }
-    fn key_unwrap_engine(&mut self) -> &mut Self::KeyUnwrapEngine {
+    fn aes_engine(&mut self) -> &mut Self::AesEngine {
         &mut self.0
     }
     fn he_packet_padding(
@@ -446,7 +446,11 @@ fn group_message1(ptk: &oer_ieee80211_core_security_rsn::Ptk, replay: u64, key_i
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(ptk);
+            .authenticate(
+                ptk,
+                &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+            )
+            .unwrap();
     eapol_frame(message.as_bytes())
 }
 
@@ -1966,7 +1970,11 @@ fn message3(ptk: &oer_ieee80211_core_security_rsn::Ptk) -> Vec<u8> {
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
-            .authenticate(ptk);
+            .authenticate(
+                ptk,
+                &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+            )
+            .unwrap();
     eapol_frame(message3.as_bytes())
 }
 
@@ -3004,7 +3012,11 @@ fn negotiated_pmf_checks_received_management_and_keeps_the_tx_key_through_discon
                         wrapped.as_bytes(),
                     )
                     .unwrap()
-                    .authenticate(&ptk);
+                    .authenticate(
+                        &ptk,
+                        &mut oer_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                    )
+                    .unwrap();
                     world.air.receive(&eapol_frame(m3.as_bytes()), meta());
                     let _message4 = world.sent(&mut seen, DATA).await;
                     world

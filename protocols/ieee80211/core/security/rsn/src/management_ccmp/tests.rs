@@ -5,6 +5,7 @@
     clippy::unreachable
 )]
 use super::*;
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
 use oer_ieee80211_wire::{ccmp::CCMP_HEADER_LEN, security::Spp};
 
@@ -21,10 +22,13 @@ fn receiver() -> ManagementCcmpReceiver {
 fn a_protected_management_frame_opens_once() {
     let mut ccmp = receiver();
     let mut first = frame();
-    assert_eq!(ccmp.open(&mut first), Ok(MANAGEMENT_BODY.as_slice()));
+    assert_eq!(
+        ccmp.open(&mut SoftwareAes128, &mut first),
+        Ok(MANAGEMENT_BODY.as_slice())
+    );
     let mut again = frame();
     assert_eq!(
-        ccmp.open(&mut again),
+        ccmp.open(&mut SoftwareAes128, &mut again),
         Err(ManagementCcmpReceiveError::Replay)
     );
 }
@@ -35,7 +39,7 @@ fn a_changed_header_or_body_fails_without_advancing_the_replay_state() {
     let mut changed_address = frame();
     changed_address[9] ^= 1;
     assert_eq!(
-        ccmp.open(&mut changed_address),
+        ccmp.open(&mut SoftwareAes128, &mut changed_address),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::InvalidMic
         ))
@@ -44,7 +48,7 @@ fn a_changed_header_or_body_fails_without_advancing_the_replay_state() {
     let mut changed_body = frame();
     changed_body[32] ^= 1;
     assert_eq!(
-        ccmp.open(&mut changed_body),
+        ccmp.open(&mut SoftwareAes128, &mut changed_body),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::InvalidMic
         ))
@@ -53,7 +57,7 @@ fn a_changed_header_or_body_fails_without_advancing_the_replay_state() {
     // Retry, Power Management and More Data are outside the MIC.
     let mut retry_cleared = frame();
     retry_cleared[1] &= !0x08;
-    assert!(ccmp.open(&mut retry_cleared).is_ok());
+    assert!(ccmp.open(&mut SoftwareAes128, &mut retry_cleared).is_ok());
 }
 
 #[test]
@@ -62,7 +66,7 @@ fn an_unprotected_or_short_frame_is_refused() {
     let mut unprotected = frame();
     unprotected[1] &= !0x40;
     assert_eq!(
-        ccmp.open(&mut unprotected),
+        ccmp.open(&mut SoftwareAes128, &mut unprotected),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::NotProtected
         ))
@@ -70,13 +74,13 @@ fn an_unprotected_or_short_frame_is_refused() {
     let mut no_ext_iv = frame();
     no_ext_iv[27] = 0;
     assert_eq!(
-        ccmp.open(&mut no_ext_iv),
+        ccmp.open(&mut SoftwareAes128, &mut no_ext_iv),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::MissingExtendedIv
         ))
     );
     assert_eq!(
-        ccmp.open(&mut [0; 39]),
+        ccmp.open(&mut SoftwareAes128, &mut [0; 39]),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::Truncated
         ))
@@ -93,13 +97,13 @@ fn an_oversized_body_is_refused_before_transform_or_replay_commit() {
     );
     let before = oversized.clone();
     assert_eq!(
-        ccmp.open(&mut oversized),
+        ccmp.open(&mut SoftwareAes128, &mut oversized),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::TooLong
         ))
     );
     assert_eq!(oversized, before);
-    assert!(ccmp.open(&mut frame()).is_ok());
+    assert!(ccmp.open(&mut SoftwareAes128, &mut frame()).is_ok());
 }
 
 #[test]
@@ -109,7 +113,7 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
     data[0] = 0x08;
     let before = data.clone();
     assert_eq!(
-        ccmp.open(&mut data),
+        ccmp.open(&mut SoftwareAes128, &mut data),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::MalformedHeader
         ))
@@ -119,7 +123,7 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
     let mut version = frame();
     version[0] |= 0x01;
     assert_eq!(
-        ccmp.open(&mut version),
+        ccmp.open(&mut SoftwareAes128, &mut version),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::MalformedHeader
         ))
@@ -128,7 +132,7 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
     let mut qos_data = frame();
     qos_data[0] = 0x88;
     assert_eq!(
-        ccmp.open(&mut qos_data),
+        ccmp.open(&mut SoftwareAes128, &mut qos_data),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::MalformedHeader
         ))
@@ -136,12 +140,12 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
     let mut reserved = frame();
     reserved[26] = 1;
     assert_eq!(
-        ccmp.open(&mut reserved),
+        ccmp.open(&mut SoftwareAes128, &mut reserved),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::InvalidCcmpHeader
         ))
     );
-    assert!(ccmp.open(&mut frame()).is_ok());
+    assert!(ccmp.open(&mut SoftwareAes128, &mut frame()).is_ok());
 }
 
 fn mode(spp: bool) -> CcmpAssociation {
@@ -161,11 +165,21 @@ fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
     for spp in [false, true] {
         let wire = management_wire();
         let mut mpdu = wire.clone();
-        assert_eq!(mode(spp).open(&key(), &mut mpdu).unwrap(), MANAGEMENT_BODY);
-        mode(spp).seal(&key(), &mut mpdu).unwrap();
+        assert_eq!(
+            mode(spp)
+                .open(&mut SoftwareAes128, &key(), &mut mpdu)
+                .unwrap(),
+            MANAGEMENT_BODY
+        );
+        mode(spp)
+            .seal(&mut SoftwareAes128, &key(), &mut mpdu)
+            .unwrap();
         assert_eq!(mpdu, wire);
         let mut receiver = crate::management_ccmp::ManagementCcmpReceiver::new(key());
-        assert_eq!(receiver.open(&mut mpdu).unwrap(), MANAGEMENT_BODY);
+        assert_eq!(
+            receiver.open(&mut SoftwareAes128, &mut mpdu).unwrap(),
+            MANAGEMENT_BODY
+        );
     }
 }
 
@@ -186,10 +200,10 @@ fn management_packet_number_zero_is_never_admitted() {
         "d040000002000000000102000000000202000000000235120000002000000000ee52738e614e583acdf68edf",
     );
     assert_eq!(
-        ccmp.open(&mut zero),
+        ccmp.open(&mut SoftwareAes128, &mut zero),
         Err(ManagementCcmpReceiveError::Replay)
     );
-    assert!(ccmp.open(&mut frame()).is_ok());
+    assert!(ccmp.open(&mut SoftwareAes128, &mut frame()).is_ok());
 }
 
 #[test]
@@ -200,13 +214,13 @@ fn management_group_key_id_is_rejected_before_replay_or_decryption() {
     );
     let before = group_key.clone();
     assert_eq!(
-        ccmp.open(&mut group_key),
+        ccmp.open(&mut SoftwareAes128, &mut group_key),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::UnexpectedKeyId
         ))
     );
     assert_eq!(group_key, before);
-    assert!(ccmp.open(&mut frame()).is_ok());
+    assert!(ccmp.open(&mut SoftwareAes128, &mut frame()).is_ok());
 }
 
 #[test]
@@ -217,11 +231,11 @@ fn management_group_address_is_rejected_before_replay_or_decryption() {
     );
     let before = group_address.clone();
     assert_eq!(
-        ccmp.open(&mut group_address),
+        ccmp.open(&mut SoftwareAes128, &mut group_address),
         Err(ManagementCcmpReceiveError::Frame(
             ManagementCcmpError::GroupAddressed
         ))
     );
     assert_eq!(group_address, before);
-    assert!(ccmp.open(&mut frame()).is_ok());
+    assert!(ccmp.open(&mut SoftwareAes128, &mut frame()).is_ok());
 }

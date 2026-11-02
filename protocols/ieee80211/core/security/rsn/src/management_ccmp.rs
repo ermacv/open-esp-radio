@@ -1,4 +1,5 @@
-//! Software CCMP of individually addressed robust management frames.
+//! CCMP of individually addressed robust management frames, on the caller's
+//! AES-128 engine.
 //!
 //! With management frame protection, a Deauthentication, Disassociation or
 //! robust Action frame to the station arrives CCMP-protected under the
@@ -32,6 +33,7 @@
     clippy::arithmetic_side_effects
 )]
 
+use oer_crypto::block::Aes128Engine;
 use oer_ieee80211_contracts_security::Ccmp128Key;
 use oer_ieee80211_core_security_cipher::management_ccmp::{
     ManagementCcmpError, ManagementCcmpFrame,
@@ -76,10 +78,12 @@ impl ManagementCcmpReceiver {
 
     /// Decrypt one received protected management frame in place and return
     /// its plaintext body. A frame that does not verify leaves the replay
-    /// frontier unchanged. MIC failure erases tentative plaintext through the
+    /// frontier unchanged. The frame is opened on `engine`. MIC failure and an
+    /// engine refusal erase tentative plaintext through the
     /// shared `oer_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation` transform; this wrapper only owns replay.
-    pub fn open<'a>(
+    pub fn open<'a, E: Aes128Engine>(
         &mut self,
+        engine: &mut E,
         frame: &'a mut [u8],
     ) -> Result<&'a [u8], ManagementCcmpReceiveError> {
         let frame = ManagementCcmpFrame::parse(frame)?;
@@ -87,7 +91,7 @@ impl ManagementCcmpReceiver {
             .replay
             .prepare(frame.packet_number())
             .map_err(|_| ManagementCcmpReceiveError::Replay)?;
-        let body = frame.open(&self.temporal_key)?;
+        let body = frame.open(engine, &self.temporal_key)?;
         candidate.commit();
         Ok(body)
     }

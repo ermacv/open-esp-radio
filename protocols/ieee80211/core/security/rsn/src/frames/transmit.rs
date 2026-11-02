@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::AkmKeys;
+use oer_crypto::block::{Aes128Engine, BlockError};
 use oer_ieee80211_wire::eapol::{EapolEncodeError, EapolKeyBuffer, EapolKeyFields};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -235,24 +236,36 @@ impl<const N: usize> RsnTxFrame<N> {
     /// Authenticate a supplicant or authenticator action with the pairwise
     /// KCK. The builder always initializes the MIC field to zero; clearing it
     /// here as well makes repeated authentication deterministic.
-    pub fn authenticate(mut self, ptk: &Ptk) -> Self {
-        self.authenticate_with_kck(ptk.akm(), ptk.kck());
-        self
+    /// An AES-CMAC suite runs on `engine`; its refusal is the error.
+    pub fn authenticate<E: Aes128Engine>(
+        mut self,
+        ptk: &Ptk,
+        engine: &mut E,
+    ) -> Result<Self, BlockError> {
+        self.authenticate_with_kck(ptk.akm(), ptk.kck(), engine)?;
+        Ok(self)
     }
 
-    pub(crate) fn authenticate_with_confirmation_key(
+    pub(crate) fn authenticate_with_confirmation_key<E: Aes128Engine>(
         mut self,
         key: &RsnKeyConfirmationKey,
-    ) -> Self {
-        self.authenticate_with_kck(key.akm(), key.as_bytes());
-        self
+        engine: &mut E,
+    ) -> Result<Self, BlockError> {
+        self.authenticate_with_kck(key.akm(), key.as_bytes(), engine)?;
+        Ok(self)
     }
 
-    fn authenticate_with_kck(&mut self, akm: Akm, kck: &[u8; RSN_KCK_LEN]) {
+    fn authenticate_with_kck<E: Aes128Engine>(
+        &mut self,
+        akm: Akm,
+        kck: &[u8; RSN_KCK_LEN],
+        engine: &mut E,
+    ) -> Result<(), BlockError> {
         self.set_mic(&[0; RSN_MIC_LEN]);
-        let mut mac = akm.mic(kck);
-        mac.update(self.as_bytes());
-        self.set_mic(&mac.finalize());
+        let mut mac = akm.mic(kck, engine)?;
+        mac.update(self.as_bytes())?;
+        self.set_mic(&mac.finalize()?);
+        Ok(())
     }
 
     pub(crate) const fn mark_retransmission(mut self) -> Self {

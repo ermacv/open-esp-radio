@@ -5,9 +5,11 @@
 //! descriptor version, pairwise key expansion and EAPOL-Key MIC; each property
 //! is an exhaustive match so adding a suite forces every dependent decision.
 
-use aes::Aes128;
-use cmac::Cmac;
 use hmac::{Hmac, Mac};
+use oer_crypto::{
+    block::{Aes128Engine, BlockError},
+    cmac::Cmac,
+};
 use oer_ieee80211_wire::security::rsn::Akm;
 use sha1::Sha1;
 use zeroize::Zeroize;
@@ -25,7 +27,13 @@ pub(crate) trait AkmKeys {
     fn key_descriptor_version(self) -> oer_wire::U8<3>;
     /// Expand a PMK over the canonical address/nonce context into a PTK.
     fn expand_ptk(self, pmk: &[u8; 32], context: &[u8; 76], output: &mut [u8; RSN_PTK_LEN]);
-    fn mic(self, kck: &[u8; RSN_KCK_LEN]) -> EapolMic;
+    /// Start the suite's EAPOL-Key MIC under `kck`. An AES-CMAC suite runs it
+    /// on `engine`, which holds the KCK until the MIC is done.
+    fn mic<'e, E: Aes128Engine>(
+        self,
+        kck: &[u8; RSN_KCK_LEN],
+        engine: &'e mut E,
+    ) -> Result<EapolMic<'e, E>, BlockError>;
 }
 
 impl AkmKeys for Akm {
@@ -49,35 +57,42 @@ impl AkmKeys for Akm {
         }
     }
 
-    fn mic(self, kck: &[u8; RSN_KCK_LEN]) -> EapolMic {
+    fn mic<'e, E: Aes128Engine>(
+        self,
+        kck: &[u8; RSN_KCK_LEN],
+        engine: &'e mut E,
+    ) -> Result<EapolMic<'e, E>, BlockError> {
         match self {
-            Self::Psk => EapolMic::HmacSha1(crate::mac::sha1(kck)),
+            Self::Psk => Ok(EapolMic::HmacSha1(crate::mac::sha1(kck))),
             Self::PskSha256 | Self::Sae => {
-                EapolMic::AesCmac(<Cmac<Aes128> as Mac>::new(kck.into()))
+                let key = oer_crypto::Aes128Key::copy_from(kck);
+                let keyed = engine.load(&key)?;
+                drop(key);
+                Ok(EapolMic::AesCmac(Cmac::new(keyed)?))
             }
         }
     }
 }
 
-/// Incremental EAPOL-Key MIC of one suite.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a MIC lives for one frame on the stack; the AES-CMAC key schedule is its whole state"
-)]
-pub(crate) enum EapolMic {
+/// Incremental EAPOL-Key MIC of one suite; an AES-CMAC MIC holds its engine,
+/// keyed with the KCK, until it is finalized or dropped.
+pub(crate) enum EapolMic<'e, E: Aes128Engine + 'e> {
     HmacSha1(Hmac<Sha1>),
-    AesCmac(Cmac<Aes128>),
+    AesCmac(Cmac<E::Keyed<'e>>),
 }
 
-impl EapolMic {
-    pub(crate) fn update(&mut self, bytes: &[u8]) {
+impl<'e, E: Aes128Engine + 'e> EapolMic<'e, E> {
+    pub(crate) fn update(&mut self, bytes: &[u8]) -> Result<(), BlockError> {
         match self {
-            Self::HmacSha1(mac) => mac.update(bytes),
+            Self::HmacSha1(mac) => {
+                mac.update(bytes);
+                Ok(())
+            }
             Self::AesCmac(mac) => mac.update(bytes),
         }
     }
 
-    pub(crate) fn finalize(self) -> [u8; RSN_MIC_LEN] {
+    pub(crate) fn finalize(self) -> Result<[u8; RSN_MIC_LEN], BlockError> {
         match self {
             Self::HmacSha1(mac) => {
                 let mut digest = mac.finalize().into_bytes();
@@ -86,22 +101,17 @@ impl EapolMic {
                     *target = *source;
                 }
                 digest.zeroize();
-                mic
+                Ok(mic)
             }
-            Self::AesCmac(mac) => {
-                let mut tag = mac.finalize().into_bytes();
-                let mic = tag.into();
-                tag.zeroize();
-                mic
-            }
+            Self::AesCmac(mac) => mac.finalize(),
         }
     }
 
     /// Constant-time comparison against a received MIC.
-    pub(crate) fn verify(self, mic: &[u8; RSN_MIC_LEN]) -> bool {
+    pub(crate) fn verify(self, mic: &[u8; RSN_MIC_LEN]) -> Result<bool, BlockError> {
         match self {
-            Self::HmacSha1(mac) => mac.verify_truncated_left(mic).is_ok(),
-            Self::AesCmac(mac) => mac.verify_slice(mic).is_ok(),
+            Self::HmacSha1(mac) => Ok(mac.verify_truncated_left(mic).is_ok()),
+            Self::AesCmac(mac) => mac.verify_truncated(mic),
         }
     }
 }
@@ -139,6 +149,8 @@ mod tests {
         clippy::unreachable
     )]
     use super::*;
+    use crate::test_engine::Refusing;
+    use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 
     fn expanded(akm: Akm, pmk: &[u8; 32], context: &[u8; 76]) -> [u8; RSN_PTK_LEN] {
         let mut bytes = [0; RSN_PTK_LEN];
@@ -166,15 +178,33 @@ mod tests {
     #[test]
     fn mic_verification_accepts_only_the_finalized_value() {
         let kck = [7; RSN_KCK_LEN];
-        let mut mic = Akm::Psk.mic(&kck);
-        mic.update(b"frame");
-        let value = mic.finalize();
-        let mut check = Akm::Psk.mic(&kck);
-        check.update(b"frame");
-        assert!(check.verify(&value));
-        let mut tampered = Akm::Psk.mic(&kck);
-        tampered.update(b"framf");
-        assert!(!tampered.verify(&value));
+        for akm in [Akm::Psk, Akm::PskSha256, Akm::Sae] {
+            let engine = &mut SoftwareAes128;
+            let mut mic = akm.mic(&kck, engine).unwrap();
+            mic.update(b"frame").unwrap();
+            let value = mic.finalize().unwrap();
+            let mut check = akm.mic(&kck, engine).unwrap();
+            check.update(b"frame").unwrap();
+            assert!(check.verify(&value).unwrap());
+            let mut tampered = akm.mic(&kck, engine).unwrap();
+            tampered.update(b"framf").unwrap();
+            assert!(!tampered.verify(&value).unwrap());
+        }
+    }
+
+    #[test]
+    fn an_aes_cmac_mic_returns_the_engines_refusal_and_hmac_needs_no_engine() {
+        let kck = [7; RSN_KCK_LEN];
+        for akm in [Akm::PskSha256, Akm::Sae] {
+            assert_eq!(
+                akm.mic(&kck, &mut Refusing).err(),
+                Some(BlockError::Unavailable)
+            );
+        }
+        let mut refusing = Refusing;
+        let mut mic = Akm::Psk.mic(&kck, &mut refusing).unwrap();
+        mic.update(b"frame").unwrap();
+        assert!(mic.finalize().is_ok());
     }
 
     #[test]
@@ -192,10 +222,11 @@ mod tests {
         assert_eq!(Akm::PskSha256.key_descriptor_version().get(), 3);
 
         // Computed independently with Python's cryptography CMAC.
-        let mut mic = Akm::PskSha256.mic(&[7; RSN_KCK_LEN]);
-        mic.update(b"eapol-frame-bytes");
+        let mut engine = SoftwareAes128;
+        let mut mic = Akm::PskSha256.mic(&[7; RSN_KCK_LEN], &mut engine).unwrap();
+        mic.update(b"eapol-frame-bytes").unwrap();
         assert_eq!(
-            mic.finalize(),
+            mic.finalize().unwrap(),
             [
                 0xc9, 0x54, 0x6e, 0xe7, 0xb6, 0xed, 0x61, 0x8c, 0x15, 0x91, 0x63, 0xcb, 0x3a, 0x83,
                 0xe9, 0xb4
@@ -217,10 +248,12 @@ mod tests {
             expanded(Akm::Sae, &pmk, &context),
             expanded(Akm::PskSha256, &pmk, &context)
         );
-        let mut sae = Akm::Sae.mic(&[7; RSN_KCK_LEN]);
-        sae.update(b"eapol-frame-bytes");
-        let mut psk_sha256 = Akm::PskSha256.mic(&[7; RSN_KCK_LEN]);
-        psk_sha256.update(b"eapol-frame-bytes");
-        assert_eq!(sae.finalize(), psk_sha256.finalize());
+        let engine = &mut SoftwareAes128;
+        let mut sae = Akm::Sae.mic(&[7; RSN_KCK_LEN], engine).unwrap();
+        sae.update(b"eapol-frame-bytes").unwrap();
+        let sae = sae.finalize().unwrap();
+        let mut psk_sha256 = Akm::PskSha256.mic(&[7; RSN_KCK_LEN], engine).unwrap();
+        psk_sha256.update(b"eapol-frame-bytes").unwrap();
+        assert_eq!(sae, psk_sha256.finalize().unwrap());
     }
 }

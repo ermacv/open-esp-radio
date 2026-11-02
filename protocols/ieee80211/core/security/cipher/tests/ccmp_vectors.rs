@@ -19,7 +19,10 @@
 //! vectors, not additional published Annex J vectors. No C code is ported.
 
 use oer_ieee80211_contracts_security::Ccmp128Key;
-use oer_ieee80211_core_security_cipher::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
+use oer_ieee80211_core_security_cipher::{
+    aes::SoftwareAes128,
+    ccmp_mpdu::{CcmpAssociation, CcmpMpduError},
+};
 use oer_ieee80211_wire::security::Spp;
 
 struct Vector {
@@ -78,7 +81,12 @@ fn assert_vector(vector: &Vector) {
     let header = bytes(vector.header);
     let body = bytes(vector.body);
     let mut opened = wire.clone();
-    assert_eq!(association.open(&key, &mut opened).unwrap(), body);
+    assert_eq!(
+        association
+            .open(&mut SoftwareAes128, &key, &mut opened)
+            .unwrap(),
+        body
+    );
     assert_eq!(&opened[..header.len()], header);
 
     // Encrypt from the independently specified plaintext, not a round trip.
@@ -86,13 +94,15 @@ fn assert_vector(vector: &Vector) {
     plain.extend_from_slice(&wire[header.len()..header.len() + 8]);
     plain.extend_from_slice(&body);
     plain.extend_from_slice(&[0; 8]);
-    association.seal(&key, &mut plain).unwrap();
+    association
+        .seal(&mut SoftwareAes128, &key, &mut plain)
+        .unwrap();
     assert_eq!(plain, wire);
 
     let mut damaged = wire.clone();
     *damaged.last_mut().unwrap() ^= 1;
     assert_eq!(
-        association.open(&key, &mut damaged),
+        association.open(&mut SoftwareAes128, &key, &mut damaged),
         Err(CcmpMpduError::InvalidMic)
     );
     assert!(
@@ -126,7 +136,7 @@ fn hostap_wlantest_qos_and_four_address_known_answers() {
         };
         wire[aad_offset] ^= 1;
         assert_eq!(
-            CcmpAssociation::new(Spp::NotNegotiated).open(&key, &mut wire),
+            CcmpAssociation::new(Spp::NotNegotiated).open(&mut SoftwareAes128, &key, &mut wire),
             Err(CcmpMpduError::InvalidMic)
         );
     }

@@ -5,15 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Stateless IEEE 802.11 CCMP, BIP and bounded AES key-wrap transforms"
+description = "Stateless IEEE 802.11 CCMP, BIP and bounded AES key-wrap transforms over a caller's AES engine"
 
 [dependencies]
 oer-crypto = { path = "../../../../../portable/crypto" }
-ccm = { version = "=0.5.0", default-features = false }
 oer-ieee80211-wire = { path = "../../../wire" }
 oer-ieee80211-contracts-security = { path = "../../../contracts/security" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
-cmac = { version = "0.7.2", default-features = false }
 zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]

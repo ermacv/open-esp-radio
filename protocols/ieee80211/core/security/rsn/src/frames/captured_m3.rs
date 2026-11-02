@@ -18,6 +18,7 @@
 
 use super::*;
 use crate::{Akm, EapolKeyFrame, EapolKeyMessage, PtkContext};
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 
 pub(crate) const MESSAGE3: [u8; 187] = [
     0x02, 0x03, 0x00, 0xb7, 0x02, 0x13, 0xcb, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -70,7 +71,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
             supplicant_nonce: SNONCE,
         },
     );
-    assert!(frame.verify_mic(&ptk));
+    assert!(frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
     let plain = crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
     let keys = parse_gtk_key_data(plain.as_bytes(), &RSN_IE, &[], true).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 1);

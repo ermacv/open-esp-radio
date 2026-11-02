@@ -9,9 +9,13 @@
     clippy::arithmetic_side_effects
 )]
 
-use aes::Aes128;
-use cmac::{Cmac, Mac, digest::KeyInit};
+use oer_crypto::{
+    Aes128Key,
+    block::{Aes128Engine, BlockError},
+    cmac::Cmac,
+};
 use oer_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
+use zeroize::Zeroize;
 
 const RSN_IGTK_LEN: usize = 16;
 
@@ -28,6 +32,18 @@ pub enum BipError {
     UnknownKeyId,
     /// The MIC does not verify.
     InvalidMic,
+    /// The AES engine refused the key or a block.
+    Engine(BlockError),
+}
+
+/// Why a group-addressed management frame was not protected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BipProtectError {
+    /// The length or the output capacity cannot hold the frame and its MMIE.
+    InvalidFrame,
+    /// The AES engine refused the key or a block. The frame's first `length`
+    /// bytes are unchanged; the bytes after them are not a valid MMIE.
+    Engine(BlockError),
 }
 
 /// A parsed BIP frame of the expected IGTK; replay admission remains with
@@ -54,39 +70,52 @@ impl<'a> BipFrame<'a> {
         self.0.packet_number()
     }
 
-    pub fn verify(self, key: &[u8; RSN_IGTK_LEN]) -> Result<(), BipError> {
-        let mut mac = cmac(key);
+    pub fn verify<E: Aes128Engine>(
+        self,
+        engine: &mut E,
+        key: &[u8; RSN_IGTK_LEN],
+    ) -> Result<(), BipError> {
+        let key = Aes128Key::copy_from(key);
+        let keyed = engine.load(&key).map_err(BipError::Engine)?;
+        drop(key);
+        let mut mac = Cmac::new(keyed).map_err(BipError::Engine)?;
         for part in self.0.mic_input() {
-            mac.update(part);
+            mac.update(part).map_err(BipError::Engine)?;
         }
-        mac.verify_truncated_left(self.0.mic())
-            .map_err(|_| BipError::InvalidMic)?;
-        Ok(())
+        if mac
+            .verify_truncated(self.0.mic())
+            .map_err(BipError::Engine)?
+        {
+            Ok(())
+        } else {
+            Err(BipError::InvalidMic)
+        }
     }
 }
 
 /// Protect a frame with the caller's IPN, without allocating or advancing it.
-pub fn protect(
+pub fn protect<E: Aes128Engine>(
+    engine: &mut E,
     key_id: u8,
     key: &[u8; RSN_IGTK_LEN],
     packet_number: u64,
     frame: &mut [u8],
     length: usize,
-) -> Option<usize> {
-    let protection = BipProtection::append(frame, length, u16::from(key_id), packet_number).ok()?;
-    let mut mac = cmac(key);
+) -> Result<usize, BipProtectError> {
+    let protection = BipProtection::append(frame, length, u16::from(key_id), packet_number)
+        .map_err(|_| BipProtectError::InvalidFrame)?;
+    let key = Aes128Key::copy_from(key);
+    let keyed = engine.load(&key).map_err(BipProtectError::Engine)?;
+    drop(key);
+    let mut mac = Cmac::new(keyed).map_err(BipProtectError::Engine)?;
     for part in protection.mic_input() {
-        mac.update(part);
+        mac.update(part).map_err(BipProtectError::Engine)?;
     }
-    let tag = mac.finalize().into_bytes();
+    let mut tag = mac.finalize().map_err(BipProtectError::Engine)?;
     let mut mic = [0; BIP_MIC_LEN];
     for (out, byte) in mic.iter_mut().zip(tag) {
         *out = byte;
     }
-    Some(protection.finish(&mic))
-}
-
-/// AES-128-CMAC over a 16-byte IGTK.
-fn cmac(key: &[u8; RSN_IGTK_LEN]) -> Cmac<Aes128> {
-    <Cmac<Aes128> as KeyInit>::new(&(*key).into())
+    tag.zeroize();
+    Ok(protection.finish(&mic))
 }

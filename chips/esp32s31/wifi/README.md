@@ -29,7 +29,8 @@ waker crosses harts.
 `Resources` consumes the unique hardware partition, binding proof, doorbell,
 the facade's affine `DmaResources` claim, signals and declared storage. The
 station unwraps EAPOL-Key data (RFC 3394) synchronously in its step over the
-engine the facade's station callbacks supply (`StaCallbacks::KeyUnwrapEngine`):
+engine the facade's station callbacks supply (`StaCallbacks::AesEngine`), on
+which its EAPOL-Key MIC and protected-management CCMP and BIP run as well:
 the AES accelerator (`compose::crypto::AesEngine`), each block waited for on
 its `STATE` flag, which the image hands to the station's `Profile`.
 The permanent RX ring and nine TX allocations have one declaration in the

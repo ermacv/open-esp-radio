@@ -14,17 +14,20 @@ execute its typed transmit and key-install requests.
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
 | `nonce` | Boot-seeded ChaCha20 owner for fresh supplicant nonces |
-| `eapol` | Message classification and MIC verification of EAPOL-Key packets the codec checked (`oer_ieee80211_wire::eapol::EapolKey`), and their owned copies |
+| `eapol` | Message classification and MIC verification of EAPOL-Key packets the codec checked (`oer_ieee80211_wire::eapol::EapolKey`), and their owned copies; an AES-CMAC MIC runs on the caller's engine |
 | `frames` | Which EAPOL-Key fields each handshake message sends, the MIC it computes, which elements and KDEs a Key Data carries, and owned security elements; the EAPOL-Key layout and its MIC field, GTK/IGTK KDEs, Key Data elements and padding, SAE element IDs and status codes are `oer-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
-| `supplicant` | Station orchestration: the RFC 3394 key-data unwrap over the caller's synchronous `oer_crypto::block::Aes128Engine` (in `RsnStaSupplicant::on_frame` and `RsnConnectedSupplicant::prepare_group_key_install`), typed key-install requests and their completions, response deadlines |
-| `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification, the binding of the station's security IEs and the Message 3 wrap and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
+| `supplicant` | Station orchestration: the EAPOL-Key MIC and the RFC 3394 key-data unwrap over the caller's synchronous `oer_crypto::block::Aes128Engine`, lent to each call that needs it, typed key-install requests and their completions, response deadlines |
+| `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification on the caller's engine, the binding of the station's security IEs and the Message 3 wrap (software AES) and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
 | `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
-`oer-ieee80211-core-security-cipher` owns software CCMP, BIP-CMAC-128 and the software
-AES-128 block primitive with its key-unwrap engine; the RFC 3394 algorithm is
-`oer-crypto`'s. The AAD, nonce and Management MIC element it authenticates
+`oer-ieee80211-core-security-cipher` owns CCMP and BIP-CMAC-128 over the
+caller's AES-128 engine, and the software AES-128 block primitive with its
+key-unwrap engine; the CCM, AES-CMAC and RFC 3394 algorithms are
+`oer-crypto`'s. `bip`, `management_ccmp` and the EAPOL-Key MIC of PSK-SHA256
+and SAE take the same `Aes128Engine` as the unwrap; its refusal is each
+call's typed `Engine` error, never a software fallback. The AAD, nonce and Management MIC element it authenticates
 are `oer-ieee80211-wire`'s (`ccmp::protected`, `bip`). Key data is bounded by
 `RSN_KEY_DATA_CAPACITY`. It has no handshake state, replay frontier or clock.
 
@@ -53,9 +56,9 @@ same type without extracting an intermediate array. PTK derivation writes
 directly into the zeroizing PTK, and GTK parsing borrows the key-data buffer
 into a zeroizing GTK. Pending actions, PMF reception and retained station
 records use the common owner; adapters and comparisons borrow its bytes.
-This covers those owners, not arbitrary compiler temporaries. AES-128/192/256
-key schedules enable RustCrypto's `zeroize` feature and wipe on drop, including
-when the stateless cipher crate is built independently. HMAC and SHA-1/SHA-2
+This covers those owners, not arbitrary compiler temporaries. The software
+engine's AES-128 key schedule enables RustCrypto's `zeroize` feature and wipes
+on drop; the CCM and AES-CMAC states erase their chaining values on drop. HMAC and SHA-1/SHA-2
 internal state derived from KCK/PMK material does not wipe on drop; zeroizing
 the input owners does not erase that state. SAE passwords, password elements,
 password tokens, derived keys and comeback-token keys zeroize on drop. Their

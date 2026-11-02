@@ -30,6 +30,7 @@ use crate::{
     management_ccmp::ManagementCcmpReceiver,
     sae::{SaeComebackTokens, SaeCommit, SaePasswordElement, valid_peer_commit},
 };
+use oer_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_ieee80211_wire::sae::{SaeCommitValues, SaeReceivedCommit, anti_clogging_token};
 
 /// The captured Message 3's PTK and its decrypted key data.
@@ -75,7 +76,7 @@ fn eapol(count: usize) {
                 frame.key_identifier(),
                 frame.key_data(),
             );
-            let _ = frame.verify_mic(&ptk);
+            let _ = frame.verify_mic(&ptk, &mut SoftwareAes128);
         }
         if let Ok(owned) =
             OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, [2, 0, 0, 0, 0, 1], bytes)
@@ -178,11 +179,13 @@ fn bip(count: usize) {
     let mut frame = [0_u8; 26 + 18];
     frame[0] = 0xc0;
     frame[4] = 0xff;
-    let length = transmitter.protect(&mut frame, 26).unwrap();
+    let length = transmitter
+        .protect(&mut SoftwareAes128, &mut frame, 26)
+        .unwrap();
     let seed = frame[..length].to_vec();
     inputs(&[&seed], count, 120, |bytes| {
         let mut receiver = BipReceiver::new(&igtk);
-        let _ = receiver.verify(bytes);
+        let _ = receiver.verify(&mut SoftwareAes128, bytes);
     });
 }
 
@@ -207,14 +210,14 @@ fn ccmp(count: usize) {
         for spp in [Spp::NotNegotiated, Spp::Negotiated] {
             copy.clear();
             copy.extend_from_slice(bytes);
-            let _ = CcmpAssociation::new(spp).open(&key, &mut copy);
+            let _ = CcmpAssociation::new(spp).open(&mut SoftwareAes128, &key, &mut copy);
         }
         copy.clear();
         copy.extend_from_slice(bytes);
         let _ = ManagementCcmpReceiver::new(oer_ieee80211_contracts_security::Ccmp128Key::new(
             key.as_bytes(),
         ))
-        .open(&mut copy);
+        .open(&mut SoftwareAes128, &mut copy);
     });
 }
 
