@@ -11,6 +11,7 @@ members = [
     "firmware/probes/esp32s31-radio",
     "firmware/probes/esp32s31-peer-overdue",
     "firmware/probes/esp32s31-aes-timing",
+    "firmware/probes/esp32s31-mcycle",
     "tools/vendor/scenario-cli",
     "tools/vendor/cli",
     "tools/vendor/ieee802154-esp32s31",
