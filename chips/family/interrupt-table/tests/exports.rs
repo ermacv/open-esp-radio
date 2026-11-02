@@ -20,7 +20,7 @@ fn safe_table_exports_resolve_transitive_paths_and_restrict_token_construction()
     fs::write(
         scratch.path().join("Cargo.toml"),
         format!(
-            "[package]\nname = \"interrupt-exports\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {manifest:?} }}\noer-memory = {{ path = {memory:?} }}\n"
+            "[package]\nname = \"interrupt-exports\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-family-interrupt-table = {{ path = {manifest:?} }}\noer-portable-memory = {{ path = {memory:?} }}\n"
         ),
     )
     .unwrap();

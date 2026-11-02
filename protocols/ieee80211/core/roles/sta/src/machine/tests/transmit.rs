@@ -2,7 +2,9 @@
 //! the service carries them into the port's attempt unchanged.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{PhyRate, Protection, RetryPlan, RetryStage, TxOperation};
+use oer_protocols_ieee80211_contracts_port::{
+    PhyRate, Protection, RetryPlan, RetryStage, TxOperation,
+};
 use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
@@ -10,7 +12,9 @@ use oer_protocols_ieee80211_wire::phy::LegacyRate;
 struct TwoStages(core::cell::RefCell<Vec<FrameRates>>);
 
 impl RateSelection<RxMeta, ()> for TwoStages {
-    fn packet_number_step(&self) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep::ONE
     }
 
@@ -32,7 +36,11 @@ impl RateSelection<RxMeta, ()> for TwoStages {
             .ok()
     }
 
-    fn associated(&mut self, _: &oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer, _: &RxMeta) {
+    fn associated(
+        &mut self,
+        _: &oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer,
+        _: &RxMeta,
+    ) {
     }
 
     fn disconnected(&mut self) {}

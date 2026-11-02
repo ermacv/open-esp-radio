@@ -152,9 +152,11 @@ fn run() -> Result<ExitCode> {
                     oer_tools_lab_arbiter::readiness::ROUTER,
                 )],
             )?;
-            let remote: Vec<oer_tools_lab_model::equipment::Fixture> = serde_json::from_value(
-                service::run(&mut lease, oer_tools_lab_client::protocol::Operation::ProbeRouter)?,
-            )?;
+            let remote: Vec<oer_tools_lab_model::equipment::Fixture> =
+                serde_json::from_value(service::run(
+                    &mut lease,
+                    oer_tools_lab_client::protocol::Operation::ProbeRouter,
+                )?)?;
             lease.release()?;
             let local = local_fixtures::probe_local(&oer_tools_lab_model::paths::stand_file()?);
             println!("Equipment over SSH (the LAB service):");

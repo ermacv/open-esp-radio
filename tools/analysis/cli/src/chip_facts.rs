@@ -4,8 +4,8 @@
 
 use std::path::Path;
 
-use oer_tools_analysis_riscv_model::Result;
 use oer_chips_family_facts::{Source, tracked};
+use oer_tools_analysis_riscv_model::Result;
 
 /// The layer files below a repository root, as they are now.
 struct Tree<'a>(&'a Path);

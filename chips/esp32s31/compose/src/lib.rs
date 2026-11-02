@@ -62,7 +62,9 @@ impl oer_chips_family_staged_runtime::adoption::Binding for Esp32s31 {
     type Interrupts = oer_chips_esp32s31_hal::platform::Hart0Grant;
     type Controller = oer_chips_esp32s31_hal::platform::InterruptController;
 
-    fn split(parts: oer_chips_esp32s31_hal::root::PlatformParts) -> (Self::Hardware, Self::Interrupts) {
+    fn split(
+        parts: oer_chips_esp32s31_hal::root::PlatformParts,
+    ) -> (Self::Hardware, Self::Interrupts) {
         (parts.hardware, parts.interrupts.grant)
     }
 

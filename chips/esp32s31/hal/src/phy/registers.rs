@@ -211,13 +211,17 @@ pub(crate) struct RadioPhyParts<P: RadioPlacement = ChipPlacement> {
     pub(crate) phy_baseband_config_oracle: BasebandRegisters<P>,
     pub(crate) phy_clock_oracle: ClockRegisters<P>,
     pub(crate) phy_frequency_channel_oracle: FrequencyRegisters<P>,
-    pub(crate) hp_sys_clkrst_radio: oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P::HpClock>,
+    pub(crate) hp_sys_clkrst_radio:
+        oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P::HpClock>,
     pub(crate) pmu_radio: oer_chips_esp32s31_pac::pmu::PmuRadio<P::Pmu>,
-    pub(crate) modem_syscon_radio: oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P::ModemSyscon>,
+    pub(crate) modem_syscon_radio:
+        oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P::ModemSyscon>,
     pub(crate) modem_syscon_clock_reset:
         oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P::ModemSyscon>,
-    pub(crate) phy_agc_recovered_gaps: oer_chips_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps<P::WifiBb>,
-    pub(crate) phy_bb_recovered_gaps: oer_chips_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps<P::WifiBb>,
+    pub(crate) phy_agc_recovered_gaps:
+        oer_chips_esp32s31_pac::wifi_bb::PhyAgcRecoveredGaps<P::WifiBb>,
+    pub(crate) phy_bb_recovered_gaps:
+        oer_chips_esp32s31_pac::wifi_bb::PhyBbRecoveredGaps<P::WifiBb>,
     pub(crate) phy_brx_recovered_gaps:
         oer_chips_esp32s31_pac::wifi_bb_brx::PhyBrxRecoveredGaps<P::WifiBbBrx>,
     pub(crate) phy_btagc_recovered: oer_chips_esp32s31_pac::bt_bb::PhyBtagcRecovered<P::BtBb>,
@@ -231,12 +235,14 @@ pub(crate) struct RadioPhyParts<P: RadioPlacement = ChipPlacement> {
         oer_chips_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump<P::ModemDatadump>,
     pub(crate) phy_fedata_recovered: oer_chips_esp32s31_pac::fe::PhyFedataRecovered<P::Fe>,
     pub(crate) phy_fedata_wifi_recovered: oer_chips_esp32s31_pac::fe::PhyFedataWifiRecovered<P::Fe>,
-    pub(crate) phy_i2c_command_ram: oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam<P::I2cRam>,
+    pub(crate) phy_i2c_command_ram:
+        oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam<P::I2cRam>,
     pub(crate) phy_iq_estimator_oracle: oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle<P::Fe>,
     pub(crate) bluetooth_lp_timer_clock:
         oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P::ModemLpcon>,
     pub(crate) coex_lp_clock: oer_chips_esp32s31_pac::modem_lpcon::CoexLpClock<P::ModemLpcon>,
-    pub(crate) modem_lpcon_power: oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower<P::ModemLpcon>,
+    pub(crate) modem_lpcon_power:
+        oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower<P::ModemLpcon>,
     pub(crate) modem_lpcon_phy_tick:
         oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPhyTick<P::ModemLpcon>,
     pub(crate) lp_aon_radio_clock: oer_chips_esp32s31_pac::lp_aonclkrst::LpAonRadioClock<P::LpAon>,
@@ -245,7 +251,8 @@ pub(crate) struct RadioPhyParts<P: RadioPlacement = ChipPlacement> {
     pub(crate) lp_tsens: oer_chips_esp32s31_pac::tsens::LpTsens<P::Tsens>,
     pub(crate) i2c_ana_mst: oer_chips_esp32s31_pac::i2c_ana_mst::I2cAnaMst<P::I2c>,
     pub(crate) phy_memory: oer_chips_esp32s31_pac::fe::PhyMemory<P::Fe>,
-    pub(crate) phy_nrx_recovered_gaps: oer_chips_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps<P::WifiBb>,
+    pub(crate) phy_nrx_recovered_gaps:
+        oer_chips_esp32s31_pac::wifi_bb::PhyNrxRecoveredGaps<P::WifiBb>,
     pub(crate) phy_pbus: oer_chips_esp32s31_pac::fe::PhyPbus<P::Fe>,
     pub(crate) phy_rx_dco_oracle: oer_chips_esp32s31_pac::fe::PhyRxDcoOracle<P::Fe>,
 }
@@ -486,7 +493,9 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
         );
         image_word!(
             self.peripherals.phy_adc_dump_recovered_modem_datadump,
-            oer_chips_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump::<P::ModemDatadump>
+            oer_chips_esp32s31_pac::modem_datadump::PhyAdcDumpRecoveredModemDatadump::<
+                P::ModemDatadump,
+            >
         );
         image_word!(
             self.peripherals.phy_fedata_recovered,

@@ -5,9 +5,9 @@
 //! `oer-protocols-ieee80211-core-upper-mac`, which a backend running the Espressif policy
 //! instantiates with them.
 
+use oer_portable_time::Duration;
 use oer_protocols_ieee80211_core_upper_mac::{AckFailureAccounting, AmpduRetryPolicy, RetryLimits};
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
-use oer_portable_time::Duration;
 
 /// Short retry limit: `lmacConfMib[0x15]` of `lmacInit`.
 pub const SHORT_RETRY_LIMIT: u8 = 0x20;

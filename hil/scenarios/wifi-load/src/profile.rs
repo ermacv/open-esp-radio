@@ -15,12 +15,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oer_tools_hil_harness::{Cx, Failure};
-use oer_tools_image_checks::copies::Copies;
 use oer_hil_services_load::{
     CollectSamples, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Profile, Sample, Samples,
     SamplesCollected,
 };
+use oer_tools_hil_harness::{Cx, Failure};
+use oer_tools_image_checks::copies::Copies;
 
 /// The sampling period in microseconds; without it the image samples
 /// nothing.

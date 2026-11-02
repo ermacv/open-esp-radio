@@ -8,8 +8,8 @@ use oer_tools_analysis_blobray_application::{
     in_process::Executable,
     library::{Assumptions, LibraryOutcome, analyze_library},
 };
-use oer_tools_analysis_riscv_model::{JumpDispatch, WorkingMemory};
 use oer_tools_analysis_cli::{jump_table::human, wire::NamedFunction};
+use oer_tools_analysis_riscv_model::{JumpDispatch, WorkingMemory};
 
 fn object(alternative: bool, displacement: i32) -> Vec<u8> {
     let mut code: Vec<u32> = vec![
@@ -163,7 +163,9 @@ fn blobray_and_both_cli_formats_preserve_the_dispatch_kind() {
         assert_eq!(dispatch["displacement"], displacement);
         let mut old = dispatch.clone();
         old.as_object_mut().unwrap().remove("displacement");
-        assert!(serde_json::from_value::<oer_tools_analysis_riscv_model::FunctionRecord>(old).is_err());
+        assert!(
+            serde_json::from_value::<oer_tools_analysis_riscv_model::FunctionRecord>(old).is_err()
+        );
         let mut ambiguous = json.clone();
         let extra = if alternative { "entries" } else { "targets" };
         ambiguous["jump_tables"][0][extra] = serde_json::json!([0x40, 0x50, 0x58]);

@@ -171,7 +171,9 @@ impl ChannelSwitch {
             }
         };
         let (written, _) = out.split_at_mut_checked(elements.len())?;
-        oer_portable_wire::Writer::new(written).write(elements).ok()?;
+        oer_portable_wire::Writer::new(written)
+            .write(elements)
+            .ok()?;
         Some(elements.len())
     }
 

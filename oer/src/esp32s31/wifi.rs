@@ -23,12 +23,6 @@
 //!   network: the station returns each received frame's buffer at once.
 
 use embassy_futures::select::{Either, select};
-use oer_portable_embassy_net::{
-    NetworkInterfaceId,
-    ethernet::LentSlots,
-    ip::{self, Configuration, Resources, Service},
-};
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_compose::{Esp32s31, pilot, platform::DeviceIdentity};
 use oer_chips_esp32s31_hal::peripherals::{
     efuse::EfuseRegisters, software_interrupt::FromCpu3Irq, timg0_alarm::Timg0AlarmParts,
@@ -38,6 +32,12 @@ use oer_chips_family_executor::{
     Doorbell, DoorbellLine, Executor, InterruptExecutor, ThreadContext, UrgentSource,
 };
 use oer_chips_family_interrupt_table::signal::{FromHandler, FromOwnTask, IrqSignal};
+use oer_portable_embassy_net::{
+    NetworkInterfaceId,
+    ethernet::LentSlots,
+    ip::{self, Configuration, Resources, Service},
+};
+use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use static_cell::StaticCell;
 
@@ -237,8 +237,12 @@ pub(crate) async fn serve_station(start: StationStart) {
         wifi::StationExit::Unavailable(wifi::UnavailableCause::Abandoned) => {
             super::fail(oer_portable_diagnostics::name!("wifi-abandoned"; 32))
         }
-        wifi::StationExit::Failed(_) => super::fail(oer_portable_diagnostics::name!("wifi-failed"; 32)),
-        wifi::StationExit::Poisoned(_) => super::fail(oer_portable_diagnostics::name!("wifi-poisoned"; 32)),
+        wifi::StationExit::Failed(_) => {
+            super::fail(oer_portable_diagnostics::name!("wifi-failed"; 32))
+        }
+        wifi::StationExit::Poisoned(_) => {
+            super::fail(oer_portable_diagnostics::name!("wifi-poisoned"; 32))
+        }
         wifi::StationExit::Quarantined(_) => {
             super::fail(oer_portable_diagnostics::name!("wifi-quarantined"; 32))
         }

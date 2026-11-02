@@ -770,7 +770,8 @@ impl PhyTxIqLoopbackTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxIqLoopbackTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(())
+                {
                     LoopbackStep::TxClock
                 } else {
                     LoopbackStep::I2c(transition)

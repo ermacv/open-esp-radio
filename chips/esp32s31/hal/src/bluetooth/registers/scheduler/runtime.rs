@@ -417,7 +417,9 @@ struct HardwareDiagnosticControl<'a, B: oer_portable_mmio::Placement> {
     registers: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothSchedulerInterruptRuntime<B>,
 }
 
-impl<B: oer_portable_mmio::Placement> BluetoothDiagnosticControl for HardwareDiagnosticControl<'_, B> {
+impl<B: oer_portable_mmio::Placement> BluetoothDiagnosticControl
+    for HardwareDiagnosticControl<'_, B>
+{
     fn select(&mut self, selector: DiagnosticSelector) {
         use oer_chips_esp32s31_pac::bt_mac::diagnostic_select::Selection;
         let selection = match selector {

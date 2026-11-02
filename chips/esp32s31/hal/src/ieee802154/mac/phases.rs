@@ -122,14 +122,38 @@ impl<'a, P: Placement + 'a, E: Placement + 'a, B: Placement + 'a> Ieee802154Inte
     type Timer0Stopped = Ieee802154Teardown<'a, P, E, B, 2>;
     type TimersStopped = Ieee802154Teardown<'a, P, E, B, 3>;
     type SampleReady = Ieee802154Teardown<'a, P, E, B, 4>;
-    type Sampled =
-        Ieee802154Teardown<'a, P, E, B, 5, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
-    type Masked =
-        Ieee802154Teardown<'a, P, E, B, 6, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
-    type TxMasked =
-        Ieee802154Teardown<'a, P, E, B, 7, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
-    type AllMasked =
-        Ieee802154Teardown<'a, P, E, B, 8, oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot>;
+    type Sampled = Ieee802154Teardown<
+        'a,
+        P,
+        E,
+        B,
+        5,
+        oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot,
+    >;
+    type Masked = Ieee802154Teardown<
+        'a,
+        P,
+        E,
+        B,
+        6,
+        oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot,
+    >;
+    type TxMasked = Ieee802154Teardown<
+        'a,
+        P,
+        E,
+        B,
+        7,
+        oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot,
+    >;
+    type AllMasked = Ieee802154Teardown<
+        'a,
+        P,
+        E,
+        B,
+        8,
+        oer_chips_esp32s31_pac::ieee802154::event_status::Snapshot,
+    >;
     type Acknowledged = Ieee802154Teardown<'a, P, E, B, 9>;
     type Output = Ieee802154InterruptSetupOwner<P>;
     fn stop_operation(interrupt: Self::Interrupt, task: Self::Task) -> Self::Stopped {

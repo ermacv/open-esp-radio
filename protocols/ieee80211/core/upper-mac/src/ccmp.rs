@@ -148,7 +148,10 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Pair the key the installation terminal returned with its new PN
     /// allocator; the token is spent. A key of another installation, which
     /// may already own a numbering, is refused with both owners.
-    pub fn installed<'id, Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>>(
+    pub fn installed<
+        'id,
+        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>,
+    >(
         self,
         key: Keys::PairwiseKey,
     ) -> Result<InstalledCcmpTxKey<Keys::PairwiseKey>, ForeignCcmpTxKey<I, Keys::PairwiseKey>> {

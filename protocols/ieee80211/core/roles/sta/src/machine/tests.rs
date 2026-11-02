@@ -24,8 +24,10 @@ type TestPools = (
     ArbiterPool,
     oer_protocols_ieee80211_contracts_port::InterfaceCommandPool<StationRole>,
 );
-type TestGatePath<'id> = oer_protocols_radio_port::Child<Root<oer_protocols_radio_port::LocalId<'id>>, 0>;
-type TestConfigurationPath<'id> = oer_protocols_radio_port::Child<Root<oer_protocols_radio_port::LocalId<'id>>, 1>;
+type TestGatePath<'id> =
+    oer_protocols_radio_port::Child<Root<oer_protocols_radio_port::LocalId<'id>>, 0>;
+type TestConfigurationPath<'id> =
+    oer_protocols_radio_port::Child<Root<oer_protocols_radio_port::LocalId<'id>>, 1>;
 
 mod block_ack;
 mod key_unwrap;
@@ -95,7 +97,9 @@ impl oer_protocols_ieee80211_contracts_port::TxBufferClass for Buffer {
 }
 
 impl TxBufferMemory for Buffer {
-    fn renew_msdu(&mut self) -> Result<(), oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
+    fn renew_msdu(
+        &mut self,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
         Ok(())
     }
     fn bytes_mut(
@@ -131,7 +135,11 @@ impl<'id, const G: usize> StaTokens for Tokens<'id, G> {
     ) -> (
         (),
         Slot,
-        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
+            Slot,
+            Slot,
+            KEY_BANK_CAPACITY,
+        >,
     ) {
         (
             (),
@@ -150,7 +158,11 @@ impl<'id, const G: usize> StaTokens for Tokens<'id, G> {
         >,
     ) -> Result<
         Self::VacantKeyBank,
-        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
+            Slot,
+            Slot,
+            KEY_BANK_CAPACITY,
+        >,
     > {
         if parts.pairwise.len() != 1 || parts.group.len() != G {
             return Err(parts);
@@ -167,7 +179,11 @@ impl<'id, const G: usize> StaTokens for Tokens<'id, G> {
     ) -> (
         (),
         Slot,
-        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<Slot, Slot, KEY_BANK_CAPACITY>,
+        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
+            Slot,
+            Slot,
+            KEY_BANK_CAPACITY,
+        >,
     ) {
         (
             (),
@@ -265,9 +281,11 @@ impl oer_portable_crypto::block::Aes128Engine for CountingBlocks {
 fn channel(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap(),
     )
     .unwrap()
@@ -1213,7 +1231,8 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
                 Seen::Edca(WmmParameterSet::DCF),
                 Seen::Notify(StaNotice::Connected {
                     bssid: oer_protocols_ieee80211_wire::address::Bssid::new(
-                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()
+                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                            .unwrap()
                     )
                     .unwrap(),
                     channel: 6
@@ -1384,10 +1403,11 @@ fn beside_an_access_point_the_scan_goes_in_absences_after_its_tbtts() {
             AccessPointFact::Running {
                 channel: channel(1),
                 next_tbtt: at(50),
-                beacon_interval: oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
-                    Duration::from_millis(100),
-                )
-                .unwrap(),
+                beacon_interval:
+                    oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
+                        Duration::from_millis(100),
+                    )
+                    .unwrap(),
             },
         );
         world.command(at(0), 1, StaCommand::Connect).unwrap();
@@ -1437,10 +1457,11 @@ fn a_scan_ends_with_a_partial_result_after_skipped_absences() {
             AccessPointFact::Running {
                 channel: channel(1),
                 next_tbtt: at(50),
-                beacon_interval: oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
-                    Duration::from_millis(100),
-                )
-                .unwrap(),
+                beacon_interval:
+                    oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
+                        Duration::from_millis(100),
+                    )
+                    .unwrap(),
             },
         );
         world.command(at(0), 1, StaCommand::Connect).unwrap();
@@ -1456,10 +1477,11 @@ fn a_scan_ends_with_a_partial_result_after_skipped_absences() {
                 AccessPointFact::Running {
                     channel: channel(1),
                     next_tbtt: at(50),
-                    beacon_interval: oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
-                        Duration::from_millis(100),
-                    )
-                    .unwrap(),
+                    beacon_interval:
+                        oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
+                            Duration::from_millis(100),
+                        )
+                        .unwrap(),
                 },
             );
             world.run(at(20));
@@ -1477,10 +1499,11 @@ fn access_point_on_1(world: &mut World<'_>) {
         AccessPointFact::Running {
             channel: channel(1),
             next_tbtt: at(50),
-            beacon_interval: oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
-                Duration::from_millis(100),
-            )
-            .unwrap(),
+            beacon_interval:
+                oer_protocols_ieee80211_core_arbiter::coordinator::BeaconInterval::new(
+                    Duration::from_millis(100),
+                )
+                .unwrap(),
         },
     );
 }
@@ -2165,11 +2188,12 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
             plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
             plain.extend_from_slice(&[0x99; 16]);
             plain.extend_from_slice(&[0xdd, 0]);
-            let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                ptk.kek(),
-                &plain,
-            )
-            .unwrap();
+            let wrapped =
+                oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+                    ptk.kek(),
+                    &plain,
+                )
+                .unwrap();
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
@@ -2188,7 +2212,8 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                     },
                     Seen::Notify(StaNotice::Connected {
                         bssid: oer_protocols_ieee80211_wire::address::Bssid::new(
-                            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap()
+                            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                                .unwrap()
                         )
                         .unwrap(),
                         channel: 6
@@ -2220,7 +2245,10 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
 /// Message 3 at 33 ms; the PTK of its handshake.
 fn wpa2_associated<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
-) -> (World<'id, G>, oer_protocols_ieee80211_core_security_rsn::Ptk) {
+) -> (
+    World<'id, G>,
+    oer_protocols_ieee80211_core_security_rsn::Ptk,
+) {
     wpa2_associated_by::<G>(mint, &wpa2_beacon())
 }
 
@@ -2228,7 +2256,10 @@ fn wpa2_associated<'id, const G: usize>(
 fn wpa2_associated_by<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
     beacon: &[u8],
-) -> (World<'id, G>, oer_protocols_ieee80211_core_security_rsn::Ptk) {
+) -> (
+    World<'id, G>,
+    oer_protocols_ieee80211_core_security_rsn::Ptk,
+) {
     use oer_protocols_ieee80211_core_security_rsn::{PtkContext, frames::RsnTxFrame};
     use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
@@ -2236,7 +2267,8 @@ fn wpa2_associated_by<'id, const G: usize>(
         mint,
         3,
         StaSecurity::Personal {
-            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password").unwrap(),
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
             pmk: Pmk::from_bytes(PMK),
         },
         core::array::from_fn::<_, G, _>(|i| Slot(u8::try_from(i + 1).unwrap())),
@@ -2266,7 +2298,10 @@ fn wpa2_associated_by<'id, const G: usize>(
 /// The world of [`wpa2_associated`], connected with group key 1.
 fn wpa2_connected<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
-) -> (World<'id, G>, oer_protocols_ieee80211_core_security_rsn::Ptk) {
+) -> (
+    World<'id, G>,
+    oer_protocols_ieee80211_core_security_rsn::Ptk,
+) {
     wpa2_connected_by::<G>(mint, &wpa2_beacon())
 }
 
@@ -2274,7 +2309,10 @@ fn wpa2_connected<'id, const G: usize>(
 fn wpa2_connected_by<'id, const G: usize>(
     mint: Mint<'id, TestPools>,
     beacon: &[u8],
-) -> (World<'id, G>, oer_protocols_ieee80211_core_security_rsn::Ptk) {
+) -> (
+    World<'id, G>,
+    oer_protocols_ieee80211_core_security_rsn::Ptk,
+) {
     use oer_protocols_ieee80211_core_security_rsn::frames::RsnTxFrame;
     use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
@@ -2284,9 +2322,11 @@ fn wpa2_connected_by<'id, const G: usize>(
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[0x99; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped =
-        oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -2308,8 +2348,10 @@ fn a_bss_closing_every_access_category_ends_the_handshake_with_its_own_reason() 
             mint,
             3,
             StaSecurity::Personal {
-                password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                    .unwrap(),
+                password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                    b"password",
+                )
+                .unwrap(),
                 pmk: Pmk::from_bytes(PMK),
             },
             [Slot(1)],
@@ -2352,9 +2394,11 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
         plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
         plain.extend_from_slice(&[0x99; 16]);
         plain.extend_from_slice(&[0xdd, 0]);
-        let wrapped =
-            oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-                .unwrap();
+        let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+            ptk.kek(),
+            &plain,
+        )
+        .unwrap();
         let message3 =
             RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                 .unwrap()
@@ -2407,9 +2451,11 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
             0x80, 0xe4,
         ]);
         plain.extend_from_slice(&[0xdd, 0]);
-        let wrapped =
-            oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-                .unwrap();
+        let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+            ptk.kek(),
+            &plain,
+        )
+        .unwrap();
         let message3 = RsnTxFrame::<512>::message3(
             Akm::Psk,
             LOCAL,
@@ -2448,9 +2494,11 @@ fn group_message1(
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, key_id, 0x00]);
     plain.extend_from_slice(&[0x77; 16]);
     plain.extend_from_slice(&[0xdd, 0, 0, 0, 0, 0, 0, 0]);
-    let wrapped =
-        oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -2949,11 +2997,12 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
             plain.extend_from_slice(&[0x99; 16]);
             plain.extend_from_slice(&[0xdd, 0]);
-            let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                ptk.kek(),
-                &plain,
-            )
-            .unwrap();
+            let wrapped =
+                oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+                    ptk.kek(),
+                    &plain,
+                )
+                .unwrap();
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
@@ -3205,7 +3254,8 @@ fn deauthentication_waits_for_the_ticket_and_buffer_of_an_accepted_transmission(
                     .0
                     .encode_null(
                         oer_protocols_ieee80211_wire::address::Bssid::new(
-                            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+                            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                                .unwrap(),
                         )
                         .unwrap(),
                         StaPowerManagement::Active,
@@ -3297,8 +3347,10 @@ fn associated_is_the_first_action_after_the_association_response() {
         installed(|mint| {
             let security = if protected {
                 StaSecurity::Personal {
-                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                        .unwrap(),
+                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                        b"password",
+                    )
+                    .unwrap(),
                     pmk: Pmk::from_bytes(PMK),
                 }
             } else {
@@ -3444,10 +3496,12 @@ fn association_waits_for_credit_without_consuming_a_request_and_still_expires() 
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
                     oer_protocols_ieee80211_wire::address::OwnAddress::new(
-                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL)
+                            .unwrap(),
                     ),
                     oer_protocols_ieee80211_wire::address::Bssid::new(
-                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                            .unwrap(),
                     )
                     .unwrap(),
                     oer_protocols_ieee80211_wire::security::LinkProtection::Open,
@@ -3546,8 +3600,10 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 mint,
                 3,
                 StaSecurity::Personal {
-                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                        .unwrap(),
+                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                        b"password",
+                    )
+                    .unwrap(),
                     pmk: Pmk::from_bytes(PMK),
                 },
             );
@@ -3594,11 +3650,12 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 plain.extend_from_slice(&[0xdd, 22, 0, 0x0f, 0xac, 1, 1, 0]);
                 plain.extend_from_slice(&[0x99; 16]);
                 plain.extend_from_slice(&[0xdd, 0]);
-                let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                    ptk.kek(),
-                    &plain,
-                )
-                .unwrap();
+                let wrapped =
+                    oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+                        ptk.kek(),
+                        &plain,
+                    )
+                    .unwrap();
                 let message3 = RsnTxFrame::<512>::message3(
                     Akm::Psk,
                     LOCAL,
@@ -3745,8 +3802,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .0
                             .encode_eapol(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
-                                        .unwrap(),
+                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
+                                        BSSID,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                                 oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission::OPEN,
@@ -3760,8 +3819,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .0
                             .encode_null(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
-                                        .unwrap(),
+                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
+                                        BSSID,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                                 StaPowerManagement::Active,
@@ -3773,8 +3834,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .0
                             .encode_protected_eapol(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
-                                        .unwrap(),
+                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
+                                        BSSID,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                                 None,
@@ -3789,8 +3852,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .0
                             .encode_protected_eapol(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
-                                        .unwrap(),
+                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
+                                        BSSID,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                                 Some(qos),
@@ -3811,8 +3876,10 @@ fn every_control_encoder_reserves_credit_before_consuming_its_sequence() {
                             .encode_management(
                                 StaManagementSubtype::Deauthentication,
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
-                                        .unwrap(),
+                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
+                                        BSSID,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                                 &reason_code::UNSPECIFIED.to_le_bytes(),
@@ -4041,9 +4108,11 @@ fn retry_message3(
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[material; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped =
-        oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, counter, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -4757,8 +4826,10 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
                 mint,
                 3,
                 StaSecurity::Personal {
-                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                        .unwrap(),
+                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                        b"password",
+                    )
+                    .unwrap(),
                     pmk: Pmk::from_bytes(PMK),
                 },
                 core::array::from_fn::<_, G, _>(|i| Slot(u8::try_from(i + 1).unwrap())),
@@ -4982,9 +5053,11 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
         while plain.len() % 8 != 0 {
             plain.push(if plain.len() == 76 { 0xdd } else { 0 });
         }
-        let wrapped =
-            oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-                .unwrap();
+        let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+            ptk.kek(),
+            &plain,
+        )
+        .unwrap();
         let m3 =
             RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                 .unwrap()
@@ -5038,11 +5111,12 @@ fn negotiated_spp_from_the_association_is_retained_by_the_ptk_owner() {
             plain.extend_from_slice(&[0xdd, 22, 0, 0x0f, 0xac, 1, 1, 0]);
             plain.extend_from_slice(&[0x99; 16]);
             plain.extend_from_slice(&[0xdd, 0]);
-            let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                ptk.kek(),
-                &plain,
-            )
-            .unwrap();
+            let wrapped =
+                oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+                    ptk.kek(),
+                    &plain,
+                )
+                .unwrap();
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
@@ -5482,9 +5556,11 @@ impl Ieee80211Capabilities for WideCaps {
 fn wide(number: u8, width: ChannelWidth) -> SupportedChannel<WideCaps> {
     SupportedChannel::new(
         oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                Channel::ghz2_4(number, width).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    Channel::ghz2_4(number, width).unwrap(),
+                ),
+            )
             .unwrap(),
     )
     .unwrap()
@@ -5493,7 +5569,9 @@ fn wide(number: u8, width: ChannelWidth) -> SupportedChannel<WideCaps> {
 /// An access point on channel 13 with HT Capabilities and an HT Operation
 /// of `operation_width`, or a legacy one without either.
 fn ht_access_point(operation_width: Option<ChannelWidth>) -> ScanRecord {
-    use oer_protocols_ieee80211_wire::ht::{HtLocalCapabilities, ht_capability_ie, ht_operation_ie};
+    use oer_protocols_ieee80211_wire::ht::{
+        HtLocalCapabilities, ht_capability_ie, ht_operation_ie,
+    };
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
             oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),

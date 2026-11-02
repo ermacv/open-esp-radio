@@ -27,8 +27,10 @@ use oer_chips_esp32s31_hal::types::{
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
 use oer_chips_family_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
+use oer_portable_memory::{
+    HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma,
+};
 use oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision;
-use oer_portable_memory::{HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -76,7 +78,10 @@ impl TxHardware for CompletionHardware {
         None
     }
 
-    fn begin_tx_timeout_abort(&mut self, _: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(
+        &mut self,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> bool {
         false
     }
 
@@ -208,7 +213,10 @@ impl TxHardware for DetachingCompletionHardware {
         None
     }
 
-    fn begin_tx_timeout_abort(&mut self, _: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(
+        &mut self,
+        _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> bool {
         self.abort_requested = true;
         true
     }
@@ -314,7 +322,8 @@ fn frame<const CAPACITY: usize, const DEPTH: usize>(
     encode: impl FnOnce(&mut [u8]),
 ) -> PlacedTxLease<PinnedDmaTxRadioLease<'static, CAPACITY, 0, 0>> {
     let (index, ()) = pool.claim_network(slot).unwrap().publish(
-        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + length).expect("test frame length"),
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + length)
+            .expect("test frame length"),
         |bytes| {
             encode(&mut bytes[TX_AMPDU_METADATA_SIZE..]);
         },
@@ -524,7 +533,8 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
             std::boxed::Box::new(PinnedDmaTxPool::new()),
         ));
         let (index, ()) = pool.claim_network(0).unwrap().publish(
-            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32)
+                .expect("test frame length"),
             |_| {},
         );
         let mut retention = RetainedAmpduDmaStorage::new();
@@ -598,7 +608,8 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     for slot in 0..4 {
         let network = pool.claim_network(slot).unwrap();
         let (index, ()) = network.publish(
-            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32)
+                .expect("test frame length"),
             |bytes| {
                 bytes[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 32].fill(slot);
                 bytes[TX_AMPDU_METADATA_SIZE + 1] = 0x41;

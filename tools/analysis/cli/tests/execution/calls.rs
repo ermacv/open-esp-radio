@@ -272,7 +272,8 @@ fn unbounded_pure_response_answers_every_call_and_completes() {
     // Three calls to 0x2000: the prefix call, then two more after reloading t0.
     let f = Fixture::new(&code(&[0x000022b7, 0x000280e7, 0x000022b7, 0x000280e7]));
     let mut r = request(&f, vec![response(Some(1))]);
-    r.cases[0].vendor.calls[0].repetition = oer_tools_analysis_blobray_domain::CallRepetition::Unbounded;
+    r.cases[0].vendor.calls[0].repetition =
+        oer_tools_analysis_blobray_domain::CallRepetition::Unbounded;
     r.cases[0].replacement = Some(r.cases[0].vendor.clone());
     let (m, rows) = run(&f, r);
     assert!(m.complete);

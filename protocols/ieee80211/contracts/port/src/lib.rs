@@ -87,7 +87,9 @@ pub use management::ManagementTxPlan;
 // Vocabulary the port's signatures carry, so a runtime over the port names
 // it without depending on the air formats.
 pub use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
-pub use oer_protocols_ieee80211_wire::channel::{Band, Channel, ChannelError, ChannelWidth, WifiChannel};
+pub use oer_protocols_ieee80211_wire::channel::{
+    Band, Channel, ChannelError, ChannelWidth, WifiChannel,
+};
 pub use oer_protocols_ieee80211_wire::phy::PhyRate;
 
 /// The clock domain of the IEEE 802.11 lower-MAC port: its instants never
@@ -110,7 +112,8 @@ pub type Ieee80211Duration = oer_portable_time::RadioDuration<Ieee80211Radio>;
 pub type Ieee80211Stamp = oer_protocols_radio_port::RadioStamp<Ieee80211Radio>;
 
 /// A generation of the port's radio-clock relation to monotonic time.
-pub type Ieee80211ClockGeneration = oer_protocols_radio_port::Generation<Ieee80211Instant, oer_portable_time::Instant>;
+pub type Ieee80211ClockGeneration =
+    oer_protocols_radio_port::Generation<Ieee80211Instant, oer_portable_time::Instant>;
 
 /// A paired reading of the IEEE 802.11 lower-MAC port's clock and the
 /// monotonic clock.

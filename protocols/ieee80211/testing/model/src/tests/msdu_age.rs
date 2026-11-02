@@ -1,10 +1,10 @@
 use super::*;
+use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
 use oer_protocols_ieee80211_testing_conformance::{
     self as conformance,
     msdu_age::{self as contract, Case, End, Trace},
 };
-use oer_portable_time_virtual::VirtualClock;
 
 type Recorded = Rc<RefCell<Option<Trace<Vec<End>>>>>;
 struct Exercise {
@@ -48,7 +48,11 @@ fn send_aggregate<'k, 'p, 'id: 'k + 'p, Id: SlotIdentity + 'id>(
 }
 async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
+    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
+        'id,
+        ModelTickets,
+        ModelPool<Id, 1>,
+    >,
 ) -> (
     Slot<'id, ModelTickets, ModelPool<Id, 1>>,
     ModelSubframes<'id, ModelBackend<Id>>,
@@ -73,7 +77,8 @@ async fn returned_aggregate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
     );
     let report = match outcome {
         TxOutcome::Ended(oer_protocols_ieee80211_contracts_port::AggregateEnd::Delivered {
-            report, ..
+            report,
+            ..
         }) => Some(report),
         _ => None,
     };
@@ -191,14 +196,18 @@ impl Work for Exercise {
             let delivered = subframes.next().unwrap();
             let missing = subframes.next().unwrap();
             let report = report.expect("the actual BlockAck reports the preceding delivery");
-            assert!(oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
-                report,
-                delivered.buffer.sequence()
-            ));
-            assert!(!oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
-                report,
-                missing.buffer.sequence()
-            ));
+            assert!(
+                oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
+                    report,
+                    delivered.buffer.sequence()
+                )
+            );
+            assert!(
+                !oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
+                    report,
+                    missing.buffer.sequence()
+                )
+            );
             assert_eq!(
                 originator.on_delivered(0, report.start_sequence, report.bitmap, PEER, STATION),
                 None

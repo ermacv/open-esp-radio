@@ -21,7 +21,9 @@
 
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
-use oer_protocols_ieee80211_core_security_cipher::bip::{self, BipError, BipFrame, BipProtectError};
+use oer_protocols_ieee80211_core_security_cipher::bip::{
+    self, BipError, BipFrame, BipProtectError,
+};
 use oer_protocols_ieee80211_core_upper_mac::packet_number::{PacketNumber48, PacketNumberFrontier};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

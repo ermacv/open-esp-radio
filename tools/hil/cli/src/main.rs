@@ -91,7 +91,8 @@ fn run(cli: Cli) -> scenarios::Result<ExitCode> {
 /// Run `command` in an owned process group; its exit code. A cancelled
 /// tool gives the group `shutdown` before it kills it.
 fn owned(command: &mut Process, shutdown: Duration) -> scenarios::Result<ExitCode> {
-    let mut child = oer_tools_os_process::owned::Child::spawn_with_shutdown_grace(command, shutdown)?;
+    let mut child =
+        oer_tools_os_process::owned::Child::spawn_with_shutdown_grace(command, shutdown)?;
     Ok(oer_tools_os_process::exit_code(
         child.wait_forwarding_cancellation()?,
     ))

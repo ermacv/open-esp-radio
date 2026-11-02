@@ -260,7 +260,9 @@ pub(crate) fn report_exception(
         .decode::<[u32; EXCEPTION_WORDS]>(Domain::CpuException)
         .map_err(|_| ())?;
     oer_portable_diagnostics::emit_note(
-        &oer_portable_diagnostics::Note::fatal_exception(view.hart, mcause, mepc, mtval, ra, mscratch),
+        &oer_portable_diagnostics::Note::fatal_exception(
+            view.hart, mcause, mepc, mtval, ra, mscratch,
+        ),
         &mut emit,
     )
     .map_err(|_| ())?;

@@ -90,8 +90,11 @@ pub fn derive<'m>(
         .ok_or("missing interrupt contract")?;
     let mut irq_storage = None;
     for range in &placement.range {
-        let bounds =
-            oer_tools_analysis_elf::StorageBounds::range(image.file(), &range.range[0], &range.range[1])?;
+        let bounds = oer_tools_analysis_elf::StorageBounds::range(
+            image.file(),
+            &range.range[0],
+            &range.range[1],
+        )?;
         if let Some(bounds) = bounds
             && bounds.end == u64::from(setup.scratch())
             && range.region == "sram"

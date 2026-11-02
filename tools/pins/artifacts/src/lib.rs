@@ -145,7 +145,11 @@ impl Manifest {
 
     /// The tracked manifest of `chip` in the repository at `root`.
     pub fn load(root: &Path, chip: &str) -> Result<Self> {
-        Self::load_with_inputs(root, chip, &mut oer_tools_os_durable::inputs::Inputs::default())
+        Self::load_with_inputs(
+            root,
+            chip,
+            &mut oer_tools_os_durable::inputs::Inputs::default(),
+        )
     }
 
     /// Include the artifact pins in the computation that consumes an artifact.

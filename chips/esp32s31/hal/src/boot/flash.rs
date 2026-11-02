@@ -357,7 +357,10 @@ impl<P: Placement, Q: Placement> MmuRegisters for FlashRegisters<P, Q> {
 #[cfg(any(test, feature = "test-support"))]
 impl<'a, 'b> FlashRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// The flash owner over host memory from each instance's base.
-    pub fn host(spi0: &'a mut [u32], spi1: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+    pub fn host(
+        spi0: &'a mut [u32],
+        spi1: &'b mut [u32],
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             spi0: Spi0Flash::host(spi0)?,
             spi1: Spi1Flash::host(spi1)?,

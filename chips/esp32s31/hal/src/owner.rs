@@ -587,7 +587,9 @@ pub struct WifiInterruptBanks {
 
 impl WifiInterruptBanks {
     /// Take both banks from the root's partition. This performs no MMIO.
-    pub(crate) fn new(partition: oer_chips_esp32s31_pac::ownership::WifiInterruptPeripherals) -> Self {
+    pub(crate) fn new(
+        partition: oer_chips_esp32s31_pac::ownership::WifiInterruptPeripherals,
+    ) -> Self {
         let (mac, power) = crate::ieee80211::registers::interrupt_banks(partition);
         Self {
             mac: MacInterruptRegisters { inner: mac },

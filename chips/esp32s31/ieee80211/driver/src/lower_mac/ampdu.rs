@@ -406,7 +406,11 @@ impl<L, const SLOTS: usize> Esp32s31AmpduBuffer<'_, L, SLOTS> {
         Ok(())
     }
 
-    fn expired_mask(&self, now: oer_portable_time::Instant, lifetime: oer_portable_time::Duration) -> u64 {
+    fn expired_mask(
+        &self,
+        now: oer_portable_time::Instant,
+        lifetime: oer_portable_time::Duration,
+    ) -> u64 {
         self.subframes
             .iter()
             .zip(self.admitted_at.iter())

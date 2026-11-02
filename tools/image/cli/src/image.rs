@@ -16,7 +16,8 @@ pub fn build(
     binary: Option<&str>,
     features: &[String],
 ) -> Result<ImageBundle> {
-    let bundle = oer_tools_image_build::build(&specification(root, image, enforced, binary, features)?)?;
+    let bundle =
+        oer_tools_image_build::build(&specification(root, image, enforced, binary, features)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -37,7 +38,10 @@ fn specification(
     if let Some(binary) = binary {
         specification.application.binary = binary.to_owned();
     }
-    specification.application.features = features.to_vec();
+    specification
+        .application
+        .features
+        .extend(features.iter().cloned());
     Ok(specification)
 }
 
@@ -77,21 +81,19 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         }
-        for image in ["boot-smoke", "radio-root"] {
-            let manifest = directory
-                .path()
-                .join("firmware/apps")
-                .join(image)
-                .join("Cargo.toml");
+        for (directory_name, package) in [
+            (
+                "hil/probes/esp32s31-boot-smoke",
+                "oer-hil-probes-esp32s31-boot-smoke",
+            ),
+            (
+                "hil/probes/esp32s31-radio-root",
+                "oer-hil-probes-esp32s31-radio-root",
+            ),
+        ] {
+            let manifest = directory.path().join(directory_name).join("Cargo.toml");
             std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
-            let suffix = image
-                .strip_prefix("../")
-                .map_or_else(|| format!("apps-{image}"), |path| path.replace('/', "-"));
-            std::fs::write(
-                manifest,
-                format!("[package]\nname = \"oer-firmware-{suffix}\"\n"),
-            )
-            .unwrap();
+            std::fs::write(manifest, format!("[package]\nname = \"{package}\"\n")).unwrap();
         }
         directory
     }
@@ -102,7 +104,7 @@ mod tests {
         let features = ["station".to_owned()];
         let spec = specification(
             directory.path(),
-            "boot-smoke",
+            "esp32s31-boot-smoke",
             Enforced::Reported,
             None,
             &features,
@@ -112,7 +114,7 @@ mod tests {
         assert!(spec.application.default_features);
         let plain = specification(
             directory.path(),
-            "boot-smoke",
+            "esp32s31-boot-smoke",
             Enforced::Reported,
             None,
             &[],
@@ -169,7 +171,7 @@ mod tests {
         let directory = repository();
         let root = directory.path();
         let profile = oer_tools_chip_profile::Profile::load(root, CHIP).unwrap();
-        let output = output(root, "boot-smoke");
+        let output = output(root, "esp32s31-boot-smoke");
         let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
         let mut built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
@@ -182,7 +184,7 @@ mod tests {
             result: oer_tools_image_bundle::CheckResult::Failed("no bound".into()),
         });
         let published = built.publish(&output).unwrap();
-        let loaded = bundle(root, "boot-smoke").unwrap();
+        let loaded = bundle(root, "esp32s31-boot-smoke").unwrap();
         assert_eq!(loaded.checks, published.checks);
         assert!(loaded.snapshot().is_ok());
     }
@@ -192,7 +194,7 @@ mod tests {
         let directory = repository();
         let root = directory.path();
         let profile = oer_tools_chip_profile::Profile::load(root, CHIP).unwrap();
-        let output = output(root, "radio-root");
+        let output = output(root, "esp32s31-radio-root");
         let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         for purpose in [Purpose::Analysis, Purpose::Flash] {
             std::fs::create_dir_all(&staging).unwrap();
@@ -205,7 +207,7 @@ mod tests {
             built.publish(&output).unwrap();
             // Both commands' write_image uses this loader, then the common
             // board writer requests a flash snapshot before writing.
-            let loaded = bundle(root, "radio-root").unwrap();
+            let loaded = bundle(root, "esp32s31-radio-root").unwrap();
             let snapshot = loaded.snapshot();
             if purpose == Purpose::Analysis {
                 assert!(

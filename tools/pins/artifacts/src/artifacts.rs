@@ -30,7 +30,11 @@ pub const STORE_ENV: &str = "OER_VENDOR_CACHE";
 /// snapshot and image build shares: `$OER_VENDOR_CACHE`, else
 /// `open-esp-radio/vendor` in the user's cache directory.
 pub fn store() -> Result<PathBuf> {
-    oer_tools_os_durable::xdg::overridable(STORE_ENV, oer_tools_os_durable::xdg::Base::Cache, "vendor")
+    oer_tools_os_durable::xdg::overridable(
+        STORE_ENV,
+        oer_tools_os_durable::xdg::Base::Cache,
+        "vendor",
+    )
 }
 
 /// Makes `root`'s `target/vendor` a link to `store`, merging a former
@@ -557,32 +561,36 @@ mod tests {
 pub(crate) fn repository() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in oer_chips_family_facts::tracked::FILES.iter().copied().chain([
-        (
-            "chips/esp32c5/vendor/artifacts.toml",
-            include_str!("../../../../chips/esp32c5/vendor/artifacts.toml"),
-        ),
-        (
-            "chips/esp32s31/vendor/artifacts.toml",
-            include_str!("../../../../chips/esp32s31/vendor/artifacts.toml"),
-        ),
-        (
-            "chips/esp32s31/vendor/facts/provenance.toml",
-            include_str!("../../../../chips/esp32s31/vendor/facts/provenance.toml"),
-        ),
-        (
-            "chips/esp32s31/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
-        ),
-        (
-            "tools/analysis/cli/tests/riscv_conformance/inputs.toml",
-            include_str!("../../../analysis/cli/tests/riscv_conformance/inputs.toml"),
-        ),
-        (
-            "tools/vendor/scenario-cli/Cargo.toml",
-            include_str!("../../../vendor/scenario-cli/Cargo.toml"),
-        ),
-    ]) {
+    for (path, text) in oer_chips_family_facts::tracked::FILES
+        .iter()
+        .copied()
+        .chain([
+            (
+                "chips/esp32c5/vendor/artifacts.toml",
+                include_str!("../../../../chips/esp32c5/vendor/artifacts.toml"),
+            ),
+            (
+                "chips/esp32s31/vendor/artifacts.toml",
+                include_str!("../../../../chips/esp32s31/vendor/artifacts.toml"),
+            ),
+            (
+                "chips/esp32s31/vendor/facts/provenance.toml",
+                include_str!("../../../../chips/esp32s31/vendor/facts/provenance.toml"),
+            ),
+            (
+                "chips/esp32s31/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+            ),
+            (
+                "tools/analysis/cli/tests/riscv_conformance/inputs.toml",
+                include_str!("../../../analysis/cli/tests/riscv_conformance/inputs.toml"),
+            ),
+            (
+                "tools/vendor/scenario-cli/Cargo.toml",
+                include_str!("../../../vendor/scenario-cli/Cargo.toml"),
+            ),
+        ])
+    {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();

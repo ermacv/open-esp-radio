@@ -376,12 +376,12 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             LowerMacTerminal::TsfSampled { sample, permission } => Self::TsfSampled {
                 sample,
                 permission: match permission {
-                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::Station(permission) => {
-                        OwnedSampledTsfPermission::Station(permission.into_owned(loan))
-                    }
-                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(permission) => {
-                        OwnedSampledTsfPermission::AccessPoint(permission.into_owned(loan))
-                    }
+                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::Station(
+                        permission,
+                    ) => OwnedSampledTsfPermission::Station(permission.into_owned(loan)),
+                    oer_protocols_ieee80211_contracts_port::SampledTsfPermission::AccessPoint(
+                        permission,
+                    ) => OwnedSampledTsfPermission::AccessPoint(permission.into_owned(loan)),
                 },
             },
         }

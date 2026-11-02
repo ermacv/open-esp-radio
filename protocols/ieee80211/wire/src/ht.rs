@@ -273,7 +273,8 @@ impl HtCapabilityInfo {
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.2 (HT Capabilities Info field,
     /// SM Power Save subfield: 0 static, 1 dynamic, 3 disabled).
-    pub const SM_POWER_SAVE_DISABLED: oer_portable_wire::U8<2> = oer_portable_wire::U8::constant::<3>();
+    pub const SM_POWER_SAVE_DISABLED: oer_portable_wire::U8<2> =
+        oer_portable_wire::U8::constant::<3>();
 }
 
 oer_portable_wire::bitfield! {
@@ -288,7 +289,8 @@ impl HtAmpduParameters {
     /// octets.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
-    pub const EXPONENT_65535_OCTETS: oer_portable_wire::U8<2> = oer_portable_wire::U8::constant::<3>();
+    pub const EXPONENT_65535_OCTETS: oer_portable_wire::U8<2> =
+        oer_portable_wire::U8::constant::<3>();
     /// The Minimum MPDU Start Spacing code of 4 us.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing

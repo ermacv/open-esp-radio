@@ -620,7 +620,9 @@ where
     }
 }
 
-impl<B: Binding, O: oer_portable_trace::Observer + Send + Sync + 'static> Driver for TimeDriver<B, O> {
+impl<B: Binding, O: oer_portable_trace::Observer + Send + Sync + 'static> Driver
+    for TimeDriver<B, O>
+{
     #[inline]
     fn now(&self) -> u64 {
         now::<B>()

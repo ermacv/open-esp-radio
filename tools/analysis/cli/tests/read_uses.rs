@@ -520,9 +520,12 @@ core::arch::global_asm!(".section .text.external,\"ax\",@progbits\n.globl extern
 "#,
         )),
     ];
-    let inventory =
-        oer_tools_analysis_blobray_application::captured::inventory(&inputs[1], &memory, &mut || Ok(()))
-            .expect("callee inventory");
+    let inventory = oer_tools_analysis_blobray_application::captured::inventory(
+        &inputs[1],
+        &memory,
+        &mut || Ok(()),
+    )
+    .expect("callee inventory");
     let symbol = inventory
         .objects
         .iter()
@@ -1566,7 +1569,9 @@ caller:
 
 #[test]
 fn contracts_distinguish_exact_sinks_from_may_dead_values_and_spills() {
-    use oer_tools_analysis_blobray_application::{library::analyze_library, signatures::Signatures};
+    use oer_tools_analysis_blobray_application::{
+        library::analyze_library, signatures::Signatures,
+    };
     let code = |body: &str| {
         fixture(&format!(
             r##"#![no_std]

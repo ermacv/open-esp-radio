@@ -33,8 +33,9 @@ fn process(
     supplicant.on_frame(frame, pmk, &mut SoftwareAes128)
 }
 
-const REFUSED: oer_portable_crypto::KeyUnwrapError =
-    oer_portable_crypto::KeyUnwrapError::Engine(oer_portable_crypto::block::BlockError::Unavailable);
+const REFUSED: oer_portable_crypto::KeyUnwrapError = oer_portable_crypto::KeyUnwrapError::Engine(
+    oer_portable_crypto::block::BlockError::Unavailable,
+);
 
 fn owned(frame: &RsnTxFrame<512>) -> crate::OwnedEapolFrame<512> {
     crate::OwnedEapolFrame::try_copy(RsnInterface::Station, AP, frame.as_bytes()).unwrap()

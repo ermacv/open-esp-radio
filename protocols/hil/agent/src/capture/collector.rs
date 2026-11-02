@@ -2,8 +2,8 @@
 //! Sync: the image lends it only within its chosen task/executor context.
 use super::Reader;
 use core::cell::{Cell, RefCell};
-use oer_protocols_hil_protocol::capture::*;
 use oer_portable_trace::{Event, Observer};
+use oer_protocols_hil_protocol::capture::*;
 
 pub trait Clock {
     fn micros(&self) -> u64;

@@ -87,17 +87,19 @@ fn settle() -> Result<(), u32> {
 fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> Result<(), u32> {
     pbus::start_force_test(phy, selector, path, value);
     for _ in 0..20 {
-        if oer_chips_family_phy::pbus::try_finish_force_test(&mut oer_chips_esp32s31_hal::phy::pbus::port(
-            phy,
-        ))
+        if oer_chips_family_phy::pbus::try_finish_force_test(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(phy),
+        )
         .is_ok()
         {
             return Ok(());
         }
         settle()?;
     }
-    oer_chips_family_phy::pbus::try_finish_force_test(&mut oer_chips_esp32s31_hal::phy::pbus::port(phy))
-        .map_err(|_| 6)
+    oer_chips_family_phy::pbus::try_finish_force_test(&mut oer_chips_esp32s31_hal::phy::pbus::port(
+        phy,
+    ))
+    .map_err(|_| 6)
 }
 fn pairs(phy: &mut impl SharedPhyAccess, tag: u32) {
     for _ in 0..100 {
@@ -137,7 +139,9 @@ fn estimator(phy: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext) -> 
     phy.configure_calibration_tone(true, 0x80, 0);
     pbus::configure_rx_clock(phy, true);
     pbus::configure_tx_clock(phy, true);
-    oer_chips_family_phy::pbus::configure_debug_mode(&mut oer_chips_esp32s31_hal::phy::pbus::port(phy));
+    oer_chips_family_phy::pbus::configure_debug_mode(&mut oer_chips_esp32s31_hal::phy::pbus::port(
+        phy,
+    ));
     let prepared = (|| {
         for (selector, path, value) in [
             (4, 1, 0),
@@ -217,7 +221,9 @@ fn estimator(phy: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyContext) -> 
     }
     if bus_usable
         && cleanup.is_ok()
-        && oer_chips_family_phy::pbus::configure_work_mode(&mut oer_chips_esp32s31_hal::phy::pbus::port(phy))
+        && oer_chips_family_phy::pbus::configure_work_mode(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(phy),
+        )
     {
         cleanup = cleanup.and(settle());
         oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(phy);
@@ -275,7 +281,12 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
         // address 0 with the BBTOP03 command in a complete cold registration.
         for (address, tag) in [(0, 0x1524), (0x400, 0x1526), (0, 0x1528)] {
             let value = freq::read_memory(phy, address, 0);
-            emit(tag + 0x100, u32::from(address), value, oer_portable_riscv::cycle32());
+            emit(
+                tag + 0x100,
+                u32::from(address),
+                value,
+                oer_portable_riscv::cycle32(),
+            );
             observation(phy, tag)?;
             if tag == 0x1524 {
                 use oer_chips_esp32s31_hal::phy::i2c::analog_i2c;

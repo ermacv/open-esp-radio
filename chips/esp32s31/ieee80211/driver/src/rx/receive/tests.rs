@@ -714,7 +714,8 @@ fn released_frames_are_rearmed_before_unmask() {
     harness.rx_event();
     harness.settle();
     assert_eq!(rings(&harness), [Event::Ring { released: 15 }]);
-    let armed = oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed =
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..16] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -935,7 +936,8 @@ fn service_fault_masks_and_quarantines() {
 impl<X: SignalExecutor> Harness<X> {
     /// The reserved descriptor's low address, as the walker reports it.
     fn reserved_low(&self) -> u32 {
-        (self.base + COUNT as u32 * oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
+        (self.base
+            + COUNT as u32 * oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
             & 0x000f_ffff
     }
 
@@ -1127,7 +1129,13 @@ const STAGE: usize = 8;
 
 type Returned<const N: usize = STAGE> = RefCell<
     Vec<
-        HeldRxFrame<'static, 'static, N, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
+        HeldRxFrame<
+            'static,
+            'static,
+            N,
+            BUFFER,
+            oer_chips_family_interrupt_table::signal::host::Host,
+        >,
     >,
 >;
 
@@ -1271,7 +1279,8 @@ fn a_returned_lease_rearms_an_exhausted_walker_without_a_mac_interrupt() {
     // BASE write, no manual cursor.
     let report = harness.report();
     assert_eq!(report.units, COUNT as u32);
-    let armed = oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
+    let armed =
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_armed_word(BUFFER as u32).unwrap();
     for descriptor in &harness.rx.descriptors()[..STAGE] {
         assert_eq!(descriptor.word0(), armed);
     }
@@ -1370,7 +1379,13 @@ fn poll_next(
         oer_chips_family_interrupt_table::signal::host::Host,
     >,
 ) -> Option<
-    HeldRxFrame<'static, 'static, STAGE, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>,
+    HeldRxFrame<
+        'static,
+        'static,
+        STAGE,
+        BUFFER,
+        oer_chips_family_interrupt_table::signal::host::Host,
+    >,
 > {
     let mut next = core::pin::pin!(receiver.next());
     match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
@@ -1506,8 +1521,8 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
     };
 
     // A second of hold, then one lease comes back.
-    let release_at =
-        oer_portable_time::Clock::now(harness.clock).saturating_add(oer_portable_time::Duration::from_millis(1_000));
+    let release_at = oer_portable_time::Clock::now(harness.clock)
+        .saturating_add(oer_portable_time::Duration::from_millis(1_000));
     harness.clock.advance_to(release_at);
     harness.host.walker.borrow_mut().clear_operations();
     held.borrow_mut().pop();
@@ -1525,7 +1540,8 @@ fn a_return_to_a_full_pool_snapshots_the_walker_before_its_drain() {
         snapshot.base,
         Some(
             harness.base
-                + COUNT as u32 * oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
+                + COUNT as u32
+                    * oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES
         )
     );
     assert!(snapshot.walker_enabled);
@@ -1694,7 +1710,11 @@ fn a_descriptor_write_while_the_pool_is_full_marks_the_snapshot() {
     hold_full_pool(&mut harness, held, 1_000);
     // A word of a held lease's descriptor changes during the hold.
     harness.rx.descriptors()[3].write_word0(
-        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            BUFFER as u32,
+            100,
+            true,
+        ),
     );
     held.borrow_mut().pop();
     harness.settle();
@@ -1718,8 +1738,8 @@ fn the_latest_snapshot_follows_every_return_and_the_longest_keeps_the_longest() 
     harness.frame(80);
     harness.settle();
     assert_eq!(held.borrow().len(), STAGE);
-    let release_at =
-        oer_portable_time::Clock::now(harness.clock).saturating_add(oer_portable_time::Duration::from_millis(500));
+    let release_at = oer_portable_time::Clock::now(harness.clock)
+        .saturating_add(oer_portable_time::Duration::from_millis(500));
     harness.clock.advance_to(release_at);
     held.borrow_mut().pop();
     harness.settle();

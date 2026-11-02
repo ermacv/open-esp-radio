@@ -47,8 +47,8 @@ use std::{
 pub use build_log::{BuildLog, BuildStepFailed};
 
 pub use cargo::LAYOUT_SEED_ENV;
-use oer_tools_chip_profile::policy::StackPolicy;
 pub use oer_chips_family_facts::{Boot, FlashMap};
+use oer_tools_chip_profile::policy::StackPolicy;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -345,7 +345,8 @@ pub(crate) fn apply_outcome(
                 .push(format!("check `{name}` does not apply: {reason}"));
         }
         if !result.passes() {
-            if checks.enforced.requires(&name) || (enforce_stack && name == oer_tools_image_checks::STACK)
+            if checks.enforced.requires(&name)
+                || (enforce_stack && name == oer_tools_image_checks::STACK)
             {
                 failed.push(format!("{name} ({elf:?}): {result}"));
             } else {

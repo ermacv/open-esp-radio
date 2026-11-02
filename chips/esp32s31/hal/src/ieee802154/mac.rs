@@ -119,7 +119,9 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154ArmedTaskOwner<P, E, B>
     /// Publish the driver-selected events after the IRQ owner has moved into
     /// its permanent handler. This accesses only task-owned enable registers;
     /// it never borrows the handler cell or grants acknowledgement authority.
-    pub fn activate<I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>>(
+    pub fn activate<
+        I: oer_chips_family_interrupt_table::Entry<Part = Ieee802154InterruptOwner<P>>,
+    >(
         mut self,
         _bound: &Bound<I>,
         events: oer_chips_family_ieee802154_mac_values::Ieee802154EventMask,

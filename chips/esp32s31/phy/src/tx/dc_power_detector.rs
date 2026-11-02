@@ -815,9 +815,9 @@ impl PhyTxDcPwdetTransition {
 
         oer_chips_esp32s31_hal::phy::pbus::configure_tx_clock(physical.hardware(), true);
         oer_chips_esp32s31_hal::phy::power_detector::configure_enabled(physical.hardware());
-        oer_chips_family_phy::pbus::configure_debug_mode(&mut oer_chips_esp32s31_hal::phy::pbus::port(
-            physical.hardware(),
-        ));
+        oer_chips_family_phy::pbus::configure_debug_mode(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(physical.hardware()),
+        );
 
         let mut terminal = RootTerminal::Complete;
         for index in 0..5 {
@@ -925,9 +925,9 @@ impl PhyTxDcPwdetTransition {
             0x80,
             0x78,
         );
-        if oer_chips_family_phy::pbus::configure_work_mode(&mut oer_chips_esp32s31_hal::phy::pbus::port(
-            physical.hardware(),
-        )) {
+        if oer_chips_family_phy::pbus::configure_work_mode(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(physical.hardware()),
+        ) {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
             oer_chips_esp32s31_hal::phy::agc::configure_pbus_work_mode_pulse(physical.hardware());
             settle(crate::executor::wait::tx::Scope::Root, 2)?;

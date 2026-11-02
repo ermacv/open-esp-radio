@@ -6,17 +6,13 @@
 
 use std::{process::ExitCode, time::Duration};
 
+use oer_hil_services_aes::{MAX_WRAPPED, UnwrapError, UnwrapKey, Unwrapped};
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Scenario, check};
-use oer_hil_services_aes::{MAX_WRAPPED, UnwrapError, UnwrapKey, Unwrapped};
 
 mod reference;
 
-const SCENARIO: Scenario = Scenario::new(
-    "aes",
-    "esp32s31-sdk-rpc",
-    &[oer_hil_services_aes::Request::KEYS],
-);
+const SCENARIO: Scenario = Scenario::new("aes", "aes", &[oer_hil_services_aes::Request::KEYS]);
 
 const CASES: [Case; 4] = [
     Case {

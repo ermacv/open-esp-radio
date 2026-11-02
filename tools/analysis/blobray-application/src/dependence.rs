@@ -40,7 +40,8 @@ const INPUT: u32 = u32::MAX;
 /// The calling convention dependence assumes: a call clobbers its
 /// registers and returns through its links, and the argument words travel
 /// in its argument registers.
-const ABI: oer_tools_analysis_riscv_model::CallAbi = oer_tools_analysis_riscv_model::CallAbi::RiscvInteger;
+const ABI: oer_tools_analysis_riscv_model::CallAbi =
+    oer_tools_analysis_riscv_model::CallAbi::RiscvInteger;
 /// Argument words passed in registers.
 const REGISTER_ARGUMENTS: usize = ABI.arguments().len();
 /// Instructions of one function's recovered CFG; a larger function gets no

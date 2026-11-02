@@ -521,7 +521,8 @@ impl PhyFrequencyCapMemoryExternalBinding {
                 address,
                 mode,
             } => {
-                let value = oer_chips_esp32s31_hal::phy::frequency::read_memory(registers, address, mode);
+                let value =
+                    oer_chips_esp32s31_hal::phy::frequency::read_memory(registers, address, mode);
                 PhyFrequencyCapMemoryCompletion::MemoryRead {
                     entry_index,
                     address,
@@ -535,7 +536,9 @@ impl PhyFrequencyCapMemoryExternalBinding {
                 value,
                 mode,
             } => {
-                oer_chips_esp32s31_hal::phy::frequency::write_memory(registers, address, value, mode);
+                oer_chips_esp32s31_hal::phy::frequency::write_memory(
+                    registers, address, value, mode,
+                );
                 PhyFrequencyCapMemoryCompletion::MemoryWritten {
                     entry_index,
                     address,
@@ -543,7 +546,10 @@ impl PhyFrequencyCapMemoryExternalBinding {
                 }
             }
             PhyFrequencyCapMemoryAction::RestoreChannelIndex { frequency_index } => {
-                oer_chips_esp32s31_hal::phy::frequency::restore_channel_index(registers, frequency_index);
+                oer_chips_esp32s31_hal::phy::frequency::restore_channel_index(
+                    registers,
+                    frequency_index,
+                );
                 PhyFrequencyCapMemoryCompletion::ChannelIndexRestored { frequency_index }
             }
             PhyFrequencyCapMemoryAction::Complete(_) => {

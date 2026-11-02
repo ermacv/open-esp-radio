@@ -5,9 +5,9 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
+use oer_portable_time::Duration;
 use oer_protocols_bluetooth_le_port::*;
 use oer_protocols_bluetooth_le_wire::{TestChannel, TestPayloadType};
-use oer_portable_time::Duration;
 
 pub(super) fn run<F: Future>(future: F) -> F::Output {
     let mut future = pin!(future);
@@ -146,13 +146,19 @@ struct AbandonBody {
     drops: alloc::rc::Rc<core::cell::Cell<u32>>,
     power: TxPower,
 }
-impl<Id: oer_protocols_radio_port::SlotIdentity> oer_protocols_radio_port::PortBody<Id, Backend<Id, Tracked>>
-    for AbandonBody
+impl<Id: oer_protocols_radio_port::SlotIdentity>
+    oer_protocols_radio_port::PortBody<Id, Backend<Id, Tracked>> for AbandonBody
 {
     type Output = ();
     async fn run<'a, 'p>(
         self,
-        owner: oer_protocols_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_protocols_radio_port::Disabled>,
+        owner: oer_protocols_radio_port::Owner<
+            'a,
+            'p,
+            Id,
+            Backend<Id, Tracked>,
+            oer_protocols_radio_port::Disabled,
+        >,
         resources: Resources<'p, Id>,
     ) -> oer_protocols_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
@@ -208,7 +214,10 @@ fn p1_drop_never_stops_radio_and_slot_retains_actual_owners_until_world_end() {
             },
         ));
         let mut driver = alloc::boxed::Box::pin(
-            oer_protocols_radio_port::conformance::registration::MockRegistration::new(registration).run(),
+            oer_protocols_radio_port::conformance::registration::MockRegistration::new(
+                registration,
+            )
+            .run(),
         );
         let mut cx = Context::from_waker(Waker::noop());
         assert!(service.as_mut().poll(&mut cx).is_pending());
@@ -234,11 +243,19 @@ fn p1_drop_never_stops_radio_and_slot_retains_actual_owners_until_world_end() {
     }));
 }
 struct EmptyBody;
-impl<Id: oer_protocols_radio_port::SlotIdentity> oer_protocols_radio_port::PortBody<Id, Backend<Id>> for EmptyBody {
+impl<Id: oer_protocols_radio_port::SlotIdentity> oer_protocols_radio_port::PortBody<Id, Backend<Id>>
+    for EmptyBody
+{
     type Output = ();
     async fn run<'a, 'p>(
         self,
-        owner: oer_protocols_radio_port::Owner<'a, 'p, Id, Backend<Id>, oer_protocols_radio_port::Disabled>,
+        owner: oer_protocols_radio_port::Owner<
+            'a,
+            'p,
+            Id,
+            Backend<Id>,
+            oer_protocols_radio_port::Disabled,
+        >,
         _: Resources<'p, Id>,
     ) -> oer_protocols_radio_port::Ended<Id, Backend<Id>, ()>
     where
@@ -271,7 +288,10 @@ fn a_late_p2_stop_cannot_reopen_the_expired_supervisor() {
             .expect("fresh test slot");
         let mut service = alloc::boxed::Box::pin(run_port(front, EmptyBody));
         let mut driver = alloc::boxed::Box::pin(
-            oer_protocols_radio_port::conformance::registration::MockRegistration::new(registration).run(),
+            oer_protocols_radio_port::conformance::registration::MockRegistration::new(
+                registration,
+            )
+            .run(),
         );
         let mut cx = Context::from_waker(Waker::noop());
         assert!(service.as_mut().poll(&mut cx).is_pending());
@@ -294,13 +314,19 @@ fn a_late_p2_stop_cannot_reopen_the_expired_supervisor() {
 struct PostFaultBody {
     drops: alloc::rc::Rc<core::cell::Cell<u32>>,
 }
-impl<Id: oer_protocols_radio_port::SlotIdentity> oer_protocols_radio_port::PortBody<Id, Backend<Id, Tracked>>
-    for PostFaultBody
+impl<Id: oer_protocols_radio_port::SlotIdentity>
+    oer_protocols_radio_port::PortBody<Id, Backend<Id, Tracked>> for PostFaultBody
 {
     type Output = ();
     async fn run<'a, 'p>(
         self,
-        owner: oer_protocols_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_protocols_radio_port::Disabled>,
+        owner: oer_protocols_radio_port::Owner<
+            'a,
+            'p,
+            Id,
+            Backend<Id, Tracked>,
+            oer_protocols_radio_port::Disabled,
+        >,
         resources: Resources<'p, Id>,
     ) -> oer_protocols_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
@@ -420,13 +446,19 @@ struct DisableBy {
     past: bool,
     disabled: alloc::rc::Rc<core::cell::Cell<Option<bool>>>,
 }
-impl<Id: oer_protocols_radio_port::SlotIdentity> oer_protocols_radio_port::PortBody<Id, Backend<Id, Tracked>>
-    for DisableBy
+impl<Id: oer_protocols_radio_port::SlotIdentity>
+    oer_protocols_radio_port::PortBody<Id, Backend<Id, Tracked>> for DisableBy
 {
     type Output = ();
     async fn run<'a, 'p>(
         self,
-        owner: oer_protocols_radio_port::Owner<'a, 'p, Id, Backend<Id, Tracked>, oer_protocols_radio_port::Disabled>,
+        owner: oer_protocols_radio_port::Owner<
+            'a,
+            'p,
+            Id,
+            Backend<Id, Tracked>,
+            oer_protocols_radio_port::Disabled,
+        >,
         resources: Resources<'p, Id>,
     ) -> oer_protocols_radio_port::Ended<Id, Backend<Id, Tracked>, ()>
     where
@@ -479,7 +511,9 @@ impl<Id: oer_protocols_radio_port::SlotIdentity> oer_protocols_radio_port::PortB
                 self.disabled.set(Some(false));
                 oer_protocols_radio_port::Ended::fail_stop(request, ())
             }
-            Err(oer_protocols_radio_port::DisableFailed::Poisoned(_)) => panic!("no model fault here"),
+            Err(oer_protocols_radio_port::DisableFailed::Poisoned(_)) => {
+                panic!("no model fault here")
+            }
         }
     }
 }

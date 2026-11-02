@@ -133,7 +133,9 @@ pub(super) fn task<B: oer_portable_mmio::Placement>(
     }
 }
 
-pub(super) fn task_enable<B: oer_portable_mmio::Placement>(b: &pac::bt_mac::BtmacBlePhyInit<B>) -> u32 {
+pub(super) fn task_enable<B: oer_portable_mmio::Placement>(
+    b: &pac::bt_mac::BtmacBlePhyInit<B>,
+) -> u32 {
     interrupt_enable(b.read_interrupt_enable())
 }
 

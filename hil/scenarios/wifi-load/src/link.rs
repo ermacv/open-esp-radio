@@ -6,8 +6,8 @@
 
 use std::time::Duration;
 
-use oer_tools_hil_harness::{Cx, RouterOperation};
 use oer_hil_services_load::{Link, Rates};
+use oer_tools_hil_harness::{Cx, RouterOperation};
 use serde_json::{Value, json};
 
 /// One reading of the access point's view of the station; why there is

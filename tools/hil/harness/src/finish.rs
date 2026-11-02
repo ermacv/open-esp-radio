@@ -9,8 +9,8 @@
 use oer_tools_lab_client::protocol::RouterOperation;
 use std::time::Duration;
 
-use oer_tools_hil_link::{CallError, Link};
 use oer_protocols_hil_protocol::base::GetHello;
+use oer_tools_hil_link::{CallError, Link};
 
 /// What a case needs from the stand's board: a reset into its image and its
 /// console.

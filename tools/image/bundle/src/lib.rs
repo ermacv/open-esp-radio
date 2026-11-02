@@ -247,7 +247,11 @@ pub struct Segment {
 impl ImageBundle {
     /// An empty bundle of `profile`'s chip in `directory`, which a pipeline
     /// fills: no files yet, no gate run.
-    pub fn new(directory: &Path, profile: &oer_tools_chip_profile::Profile, flash: FlashMap) -> Self {
+    pub fn new(
+        directory: &Path,
+        profile: &oer_tools_chip_profile::Profile,
+        flash: FlashMap,
+    ) -> Self {
         Self::from_parts(
             directory,
             &profile.facts.id,

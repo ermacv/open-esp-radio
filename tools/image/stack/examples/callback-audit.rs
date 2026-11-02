@@ -143,19 +143,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .map(|symbol| format!("{}:{:?}", symbol.index, symbol.name))
                 .unwrap_or_else(|| "-".into())
         };
-        let section = |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
-            use_.symbol
-                .as_ref()
-                .and_then(|s| s.section)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "-".into())
-        };
-        let address = |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
-            use_.symbol
-                .as_ref()
-                .map(|s| format!("{:#010x}", s.address))
-                .unwrap_or_else(|| "-".into())
-        };
+        let section =
+            |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+                use_.symbol
+                    .as_ref()
+                    .and_then(|s| s.section)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "-".into())
+            };
+        let address =
+            |use_: &oer_tools_analysis_riscv_program::facts::addresses::AddressUse<'_>| {
+                use_.symbol
+                    .as_ref()
+                    .map(|s| format!("{:#010x}", s.address))
+                    .unwrap_or_else(|| "-".into())
+            };
         let classification = if let Some(reason) = pair.unknown {
             format!("{reason:?}")
         } else if pair.functions.is_empty() {

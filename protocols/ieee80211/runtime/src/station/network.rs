@@ -22,13 +22,16 @@ impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0.storage_mut()
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
-        self.0
-            .advance(by)
-            .map_err(|refused| oer_protocols_network_port::StorageAdvanceRefused {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
+        self.0.advance(by).map_err(
+            |refused| oer_protocols_network_port::StorageAdvanceRefused {
                 by: refused.by,
                 length: refused.mpdu_len,
-            })
+            },
+        )
     }
 }
 
@@ -145,7 +148,11 @@ pub struct NetworkDrainFailure {
 
 /// Stop the network and wait, until `deadline`, for it to stop and return
 /// every lent buffer.
-pub(super) async fn drain<'p, 'id: 'p, P: oer_protocols_ieee80211_contracts_port::LowerMacPhase<'p, 'id>>(
+pub(super) async fn drain<
+    'p,
+    'id: 'p,
+    P: oer_protocols_ieee80211_contracts_port::LowerMacPhase<'p, 'id>,
+>(
     phase: &mut P,
     network: &impl NetworkStop,
     timer: &impl oer_portable_time::Timer,

@@ -58,7 +58,8 @@ fn poll_next<'a>(
         BUFFER,
         oer_chips_family_interrupt_table::signal::host::Host,
     >,
-) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>> {
+) -> Option<HeldRxFrame<'a, 'a, SLOTS, BUFFER, oer_chips_family_interrupt_table::signal::host::Host>>
+{
     let mut next = pin!(receiver.next());
     match next.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
         Poll::Ready(frame) => Some(frame),
@@ -304,8 +305,8 @@ fn malformed_prefix_refusals_are_counted_by_reason() {
 
 mod normalized_handoff {
     use crate::mac::portable::rx_meta;
-    use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RxEvidence};
     use oer_portable_time::Instant;
+    use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RxEvidence};
 
     use super::*;
 

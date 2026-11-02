@@ -444,7 +444,12 @@ fn wait_cause(s: &Session<'_>) {
     while s.ble.timer_status.read_bluetooth_modem_lp_status() == 0
         && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
     {}
-    emit(0x23ff, oer_portable_riscv::cycle32().wrapping_sub(start), 0, 0);
+    emit(
+        0x23ff,
+        oer_portable_riscv::cycle32().wrapping_sub(start),
+        0,
+        0,
+    );
 }
 
 pub(super) fn lp_causes(s: &mut Session<'_>) {
@@ -514,7 +519,12 @@ pub(super) fn lp_wrap(s: &mut Session<'_>) {
         }
         prior = now;
     }
-    emit(0x250f, wraps, oer_portable_riscv::cycle32().wrapping_sub(start), 0);
+    emit(
+        0x250f,
+        wraps,
+        oer_portable_riscv::cycle32().wrapping_sub(start),
+        0,
+    );
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     lp_state(s, 0x2503);
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();

@@ -2,7 +2,9 @@
 
 use super::Result;
 use oer_chips_family_facts::Memory;
-use oer_tools_image_stack::{Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites};
+use oer_tools_image_stack::{
+    Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites,
+};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Write as _};
 

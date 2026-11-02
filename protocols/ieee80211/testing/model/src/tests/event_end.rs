@@ -150,7 +150,8 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
                 let disabled = owner
                     .disable(None, &mut |_| panic!("Drained returned every terminal"))
                     .await;
-                let Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) = disabled else {
+                let Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) = disabled
+                else {
                     panic!("the fault persists")
                 };
                 Ended::uninstall(poisoned, (), ())

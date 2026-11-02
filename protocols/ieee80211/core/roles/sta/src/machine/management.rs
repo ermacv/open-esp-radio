@@ -1,5 +1,6 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
+use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_security_rsn::{
     bip::BipReceiver, frames::RsnIgtk, management_ccmp::ManagementCcmpReceiver,
@@ -12,7 +13,6 @@ use oer_protocols_ieee80211_wire::{
     management_protection::SaQuery,
     sequence::SequenceControl,
 };
-use oer_portable_time::Instant;
 
 use crate::sa_query::{SaQueryStep, StationSaQuery};
 

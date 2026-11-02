@@ -57,8 +57,9 @@ pub(crate) const REGISTRATION_PLACE: u32 = 7;
 /// executor's interrupt stack first and moved, which put its 8 KiB twice on
 /// that stack. `StaticPlace` checks its size when the image compiles.
 #[cfg(target_arch = "riscv32")]
-static REGISTRATION_FUTURE: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<[u128; 544]>> =
-    static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
+static REGISTRATION_FUTURE: static_cell::ConstStaticCell<
+    oer_portable_memory::StaticPlace<[u128; 544]>,
+> = static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
 
 /// Start the session: [`STARTED`] or why it did not.
 pub(crate) fn init(

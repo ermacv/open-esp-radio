@@ -5,13 +5,13 @@
 
 use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
 use core::num::NonZeroU64;
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_addba_response},
     sequence::SequenceNumber,
     status::status_code,
     tsf::time_units_micros,
 };
-use oer_portable_time::{Duration, Instant};
 
 /// IEEE 802.11 ADDBA response status, separate from a local parsing error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

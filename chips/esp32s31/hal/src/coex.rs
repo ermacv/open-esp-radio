@@ -180,7 +180,9 @@ impl CoexPolicyTimer {
 /// RF admission or grant revocation.
 pub struct CoexPolicyTimerBank<
     'registers,
-    P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<{ oer_chips_esp32s31_pac::instances::coex::BASE }>,
+    P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<
+        { oer_chips_esp32s31_pac::instances::coex::BASE },
+    >,
 > {
     registers: CoexTimerBankRegisters<'registers, P>,
     pti: &'registers CoexPtiTable,

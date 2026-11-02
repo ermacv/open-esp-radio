@@ -2,12 +2,12 @@
 
 use crate::sequence::SequenceSpace;
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_ACTION_BODY_LEN, AddbaRequestError, BlockAckAction, encode_addba_request,
     parse_block_ack_action,
 };
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_portable_time::{Duration, Instant};
 
 /// Largest originator window represented by the delivery/expiry bitmaps.
 pub const MAX_TX_BLOCK_ACK_WINDOW: u16 = 64;

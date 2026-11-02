@@ -14,7 +14,9 @@ const SELECTED_SECURITY_IES_CAPACITY: usize = SELECTED_RSN_IE_LEN + 18 + 3;
 
 #[test]
 fn spp_negotiation_follows_both_rsn_capabilities() {
-    use oer_protocols_ieee80211_wire::security::{AssociationSecurity, Spp, SppCapability, SppError};
+    use oer_protocols_ieee80211_wire::security::{
+        AssociationSecurity, Spp, SppCapability, SppError,
+    };
     for (advertised, expected) in [
         (SppCapability::NotCapable, Spp::NotNegotiated),
         (SppCapability::Capable, Spp::Negotiated),
@@ -302,7 +304,9 @@ trait NegotiatedAkm {
 impl NegotiatedAkm for SelectedRsn {
     fn negotiated_akm(&self) -> oer_protocols_ieee80211_wire::security::AssociationAkm {
         match self.security() {
-            oer_protocols_ieee80211_wire::security::AssociationSecurity::Rsn(association) => association.akm,
+            oer_protocols_ieee80211_wire::security::AssociationSecurity::Rsn(association) => {
+                association.akm
+            }
             oer_protocols_ieee80211_wire::security::AssociationSecurity::Open => {
                 panic!("an Open selection has no AKM")
             }
@@ -369,7 +373,9 @@ fn a_psk_only_owner_never_selects_sae_or_an_open_network() {
 
 #[test]
 fn a_personal_selection_advertises_spp_and_the_protection_it_negotiates() {
-    use oer_protocols_ieee80211_wire::security::{AssociationAkm, AssociationSecurity, SaePwe, Spp};
+    use oer_protocols_ieee80211_wire::security::{
+        AssociationAkm, AssociationSecurity, SaePwe, Spp,
+    };
     let psk = super::personal_rsn(AssociationAkm::Psk, Spp::NotNegotiated, false);
     // SPP A-MSDU capable only, no RSNXE.
     assert_eq!(&psk.as_bytes()[20..22], &[0, 4]);

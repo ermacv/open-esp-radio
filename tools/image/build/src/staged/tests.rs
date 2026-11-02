@@ -330,7 +330,11 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
 /// Link real read-only payload/reference inputs through the shared script,
 /// or an old contiguous-data layout. The real espflash encoder then decides
 /// how many mapped ESP records the loader sees; ELF section count is not it.
-fn loader_fixture(directory: &Path, profile: &oer_tools_chip_profile::Profile, split: bool) -> Vec<u8> {
+fn loader_fixture(
+    directory: &Path,
+    profile: &oer_tools_chip_profile::Profile,
+    split: bool,
+) -> Vec<u8> {
     use object::write::{Object, Symbol, SymbolSection};
     use object::{
         Architecture, BinaryFormat, Endianness, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
@@ -385,7 +389,7 @@ fn loader_fixture(directory: &Path, profile: &oer_tools_chip_profile::Profile, s
     )).unwrap();
     let output = directory.join("loader.elf");
     let scripts =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/espressif/staged-layout/linker");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../chips/family/staged-layout/linker");
     let result = std::process::Command::new(oer_tools_os_toolchain::lld().unwrap())
         .arg("-L")
         .arg(scripts)

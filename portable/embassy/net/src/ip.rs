@@ -7,8 +7,10 @@
 
 use core::{cell::Cell, future::Future, task::Poll};
 use oer_portable_memory::ExecutionContext;
-use oer_protocols_network_port::{EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId};
 use oer_portable_sync::PriorityWaker;
+use oer_protocols_network_port::{
+    EthernetFrameView, LinkSnapshot, LinkState, NetDevice, NetworkInterfaceId,
+};
 use owned_embassy_net::{
     Stack, StackStorage,
     iface::{Iface, dhcpv4::DhcpConfig},

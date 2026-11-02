@@ -336,7 +336,9 @@ fn call_sites(
 
 #[test]
 fn call_argument_lookup_errors_reach_the_caller_after_any_checkpoint() {
-    use oer_tools_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
+    use oer_tools_analysis_riscv_model::{
+        Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory,
+    };
     let records = [
         reference(0, "callee", 1, ReferenceKind::Call),
         inputs(

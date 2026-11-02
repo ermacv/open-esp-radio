@@ -25,6 +25,7 @@ use oer_protocols_ieee80211_wire::frame::write_sequence_control;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::tsf::time_units_micros;
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::{
     ap::profile::Advertisement,
     beacon::{
@@ -35,7 +36,6 @@ use oer_protocols_ieee80211_wire::{
     protection::ApBssProtection,
     ssid::WifiSsid,
 };
-use oer_portable_time::{Duration, Instant};
 
 use crate::{security_policy::ApSecurityPolicy, tbtt::next_tbtt};
 

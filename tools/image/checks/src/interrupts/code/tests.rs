@@ -425,11 +425,13 @@ impl MultipleHandlers {
             exception_copies: 1,
             resolutions: &self.resolutions,
         };
-        self.stacks.harts =
-            oer_tools_image_stack::interrupt_stacks(&self.analysis, &inputs, &mut ledger(), &mut || {
-                Ok(())
-            })
-            .unwrap();
+        self.stacks.harts = oer_tools_image_stack::interrupt_stacks(
+            &self.analysis,
+            &inputs,
+            &mut ledger(),
+            &mut || Ok(()),
+        )
+        .unwrap();
         self.stacks.code_placement = CodePlacement::of(
             &self.analysis,
             &self

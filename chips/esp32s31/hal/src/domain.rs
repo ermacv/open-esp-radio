@@ -651,7 +651,9 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 &mut state.registers,
             )
             .map(|acquired| match acquired {
-                oer_chips_family_radio::domain::BtbbAcquired::Initialized => BtbbAcquired::Initialized,
+                oer_chips_family_radio::domain::BtbbAcquired::Initialized => {
+                    BtbbAcquired::Initialized
+                }
                 oer_chips_family_radio::domain::BtbbAcquired::Joined => BtbbAcquired::Joined,
             })
             .map_err(btbb_error)

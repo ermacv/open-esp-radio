@@ -120,7 +120,8 @@ impl Image {
                     && names_a_location(symbol.name)
                     && !matches!(
                         symbol.kind,
-                        oer_tools_analysis_elf::SymbolKind::Section | oer_tools_analysis_elf::SymbolKind::File
+                        oer_tools_analysis_elf::SymbolKind::Section
+                            | oer_tools_analysis_elf::SymbolKind::File
                     )
             })
             .map(|symbol| Symbol {

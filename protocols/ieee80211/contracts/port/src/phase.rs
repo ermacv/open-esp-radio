@@ -1195,7 +1195,9 @@ pub enum TxNumbering {
 }
 impl TxNumbering {
     /// The supplied PN, absent for an open MPDU.
-    pub const fn packet_number(self) -> Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber> {
+    pub const fn packet_number(
+        self,
+    ) -> Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber> {
         match self {
             Self::Open => None,
             Self::Ccmp(pn) => Some(pn),

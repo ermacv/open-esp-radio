@@ -34,7 +34,10 @@ impl EdcaParameterSet {
 
     /// Lifetimes in ACI order: BE, BK, VI, VO. SupportedEdca validates
     /// the whole table before it can be installed.
-    pub const fn new(wmm: WmmParameterSet, msdu_lifetimes: [oer_portable_time::Duration; 4]) -> Self {
+    pub const fn new(
+        wmm: WmmParameterSet,
+        msdu_lifetimes: [oer_portable_time::Duration; 4],
+    ) -> Self {
         Self {
             wmm,
             msdu_lifetimes,

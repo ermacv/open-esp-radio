@@ -135,11 +135,21 @@ fn crossed(s: &Session<'_>, origin: u32, distance: u32, tag: u32) -> bool {
     let start = oer_portable_riscv::cycle32();
     while oer_portable_riscv::cycle32().wrapping_sub(start) < CAUSE_LIMIT {
         if counter(s).wrapping_sub(origin) & LOW_MAX >= distance {
-            emit(tag, 1, counter(s), oer_portable_riscv::cycle32().wrapping_sub(start));
+            emit(
+                tag,
+                1,
+                counter(s),
+                oer_portable_riscv::cycle32().wrapping_sub(start),
+            );
             return true;
         }
     }
-    emit(tag, 0, counter(s), oer_portable_riscv::cycle32().wrapping_sub(start));
+    emit(
+        tag,
+        0,
+        counter(s),
+        oer_portable_riscv::cycle32().wrapping_sub(start),
+    );
     false
 }
 

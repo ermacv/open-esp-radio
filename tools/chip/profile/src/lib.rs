@@ -170,7 +170,11 @@ fn default_task_stack(source: &mut dyn Source, facts: &mut Facts) -> Result<()> 
 impl Profile {
     /// The profile of `id`, or an error naming the supported chips.
     pub fn load(root: &Path, id: &str) -> Result<Self> {
-        Self::load_with_inputs(root, id, &mut oer_tools_os_durable::inputs::Inputs::default())
+        Self::load_with_inputs(
+            root,
+            id,
+            &mut oer_tools_os_durable::inputs::Inputs::default(),
+        )
     }
 
     /// Load the profile and record every layer it reads in the caller's
@@ -234,7 +238,7 @@ impl Profile {
     /// The bootstrap package the staged boot builds into every image beside
     /// its runtime.
     pub fn bootstrap_package(&self) -> String {
-        format!("oer-firmware-bootstrap-{}", self.facts.id)
+        format!("oer-chips-{}-bootstrap", self.facts.id)
     }
 
     /// The chip's own stack policy (`chips/<id>/platform/stack.toml`), relative
@@ -290,10 +294,14 @@ mod tests {
     fn repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
-        for (path, text) in oer_chips_family_facts::tracked::FILES.iter().copied().chain([(
-            "chips/esp32s31/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
-        )]) {
+        for (path, text) in oer_chips_family_facts::tracked::FILES
+            .iter()
+            .copied()
+            .chain([(
+                "chips/esp32s31/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+            )])
+        {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();

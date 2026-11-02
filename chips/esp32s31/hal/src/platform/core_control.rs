@@ -307,7 +307,8 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
 }
 
 impl<P: Placement, Q: Placement, R: Placement, S: Placement, T: Placement>
-    oer_chips_family_boot::drivers::cores::RuntimeRegisters for CoreControlRegisters<P, Q, R, S, T>
+    oer_chips_family_boot::drivers::cores::RuntimeRegisters
+    for CoreControlRegisters<P, Q, R, S, T>
 {
     type Hart = Hart;
     type Stops = [Option<oer_chips_family_boot::drivers::cores::Stopped>; super::HARTS];

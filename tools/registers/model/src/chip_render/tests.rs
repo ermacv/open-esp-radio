@@ -90,7 +90,7 @@ fn cargo(directory: &Path, rendered: &str, main: &str, command: &str) -> std::pr
         directory.join("Cargo.toml"),
         format!(
             "[package]\nname = \"rendered\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
-             [dependencies]\noer-mmio = {{ path = {:?} }}\n\
+             [dependencies]\noer-portable-mmio = {{ path = {:?} }}\n\
              oer-portable-memory = {{ path = {:?} }}\n\
              bytemuck = {{ version = \"1.25.2\", default-features = false, features = [\"derive\", \"min_const_generics\"] }}\n\
              [workspace]\n",
@@ -1550,7 +1550,8 @@ fn layout_constant_values_are_checked_even_in_runtime_builders() {
 #[test]
 fn hart_geometry_accepts_one_and_three_and_rejects_runtime_constant_misuse() {
     for n in [1, 3] {
-        let rust = oer_chips_family_facts::generate::hart_geometry(n, 0).expect("synthetic geometry");
+        let rust =
+            oer_chips_family_facts::generate::hart_geometry(n, 0).expect("synthetic geometry");
         let main = format!(
             r#"fn main() {{
             assert_eq!(HARTS, {n});
@@ -1769,7 +1770,11 @@ fn a_hart_local_instance_is_claimed_once_per_hart() {
 fn an_instance_without_hart_local_keeps_one_claim_and_one_check() {
     let rust = rendered();
     assert!(!rust.contains("super::HARTS]"), "{rust}");
-    assert_eq!(rust.matches("oer_portable_mmio::check::disjoint_blocks(").count(), 1);
+    assert_eq!(
+        rust.matches("oer_portable_mmio::check::disjoint_blocks(")
+            .count(),
+        1
+    );
     // With hart facts but no hart-local instance, the ownership is the same.
     let with_facts = hart_local(2, &[]).expect("the fixture with hart facts renders");
     let ownership = |text: &str| {

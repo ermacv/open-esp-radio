@@ -9,11 +9,11 @@
 //! the Espressif one (`oer-chips-family-ieee80211-policy::rate_selection`)
 //! sends as the vendor's station does.
 
+use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Band, RetryPlan, RxMetadata, SingleOutcome, TxOutcome,
 };
 use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
-use oer_portable_time::Instant;
 
 use crate::protection::BasicRates;
 use crate::rate_control::{BlockAckTally, RatePeer};

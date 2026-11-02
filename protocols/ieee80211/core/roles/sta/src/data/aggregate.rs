@@ -95,8 +95,9 @@ impl AttemptWait {
                 if tid != growing {
                     return Some(self);
                 }
-                let follows =
-                    oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(last, sequence) == 1;
+                let follows = oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
+                    last, sequence,
+                ) == 1;
                 let length = subframe_octets(mpdu, protection)
                     .and_then(|octets| length.checked_add(octets))
                     .filter(|total| window.fits(*total))?;
@@ -135,7 +136,8 @@ fn subframe_octets(mpdu: usize, protection: DataProtection<()>) -> Option<u32> {
 impl AggregateWindow {
     /// Whether `sequence` lies inside the window.
     fn holds(&self, sequence: SequenceNumber) -> bool {
-        oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence) < self.size
+        oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence)
+            < self.size
     }
 
     /// Whether `sequence` lies beyond the window's end: after its head in
@@ -208,7 +210,9 @@ impl BlockAckMarks {
     }
 
     fn mark(&mut self, sequence: SequenceNumber, delivered: bool) {
-        let offset = oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(self.start, sequence);
+        let offset = oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
+            self.start, sequence,
+        );
         let Some(bit) = 1_u64.checked_shl(u32::from(offset)) else {
             return;
         };
@@ -366,7 +370,8 @@ pub struct DataAggregateInfo<K, C, A> {
     members: PhantomData<fn() -> Member<K, C>>,
 }
 
-impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p> oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
+impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p>
+    oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
     for DataAggregateContext<'p, K, C, A, Path>
 where
     Path::Identity: 'p,
@@ -384,7 +389,9 @@ where
         })
     }
 
-    fn restore(context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+    fn restore(
+        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
+    ) -> Self {
         let (link, data) = context.into_parts();
         Self {
             admission: data.admission,
@@ -551,8 +558,9 @@ impl<
             .take_while(|owed| {
                 let sequence = owed.context.sequence;
                 let follows = previous.is_none_or(|previous| {
-                    oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(previous, sequence)
-                        == 1
+                    oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
+                        previous, sequence,
+                    ) == 1
                 });
                 previous = Some(sequence);
                 let fits = subframe_octets(

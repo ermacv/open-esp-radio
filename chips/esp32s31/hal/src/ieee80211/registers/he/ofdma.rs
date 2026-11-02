@@ -331,8 +331,8 @@ impl MacBeamformingAverageSnr {
             raw_code,
             quarter_db: raw_code as u16 + 88,
             is_lower_bound: raw_code
-                == oer_chips_esp32s31_pac::wifi_mac::average_snr::Stream0Code::SaturatedOrInvalid.bits()
-                    as u8,
+                == oer_chips_esp32s31_pac::wifi_mac::average_snr::Stream0Code::SaturatedOrInvalid
+                    .bits() as u8,
         }
     }
 }

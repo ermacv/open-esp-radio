@@ -12,7 +12,9 @@ use oer_protocols_ieee80211_wire::{ccmp::CCMP_HEADER_LEN, security::Spp};
 const HEADER_LEN: usize = 24;
 const MIC_LEN: usize = 8;
 
-use oer_protocols_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire as frame};
+use oer_protocols_ieee80211_wire::management_ccmp_vector::{
+    MANAGEMENT_BODY, management_wire as frame,
+};
 
 fn receiver() -> ManagementCcmpReceiver {
     ManagementCcmpReceiver::new(key())

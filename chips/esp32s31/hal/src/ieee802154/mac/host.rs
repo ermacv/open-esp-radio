@@ -71,9 +71,10 @@ pub(crate) struct NoRoutes;
 impl oer_chips_family_interrupt_table::Controller for NoRoutes {
     const SOURCES: u16 = 256;
     const LINES: u8 = crate::platform::interrupt_controller::facts::LINES.count;
-    const LEVEL_BITS: oer_portable_riscv::clic::LevelBits = oer_portable_riscv::clic::LevelBits::constant::<
-        { crate::platform::interrupt_controller::facts::LEVEL_BITS },
-    >();
+    const LEVEL_BITS: oer_portable_riscv::clic::LevelBits =
+        oer_portable_riscv::clic::LevelBits::constant::<
+            { crate::platform::interrupt_controller::facts::LEVEL_BITS },
+        >();
     fn verify_configuration(&self) -> Result<(), oer_chips_family_interrupt_table::Error> {
         Ok(())
     }

@@ -91,7 +91,7 @@ fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
     let mut found = Vec::new();
     inspect(
         FACTS,
-        &toml::from_str("[dependencies]\noer-esp32s31-hal = {}\n").unwrap(),
+        &toml::from_str("[dependencies]\noer-chips-esp32s31-hal = {}\n").unwrap(),
         None,
         &mut found,
     );

@@ -94,8 +94,10 @@ impl IngressClass {
                 if matches!(
                     oer_protocols_ieee80211_wire::frame::FrameControlFields::from_raw(value).kind(),
                     oer_protocols_ieee80211_wire::frame::FrameType::Data
-                ) && oer_protocols_ieee80211_wire::frame::FrameControlFields::from_raw(value)
-                    .protected() =>
+                ) && oer_protocols_ieee80211_wire::frame::FrameControlFields::from_raw(
+                    value,
+                )
+                .protected() =>
             {
                 Self::BulkProtectedData
             }

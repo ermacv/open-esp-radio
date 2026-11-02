@@ -7,7 +7,9 @@ use oer_chips_family_ieee802154_engine::{
     ll::model::Ieee802154LlModel,
 };
 use oer_chips_family_ieee802154_mac_values::FRAME_SIZE;
-use oer_chips_family_ieee802154_mac_values::{Ieee802154Channel, Ieee802154Event, Ieee802154RxStatus};
+use oer_chips_family_ieee802154_mac_values::{
+    Ieee802154Channel, Ieee802154Event, Ieee802154RxStatus,
+};
 use std::boxed::Box;
 
 static LEVELS: [i8; 1] = [0];

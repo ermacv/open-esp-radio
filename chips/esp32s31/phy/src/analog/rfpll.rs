@@ -957,7 +957,10 @@ impl RfpllFrequencyMmioBinding {
                 frequency_index,
                 crystal_selector,
             } => {
-                oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(registers, frequency_index);
+                oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(
+                    registers,
+                    frequency_index,
+                );
                 RfpllFrequencyCompletion::ChannelSwitchStarted {
                     frequency_index,
                     crystal_selector,
@@ -969,7 +972,9 @@ impl RfpllFrequencyMmioBinding {
             }
             RfpllFrequencyAction::ReadChannelReady { .. } => {
                 RfpllFrequencyCompletion::ChannelReadyObserved {
-                    ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(registers),
+                    ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(
+                        registers,
+                    ),
                 }
             }
             RfpllFrequencyAction::ConfigureNrx { frequency_mhz } => {

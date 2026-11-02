@@ -1237,7 +1237,9 @@ impl NormalizedRxFrame<'_> {
     /// The PHY fields actually decoded from this frame's hardware prefix.
     pub fn observed_phy(&self) -> Option<RxPhyInfo> {
         match self.metadata.rate {
-            oer_protocols_ieee80211_contracts_port::RxEvidence::HardwareObserved(rate) => Some(rate),
+            oer_protocols_ieee80211_contracts_port::RxEvidence::HardwareObserved(rate) => {
+                Some(rate)
+            }
             _ => None,
         }
     }

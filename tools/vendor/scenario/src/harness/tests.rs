@@ -232,11 +232,13 @@ fn operator_flags_and_usage_reach_the_scenario_report() {
     ])
     .budget;
     let (value, report) = budget
-        .run(|memory, control| -> oer_tools_analysis_riscv_model::Result<_> {
-            control.checkpoint(23)?;
-            let _reservation = memory.reserve(41, RunPosition::default())?;
-            Ok(17)
-        })
+        .run(
+            |memory, control| -> oer_tools_analysis_riscv_model::Result<_> {
+                control.checkpoint(23)?;
+                let _reservation = memory.reserve(41, RunPosition::default())?;
+                Ok(17)
+            },
+        )
         .unwrap();
     assert_eq!(value, 17);
     assert_eq!(report.profile, AnalysisProfile::VendorScenario);

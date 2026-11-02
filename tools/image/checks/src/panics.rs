@@ -100,6 +100,8 @@ impl Layer {
         let last = *parts.last()?;
         Some(match *parts.first()? {
             "chips" if last == "hal" => Self::Hal,
+            // A chip's bootstrap is an image of its own.
+            "chips" if last == "bootstrap" => Self::Firmware,
             "chips"
                 if ["pac", "pac-raw"].contains(&last)
                     || last.ends_with("-pac")
@@ -110,11 +112,11 @@ impl Layer {
             "chips" => Self::Chips,
             "portable" => Self::Portable,
             "protocols" => Self::Protocols,
-            "firmware" => Self::Firmware,
-            // The scenarios' services are wire vocabularies; their images
-            // are firmware.
-            "hil-scenarios" if parts.get(1) == Some(&"services") => Self::Protocols,
-            "hil-scenarios" => Self::Firmware,
+            "examples" => Self::Firmware,
+            // The scenarios' services are wire vocabularies; their images,
+            // probes and agent are firmware.
+            "hil" if parts.get(1) == Some(&"services") => Self::Protocols,
+            "hil" => Self::Firmware,
             _ => return None,
         })
     }

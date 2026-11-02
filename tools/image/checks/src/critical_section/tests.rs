@@ -147,9 +147,11 @@ fn every_handler_and_exception_is_a_root_including_the_shorter_handler() {
 fn a_task_poll_or_start_payload_reached_from_another_hart_is_refused() {
     // A resolved indirect entry into task/payload code uses the existing walk.
     let mut image = graph(0x0007_80e7, ENTRIES[0]);
-    image
-        .resolutions
-        .add(SECONDARY + 8, oer_tools_image_stack::Fact::FieldType, [SHORT]);
+    image.resolutions.add(
+        SECONDARY + 8,
+        oer_tools_image_stack::Fact::FieldType,
+        [SHORT],
+    );
     assert!(audit_roots(&image, &entries(), BOOT).is_err());
 }
 

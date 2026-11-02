@@ -225,7 +225,7 @@ system these rules serve.
   `tools/<domain>/` the developer's machine. Executables only in
   `firmware/`, `hil-scenarios/` and `tools/`. A library is `oer-` plus its
   path below the root; an executable keeps its root
-  (`oer-hil-probes-boot-smoke`). A crate never sits inside another; a new crate
+  (`oer-hil-probes-esp32s31-boot-smoke`). A crate never sits inside another; a new crate
   needs a reason (dependency direction, license, target, independent
   consumer). Only the image pipeline builds images: `cargo fw`, and the HIL
   harness for a scenario's image. Every package builds.

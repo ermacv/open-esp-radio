@@ -1,10 +1,10 @@
 use super::*;
+use oer_portable_time::Clock;
+use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_STATUS_REQUEST_DECLINED, BlockAckAction, encode_addba_request, parse_block_ack_action,
 };
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_portable_time::Clock;
-use oer_portable_time_virtual::VirtualClock;
 
 #[test]
 fn unsupported_addba_receives_an_explicit_decline() {
@@ -58,7 +58,8 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
             Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
             oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
                 dialog_token: 17,
-                status: oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
+                status:
+                    oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: 0,
                 window: 8,
                 timeout_tu: 0,

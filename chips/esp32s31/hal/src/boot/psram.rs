@@ -45,7 +45,9 @@ impl PsramRegisters {
     /// Consume this exact mapped controller/MMU owner to lend its bytes once.
     /// Copyable range observations and unrelated owners grant no loan.
     #[cfg(target_arch = "riscv32")]
-    pub fn into_region(mapped: oer_chips_family_boot::psram::MappedPsram<Self>) -> &'static mut [u8] {
+    pub fn into_region(
+        mapped: oer_chips_family_boot::psram::MappedPsram<Self>,
+    ) -> &'static mut [u8] {
         let (registers, mapped) = mapped.into_parts();
         // Retire every remap authority before issuing the static loan.
         drop(registers);
@@ -207,16 +209,16 @@ impl<P: Placement, Q: Placement, R: Placement> PsramControllerRegisters
         spi.modify_sram_drd_cmd(|w| {
             w.set_cache_sram_usr_rd_cmd_bitlen(COMMAND_BITLEN)
                 .set_cache_sram_usr_rd_cmd_value(
-                    oer_chips_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead
-                        .bits() as u16,
-                );
+                oer_chips_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead
+                    .bits() as u16,
+            );
         });
         spi.modify_sram_dwr_cmd(|w| {
             w.set_cache_sram_usr_wr_cmd_bitlen(COMMAND_BITLEN)
                 .set_cache_sram_usr_wr_cmd_value(
-                    oer_chips_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite
-                        .bits() as u16,
-                );
+                oer_chips_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite
+                    .bits() as u16,
+            );
         });
         spi.modify_ctrl1(|w| {
             w.set_ar_splice_en(true).set_aw_splice_en(true);
@@ -382,7 +384,13 @@ impl<P: Placement, Q: Placement, R: Placement> MmuRegisters for PsramRegisters<P
 }
 
 #[cfg(any(test, feature = "test-support"))]
-impl<'a, 'b, 'c> PsramRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>, oer_portable_mmio::Host<'c>> {
+impl<'a, 'b, 'c>
+    PsramRegisters<
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'b>,
+        oer_portable_mmio::Host<'c>,
+    >
+{
     /// The PSRAM owner over host memory from each instance's base.
     pub fn host(
         memspi2: &'a mut [u32],

@@ -133,7 +133,11 @@ fn observe<'id, Id: SlotIdentity + 'id>(
 }
 fn returned<'id, Id: SlotIdentity + 'id>(
     terminal: LowerMacTerminal<'id, ModelTypes<Backend<Id>>>,
-    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
+    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
+        'id,
+        ModelTickets,
+        ModelPool<Id, 1>,
+    >,
     seen: &mut Capture,
     air: &ModelAir,
 ) -> Result<(), &'static str> {

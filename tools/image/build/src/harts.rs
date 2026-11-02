@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn the_boot_smoke_image_declares_hart_1() {
         let manifest: toml::Value = toml::from_str(include_str!(
-            "../../../../hil/probes/boot-smoke/Cargo.toml"
+            "../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"
         ))
         .unwrap();
         let package = &manifest["package"];
@@ -135,7 +135,7 @@ mod tests {
         }]});
         let profile = Profile::tracked("esp32s31").unwrap();
         assert_eq!(
-            of_metadata(&metadata, "oer-hil-probes-boot-smoke", &profile).unwrap(),
+            of_metadata(&metadata, "oer-hil-probes-esp32s31-boot-smoke", &profile).unwrap(),
             [0, 1]
         );
     }

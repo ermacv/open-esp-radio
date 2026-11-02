@@ -203,7 +203,8 @@ impl MacLegacyTxResponse {
                 oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::AckResponse.bits() as u8
             }
             Self::BlockAck => {
-                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::BlockAckResponse.bits() as u8
+                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::BlockAckResponse.bits()
+                    as u8
             }
         }
     }
@@ -550,9 +551,15 @@ pub enum MacHeGuardIntervalAndLtf {
 impl MacHeGuardIntervalAndLtf {
     const fn register_value(self) -> oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf {
         match self {
-            Self::OneLtf800Ns => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::OneLtf800ns,
-            Self::TwoLtf800Ns => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf800ns,
-            Self::TwoLtf1600Ns => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf1600ns,
+            Self::OneLtf800Ns => {
+                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::OneLtf800ns
+            }
+            Self::TwoLtf800Ns => {
+                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf800ns
+            }
+            Self::TwoLtf1600Ns => {
+                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf1600ns
+            }
             Self::FourLtf3200Ns => {
                 oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::FourLtf3200ns
             }
@@ -1055,11 +1062,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         assert!(
@@ -1252,11 +1261,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         self.publish_prepared_control(
@@ -1271,7 +1282,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 rate: parameters.rate.code(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
-                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy.bits() as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy.bits()
+                    as u8,
                 cbw40: false,
             },
         );
@@ -1367,11 +1379,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
 
@@ -1382,7 +1396,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             program.descriptor_head,
             match parameters.format {
                 MacHtTxFormat::SingleMpdu => {
-                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtSingleMpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtSingleMpdu.bits()
+                        as u8
                 }
                 MacHtTxFormat::Ampdu => {
                     oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtAmpdu.bits() as u8
@@ -1396,7 +1411,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 rate: parameters.rate.register_value(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
-                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Ht.bits() as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Ht.bits()
+                    as u8,
                 cbw40,
             },
         );
@@ -1504,11 +1520,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         assert!(
@@ -1562,11 +1580,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.packet_priority) <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
+            u32::from(parameters.packet_priority)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX,
             "the program bounds the priority"
         );
         assert!(
-            u32::from(parameters.priority_count) <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
+            u32::from(parameters.priority_count)
+                <= oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX,
             "the program bounds the count"
         );
         let bank = queue::bank(queue);
@@ -1589,7 +1609,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 rate: parameters.rate.plcp_rate_field(),
                 key_entry_index: parameters.hardware_key_selector,
                 interface: parameters.interface,
-                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::He.bits() as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::He.bits()
+                    as u8,
                 cbw40: false,
             },
         );

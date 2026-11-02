@@ -267,7 +267,12 @@ pub(super) fn retire_with<
 
 #[cfg(test)]
 impl<'a>
-    LaunchPermit<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'a>>
+    LaunchPermit<
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'a>,
+    >
 {
     /// The permit over host memory: hart 1's route bank, LP_SYS, the cache
     /// and hart 1's CLIC.

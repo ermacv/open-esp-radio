@@ -6,9 +6,9 @@ use core::{
     num::{NonZeroU32, NonZeroU64},
     task::Waker,
 };
-use oer_protocols_bluetooth_le_port::{PacketCount, Receive, Transmit};
 use oer_portable_time::{Clock, Duration, Instant, TimeOverflow, Timer};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_bluetooth_le_port::{PacketCount, Receive, Transmit};
 
 /// Explicit propagation input. Loss applies to numbered packets per transmitter.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

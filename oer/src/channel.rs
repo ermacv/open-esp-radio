@@ -10,7 +10,9 @@
 use core::marker::PhantomData;
 
 use atomic_waker::AtomicWaker;
-use oer_portable_memory::{ClaimCell, QueueNotify, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    ClaimCell, QueueNotify, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
+};
 use static_cell::ConstStaticCell;
 
 /// The two queues of a channel, and their notifies: `C` the application
@@ -100,7 +102,9 @@ where
     pub(crate) fn take_second(&'static self) -> Result<End<B, A, N, S, C>, ChannelError> {
         let (receive, send) = self.second.take().map_err(|refusal| match refusal {
             oer_portable_memory::Claim::Empty => ChannelError::NotSplit,
-            oer_portable_memory::Claim::Lent | oer_portable_memory::Claim::Kept => ChannelError::Taken,
+            oer_portable_memory::Claim::Lent | oer_portable_memory::Claim::Kept => {
+                ChannelError::Taken
+            }
         })?;
         Ok(End {
             send,

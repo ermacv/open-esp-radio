@@ -13,10 +13,12 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     task::{Context, Poll},
 };
-use oer_protocols_ieee80211_contracts_port::{AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer};
 use oer_portable_memory::QueueNotify;
-use oer_protocols_radio_port::SlotIdentity;
 use oer_portable_sync::PriorityWaker;
+use oer_protocols_ieee80211_contracts_port::{
+    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer,
+};
+use oer_protocols_radio_port::SlotIdentity;
 
 /// How a lent unit's return tells the task waiting for every return (the
 /// station's stop) and the driver when it asked for its units. Every call

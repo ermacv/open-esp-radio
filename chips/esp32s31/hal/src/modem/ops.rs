@@ -50,12 +50,24 @@ pub(crate) fn enable_phy_calibration_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_22m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled);
-        w.set_clk_wifibb_40m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled);
-        w.set_clk_wifibb_44m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled);
-        w.set_clk_wifibb_80m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled);
-        w.set_clk_wifibb_40x_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled);
-        w.set_clk_wifibb_80x_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled);
+        w.set_clk_wifibb_22m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
+        );
+        w.set_clk_wifibb_40m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
+        );
+        w.set_clk_wifibb_44m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
+        );
+        w.set_clk_wifibb_80m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
+        );
+        w.set_clk_wifibb_40x_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
+        );
+        w.set_clk_wifibb_80x_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
+        );
         w.set_clk_wifibb_40x1_en(
             oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
         );
@@ -65,7 +77,9 @@ pub(crate) fn enable_phy_calibration_clocks<P: Placement>(
         w.set_clk_wifibb_160x1_en(
             oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
         );
-        w.set_clk_wifi_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled);
+        w.set_clk_wifi_apb_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled,
+        );
         w.set_clk_fe_80m_en(true);
         w.set_clk_fe_160m_en(true);
         w.set_clk_fe_apb_en(true);
@@ -110,12 +124,24 @@ pub(crate) fn enable_wifi_mac_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_22m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled);
-        w.set_clk_wifibb_40m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled);
-        w.set_clk_wifibb_44m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled);
-        w.set_clk_wifibb_80m_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled);
-        w.set_clk_wifibb_40x_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled);
-        w.set_clk_wifibb_80x_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled);
+        w.set_clk_wifibb_22m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
+        );
+        w.set_clk_wifibb_40m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
+        );
+        w.set_clk_wifibb_44m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
+        );
+        w.set_clk_wifibb_80m_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
+        );
+        w.set_clk_wifibb_40x_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
+        );
+        w.set_clk_wifibb_80x_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
+        );
         w.set_clk_wifibb_40x1_en(
             oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
         );
@@ -125,8 +151,12 @@ pub(crate) fn enable_wifi_mac_clocks<P: Placement>(
         w.set_clk_wifibb_160x1_en(
             oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
         );
-        w.set_clk_wifimac_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifimacEn::Enabled);
-        w.set_clk_wifi_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled);
+        w.set_clk_wifimac_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifimacEn::Enabled,
+        );
+        w.set_clk_wifi_apb_en(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled,
+        );
     });
 }
 

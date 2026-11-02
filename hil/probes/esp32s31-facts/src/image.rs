@@ -1083,7 +1083,8 @@ fn setup(s: &mut Session<'_>) {
     // stacks remain in SRAM for this whole image, with IRQ stack below task stack.
     unsafe {
         oer_portable_riscv::install_trap_stack(
-            ptr::addr_of!(_facts_start_trap) as usize | oer_portable_riscv::machine::MTVEC_CLIC_MODE,
+            ptr::addr_of!(_facts_start_trap) as usize
+                | oer_portable_riscv::machine::MTVEC_CLIC_MODE,
             ptr::addr_of!(_facts_mtvt) as usize,
             ptr::addr_of!(__runtime_cpu0_irq_stack_top) as usize,
         );

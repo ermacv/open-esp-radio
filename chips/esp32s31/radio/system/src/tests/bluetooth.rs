@@ -574,12 +574,13 @@ fn detach_and_reattach_do_not_clear_a_poisoned_common_domain() {
 #[test]
 fn a_tracking_deadline_the_clock_cannot_hold_ends_the_attached_run() {
     use core::pin::pin;
-    let overflow =
-        PoisonCause::TrackingRefused(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+    let overflow = PoisonCause::TrackingRefused(
+        oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
             oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
                 class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::BluetoothIeee802154,
             },
-        ));
+        ),
+    );
     let model = model(Script {
         ble_available: true,
         deadline_fault: Some(overflow),

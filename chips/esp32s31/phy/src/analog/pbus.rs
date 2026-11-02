@@ -555,7 +555,11 @@ impl PhyForceTxRxMmioBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyForceTxRxCompletion {
-        oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, self.enabled, self.phase);
+        oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(
+            registers,
+            self.enabled,
+            self.phase,
+        );
         PhyForceTxRxCompletion::Configured {
             enabled: self.enabled,
             phase: self.phase,

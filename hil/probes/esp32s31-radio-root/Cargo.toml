@@ -1,26 +1,23 @@
 [package]
-name = "oer-hil-probes-boot-smoke"
+name = "oer-hil-probes-esp32s31-radio-root"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
 publish.workspace = true
-description = "The smallest staged image: boots through the staged runtime, reports the previous panic and passes"
+description = "Takes the reset root and requests and releases each platform clock once through the platform clock owner; no RF"
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-chips-esp32s31-board = { path = "../../../chips/esp32s31/board" }
-oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-chips-family-staged-runtime = { path = "../../../chips/family/staged-runtime" }
 oer-chips-esp32s31-compose = { path = "../../../chips/esp32s31/compose" }
-oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-chips-family-executor = { path = "../../../chips/family/executor" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
-oer-chips-family-interrupt-table = { path = "../../../chips/family/interrupt-table" }
-oer-portable-memory = { path = "../../../portable/memory" }
-oer-portable-crypto = { path = "../../../portable/crypto" }
 
 [build-dependencies]
 oer-chips-esp32s31-layout = { workspace = true, features = ["build"] }
@@ -30,14 +27,10 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
-# The harts this image runs: hart 1 starts during boot, runs its own
-# interrupt-mode executor with its own timer, holds the AES block and answers
-# the boot hart's requests and liveness beats.
-harts = ["boot", 1]
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
-runtime = { firmware = 4 }
+runtime = { chips = 1, firmware = 21, unnamed = 2 }
 bootstrap = { unnamed = 2 }

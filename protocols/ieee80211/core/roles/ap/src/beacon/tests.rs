@@ -45,7 +45,11 @@ fn publication_beacon(storage: &mut [u8; AP_BEACON_CAPACITY]) -> ApBeacon<'_> {
         &ADVERTISEMENT,
         [2; 6],
         &WifiSsid::new(b"ap").unwrap(),
-        Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(
+            6,
+            oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+        )
+        .unwrap(),
         100,
         2,
         SequenceNumber::ZERO,
@@ -145,7 +149,11 @@ fn static_storage_owns_beacon_dtim_and_next_deadline() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(
+            6,
+            oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+        )
+        .unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -201,7 +209,11 @@ fn late_publication_does_not_move_the_absolute_tbtt_schedule() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(
+            6,
+            oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+        )
+        .unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -258,7 +270,11 @@ fn the_tbtt_schedule_survives_the_u32_microsecond_boundary() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(
+            6,
+            oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+        )
+        .unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -306,7 +322,11 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
         &ADVERTISEMENT,
         [2; 6],
         &ssid,
-        Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+        Channel::ghz2_4(
+            6,
+            oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+        )
+        .unwrap(),
         100,
         2,
         SequenceNumber::new(3).unwrap(),
@@ -366,7 +386,11 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
             &ADVERTISEMENT,
             [2; 6],
             &ssid,
-            Channel::ghz2_4(1, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above).unwrap(),
+            Channel::ghz2_4(
+                1,
+                oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above,
+            )
+            .unwrap(),
             100,
             2,
             sequence,

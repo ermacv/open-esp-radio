@@ -204,7 +204,9 @@ fn curated_registers_keep_their_absolute_words() {
 
 #[test]
 fn unestablished_facts_stay_unestablished() {
-    use oer_tools_registers_contracts::{FactAccuracy, FactCompleteness, FactProvenance, NameOrigin};
+    use oer_tools_registers_contracts::{
+        FactAccuracy, FactCompleteness, FactProvenance, NameOrigin,
+    };
     use oer_tools_registers_model::chip_model::FieldClass;
 
     let model = model();
@@ -664,7 +666,8 @@ fn the_thin_renderer_renders_the_esp32s31_root_and_policy() {
     ] {
         assert!(rendered.contains(item), "{item}");
     }
-    let linker = oer_tools_registers_model::chip_render::dma_window(&model).expect("the window renders");
+    let linker =
+        oer_tools_registers_model::chip_render::dma_window(&model).expect("the window renders");
     for item in [
         "DMA_WINDOW_ORIGIN = 0x2f000000;",
         "DMA_WINDOW_LENGTH = 0x00080000;",

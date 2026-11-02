@@ -71,12 +71,13 @@ pub(crate) fn command(
             client.token().ok_or("the lease has no token")?,
         );
     let mut child = if std::io::stdin().is_terminal() {
-        Child::Foreground(oer_tools_os_process::foreground::Child::spawn(&mut command)?)
-    } else {
-        Child::Owned(oer_tools_os_process::owned::Child::spawn_with_shutdown_grace(
+        Child::Foreground(oer_tools_os_process::foreground::Child::spawn(
             &mut command,
-            GRACE,
         )?)
+    } else {
+        Child::Owned(
+            oer_tools_os_process::owned::Child::spawn_with_shutdown_grace(&mut command, GRACE)?,
+        )
     };
     loop {
         if let Some(status) = child.try_wait()? {

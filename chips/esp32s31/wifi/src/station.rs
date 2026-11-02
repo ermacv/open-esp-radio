@@ -5,12 +5,16 @@ use crate::chip::{
 };
 use crate::radio::{self, Backend, Caps, Device, Family};
 use core::{convert::Infallible, future::Future, marker::PhantomData, mem::MaybeUninit};
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_ieee80211_driver::port::{self, device::Composition};
 use oer_chips_family_ieee80211_policy::rate_selection::EspressifRateSelection;
+use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_runtime::station::*;
 
+use oer_portable_memory::{Placed, StaticPlace};
+#[cfg(oer_trace)]
+use oer_portable_time::Clock;
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_roles_sta::{
     data::StaData,
     epoch::{EpochContext, LinkEpochSource},
@@ -24,11 +28,7 @@ use oer_protocols_ieee80211_wire::{
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::AssociationCapabilities,
 };
-use oer_portable_memory::{Placed, StaticPlace};
 use oer_protocols_radio_port::{self as rp, Child, PortBackend, Root, SlotIdentity};
-#[cfg(oer_trace)]
-use oer_portable_time::Clock;
-use oer_portable_time::{Duration, Instant};
 
 pub type Epoch<Id> = Child<Root<Id>, 4>;
 pub struct ImageComposition<W: Binding>(PhantomData<W>);
@@ -166,7 +166,10 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
                     #[cfg(oer_trace)]
                     {
                         let observer = W::DriverObserver::default();
-                        oer_portable_trace::observe!(observer, crate::observation::StationAuthenticated);
+                        oer_portable_trace::observe!(
+                            observer,
+                            crate::observation::StationAuthenticated
+                        );
                     }
                 }
                 if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
@@ -224,7 +227,9 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
 
 pub struct Rates<W: Binding>(EspressifRateSelection<Caps>, W::Observer);
 impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAnswer> for Rates<W> {
-    fn packet_number_step(&self) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::packet_number_step(&self.0)
     }
     fn plan<R>(
@@ -286,7 +291,10 @@ impl<W: Binding, M: SignalMetadata> RateSelection<M, port::Ack, port::BlockAckAn
         &mut self,
         now: Instant,
         tally: oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally,
-        completion: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<port::BlockAckAnswer, D>,
+        completion: &oer_protocols_ieee80211_contracts_port::AggregateOutcome<
+            port::BlockAckAnswer,
+            D,
+        >,
     ) {
         <EspressifRateSelection<Caps> as RateSelection<M, port::Ack, port::BlockAckAnswer>>::completed_aggregate(
             &mut self.0,
@@ -318,7 +326,10 @@ fn selected_rate<M: SignalMetadata>(
 // WMM Information: QoS station, U-APSD disabled (IEEE 802.11 WMM OUI type 2).
 const HT20: [u8; 28] = ht_capability_ie(
     HtLocalCapabilities::new(0, 0, 0xff, 1),
-    match Channel::ghz2_4(1, oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz20) {
+    match Channel::ghz2_4(
+        1,
+        oer_protocols_ieee80211_wire::channel::WifiChannelWidth::Mhz20,
+    ) {
         Ok(channel) => channel,
         Err(_) => panic!("HT20 advertisement geometry"),
     },
@@ -467,7 +478,8 @@ fn initialize_service<'id, W: Binding>(
     let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
     let [b0, b1, b2, b3, data @ ..] = resources.buffers;
     const {
-        if MANAGEMENT != 4 || DATA_BUFFERS > oer_protocols_ieee80211_runtime::station::DATA_BUFFERS {
+        if MANAGEMENT != 4 || DATA_BUFFERS > oer_protocols_ieee80211_runtime::station::DATA_BUFFERS
+        {
             panic!("four management buffers, and the data machine's queue holds the rest");
         }
     }
@@ -653,7 +665,10 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
 /// ([`crate::release::within`]): an answer after it is never read, the
 /// release reports `Deadline`, and the spent poster is never reused.
 async fn release_answer<W: Binding>(
-    pending: &mut oer_portable_memory::Awaiting<radio::Retire<W>, Result<(), crate::failure::ReleaseCause>>,
+    pending: &mut oer_portable_memory::Awaiting<
+        radio::Retire<W>,
+        Result<(), crate::failure::ReleaseCause>,
+    >,
     deadline: rp::StopDeadline,
 ) -> Result<(), crate::failure::ReleaseCause> {
     use crate::failure::ReleaseCause;

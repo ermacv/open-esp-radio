@@ -280,7 +280,9 @@ pub(crate) const fn executor_observer<const SLOT: usize>() -> ExecutorObserver<S
 pub struct Observer;
 
 impl Observer {
-    fn decoded<E: oer_portable_trace::Event + Copy, D: oer_portable_trace::Event>(event: E) -> Option<D> {
+    fn decoded<E: oer_portable_trace::Event + Copy, D: oer_portable_trace::Event>(
+        event: E,
+    ) -> Option<D> {
         (E::KIND == D::KIND)
             .then(|| D::decode(event.encode()))
             .flatten()

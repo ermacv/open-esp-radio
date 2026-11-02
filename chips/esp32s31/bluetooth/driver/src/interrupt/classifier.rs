@@ -12,7 +12,9 @@
 //! handler must obtain each observation at its named point; it must not reuse
 //! one register image for both merely because their bit geometry is equal.
 
-use oer_chips_esp32s31_hal::bluetooth::{BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch};
+use oer_chips_esp32s31_hal::bluetooth::{
+    BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
+};
 
 pub use oer_chips_esp32s31_hal::bluetooth::{
     BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,

@@ -11,8 +11,6 @@ use oer_chips_family_interrupt_table::signal::SignalExecutor;
 #[cfg(target_arch = "riscv32")]
 use crate::{low_power::ControllerLowPowerHardwareInitialized, resources::InterruptBankOwner};
 #[cfg(target_arch = "riscv32")]
-use oer_protocols_bluetooth_le_wire::LePublicDeviceAddress;
-#[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_hal::bluetooth::ControllerPublicAddress;
 #[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_hal::bluetooth::ModemLpTimerLowPowerHardwareInitializedOwner;
@@ -22,6 +20,8 @@ use oer_chips_esp32s31_hal::bluetooth::engine::BlePhyLe1MPacketStartCalibration;
 use oer_chips_esp32s31_hal::bluetooth::engine::{
     LePacketCapturedTime, PeripheralConnectionCapturedAnchorTime,
 };
+#[cfg(target_arch = "riscv32")]
+use oer_protocols_bluetooth_le_wire::LePublicDeviceAddress;
 
 /// Observation that the source-owned normal BLE PHY transaction completed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

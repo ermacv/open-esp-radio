@@ -70,7 +70,8 @@ fn signed_message2(
 ) -> OwnedEapolFrame<512> {
     let ptk = {
         let mut derivation =
-            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
+                .unwrap();
         loop {
             if let Some(pmk) = derivation.step() {
                 break pmk;
@@ -115,7 +116,9 @@ fn ht_capabilities() -> ApAssociationCapabilities {
         short_preamble: true,
         ht: ht_peer_capabilities(&ht_capability_ie(
             TEST_HT_CAPABILITIES,
-            oer_protocols_ieee80211_wire::channel::Channel::from_wifi_channel(WifiChannel::mhz20(6).unwrap()),
+            oer_protocols_ieee80211_wire::channel::Channel::from_wifi_channel(
+                WifiChannel::mhz20(6).unwrap(),
+            ),
         )),
         qos_supported: true,
     }
@@ -134,9 +137,11 @@ fn service(
     AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
         AP,
         {
-            let mut derivation =
-                oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
-                    .unwrap();
+            let mut derivation = oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(
+                b"password",
+                b"test-ap",
+            )
+            .unwrap();
             loop {
                 if let Some(pmk) = derivation.step() {
                     break pmk;
@@ -503,7 +508,10 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
         .authenticate_open(OTHER, oer_portable_time::Instant::from_micros(6_000_000))
         .unwrap();
     assert_eq!(
-        service.observe_bound_data_activity(binding, oer_portable_time::Instant::from_micros(6_001_000)),
+        service.observe_bound_data_activity(
+            binding,
+            oer_portable_time::Instant::from_micros(6_001_000)
+        ),
         Err(ApServiceError::UnknownPeer),
         "coalescing must not weaken the slot-generation fence"
     );
@@ -560,28 +568,31 @@ fn authenticated_peer_expires_at_the_recovered_fifteen_second_frontier() {
 #[test]
 fn associated_activity_refreshes_the_configured_inactivity_frontier() {
     let mut storage = AccessPointPeerStorage::new();
-    let mut service = AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
-        AP,
-        {
-            let mut derivation =
-                oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
-                    .unwrap();
-            loop {
-                if let Some(pmk) = derivation.step() {
-                    break pmk;
+    let mut service =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
+            AP,
+            {
+                let mut derivation = oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(
+                    b"password",
+                    b"test-ap",
+                )
+                .unwrap();
+                loop {
+                    if let Some(pmk) = derivation.step() {
+                        break pmk;
+                    }
                 }
-            }
-        },
-        RsnGtk::new(
-            oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
-            &[0x55; 16],
-        ),
-        AccessPointClientLimit::new(2).unwrap(),
-        AccessPointInactiveTimeout::new(10).unwrap(),
-        storage.lend(),
-    )
-    .unwrap();
+            },
+            RsnGtk::new(
+                oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+                true,
+                &[0x55; 16],
+            ),
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::new(10).unwrap(),
+            storage.lend(),
+        )
+        .unwrap();
     service
         .authenticate_open(PEER, oer_portable_time::Instant::from_micros(0))
         .unwrap();
@@ -734,7 +745,11 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     );
     assert!(!message1.retransmission());
     service
-        .observe_wpa2_transmit(message1_context, true, oer_portable_time::Instant::from_micros(10))
+        .observe_wpa2_transmit(
+            message1_context,
+            true,
+            oer_portable_time::Instant::from_micros(10),
+        )
         .unwrap();
     assert_eq!(
         service.next_wpa2_retry_deadline(),
@@ -752,7 +767,8 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
 
     let ptk = {
         let mut derivation =
-            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
+                .unwrap();
         loop {
             if let Some(pmk) = derivation.step() {
                 break pmk;
@@ -834,10 +850,14 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         Err(RsnFrameError::RsnIeMismatch)
     ));
 
-    let message4 = RsnTxFrame::<512>::message4(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
+    let message4 = RsnTxFrame::<512>::message4(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+        AP,
+        10,
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
@@ -913,8 +933,12 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         .unwrap();
     let original_deadline = service.peer_status(PEER).unwrap().deadline;
 
-    let replay_mismatch =
-        RsnTxFrame::<512>::message4(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, AP, 77).unwrap();
+    let replay_mismatch = RsnTxFrame::<512>::message4(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+        AP,
+        77,
+    )
+    .unwrap();
     let replay_mismatch = OwnedEapolFrame::<512>::try_copy(
         RsnInterface::AccessPoint,
         PEER,
@@ -926,9 +950,13 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         ApWpa2Progress::None
     ));
 
-    let unsupported =
-        RsnTxFrame::<512>::message1(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, AP, 9, ANONCE)
-            .unwrap();
+    let unsupported = RsnTxFrame::<512>::message1(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+        AP,
+        9,
+        ANONCE,
+    )
+    .unwrap();
     let unsupported =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, unsupported.as_bytes())
             .unwrap();
@@ -975,7 +1003,8 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
 
     let ptk = {
         let mut derivation =
-            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap").unwrap();
+            oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
+                .unwrap();
         loop {
             if let Some(pmk) = derivation.step() {
                 break pmk;
@@ -991,10 +1020,14 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
             supplicant_nonce: SNONCE,
         },
     );
-    let valid_m4 = RsnTxFrame::<512>::message4(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
+    let valid_m4 = RsnTxFrame::<512>::message4(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+        AP,
+        10,
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let valid_m4 =
         OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, valid_m4.as_bytes()).unwrap();
     let forged_m4 = corrupt_mic(valid_m4.clone());
@@ -1160,28 +1193,31 @@ fn management_sequence_wraps_at_twelve_bits() {
 #[test]
 fn all_fifteen_aids_are_stable_and_reused_after_removal() {
     let mut storage = AccessPointPeerStorage::new();
-    let mut service = AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
-        AP,
-        {
-            let mut derivation =
-                oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
-                    .unwrap();
-            loop {
-                if let Some(pmk) = derivation.step() {
-                    break pmk;
+    let mut service =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
+            AP,
+            {
+                let mut derivation = oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(
+                    b"password",
+                    b"test-ap",
+                )
+                .unwrap();
+                loop {
+                    if let Some(pmk) = derivation.step() {
+                        break pmk;
+                    }
                 }
-            }
-        },
-        RsnGtk::new(
-            oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
-            &[0x55; 16],
-        ),
-        AccessPointClientLimit::new(15).unwrap(),
-        AccessPointInactiveTimeout::default(),
-        storage.lend(),
-    )
-    .unwrap();
+            },
+            RsnGtk::new(
+                oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+                true,
+                &[0x55; 16],
+            ),
+            AccessPointClientLimit::new(15).unwrap(),
+            AccessPointInactiveTimeout::default(),
+            storage.lend(),
+        )
+        .unwrap();
     for suffix in 1..=15_u8 {
         let peer = [0x02, 0, 0, 0, 1, suffix];
         assert_eq!(
@@ -1245,8 +1281,9 @@ fn bounded_peer_table_has_an_explicit_memory_ceiling() {
     // The service itself travels through the typed lifecycle, while all
     // fifteen WPA2 state machines remain in caller-owned static storage.
     assert!(
-        core::mem::size_of::<AccessPointService<'_, oer_protocols_ieee80211_wire::security::spp::Association>>(
-        ) <= 256
+        core::mem::size_of::<
+            AccessPointService<'_, oer_protocols_ieee80211_wire::security::spp::Association>,
+        >() <= 256
     );
     // Fifteen independently negotiated TX BlockAck sessions and the
     // per-peer HMAC-SHA1-128 Association-security commitments, exact
@@ -1642,28 +1679,31 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
 #[test]
 fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
     let mut storage = AccessPointPeerStorage::new();
-    let service = AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
-        AP,
-        {
-            let mut derivation =
-                oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
-                    .unwrap();
-            loop {
-                if let Some(pmk) = derivation.step() {
-                    break pmk;
+    let service =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new(
+            AP,
+            {
+                let mut derivation = oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(
+                    b"password",
+                    b"test-ap",
+                )
+                .unwrap();
+                loop {
+                    if let Some(pmk) = derivation.step() {
+                        break pmk;
+                    }
                 }
-            }
-        },
-        RsnGtk::new(
-            oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
-            &[0x55; 16],
-        ),
-        AccessPointClientLimit::new(2).unwrap(),
-        AccessPointInactiveTimeout::new(10).unwrap(),
-        storage.lend(),
-    )
-    .unwrap();
+            },
+            RsnGtk::new(
+                oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+                true,
+                &[0x55; 16],
+            ),
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::new(10).unwrap(),
+            storage.lend(),
+        )
+        .unwrap();
     assert!(
         service
             .matches_association_security(association_security(&WPA2_RSN))
@@ -1798,7 +1838,11 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     .unwrap();
     assert_eq!(keys.igtk.unwrap().key(), &[0x66; 16]);
     service
-        .observe_wpa2_transmit(message3_context, true, oer_portable_time::Instant::from_micros(3))
+        .observe_wpa2_transmit(
+            message3_context,
+            true,
+            oer_portable_time::Instant::from_micros(3),
+        )
         .unwrap();
 }
 
@@ -1806,22 +1850,24 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
 fn a_wpa3_association_resumes_only_a_known_pmkid() {
     let mut storage = AccessPointPeerStorage::new();
     let mut service = wpa3_service(&mut storage);
-    let associate =
-        |service: &mut AccessPointService<'_, oer_protocols_ieee80211_wire::security::spp::Association>,
-         rsn: &[u8]| {
-            association_status(
-                service
-                    .associate_rsn(
-                        PEER,
-                        association_security(rsn),
-                        ht_capabilities(),
-                        [7; 32],
-                        9,
-                        oer_portable_time::Instant::from_micros(1),
-                    )
-                    .unwrap(),
-            )
-        };
+    let associate = |service: &mut AccessPointService<
+        '_,
+        oer_protocols_ieee80211_wire::security::spp::Association,
+    >,
+                     rsn: &[u8]| {
+        association_status(
+            service
+                .associate_rsn(
+                    PEER,
+                    association_security(rsn),
+                    ht_capabilities(),
+                    [7; 32],
+                    9,
+                    oer_portable_time::Instant::from_micros(1),
+                )
+                .unwrap(),
+        )
+    };
 
     // Open System authentication without a cached association.
     service
@@ -1963,10 +2009,14 @@ fn authorize_management_peer(
 ) {
     let (ptk, _) = begin_management_handshake(service, peer);
     let now = oer_portable_time::Instant::from_micros(1);
-    let message4 = RsnTxFrame::<512>::message4(oer_protocols_ieee80211_wire::security::rsn::Akm::Sae, AP, 10)
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
+    let message4 = RsnTxFrame::<512>::message4(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
+        AP,
+        10,
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message4.as_bytes())
             .unwrap();
@@ -2139,7 +2189,11 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
         Err(oer_protocols_ieee80211_core_security_rsn::bip::BipReceiveError::Replay)
     );
     service
-        .observe_wpa2_transmit(message3_context, true, oer_portable_time::Instant::from_micros(10))
+        .observe_wpa2_transmit(
+            message3_context,
+            true,
+            oer_portable_time::Instant::from_micros(10),
+        )
         .unwrap();
     // Group TX can advance while Message 4 is missing; a retransmitted M3
     // must retain its original authenticated bytes, including the IPN.
@@ -2204,9 +2258,11 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
         let mut service = AccessPointService::<spp::Interface>::new(
             AP,
             {
-                let mut derivation =
-                    oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(b"password", b"test-ap")
-                        .unwrap();
+                let mut derivation = oer_protocols_ieee80211_core_security_rsn::PmkDerivation::new(
+                    b"password",
+                    b"test-ap",
+                )
+                .unwrap();
                 loop {
                     if let Some(pmk) = derivation.step() {
                         break pmk;
@@ -2305,9 +2361,8 @@ fn an_inconsistent_bip_owner_returns_no_management_key_without_mutating_the_fram
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
     let igtk = RsnIgtk::new(4, [0; 6], &[3; 16]).unwrap();
-    service.group_management = Some(oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter::new(
-        &igtk,
-    ));
+    service.group_management =
+        Some(oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter::new(&igtk));
     let mut frame = [0; 64];
     let length = ApManagementFrame {
         subtype: ApManagementSubtype::Action,

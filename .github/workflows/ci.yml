@@ -118,7 +118,7 @@ jobs:
           # with their cfgs, as `cargo fw` builds it.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/hil-scenarios/images/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -152,7 +152,7 @@ jobs:
           # The clippy step checks the instrumented images, with their cfgs.
           firmware() {
             jq -r '.packages[]
-              | select(.manifest_path | test("/firmware/(apps|bootstrap)/|/hil-scenarios/images/|/chips/(esp32s31/board|espressif/staged-(runtime|bootstrap))/"))
+              | select(.manifest_path | test("/examples/|/hil/images/|/chips/esp32s31/bootstrap/|/chips/(esp32s31/board|family/staged-(runtime|bootstrap))/"))
               | select(.metadata."open-radio".instrumentation == null)
               | "-p " + .name' <<<"$meta"
           }
@@ -160,15 +160,15 @@ jobs:
       - name: Image build
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |
-          cargo fw build boot-smoke
-          cargo fw build radio-root
+          cargo fw build esp32s31-boot-smoke
+          cargo fw build esp32s31-radio-root
           cargo fw build wifi-station
-          OER_WIFI_STATION_PROFILE="$PWD/firmware/apps/wifi-station/profiles/open-ci.toml" \
+          OER_WIFI_STATION_PROFILE="$PWD/examples/wifi-station/profiles/open-ci.toml" \
             cargo fw build wifi-station --features station
       - name: HIL image builds
         # Every image the HIL scenarios share, with the linked image's checks.
         run: |
-          for image in hil-scenarios/images/*/; do
+          for image in hil/images/*/; do
             cargo fw build "$(basename "$image")"
           done
       - name: Probe images
@@ -177,7 +177,7 @@ jobs:
         run: |
           meta=$(cargo metadata --format-version 1 --no-deps --locked)
           packages=$(jq -r '.packages[]
-            | select(.manifest_path | contains("/firmware/probes/"))
+            | select(.manifest_path | contains("/hil/probes/"))
             | .name' <<<"$meta")
           while read -r package; do
             cargo fw probe "$package"

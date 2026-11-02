@@ -15,9 +15,9 @@ fn a_right_converts_only_to_a_set_of_its_own_executor() {
         .expect("paired extends case")
         .replace("__SRC__", &manifest.join("src").to_string_lossy());
     fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"extends-executor\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[lints.rust]\nunexpected_cfgs = \"allow\"\n[features]\ndefault = [\"chip\"]\nchip = []\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?} }}\noer-espressif-platform-port = {{ path = {:?} }}\noer-riscv = {{ path = {:?} }}\noer-trace = {{ path = {:?} }}\n",
-        manifest.join("../../../chips/espressif/interrupt-table"),
-        manifest.join("../../../chips/espressif/platform-port"),
+        "[package]\nname = \"extends-executor\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[lints.rust]\nunexpected_cfgs = \"allow\"\n[features]\ndefault = [\"chip\"]\nchip = []\n[dependencies]\noer-chips-family-interrupt-table = {{ path = {:?} }}\noer-chips-family-platform-port = {{ path = {:?} }}\noer-portable-riscv = {{ path = {:?} }}\noer-portable-trace = {{ path = {:?} }}\n",
+        manifest.join("../../../chips/family/interrupt-table"),
+        manifest.join("../../../chips/family/platform-port"),
         manifest.join("../../../portable/riscv"),
         // The executor's observer hook names it in a trace build.
         manifest.join("../../../portable/trace"),

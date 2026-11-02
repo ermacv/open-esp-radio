@@ -6,11 +6,11 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
-use oer_protocols_bluetooth_le_port::LeInstant;
 use oer_portable_memory::{Awaiting, HandlerCell, Poster, RequestSlot};
-use oer_protocols_radio_port::{ClockError, Poisoned, PortResult};
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::{Duration, Timer};
+use oer_protocols_bluetooth_le_port::LeInstant;
+use oer_protocols_radio_port::{ClockError, Poisoned, PortResult};
 
 /// One operation on the retained physical installation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

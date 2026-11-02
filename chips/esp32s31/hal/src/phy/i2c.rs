@@ -63,7 +63,10 @@ struct OperationCommands(PhyI2cConfigurationOperation);
 impl oer_chips_family_analog::ConfigurationCommands for OperationCommands {
     type Address = Address;
 
-    fn command(&self, index: usize) -> Option<oer_chips_family_analog::ConfigurationCommand<Address>> {
+    fn command(
+        &self,
+        index: usize,
+    ) -> Option<oer_chips_family_analog::ConfigurationCommand<Address>> {
         use oer_chips_family_analog::ConfigurationCommand;
         let index = u8::try_from(index).ok()?;
         Some(match self.0.command(index)? {

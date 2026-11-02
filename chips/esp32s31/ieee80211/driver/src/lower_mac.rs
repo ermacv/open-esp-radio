@@ -1185,7 +1185,8 @@ where
             }
             TransmitKeyScope::AccessPointGroup { key_id } => key_id.group_key_id().key_id(),
         };
-        let header = oer_protocols_ieee80211_wire::ccmp::CcmpHeader::new(packet_number, key_id).encode();
+        let header =
+            oer_protocols_ieee80211_wire::ccmp::CcmpHeader::new(packet_number, key_id).encode();
         place.copy_from_slice(&header);
         Ok(())
     }
@@ -1937,7 +1938,10 @@ where
     }
 
     /// Retain the phase's six-bit color proof through the core boundary.
-    pub fn set_checked_he_bss_color(&mut self, color: oer_protocols_ieee80211_contracts_port::BssColor) {
+    pub fn set_checked_he_bss_color(
+        &mut self,
+        color: oer_protocols_ieee80211_contracts_port::BssColor,
+    ) {
         self.tx.policy_mut().install_he_bss_color(color.get());
     }
 
@@ -1973,8 +1977,10 @@ where
         &mut self,
         role: VifRole,
         parameters: oer_protocols_ieee80211_contracts_port::SupportedEdca<K>,
-    ) -> Result<oer_protocols_ieee80211_contracts_port::SupportedEdca<K>, crate::mac::edca::EdcaParametersError>
-    {
+    ) -> Result<
+        oer_protocols_ieee80211_contracts_port::SupportedEdca<K>,
+        crate::mac::edca::EdcaParametersError,
+    > {
         self.tx.policy_mut().install_edca(role, parameters.get())?;
         Ok(parameters)
     }
@@ -2737,7 +2743,10 @@ pub struct AmpduValues {
 
 /// A refused aggregate plan returns its admission without publishing.
 #[must_use = "retain both admission owners and handle the reason"]
-pub struct AmpduPlanningRefused<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+pub struct AmpduPlanningRefused<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+> {
     pub queue: FreeQueue<'core, Path>,
     pub admission: TxAdmission<'core, Path>,
     pub reason: AmpduRefusal,
@@ -2878,7 +2887,9 @@ fn block_ack(report: crate::ordinary_tx::OrdinaryTxReport) -> Option<BlockAckRep
 #[cfg(test)]
 mod tests;
 
-fn spp_mode(spp: oer_protocols_ieee80211_wire::security::Spp) -> oer_chips_esp32s31_hal::types::MacSppMode {
+fn spp_mode(
+    spp: oer_protocols_ieee80211_wire::security::Spp,
+) -> oer_chips_esp32s31_hal::types::MacSppMode {
     match spp {
         oer_protocols_ieee80211_wire::security::Spp::Negotiated => {
             oer_chips_esp32s31_hal::types::MacSppMode::Authenticated

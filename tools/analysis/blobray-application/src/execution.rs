@@ -51,23 +51,28 @@ fn segments<'a>(
     c: &mut dyn RunControl,
 ) -> Result<Vec<LoadedSegment<'a>>> {
     let mut result = Vec::new();
-    oer_tools_analysis_riscv_program::execution_segments(source, memory, c, &mut |segment, bytes, c| {
-        let mut copy = memory.bytes(bytes.len(), c.position())?;
-        for (chunk, source) in copy.chunks_mut(WORK_BLOCK).zip(bytes.chunks(WORK_BLOCK)) {
-            c.checkpoint(1)?;
-            chunk.copy_from_slice(source);
-        }
-        result
-            .try_reserve(1)
-            .map_err(|_| Error::new(ErrorCode::ResourceLimited, "segment allocation refused"))?;
-        result.push(LoadedSegment {
-            address: segment.address as u32,
-            memory_size: segment.memory_size as usize,
-            flags: segment.flags,
-            bytes: copy,
-        });
-        Ok(())
-    })?;
+    oer_tools_analysis_riscv_program::execution_segments(
+        source,
+        memory,
+        c,
+        &mut |segment, bytes, c| {
+            let mut copy = memory.bytes(bytes.len(), c.position())?;
+            for (chunk, source) in copy.chunks_mut(WORK_BLOCK).zip(bytes.chunks(WORK_BLOCK)) {
+                c.checkpoint(1)?;
+                chunk.copy_from_slice(source);
+            }
+            result.try_reserve(1).map_err(|_| {
+                Error::new(ErrorCode::ResourceLimited, "segment allocation refused")
+            })?;
+            result.push(LoadedSegment {
+                address: segment.address as u32,
+                memory_size: segment.memory_size as usize,
+                flags: segment.flags,
+                bytes: copy,
+            });
+            Ok(())
+        },
+    )?;
     Ok(result)
 }
 fn session<'a>(

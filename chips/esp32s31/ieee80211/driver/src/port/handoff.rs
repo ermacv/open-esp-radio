@@ -139,7 +139,8 @@ pub(super) struct HeldBacking<'id, Id: SlotIdentity, D: Device<B>, const B: usiz
     pub(super) failed_terminal: FailedTerminal<'id, Id, D, B, O>,
     pub(super) completions: Completions<'id, Id, D, B, O>,
     pub(super) frontend_identity: Cell<u64>,
-    pub(super) clock_replies: oer_portable_memory::AffineSpscQueue<ClockAnswer, 1, CompactSpscCursor>,
+    pub(super) clock_replies:
+        oer_portable_memory::AffineSpscQueue<ClockAnswer, 1, CompactSpscCursor>,
     pub(super) clock_use: Cell<ClockUse>,
 }
 impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>

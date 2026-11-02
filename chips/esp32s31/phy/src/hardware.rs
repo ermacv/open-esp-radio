@@ -385,7 +385,10 @@ pub(crate) fn clear_phy_tx_dc_measurement(registers: &mut impl SharedPhyAccess) 
 #[cfg(target_arch = "riscv32")]
 trait PhyGainMemory {
     fn table_memory_base_index(&self) -> u8;
-    fn program_gain_memory_entry(&mut self, entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry);
+    fn program_gain_memory_entry(
+        &mut self,
+        entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry,
+    );
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -399,7 +402,10 @@ impl<T: SharedPhyAccess> PhyGainMemory for SharedPhyGainMemory<'_, T> {
         oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(self.registers)
     }
 
-    fn program_gain_memory_entry(&mut self, entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry) {
+    fn program_gain_memory_entry(
+        &mut self,
+        entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry,
+    ) {
         oer_chips_esp32s31_hal::phy::memory::program_gain_memory_entry(self.registers, entry);
     }
 }
@@ -410,7 +416,10 @@ impl<P> PhyGainMemory for RadioChannelHal<'_, P> {
         self.table_memory_base_index()
     }
 
-    fn program_gain_memory_entry(&mut self, entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry) {
+    fn program_gain_memory_entry(
+        &mut self,
+        entry: oer_chips_esp32s31_hal::types::PhyGainMemoryEntry,
+    ) {
         self.program_gain_memory_entry(entry);
     }
 }
@@ -484,7 +493,8 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
     registers: &mut impl SharedPhyAccess,
     image: &crate::calibration::bluetooth::PhyBluetoothTxGainImage,
 ) {
-    let hardware_base = oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(registers);
+    let hardware_base =
+        oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(registers);
     let memory_base = hardware_base.wrapping_add(32);
     let mut entry = 0_u8;
     while entry != 16 {

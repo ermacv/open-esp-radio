@@ -824,7 +824,10 @@ impl<Id: SlotIdentity> PortPhase for ModelEvents<'_, '_, Id> {
     fn next_event(
         &mut self,
     ) -> impl Future<
-        Output = Result<Result<ModelEvent, EventsLost>, oer_protocols_radio_port::EventEnd<ModelFault>>,
+        Output = Result<
+            Result<ModelEvent, EventsLost>,
+            oer_protocols_radio_port::EventEnd<ModelFault>,
+        >,
     > + '_ {
         poll_fn(|context| {
             if let Some(end) = *self.end {
@@ -1457,12 +1460,9 @@ impl<Id: SlotIdentity> SlotBodyOwner<Id> for OwnedModel<Id> {
         Id: 's,
         's: 'p,
     {
-        let resources =
-            raw.resources
-                .take()
-                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
-                    "802.15.4 resources",
-                ))?;
+        let resources = raw.resources.take().ok_or(
+            oer_protocols_radio_port::SlotInitError::MissingResource("802.15.4 resources"),
+        )?;
         let lend_interface =
             |resources: InterfaceResources<'static, 0, MODEL_PENDING_SLOTS, Child<Root<Id>, 0>>| {
                 InterfaceResources {

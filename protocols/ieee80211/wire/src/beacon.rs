@@ -470,7 +470,8 @@ pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
             let [id, length] = reader.read::<2>().ok()?;
             let element = reader.take(usize::from(length)).ok()?;
             if id == 5 {
-                let [count, period, _, _] = oer_portable_wire::Reader::new(element).read::<4>().ok()?;
+                let [count, period, _, _] =
+                    oer_portable_wire::Reader::new(element).read::<4>().ok()?;
                 return (period != 0 && count < period).then_some((offset, count, period));
             }
             offset = offset.checked_add(2)?.checked_add(usize::from(length))?;
@@ -576,7 +577,9 @@ pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u
         .ok()?;
 
     let (tim_offset, _, period) = dtim(bytes)?;
-    let interval_tu = oer_portable_wire::Reader::new(bytes.get(32..)?).u16_le().ok()?;
+    let interval_tu = oer_portable_wire::Reader::new(bytes.get(32..)?)
+        .u16_le()
+        .ok()?;
     if interval_tu == 0 {
         return None;
     }

@@ -56,8 +56,12 @@ pub const BUILD_ROOT_ENV: &str = "OER_BUILD_ROOT";
 /// checkout of this host shares, since the slots bound the host's load.
 /// Nothing compiled lives here.
 pub fn host_build_root() -> Result<PathBuf> {
-    oer_tools_os_durable::xdg::overridable(BUILD_ROOT_ENV, oer_tools_os_durable::xdg::Base::Cache, "build")
-        .map_err(|error| error.to_string().into())
+    oer_tools_os_durable::xdg::overridable(
+        BUILD_ROOT_ENV,
+        oer_tools_os_durable::xdg::Base::Cache,
+        "build",
+    )
+    .map_err(|error| error.to_string().into())
 }
 
 /// The firmware compile cache (`CARGO_TARGET_DIR`) of the checkout at
@@ -489,7 +493,10 @@ mod tests {
         assert!(arguments.contains(&"linker=/a b/linker".to_owned()));
         assert!(environment(&command, "RUSTFLAGS").is_none());
         assert_eq!(environment(&command, "RUSTC_BOOTSTRAP").unwrap(), "1");
-        assert_eq!(oer_tools_image_checks::codegen::rustflags(&arguments), Ok(()));
+        assert_eq!(
+            oer_tools_image_checks::codegen::rustflags(&arguments),
+            Ok(())
+        );
         for (variable, value) in [
             ("RUSTFLAGS", "-C llvm-args=-pick-merged-source-locations"),
             (

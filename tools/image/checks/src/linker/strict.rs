@@ -54,13 +54,16 @@ impl Spec {
         elf: &Path,
         inputs: &mut Inputs,
     ) -> Result<Option<(Image, oer_tools_chip_profile::Profile, StackPolicy)>> {
-        let profile = oer_tools_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
+        let profile =
+            oer_tools_chip_profile::Profile::load_with_inputs(&self.root, &self.chip, inputs)?;
         if profile.facts.memory.is_none() || profile.facts.interrupts.is_none() {
             return Ok(None);
         }
-        let policy =
-            oer_tools_chip_profile::policy::StackPolicy::load_with_inputs(&self.stack_policy, inputs)?
-                .for_image(&self.harts)?;
+        let policy = oer_tools_chip_profile::policy::StackPolicy::load_with_inputs(
+            &self.stack_policy,
+            inputs,
+        )?
+        .for_image(&self.harts)?;
         let profile = policy.runtime_profile(&profile)?;
         let image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
         Ok(Some((image, profile, policy)))

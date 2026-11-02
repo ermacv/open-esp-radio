@@ -63,17 +63,19 @@ fn wmm_update_is_validated_before_any_queue_changes() {
     invalid[11] = (11 << 4) | 4;
     let parameters = parse_wmm_parameter_element(&invalid).unwrap();
     assert_eq!(
-        queues.configure_from_edca(oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
-            parameters
-        )),
+        queues.configure_from_edca(
+            oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(parameters)
+        ),
         Err(EdcaParametersError::MaximumExponentOutOfRange(11))
     );
     assert_eq!(queues, before);
 
     queues
-        .configure_from_edca(oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
-            parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
-        ))
+        .configure_from_edca(
+            oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+                parse_wmm_parameter_element(&STANDARD_WMM).unwrap(),
+            ),
+        )
         .unwrap();
     assert_eq!(
         queues.queue(LegacyTxQueue::BestEffort).parameters(),

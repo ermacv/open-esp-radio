@@ -176,7 +176,8 @@ where
 {
     Boundary::new(async move {
         let mut initial_storage = core::mem::MaybeUninit::uninit();
-        let initial = oer_portable_memory::Placed::init(&mut initial_storage, |place| place.write(initial));
+        let initial =
+            oer_portable_memory::Placed::init(&mut initial_storage, |place| place.write(initial));
         let mut preparation = core::mem::MaybeUninit::uninit();
         let prepared = begin_concurrent_registration(initial, clocks, &mut preparation);
         oer_portable_memory::match_placed!(prepared, Result {
@@ -230,9 +231,9 @@ fn begin_concurrent_registration<'p, B: PlatformClockBackend>(
         if let Err(error) = enable_phy_clocks(&mut radio, clocks) {
             return place.write(Err((radio, ConcurrentPhyError::Clock(error))));
         }
-        place.write(Ok(
-            radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Register)
-        ))
+        place.write(Ok(radio.detach(
+            oer_chips_esp32s31_hal::domain::transaction::Operation::Register,
+        )))
     })
 }
 
@@ -335,7 +336,8 @@ where
             Ok(domain) => domain,
             Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
         };
-        let mut transaction = radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Close);
+        let mut transaction =
+            radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Close);
         let (registers, phy) = transaction.hardware_with_attachment();
         if !domain.clients.describes(registers) {
             *phy.slot_mut() = Slot::Registered(domain);
@@ -421,7 +423,8 @@ where
             Ok(domain) => domain,
             Err(error) => return (radio, Err(ConcurrentRfError::Rejected(error))),
         };
-        let transaction = radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Wake);
+        let transaction =
+            radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Wake);
         let describes = domain.clients.describes(transaction.hardware());
         let mut radio = transaction.reunite();
         if !describes {
@@ -442,7 +445,8 @@ where
                 ))),
             );
         }
-        let mut transaction = radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Wake);
+        let mut transaction =
+            radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Wake);
         let result = core::pin::pin!(radio_lifecycle::execute_rf_wake_with_hal::<D>(
             timer,
             transaction.hardware_mut(),
@@ -517,7 +521,8 @@ where
     };
     let mut tracking = pending.begin_tracking(registered.tracking_policy());
     let fault = radio.fault_handle();
-    let mut transaction = radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Maintain);
+    let mut transaction =
+        radio.detach(oer_chips_esp32s31_hal::domain::transaction::Operation::Maintain);
     if !tracking.describes(transaction.hardware()) {
         *transaction.attachment_mut().slot_mut() = Slot::Poisoned;
         return (

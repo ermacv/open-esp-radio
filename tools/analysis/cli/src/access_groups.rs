@@ -1,6 +1,8 @@
 //! Human rendering of register-access groups and stored values.
 use oer_tools_analysis_blobray_application::access_groups::{AccessGroups, GroupFunction};
-use oer_tools_analysis_blobray_domain::{IndexedAddress, RegisterMaskKind, StoredBits, StoredBitsSource};
+use oer_tools_analysis_blobray_domain::{
+    IndexedAddress, RegisterMaskKind, StoredBits, StoredBitsSource,
+};
 use oer_tools_analysis_riscv_model::ObjectLocation;
 
 /// `name (input 0, member 3)`; `<unnamed>` for a function without a name

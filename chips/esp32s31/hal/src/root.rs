@@ -450,7 +450,9 @@ impl RadioHardware {
         // device registers exist behind the claimed addresses on the host
         // and no test accesses one through it, so the claim need not be
         // unique.
-        let claims = unsafe { oer_portable_mmio::assume_owned::<oer_chips_esp32s31_pac::ownership::Claims>() };
+        let claims = unsafe {
+            oer_portable_mmio::assume_owned::<oer_chips_esp32s31_pac::ownership::Claims>()
+        };
         Self::of_partitions(oer_chips_esp32s31_pac::ownership::partition(claims))
     }
 

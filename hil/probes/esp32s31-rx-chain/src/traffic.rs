@@ -1,7 +1,6 @@
 //! Selections200–209: one finite publication with real take/recycle and saved clears.
 use super::{COUNT, NODES, Storage, WORDS, node, read_word, usb};
 use core::fmt::Write as _;
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_hal::{
     ieee80211::{
         dma::rx_ring::RxRingLive,
@@ -10,6 +9,7 @@ use oer_chips_esp32s31_hal::{
     owner::{MacInterruptRegisters, RadioAccess},
 };
 use oer_chips_esp32s31_ieee80211_driver::rx::receive::RELOAD_SETTLE_LIMIT;
+use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::zeroed::ZeroedStatic;
 use oer_portable_time::{Clock, Duration, settle::Settle};
 #[path = "traffic/journal.rs"]
@@ -36,19 +36,27 @@ fn bank(irq: &MacInterruptRegisters) -> Result<[u32; WIDTH], oer_portable_diagno
     let rx = irq.mac_rx_interrupt_enable();
     let opaque = irq.mac_opaque_interrupt_enable();
     let mut row = [0; WIDTH];
-    *row.get_mut(2).ok_or(oer_portable_diagnostics::name!("row"; 32))? = begin;
-    *row.get_mut(4).ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw.bits();
-    *row.get_mut(5).ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw_end;
-    *row.get_mut(6).ok_or(oer_portable_diagnostics::name!("row"; 32))? = st.bits();
-    *row.get_mut(7).ok_or(oer_portable_diagnostics::name!("row"; 32))? = st_end;
+    *row.get_mut(2)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = begin;
+    *row.get_mut(4)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw.bits();
+    *row.get_mut(5)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw_end;
+    *row.get_mut(6)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = st.bits();
+    *row.get_mut(7)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = st_end;
     // Compact software output codes, not peripheral masks.
-    *row.get_mut(12).ok_or(oer_portable_diagnostics::name!("row"; 32))? =
+    *row.get_mut(12)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? =
         u32::from(rx.auxiliary_5) + 2 * u32::from(rx.success) + 4 * u32::from(rx.auxiliary_24);
-    *row.get_mut(13).ok_or(oer_portable_diagnostics::name!("row"; 32))? = u32::from(opaque.lane_6)
+    *row.get_mut(13)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = u32::from(opaque.lane_6)
         + 2 * u32::from(opaque.lane_12)
         + 4 * u32::from(opaque.lane_13)
         + 8 * u32::from(opaque.lane_23);
-    *row.get_mut(28).ok_or(oer_portable_diagnostics::name!("row"; 32))? = oer_portable_riscv::cycle32();
+    *row.get_mut(28)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = oer_portable_riscv::cycle32();
     Ok(row)
 }
 
@@ -59,7 +67,8 @@ pub(super) fn checkpoint(
     irq: &MacInterruptRegisters,
 ) -> Result<(), oer_portable_diagnostics::Name<32>> {
     let mut row = bank(irq)?;
-    *row.get_mut(29).ok_or(oer_portable_diagnostics::name!("row"; 32))? = step;
+    *row.get_mut(29)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = step;
     trace.record(row, phase, true)
 }
 
@@ -119,16 +128,26 @@ fn scan(
         }
     }
     let mut row = bank(irq)?;
-    *row.get_mut(2).ok_or(oer_portable_diagnostics::name!("row"; 32))? = begin;
-    *row.get_mut(3).ok_or(oer_portable_diagnostics::name!("row"; 32))? = copy_end;
-    *row.get_mut(4).ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw.bits();
-    *row.get_mut(5).ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw_end;
-    *row.get_mut(6).ok_or(oer_portable_diagnostics::name!("row"; 32))? = status.bits();
-    *row.get_mut(7).ok_or(oer_portable_diagnostics::name!("row"; 32))? = status_end;
-    *row.get_mut(8).ok_or(oer_portable_diagnostics::name!("row"; 32))? = cursor.last_descriptor_low;
-    *row.get_mut(9).ok_or(oer_portable_diagnostics::name!("row"; 32))? = cursor.next_descriptor_low;
-    *row.get_mut(10).ok_or(oer_portable_diagnostics::name!("row"; 32))? = done;
-    *row.get_mut(11).ok_or(oer_portable_diagnostics::name!("row"; 32))? =
+    *row.get_mut(2)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = begin;
+    *row.get_mut(3)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = copy_end;
+    *row.get_mut(4)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw.bits();
+    *row.get_mut(5)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = raw_end;
+    *row.get_mut(6)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = status.bits();
+    *row.get_mut(7)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = status_end;
+    *row.get_mut(8)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = cursor.last_descriptor_low;
+    *row.get_mut(9)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = cursor.next_descriptor_low;
+    *row.get_mut(10)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = done;
+    *row.get_mut(11)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? =
         u32::from(storage.reserved_descriptor().word0().rx_done());
     let stats = access.receive_statistics_snapshot().primary;
     for (column, value) in [
@@ -304,7 +323,8 @@ fn scan(
             let _appended = credit
                 .append(access.rx_dma())
                 .map_err(|_| oer_portable_diagnostics::name!("traffic-recycle"; 32))?;
-            *row.get_mut(25).ok_or(oer_portable_diagnostics::name!("row"; 32))? = 1;
+            *row.get_mut(25)
+                .ok_or(oer_portable_diagnostics::name!("row"; 32))? = 1;
         }
         ring.complete_pending_reload(
             access.rx_dma(),
@@ -316,9 +336,12 @@ fn scan(
     if phase == 203 {
         irq.acknowledge_mac_interrupts(status.retain_rx_causes(MacRxInterrupts::ALL));
     }
-    *row.get_mut(26).ok_or(oer_portable_diagnostics::name!("row"; 32))? = irq.mac_interrupt_raw().bits();
-    *row.get_mut(27).ok_or(oer_portable_diagnostics::name!("row"; 32))? = irq.mac_interrupt_status().bits();
-    *row.get_mut(28).ok_or(oer_portable_diagnostics::name!("row"; 32))? = oer_portable_riscv::cycle32();
+    *row.get_mut(26)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = irq.mac_interrupt_raw().bits();
+    *row.get_mut(27)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = irq.mac_interrupt_status().bits();
+    *row.get_mut(28)
+        .ok_or(oer_portable_diagnostics::name!("row"; 32))? = oer_portable_riscv::cycle32();
     trace.previous_begin = begin;
     trace.previous_end = copy_end;
     trace.record(row, phase, false)
@@ -383,8 +406,10 @@ pub(super) fn clears(
     // Emit each exact clear authority before consuming it, including zero samples.
     for (step, bits) in [(5, held5.bits()), (14, held14.bits()), (24, held24.bits())] {
         let mut row = bank(irq)?;
-        *row.get_mut(29).ok_or(oer_portable_diagnostics::name!("row"; 32))? = step;
-        *row.get_mut(30).ok_or(oer_portable_diagnostics::name!("row"; 32))? = bits;
+        *row.get_mut(29)
+            .ok_or(oer_portable_diagnostics::name!("row"; 32))? = step;
+        *row.get_mut(30)
+            .ok_or(oer_portable_diagnostics::name!("row"; 32))? = bits;
         trace.record(row, 206, true)?;
     }
     irq.mask_all_mac_interrupts();
@@ -418,7 +443,8 @@ pub(super) async fn dump(
         line.push_str("M")
             .map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
         for v in row {
-            write!(&mut line, " {v:x}").map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
+            write!(&mut line, " {v:x}")
+                .map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
         }
         line.push('\n')
             .map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
@@ -428,7 +454,8 @@ pub(super) async fn dump(
         line.clear();
         write!(&mut line, "T {id:x}").map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
         for v in unit.header {
-            write!(&mut line, " {v:x}").map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
+            write!(&mut line, " {v:x}")
+                .map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;
         }
         line.push('\n')
             .map_err(|_| oer_portable_diagnostics::name!("format"; 32))?;

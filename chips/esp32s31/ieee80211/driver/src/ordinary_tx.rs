@@ -11,8 +11,8 @@
 
 use core::pin::Pin;
 use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
-use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 use oer_portable_time::{Clock, Instant, Timer};
+use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 
 use crate::mac::{
     edca::EdcaContentionParameters,
@@ -41,7 +41,8 @@ pub const TX_FCS_SIZE: usize = 4;
 /// Settle interval between the forced-CCA edge of a queue's timeout abort
 /// and its detach (`SOURCE[PROMOTED_LMAC_TX]`, see
 /// `TxSlot::begin_timeout_abort`).
-pub(crate) const TX_ABORT_SETTLE: oer_portable_time::Duration = oer_portable_time::Duration::from_micros(16);
+pub(crate) const TX_ABORT_SETTLE: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_micros(16);
 /// First Frame Control byte of a BlockAckReq: control type, subtype eight.
 const BLOCK_ACK_REQUEST_FRAME_CONTROL: u8 = 0x84;
 
@@ -1880,7 +1881,10 @@ impl FixedRateRetry {
     fn counters(&self) -> RetryCounters {
         self.counters
     }
-    fn observe(&mut self, status: oer_protocols_ieee80211_contracts_port::TxStatus) -> FixedRetryDecision {
+    fn observe(
+        &mut self,
+        status: oer_protocols_ieee80211_contracts_port::TxStatus,
+    ) -> FixedRetryDecision {
         use oer_protocols_ieee80211_contracts_port::TxStatus;
         match status {
             TxStatus::Success | TxStatus::TimedOut => return FixedRetryDecision::Complete,

@@ -131,7 +131,10 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
     for _ in 0..RF_OPERATION_LIMIT {
         match transaction.action() {
             PhyI2cConfigurationAction::StartCommand => {
-                match oer_chips_esp32s31_hal::phy::i2c::start_configuration(&mut transaction, registers) {
+                match oer_chips_esp32s31_hal::phy::i2c::start_configuration(
+                    &mut transaction,
+                    registers,
+                ) {
                     Ok(()) => {}
                     Err(PhyI2cConfigurationError::BusyAtStart) => {
                         delay::<D, _>(timer, Kind::BusBusy, 1).await;
@@ -141,8 +144,10 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
             }
             PhyI2cConfigurationAction::AwaitCompletionEdge => {
                 delay::<D, _>(timer, Kind::Completion, 1).await;
-                match oer_chips_esp32s31_hal::phy::i2c::observe_configuration(&mut transaction, registers)
-                {
+                match oer_chips_esp32s31_hal::phy::i2c::observe_configuration(
+                    &mut transaction,
+                    registers,
+                ) {
                     Ok(PhyI2cConfigurationObservation::StillPending)
                     | Ok(PhyI2cConfigurationObservation::EdgeConsumed) => {}
                     Err(_) => return Err(PhyTargetPortError::UnexpectedBinding),
@@ -206,9 +211,8 @@ fn open_wake_i2c_power<C: oer_portable_time::Clock + ?Sized>(
             OpenI2cXpdAction::ConfigurePowerAndPulse => {
                 crate::analog::i2c::configure_open_i2c_power_and_pulse(registers);
                 OpenI2cXpdCompletion::PowerAndPulseConfigured {
-                    started_at_cycle: oer_chips_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(
-                        registers,
-                    ),
+                    started_at_cycle:
+                        oer_chips_esp32s31_hal::phy::prelude::sample_sdm_deadline_counter(registers),
                 }
             }
             OpenI2cXpdAction::CheckSdmDeadline {
@@ -400,15 +404,21 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     force_wake_txrx::<D>(registers, enabled)?;
                 }
                 PhyRfWakeOperation::SetHardwareFrequencyControl { enabled } => {
-                    oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(registers, enabled);
+                    oer_chips_esp32s31_hal::phy::frequency::set_hardware_control(
+                        registers, enabled,
+                    );
                 }
                 PhyRfWakeOperation::ResetI2cMaster => reset_wake_i2c_master(timer, registers)?,
                 PhyRfWakeOperation::OpenFrontendBasebandClocks => {
                     registers.open_frontend_baseband_internal_clocks();
-                    oer_chips_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(registers);
+                    oer_chips_esp32s31_hal::phy::analog_i2c::enable_frontend_baseband_power(
+                        registers,
+                    );
                 }
                 PhyRfWakeOperation::SetBbpllCalibration { enabled } => {
-                    oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(registers, enabled);
+                    oer_chips_esp32s31_hal::phy::i2c::configure_bbpll_calibration(
+                        registers, enabled,
+                    );
                 }
                 PhyRfWakeOperation::ConfigureBiasRegisters => {
                     drive_wake_i2c_configuration::<D>(
@@ -545,7 +555,8 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                         .deadline_after(oer_portable_time::Duration::from_micros(20))
                         .map_err(|_| PhyTargetPortError::HardwareEdgeTimedOut)?;
                     loop {
-                        if oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(registers) {
+                        if oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(registers)
+                        {
                             break;
                         }
                         if timer.now() >= deadline {

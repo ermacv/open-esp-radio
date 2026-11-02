@@ -114,7 +114,10 @@ mod tests {
                 (
                     manifest["package"].clone(),
                     dependencies,
-                    Path::new(member).starts_with("firmware"),
+                    crate::images::DIRECTORIES
+                        .iter()
+                        .any(|images| Path::new(member).starts_with(images))
+                        || Path::new(member).ends_with("bootstrap"),
                 ),
             );
         }
@@ -169,7 +172,7 @@ mod tests {
             root.join("Cargo.toml"),
             r#"
 [workspace]
-members = ["firmware/apps/new", "hil/probes/new", "tools/host", "chips/adapter"]
+members = ["examples/new", "hil/probes/new", "tools/host", "chips/adapter"]
 [workspace.dependencies]
 rt = { package = "oer-chips-family-staged-runtime", version = "0.1" }
 "#,
@@ -177,7 +180,7 @@ rt = { package = "oer-chips-family-staged-runtime", version = "0.1" }
         .unwrap();
         for (member, source) in [
             (
-                "firmware/apps/new",
+                "examples/new",
                 r#"
 [package]
 name = "new-app"

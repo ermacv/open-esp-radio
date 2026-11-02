@@ -33,10 +33,10 @@
 
 use core::num::{NonZeroU8, NonZeroU64};
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
 use oer_protocols_ieee80211_wire::channel::{Band, Channel};
 use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitchMode;
-use oer_portable_time::{Duration, Instant};
 
 use crate::channel::requires_radar_detection;
 

@@ -28,14 +28,14 @@
 //! short leaf of the fatal path. The next boot's [`report_previous`] prints
 //! the record and clears it only after every note was written whole.
 
+#[cfg(target_arch = "riscv32")]
+use oer_chips_family_staged_runtime::retained_fault;
+pub use oer_chips_family_staged_runtime::retained_fault::Terminal;
 #[cfg(any(test, target_arch = "riscv32"))]
 use oer_portable_diagnostics::Note;
 use oer_portable_diagnostics::fault::Record;
 #[cfg(any(test, target_arch = "riscv32"))]
 use oer_portable_diagnostics::fault::{Class, Domain};
-#[cfg(target_arch = "riscv32")]
-use oer_chips_family_staged_runtime::retained_fault;
-pub use oer_chips_family_staged_runtime::retained_fault::Terminal;
 
 /// The interrupt matrix's sources, in 32-bit words.
 pub const SOURCE_WORDS: usize = 6;
@@ -229,7 +229,10 @@ impl Observed {
 pub fn capture(
     claim: &oer_chips_family_staged_runtime::retained_fault::Claim<'_>,
     frame: &oer_chips_family_staged_runtime::trap::TrapFrame,
-    stop: Result<&oer_chips_esp32s31_hal::cores::StopTheWorld<'_>, oer_chips_esp32s31_hal::cores::StopError>,
+    stop: Result<
+        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::cores::StopError,
+    >,
 ) {
     if let Ok(record) = observe(claim.terminal(), frame, stop).record() {
         let _committed = claim.commit(&SLOT, record);
@@ -240,7 +243,10 @@ pub fn capture(
 fn observe(
     terminal: Option<Terminal>,
     frame: &oer_chips_family_staged_runtime::trap::TrapFrame,
-    stop: Result<&oer_chips_esp32s31_hal::cores::StopTheWorld<'_>, oer_chips_esp32s31_hal::cores::StopError>,
+    stop: Result<
+        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::cores::StopError,
+    >,
 ) -> Observed {
     use oer_chips_esp32s31_hal::platform::interrupt_controller;
     use oer_chips_family_staged_runtime::trap::{self, TrapRegisters};
@@ -306,7 +312,9 @@ fn observe(
 /// The record's word of an observed line: bit 0 pending, 1 enabled, 2
 /// edge-triggered, bits 8.. its level byte.
 #[cfg(target_arch = "riscv32")]
-fn line_word(observed: oer_chips_esp32s31_hal::platform::interrupt_controller::LineObservation) -> u32 {
+fn line_word(
+    observed: oer_chips_esp32s31_hal::platform::interrupt_controller::LineObservation,
+) -> u32 {
     use oer_portable_riscv::clic::Trigger;
     let oer_chips_esp32s31_hal::platform::interrupt_controller::LineObservation { pending, state } =
         observed;

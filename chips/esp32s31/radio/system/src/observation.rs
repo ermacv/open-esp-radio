@@ -96,7 +96,8 @@ const NOT_DUE: u32 = 2;
 const UNAVAILABLE: u32 = 3;
 
 impl oer_portable_trace::Event for TrackingTick {
-    const KIND: oer_portable_trace::Kind = oer_portable_trace::Kind::new(oer_portable_trace::Domain::Phy, 1);
+    const KIND: oer_portable_trace::Kind =
+        oer_portable_trace::Kind::new(oer_portable_trace::Domain::Phy, 1);
     const CHANNEL: oer_portable_trace::Channel = const {
         match oer_portable_trace::Channel::new(oer_portable_trace::Domain::Phy, 0) {
             Ok(channel) => channel,

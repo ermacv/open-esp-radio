@@ -199,9 +199,10 @@ fn ordinary_panics_are_not_classified_by_a_similar_callee_or_the_caller_name() {
         "core::panicking::panic_const::panic_const_async_gen_fn_resumed",
     ] {
         let mut image = program_with_panic(entry, PANIC);
-        image
-            .names
-            .insert(HAL, "oer_chips_esp32s31_hal::panic_const_async_fn_resumed".into());
+        image.names.insert(
+            HAL,
+            "oer_chips_esp32s31_hal::panic_const_async_fn_resumed".into(),
+        );
         let report = Report {
             elf: CheckedElf::Runtime,
             roots: vec![root(&image, "CPU0", true)],
@@ -418,13 +419,10 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             Path::new("protocols/ieee80211/core/roles/sta"),
         ),
         (
-            "oer-hil-probes-boot-smoke",
-            Path::new("hil/probes/boot-smoke"),
+            "oer-hil-probes-esp32s31-boot-smoke",
+            Path::new("hil/probes/esp32s31-boot-smoke"),
         ),
-        (
-            "oer-hil-images-aes",
-            Path::new("hil/images/aes"),
-        ),
+        ("oer-hil-images-aes", Path::new("hil/images/aes")),
         ("oer-hil-services-aes", Path::new("hil/services/aes")),
         ("oer-tools-image-checks", Path::new("tools/image/checks")),
     ]);
@@ -445,13 +443,13 @@ fn a_function_takes_the_layer_of_the_crate_its_name_starts_with() {
             "oer_protocols_ieee80211_core_roles_sta::Station::step",
             Layer::Protocols,
         ),
-        ("oer_hil_probes_boot_smoke::main", Layer::Firmware),
-        (
-            "oer_hil_images_aes::main",
-            Layer::Firmware,
-        ),
+        ("oer_hil_probes_esp32s31_boot_smoke::main", Layer::Firmware),
+        ("oer_hil_images_aes::main", Layer::Firmware),
         ("oer_hil_services_aes::Engine::unwrap_key", Layer::Protocols),
-        ("core::ptr::drop_in_place<oer_portable_time::Instant>", Layer::Core),
+        (
+            "core::ptr::drop_in_place<oer_portable_time::Instant>",
+            Layer::Core,
+        ),
         ("compiler_builtins::mem::memcpy", Layer::Core),
         ("embassy_sync::signal::Signal<M,T>::wait", Layer::Embassy),
         ("esp_radio::wifi::start", Layer::ThirdParty),

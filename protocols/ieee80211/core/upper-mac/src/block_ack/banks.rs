@@ -14,6 +14,7 @@ use super::{
     AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckNegotiation, RxBlockAckSession,
     RxReorderMpdu, RxReorderRelease,
 };
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
     Ieee80211Capabilities, RxBuffer, RxCryptoStatus, RxEvidence, RxMetadata, SupportedBlockAck, Tid,
 };
@@ -26,7 +27,6 @@ use oer_protocols_ieee80211_wire::{
     sequence::{SequenceControl, SequenceNumber},
     status::reason_code,
 };
-use oer_portable_time::{Duration, Instant};
 
 /// What the receive agreements decided, reported to the sink the caller lends
 /// a call. The owner keeps no count of these.

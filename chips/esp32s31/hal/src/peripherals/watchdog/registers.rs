@@ -157,7 +157,9 @@ impl<P: Placement, Q: Placement> oer_chips_family_boot::adoption::Timer0Clock
     }
 }
 
-impl<P: Placement, Q: Placement> oer_chips_family_boot::adoption::Main1Clock for Mwdt1Registers<P, Q> {
+impl<P: Placement, Q: Placement> oer_chips_family_boot::adoption::Main1Clock
+    for Mwdt1Registers<P, Q>
+{
     fn start_clock(&mut self) {
         Self::start_clock(self);
     }
@@ -328,7 +330,10 @@ impl<P: Placement> SuperWatchdogRegisters for SwdRegisters<P> {
 impl<'a, 'b> Mwdt0Registers<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// Timer group 0's watchdog and clock words over host memory from each
     /// instance's base.
-    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+    pub fn host(
+        wdt: &'a mut [u32],
+        clock: &'b mut [u32],
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             wdt: Timg0Wdt::host(wdt)?,
             clock: HpSysClkrstTimg0::host(clock)?,
@@ -340,7 +345,10 @@ impl<'a, 'b> Mwdt0Registers<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host
 impl<'a, 'b> Mwdt1Registers<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// Timer group 1's watchdog and clock words over host memory from each
     /// instance's base.
-    pub fn host(wdt: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+    pub fn host(
+        wdt: &'a mut [u32],
+        clock: &'b mut [u32],
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             wdt: Timg1Wdt::host(wdt)?,
             clock: HpSysClkrstTimg1::host(clock)?,

@@ -12,8 +12,10 @@ use oer_portable_mmio::Placement;
 
 use crate::bluetooth::registers::{BluetoothPlacements, BluetoothTaskRegisters, device_fence};
 
-const PUBLIC_DEVICE_ADDRESS_SLOT: oer_portable_mmio::Index<3> = oer_portable_mmio::Index::constant::<0>();
-const RANDOM_DEVICE_ADDRESS_SLOT: oer_portable_mmio::Index<3> = oer_portable_mmio::Index::constant::<1>();
+const PUBLIC_DEVICE_ADDRESS_SLOT: oer_portable_mmio::Index<3> =
+    oer_portable_mmio::Index::constant::<0>();
+const RANDOM_DEVICE_ADDRESS_SLOT: oer_portable_mmio::Index<3> =
+    oer_portable_mmio::Index::constant::<1>();
 
 fn program_controller_address_slot<P: Placement>(
     registers: &mut BleControllerAddressSlots<P>,

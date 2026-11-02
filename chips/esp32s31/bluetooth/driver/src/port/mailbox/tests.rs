@@ -1,10 +1,10 @@
 use super::*;
 use core::{future::Future, pin::pin, task::Waker};
-use oer_protocols_bluetooth_le_port::{Cause, Receive, TestPhy};
-use oer_protocols_bluetooth_le_wire::TestChannel;
 use oer_portable_memory::Doorbell;
 use oer_portable_time::{Clock, Instant};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_bluetooth_le_port::{Cause, Receive, TestPhy};
+use oer_protocols_bluetooth_le_wire::TestChannel;
 use std::{boxed::Box, rc::Rc};
 
 #[test]

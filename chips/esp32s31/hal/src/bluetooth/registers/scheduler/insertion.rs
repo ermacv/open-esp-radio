@@ -105,7 +105,10 @@ trait BluetoothSchedulerInsertionExecutionObservationControl {
     fn observe_execution_modify_rejected(&mut self) -> bool;
 }
 
-struct HardwareBluetoothSchedulerInsertionExecutionControl<'registers, B: oer_portable_mmio::Placement> {
+struct HardwareBluetoothSchedulerInsertionExecutionControl<
+    'registers,
+    B: oer_portable_mmio::Placement,
+> {
     registers: &'registers mut oer_chips_esp32s31_pac::bt_mac::BluetoothControllerCore<B>,
 }
 

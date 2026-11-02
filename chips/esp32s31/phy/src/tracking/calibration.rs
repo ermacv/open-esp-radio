@@ -1416,7 +1416,10 @@ impl PhyCalibrationTrackingRegisterBinding {
                 PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled }
             }
             RegisterAction::ConfigureBasebandChannel { cbw } => {
-                oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(registers, cbw.into());
+                oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(
+                    registers,
+                    cbw.into(),
+                );
                 PhyCalibrationTrackingCompletion::BasebandChannelConfigured { cbw }
             }
             RegisterAction::RestoreTxGainCompensation => {

@@ -525,7 +525,10 @@ impl TxHardware for MockMmio {
         self.tx_completions[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(
+        &mut self,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> bool {
         let queue = queue.get() as u8;
         if !self.tx_timeout_pending[usize::from(queue)] {
             return false;

@@ -729,7 +729,8 @@ const fn dropped(drop: oer_protocols_ieee80211_runtime::station::RxDrop) -> Stat
     }
 }
 
-impl<O: oer_portable_trace::Observer> oer_portable_events::EventSink<oer_protocols_ieee80211_runtime::station::ServiceEvent>
+impl<O: oer_portable_trace::Observer>
+    oer_portable_events::EventSink<oer_protocols_ieee80211_runtime::station::ServiceEvent>
     for TracedStationEvents<O>
 {
     const ENABLED: bool = cfg!(oer_trace);
@@ -740,8 +741,9 @@ impl<O: oer_portable_trace::Observer> oer_portable_events::EventSink<oer_protoco
 }
 
 impl<O: oer_portable_trace::Observer>
-    oer_portable_events::EventSink<oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent>
-    for TracedStationEvents<O>
+    oer_portable_events::EventSink<
+        oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent,
+    > for TracedStationEvents<O>
 {
     const ENABLED: bool = cfg!(oer_trace);
 
@@ -750,7 +752,8 @@ impl<O: oer_portable_trace::Observer>
     }
 }
 
-impl<O: oer_portable_trace::Observer> oer_portable_events::EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>
+impl<O: oer_portable_trace::Observer>
+    oer_portable_events::EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>
     for TracedStationEvents<O>
 {
     const ENABLED: bool = cfg!(oer_trace);
@@ -836,7 +839,9 @@ mod tests {
             AgreementStop, ReorderCause, RxBlockAckEvent,
         };
         use oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason;
-        use oer_protocols_ieee80211_runtime::station::{RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent};
+        use oer_protocols_ieee80211_runtime::station::{
+            RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent,
+        };
         let mut seen = heapless::Vec::<(StationRxKind, u32), 16>::new();
         let mut emit = |kind, count| seen.push((kind, count)).unwrap();
         service_rx(
@@ -919,7 +924,9 @@ mod tests {
         use oer_protocols_ieee80211_contracts_port::{
             Air, IndeterminateCause, SingleEnd, SingleOutcome, TxOutcome,
         };
-        use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth};
+        use oer_protocols_ieee80211_wire::phy::{
+            HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
+        };
         let ht40 =
             PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true).unwrap());
         assert_eq!(
@@ -964,9 +971,9 @@ mod tests {
             TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout);
         assert_eq!(TxData::of(&unknown).end, TxEnd::Unsent);
         assert_eq!(
-            Containment::of(oer_protocols_ieee80211_contracts_port::RxEvidence::ProtocolValidated(
-                true
-            )),
+            Containment::of(
+                oer_protocols_ieee80211_contracts_port::RxEvidence::ProtocolValidated(true)
+            ),
             Containment::InAmpdu
         );
     }

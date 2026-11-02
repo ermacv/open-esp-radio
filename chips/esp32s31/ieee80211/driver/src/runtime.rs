@@ -175,7 +175,12 @@ impl<W> WifiStopped<W> {
             .await
         {
             Ok(answer) => answer,
-            Err(reason) => return Err(oer_portable_memory::RequestQuarantine::new(reason, Some(platform))),
+            Err(reason) => {
+                return Err(oer_portable_memory::RequestQuarantine::new(
+                    reason,
+                    Some(platform),
+                ));
+            }
         };
         let Left {
             payload: WifiLeft { wifi },
@@ -204,7 +209,10 @@ impl<W> WifiStopped<W> {
     ) -> Result<
         (
             MembershipCell<Wifi>,
-            Result<(Self, oer_chips_esp32s31_radio_client::wifi::RetuneReport), WifiRetuneFailure<W>>,
+            Result<
+                (Self, oer_chips_esp32s31_radio_client::wifi::RetuneReport),
+                WifiRetuneFailure<W>,
+            >,
         ),
         oer_portable_memory::RequestQuarantine<Option<W>>,
     >
@@ -285,7 +293,12 @@ impl<W> WifiStopped<W> {
     }
 
     /// Borrow the role-neutral radio state for stopped-only operations.
-    pub fn radio_mut(&mut self) -> (oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal<'_>, &mut W) {
+    pub fn radio_mut(
+        &mut self,
+    ) -> (
+        oer_chips_esp32s31_hal::ieee80211::mac::WifiMacHal<'_>,
+        &mut W,
+    ) {
         (self.registers.wifi_mac_hal(), &mut self.platform)
     }
 
@@ -475,7 +488,10 @@ pub(crate) fn enter_esp32s31_wifi_runtime<W>(
 /// No field is structurally pinned; polling never lends a pinned platform.
 pub struct WifiRetunePending<W> {
     pending: Option<
-        oer_chips_esp32s31_radio_client::Pending<Wifi, oer_chips_esp32s31_radio_client::RetuneAnswer<Wifi>>,
+        oer_chips_esp32s31_radio_client::Pending<
+            Wifi,
+            oer_chips_esp32s31_radio_client::RetuneAnswer<Wifi>,
+        >,
     >,
     context: Option<(W, WifiStartReport, WifiChannel, WifiChannel)>,
     immediate: Option<(
@@ -522,7 +538,9 @@ impl<W: crate::startup::WifiMacPlatform> core::future::Future for WifiRetunePend
             Err(reason) => {
                 this.pending = None;
                 let platform = this.context.take().map(|(platform, _, _, _)| platform);
-                return Poll::Ready(Err(oer_portable_memory::RequestQuarantine::new(reason, platform)));
+                return Poll::Ready(Err(oer_portable_memory::RequestQuarantine::new(
+                    reason, platform,
+                )));
             }
         };
         this.pending = None;

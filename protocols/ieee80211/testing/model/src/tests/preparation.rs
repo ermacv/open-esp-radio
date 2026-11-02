@@ -1,5 +1,7 @@
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, LayoutError, MpduStartSpacing, PoolSource};
+use oer_protocols_ieee80211_contracts_port::{
+    AggregateAttempt, LayoutError, MpduStartSpacing, PoolSource,
+};
 // The fixture classifies port refusals; no station transition is involved.
 #[derive(Debug, Eq, PartialEq)]
 enum TxRefusal {
@@ -272,7 +274,8 @@ impl Work for BodyView {
                 };
                 let checked = CheckedAggregate::new(aggregate, source).ok().unwrap();
                 let (aggregate, source) = checked.into_parts();
-                let oer_protocols_ieee80211_contracts_port::CheckedSubframe::Fresh(source) = source else {
+                let oer_protocols_ieee80211_contracts_port::CheckedSubframe::Fresh(source) = source
+                else {
                     panic!("fresh subframe stays fresh before backend preparation");
                 };
                 let (source, layout) = source.into_parts();
@@ -286,7 +289,9 @@ impl Work for BodyView {
                     protection: TxProtection::Open,
                 };
                 let checked = source.check().ok().unwrap();
-                let oer_protocols_ieee80211_contracts_port::CheckedTxSource::Fresh(source) = checked else {
+                let oer_protocols_ieee80211_contracts_port::CheckedTxSource::Fresh(source) =
+                    checked
+                else {
                     panic!("fresh source stays fresh before backend preparation");
                 };
                 let (source, layout) = source.into_parts();

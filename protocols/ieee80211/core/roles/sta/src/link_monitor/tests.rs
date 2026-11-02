@@ -1,5 +1,7 @@
 use super::*;
-use oer_protocols_ieee80211_wire::{protection::ErpProtection, station_beacon::StaBeaconProtection};
+use oer_protocols_ieee80211_wire::{
+    protection::ErpProtection, station_beacon::StaBeaconProtection,
+};
 
 const BEACON: StaBeacon = StaBeacon {
     observation: StaBeaconObservation {
@@ -25,17 +27,23 @@ fn read(elements: &[u8]) -> StaBeacon {
     frame[16..22].copy_from_slice(&BSSID);
     frame[32..34].copy_from_slice(&100_u16.to_le_bytes());
     frame.extend_from_slice(elements);
-    StaBeacon::new(oer_protocols_ieee80211_wire::station_beacon::parse_sta_beacon(&frame, BSSID, 1).unwrap())
+    StaBeacon::new(
+        oer_protocols_ieee80211_wire::station_beacon::parse_sta_beacon(&frame, BSSID, 1).unwrap(),
+    )
 }
 
 #[test]
 fn each_beacon_sets_its_own_erp_requirements() {
     let config =
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200)).unwrap();
+        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200))
+            .unwrap();
     let mut monitor = StaBeaconMonitor::new(config);
     let mut last_erp = |elements: &[u8]| {
         monitor
-            .observe(oer_portable_time::Instant::from_micros(1_000), read(elements))
+            .observe(
+                oer_portable_time::Instant::from_micros(1_000),
+                read(elements),
+            )
             .unwrap();
         monitor.last_observation().unwrap().erp
     };
@@ -62,9 +70,12 @@ fn each_beacon_sets_its_own_erp_requirements() {
 #[test]
 fn exact_deadline_is_lost_but_an_observation_refreshes_the_window() {
     let config =
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200)).unwrap();
+        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200))
+            .unwrap();
     let mut monitor = StaBeaconMonitor::new(config);
-    monitor.arm(oer_portable_time::Instant::from_micros(1_000)).unwrap();
+    monitor
+        .arm(oer_portable_time::Instant::from_micros(1_000))
+        .unwrap();
     assert_eq!(
         monitor.deadline(),
         Some(oer_portable_time::Instant::from_micros(308_200))
@@ -102,9 +113,12 @@ fn construction_rejects_unbounded_or_vacuous_policy() {
 #[test]
 fn active_reachability_refresh_does_not_fabricate_a_beacon() {
     let config =
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200)).unwrap();
+        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200))
+            .unwrap();
     let mut monitor = StaBeaconMonitor::new(config);
-    monitor.arm(oer_portable_time::Instant::from_micros(1_000)).unwrap();
+    monitor
+        .arm(oer_portable_time::Instant::from_micros(1_000))
+        .unwrap();
     monitor
         .observe_reachability(oer_portable_time::Instant::from_micros(308_200))
         .unwrap();

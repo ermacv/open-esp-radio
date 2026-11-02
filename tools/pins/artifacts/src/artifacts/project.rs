@@ -63,7 +63,9 @@ impl Project {
     /// ELF's artifact id and the reviewed summaries of the ROM functions its
     /// images call, relative to the root; `None` for a chip without one.
     pub fn rom(&self, root: &Path) -> Result<Option<oer_chips_family_facts::Rom>> {
-        Ok(oer_tools_chip_profile::Profile::load(root, &self.0)?.facts.rom)
+        Ok(oer_tools_chip_profile::Profile::load(root, &self.0)?
+            .facts
+            .rom)
     }
 
     /// Directory of the chip's module in the typed vendor scenario library;

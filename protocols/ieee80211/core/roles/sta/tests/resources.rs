@@ -2,7 +2,9 @@ use oer_protocols_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_core_arbiter::{AbsencePlace, LeasePlace};
 use oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource;
-use oer_protocols_ieee80211_core_roles_sta::machine::{StaConfig, StaTokens, Station, StationResources};
+use oer_protocols_ieee80211_core_roles_sta::machine::{
+    StaConfig, StaTokens, Station, StationResources,
+};
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 struct Caps;
 impl Ieee80211Capabilities for Caps {
@@ -39,7 +41,9 @@ impl Ieee80211Capabilities for Caps {
 }
 struct Buffer;
 impl TxBufferMemory for Buffer {
-    fn renew_msdu(&mut self) -> Result<(), oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
+    fn renew_msdu(
+        &mut self,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
         Ok(())
     }
     fn bytes_mut(
@@ -55,8 +59,11 @@ impl oer_protocols_ieee80211_contracts_port::TxBufferClass for Buffer {
 impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
     type AssociationStart = ();
     type Association = ();
-    type VacantKeyBank =
-        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+    type VacantKeyBank = oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
+        (),
+        (),
+        KEY_BANK_CAPACITY,
+    >;
     type VacantAssociation = [(); GROUPS];
     fn begin_association(_: (), _: oer_protocols_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {

@@ -158,8 +158,9 @@ impl StandDrivers {
         }
         // A board that is re-enumerating returns within this wait; one that
         // does not is an error, never a stand-in path a reset would open.
-        let port = oer_tools_lab_board::discovery::wait_for(&entry.device_id().map_err(text)?, REATTACH)
-            .ok_or_else(|| format!("board `{}` is not attached", entry.id))?;
+        let port =
+            oer_tools_lab_board::discovery::wait_for(&entry.device_id().map_err(text)?, REATTACH)
+                .ok_or_else(|| format!("board `{}` is not attached", entry.id))?;
         Ok((
             Board::new(&stand, entry, port).map_err(text)?,
             entry.mac.clone(),
@@ -302,9 +303,12 @@ impl StandDrivers {
                 "switching port {port} of hub `{hub}` needs a lease that holds it"
             ));
         }
-        oer_tools_lab_board::power::HubPower::new(oer_tools_lab_board::power::HubPort { location, port })
-            .cycle_holding(off)
-            .map_err(text)
+        oer_tools_lab_board::power::HubPower::new(oer_tools_lab_board::power::HubPort {
+            location,
+            port,
+        })
+        .cycle_holding(off)
+        .map_err(text)
     }
 }
 
@@ -487,8 +491,10 @@ impl Drivers for StandDrivers {
                 if !covers(claims, &[Claim::shared(ROUTER)]) {
                     return Err("probing the router needs a lease that holds it".to_owned());
                 }
-                serde_json::to_value(oer_tools_lab_router::fixtures::probe_remote(&self.stand_file))
-                    .map_err(text)
+                serde_json::to_value(oer_tools_lab_router::fixtures::probe_remote(
+                    &self.stand_file,
+                ))
+                .map_err(text)
             }
             Operation::Detect => {
                 if !covers(claims, &[Claim::stand()]) {

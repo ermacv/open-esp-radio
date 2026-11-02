@@ -57,8 +57,9 @@ pub fn capture_context<'m>(
         start: function.address.into(),
         length: function.size.into(),
     };
-    let Some((site, target)) =
-        oer_tools_analysis_riscv_analysis::stack_context::external_terminal(&before, extent, control)?
+    let Some((site, target)) = oer_tools_analysis_riscv_analysis::stack_context::external_terminal(
+        &before, extent, control,
+    )?
     else {
         return Ok(before);
     };

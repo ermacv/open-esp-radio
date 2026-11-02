@@ -87,7 +87,11 @@ fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
         panic!("setup must be ready");
     };
     requester
-        .complete_transmission(transmission, true, oer_portable_time::Instant::from_micros(10))
+        .complete_transmission(
+            transmission,
+            true,
+            oer_portable_time::Instant::from_micros(10),
+        )
         .unwrap();
 
     let mut response_parameters = parameters(false);
@@ -268,7 +272,9 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
         requester.flow(flow),
         IndividualTwtFlowAccess::Transmitting(_)
     ));
-    clock.advance(oer_portable_time::Duration::from_micros(10)).unwrap();
+    clock
+        .advance(oer_portable_time::Duration::from_micros(10))
+        .unwrap();
     requester
         .complete_transmission(transmission, true, clock.now())
         .unwrap();

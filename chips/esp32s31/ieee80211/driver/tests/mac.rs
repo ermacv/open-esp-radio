@@ -11,9 +11,9 @@ use oer_chips_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHtTxProgram, MacInterface, MacKeyInstallOutcome, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
+use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 use oer_protocols_ieee80211_contracts_port::{MacRxMetadata, RxEvidence};
 use oer_protocols_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, HeMuSigBUser};
-use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 use {
     oer_chips_esp32s31_hal::{
         ieee80211::init::{

@@ -133,7 +133,9 @@ fn lease(target: &Target, owner: String, work: String) -> Result<Client> {
     crate::service::lease(
         owner,
         work,
-        vec![oer_tools_lab_arbiter::claims::Claim::board(&target.board.mac)],
+        vec![oer_tools_lab_arbiter::claims::Claim::board(
+            &target.board.mac,
+        )],
     )
 }
 
@@ -193,7 +195,10 @@ pub(crate) fn board(
                 .join("target/hil/console")
                 .join(target.mac.compact());
             std::fs::create_dir_all(&log)?;
-            let log = log.join(format!("console-{}.log", oer_tools_os_durable::unix_seconds()));
+            let log = log.join(format!(
+                "console-{}.log",
+                oer_tools_os_durable::unix_seconds()
+            ));
             let (lines, input) = console_lines(&mut lease, &target)?;
             let seen = capture(&lines, duration, until.as_deref(), &log)?;
             let _ = input.cancel();

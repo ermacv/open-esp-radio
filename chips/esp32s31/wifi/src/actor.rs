@@ -1,6 +1,5 @@
 //! The shared RF owner assembled with the same S31 platform and PHY policy.
 use crate::{Binding, InitializationError};
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_compose::{Esp32s31, radio_fault};
 use oer_chips_esp32s31_hal::{
     domain::RadioDomain,
@@ -13,6 +12,7 @@ use oer_chips_esp32s31_phy::{
 };
 use oer_chips_esp32s31_radio_client::{self as client, LpClock, RcSlow};
 use oer_chips_esp32s31_radio_system::{Esp32s31Radio, RadioSystem};
+use oer_portable_embassy_time::EmbassyClock;
 type Inner<P, R> = RadioSystem<
     client::wifi::Wifi,
     RcSlow,

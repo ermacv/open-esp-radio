@@ -2157,7 +2157,8 @@ impl PhyRxIqEstimatorMmioBinding {
                 }
             }
             PhyRxIqEstimatorAction::ReadMismatch(request) => {
-                let snapshot = oer_chips_esp32s31_hal::phy::iq_estimator::read_rxiq_mismatch(registers);
+                let snapshot =
+                    oer_chips_esp32s31_hal::phy::iq_estimator::read_rxiq_mismatch(registers);
                 PhyRxIqEstimatorCompletion::MismatchRead {
                     request,
                     snapshot: PhyRxIqMismatchSnapshot {
@@ -2449,7 +2450,9 @@ impl PhyRxIqInitMmioBinding {
                 PhyRxIqInitCompletion::PbusDebugModeConfigured
             }
             PhyRxIqInitAction::ConfigureCorrection { begin } => {
-                oer_chips_esp32s31_hal::phy::baseband::configure_rxiq_root_correction(registers, begin);
+                oer_chips_esp32s31_hal::phy::baseband::configure_rxiq_root_correction(
+                    registers, begin,
+                );
                 PhyRxIqInitCompletion::CorrectionConfigured { begin }
             }
             PhyRxIqInitAction::ConfigurePbusWorkMode => {

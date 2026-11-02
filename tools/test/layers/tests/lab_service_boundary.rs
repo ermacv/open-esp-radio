@@ -5,7 +5,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The service's implementation and the drivers only it runs.
-const IMPLEMENTATION: [&str; 3] = ["oer-tools-lab-service", "oer-tools-lab-board", "oer-tools-lab-router"];
+const IMPLEMENTATION: [&str; 3] = [
+    "oer-tools-lab-service",
+    "oer-tools-lab-board",
+    "oer-tools-lab-router",
+];
 /// The service's clients.
 const CLIENTS: [&str; 5] = [
     "oer-tools-lab-client",

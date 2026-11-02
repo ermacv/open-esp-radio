@@ -592,7 +592,9 @@ impl Gates {
         }
         if let Some(audit) = &self.audit {
             let result = ran((|| -> Result<()> {
-                audit(&oer_tools_analysis_elf::Elf::parse(&std::fs::read(input.elf)?)?)
+                audit(&oer_tools_analysis_elf::Elf::parse(&std::fs::read(
+                    input.elf,
+                )?)?)
             })());
             outcome.results.push((AUDIT.to_owned(), result));
         }

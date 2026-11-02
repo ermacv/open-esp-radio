@@ -28,7 +28,9 @@ use embassy_sync::mutex::Mutex as AsyncMutex;
 use embedded_io_async::{Read, Write};
 use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, Written, emit_note};
 use oer_protocols_hil_protocol::base::{ImageKeySet, LinkHealth, Rejected};
-use oer_protocols_hil_protocol::{DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity};
+use oer_protocols_hil_protocol::{
+    DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity,
+};
 
 use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
 

@@ -107,7 +107,8 @@ pub(super) fn capture(ctx: &Checkout, chip: &str, output: &Path) -> Result<Corpu
         return Err(format!("no pinned binary/function corpus for {chip}").into());
     }
     let names: Vec<_> = names.into_iter().collect();
-    let host = oer_tools_os_toolchain::workspace::build(&ctx.root, "oer-tools-analysis-cli", "blobray")?;
+    let host =
+        oer_tools_os_toolchain::workspace::build(&ctx.root, "oer-tools-analysis-cli", "blobray")?;
     let mut command = ctx.command(host);
     let limits = AnalysisProfile::SignatureCorpus.limits();
     command.args([

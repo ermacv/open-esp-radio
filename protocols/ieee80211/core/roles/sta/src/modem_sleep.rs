@@ -21,9 +21,9 @@
 //! espressif/esp32-wifi-lib `f856b5db`; each method names the function it
 //! follows.
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 use oer_protocols_ieee80211_wire::tsf::time_units_micros;
-use oer_portable_time::{Duration, Instant};
 
 /// Beacon receive window requested at each TBTT (`g_pm_cfg[20]`).
 pub const BEACON_WINDOW_MICROS: u32 = 25_000;

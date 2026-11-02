@@ -94,9 +94,7 @@ pub fn parse(text: &str) -> Result<String, String> {
         .ok()
         .and_then(|channel| {
             domain
-                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    channel,
-                ))
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
                 .ok()
         })
         .ok_or("`channel` is not permitted in the country's regulatory domain")?;

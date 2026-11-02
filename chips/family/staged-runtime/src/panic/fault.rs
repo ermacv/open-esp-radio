@@ -85,8 +85,12 @@ impl FaultReason {
             Self::TimerBinding => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
             Self::TimerBankUnavailable => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
             Self::MissingComparator => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
-            Self::RouteWrongControlBits => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
-            Self::RouteWrongInterruptCount => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteWrongControlBits => {
+                oer_portable_diagnostics::fault::Class::ConfigurationBoot
+            }
+            Self::RouteWrongInterruptCount => {
+                oer_portable_diagnostics::fault::Class::ConfigurationBoot
+            }
             Self::RouteWrongLevelBits => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::RouteWrongHart => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::RouteNotInTable => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
@@ -101,7 +105,9 @@ impl FaultReason {
             Self::HilCheckpoint => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
             Self::HilRateOverflow => oer_portable_diagnostics::fault::Class::Exhaustion,
             Self::RouteWrongClass => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
-            Self::RouteHandlerCellMismatch => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
+            Self::RouteHandlerCellMismatch => {
+                oer_portable_diagnostics::fault::Class::ConfigurationBoot
+            }
             Self::HilRequested => oer_portable_diagnostics::fault::Class::RequestedReset,
             Self::RequestUnanswered => oer_portable_diagnostics::fault::Class::Cancellation,
             Self::SecondaryLaunch => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
@@ -111,8 +117,12 @@ impl FaultReason {
             Self::LivenessBroken => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
             Self::WakerCrossedHarts => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
             Self::BindingRefused => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
-            Self::BindingStorageClaimed => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
-            Self::BindingHandlerOccupied => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
+            Self::BindingStorageClaimed => {
+                oer_portable_diagnostics::fault::Class::SoftwareInvariant
+            }
+            Self::BindingHandlerOccupied => {
+                oer_portable_diagnostics::fault::Class::SoftwareInvariant
+            }
             Self::BindingLineRefused => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::BindingRouteRefused => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::OutsideExecutor => oer_portable_diagnostics::fault::Class::SoftwareInvariant,

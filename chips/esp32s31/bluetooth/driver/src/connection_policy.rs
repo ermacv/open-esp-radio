@@ -15,7 +15,9 @@
 
 use core::num::NonZeroU64;
 
-use oer_protocols_bluetooth_le_port::{ConnectionAllowances, LeRadio, NonZeroRadioDuration, RadioDuration};
+use oer_protocols_bluetooth_le_port::{
+    ConnectionAllowances, LeRadio, NonZeroRadioDuration, RadioDuration,
+};
 
 // SOURCE: esp32s31-bt-lib 7a85006f, libble_app.a[ble_3.o] recurring-event
 // r_sym_ble_rsCCyH2B22gdYkN4LOOJ, Controller configuration and private options:

@@ -28,7 +28,7 @@ fn allowed(package: &str, file: &str, instruction: &str) -> bool {
     ABI_ASSEMBLY
         .iter()
         .any(|(owner, files)| package == *owner && files.contains(&file))
-        || package.starts_with("firmware/bootstrap/")
+        || package == "chips/esp32s31/bootstrap"
         || package.starts_with("hil/probes/")
 }
 

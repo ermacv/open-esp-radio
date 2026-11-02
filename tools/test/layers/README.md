@@ -118,7 +118,7 @@ name, in AST/token visitation order. Every key includes it, including unique
 sites, so appending a repeat preserves existing keys. Inserting or reordering
 identical sites requires reviewing their classifications.
 
-For example, `hil/probes/boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
+For example, `hil/probes/esp32s31-boot-smoke/src/main.rs:crate::run:panic-macro:panic:1`
 names the first `panic!` in `run`. Unregistered-site diagnostics show the
 current `path:line:column` (1-based) for navigation. Stale keys identify sites
 which no longer exist and have no current coordinates.

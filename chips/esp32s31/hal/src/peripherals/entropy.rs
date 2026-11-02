@@ -155,7 +155,10 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
 #[cfg(any(test, feature = "test-support"))]
 impl<'a, 'b> EntropyRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>> {
     /// The generator over host memory from each instance's base.
-    pub fn host(trng: &'a mut [u32], clock: &'b mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+    pub fn host(
+        trng: &'a mut [u32],
+        clock: &'b mut [u32],
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         Ok(Self {
             trng: oer_chips_esp32s31_pac::trng::trng_host(trng)?.1,
             clock: LpPericlkrstRngInit::host(clock)?,

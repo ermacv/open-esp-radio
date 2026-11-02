@@ -69,10 +69,14 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     let ApWpa2Progress::Transmit(message3) = service.on_eapol(PEER, message2).unwrap() else {
         panic!("verified Message 2 produces Message 3");
     };
-    let message4 = RsnTxFrame::<512>::message4(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, AP, 10)
-        .unwrap()
-        .authenticate(service.pending_ptk(PEER).unwrap(), &mut SoftwareAes128)
-        .unwrap();
+    let message4 = RsnTxFrame::<512>::message4(
+        oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+        AP,
+        10,
+    )
+    .unwrap()
+    .authenticate(service.pending_ptk(PEER).unwrap(), &mut SoftwareAes128)
+    .unwrap();
     let message4 =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
             .unwrap();
@@ -99,12 +103,20 @@ fn an_old_publication_does_not_refresh_a_reassociated_peer() {
     let (_old, old_context) = begin(&mut service, [7; 32], 9).into_parts();
     let (_new, new_context) = begin(&mut service, [9; 32], 19).into_parts();
     service
-        .observe_wpa2_transmit(new_context, false, oer_portable_time::Instant::from_micros(20))
+        .observe_wpa2_transmit(
+            new_context,
+            false,
+            oer_portable_time::Instant::from_micros(20),
+        )
         .unwrap();
     let deadline = service.next_wpa2_retry_deadline();
     let activity = service.peer_status(PEER).unwrap().last_activity;
     assert_eq!(
-        service.observe_wpa2_transmit(old_context, true, oer_portable_time::Instant::from_micros(30)),
+        service.observe_wpa2_transmit(
+            old_context,
+            true,
+            oer_portable_time::Instant::from_micros(30)
+        ),
         Ok(ApEapolTxCompletion::Superseded),
     );
     assert_eq!(service.next_wpa2_retry_deadline(), deadline);
@@ -146,7 +158,11 @@ fn a_retry_terminal_does_not_postpone_its_next_deadline() {
     let deadline = service.next_wpa2_retry_deadline();
     let (_retry, context) = retry.into_parts();
     assert_eq!(
-        service.observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(500_000)),
+        service.observe_wpa2_transmit(
+            context,
+            true,
+            oer_portable_time::Instant::from_micros(500_000)
+        ),
         Ok(ApEapolTxCompletion::WindowRetained),
     );
     assert_eq!(service.next_wpa2_retry_deadline(), deadline);

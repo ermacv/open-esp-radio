@@ -16,7 +16,6 @@
 //! executor runs only when a Wi-Fi station starts. An entry no driver binds
 //! routes no source.
 
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_hal::{
     peripherals::{
         aes::AesParts,
@@ -30,6 +29,7 @@ use oer_chips_esp32s31_hal::{
 };
 use oer_chips_family_executor::{Executor, Spawner};
 use oer_chips_family_staged_runtime::{Adopted, Handoff};
+use oer_portable_embassy_time::EmbassyClock;
 
 pub use oer_chips_esp32s31_compose::Esp32s31;
 
@@ -774,7 +774,8 @@ pub fn start<S: Started, H: Hart1Started>(
     let id = match (setup.boot_id, setup.entropy.take()) {
         (Some(id), _) => id,
         (None, Some(registers)) => {
-            let mut rng = oer_chips_esp32s31_compose::platform::Entropy::new(registers, EmbassyClock);
+            let mut rng =
+                oer_chips_esp32s31_compose::platform::Entropy::new(registers, EmbassyClock);
             if !rng.is_healthy() {
                 fail(Error::Entropy.name());
             }

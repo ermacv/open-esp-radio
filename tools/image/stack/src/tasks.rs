@@ -43,7 +43,12 @@ pub fn task_poll_resolutions(
             .and_then(|facts| facts.function.names.first())
             .map_or_else(
                 || format!("{address:#010x}"),
-                |name| format!("`{}` ({address:#010x})", oer_tools_analysis_elf::demangle(name)),
+                |name| {
+                    format!(
+                        "`{}` ({address:#010x})",
+                        oer_tools_analysis_elf::demangle(name)
+                    )
+                },
             )
     };
     let marked = dwarf.poll_boundaries();

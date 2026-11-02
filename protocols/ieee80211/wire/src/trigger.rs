@@ -937,9 +937,9 @@ pub fn parse_trigger_response_scheduling_control(
         ap_tx_power: TriggerApTxPower::from_trs_encoding(oer_portable_wire::U8::from_low_bits(
             ap_tx_power_encoding,
         )),
-        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(oer_portable_wire::U8::from_low_bits(
-            uplink_target_rssi_encoding,
-        )),
+        uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(
+            oer_portable_wire::U8::from_low_bits(uplink_target_rssi_encoding),
+        ),
     })
 }
 

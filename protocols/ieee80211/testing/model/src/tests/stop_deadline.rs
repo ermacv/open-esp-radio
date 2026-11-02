@@ -1,9 +1,9 @@
 //! A stop's deadline in the model: no disabled owner and no join after it.
 
 use super::*;
-use oer_protocols_radio_port::DisableFailed;
 use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_radio_port::DisableFailed;
 
 /// How far into the stop the deadline lies.
 const DEADLINE: Duration = Duration::from_millis(1);

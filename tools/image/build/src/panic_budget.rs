@@ -78,7 +78,7 @@ mod tests {
                   "metadata": null },
                 { "name": "oer-chips-esp32s31-hal", "manifest_path": "/w/chips/esp32s31/hal/Cargo.toml",
                   "metadata": null },
-                { "name": "image", "manifest_path": "/w/firmware/apps/image/Cargo.toml",
+                { "name": "image", "manifest_path": "/w/examples/image/Cargo.toml",
                   "metadata": { "open-radio": { "panic-budget": declared } } },
             ],
         })
@@ -102,8 +102,8 @@ mod tests {
     #[test]
     fn every_image_declares_a_budget_that_parses() -> Result<()> {
         for text in [
-            include_str!("../../../../hil/probes/boot-smoke/Cargo.toml"),
-            include_str!("../../../../hil/probes/radio-root/Cargo.toml"),
+            include_str!("../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"),
+            include_str!("../../../../hil/probes/esp32s31-radio-root/Cargo.toml"),
             include_str!("../../../../hil/images/aes/Cargo.toml"),
             include_str!("../../../../hil/images/station/Cargo.toml"),
         ] {

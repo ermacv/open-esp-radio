@@ -397,10 +397,10 @@ mod tests {
     #[test]
     fn reported_build_checks_require_an_explicit_probe_request() {
         assert_eq!(
-            build_enforcement("oer-hil-probes-boot-smoke", false).unwrap(),
+            build_enforcement("oer-examples-wifi-station", false).unwrap(),
             Enforced::Only([Check::Interrupts].into())
         );
-        assert!(build_enforcement("oer-hil-probes-boot-smoke", true).is_err());
+        assert!(build_enforcement("oer-examples-wifi-station", true).is_err());
         assert!(matches!(
             build_enforcement("oer-hil-probes-esp32s31-radio", true).unwrap(),
             Enforced::Reported
@@ -428,7 +428,10 @@ mod tests {
             None
         );
         assert_eq!(
-            console_verdict(oer_portable_diagnostics::PREFIX, "OER-RESULT: pass boot-smoke"),
+            console_verdict(
+                oer_portable_diagnostics::PREFIX,
+                "OER-RESULT: pass boot-smoke"
+            ),
             Some(Verdict::Pass)
         );
         assert_eq!(

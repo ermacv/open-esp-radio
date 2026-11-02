@@ -59,15 +59,18 @@ use {
     oer_protocols_ieee80211_wire::block_ack::BlockAckAction,
 };
 
-pub const AP_ASSOCIATION_DEADLINE: oer_portable_time::Duration = oer_portable_time::Duration::from_secs(15);
+pub const AP_ASSOCIATION_DEADLINE: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_secs(15);
 /// AP-owned response window for each four-way-handshake publication.
 ///
 /// This follows the generic hostap authenticator policy: a 100-ms first
 /// EAPOL-Key response window, 1-second subsequent windows, and four total
 /// publications. An acknowledged Message 1 uses the subsequent window
 /// immediately. It is protocol policy, not an ESP32 hardware fact.
-pub const AP_WPA2_FIRST_RETRY_INTERVAL: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(100);
-pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_portable_time::Duration = oer_portable_time::Duration::from_secs(1);
+pub const AP_WPA2_FIRST_RETRY_INTERVAL: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_millis(100);
+pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_secs(1);
 /// Retransmissions after the original M1 or M3 publication.
 pub const AP_WPA2_RETRY_ATTEMPTS: u8 = 3;
 pub const AP_TX_BLOCK_ACK_TID: u8 = 0;
@@ -838,9 +841,9 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         peer_storage.storage.clear();
         peer_storage.storage.generation = generation;
         let group_management = match &security {
-            AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } => Some(
-                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter::new(igtk),
-            ),
+            AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } => {
+                Some(oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter::new(igtk))
+            }
             AccessPointSecurityMaterial::Open
             | AccessPointSecurityMaterial::Wpa2Personal { .. } => None,
         };

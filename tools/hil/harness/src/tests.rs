@@ -1,10 +1,10 @@
 use std::{thread, time::Duration};
 
-use oer_tools_hil_link::test_support::{Device, HELLO};
 use oer_protocols_hil_protocol::{
     Endpoint, Key, Message, WireKind,
     base::{GetImageKeys, Hello, ImageKeyPage, RejectReason, Rejected, digest, sorted_keys},
 };
+use oer_tools_hil_link::test_support::{Device, HELLO};
 use serde::{Deserialize, Serialize};
 
 use crate::{Case, Cleanup, Cx, Failure, Outcome, Scenario, Verdict, check, run};

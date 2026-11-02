@@ -11,13 +11,13 @@
 
 use std::{collections::BTreeSet, mem::offset_of};
 
-use oer_tools_chip_profile::Profile;
 use oer_chips_family_facts::{Facts, Region};
 use oer_chips_family_staged_layout::{
     Layout, Region as LayoutRegion,
     stage_two::{self, Header},
     zeroed::RUNTIME_ZEROED_REGIONS,
 };
+use oer_tools_chip_profile::Profile;
 
 const CHIPS: [(&str, Layout); 1] = [("esp32s31", oer_chips_esp32s31_layout::LAYOUT)];
 

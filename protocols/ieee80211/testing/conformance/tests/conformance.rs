@@ -124,7 +124,10 @@ fn trace(case: Case) -> Trace<(), (), ()> {
         })),
         Case::BlockAck => Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
             air,
-            report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(SequenceNumber::ZERO, 1),
+            report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
+                SequenceNumber::ZERO,
+                1,
+            ),
             ack: (),
         })),
         Case::NoResponse(Form::Single) => {
@@ -252,7 +255,9 @@ fn retained_mpdu_verification_accepts_array_and_bounded_observation_storage() {
     first[0] = 0x08;
     first[1] = 0x41;
     let mut retry = first;
-    assert!(oer_protocols_ieee80211_wire::frame::set_retry_bit(&mut retry));
+    assert!(oer_protocols_ieee80211_wire::frame::set_retry_bit(
+        &mut retry
+    ));
     let mut retried_frames: heapless::Vec<[u8; 40], 1> = heapless::Vec::new();
     retried_frames
         .push(retry)
@@ -383,7 +388,8 @@ fn hardware_group_runner_does_not_require_injected_ingress_or_stalled_commands()
         }
     }
 
-    let clock: oer_portable_time_virtual::VirtualClock = oer_portable_time_virtual::VirtualClock::new();
+    let clock: oer_portable_time_virtual::VirtualClock =
+        oer_portable_time_virtual::VirtualClock::new();
     let mut fixture = GroupFixture {
         clock: &clock,
         calls: heapless::Vec::new(),

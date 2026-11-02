@@ -53,10 +53,10 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use oer_portable_diagnostics::Note;
 use oer_chips_family_boot::drivers::cores::{
     self as driver, CoreState, STALL_POLLS, Stopped, Unconfirmed,
 };
+use oer_portable_diagnostics::Note;
 use oer_portable_memory::{Claim, ClaimCell, Held};
 use oer_portable_mmio::Placement;
 

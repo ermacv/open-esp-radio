@@ -20,7 +20,7 @@ error[E0599]: no method named `release` found for mutable reference `&mut CoreCo
    |               ^^^^^^^
    |
 help: there is a method `release_reset` with a similar name, but with different arguments
-  --> $WORKSPACE/chips/espressif/boot/src/drivers/cores.rs
+  --> $WORKSPACE/chips/family/boot/src/drivers/cores.rs
    |
    |     fn release_reset(&mut self, access: Access<'_>, hart: Self::Secondary);
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

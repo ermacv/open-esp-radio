@@ -35,7 +35,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Sample one of the 120 linked TX MPDU-length entries.
     pub fn he_tx_mpdu_length_link(&self, index: u8) -> Option<MacHeTxMpduLengthLink> {
-        let index = oer_portable_mmio::Index::<MPDU_LENGTH_LINK_COUNT>::new(usize::from(index)).ok()?;
+        let index =
+            oer_portable_mmio::Index::<MPDU_LENGTH_LINK_COUNT>::new(usize::from(index)).ok()?;
         let value = self.mac.wifi_mac_he_init_suffix.read_he_scratch(index);
         Some(MacHeTxMpduLengthLink {
             mpdu_length: halfword(value.mpdu_length()),
@@ -117,16 +118,24 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_auto_ack_allow_ersu(true);
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_0(oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8);
+            w.set_rate_0(
+                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8,
+            );
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_1(oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8);
+            w.set_rate_1(
+                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8,
+            );
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_2(oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8);
+            w.set_rate_2(
+                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8,
+            );
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_3(oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8);
+            w.set_rate_3(
+                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8,
+            );
         });
 
         // Complete hal_set_tx_min_pwr(-11), then the parent field update.

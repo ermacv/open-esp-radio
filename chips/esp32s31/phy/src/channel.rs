@@ -1023,7 +1023,10 @@ impl PhyChipChannelMmioBinding {
                 frequency_index,
                 crystal_selector,
             } => {
-                oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(registers, frequency_index);
+                oer_chips_esp32s31_hal::phy::frequency::start_channel_switch(
+                    registers,
+                    frequency_index,
+                );
                 PhyChipChannelCompletion::FrequencySwitchStarted {
                     frequency_index,
                     crystal_selector,
@@ -1035,7 +1038,9 @@ impl PhyChipChannelMmioBinding {
             }
             PhyChipChannelAction::AwaitFrequencyReadyEdge { .. } => {
                 PhyChipChannelCompletion::FrequencyReadyObserved {
-                    ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(registers),
+                    ready: oer_chips_esp32s31_hal::phy::frequency::sample_frequency_ready(
+                        registers,
+                    ),
                 }
             }
             PhyChipChannelAction::ConfigureNrx { frequency_mhz } => {
@@ -1062,7 +1067,10 @@ impl PhyChipChannelMmioBinding {
                 PhyChipChannelCompletion::TxCapCommandMemoryPublished { value }
             }
             PhyChipChannelAction::ConfigureChannelCbw { cbw } => {
-                oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(registers, u32::from(cbw));
+                oer_chips_esp32s31_hal::phy::frequency::configure_channel_cbw(
+                    registers,
+                    u32::from(cbw),
+                );
                 PhyChipChannelCompletion::ChannelCbwConfigured { cbw }
             }
             PhyChipChannelAction::ClearDcMemory => {

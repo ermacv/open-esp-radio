@@ -2,9 +2,9 @@
 //! station, the library's user or boot-smoke's hart-1 task takes by value and
 //! lends to each synchronous operation. Each block waits synchronously on the
 //! accelerator's `STATE` flag.
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_hal::peripherals::aes::{AesInterrupt, AesParts, AesRegisters};
 use oer_chips_family_interrupt_table::Silent;
+use oer_portable_embassy_time::EmbassyClock;
 
 /// The accelerator as a synchronous AES-128 engine, its block settles
 /// measured on the executors' clock.

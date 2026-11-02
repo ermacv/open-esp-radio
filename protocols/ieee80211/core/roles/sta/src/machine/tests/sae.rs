@@ -1,5 +1,7 @@
 use super::*;
-use oer_protocols_ieee80211_core_security_rsn::{Ptk, PtkContext, frames::RsnTxFrame, sae::SaeKeys};
+use oer_protocols_ieee80211_core_security_rsn::{
+    Ptk, PtkContext, frames::RsnTxFrame, sae::SaeKeys,
+};
 use oer_protocols_ieee80211_wire::sae::SaeCommitValues;
 use oer_protocols_ieee80211_wire::security::rsn::{Akm, RsnElement};
 use std::vec;
@@ -169,9 +171,11 @@ fn finish_handshake(
             plain.push(0);
         }
     }
-    let wrapped =
-        oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let message3 = RsnTxFrame::<512>::message3(akm, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
         .authenticate(&ptk, &mut SoftwareAes128)
@@ -268,8 +272,10 @@ fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
                 .station
                 .pmksa
                 .resume(
-                    oer_protocols_ieee80211_wire::address::Bssid::new(IndividualAddress::new(BSSID).unwrap())
-                        .unwrap(),
+                    oer_protocols_ieee80211_wire::address::Bssid::new(
+                        IndividualAddress::new(BSSID).unwrap()
+                    )
+                    .unwrap(),
                     SSID
                 )
                 .is_none()

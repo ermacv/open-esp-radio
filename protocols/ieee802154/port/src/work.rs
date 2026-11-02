@@ -2,8 +2,8 @@
 
 use core::{fmt::Debug, future::Future};
 
-use oer_protocols_radio_port::{ClockError, PortResult};
 use oer_portable_time::RadioInstant;
+use oer_protocols_radio_port::{ClockError, PortResult};
 
 /// One admitted operation: what a client's submission returns. It holds
 /// the backend's token, which is neither `Clone` nor `Copy` and only the

@@ -152,7 +152,8 @@ pub fn lld() -> Result<PathBuf> {
 /// `<sysroot>/lib/rustlib/<host>/bin` of `rustc`.
 fn sysroot_bin(rustc: &OsStr) -> Result<PathBuf> {
     let text = |arguments: &[&str]| -> Result<String> {
-        let output = oer_tools_os_process::capture(oer_tools_os_process::command(rustc).args(arguments))?;
+        let output =
+            oer_tools_os_process::capture(oer_tools_os_process::command(rustc).args(arguments))?;
         Ok(String::from_utf8(output.stdout)?)
     };
     let sysroot = text(&["--print", "sysroot"])?;
@@ -233,7 +234,8 @@ fn version_of(program: &OsStr, tool: Tool) -> Option<String> {
     let mut command = oer_tools_os_process::command(program);
     command.args(tool.version_arguments());
     let output =
-        oer_tools_os_process::output(&mut command, Some(std::time::Duration::from_secs(60))).ok()?;
+        oer_tools_os_process::output(&mut command, Some(std::time::Duration::from_secs(60)))
+            .ok()?;
     output
         .status
         .success()

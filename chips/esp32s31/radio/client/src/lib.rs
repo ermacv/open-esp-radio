@@ -79,7 +79,8 @@ pub use poison::{
 
 /// The provisional bound of one poll of the actor future
 /// (docs/architecture.md, "Radio system").
-pub const ACTOR_STEP_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_micros(50);
+pub const ACTOR_STEP_BOUND: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_micros(50);
 
 mod sealed {
     pub trait Sealed {}

@@ -42,7 +42,9 @@ pub(in crate::image) fn compare_ack(s: &mut Session<'_>) {
     let deadline = s.ble.timer.read_word_006c_opaque().compare_target().get();
     command18(&mut s.ble);
     let start = oer_portable_riscv::cycle32();
-    while counter(&s.ble) < deadline && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT {}
+    while counter(&s.ble) < deadline
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
+    {}
     window(4096);
     emit(0x8050, old.into(), deadline, counter(&s.ble));
     lp_state(s, 0x8060);

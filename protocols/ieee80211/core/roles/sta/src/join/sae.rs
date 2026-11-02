@@ -14,6 +14,7 @@
 //! `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
 //! `components/wpa_supplicant/esp_supplicant/src/esp_wpa3.c`.
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_security_rsn::Pmk;
 use oer_protocols_ieee80211_core_security_rsn::sae::{SaeCommit, SaeError, SaeKeys};
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
@@ -24,7 +25,6 @@ use oer_protocols_ieee80211_wire::station::{
     SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, parse_sae_authentication, parse_sta_disconnect,
 };
 use oer_protocols_ieee80211_wire::status::status_code;
-use oer_portable_time::{Duration, Instant};
 
 pub const STA_SAE_COMMIT_TIMEOUT: Duration = Duration::from_secs(4);
 pub const STA_SAE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(2);

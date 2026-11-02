@@ -10,8 +10,12 @@ use oer_protocols_ieee80211_testing_conformance::{
 };
 
 type Terminal = BarrierEvent<Ack, Infallible>;
-type Trace =
-    oer_protocols_ieee80211_testing_conformance::BarrierTrace<Vec<Terminal>, Vec<u8>, Vec<Vec<u8>>, Terminal>;
+type Trace = oer_protocols_ieee80211_testing_conformance::BarrierTrace<
+    Vec<Terminal>,
+    Vec<u8>,
+    Vec<Vec<u8>>,
+    Terminal,
+>;
 
 /// Completion statuses for the head and, after GateRetry, its Sent retry.
 fn statuses(case: BarrierCase) -> Vec<(u8, u8)> {
@@ -97,7 +101,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for BarrierBody {
             let mut phase = owner.phase();
             let (start, bank) = resources.station_association.into_parts();
             let ([slot], _) = bank.into_parts();
-            let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+            let association =
+                start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
             let key = installed_pairwise(&mut phase, &association, slot, 7).await;
             let [head, tail, ..] = resources.buffers;
             let [head_ticket, tail_ticket, ..] = resources.tickets;

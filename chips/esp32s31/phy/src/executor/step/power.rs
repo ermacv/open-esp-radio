@@ -178,7 +178,11 @@ fn acknowledge(transition: &mut PhyTxPowerTrackingTransition) -> Result<(), Fail
 }
 
 #[inline(never)]
-fn elapsed<C: oer_portable_time::Clock>(clock: &C, started: Option<oer_portable_time::Instant>, maximum: &mut u16) {
+fn elapsed<C: oer_portable_time::Clock>(
+    clock: &C,
+    started: Option<oer_portable_time::Instant>,
+    maximum: &mut u16,
+) {
     if let Some(started) = started {
         let micros = clock.now().saturating_duration_since(started).as_micros();
         *maximum = (*maximum).max(u16::try_from(micros).unwrap_or(u16::MAX));

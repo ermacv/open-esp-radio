@@ -1,6 +1,8 @@
 //! Image binding of the SAR/PWDET pilot to the measured P2 line pair.
 use oer_chips_esp32s31_compose::Esp32s31;
-use oer_chips_esp32s31_hal::domain::transaction::{Fault, FaultReason, SarSetupFault, SarSetupStorage};
+use oer_chips_esp32s31_hal::domain::transaction::{
+    Fault, FaultReason, SarSetupFault, SarSetupStorage,
+};
 use oer_chips_esp32s31_hal::peripherals::timg0_alarm::{Timg0AlarmInterrupt, Timg0AlarmParts};
 use oer_chips_esp32s31_phy::sar_pilot;
 use oer_chips_family_executor::InterruptExecutor;
@@ -39,13 +41,12 @@ pub(crate) fn init<const H: u8>(
     if HANDLER.install(handler).is_err() {
         reset(SarSetupFault::Storage(SarSetupStorage::Handler));
     }
-    let bound =
-        router.bind(token, interrupt).unwrap_or_else(|error| {
-            oer_chips_family_staged_runtime::interrupts::reset_binding::<
-                oer_chips_esp32s31_hal::platform::Port,
-                _,
-            >(error)
-        });
+    let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
+        oer_chips_family_staged_runtime::interrupts::reset_binding::<
+            oer_chips_esp32s31_hal::platform::Port,
+            _,
+        >(error)
+    });
     client.bind(bound)
 }
 pub(crate) fn interrupt(part: &mut Timg0AlarmInterrupt) {

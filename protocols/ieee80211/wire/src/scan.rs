@@ -525,7 +525,9 @@ fn store_element<const N: usize>(
     let length = oer_portable_wire::PrefixLength::new(value.len().checked_add(2)?)?;
     let (stored_header, stored_value) = length.borrow_mut(buffer).split_first_chunk_mut::<2>()?;
     *stored_header = header;
-    oer_portable_wire::Writer::new(stored_value).write(value).ok()?;
+    oer_portable_wire::Writer::new(stored_value)
+        .write(value)
+        .ok()?;
     Some(length)
 }
 
@@ -537,6 +539,8 @@ fn exact_element<const N: usize>(header: [u8; 2], value: &[u8]) -> Option<[u8; N
         return None;
     }
     *stored_header = header;
-    oer_portable_wire::Writer::new(stored_value).write(value).ok()?;
+    oer_portable_wire::Writer::new(stored_value)
+        .write(value)
+        .ok()?;
     Some(element)
 }

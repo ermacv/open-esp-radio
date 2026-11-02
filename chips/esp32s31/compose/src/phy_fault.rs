@@ -1,5 +1,4 @@
 //! PHY transaction cancellation: quarantine, retained reset and next-boot output.
-use oer_portable_diagnostics::fault::Record;
 #[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_hal::domain::transaction::TransactionSeat;
 #[cfg(target_arch = "riscv32")]
@@ -10,6 +9,7 @@ use oer_chips_esp32s31_hal::domain::transaction::{Fault, FaultReason, PhyIdentit
 #[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_hal::platform::Port;
 use oer_chips_family_staged_runtime::retained_fault;
+use oer_portable_diagnostics::fault::Record;
 oer_chips_family_staged_runtime::retained_static! { static PHY_FAULT: Record; }
 #[cfg(target_arch = "riscv32")]
 static SEAT: TransactionSeat = TransactionSeat::new();

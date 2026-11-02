@@ -815,7 +815,9 @@ fn permit(
     levels: oer_chips_family_ieee802154_mac_values::Ieee802154TxPowerLevels<'_>,
 ) -> Option<oer_chips_family_ieee802154_engine::pib::Ieee802154Permit> {
     let channel = Ieee802154Channel::new(number).ok()?;
-    let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN.permit(channel).ok()?;
+    let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
+        .permit(channel)
+        .ok()?;
     let ceiling = permitted.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
         antenna_gain_mbm: 0,
         chip_maximum_mbm: i32::MAX,

@@ -314,9 +314,11 @@ fn run(
             let mut starts = std::collections::BTreeSet::new();
             for id in &target.executables {
                 let executable = find(input.executables, id)?;
-                for (address, _) in
-                    oer_tools_analysis_riscv_program::code_symbols(&executable.bytes(), memory, control)?
-                {
+                for (address, _) in oer_tools_analysis_riscv_program::code_symbols(
+                    &executable.bytes(),
+                    memory,
+                    control,
+                )? {
                     starts.insert(address);
                 }
             }

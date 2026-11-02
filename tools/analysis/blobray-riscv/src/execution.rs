@@ -27,7 +27,8 @@ impl Profile {
             Self::Full => !matches!(decoded.inst, Instruction::Unimp | Instruction::Float(_)),
             Self::Rv32imac => {
                 !matches!(decoded.inst, Instruction::Unimp)
-                    && oer_tools_analysis_riscv_decode::decode(bytes, Extensions::RV32IMAC).is_some()
+                    && oer_tools_analysis_riscv_decode::decode(bytes, Extensions::RV32IMAC)
+                        .is_some()
             }
         }
     }

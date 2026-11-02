@@ -209,17 +209,18 @@ impl Openocd {
     fn run(&self, arguments: &[String], timeout: Duration) -> crate::Result<std::process::Output> {
         let mut command = oer_tools_os_process::command(&self.program);
         command.args(arguments);
-        let output = oer_tools_os_process::output(&mut command, Some(timeout)).map_err(|error| {
-            if error.is::<oer_tools_os_process::owned::DeadlineExceeded>() {
-                format!(
-                    "OpenOCD did not finish within {}s and was stopped",
-                    timeout.as_secs()
-                )
-                .into()
-            } else {
-                error
-            }
-        })?;
+        let output =
+            oer_tools_os_process::output(&mut command, Some(timeout)).map_err(|error| {
+                if error.is::<oer_tools_os_process::owned::DeadlineExceeded>() {
+                    format!(
+                        "OpenOCD did not finish within {}s and was stopped",
+                        timeout.as_secs()
+                    )
+                    .into()
+                } else {
+                    error
+                }
+            })?;
         if !output.status.success() {
             return Err(format!(
                 "OpenOCD failed with {}:\n{}",

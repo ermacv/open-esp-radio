@@ -117,7 +117,9 @@ impl Work for DuringPublication {
             }
             assert!(phase.held.events.is_empty());
             just_before_timeout = Some(held_snapshot(phase));
-            self.2.advance(oer_portable_time::Duration::from_micros(1)).unwrap();
+            self.2
+                .advance(oer_portable_time::Duration::from_micros(1))
+                .unwrap();
             air.clock_advanced();
         } else {
             air.hold_completion(WmmAccessCategory::BestEffort, false);

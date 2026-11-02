@@ -1167,16 +1167,20 @@ fn reviews_match_without_crate_disambiguators_only() {
 fn the_repository_policies_load() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in oer_chips_family_facts::tracked::FILES.iter().copied().chain([
-        (
-            "chips/esp32s31/platform/stack.toml",
-            include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
-        ),
-        (
-            "chips/family/staged-layout/stack-coverage.toml",
-            include_str!("../../../../../chips/family/staged-layout/stack-coverage.toml"),
-        ),
-    ]) {
+    for (path, text) in oer_chips_family_facts::tracked::FILES
+        .iter()
+        .copied()
+        .chain([
+            (
+                "chips/esp32s31/platform/stack.toml",
+                include_str!("../../../../../chips/esp32s31/platform/stack.toml"),
+            ),
+            (
+                "chips/family/staged-layout/stack-coverage.toml",
+                include_str!("../../../../../chips/family/staged-layout/stack-coverage.toml"),
+            ),
+        ])
+    {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
@@ -1358,7 +1362,9 @@ minimum_free_bytes = 16
         for (root, proven) in [("leaf", true), ("indirect", false)] {
             let (_directory, policy) = policy_with(&USED.replace("ROOT", root), ASM_REVIEW);
             let image = image(
-                &with(Some(starter("oer_chips_esp32s31_hal::cores::Cores::start_hart1"))),
+                &with(Some(starter(
+                    "oer_chips_esp32s31_hal::cores::Cores::start_hart1",
+                ))),
                 &[
                     ("boot_stack", 0, 1024),
                     ("secondary_stack", 0x400, 1024),

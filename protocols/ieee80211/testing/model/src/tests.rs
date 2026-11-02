@@ -125,9 +125,11 @@ fn each_installation_and_retuned_phase_checks_its_own_channel() {
             source.setup().set_channel(
                 SupportedChannel::new(
                     oer_protocols_radio_regulatory::TEST_DOMAIN
-                        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                            Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
-                        ))
+                        .permit(
+                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                                Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
+                            ),
+                        )
                         .unwrap(),
                 )
                 .unwrap(),
@@ -1454,7 +1456,9 @@ impl Work for AggregateRetransmission<'_> {
         );
 
         let mut terminal_access = resources.terminal_access;
-        use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
+        use oer_protocols_ieee80211_contracts_port::{
+            AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid,
+        };
         let ModelResources {
             mut tickets,
             mut small,
@@ -2075,7 +2079,10 @@ struct TestPacketNumbers {
 }
 impl TestPacketNumbers {
     fn new(step: oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep) -> Self {
-        Self::continuing_after(step, oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO)
+        Self::continuing_after(
+            step,
+            oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::ZERO,
+        )
     }
     fn continuing_after(
         step: oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep,

@@ -232,8 +232,8 @@ pub fn run(
             .filter_map(|a| {
                 let name = a.path.file_name()?.to_owned();
                 let old = baseline.join(name);
-                let binary =
-                    std::fs::read(&a.path).is_ok_and(|bytes| oer_tools_analysis_elf::is_binary(&bytes));
+                let binary = std::fs::read(&a.path)
+                    .is_ok_and(|bytes| oer_tools_analysis_elf::is_binary(&bytes));
                 (binary && old.is_file()).then_some((a.id, old, a.path))
             })
             .collect(),

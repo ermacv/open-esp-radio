@@ -20,11 +20,11 @@
 //! SOURCE: TRM_S31_V01_AES §10.5.3 and ESP-IDF 4d80c1b2 aes_ll.h/aes_hal.c
 //! for the sequence; neither states a block latency.
 
+use oer_chips_esp32s31_hal::peripherals::aes::{BlockWords, IDLE, KeyWords, Registers, WORK};
 use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, Block, BlockEngine, BlockError},
 };
-use oer_chips_esp32s31_hal::peripherals::aes::{BlockWords, IDLE, KeyWords, Registers, WORK};
 use oer_portable_time::{
     Clock, Duration,
     settle::{Settle, SettleLimit, settle},

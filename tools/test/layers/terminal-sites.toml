@@ -239,33 +239,33 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "hil/probes/esp32s31-mcycle/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "hil/probes/esp32s31-mcycle", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "hil/probes/esp32s31-mcycle/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-mcycle", classes = ["configuration-boot"] }
 "hil/probes/esp32s31-mcycle/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "hil/probes/esp32s31-mcycle", classes = ["configuration-boot"] }
-# hil/probes/boot-smoke/src/entry.rs
-"hil/probes/boot-smoke/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot"] }
-"hil/probes/boot-smoke/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/boot-smoke", classes = ["rust-panic"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:1" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:2" = { owner = "hil/probes/boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:1" = { owner = "hil/probes/boot-smoke", classes = ["software-invariant"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:2" = { owner = "hil/probes/boot-smoke", classes = ["cancellation"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:3" = { owner = "hil/probes/boot-smoke", classes = ["software-invariant"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:4" = { owner = "hil/probes/boot-smoke", classes = ["software-invariant"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::respond:terminal-reference:reset_fault:1" = { owner = "hil/probes/boot-smoke", classes = ["software-invariant"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::serve_aes:terminal-reference:reset_fault:1" = { owner = "hil/probes/boot-smoke", classes = ["software-invariant"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::answer_beats:terminal-reference:reset_fault:1" = { owner = "hil/probes/boot-smoke", classes = ["software-invariant"] }
-"hil/probes/boot-smoke/src/entry.rs:crate::supervise_hart1:terminal-reference:reset_fault:1" = { owner = "hil/probes/boot-smoke", classes = ["cancellation", "software-invariant"] }
+# hil/probes/esp32s31-boot-smoke/src/entry.rs
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["rust-panic"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::hart1_main:terminal-entry:hart1_main:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::hart1_main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["software-invariant"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:2" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["cancellation"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:3" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["software-invariant"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::ask:terminal-reference:reset_fault:4" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["software-invariant"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::respond:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["software-invariant"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::serve_aes:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["software-invariant"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::answer_beats:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["software-invariant"] }
+"hil/probes/esp32s31-boot-smoke/src/entry.rs:crate::supervise_hart1:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-boot-smoke", classes = ["cancellation", "software-invariant"] }
 
-# hil/probes/radio-root/src/entry.rs
-"hil/probes/radio-root/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil/probes/radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/radio-root/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/radio-root", classes = ["configuration-boot"] }
-"hil/probes/radio-root/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/radio-root", classes = ["rust-panic"] }
-"hil/probes/radio-root/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil/probes/radio-root", classes = ["configuration-boot"] }
-"hil/probes/radio-root/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/radio-root/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/radio-root", classes = ["configuration-boot"] }
+# hil/probes/esp32s31-radio-root/src/entry.rs
+"hil/probes/esp32s31-radio-root/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-radio-root/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-radio-root/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["rust-panic"] }
+"hil/probes/esp32s31-radio-root/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-radio-root/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-radio-root/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot"] }
 
 
 

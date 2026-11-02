@@ -88,7 +88,11 @@ fn terminal_status_distinguishes_an_exchange_from_one_attempt() {
 fn receive_metadata_keeps_absence_and_provenance_distinct() {
     let staged = MacRxMetadata {
         channel: RxEvidence::HardwareObserved(
-            Channel::ghz2_4(6, oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20).unwrap(),
+            Channel::ghz2_4(
+                6,
+                oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+            )
+            .unwrap(),
         ),
         rate: RxEvidence::HardwareObserved(11_u8),
         rssi_dbm: RxEvidence::HardwareObserved(-47),

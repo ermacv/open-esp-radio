@@ -3,9 +3,9 @@ extern crate std;
 use super::*;
 use core::{cell::RefCell, pin::Pin, task::Waker};
 use oer_portable_memory::HostContext;
-use oer_protocols_network_port::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_network_port::{EthernetFrame, FrameLengthError, TransmitError, TransmitRefused};
 use std::{
     boxed::Box,
     collections::VecDeque,
@@ -94,7 +94,10 @@ impl oer_protocols_network_port::FrameStorage for Lent {
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.bytes[self.start..]
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
         let length = self.bytes.len() - self.start;
         if by > length {
             return Err(oer_protocols_network_port::StorageAdvanceRefused { by, length });

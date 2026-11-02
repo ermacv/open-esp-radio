@@ -30,7 +30,8 @@ fn compile(directory: &Path, declarations: &[&str]) -> Vec<u8> {
         );
     }
     std::fs::write(directory.join("library.rs"), library).unwrap();
-    oer_tools_probe_codegen::build(&directory.join("declarations.rs"), "fixture", directory).unwrap();
+    oer_tools_probe_codegen::build(&directory.join("declarations.rs"), "fixture", directory)
+        .unwrap();
     std::fs::write(directory.join("main.rs"), format!(
         "#![no_std]\n#![no_main]\nextern crate fixture as _;\ninclude!({:?});\n#[unsafe(no_mangle)] pub extern \"C\" fn _start() -> ! {{ loop {{core::hint::spin_loop();}} }}",
         directory.join("probe_catalog.rs"))).unwrap();

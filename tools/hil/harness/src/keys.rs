@@ -3,11 +3,11 @@
 
 use std::{collections::BTreeSet, fmt, time::Duration};
 
-use oer_tools_hil_link::{Boot, CallError, Link};
 use oer_protocols_hil_protocol::{
     Key,
     base::{GetImageKeys, ImageKeysCheck, ImageKeysError},
 };
+use oer_tools_hil_link::{Boot, CallError, Link};
 
 /// How long one key page may take.
 const PAGE_TIMEOUT: Duration = Duration::from_secs(2);

@@ -191,8 +191,10 @@ pub trait WifiIrqActivation: sealed::Sealed {
     const CONTEXT: oer_chips_family_interrupt_table::Context;
 }
 
-impl<E: oer_chips_family_interrupt_table::Entry> sealed::Sealed for Bound<E> where E::Part: WifiLinePart
-{}
+impl<E: oer_chips_family_interrupt_table::Entry> sealed::Sealed for Bound<E> where
+    E::Part: WifiLinePart
+{
+}
 impl<E: oer_chips_family_interrupt_table::Entry> WifiIrqActivation for Bound<E>
 where
     E::Part: WifiLinePart,

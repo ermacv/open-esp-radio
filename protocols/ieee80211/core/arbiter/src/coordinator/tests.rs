@@ -10,9 +10,11 @@ const FIRST_TBTT: u64 = 1_000_000;
 fn ghz2_4(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap(),
     )
     .unwrap()
@@ -21,9 +23,11 @@ fn ghz2_4(number: u8) -> SupportedChannel<Caps> {
 fn ghz5(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                Channel::ghz5(number, ChannelWidth::Mhz20).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    Channel::ghz5(number, ChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap(),
     )
     .unwrap()

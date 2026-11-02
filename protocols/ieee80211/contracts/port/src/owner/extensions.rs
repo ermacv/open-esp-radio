@@ -309,7 +309,14 @@ impl MpduStartSpacing {
 }
 
 /// One A-MPDU attempt: its ticket, its aggregate and how it goes.
-pub struct AggregateAttempt<'id, T, A, K, X, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+pub struct AggregateAttempt<
+    'id,
+    T,
+    A,
+    K,
+    X,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     /// The caller's context for all subframes, returned with their terminal.
     pub context: X,
     /// The attempt's place in flight.

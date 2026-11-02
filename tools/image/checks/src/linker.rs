@@ -124,7 +124,8 @@ fn link(
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
     // The analysis-only first ELF reserves the policy maximum without guards.
     // The final link supplies the selected physical guards from the chip contract.
-    let profile = oer_tools_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
+    let profile =
+        oer_tools_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
     if let Some(interrupts) = &profile.facts.interrupts {
         for hart in interrupts.irq_stack_guard_bytes.keys() {
             arguments.push(format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes=0").into());

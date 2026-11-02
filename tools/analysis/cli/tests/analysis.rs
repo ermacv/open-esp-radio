@@ -9,7 +9,9 @@ use object::{
     write::{Object, Relocation, Symbol, SymbolSection},
 };
 use oer_tools_analysis_blobray_application::in_process::{Executable, Limits};
-use oer_tools_analysis_blobray_application::library::{Assumptions, LibraryOutcome, analyze_library};
+use oer_tools_analysis_blobray_application::library::{
+    Assumptions, LibraryOutcome, analyze_library,
+};
 use oer_tools_analysis_riscv_model::*;
 
 fn symbol(name: &[u8], section: SymbolSection, size: u64, kind: SymbolKind) -> Symbol {

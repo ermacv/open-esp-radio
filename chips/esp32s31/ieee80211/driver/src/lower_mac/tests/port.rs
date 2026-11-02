@@ -6,6 +6,7 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
+use oer_portable_time::{Clock, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
@@ -13,7 +14,6 @@ use oer_protocols_ieee80211_wire::{
     phy::{LegacyRate, PhyRate},
 };
 use oer_protocols_radio_port::{self as radio, PortBackend, PortBody, PortPhase};
-use oer_portable_time::{Clock, Instant, Timer};
 use std::{
     boxed::Box,
     cell::{Cell, RefCell},
@@ -242,7 +242,11 @@ impl ReceiveUnit for TestReceive {
     fn bytes(&self) -> &[u8] {
         &self.bytes[self.view.clone()]
     }
-    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_portable_memory::FrameRangeError> {
+    fn narrow(
+        &mut self,
+        offset: usize,
+        length: usize,
+    ) -> Result<(), oer_portable_memory::FrameRangeError> {
         let start = self.view.start + offset;
         if start + length > self.view.end {
             return Err(oer_portable_memory::FrameRangeError {
@@ -394,8 +398,9 @@ impl Device<512> for TestDevice {
                 .get(self.completed)
                 .copied()
                 .unwrap_or((0, 0));
-            let completion =
-                oer_chips_esp32s31_hal::types::MacTxCompletionObservation::new_model(status, detail);
+            let completion = oer_chips_esp32s31_hal::types::MacTxCompletionObservation::new_model(
+                status, detail,
+            );
             match self.observed.borrow().block_ack {
                 Some((start, bitmap, received)) => {
                     self.hardware.block_ack_completion[usize::from(queue)] = Some(
@@ -751,7 +756,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
             let header = HeaderSpec::new(
-                FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("frame control"),
+                FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS)
+                    .expect("frame control"),
                 0,
                 IndividualAddress::new(BSSID).expect("receiver"),
                 STATION,
@@ -808,7 +814,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Exchange {
                         context: Tag(71, None),
                         ticket,
                         source: prepared,
-                        access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                        access_category:
+                            oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
                         protection: Protection::None,
                         power: SupportedPower::new(TxPower::Calibrated).expect("power"),
                         coex_operation: TxOperation::Data,
@@ -979,7 +986,8 @@ fn submit_mpdu_budget<'k, 'p, 'id: 'p + 'k, Id: radio::SlotIdentity + 'id>(
         protection: match key {
             Some(key) => TxProtection::Ccmp(NumberedKey {
                 key,
-                packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(7).expect("PN"),
+                packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(7)
+                    .expect("PN"),
             }),
             None => TxProtection::Open,
         },
@@ -1053,7 +1061,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for SuspendBody {
                 let mut phase = owner.phase();
                 let (start, bank) = resources.station_association.into_parts();
                 let (_, [slot]) = bank.into_parts();
-                let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+                let association =
+                    start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
                 phase.station().install_group_key(
                     &association,
                     resources.station_group_permission,
@@ -1140,7 +1149,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for GroupCycle {
             let mut phase = owner.phase();
             let (start, bank) = resources.station_association.into_parts();
             let (_, [slot]) = bank.into_parts();
-            let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+            let association =
+                start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
             let id = |id| oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(id).expect("KeyID");
             phase.station().install_group_key(
                 &association,
@@ -1599,7 +1609,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Protected {
             let mut phase = owner.phase();
             let (start, bank) = resources.station_association.into_parts();
             let ([slot], _) = bank.into_parts();
-            let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+            let association =
+                start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
             phase.station().configure(
                 resources
                     .station_commands

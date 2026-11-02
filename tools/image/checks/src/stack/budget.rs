@@ -39,7 +39,10 @@ pub fn resources(
     )
 }
 
-pub fn header(resources: &oer_tools_analysis_riscv_model::AnalysisResources, memory_peak: u64) -> String {
+pub fn header(
+    resources: &oer_tools_analysis_riscv_model::AnalysisResources,
+    memory_peak: u64,
+) -> String {
     let mut resources = resources.clone();
     resources.usage.peak_admitted_bytes = memory_peak;
     format!(

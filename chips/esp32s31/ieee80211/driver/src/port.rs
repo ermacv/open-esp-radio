@@ -28,13 +28,15 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::association;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId};
 use oer_protocols_radio_port::{self as radio, Child, Root, Slot};
-use oer_protocols_radio_port::{BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner};
-use oer_portable_time::{Clock, Duration, Instant, Timer};
+use oer_protocols_radio_port::{
+    BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner,
+};
 
 mod aggregate;
 pub use aggregate::{Aggregate, AggregateExecution, SubframeMpdus, Subframes, TX_AMPDU_SUBFRAMES};
@@ -190,7 +192,11 @@ pub trait ReceiveUnit: 'static {
     /// Narrow the view to `length` bytes from `offset` in it; a range
     /// outside it is refused and changes nothing. Normalization reads the
     /// whole received unit, so it runs before.
-    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_portable_memory::FrameRangeError>;
+    fn narrow(
+        &mut self,
+        offset: usize,
+        length: usize,
+    ) -> Result<(), oer_portable_memory::FrameRangeError>;
     /// [`Self::bytes`], then the rest of the unit's allocation; every byte
     /// is initialized.
     fn storage(&self) -> &[u8];

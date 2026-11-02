@@ -287,8 +287,10 @@ mod tests {
         let caps = Esp32s31Caps::<512>::CAPS;
         let records = core::array::from_fn(|index| WmmAcParameters {
             admission_control_mandatory: index & 1 != 0,
-            aifsn: oer_portable_wire::U8::new(caps.edca_max_aifsn.saturating_sub(index as u8)).unwrap(),
-            ecw_min: oer_portable_wire::U8::new((index as u8).min(caps.edca_max_cw_exponent)).unwrap(),
+            aifsn: oer_portable_wire::U8::new(caps.edca_max_aifsn.saturating_sub(index as u8))
+                .unwrap(),
+            ecw_min: oer_portable_wire::U8::new((index as u8).min(caps.edca_max_cw_exponent))
+                .unwrap(),
             ecw_max: oer_portable_wire::U8::new(caps.edca_max_cw_exponent).unwrap(),
             txop_limit_units_32_us: caps
                 .edca_max_txop_limit_units_32_us

@@ -9,7 +9,6 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_board as board;
 use oer_chips_esp32s31_hal::{
     ieee80211::{
@@ -43,6 +42,8 @@ use oer_chips_esp32s31_ieee80211_driver::{
 };
 use oer_chips_esp32s31_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_chips_esp32s31_radio_client::{MembershipCell, wifi::Wifi};
+use oer_portable_embassy_time::EmbassyClock;
+use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
@@ -50,7 +51,6 @@ use oer_protocols_ieee80211_wire::{
 };
 use oer_protocols_radio_port::{self as radio, SlotIdentity};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
-use oer_portable_time::Instant;
 use static_cell::StaticCell;
 
 type Inner<W> = RadioDevice<
@@ -167,7 +167,8 @@ impl RadioCoexPriorities for Coex {
 }
 pub(crate) type Front<W> =
     radio::SlotFrontend<'static, <W as Binding>::Id, Backend<<W as Binding>::Id, W>>;
-pub(crate) type ReadySlot<W> = oer_portable_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
+pub(crate) type ReadySlot<W> =
+    oer_portable_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
 type Stopped<W> =
     oer_chips_esp32s31_ieee80211_driver::port::StoppedPort<<W as Binding>::Id, Device<W>, TX, ()>;
 /// The ordinary join of a station that ended for uninstall.
@@ -264,9 +265,7 @@ async fn install<W: Binding>(
     let channel = WifiChannel::new_2_4_ghz(config.channel, WifiChannelWidth::Mhz20)
         .map_err(|_| InitializationError::Channel)?;
     let initial = domain
-        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-            channel,
-        ))
+        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
         .map_err(|_| InitializationError::Channel)?;
     let limits = board::wifi_power_limits(
         i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
@@ -297,16 +296,21 @@ async fn install<W: Binding>(
     let stopped = stopped.map_err(|_| InitializationError::Radio)?;
     let power = stopped.start_report().track.tx_power;
     let arena = boot.rx;
-    let (rx, _, _) =
-        oer_chips_esp32s31_ieee80211_driver::rx::arena::WifiRxArena::<N, B, S, Q, DriverExecutor>::bind(
-            arena,
-            WifiIrqSignals {
-                mac: boot.mac,
-                receive: boot.receive,
-                power: boot.power,
-            },
-        )
-        .map_err(|_| InitializationError::Rx)?;
+    let (rx, _, _) = oer_chips_esp32s31_ieee80211_driver::rx::arena::WifiRxArena::<
+        N,
+        B,
+        S,
+        Q,
+        DriverExecutor,
+    >::bind(
+        arena,
+        WifiIrqSignals {
+            mac: boot.mac,
+            receive: boot.receive,
+            power: boot.power,
+        },
+    )
+    .map_err(|_| InitializationError::Rx)?;
     // Every bind lends the same static arena's counters: the first stays.
     #[cfg(oer_trace)]
     let _bound = crate::RX_COUNTERS.set(rx.counters());
@@ -468,7 +472,10 @@ impl<W: Binding> port::Device<TX> for Device<W> {
                 }) {
                     {
                         let observer = W::DriverObserver::default();
-                        oer_portable_trace::observe!(observer, crate::observation::TxQueueCollision);
+                        oer_portable_trace::observe!(
+                            observer,
+                            crate::observation::TxQueueCollision
+                        );
                     }
                 }
             }
@@ -513,4 +520,5 @@ impl<W: Binding> port::Device<TX> for Device<W> {
 }
 
 /// The image declaration names only this facade-composed backing.
-pub type Slot<W> = oer_protocols_radio_port::PortSlot<<W as Binding>::Id, Backend<<W as Binding>::Id, W>>;
+pub type Slot<W> =
+    oer_protocols_radio_port::PortSlot<<W as Binding>::Id, Backend<<W as Binding>::Id, W>>;

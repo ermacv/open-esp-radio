@@ -200,7 +200,10 @@ impl oer_protocols_network_port::FrameStorage for Lent {
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.bytes[self.start..]
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
         let length = self.bytes.len() - self.start;
         if by > length {
             return Err(oer_protocols_network_port::StorageAdvanceRefused { by, length });
@@ -233,7 +236,9 @@ fn lent(
         start: 0,
         dropped: dropped.clone(),
     };
-    let Ok(frame) = oer_protocols_network_port::LentFrame::new(storage, [2; 6], [4; 6], 0x0800, range) else {
+    let Ok(frame) =
+        oer_protocols_network_port::LentFrame::new(storage, [2; 6], [4; 6], 0x0800, range)
+    else {
         panic!("the payload lies in the buffer");
     };
     (frame, dropped)

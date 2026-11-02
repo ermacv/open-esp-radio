@@ -296,7 +296,9 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
             w.set_init_byte_2_low_7(oer_portable_mmio::Bits::constant::<0x0>());
         });
         btmac.modify_word_0654_opaque(|w| {
-            w.set_init_byte_2_low_7(oer_portable_mmio::Bits::truncate(w.init_byte_2_low_7().get() | 0x32));
+            w.set_init_byte_2_low_7(oer_portable_mmio::Bits::truncate(
+                w.init_byte_2_low_7().get() | 0x32,
+            ));
             w.set_init_byte_2_high(true);
         });
 

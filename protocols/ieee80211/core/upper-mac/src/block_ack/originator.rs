@@ -461,12 +461,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .agreement_mut(tid)?
             .session
             .on_delivered(starting_sequence, bitmap)?;
-        Some(oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-            receiver,
-            transmitter,
-            tid,
-            next,
-        ))
+        Some(
+            oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
+                receiver,
+                transmitter,
+                tid,
+                next,
+            ),
+        )
     }
 
     /// Consume expiry marks, one bit per sequence from `starting_sequence`.
@@ -487,12 +489,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .agreement_mut(tid)?
             .session
             .on_expired(starting_sequence, bitmap)?;
-        Some(oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-            receiver,
-            transmitter,
-            tid,
-            next,
-        ))
+        Some(
+            oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
+                receiver,
+                transmitter,
+                tid,
+                next,
+            ),
+        )
     }
 
     pub fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {

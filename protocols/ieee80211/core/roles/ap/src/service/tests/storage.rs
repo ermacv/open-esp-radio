@@ -157,12 +157,13 @@ fn removing_the_last_generation_keeps_the_frontier_exhausted_across_restart() {
         Ok(ApMlmeAction::PeerRemoved { peer: PEER })
     );
     let peers = service.into_peer_storage();
-    let result = AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
-        AP,
-        AccessPointClientLimit::new(1).unwrap(),
-        AccessPointInactiveTimeout::default(),
-        peers,
-    );
+    let result =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(1).unwrap(),
+            AccessPointInactiveTimeout::default(),
+            peers,
+        );
     assert_eq!(result.err(), Some(ApServiceError::GenerationExhausted));
     assert_eq!(storage.generation, u32::MAX);
 }

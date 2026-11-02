@@ -130,7 +130,9 @@ fn source_127_readiness_wakes_the_worker_without_being_taken() {
     let _ = ModemLpTimerStableInterruptStep::SoftwarePending.publish(&foreign);
     assert_eq!(
         foreign.poll_pending(&mut cx),
-        Poll::Ready(Err(oer_chips_family_interrupt_table::signal::ForeignContext))
+        Poll::Ready(Err(
+            oer_chips_family_interrupt_table::signal::ForeignContext
+        ))
     );
 }
 

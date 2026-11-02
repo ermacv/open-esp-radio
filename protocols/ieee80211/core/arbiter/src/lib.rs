@@ -175,13 +175,13 @@ pub mod interface;
 
 use core::{fmt::Debug, marker::PhantomData};
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
     AirReservationPhase, ArbiterAuthority, GateClosed, GateOpen, Ieee80211Capabilities,
     Ieee80211Instant, LowerMacPhase, PhaseTypes, SupportedChannel,
 };
 use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitchMode;
 use oer_protocols_radio_port::{PoolPath, Root};
-use oer_portable_time::{Duration, Instant};
 
 use coordinator::{
     ApFollowPolicy, ApSchedule, ApSearchPolicy, BeaconInterval, ChannelCoordinator,
@@ -197,7 +197,10 @@ type Brand<'id, Path> = PhantomData<fn(&'id (), Path) -> (&'id (), Path)>;
 
 /// The name of one lease.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LeaseId<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>(u64, Brand<'id, Path>);
+pub struct LeaseId<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>(
+    u64,
+    Brand<'id, Path>,
+);
 
 /// The station's right to hold one lease: a request takes it, and the
 /// lease's end or cancellation gives it back. Only the arbiter makes one.

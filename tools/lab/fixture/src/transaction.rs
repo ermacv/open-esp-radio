@@ -180,7 +180,8 @@ mod linux {
         if let Some(file) = file {
             command.arg(file);
         }
-        let output = oer_tools_os_process::output(&mut command, Some(std::time::Duration::from_secs(5)))?;
+        let output =
+            oer_tools_os_process::output(&mut command, Some(std::time::Duration::from_secs(5)))?;
         if !output.status.success() {
             return Err(format!(
                 "visudo rejected fixture policy: {}",
@@ -729,7 +730,8 @@ mod linux {
         }
         let mut identity = bundle.clone();
         identity.generation.clear();
-        if oer_tools_os_durable::sha256_bytes(&serde_json::to_vec(&identity)?) != bundle.generation {
+        if oer_tools_os_durable::sha256_bytes(&serde_json::to_vec(&identity)?) != bundle.generation
+        {
             return Err("prepared bundle generation does not match its manifest".into());
         }
         Ok(())

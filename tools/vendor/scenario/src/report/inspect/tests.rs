@@ -218,7 +218,10 @@ fn fields_preserve_relocated_pointer_loads_only_when_requested() {
             },
         )
         .expect("default pointer analysis");
-        assert_eq!(load, Some(oer_tools_analysis_riscv_model::AbstractValue::Unknown));
+        assert_eq!(
+            load,
+            Some(oer_tools_analysis_riscv_model::AbstractValue::Unknown)
+        );
     }
     let text = fields(&corpus, &[0x34, 0]).expect("relocated pointer field");
     assert!(

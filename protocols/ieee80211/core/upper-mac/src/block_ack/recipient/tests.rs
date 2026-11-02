@@ -47,7 +47,9 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     assert_eq!(response.tid, 3);
     assert!(response.amsdu);
     assert!(matches!(
-        oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(&response.encode().unwrap()),
+        oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(
+            &response.encode().unwrap()
+        ),
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 17,
             status: 0,

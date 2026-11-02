@@ -93,7 +93,10 @@ where
                 Report::Joined(output)
             }
             PortEnd::FailStopped { outcome, output } => {
-                let stopped = matches!(outcome.outcome(), oer_protocols_radio_port::Abandon::Stopped(_));
+                let stopped = matches!(
+                    outcome.outcome(),
+                    oer_protocols_radio_port::Abandon::Stopped(_)
+                );
                 drop(outcome);
                 if stopped {
                     Report::Stopped(output)
@@ -127,7 +130,10 @@ macro_rules! plain_context {
             where
                 Self: 'p,
                 Id: 'p;
-            fn view<'a, 'p>(&'a self, _: oer_protocols_radio_port::ContextLoan<'p, Id>) -> Self::View<'a, 'p>
+            fn view<'a, 'p>(
+                &'a self,
+                _: oer_protocols_radio_port::ContextLoan<'p, Id>,
+            ) -> Self::View<'a, 'p>
             where
                 Self: 'p,
                 Id: 'p,
@@ -135,7 +141,10 @@ macro_rules! plain_context {
             {
                 self
             }
-            fn into_parts<'p>(self, _: oer_protocols_radio_port::ContextLoan<'p, Id>) -> Self::Parts<'p>
+            fn into_parts<'p>(
+                self,
+                _: oer_protocols_radio_port::ContextLoan<'p, Id>,
+            ) -> Self::Parts<'p>
             where
                 Self: 'p,
                 Id: 'p,

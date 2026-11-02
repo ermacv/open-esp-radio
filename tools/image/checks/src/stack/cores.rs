@@ -69,7 +69,10 @@ fn linked_ipc(image: &Image, profile: &Profile) -> Result<()> {
 /// neither symbol.
 fn linked_bytes(image: &Image, bottom: &str, top: &str) -> Result<Option<u64>> {
     let file = oer_tools_analysis_elf::Elf::parse(&image.elf)?;
-    Ok(oer_tools_analysis_elf::StorageBounds::range(&file, bottom, top)?.map(|range| range.capacity))
+    Ok(
+        oer_tools_analysis_elf::StorageBounds::range(&file, bottom, top)?
+            .map(|range| range.capacity),
+    )
 }
 
 /// Prove the runtime `image`'s unused cores and return the report: every

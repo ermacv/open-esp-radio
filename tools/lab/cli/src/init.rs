@@ -48,7 +48,10 @@ pub(crate) fn init(root: &Path, cli: InitCli) -> Result<std::process::ExitCode> 
         },
         &mut |message| eprintln!("stand: {message}"),
     )?;
-    let detected = crate::service::run(&mut client, oer_tools_lab_client::protocol::Operation::Detect)?;
+    let detected = crate::service::run(
+        &mut client,
+        oer_tools_lab_client::protocol::Operation::Detect,
+    )?;
     let mut boards = Vec::new();
     for device in detected.as_array().ok_or("the service detected no list")? {
         let mac = device["mac"]

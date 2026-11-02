@@ -5,17 +5,17 @@ use oer_chips_esp32s31_ieee80211_driver::irq::{
 };
 use oer_chips_family_executor::{Doorbell, DoorbellAcknowledger};
 use oer_chips_family_interrupt_table::{Bound, Entry, InterruptSources, signal::IrqSignal};
+use oer_portable_memory::HandlerCell;
+use oer_portable_time::Duration;
+use oer_portable_trace::Observer;
 use oer_protocols_ieee80211_core_roles_sta::machine::{StaCallbacks, StaConfig};
 use oer_protocols_ieee80211_runtime::station as runtime;
 use oer_protocols_ieee80211_wire::{
     address::{IndividualAddress, OwnAddress},
     channel::WifiChannelWidth,
 };
-use oer_portable_memory::HandlerCell;
 use oer_protocols_radio_port::SlotIdentity;
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
-use oer_portable_time::Duration;
-use oer_portable_trace::Observer;
 
 pub const N: usize = 96;
 pub const B: usize = crate::FRAME_CAPACITY;
@@ -160,8 +160,9 @@ impl InterruptTypes for Interrupts {
         WifiIrqPart::new(banks, irq, lower)
     }
     fn service(&self, part: &mut Self::Part) -> Result<bool, u32> {
-        service_wifi_line(&self.line, part)
-            .map_err(|oer_chips_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }| raw)
+        service_wifi_line(&self.line, part).map_err(
+            |oer_chips_esp32s31_ieee80211_driver::mac::irq::Fault::FatalAssertion { raw }| raw,
+        )
     }
 }
 #[derive(Clone, Copy)]
@@ -218,14 +219,16 @@ impl Config {
         let domain =
             RegulatoryDomain::of(Country::new(country).map_err(|_| InitializationError::Country)?)
                 .ok_or(InitializationError::Domain)?;
-        let channel_value =
-            oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(channel, WifiChannelWidth::Mhz20)
-                .map_err(|_| InitializationError::Channel)?;
+        let channel_value = oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
+            channel,
+            WifiChannelWidth::Mhz20,
+        )
+        .map_err(|_| InitializationError::Channel)?;
         let supported = oer_protocols_ieee80211_contracts_port::SupportedChannel::new(
             domain
-                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    channel_value,
-                ))
+                .permit(
+                    oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel_value),
+                )
                 .map_err(|_| InitializationError::Channel)?,
         )
         .ok_or(InitializationError::Channel)?;
@@ -288,15 +291,17 @@ impl<W: Binding> Profile<W> {
         let mut channels = heapless::Vec::new();
         if config.all_channels {
             for n in 1..=13 {
-                let Ok(ch) =
-                    oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(n, WifiChannelWidth::Mhz20)
-                else {
+                let Ok(ch) = oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
+                    n,
+                    WifiChannelWidth::Mhz20,
+                ) else {
                     continue;
                 };
                 if let Ok(p) = config
                     .domain
                     .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(ch))
-                    && let Some(c) = oer_protocols_ieee80211_contracts_port::SupportedChannel::<Caps>::new(p)
+                    && let Some(c) =
+                        oer_protocols_ieee80211_contracts_port::SupportedChannel::<Caps>::new(p)
                 {
                     channels.push(c).map_err(|_| InitializationError::Channel)?;
                 }
@@ -313,15 +318,17 @@ impl<W: Binding> Profile<W> {
                 for width in [WifiChannelWidth::Mhz40Above, WifiChannelWidth::Mhz40Below] {
                     // A secondary outside the band or the domain is no
                     // 40 MHz channel of this primary.
-                    let Ok(wide) = oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(number, width)
+                    let Ok(wide) =
+                        oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(number, width)
                     else {
                         continue;
                     };
-                    if let Ok(permitted) = config
-                        .domain
-                        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(wide))
-                        && let Some(wide) =
-                            oer_protocols_ieee80211_contracts_port::SupportedChannel::<Caps>::new(permitted)
+                    if let Ok(permitted) = config.domain.permit(
+                        oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(wide),
+                    ) && let Some(wide) =
+                        oer_protocols_ieee80211_contracts_port::SupportedChannel::<Caps>::new(
+                            permitted,
+                        )
                     {
                         wide_channels
                             .push(wide)
@@ -351,8 +358,10 @@ impl<W: Binding> Profile<W> {
                     oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode::Ht20
                 },
                 tx_block_ack: Some(
-                    oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(TX_BLOCK_ACK)
-                        .map_err(|_| InitializationError::TxBlockAck)?,
+                    oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
+                        TX_BLOCK_ACK,
+                    )
+                    .map_err(|_| InitializationError::TxBlockAck)?,
                 ),
                 callbacks: CoreCallbacks { callbacks, aes },
             },
@@ -446,10 +455,12 @@ where
     pub const fn across_harts(network: N, station: S, driver: D) -> Self {
         Self {
             channels: Channels::across_harts(network, station),
-            driver: radio::DriverStorage::new(oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers {
-                driver,
-                returned: station,
-            }),
+            driver: radio::DriverStorage::new(
+                oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers {
+                    driver,
+                    returned: station,
+                },
+            ),
             service: service::ServiceStorage::new(),
             bell: oer_portable_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
@@ -461,7 +472,9 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
     pub const fn new() -> Self {
         Self {
             channels: Channels::new(),
-            driver: radio::DriverStorage::new(oer_chips_esp32s31_ieee80211_driver::port::SameHart::new()),
+            driver: radio::DriverStorage::new(
+                oer_chips_esp32s31_ieee80211_driver::port::SameHart::new(),
+            ),
             service: service::ServiceStorage::new(),
             bell: oer_portable_memory::Doorbell::new(),
             ready: static_cell::StaticCell::new(),
@@ -511,7 +524,8 @@ pub struct StationRunner<W: Binding> {
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
-    pub(crate) frontend: oer_portable_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
+    pub(crate) frontend:
+        oer_portable_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
     pub(crate) config: Config,
     pub(crate) connection: ServiceConnection<'static, W::Notifies>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,

@@ -286,7 +286,8 @@ pub fn model(root: &Path, chip: &str) -> Result<(Vec<DeclaredRegister>, Vec<Regi
         .collect::<Result<Vec<_>>>()?;
     let mut registers = Vec::new();
     for register in model.registers() {
-        let oer_tools_registers_model::chip_model::Location::Mmio { address } = register.location else {
+        let oer_tools_registers_model::chip_model::Location::Mmio { address } = register.location
+        else {
             continue;
         };
         let template = model

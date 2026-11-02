@@ -439,7 +439,13 @@ impl ElfSink for Selection {
 #[allow(clippy::too_many_arguments)]
 fn research_function<'m>(
     object: &mut oer_tools_analysis_blobray_artifacts::PreparedObject<'_, '_>,
-    references: &mut AdmittedVec<'m, (u32, oer_tools_analysis_riscv_analysis::PreparedReferences<'m>)>,
+    references: &mut AdmittedVec<
+        'm,
+        (
+            u32,
+            oer_tools_analysis_riscv_analysis::PreparedReferences<'m>,
+        ),
+    >,
     symbol: &SymbolId,
     input: u64,
     payload: &ArtifactId,
@@ -643,7 +649,9 @@ fn analyze_object(
             let mut image_facts = None;
             match object_type {
                 Some(elf::ObjectKind::Relocatable) => {
-                    match oer_tools_analysis_riscv_program::tables::ObjectTables::new(bytes, memory, c) {
+                    match oer_tools_analysis_riscv_program::tables::ObjectTables::new(
+                        bytes, memory, c,
+                    ) {
                         Ok(tables) => object_tables = Some(tables),
                         Err(error) => unreadable(error, c)?,
                     }

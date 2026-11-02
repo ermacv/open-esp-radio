@@ -30,7 +30,11 @@ impl TransmitSecurity {
     /// frame's key identifier mode, or `None` when the image has no
     /// auxiliary security header to write.
     pub fn apply(&self, image: &mut [u8]) -> Option<KeyIdMode> {
-        oer_protocols_ieee802154_wire::security::write_security_header(image, self.frame_counter, self.key_id)
+        oer_protocols_ieee802154_wire::security::write_security_header(
+            image,
+            self.frame_counter,
+            self.key_id,
+        )
     }
 
     /// The fields [`Self::apply`] wrote into a frame of `mode`: none when

@@ -466,7 +466,8 @@ mod tests {
         assert_eq!(latest.owner, "peer");
         assert_eq!(latest.device.as_deref(), Some("02:00:00:00:25:64"));
         // An unreadable line fails the strict reader, not the history view.
-        oer_tools_os_durable::jsonl::append(&arbiter.path, &serde_json::json!({"broken": true})).unwrap();
+        oer_tools_os_durable::jsonl::append(&arbiter.path, &serde_json::json!({"broken": true}))
+            .unwrap();
         assert!(arbiter.latest_flash(&mac).is_err());
         assert_eq!(arbiter.events().unwrap().len(), 1);
     }

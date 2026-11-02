@@ -5,9 +5,9 @@
     clippy::indexing_slicing
 )]
 use super::{domain::*, membership::*};
-use oer_protocols_radio_coex::RadioClient::*;
 use oer_portable_time::{Clock as _, Duration};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_radio_coex::RadioClient::*;
 use std::vec::Vec;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

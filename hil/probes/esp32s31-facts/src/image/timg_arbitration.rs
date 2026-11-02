@@ -41,7 +41,10 @@ pub(super) fn interrupt(clic: &mut pac::clic::Clic) -> bool {
     if let (Some(c), Some(t), Some(l)) = (CAUSES.get(at), CYCLES.get(at), LEVELS.get(at)) {
         c.store(cause, Ordering::Relaxed);
         t.store(cycle, Ordering::Relaxed);
-        l.store(oer_portable_riscv::read_mintstatus() as u32, Ordering::Release);
+        l.store(
+            oer_portable_riscv::read_mintstatus() as u32,
+            Ordering::Release,
+        );
     } else {
         emit(0x19ee, cause, cycle, 2);
         super::halt();

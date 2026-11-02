@@ -240,7 +240,10 @@ impl ImageNames {
     pub fn name(&self, number: usize) -> Option<&'static str> {
         match number.checked_sub(LIBRARY_PARTS) {
             None => LibraryPart::ALL.get(number).map(|part| part.name()),
-            Some(slot) => self.names.get(slot).and_then(oer_portable_memory::OnceValue::get),
+            Some(slot) => self
+                .names
+                .get(slot)
+                .and_then(oer_portable_memory::OnceValue::get),
         }
     }
 }

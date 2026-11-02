@@ -759,7 +759,9 @@ pub mod __private {
     unsafe impl oer_portable_memory::LinkSlot for InterruptTableSlot {
         type Value = &'static [Binding];
         const NAME: oer_portable_memory::SlotName =
-            oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text("__OER_INTERRUPT_TABLE")]);
+            oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text(
+                "__OER_INTERRUPT_TABLE",
+            )]);
         const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Static;
     }
     pub enum InterruptHandlerSlot<const H: u8, const L: u8> {}

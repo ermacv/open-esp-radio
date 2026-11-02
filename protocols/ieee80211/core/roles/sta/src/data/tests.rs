@@ -16,7 +16,10 @@ use oer_protocols_ieee80211_wire::data::MsduParts;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use std::vec::Vec;
-use {oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch, oer_protocols_ieee80211_wire::ccmp::GroupKeyId};
+use {
+    oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch,
+    oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
+};
 
 struct Caps;
 
@@ -139,8 +142,11 @@ struct Station<'id>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
 impl<'id> StaTokens for Station<'id> {
     type AssociationStart = ();
     type Association = ();
-    type VacantKeyBank =
-        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<(), (), KEY_BANK_CAPACITY>;
+    type VacantKeyBank = oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
+        (),
+        (),
+        KEY_BANK_CAPACITY,
+    >;
     type VacantAssociation = [(); 0];
     fn begin_association(_: (), _: oer_protocols_ieee80211_wire::security::Spp) {}
     fn association(key: &()) -> &() {
@@ -1034,11 +1040,12 @@ enum End {
 
 /// The terminal of an attempt that made `transmissions`.
 fn ended(status: End, transmissions: u16) -> SingleOutcome<(), ()> {
-    let air =
-        NonZeroU16::new(transmissions).map(|transmissions| oer_protocols_ieee80211_contracts_port::Air {
+    let air = NonZeroU16::new(transmissions).map(|transmissions| {
+        oer_protocols_ieee80211_contracts_port::Air {
             transmissions,
             rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
-        });
+        }
+    });
     TxOutcome::Ended(match status {
         End::Delivered => SingleEnd::Delivered {
             air: air.unwrap(),
@@ -1366,8 +1373,9 @@ fn received<'f, T: StaTokens>(
     frame: &'f [u8],
     meta: &RxMeta,
 ) -> Result<
-    impl Iterator<Item = Result<MsduParts<'f>, oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason>>
-    + 'f,
+    impl Iterator<
+        Item = Result<MsduParts<'f>, oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason>,
+    > + 'f,
     oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason,
 > {
     use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, RxDropReason};
@@ -1377,7 +1385,8 @@ fn received<'f, T: StaTokens>(
         LinkProtection::Open => None,
     };
     let admitted = AdmittedData::admit(
-        oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
+        oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(frame)
+            .ok_or(RxDropReason::Header)?,
         link.address,
         link.bssid,
         integrity(meta),
@@ -1453,11 +1462,13 @@ fn closed(restricted: &[WmmAccessCategory]) -> AcAdmission {
         admission_control_mandatory: restricted.contains(&category),
         ..defaults.access_category(category)
     };
-    AcAdmission::from_edca(oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
-        1,
-        false,
-        WmmAccessCategory::ALL.map(record),
-    ))
+    AcAdmission::from_edca(
+        oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
+            1,
+            false,
+            WmmAccessCategory::ALL.map(record),
+        ),
+    )
 }
 
 #[test]
@@ -1580,18 +1591,23 @@ const RETRY: AggregateRetry = AggregateRetry {
     attempts: 2,
 };
 
-fn block_ack(start: u16, bitmap: u64) -> oer_protocols_ieee80211_contracts_port::AggregateOutcome<(), ()> {
-    TxOutcome::Ended(oer_protocols_ieee80211_contracts_port::AggregateEnd::Delivered {
-        air: oer_protocols_ieee80211_contracts_port::Air {
-            transmissions: NonZeroU16::MIN,
-            rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+fn block_ack(
+    start: u16,
+    bitmap: u64,
+) -> oer_protocols_ieee80211_contracts_port::AggregateOutcome<(), ()> {
+    TxOutcome::Ended(
+        oer_protocols_ieee80211_contracts_port::AggregateEnd::Delivered {
+            air: oer_protocols_ieee80211_contracts_port::Air {
+                transmissions: NonZeroU16::MIN,
+                rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
+            },
+            report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
+                SequenceNumber::new(start).unwrap(),
+                bitmap,
+            ),
+            ack: (),
         },
-        report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
-            SequenceNumber::new(start).unwrap(),
-            bitmap,
-        ),
-        ack: (),
-    })
+    )
 }
 
 fn aggregate(

@@ -13,7 +13,9 @@ use crate::{
 /// acquisition is due at once and its tracking completes there.
 fn clients(active: &[RadioClient]) -> PhyClientSnapshot {
     let mut owner = PhyClientState::without_registration(1000);
-    let at_zero = oer_portable_time_virtual::VirtualClock::<8>::starting_at(oer_portable_time::Instant::EPOCH);
+    let at_zero = oer_portable_time_virtual::VirtualClock::<8>::starting_at(
+        oer_portable_time::Instant::EPOCH,
+    );
     for client in active {
         owner = match available(owner, *client)
             .acquire(&at_zero)

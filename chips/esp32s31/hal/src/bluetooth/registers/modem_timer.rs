@@ -590,7 +590,9 @@ impl<B: oer_portable_mmio::Placement> ModemLpTimerStartTransaction
     }
 }
 
-impl<B: oer_portable_mmio::Placement> ModemLpTimerTransaction for HardwareModemLpTimerTransaction<'_, B> {
+impl<B: oer_portable_mmio::Placement> ModemLpTimerTransaction
+    for HardwareModemLpTimerTransaction<'_, B>
+{
     fn prepare_controls(&mut self) {
         self.registers.write_word_004c_opaque(|w| {
             w.set_bits_0_31_opaque(0);

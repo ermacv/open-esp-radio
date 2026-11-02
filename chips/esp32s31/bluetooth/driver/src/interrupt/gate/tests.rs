@@ -137,7 +137,10 @@ impl GateHardware for Fake {
         Ok(model.channel.pop_front().unwrap_or(false))
     }
 
-    fn capture_primary<C: oer_portable_time::Clock>(bank: &mut FakeBank, _: &C) -> PrimaryInterruptCapture {
+    fn capture_primary<C: oer_portable_time::Clock>(
+        bank: &mut FakeBank,
+        _: &C,
+    ) -> PrimaryInterruptCapture {
         let mut model = bank.model.lock().expect("one test thread");
         model.ops.push(Op::Primary);
         PrimaryInterruptCapture(model.primary.pop_front().unwrap_or(0))

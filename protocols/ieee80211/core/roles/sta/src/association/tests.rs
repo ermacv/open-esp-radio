@@ -47,7 +47,8 @@ mod associated_peer {
     fn he20_access_point() -> ScanRecord {
         let mut access_point = ScanRecord::new(
             oer_protocols_ieee80211_wire::address::Bssid::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                    .unwrap(),
             )
             .unwrap(),
         );
@@ -134,7 +135,8 @@ mod associated_peer {
     fn the_peer_carries_every_bss_protection_fact() {
         let mut access_point = ScanRecord::new(
             oer_protocols_ieee80211_wire::address::Bssid::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                    .unwrap(),
             )
             .unwrap(),
         );

@@ -8,7 +8,9 @@
 use oer_protocols_ieee80211_wire::data::DataInterfaceRole;
 
 use crate::mac::tx::metadata::descriptor_priority_byte;
-use oer_chips_esp32s31_hal::layouts::{WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixSecurity};
+use oer_chips_esp32s31_hal::layouts::{
+    WifiTxDescriptorPrefixFlags, WifiTxDescriptorPrefixSecurity,
+};
 
 const DESCRIPTOR_NODE_NIBBLE_SHIFT: u32 = 12;
 // This node-derived nibble's meaning remains unassigned.

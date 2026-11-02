@@ -2,7 +2,9 @@
 
 use crate::Result;
 use oer_tools_image_checks::linker::hot::FRAGMENT as HOT_FRAGMENT;
-use oer_tools_image_checks::linker::strict::{FRAGMENT, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec};
+use oer_tools_image_checks::linker::strict::{
+    FRAGMENT, PLACEMENT, Placement, SPEC_ENV, SPEC_FILE, Spec,
+};
 use std::{
     path::{Path, PathBuf},
     process::Command,

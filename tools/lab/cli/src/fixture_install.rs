@@ -131,7 +131,9 @@ fn install_lease(provider: Provider) -> Result<oer_tools_lab_client::client::Cli
 
 #[cfg(target_os = "linux")]
 fn current_operator() -> Result<String> {
-    let output = oer_tools_os_process::command("/usr/bin/id").arg("-un").output()?;
+    let output = oer_tools_os_process::command("/usr/bin/id")
+        .arg("-un")
+        .output()?;
     if !output.status.success() {
         return Err("cannot resolve the non-root fixture operator".into());
     }

@@ -20,7 +20,9 @@ pub enum PhyFaultSlot {}
 unsafe impl oer_portable_memory::LinkSlot for PhyFaultSlot {
     type Value = fn(Fault) -> !;
     const NAME: oer_portable_memory::SlotName =
-        oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text("__oer_phy_transaction_fault")]);
+        oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text(
+            "__oer_phy_transaction_fault",
+        )]);
     const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Function;
 }
 

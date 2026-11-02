@@ -3,7 +3,9 @@
 //! declaration in its table (`oer_chips_family_interrupt_table::Class`), never a level
 //! number or a handler's name.
 
-use oer_tools_image_stack::{Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites};
+use oer_tools_image_stack::{
+    Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites,
+};
 use std::collections::BTreeSet;
 use std::fmt;
 

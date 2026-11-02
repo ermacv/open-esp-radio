@@ -170,7 +170,8 @@ mod tests {
     fn a_rule_without_a_selection_is_dead_only_in_a_used_contract() {
         let contract = crate::failure::tests::contract();
         let reference =
-            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract).unwrap();
+            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract)
+                .unwrap();
         let mut reviewed = [Reviewed::new("fixture", reference, contract)];
         assert!(dead(&reviewed).is_empty());
         reviewed[0].used = true;
@@ -187,7 +188,8 @@ mod tests {
         port.name = "settled-check-other-port".into();
         contract.rules.push(port);
         let reference =
-            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract).unwrap();
+            oer_tools_analysis_blobray_application::in_process::effect_contract_id(&contract)
+                .unwrap();
         let mut reviewed = [Reviewed::new("fixture", reference, contract)];
         reviewed[0].used = true;
         assert_eq!(

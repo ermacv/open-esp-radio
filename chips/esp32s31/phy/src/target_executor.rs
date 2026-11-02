@@ -75,12 +75,10 @@ pub(crate) fn force_pbus_direct<C: oer_portable_time::Clock + ?Sized>(
         transaction.value(),
     );
     crate::executor::wait::poll::bounded::<core::convert::Infallible, _>(clock, || {
-        Ok(
-            oer_chips_family_phy::pbus::try_finish_force_test(&mut oer_chips_esp32s31_hal::phy::pbus::port(
-                registers,
-            ))
-            .is_ok(),
+        Ok(oer_chips_family_phy::pbus::try_finish_force_test(
+            &mut oer_chips_esp32s31_hal::phy::pbus::port(registers),
         )
+        .is_ok())
     })
     .unwrap_or_else(|never| match never {})
 }

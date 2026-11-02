@@ -137,7 +137,12 @@ fn timer(s: &mut Session<'_>, n: u32) {
     {
         r = s.radio.power.read_raw();
     }
-    emit(0x22010, n, oer_portable_riscv::cycle32().wrapping_sub(start), 0);
+    emit(
+        0x22010,
+        n,
+        oer_portable_riscv::cycle32().wrapping_sub(start),
+        0,
+    );
     timer_counter(s, n, 0x22014);
     s.radio.timer.modify_control(i, |w| {
         w.set_timer_enable(false);
@@ -195,7 +200,12 @@ pub(in crate::image) fn tbtt(s: &mut Session<'_>) {
     while !s.radio.power.read_raw().tbtt_0()
         && oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT
     {}
-    emit(0x22010, 4, oer_portable_riscv::cycle32().wrapping_sub(start), 0);
+    emit(
+        0x22010,
+        4,
+        oer_portable_riscv::cycle32().wrapping_sub(start),
+        0,
+    );
     station(s, 0x22014);
     s.radio.rtc.modify_sta_tsf_control(|w| {
         w.set_sta_tbtt_enable(false);

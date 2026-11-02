@@ -173,7 +173,11 @@ impl<const CAPACITY: usize> BoundedAmpduRetryState<CAPACITY> {
 
     /// Whether an MSDU admitted at `admitted` is aged at `now`: less than
     /// one lifetime unit remains.
-    pub fn aged(&self, admitted: oer_portable_time::Instant, now: oer_portable_time::Instant) -> bool {
+    pub fn aged(
+        &self,
+        admitted: oer_portable_time::Instant,
+        now: oer_portable_time::Instant,
+    ) -> bool {
         self.state.aged(admitted, now)
     }
 

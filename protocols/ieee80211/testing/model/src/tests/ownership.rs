@@ -272,7 +272,8 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
                                     access_category: operation.category,
                                     protection: Protection::None,
                                     power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                    coex_operation: oer_protocols_ieee80211_contracts_port::TxOperation::Data,
+                                    coex_operation:
+                                        oer_protocols_ieee80211_contracts_port::TxOperation::Data,
                                 })
                                 .admit(),
                             )
@@ -502,7 +503,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext
         'id: 'a,
     {
         let mut terminal_access = resources.terminal_access;
-        use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid};
+        use oer_protocols_ieee80211_contracts_port::{
+            AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid,
+        };
         let Ok(mut owner) = owner.enable().await else {
             panic!("the model enables")
         };
@@ -678,7 +681,10 @@ fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or
     for (withdraw, initial_pn) in [
         (false, 0),
         (true, 0),
-        (false, oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3),
+        (
+            false,
+            oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3,
+        ),
     ] {
         let (backend, air) = Fixture::<ModelCaps, AggregateContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
@@ -950,7 +956,10 @@ impl<Id: SlotIdentity> oer_protocols_radio_port::ContextProjection<Id> for Conte
     where
         Self: 'p,
         Id: 'p;
-    fn view<'a, 'p>(&'a self, _: oer_protocols_radio_port::ContextLoan<'p, Id>) -> Self::View<'a, 'p>
+    fn view<'a, 'p>(
+        &'a self,
+        _: oer_protocols_radio_port::ContextLoan<'p, Id>,
+    ) -> Self::View<'a, 'p>
     where
         Self: 'p,
         Id: 'p,

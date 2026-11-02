@@ -212,7 +212,8 @@ pub struct ControllerPoweredTaskRuntime<'runtime, X: SignalExecutor, M: Controll
     pub(crate) task: TaskResources<M>,
     pub(crate) time_scale: oer_chips_esp32s31_hal::bluetooth::BluetoothControllerTimeScale,
     pub(crate) _standalone_dtm_profile: crate::controller_hal::StandaloneAlwaysAwakeDtmProfile,
-    pub(crate) config: oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
+    pub(crate) config:
+        oer_chips_esp32s31_hal::bluetooth::engine::scheduler::SchedulerSoftwareConfig,
 }
 
 /// Why the powered task endpoint cannot be retired yet.

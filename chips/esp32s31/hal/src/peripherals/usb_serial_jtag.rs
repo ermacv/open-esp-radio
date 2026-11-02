@@ -22,7 +22,6 @@
 
 use core::marker::PhantomData;
 
-use oer_portable_diagnostics::{Note, Written};
 use oer_chips_esp32s31_pac::{
     instances,
     ownership::UsbSerialJtagPeripherals,
@@ -31,6 +30,7 @@ use oer_chips_esp32s31_pac::{
 pub use oer_chips_family_usb_serial_jtag::ownership::RetireError;
 use oer_chips_family_usb_serial_jtag::ownership::{Console, Ownership};
 use oer_chips_family_usb_serial_jtag::{EndpointRegisters, Events, InterruptRegisters};
+use oer_portable_diagnostics::{Note, Written};
 use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 
 #[cfg(test)]
@@ -289,7 +289,10 @@ impl<'a> ConsoleRegisters<oer_portable_mmio::Host<'a>> {
     /// The console's parts over host memory from the block's base: one
     /// memory for the task's and the handler's divided words, one for the
     /// pads.
-    pub fn host(words: &'a mut [u32], pads: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {
+    pub fn host(
+        words: &'a mut [u32],
+        pads: &'a mut [u32],
+    ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         let (task, irq) = oer_chips_esp32s31_pac::usb_serial_jtag::usb_device_host(words)?;
         Ok(Self {
             task: Endpoint(task),

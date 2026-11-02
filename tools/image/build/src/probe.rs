@@ -17,22 +17,20 @@ use crate::{Result, strict};
 /// The cfg the probe hooks are compiled under.
 pub const PROBE_CFG: &str = "oer_probe";
 /// Every package of `hil/probes/` (`<chip>-<name>`) is named after its path.
-pub const PROBE_PACKAGE_PREFIX: &str = "oer-firmware-probes-";
+pub const PROBE_PACKAGE_PREFIX: &str = "oer-hil-probes-";
 /// The target directory of probe builds, below the checkout's `target/`.
 pub const TARGET_SUBDIRECTORY: &str = "fw-probe";
 const PROFILE: &str = crate::FIRMWARE_PROFILE;
 
 /// The chip of the probe package `package`
-/// (`oer-firmware-probes-<chip>-<name>`), one of `chips`.
+/// (`oer-hil-probes-<chip>-<name>`), one of `chips`.
 ///
 /// # Errors
 ///
 /// `package` is not a verification package of one of `chips`.
 pub fn chip_of<'a>(package: &str, chips: &'a [String]) -> Result<&'a str> {
     let rest = package.strip_prefix(PROBE_PACKAGE_PREFIX).ok_or_else(|| {
-        format!(
-            "{package} is not a hil/probes package, which alone builds with cfg({PROBE_CFG})"
-        )
+        format!("{package} is not a hil/probes package, which alone builds with cfg({PROBE_CFG})")
     })?;
     chips
         .iter()
@@ -59,9 +57,11 @@ pub fn command(
         .get_envs()
         .find(|(name, _)| *name == "CARGO_ENCODED_RUSTFLAGS")
         .and_then(|(_, value)| value)
-        .ok_or(oer_tools_image_checks::codegen::CodegenPrecondition::MissingFlag(
-            "the image compiler's encoded rustflags",
-        ))?;
+        .ok_or(
+            oer_tools_image_checks::codegen::CodegenPrecondition::MissingFlag(
+                "the image compiler's encoded rustflags",
+            ),
+        )?;
     let mut flags = existing
         .to_str()
         .ok_or("probe rustflags must be UTF-8")?
@@ -125,8 +125,9 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     )?;
     // The stacks of the harts the probe declares, as an image's: the build
     // script and the image linker size them alike.
-    let policy = oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
-        .for_image(&analysis.harts)?;
+    let policy =
+        oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
+            .for_image(&analysis.harts)?;
     let target = profile.facts.rust_target.as_str();
     let cache = target_dir(root);
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
@@ -293,12 +294,12 @@ mod tests {
             "esp32s31"
         );
         assert_eq!(
-            chip_of("oer-firmware-probes-esp32x9-radio", &chips).unwrap(),
+            chip_of("oer-hil-probes-esp32x9-radio", &chips).unwrap(),
             "esp32x9"
         );
-        assert!(chip_of("oer-hil-probes-boot-smoke", &chips).is_err());
-        assert!(chip_of("oer-firmware-probes-esp32s3-probe", &chips).is_err());
-        assert!(chip_of("oer-firmware-probes-esp32s31", &chips).is_err());
+        assert!(chip_of("oer-examples-wifi-station", &chips).is_err());
+        assert!(chip_of("oer-hil-probes-esp32s3-probe", &chips).is_err());
+        assert!(chip_of("oer-hil-probes-esp32s31", &chips).is_err());
     }
 
     #[test]
@@ -344,14 +345,7 @@ mod tests {
         let mut compiler = Command::new("cargo");
         let pinned = "-Zmerge-functions=disabled\x1f-Cllvm-args=-enable-machine-outliner=never\x1f-C\x1flinker=image-linker";
         compiler.env("CARGO_ENCODED_RUSTFLAGS", pinned);
-        let command = command(
-            compiler,
-            root,
-            "oer-hil-probes-esp32s31-radio",
-            "rv",
-            None,
-        )
-        .unwrap();
+        let command = command(compiler, root, "oer-hil-probes-esp32s31-radio", "rv", None).unwrap();
         let env: Vec<_> = command.get_envs().collect();
         assert!(env.contains(&(
             std::ffi::OsStr::new("CARGO_TARGET_DIR"),

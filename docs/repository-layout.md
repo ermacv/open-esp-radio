@@ -108,8 +108,8 @@ A library's package name is `oer-` and its path below its root:
 `oer`, `tools/hil/link` is
 `oer-tools-hil-link`, `hil/services/aes` is `oer-hil-services-aes`, and
 `hil/agent` is `oer-hil-agent`. An
-executable keeps its root: `hil/probes/boot-smoke` is
-`oer-hil-probes-boot-smoke`, `tools/image/cli` is `oer-tools-image-cli`, and
+executable keeps its root: `hil/probes/esp32s31-boot-smoke` is
+`oer-hil-probes-esp32s31-boot-smoke`, `tools/image/cli` is `oer-tools-image-cli`, and
 `hil/scenarios/aes` is `oer-hil-scenarios-aes`.
 Rust imports replace hyphens with underscores. A program called by name,
 such as the image linker or a privileged helper, sets its binary name

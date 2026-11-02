@@ -380,7 +380,8 @@ pub fn handle<'i, P: oer_chips_family_platform_port::Platform>(
                     },
                 ));
             }
-            let in_interrupt = crate::stacks::on_interrupt_stack(hart, oer_portable_riscv::stack_pointer());
+            let in_interrupt =
+                crate::stacks::on_interrupt_stack(hart, oer_portable_riscv::stack_pointer());
             let details = if in_interrupt {
                 PanicDetails {
                     file: "",

@@ -348,9 +348,9 @@ fn tx_cap_lowering_covers_every_nested_operation_class() {
         ))
     ));
     assert!(matches!(
-        PhyTxCapExternalBinding::lower(PhyTxCapAction::I2c(oer_chips_family_analog::Action::Read {
-            address: i2c
-        })),
+        PhyTxCapExternalBinding::lower(PhyTxCapAction::I2c(
+            oer_chips_family_analog::Action::Read { address: i2c }
+        )),
         Ok(PhyTxCapExternalBinding::I2c(_))
     ));
     assert!(matches!(

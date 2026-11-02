@@ -679,7 +679,9 @@ fn function_records(
     for function in &functions {
         if let oer_tools_analysis_cli::wire::NamedFunction::Analyzed { records, .. } = function {
             for record in records {
-                if let oer_tools_analysis_riscv_model::FunctionRecord::SemanticGap { reason, .. } = record
+                if let oer_tools_analysis_riscv_model::FunctionRecord::SemanticGap {
+                    reason, ..
+                } = record
                     && let Some(reason) = LimitReason::semantic_gap(*reason)
                 {
                     projected.result(reason);

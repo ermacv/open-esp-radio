@@ -1,7 +1,9 @@
 use oer_protocols_radio_port::conformance::registration::{MockCleanup, MockRegistration};
 extern crate std;
 
-use oer_protocols_radio_port::{Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped};
+use oer_protocols_radio_port::{
+    Abandon, Quarantine, SlotIdentity, SlotOwner, SlotRetire, SlotStopped,
+};
 
 struct Owner;
 

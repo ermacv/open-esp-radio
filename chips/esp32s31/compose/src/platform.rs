@@ -1,10 +1,10 @@
 //! S31 owners and platform operations used by image compositions.
 //! The image selects entries, priorities, tasks and terminal policy.
 use crate::Esp32s31;
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_hal::{peripherals as hw, root};
 use oer_chips_family_interrupt_table::{Controller, Entry, InterruptSource, Router};
 use oer_chips_family_platform_port::AlarmPart;
+use oer_portable_embassy_time::EmbassyClock;
 
 /// Associated interrupt parts are supplied by the same platform that owns
 /// their construction and service, rather than named by an image's HAL edge.
@@ -34,8 +34,8 @@ pub enum PrepareError {
 }
 /// Claim once and execute the shared runtime adoption driver. No image
 /// sequence is copied here; mapping and image boot evidence remain explicit.
-pub fn prepare() -> Result<oer_chips_family_staged_runtime::adoption::Prepared<Esp32s31>, PrepareError>
-{
+pub fn prepare()
+-> Result<oer_chips_family_staged_runtime::adoption::Prepared<Esp32s31>, PrepareError> {
     let root = root::Root::take().ok_or(PrepareError::Claimed)?;
     oer_chips_family_staged_runtime::adoption::prepare::<Esp32s31>(root.into_runtime()).map_err(
         |error| {
@@ -128,5 +128,7 @@ pub fn trace_now() -> u64 {
 }
 /// The image chooses this terminal path for an unanswered owned request.
 pub fn reset_request<T>(error: oer_portable_memory::RequestError) -> T {
-    oer_chips_family_staged_runtime::panic::reset_request::<oer_chips_esp32s31_hal::platform::Port, T>(error)
+    oer_chips_family_staged_runtime::panic::reset_request::<oer_chips_esp32s31_hal::platform::Port, T>(
+        error,
+    )
 }

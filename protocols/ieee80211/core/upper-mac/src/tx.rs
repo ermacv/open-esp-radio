@@ -30,13 +30,17 @@
 
 use crate::protection::{ProtectedPpdu, TxProtectionDecision, TxPsdu, TxReceiver};
 use crate::retry::FrameClass;
-use oer_protocols_ieee80211_contracts_port::{BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus};
+use oer_protocols_ieee80211_contracts_port::{
+    BlockAckReport, TxOperation, TxPower, TxResponse, TxStatus,
+};
 use oer_protocols_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
 
 mod ampdu_status;
 pub use ampdu_status::{MacAmpduTxResult, MacAmpduTxStatus, MacIndividualRetries};
-use oer_protocols_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber};
 use oer_portable_time::Instant;
+use oer_protocols_ieee80211_wire::{
+    phy::PhyRate, qos::WmmAccessCategory, sequence::SequenceNumber,
+};
 
 use crate::{
     ampdu::{

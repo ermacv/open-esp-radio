@@ -16,7 +16,10 @@ pub(crate) fn phase(value: u32) {
 pub(crate) fn exception(
     claim: &Claim<'_>,
     frame: &TrapFrame,
-    _: Result<&oer_chips_esp32s31_hal::cores::StopTheWorld<'_>, oer_chips_esp32s31_hal::cores::StopError>,
+    _: Result<
+        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::cores::StopError,
+    >,
 ) {
     record(claim, 1, frame.mcause, frame.mepc, frame.mtval, frame.ra);
 }
@@ -24,7 +27,10 @@ pub(crate) fn exception(
 pub(crate) fn panic(
     claim: &Claim<'_>,
     _: &runtime::panic::PanicDetails<'_>,
-    _: Result<&oer_chips_esp32s31_hal::cores::StopTheWorld<'_>, oer_chips_esp32s31_hal::cores::StopError>,
+    _: Result<
+        &oer_chips_esp32s31_hal::cores::StopTheWorld<'_>,
+        oer_chips_esp32s31_hal::cores::StopError,
+    >,
 ) {
     let registers = runtime::trap::TrapRegisters::read();
     record(
@@ -68,7 +74,9 @@ pub(crate) fn report_previous() {
     if let Some(previous) = runtime::panic::peek_previous() {
         let _ = runtime::diagnostics::emit_previous_panic(
             |bytes| {
-                if oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes).is_whole() {
+                if oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(bytes)
+                    .is_whole()
+                {
                     Ok(())
                 } else {
                     Err(())
@@ -100,7 +108,9 @@ pub(crate) fn report_previous() {
         use core::fmt::Write as _;
         let mut line = heapless::String::<80>::new();
         writeln!(&mut line, "RXCHAIN previous kind={kind} phase={phase}").map_err(|_| ())?;
-        if !oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(line.as_bytes()).is_whole() {
+        if !oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(line.as_bytes())
+            .is_whole()
+        {
             return Err(());
         }
         oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::early_text(

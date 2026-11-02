@@ -326,7 +326,9 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
             world.receive_verified(at(51), &group_message1(&ptk, 5, 2));
             let before = world.frames.len();
             world.outcomes.push_back((
-                TxOutcome::Withdrawn(oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled),
+                TxOutcome::Withdrawn(
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
+                ),
                 true,
             ));
             world.end_transmissions(at(52));

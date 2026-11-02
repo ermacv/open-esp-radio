@@ -30,6 +30,7 @@ use crate::rate_record::RateScheduleRef;
 use core::marker::PhantomData;
 use core::num::NonZeroU8;
 
+use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
     AckSnr, AggregateEnd, AggregateOutcome, Band, BlockAckSnr, Ieee80211Capabilities, Protection,
     RateSample, RetryPlan, RetryStage, SignalMetadata, SingleOutcome, SnrSample, TxOutcome,
@@ -39,7 +40,6 @@ use oer_protocols_ieee80211_core_upper_mac::{
     rate_selection::{FrameRates, RateSelection},
 };
 use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
-use oer_portable_time::Instant;
 
 use crate::{
     rate_code::legacy_rate,
@@ -331,7 +331,9 @@ fn control_plan(
 impl<K: Ieee80211Capabilities, M: SignalMetadata, A: AckSnr, BA: BlockAckSnr>
     RateSelection<M, A, BA> for EspressifRateSelection<K>
 {
-    fn packet_number_step(&self) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
+    fn packet_number_step(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep {
         crate::ccmp::TX_PACKET_NUMBER_STEP
     }
 

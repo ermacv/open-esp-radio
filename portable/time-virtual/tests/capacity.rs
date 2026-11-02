@@ -11,7 +11,7 @@ fn every_constructor_rejects_zero_capacity_during_codegen() {
     fs::create_dir_all(&scratch_root).unwrap();
     let scratch = tempfile::tempdir_in(scratch_root).unwrap();
     fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"clock-capacity\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-time-virtual = {{ path = {manifest:?} }}\n"
+        "[package]\nname = \"clock-capacity\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-portable-time-virtual = {{ path = {manifest:?} }}\n"
     )).unwrap();
     for constructor in [
         "VirtualClock::new()",

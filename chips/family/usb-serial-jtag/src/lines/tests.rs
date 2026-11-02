@@ -9,8 +9,8 @@ use core::{
 use std::{boxed::Box, vec::Vec};
 
 use embedded_io_async::ErrorType;
-use oer_portable_diagnostics::Note;
 use oer_chips_family_interrupt_table::signal::host::Host;
+use oer_portable_diagnostics::Note;
 
 use super::{NoteError, write_note};
 use crate::{

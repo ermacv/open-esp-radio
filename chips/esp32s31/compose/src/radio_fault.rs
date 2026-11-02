@@ -3,9 +3,9 @@
 //! safe continuation is not established. The record keeps the fault's
 //! class and its variant path (names, then numbers) as text, retained until
 //! the next boot's complete output.
+use oer_chips_family_staged_runtime::retained_fault;
 use oer_portable_diagnostics::DiagPath;
 use oer_portable_diagnostics::fault::{Class, Domain, Record};
-use oer_chips_family_staged_runtime::retained_fault;
 oer_chips_family_staged_runtime::retained_static! { static RADIO_FAULT: Record; }
 
 /// The record's reason: the periodic tracking failed.
@@ -34,13 +34,13 @@ impl Failure {
     /// Record the failure for the next boot, then reset the chip.
     #[cfg(target_arch = "riscv32")]
     pub fn reset(self) -> ! {
-        oer_chips_family_staged_runtime::fatal::reset_recording::<oer_chips_esp32s31_hal::platform::Port>(
-            |claim, _stop| {
-                if let Ok(record) = encode(self) {
-                    let _committed = claim.commit(&RADIO_FAULT, record);
-                }
-            },
-        )
+        oer_chips_family_staged_runtime::fatal::reset_recording::<
+            oer_chips_esp32s31_hal::platform::Port,
+        >(|claim, _stop| {
+            if let Ok(record) = encode(self) {
+                let _committed = claim.commit(&RADIO_FAULT, record);
+            }
+        })
     }
 }
 

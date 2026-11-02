@@ -241,11 +241,13 @@ fn source_identity(root: &Path) -> Result<SourceIdentity> {
         ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )
     .map_err(|error| format!("cannot capture repository state for fixture bundle: {error}"))?;
-    let diff =
-        oer_tools_os_process::git::output(root, ["diff", "--binary", "--no-ext-diff", "HEAD", "--"])
-            .map_err(|error| {
-                format!("cannot capture repository content identity for fixture bundle: {error}")
-            })?;
+    let diff = oer_tools_os_process::git::output(
+        root,
+        ["diff", "--binary", "--no-ext-diff", "HEAD", "--"],
+    )
+    .map_err(|error| {
+        format!("cannot capture repository content identity for fixture bundle: {error}")
+    })?;
     let mut workspace = Sha256::new();
     workspace.update(&state);
     workspace.update(&diff);

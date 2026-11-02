@@ -152,7 +152,9 @@ impl<
         // (`rx_ring_outspans_any_unit`).
         const {
             assert!(
-                oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(COUNT, BUFFER),
+                oer_chips_esp32s31_hal::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(
+                    COUNT, BUFFER
+                ),
                 "one receive unit could span the whole ring"
             );
         }

@@ -196,7 +196,10 @@ impl port::ExecutorPlatform for Port {
 }
 
 /// Whether the selected hart's debug module is active in `status`.
-fn debug_module_active<P: oer_portable_mmio::Placement>(status: &DebugModeStatus<P>, hart: Hart) -> bool {
+fn debug_module_active<P: oer_portable_mmio::Placement>(
+    status: &DebugModeStatus<P>,
+    hart: Hart,
+) -> bool {
     status.read_debug_mode(hart.index()).debug_module_active()
 }
 

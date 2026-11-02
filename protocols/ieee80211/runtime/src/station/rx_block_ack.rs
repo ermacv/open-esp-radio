@@ -28,11 +28,12 @@ pub type RxBlockAckStorage<'id, Ty, const BANKS: usize, const FRAMES: usize> =
     >;
 
 /// The loans of [`RxBlockAckStorage`] the service carries.
-pub type RxBlockAckView<'id, Ty> = oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckView<
-    'id,
-    PortRxBlockAck<'id, Ty>,
-    LinkEpoch<'id, <Ty as PhaseTypes<'id>>::EpochPath>,
->;
+pub type RxBlockAckView<'id, Ty> =
+    oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckView<
+        'id,
+        PortRxBlockAck<'id, Ty>,
+        LinkEpoch<'id, <Ty as PhaseTypes<'id>>::EpochPath>,
+    >;
 
 /// The running phase, carrying out the receive agreements' port calls.
 pub(super) struct PhaseBlockAcks<'r, 'p, P>(&'r mut P, PhantomData<&'p ()>);

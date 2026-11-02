@@ -1,7 +1,7 @@
 //! Admission age through queued publication, retry and A-MPDU re-formation.
 use super::{Environment, Execution, ModelOnlyReason, Report};
-use oer_protocols_ieee80211_contracts_port::Ieee80211Instant;
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::Ieee80211Instant;
 
 /// Deterministically controlled age boundary exercised by a fixture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1933,24 +1933,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-probes-boot-smoke"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-layout",
- "oer-chips-family-executor",
- "oer-chips-family-interrupt-table",
- "oer-chips-family-staged-runtime",
- "oer-portable-crypto",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-memory",
- "oer-portable-time",
-]
-
-[[package]]
 name = "oer-hil-probes-esp32s31-aes-timing"
 version = "0.1.0"
 dependencies = [
@@ -1971,6 +1953,24 @@ dependencies = [
  "oer-portable-riscv",
  "oer-portable-time",
  "oer-protocols-ieee80211-core-security-cipher",
+]
+
+[[package]]
+name = "oer-hil-probes-esp32s31-boot-smoke"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-interrupt-table",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-crypto",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-memory",
+ "oer-portable-time",
 ]
 
 [[package]]
@@ -2049,6 +2049,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-probes-esp32s31-radio-root"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-board",
+ "oer-chips-esp32s31-compose",
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-layout",
+ "oer-chips-family-executor",
+ "oer-chips-family-staged-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-time",
+]
+
+[[package]]
 name = "oer-hil-probes-esp32s31-register"
 version = "0.1.0"
 dependencies = [
@@ -2088,21 +2103,6 @@ dependencies = [
  "oer-protocols-ieee80211-wire",
  "oer-protocols-radio-regulatory",
  "static_cell",
-]
-
-[[package]]
-name = "oer-hil-probes-radio-root"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-board",
- "oer-chips-esp32s31-compose",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-layout",
- "oer-chips-family-executor",
- "oer-chips-family-staged-runtime",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-time",
 ]
 
 [[package]]

@@ -2,14 +2,16 @@
 //! Only externally published events and the bridge's bounded continuation may
 //! poll this task. Virtual time never supplies a bridge wake.
 use core::{future::Future, task::Poll};
-use oer_portable_embassy_net::{NetworkInterfaceId, OwnedEndpointResources, ethernet::EthernetBridge};
+use oer_portable_embassy_net::{
+    NetworkInterfaceId, OwnedEndpointResources, ethernet::EthernetBridge,
+};
 use oer_portable_memory::HostContext;
+use oer_portable_time::Duration;
+use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_port::{
     EthernetFrame, EthernetFrameView, FrameLengthError, LinkSnapshot, LinkState, NetDevice,
     TransmitError, TransmitRefused,
 };
-use oer_portable_time::Duration;
-use oer_portable_time_virtual::VirtualClock;
 use std::{
     cell::RefCell,
     collections::VecDeque,

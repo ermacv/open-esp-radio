@@ -1,6 +1,5 @@
 //! One bounded RX traffic capture with real take/recycle. No live CPU buffer write.
 use crate::usb;
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_board as board;
 use oer_chips_esp32s31_compose::Esp32s31;
 use oer_chips_esp32s31_hal::{
@@ -28,9 +27,10 @@ use oer_chips_esp32s31_phy::{
 use oer_chips_esp32s31_radio_client::{LpClock, RcSlow};
 use oer_chips_esp32s31_radio_system::Esp32s31Radio;
 use oer_chips_family_executor::{Executor, InterruptExecutor};
+use oer_portable_embassy_time::EmbassyClock;
+use oer_portable_time::{Clock, Duration, Timer};
 use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
-use oer_portable_time::{Clock, Duration, Timer};
 use static_cell::StaticCell;
 
 #[path = "traffic.rs"]
@@ -105,7 +105,9 @@ oer_chips_family_staged_runtime::entry!(
     hook = crate::diagnostic::panic,
     exception = crate::diagnostic::exception
 );
-fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>) -> ! {
+fn main(
+    handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>,
+) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root"; 32));
     };
@@ -123,14 +125,19 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+    ) = match oer_chips_family_staged_runtime::adoption::run::<
+        oer_chips_esp32s31_compose::Esp32s31,
+        _,
+        _,
+    >(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         board::BootstrapPsram,
         oer_chips_esp32s31_compose::phy_fault::report_previous,
         |hardware| {
-            let _reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            let _reset_causes =
+                oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
 
             crate::diagnostic::report_previous();
             (
@@ -277,11 +284,14 @@ type DirectPrepare<'a> = impl core::future::Future<
 type DirectTrack<'a> = impl core::future::Future<
         Output = Result<
             oer_chips_esp32s31_radio_client::wifi::WifiTracked,
-            oer_chips_esp32s31_radio_client::Failed<oer_chips_esp32s31_hal::ieee80211::client::WifiClocked>,
+            oer_chips_esp32s31_radio_client::Failed<
+                oer_chips_esp32s31_hal::ieee80211::client::WifiClocked,
+            >,
         >,
     > + 'a;
-static PREPARE: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<DirectPrepare<'static>>> =
-    static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
+static PREPARE: static_cell::ConstStaticCell<
+    oer_portable_memory::StaticPlace<DirectPrepare<'static>>,
+> = static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
 static TRACK: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<DirectTrack<'static>>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
 #[define_opaque(DirectPrepare)]
@@ -300,7 +310,10 @@ fn track_future(
 #[inline(never)]
 fn placed_prepare(
     backend: &mut Backend,
-) -> Result<oer_portable_memory::PlacedFuture<'_, DirectPrepare<'_>>, oer_portable_diagnostics::Name<32>> {
+) -> Result<
+    oer_portable_memory::PlacedFuture<'_, DirectPrepare<'_>>,
+    oer_portable_diagnostics::Name<32>,
+> {
     let place = PREPARE
         .try_take()
         .ok_or(oer_portable_diagnostics::name!("direct-prepare-place"; 32))?;
@@ -310,7 +323,10 @@ fn placed_prepare(
 fn placed_track(
     backend: &mut Backend,
     request: oer_chips_esp32s31_radio_client::wifi::WifiTrack,
-) -> Result<oer_portable_memory::PlacedFuture<'_, DirectTrack<'_>>, oer_portable_diagnostics::Name<32>> {
+) -> Result<
+    oer_portable_memory::PlacedFuture<'_, DirectTrack<'_>>,
+    oer_portable_diagnostics::Name<32>,
+> {
     let place = TRACK
         .try_take()
         .ok_or(oer_portable_diagnostics::name!("direct-track-place"; 32))?;
@@ -338,9 +354,7 @@ fn direct_future(
             .and_then(RegulatoryDomain::of)
             .ok_or(oer_portable_diagnostics::name!("direct-domain"; 32))?;
         let channel = domain
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                channel,
-            ))
+            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
             .map_err(|_| oer_portable_diagnostics::name!("direct-permit"; 32))?;
         let tx_ceiling = channel.tx_ceiling(board::wifi_power_limits(
             i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
@@ -562,8 +576,11 @@ async fn run_direct(
     };
     let access = &mut output.access;
     traffic::checkpoint(trace, 201, 0, &mac_irq)?;
-    let placed = RxDmaStorage::place(RX.take().ok_or(oer_portable_diagnostics::name!("rx-claimed"; 32))?)
-        .map_err(|_| oer_portable_diagnostics::name!("rx-place"; 32))?;
+    let placed = RxDmaStorage::place(
+        RX.take()
+            .ok_or(oer_portable_diagnostics::name!("rx-claimed"; 32))?,
+    )
+    .map_err(|_| oer_portable_diagnostics::name!("rx-place"; 32))?;
     let storage = placed.storage();
     let prepared = placed
         .prepare_ring(access.rx_dma())

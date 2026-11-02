@@ -256,7 +256,9 @@ fn field_accesses(
 
 #[test]
 fn field_errors_during_folding_and_name_lookup_reach_the_caller() {
-    use oer_tools_analysis_riscv_model::{Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory};
+    use oer_tools_analysis_riscv_model::{
+        Error, ErrorCode, FunctionIndex, RecordPolicy, WorkingMemory,
+    };
     let records = records();
     let memory = WorkingMemory::new(8192).expect("navigation fixture should succeed");
     let facts = FunctionIndex::new(&records, RecordPolicy::Dictionary, &memory, &mut || Ok(()))

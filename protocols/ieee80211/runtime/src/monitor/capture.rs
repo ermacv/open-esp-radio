@@ -7,14 +7,14 @@
 //! the selected chip can access that memory; the lock-free SPSC queue stores
 //! only leases and metadata, not frame-sized arrays.
 
+use oer_portable_memory::{
+    AffineSpscTrySendError, RxHandoffPool, RxNetworkLease, WakingSpscQueue, WakingSpscReceiver,
+    WakingSpscSender,
+};
 use oer_protocols_ieee80211_contracts_port::{
     ChannelContextId, MacRxMetadata, MonitorDropReason, MonitorFrame,
     MonitorInjectionChannelBinding, MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
     WifiChannel,
-};
-use oer_portable_memory::{
-    AffineSpscTrySendError, RxHandoffPool, RxNetworkLease, WakingSpscQueue, WakingSpscReceiver,
-    WakingSpscSender,
 };
 
 /// Metadata copied alongside one independently retained monitor frame.
@@ -146,8 +146,8 @@ impl<const CAPACITY: usize, const SLOTS: usize> MonitorCapturePool<CAPACITY, SLO
         let captured_length = snapshot_length
             .unwrap_or(frame.bytes.len())
             .min(frame.bytes.len());
-        let captured_length =
-            oer_portable_memory::FrameLen::new(captured_length).map_err(|_| MonitorDropReason::TooLong)?;
+        let captured_length = oer_portable_memory::FrameLen::new(captured_length)
+            .map_err(|_| MonitorDropReason::TooLong)?;
         let mut radio = self
             .storage
             .try_claim_radio()

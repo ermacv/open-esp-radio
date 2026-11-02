@@ -46,7 +46,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
         control.modify_multi_bssid_control(|w| {
             w.set_bssid_select(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssidSelect::Interface0.bits(),
+                oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssidSelect::Interface0
+                    .bits(),
             ));
         });
 
@@ -137,8 +138,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_rate_0(
                     oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8,
                 )
-                .set_rate_1(oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8)
-                .set_rate_2(oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8)
+                .set_rate_1(
+                    oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8,
+                )
+                .set_rate_2(
+                    oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8,
+                )
                 .set_rate_3(
                     oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8,
                 );

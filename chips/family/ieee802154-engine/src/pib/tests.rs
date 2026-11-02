@@ -136,11 +136,13 @@ fn defaults_hold_a_threshold_of_the_kconfig_range() {
     for threshold in [-121, 1] {
         assert_eq!(
             Ieee802154PibDefaults::new(Ieee802154CcaMode::Carrier, threshold),
-            Err(oer_protocols_ieee802154_port::CcaThresholdError::OutOfRange {
-                requested_dbm: threshold,
-                lowest_dbm: -120,
-                highest_dbm: 0,
-            })
+            Err(
+                oer_protocols_ieee802154_port::CcaThresholdError::OutOfRange {
+                    requested_dbm: threshold,
+                    lowest_dbm: -120,
+                    highest_dbm: 0,
+                }
+            )
         );
     }
     assert_eq!(Ieee802154PibDefaults::default().cca_threshold_dbm(), -75);

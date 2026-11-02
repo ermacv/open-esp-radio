@@ -98,14 +98,18 @@ fn blink<'a>(
     owner: String,
 ) -> Result<(&'a oer_tools_lab_model::Hub, u8)> {
     let (hub, port) = discover::blink_target(stand, target)?;
-    let mut claims = vec![oer_tools_lab_arbiter::claims::Claim::hub_port(&hub.usb2, port)];
+    let mut claims = vec![oer_tools_lab_arbiter::claims::Claim::hub_port(
+        &hub.usb2, port,
+    )];
     if let Some(board) = stand.boards.iter().find(|board| {
         board
             .port
             .as_ref()
             .is_some_and(|place| place.hub == hub.id && place.port == u32::from(port))
     }) {
-        claims.push(oer_tools_lab_arbiter::claims::Claim::board(&board.device_id()?));
+        claims.push(oer_tools_lab_arbiter::claims::Claim::board(
+            &board.device_id()?,
+        ));
     }
     let mut lease = crate::service::lease(
         owner,
@@ -134,7 +138,9 @@ fn verify_power(
     let mut lease = crate::service::lease(
         owner,
         format!("stand discover --verify-power {query}"),
-        vec![oer_tools_lab_arbiter::claims::Claim::board(&board.device_id()?)],
+        vec![oer_tools_lab_arbiter::claims::Claim::board(
+            &board.device_id()?,
+        )],
     )?;
     let returned = crate::service::run(
         &mut lease,

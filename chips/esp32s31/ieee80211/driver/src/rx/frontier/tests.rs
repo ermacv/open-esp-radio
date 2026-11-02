@@ -18,10 +18,11 @@ const BASE: u32 = oer_chips_esp32s31_hal::ieee80211::dma::space::HOST_ARENA_BASE
 
 /// A placed static host arena, as the product's is placed.
 fn leaked<const N: usize, const S: usize>() -> PlacedRxDma<N, BUFFER_SIZE, S, HostDma> {
-    let placed = ReceiveDmaStorage::place(oer_chips_esp32s31_hal::memory::dma_static::Placed::host(
-        std::boxed::Box::leak(std::boxed::Box::new(ReceiveDmaStorage::new())),
-    ))
-    .unwrap();
+    let placed =
+        ReceiveDmaStorage::place(oer_chips_esp32s31_hal::memory::dma_static::Placed::host(
+            std::boxed::Box::leak(std::boxed::Box::new(ReceiveDmaStorage::new())),
+        ))
+        .unwrap();
     assert_eq!(placed.descriptor_base(), BASE);
     placed
 }
@@ -47,8 +48,12 @@ fn exhausted_terminal_writeback_without_a_fresh_irq_retains_task_continuation() 
         .and_then(|ring| ring.core_ready_for_test().publish(&mut hardware))
         .unwrap();
     let mut rx = ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_prepared(prepared);
-    block_on(rx.start_with_storage(&oer_portable_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
+    block_on(rx.start_with_storage(
+        &oer_portable_time_virtual::SkipClock::new(),
+        &mut hardware,
+        storage,
+    ))
+    .unwrap();
 
     // The walker reached the accepted terminal and stopped at NEXT=0. The
     // descriptor writeback can become visible after the RX-success edge which
@@ -76,8 +81,12 @@ fn owner_round_trips_a_live_ring_between_phases() {
     let mut hardware = RxWalkerModel::default();
     let mut rx =
         ReceiveFrontier::<COUNT, BUFFER_SIZE>::from_halted(halted_ring(&mut hardware, placed));
-    block_on(rx.start_with_storage(&oer_portable_time_virtual::SkipClock::new(), &mut hardware, storage))
-        .unwrap();
+    block_on(rx.start_with_storage(
+        &oer_portable_time_virtual::SkipClock::new(),
+        &mut hardware,
+        storage,
+    ))
+    .unwrap();
     assert_eq!(rx.phase(), RxFrontierPhase::Live);
 
     let mut moved = rx.take().unwrap();

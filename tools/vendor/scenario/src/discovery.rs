@@ -60,7 +60,8 @@ impl Symbols {
                 if symbol.section.is_none()
                     || !matches!(
                         symbol.kind,
-                        oer_tools_analysis_elf::SymbolKind::Data | oer_tools_analysis_elf::SymbolKind::Text
+                        oer_tools_analysis_elf::SymbolKind::Data
+                            | oer_tools_analysis_elf::SymbolKind::Text
                     )
                     || symbol.size == 0
                 {

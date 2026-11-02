@@ -555,8 +555,12 @@ pub(crate) fn devices(
                      reset|power-cycle; --confirm rom-answers tries the stand's own reset first",
                 )? {
                     ConfirmArg::Reset => oer_tools_lab_arbiter::journal::Confirmation::Reset,
-                    ConfirmArg::PowerCycle => oer_tools_lab_arbiter::journal::Confirmation::PowerCycle,
-                    ConfirmArg::RomAnswers => oer_tools_lab_arbiter::journal::Confirmation::RomAnswers,
+                    ConfirmArg::PowerCycle => {
+                        oer_tools_lab_arbiter::journal::Confirmation::PowerCycle
+                    }
+                    ConfirmArg::RomAnswers => {
+                        oer_tools_lab_arbiter::journal::Confirmation::RomAnswers
+                    }
                 };
                 client.return_resource(&resource)?;
                 let readiness = loop {
@@ -578,7 +582,10 @@ pub(crate) fn devices(
                     Some(oer_tools_lab_arbiter::readiness::Readiness::Ready { .. }) => {
                         String::from("the LAB service confirmed its end state")
                     }
-                    Some(oer_tools_lab_arbiter::readiness::Readiness::Unavailable { reason, .. }) => {
+                    Some(oer_tools_lab_arbiter::readiness::Readiness::Unavailable {
+                        reason,
+                        ..
+                    }) => {
                         return Err(
                             format!("{board} ({mac}) is still unavailable: {reason}").into()
                         );

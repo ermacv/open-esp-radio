@@ -8,7 +8,9 @@ use oer_chips_family_ieee802154_engine::{
     },
     pib::Ieee802154Pib,
 };
-use oer_chips_family_ieee802154_mac_values::{Ieee802154MultipanEnableState, Ieee802154MultipanIndex};
+use oer_chips_family_ieee802154_mac_values::{
+    Ieee802154MultipanEnableState, Ieee802154MultipanIndex,
+};
 use oer_protocols_ieee802154_port::{AutoPendingMode, PendingTable};
 
 impl<Ll: Ieee802154LowLevel<Address = DmaWindowAddress>> Ieee802154Engine<Ll> {

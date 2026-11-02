@@ -106,7 +106,9 @@ pub struct PreparedCredentials {
 }
 impl PreparedCredentials {
     /// The station's profile of this network; the PMK moves, never copied.
-    pub(crate) fn into_profile(self) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
+    pub(crate) fn into_profile(
+        self,
+    ) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
         use oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity;
         let Self { ssid, pmk } = self;
         oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
@@ -233,11 +235,14 @@ mod tests {
             authenticator_nonce: [6; 32],
             supplicant_nonce: [8; 32],
         };
-        let actual = prepared
-            .pmk
-            .unwrap()
-            .derive_ptk(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, context);
-        let expected = expected.derive_ptk(oer_protocols_ieee80211_wire::security::rsn::Akm::Psk, context);
+        let actual = prepared.pmk.unwrap().derive_ptk(
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            context,
+        );
+        let expected = expected.derive_ptk(
+            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
+            context,
+        );
         assert_eq!(actual.kck(), expected.kck());
         assert_eq!(actual.kek(), expected.kek());
     }

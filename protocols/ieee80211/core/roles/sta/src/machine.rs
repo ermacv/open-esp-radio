@@ -138,9 +138,9 @@ use crate::receive::{Management, Received, observe_scan};
 use oer_protocols_ieee80211_contracts_port::ChannelWidth;
 use oer_protocols_ieee80211_wire::scan::HtSecondaryChannel;
 // The machine's tests build receive metadata through `use super::*`.
+use oer_portable_time::{Duration, Instant};
 #[cfg(test)]
 use oer_protocols_ieee80211_contracts_port::RxEvidence;
-use oer_portable_time::{Duration, Instant};
 
 use crate::epoch::{LinkEpoch, LinkEpochSource};
 use crate::join::sae::{StaSaeAuthentication, StaSaeEvent, StaSaeFailure, StaSaeTransmission};
@@ -659,7 +659,9 @@ where
         self.epoch.context(StaTxPurpose(self.purpose))
     }
 
-    fn restore(context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+    fn restore(
+        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
+    ) -> Self {
         let (epoch, StaTxPurpose(purpose)) = context.into_parts();
         Self { epoch, purpose }
     }
@@ -749,7 +751,9 @@ impl StaFrameClass {
     /// setup and keys go first, any other frame at its access category.
     pub const fn coex_operation(self) -> oer_protocols_ieee80211_contracts_port::TxOperation {
         match self {
-            Self::Connection(frame) => oer_protocols_ieee80211_contracts_port::TxOperation::Connection(frame),
+            Self::Connection(frame) => {
+                oer_protocols_ieee80211_contracts_port::TxOperation::Connection(frame)
+            }
             Self::Normal => oer_protocols_ieee80211_contracts_port::TxOperation::Data,
         }
     }
@@ -784,7 +788,9 @@ impl StaRatePlan {
     }
 }
 
-impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBufferClass> StaFrame<K, C> {
+impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBufferClass>
+    StaFrame<K, C>
+{
     /// The frame on the phase's channel at the rates of `plan`, as `rates`
     /// select them; `carried` turns a rate into the phase's. `None` when no
     /// stage of the selection is carried: the frame does not go. A
@@ -795,12 +801,13 @@ impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBuff
         rates: &impl RateSelection<M, A, BA>,
         carried: impl Fn(
             oer_protocols_ieee80211_contracts_port::PhyRate,
-        ) -> Option<oer_protocols_ieee80211_contracts_port::PhaseRate<'p, 'id, K>>,
+        )
+            -> Option<oer_protocols_ieee80211_contracts_port::PhaseRate<'p, 'id, K>>,
     ) -> Option<oer_protocols_ieee80211_contracts_port::ClassFrame<'p, 'id, C, K>> {
         match self {
-            Self::Individual(frame) => plan
-                .individual(rates, carried)
-                .map(|plan| oer_protocols_ieee80211_contracts_port::ClassFrame::individual(frame, plan)),
+            Self::Individual(frame) => plan.individual(rates, carried).map(|plan| {
+                oer_protocols_ieee80211_contracts_port::ClassFrame::individual(frame, plan)
+            }),
             Self::Group(frame) => StaRatePlan::group(rates, carried)
                 .map(|rate| oer_protocols_ieee80211_contracts_port::ClassFrame::group(frame, rate)),
             Self::BlockAckRequest {
@@ -835,7 +842,8 @@ impl<T: StaTokens, K: Ieee80211Capabilities> StaTransmit<'_, T, K> {
     pub const PROTECTION: oer_protocols_ieee80211_contracts_port::Protection =
         oer_protocols_ieee80211_contracts_port::Protection::None;
     /// A station frame goes at the port's calibrated power.
-    pub const POWER: oer_protocols_ieee80211_contracts_port::SupportedPower<K> = calibrated_power::<K>();
+    pub const POWER: oer_protocols_ieee80211_contracts_port::SupportedPower<K> =
+        calibrated_power::<K>();
 }
 
 /// The calibrated power every station attempt takes, which its port must
@@ -1385,14 +1393,18 @@ pub struct PendingGroupKey<'id, Path: PoolPath = Root<oer_protocols_radio_port::
 /// }
 /// ```
 #[must_use = "return this token with the matching group replacement terminal"]
-pub struct PendingGroupReplacement<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+pub struct PendingGroupReplacement<
+    'id,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     install: PendingGroupKey<'id, Path>,
     previous_id: GroupKeyId,
 }
 
 /// Replay and material custody of the existing installation being selected.
 #[must_use = "return with the matching selection terminal"]
-pub struct PendingGroupSelection<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+pub struct PendingGroupSelection<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>
+{
     install: PendingGroupKey<'id, Path>,
 }
 
@@ -1420,7 +1432,10 @@ pub struct PendingGroupRemoval<'id, Path: PoolPath = Root<oer_protocols_radio_po
 /// }
 /// ```
 #[derive(Debug)]
-pub struct StaConfigurationContext<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+pub struct StaConfigurationContext<
+    'id,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     epoch: Option<LinkEpoch<'id, Path>>,
 }
 
@@ -1438,10 +1453,14 @@ where
         }
     }
 
-    fn restore(context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+    fn restore(
+        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
+    ) -> Self {
         let epoch = match context.into_choice() {
             oer_protocols_radio_port::ContextChoice::First(_) => None,
-            oer_protocols_radio_port::ContextChoice::Second(context) => Some(context.into_parts().0),
+            oer_protocols_radio_port::ContextChoice::Second(context) => {
+                Some(context.into_parts().0)
+            }
         };
         Self { epoch }
     }
@@ -3545,11 +3564,12 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         let State::Connected(connected) = &self.state else {
             return None;
         };
-        let parameters = oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([connected
-            .as_ref()?
-            .peer
-            .associated
-            .ht_ampdu_parameters]);
+        let parameters =
+            oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([connected
+                .as_ref()?
+                .peer
+                .associated
+                .ht_ampdu_parameters]);
         Some((parameters.spacing().get(), parameters.max_ampdu_length()))
     }
 
@@ -4682,7 +4702,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     if let Some(cached) = self.pmksa.resume(bssid, &profile.ssid) {
                         join.rsn = join
                             .rsn
-                            .with_pmkid(oer_protocols_ieee80211_wire::security::Pmkid(cached.pmkid()))
+                            .with_pmkid(oer_protocols_ieee80211_wire::security::Pmkid(
+                                cached.pmkid(),
+                            ))
                             .ok_or(StaDisconnectReason::AuthenticationFailed)?;
                         AssociationKey::Protected(cached.pmk().duplicate())
                     } else {
@@ -5236,7 +5258,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         engine: &mut C::AesEngine,
     ) -> Result<(), StaRxError> {
         let Some(rsn) = connected.rsn.as_mut() else {
-            return Err(oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Protection.into());
+            return Err(
+                oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Protection.into(),
+            );
         };
         rsn.receive(eapol, protection, engine)
     }
@@ -5722,10 +5746,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             return (Change::Keep, ActionProgress::Action(Owed::Upstream(fact)));
         }
         if core::mem::take(&mut connected.edca)
-            && let Some(edca) =
-                SupportedEdca::new(oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+            && let Some(edca) = SupportedEdca::new(
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
                     connected.peer.associated.edca,
-                ))
+                ),
+            )
         {
             return (Change::Keep, ActionProgress::Action(Owed::SetEdca(edca)));
         }
@@ -6673,9 +6698,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     peer,
                     key,
                 };
-                match SupportedEdca::new(oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
-                    peer.associated.edca,
-                )) {
+                match SupportedEdca::new(
+                    oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
+                        peer.associated.edca,
+                    ),
+                ) {
                     Some(edca) => (next, Some(Owed::SetEdca(edca))),
                     None => {
                         join.step = next;
@@ -6837,9 +6864,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     oer_protocols_ieee80211_wire::frame::MacHeader::decode(bytes)?,
                     GroupAddress::new,
                 )?;
-                oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(header, length)?)
-                    .ok()
-                    .map(StaFrame::Group)
+                oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
+                    header, length,
+                )?)
+                .ok()
+                .map(StaFrame::Group)
             } else {
                 let header = HeaderSpec::from_mac_header(
                     oer_protocols_ieee80211_wire::frame::MacHeader::decode(bytes)?,

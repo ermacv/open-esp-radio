@@ -40,7 +40,10 @@ fn test_unwrap(
     request: oer_portable_crypto::KeyUnwrapRequest<
         { oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY },
     >,
-) -> Result<oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData, oer_portable_crypto::KeyUnwrapError> {
+) -> Result<
+    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
+    oer_portable_crypto::KeyUnwrapError,
+> {
     oer_portable_crypto::block::unwrap_now(
         &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
         request,
@@ -53,7 +56,10 @@ fn test_unwrap(
 pub(crate) fn test_unwrap_bytes(
     kek: &[u8; RSN_KEK_LEN],
     wrapped: &[u8],
-) -> Result<oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData, oer_portable_crypto::KeyUnwrapError> {
+) -> Result<
+    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
+    oer_portable_crypto::KeyUnwrapError,
+> {
     test_unwrap(oer_portable_crypto::KeyUnwrapRequest::new(
         oer_portable_crypto::Aes128Key::copy_from(kek),
         oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::try_copy(wrapped)

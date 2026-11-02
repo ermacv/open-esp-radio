@@ -937,7 +937,10 @@ mod tests {
         .map(|path| root.join(path));
         assert_eq!(digests.len(), layers.len() + 2);
         for path in layers.into_iter().chain([policy, base]) {
-            assert_eq!(digests[&path], oer_tools_os_durable::sha256_file(&path).unwrap());
+            assert_eq!(
+                digests[&path],
+                oer_tools_os_durable::sha256_file(&path).unwrap()
+            );
         }
     }
 

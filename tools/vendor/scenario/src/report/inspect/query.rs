@@ -451,7 +451,8 @@ pub fn prints(corpus: &Corpus, start: u32, end: u32) -> Result<String> {
                             );
                             for record in a.records {
                                 if let FunctionRecord::Reference {
-                                    reference_kind: oer_tools_analysis_riscv_model::ReferenceKind::Call,
+                                    reference_kind:
+                                        oer_tools_analysis_riscv_model::ReferenceKind::Call,
                                     target,
                                     ..
                                 } = record

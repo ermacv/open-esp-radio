@@ -106,7 +106,8 @@ fn run() -> oer_tools_registers_generate::Result<()> {
 fn main() -> std::process::ExitCode {
     if oer_tools_os_command_tree::requested() {
         use clap::CommandFactory as _;
-        let tree = oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
+        let tree =
+            oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
         println!("{}", oer_tools_os_command_tree::json(&tree));
         return std::process::ExitCode::SUCCESS;
     }

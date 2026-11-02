@@ -1,5 +1,4 @@
 //! Staged, no-traffic executor for the comparison session's silicon sheets.
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_compose::Esp32s31;
 use oer_chips_esp32s31_hal::{
     peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
@@ -13,6 +12,7 @@ use oer_chips_esp32s31_hal::{
 };
 use oer_chips_esp32s31_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
 use oer_chips_family_executor::{Executor, InterruptExecutor};
+use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
 
 oer_chips_family_staged_runtime::interrupt_table! {
@@ -41,7 +41,9 @@ static CALIBRATION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlac
 
 oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_compose::phy_fault::reset);
 oer_chips_family_staged_runtime::entry!(main, oer_chips_esp32s31_hal::platform::Port);
-fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>) -> ! {
+fn main(
+    handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal::platform::Port>,
+) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root"; 32));
     };
@@ -56,14 +58,19 @@ fn main(handoff: oer_chips_family_staged_runtime::Handoff<oer_chips_esp32s31_hal
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_staged_runtime::adoption::run::<oer_chips_esp32s31_compose::Esp32s31, _, _>(
+    ) = match oer_chips_family_staged_runtime::adoption::run::<
+        oer_chips_esp32s31_compose::Esp32s31,
+        _,
+        _,
+    >(
         handoff,
         root.into_runtime(),
         INTERRUPT_TABLE,
         oer_chips_esp32s31_board::BootstrapPsram,
         oer_chips_esp32s31_compose::phy_fault::report_previous,
         |hardware| {
-            let _reset_causes = oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
+            let _reset_causes =
+                oer_chips_esp32s31_compose::reset_causes::read(hardware.reset_cause);
             (
                 hardware.efuse,
                 hardware.system_timer,
@@ -184,11 +191,21 @@ async fn sheets(boot: Boot) {
         })
         .await;
     if reason != 0 {
-        crate::est_freq::emit(150, reason, oer_portable_riscv::cycle32().wrapping_sub(started), 0);
+        crate::est_freq::emit(
+            150,
+            reason,
+            oer_portable_riscv::cycle32().wrapping_sub(started),
+            0,
+        );
         crate::est_freq::status(0x1950_bad0);
         fail(oer_portable_diagnostics::name!("calibration"; 32));
     }
-    crate::est_freq::emit(150, 0, oer_portable_riscv::cycle32().wrapping_sub(started), 1);
+    crate::est_freq::emit(
+        150,
+        0,
+        oer_portable_riscv::cycle32().wrapping_sub(started),
+        1,
+    );
     crate::est_freq::status(0x1950_0001);
     loop {
         let request = crate::est_freq::take_request();

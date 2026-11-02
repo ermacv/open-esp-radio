@@ -61,9 +61,11 @@ type TestArbiter<'id, R = NoReservation> = Arbiter<'id, Caps, R>;
 fn channel(number: u8) -> SupportedChannel<Caps> {
     SupportedChannel::new(
         oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap(),
     )
     .unwrap()
@@ -932,9 +934,11 @@ fn a_join_where_the_access_point_may_not_follow_stops_it_by_the_default_policy()
         let (mut arbiter, place, mut port) = beside_access_point::<NoReservation>(mint);
         let five = SupportedChannel::new(
             oer_protocols_radio_regulatory::TEST_DOMAIN
-                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
-                ))
+                .permit(
+                    oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                        Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
+                    ),
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -1451,9 +1455,11 @@ fn a_cancelled_starting_absence_delivers_its_pending_leave_and_both_places() {
                 UpstreamFact::SwitchAnnounced {
                     target: SupportedChannel::new(
                         oer_protocols_radio_regulatory::TEST_DOMAIN
-                            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                                Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
-                            ))
+                            .permit(
+                                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                                    Channel::ghz5(36, ChannelWidth::Mhz20).unwrap(),
+                                ),
+                            )
                             .unwrap(),
                     )
                     .unwrap(),

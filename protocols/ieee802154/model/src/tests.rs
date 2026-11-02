@@ -40,7 +40,8 @@ const DATA: [u8; 9] = [0x61, 0x88, 0x01, 0xcd, 0xab, 0x02, 0x00, 0x01, 0x00];
 
 fn transmission<'f>(frame: &'f [u8]) -> SupportedTransmit<'f, ModelCaps> {
     SupportedTransmit::new(Transmission {
-        frame: oer_protocols_ieee802154_wire::FrameView::new(frame).unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_protocols_ieee802154_wire::FrameView::new(frame)
+            .unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
         mode: oer_protocols_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
         power: None,
@@ -68,7 +69,10 @@ where
                 async |frontend| run_port(frontend, body).await,
             )
             .await;
-        assert!(matches!(end, oer_protocols_radio_port::PortEnd::Uninstalled { .. }));
+        assert!(matches!(
+            end,
+            oer_protocols_radio_port::PortEnd::Uninstalled { .. }
+        ));
         assert!(!handle.abandoned());
         drop(end);
         slot.end_model_world();
@@ -854,7 +858,9 @@ fn a_radio_fault_ends_admitted_work_first_then_poisons() {
                 .await
             {
                 Ok(_) => panic!("a poisoned backend does not disable"),
-                Err(oer_protocols_radio_port::DisableFailed::Expired(_)) => panic!("no stop deadline"),
+                Err(oer_protocols_radio_port::DisableFailed::Expired(_)) => {
+                    panic!("no stop deadline")
+                }
                 Err(oer_protocols_radio_port::DisableFailed::Poisoned(poisoned)) => {
                     oer_protocols_radio_port::Ended::uninstall(poisoned, (), ())
                 }
@@ -1298,7 +1304,8 @@ fn validated_values_check_the_capabilities() {
     assert!(SupportedEnergyScan::<Plain>::new(channel(11), 1).is_none());
     assert!(SupportedCca::<Plain>::new(channel(11)).is_none());
     let refused = SupportedTransmit::<Plain>::new(Transmission {
-        frame: oer_protocols_ieee802154_wire::FrameView::new(&DATA).unwrap_or_else(|_| panic!("a MAC frame")),
+        frame: oer_protocols_ieee802154_wire::FrameView::new(&DATA)
+            .unwrap_or_else(|_| panic!("a MAC frame")),
         channel: channel(15),
         mode: oer_protocols_ieee802154_port::TxMode::CsmaCa { max_backoffs: 4 },
         power: None,
@@ -1356,7 +1363,11 @@ fn the_operation_pool_serves_takers_in_arrival_order() {
             mut seats,
         } = mint.into_pools();
         let pool = oer_protocols_radio_port::FifoPermitPool::new(supply, line);
-        oer_protocols_radio_port::conformance::permits_serve_takers_in_arrival_order(&pool, &mut seats, []);
+        oer_protocols_radio_port::conformance::permits_serve_takers_in_arrival_order(
+            &pool,
+            &mut seats,
+            [],
+        );
     }));
 }
 
@@ -1569,8 +1580,10 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
     use oer_protocols_ieee802154_port::owner::{Operation, OperationPermits};
     use oer_protocols_radio_port::{Permits, branded};
     ready(branded::<Permits<Operation, 1, 2>, _>(async |mint| {
-        let (permits, [mut first, mut second]) =
-            OperationPermits::new(mint.into_pools(), oer_protocols_radio_port::FifoPermitPool::new);
+        let (permits, [mut first, mut second]) = OperationPermits::new(
+            mint.into_pools(),
+            oer_protocols_radio_port::FifoPermitPool::new,
+        );
         let token = ready(permits.pool().take(&mut first));
         drop(permits.guard(token));
         let token = ready(permits.pool().take(&mut second));
@@ -1590,7 +1603,9 @@ fn work_permit_moves_into_admission_and_only_its_terminal_releases_it() {
             );
         }
         let mismatch = match permits.complete(RequestId::new(42)) {
-            Err(oer_protocols_ieee802154_port::owner::CompletionError::Mismatch(mismatch)) => mismatch,
+            Err(oer_protocols_ieee802154_port::owner::CompletionError::Mismatch(mismatch)) => {
+                mismatch
+            }
             _ => panic!("another terminal cannot release the held operation"),
         };
         assert_eq!(mismatch.held, Some((Interface::new(1), id)));

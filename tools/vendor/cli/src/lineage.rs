@@ -130,7 +130,8 @@ fn from_git(repo: &Path, library: &str, selected: &[String]) -> Result<Vec<Revis
             ["rev-parse", "--verify", &format!("{revision}^{{commit}}")],
         )?;
         let revision = String::from_utf8(commit)?.trim().to_owned();
-        let bytes = oer_tools_os_process::git::output(repo, ["show", &format!("{revision}:{library}")])?;
+        let bytes =
+            oer_tools_os_process::git::output(repo, ["show", &format!("{revision}:{library}")])?;
         let archive = read_archive(&revision, &bytes)?;
         // A commit that does not change the bytes adds no evidence.
         if archives

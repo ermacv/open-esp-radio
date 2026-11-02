@@ -49,8 +49,9 @@ impl FakeRegisters {
             state: Ieee802154StateSnapshot::new(
                 Ieee802154RxStateCode::from_parts(
                     rx,
-                    u32::from(rx)
-                        .cmp(&oer_chips_esp32s31_pac::ieee802154::rx_status::State::ReceiveSfd.bits()),
+                    u32::from(rx).cmp(
+                        &oer_chips_esp32s31_pac::ieee802154::rx_status::State::ReceiveSfd.bits(),
+                    ),
                 ),
                 Ieee802154TxStateCode::from_field(tx),
             ),

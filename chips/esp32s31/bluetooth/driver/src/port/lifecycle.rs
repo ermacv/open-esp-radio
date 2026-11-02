@@ -73,14 +73,13 @@ impl<Id: SlotIdentity, D: Device, X> SlotOwner<Id> for Backend<Id, D, X> {
                 timer: q
                     .timer
                     .as_ref()
-                    .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource("BLE timer"))?
-                    .clone(),
-                clock: q
-                    .clock
-                    .as_mut()
                     .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
-                        "BLE clock endpoint",
-                    ))?,
+                        "BLE timer",
+                    ))?
+                    .clone(),
+                clock: q.clock.as_mut().ok_or(
+                    oer_protocols_radio_port::SlotInitError::MissingResource("BLE clock endpoint"),
+                )?,
                 epoch: q.epoch,
                 bound: q.bound,
             },

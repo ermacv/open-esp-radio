@@ -353,7 +353,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         now: oer_portable_time::Instant,
     ) -> Result<(), ApServiceError> {
         let inactive_timeout = self.inactive_timeout.duration();
-        let refresh_margin = oer_portable_time::Duration::from_micros(inactive_timeout.as_micros() / 2);
+        let refresh_margin =
+            oer_portable_time::Duration::from_micros(inactive_timeout.as_micros() / 2);
         let existing = self
             .bound_peer_mut(binding)
             .ok_or(ApServiceError::UnknownPeer)?;

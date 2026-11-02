@@ -338,7 +338,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
 }
 #[cfg(any(test, feature = "test-support"))]
 impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext>
-    oer_protocols_radio_port::conformance::registration::MockCleanup<Id> for ModelBackend<Id, C, X>
+    oer_protocols_radio_port::conformance::registration::MockCleanup<Id>
+    for ModelBackend<Id, C, X>
 {
     fn abandon<'s>(
         &mut self,
@@ -625,14 +626,18 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> ModelSlotOwner
 }
 
 impl<B: ModelComposition> ModelQueues<B> {
-    fn prepared(backing: &mut Option<Self>) -> Result<&mut Self, oer_protocols_radio_port::SlotInitError> {
+    fn prepared(
+        backing: &mut Option<Self>,
+    ) -> Result<&mut Self, oer_protocols_radio_port::SlotInitError> {
         backing
             .as_mut()
             .ok_or(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)
     }
 }
 impl<B: ModelComposition> ModelResources<'static, B> {
-    fn take_from(backing: &mut Option<Self>) -> Result<Self, oer_protocols_radio_port::SlotInitError> {
+    fn take_from(
+        backing: &mut Option<Self>,
+    ) -> Result<Self, oer_protocols_radio_port::SlotInitError> {
         backing
             .take()
             .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(

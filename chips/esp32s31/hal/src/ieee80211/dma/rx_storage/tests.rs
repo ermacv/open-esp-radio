@@ -2849,9 +2849,10 @@ fn rearm_restores_the_owner_bit_and_a_doorbell_still_follows_a_detached_last() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
-    let pool = Box::leak(Box::new(
-        oer_portable_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let leases = ring.detach_all(pool);
     assert_eq!(leases.len(), COUNT);
     // Every detached descriptor, LAST (the accepted tail) included, carries
@@ -2891,9 +2892,10 @@ fn a_frozen_cursor_naming_a_detached_descriptor_fails_closed_and_is_counted() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
-    let pool = Box::leak(Box::new(
-        oer_portable_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let leases = ring.detach_all(pool);
     assert!(ring.live.freeze_cursor(&mut ring.walker).is_ok());
     // The walker stopped on the barrier of a held lease's descriptor.
@@ -2916,9 +2918,10 @@ fn a_settled_doorbell_leaving_next_on_a_detached_descriptor_fails_closed() {
     const COUNT: usize = 4;
     let mut ring = Walked::<COUNT>::start();
     ring.fill();
-    let pool = Box::leak(Box::new(
-        oer_portable_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let mut leases = ring.detach_all(pool);
     // Every lease but LAST's returns; LAST stays held, detached.
     let held = leases.pop().expect("LAST's lease");
@@ -2973,9 +2976,10 @@ fn walker_on_detached_cannot_fire_on_a_just_completed_descriptor() {
         .unwrap();
     // The LAST-bounded frontier stops at LAST: descriptor 2 is not in it.
     assert_eq!((frontier.unit_count, frontier.descriptor_count), (2, 2));
-    let pool = Box::leak(Box::new(
-        oer_portable_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let mut leases = std::vec::Vec::new();
     let mut remaining = frontier.descriptor_count;
     while remaining != 0 {
@@ -3059,9 +3063,10 @@ fn walker_on_detached_cannot_fire_on_a_detached_last_at_exhaustion() {
         .completed_unit_frontier_through_cursor(&ring.live, cursor)
         .unwrap();
     assert_eq!(frontier.descriptor_count, COUNT);
-    let pool = Box::leak(Box::new(
-        oer_portable_memory::ExternalRxHandoffPool::<16, COUNT>::new(),
-    ));
+    let pool = Box::leak(Box::new(oer_portable_memory::ExternalRxHandoffPool::<
+        16,
+        COUNT,
+    >::new()));
     let leases = ring.detach_all(pool);
     assert_eq!(leases.len(), COUNT);
     // LAST, the accepted tail, is detached; NEXT = 0 names no descriptor.

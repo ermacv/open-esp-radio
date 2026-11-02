@@ -33,7 +33,9 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerRunInterruptControl
     fn enable_scheduler_run_bank_0(&mut self) {
         self.bank.modify_irq_enable_0(|w| {
             w.set_source_21(true);
-            w.set_sources_27_28(oer_portable_mmio::Bits::truncate(w.sources_27_28().get() | 0x3));
+            w.set_sources_27_28(oer_portable_mmio::Bits::truncate(
+                w.sources_27_28().get() | 0x3,
+            ));
         });
     }
 
@@ -79,7 +81,9 @@ struct HardwareInterruptControl<'a, B: oer_portable_mmio::Placement> {
     bank: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothInterruptBank<B>,
 }
 
-impl<B: oer_portable_mmio::Placement> BluetoothInterruptControl for HardwareInterruptControl<'_, B> {
+impl<B: oer_portable_mmio::Placement> BluetoothInterruptControl
+    for HardwareInterruptControl<'_, B>
+{
     fn clear_primary_baseline_bank_0(&mut self) {
         self.bank.clear_bluetooth_primary_baseline_bank_0();
     }
@@ -199,7 +203,9 @@ trait BluetoothPrimaryInterruptControl {
     fn capture_diagnostic_state(&mut self);
 }
 
-impl<B: oer_portable_mmio::Placement> BluetoothPrimaryInterruptControl for HardwareInterruptControl<'_, B> {
+impl<B: oer_portable_mmio::Placement> BluetoothPrimaryInterruptControl
+    for HardwareInterruptControl<'_, B>
+{
     type Bank0Snapshot = bank::BluetoothPrimaryInterruptBank0Snapshot;
     type Bank1Snapshot = bank::BluetoothPrimaryInterruptBank1Snapshot;
 

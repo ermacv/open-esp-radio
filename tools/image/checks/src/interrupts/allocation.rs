@@ -1,8 +1,8 @@
 //! Actual linked allocations; the contract's `irq-stack-bytes` is a ceiling.
 
 use super::{InterruptStacks, Result};
-use oer_tools_analysis_elf::{Elf, StorageBounds};
 use oer_chips_family_facts::{InterruptContract, Memory};
+use oer_tools_analysis_elf::{Elf, StorageBounds};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 

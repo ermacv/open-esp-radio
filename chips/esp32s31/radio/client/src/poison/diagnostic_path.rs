@@ -1,9 +1,9 @@
 //! The variant paths of a poison, for retained diagnostics that do not
 //! format. Each `match` is exhaustive: a new variant breaks the build.
 
-use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 use oer_chips_esp32s31_hal::domain::{CommonRadioPowerError, RadioClient};
 use oer_chips_esp32s31_phy::{PhyRegisterBindingError, PhyRegisterStage};
+use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use super::{
     CalibrationTrackingFailure, CalibrationTrackingFault, PhyFault, Poison, PoisonCause,

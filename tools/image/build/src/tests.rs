@@ -240,48 +240,56 @@ fn runtime_checks_refuse_requested_link_time_gates() {
 pub(crate) fn repository() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path();
-    for (path, text) in oer_chips_family_facts::tracked::FILES.iter().copied().chain([
-        (
-            "chips/esp32c5/platform/flash.toml",
-            include_str!("../../../../chips/esp32c5/platform/flash.toml"),
-        ),
-        (
-            "chips/esp32c5/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
-        ),
-        (
-            "chips/esp32s31/platform/partitions/applications.csv",
-            include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
-        ),
-        (
-            "tools/lab/peers/esp32c5-ieee802154/firmware.toml",
-            include_str!("../../../lab/peers/esp32c5-ieee802154/firmware.toml"),
-        ),
-        (
-            "tools/lab/peers/esp32c5-openthread/firmware.toml",
-            include_str!("../../../lab/peers/esp32c5-openthread/firmware.toml"),
-        ),
-        (
-            "tools/vendor/references/esp32c5/ble-scan-request-counter/firmware.toml",
-            include_str!(
-                "../../../vendor/references/esp32c5/ble-scan-request-counter/firmware.toml"
+    for (path, text) in oer_chips_family_facts::tracked::FILES
+        .iter()
+        .copied()
+        .chain([
+            (
+                "chips/esp32c5/platform/flash.toml",
+                include_str!("../../../../chips/esp32c5/platform/flash.toml"),
             ),
-        ),
-        (
-            "tools/vendor/references/esp32s31/ble-scan-reference/firmware.toml",
-            include_str!("../../../vendor/references/esp32s31/ble-scan-reference/firmware.toml"),
-        ),
-        (
-            "tools/vendor/references/esp32s31/ieee802154-reference/firmware.toml",
-            include_str!("../../../vendor/references/esp32s31/ieee802154-reference/firmware.toml"),
-        ),
-        (
-            "tools/vendor/references/esp32s31/phy-tracking-reference/firmware.toml",
-            include_str!(
-                "../../../vendor/references/esp32s31/phy-tracking-reference/firmware.toml"
+            (
+                "chips/esp32c5/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32c5/platform/partitions/applications.csv"),
             ),
-        ),
-    ]) {
+            (
+                "chips/esp32s31/platform/partitions/applications.csv",
+                include_str!("../../../../chips/esp32s31/platform/partitions/applications.csv"),
+            ),
+            (
+                "tools/lab/peers/esp32c5-ieee802154/firmware.toml",
+                include_str!("../../../lab/peers/esp32c5-ieee802154/firmware.toml"),
+            ),
+            (
+                "tools/lab/peers/esp32c5-openthread/firmware.toml",
+                include_str!("../../../lab/peers/esp32c5-openthread/firmware.toml"),
+            ),
+            (
+                "tools/vendor/references/esp32c5/ble-scan-request-counter/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32c5/ble-scan-request-counter/firmware.toml"
+                ),
+            ),
+            (
+                "tools/vendor/references/esp32s31/ble-scan-reference/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32s31/ble-scan-reference/firmware.toml"
+                ),
+            ),
+            (
+                "tools/vendor/references/esp32s31/ieee802154-reference/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32s31/ieee802154-reference/firmware.toml"
+                ),
+            ),
+            (
+                "tools/vendor/references/esp32s31/phy-tracking-reference/firmware.toml",
+                include_str!(
+                    "../../../vendor/references/esp32s31/phy-tracking-reference/firmware.toml"
+                ),
+            ),
+        ])
+    {
         let path = root.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();

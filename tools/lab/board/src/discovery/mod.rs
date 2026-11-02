@@ -71,7 +71,8 @@ pub fn wait_for(mac: &DeviceId, within: Duration) -> Option<PathBuf> {
         if let Ok(port) = port_of(mac) {
             return Some(port);
         }
-        if started.elapsed() >= within || oer_tools_os_process::sleep(Duration::from_millis(250)).is_err()
+        if started.elapsed() >= within
+            || oer_tools_os_process::sleep(Duration::from_millis(250)).is_err()
         {
             return None;
         }

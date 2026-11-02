@@ -125,7 +125,9 @@ enum Check {
 
 /// The chips with pinned vendor artifacts.
 fn verified_chips(ctx: &Checkout) -> Result<Vec<String>> {
-    Ok(oer_tools_pins_artifacts::artifacts::project::projects(&ctx.root)?)
+    Ok(oer_tools_pins_artifacts::artifacts::project::projects(
+        &ctx.root,
+    )?)
 }
 
 fn provenance(ctx: &Checkout, chip: &str) -> Result<()> {
@@ -232,8 +234,10 @@ fn run() -> Result<ExitCode> {
 fn main() -> ExitCode {
     if oer_tools_os_command_tree::requested() {
         use clap::CommandFactory as _;
-        let tree =
-            oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("vendor-check")]);
+        let tree = oer_tools_os_command_tree::command_tree(
+            &Cli::command(),
+            &[String::from("vendor-check")],
+        );
         println!("{}", oer_tools_os_command_tree::json(&tree));
         return ExitCode::SUCCESS;
     }

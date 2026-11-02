@@ -321,7 +321,12 @@ fn active_originator(start: u16) -> TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS> 
 const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
 fn bar(start: u16) -> [u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN] {
-    oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(PEER, LOCAL, 0, sequence(start))
+    oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
+        PEER,
+        LOCAL,
+        0,
+        sequence(start),
+    )
 }
 
 #[test]

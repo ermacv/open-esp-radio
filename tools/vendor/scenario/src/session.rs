@@ -320,7 +320,8 @@ impl Session {
             name,
             &serde_json::json!({"subject": subject, "reason": reason, "projection": &projection}),
         )?;
-        let selection = oer_tools_analysis_blobray_application::in_process::projection_id(&projection)?;
+        let selection =
+            oer_tools_analysis_blobray_application::in_process::projection_id(&projection)?;
         if !self.projections.contains(&projection) {
             self.projections.push(projection);
         }
@@ -560,8 +561,10 @@ impl Session {
                 contracts
                     .iter()
                     .find(|contract| {
-                        oer_tools_analysis_blobray_application::in_process::effect_contract_id(contract)
-                            .is_ok_and(|reference| &reference == selected)
+                        oer_tools_analysis_blobray_application::in_process::effect_contract_id(
+                            contract,
+                        )
+                        .is_ok_and(|reference| &reference == selected)
                     })
                     .cloned()
             })
@@ -670,10 +673,9 @@ impl Session {
             if selected.is_empty() {
                 continue;
             }
-            if selected
-                .iter()
-                .any(|c| c.verdict != Some(oer_tools_analysis_blobray_domain::ComparisonVerdict::Match))
-            {
+            if selected.iter().any(|c| {
+                c.verdict != Some(oer_tools_analysis_blobray_domain::ComparisonVerdict::Match)
+            }) {
                 continue;
             }
             cases += selected.len() as u64;
@@ -1044,7 +1046,8 @@ pub fn request(
     ExecutionRequest {
         schema: oer_tools_analysis_blobray_domain::EXECUTION_SCHEMA,
         vendor: with_fill(vendor),
-        binding: replacement.map(|_| oer_tools_analysis_blobray_domain::CompiledBinding::SharedCore),
+        binding: replacement
+            .map(|_| oer_tools_analysis_blobray_domain::CompiledBinding::SharedCore),
         replacement: replacement.map(with_fill),
         cases,
         max_events,

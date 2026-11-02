@@ -70,13 +70,14 @@ fn changed_ticket_identity_is_an_owner_violation() {
 
 /// Evidence of one acknowledged publication.
 fn acknowledged(transmissions: u16) -> ReturnEvidence {
-    let terminal: oer_protocols_ieee80211_contracts_port::SingleOutcome<(), ()> =
-        TxOutcome::Ended(SingleEnd::AckTimeout(oer_protocols_ieee80211_contracts_port::Air {
+    let terminal: oer_protocols_ieee80211_contracts_port::SingleOutcome<(), ()> = TxOutcome::Ended(
+        SingleEnd::AckTimeout(oer_protocols_ieee80211_contracts_port::Air {
             transmissions: core::num::NonZeroU16::new(transmissions).expect("a transmission"),
             rate: oer_protocols_ieee80211_contracts_port::PhyRate::Legacy(
                 oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M,
             ),
-        }));
+        }),
+    );
     ReturnEvidence::terminal(true, &terminal).expect("terminal evidence")
 }
 
@@ -382,13 +383,14 @@ fn edca_verifier_rejects_tail_parameters_wrong_draws_and_queue_reordering() {
     let trace = || {
         let station = edca::parameters(Station, false);
         let ap = edca::parameters(AccessPoint, false);
-        let draw = |role, table: oer_protocols_ieee80211_contracts_port::EdcaParameterSet, slots| Draw {
-            role,
-            category: case.category,
-            parameters: table.access_category(case.category),
-            window_slots: slots,
-            backoff_slots: slots,
-        };
+        let draw =
+            |role, table: oer_protocols_ieee80211_contracts_port::EdcaParameterSet, slots| Draw {
+                role,
+                category: case.category,
+                parameters: table.access_category(case.category),
+                window_slots: slots,
+                backoff_slots: slots,
+            };
         edca::Trace {
             draws: [
                 draw(Station, station, 15),

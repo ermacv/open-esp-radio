@@ -78,7 +78,8 @@ fn cancelled_mac_wait_releases_the_slot_for_the_next_waiter() {
 
 #[test]
 fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
-    let mut storage = PowerIrqStorage::new(oer_chips_family_interrupt_table::signal::host::signal().0);
+    let mut storage =
+        PowerIrqStorage::new(oer_chips_family_interrupt_table::signal::host::signal().0);
     let (publisher, mut consumer) = storage.split();
     let old = Arc::new(WakeCount::default());
     let current = Arc::new(WakeCount::default());
@@ -159,7 +160,8 @@ fn hardware_counts_exclude_capacity_and_handoff_and_wrap() {
 
 #[test]
 fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
-    let mut storage = PowerIrqStorage::new(oer_chips_family_interrupt_table::signal::host::signal().0);
+    let mut storage =
+        PowerIrqStorage::new(oer_chips_family_interrupt_table::signal::host::signal().0);
     let (publisher, mut consumer) = storage.split();
     publisher.publish(MacPowerInterruptObservation::from_semantic_events(
         true, false, true, false, false, true,

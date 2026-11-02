@@ -15,8 +15,8 @@ fn executor_startup_rejects_a_foreign_harts_route_at_monomorphization() {
             &manifest.join("src/hart_binding.rs").to_string_lossy(),
         );
     fs::write(scratch.path().join("Cargo.toml"), format!(
-        "[package]\nname = \"executor-hart\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {:?} }}\n",
-        manifest.join("../../../chips/espressif/interrupt-table")
+        "[package]\nname = \"executor-hart\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-family-interrupt-table = {{ path = {:?} }}\n",
+        manifest.join("../../../chips/family/interrupt-table")
     )).expect("isolated compiler manifest");
     for (mode, cfg, accepted) in [("pass", "any()", true), ("reject", "all()", false)] {
         fs::write(

@@ -382,7 +382,8 @@ pub(crate) struct ModemExecution<'a, H, B: PlatformClockBackend, P> {
 }
 
 impl<H: ModemClockPort, B: PlatformClockBackend, P>
-    oer_chips_family_modem_clock::execution::RegisterPort<Dependency> for ModemExecution<'_, H, B, P>
+    oer_chips_family_modem_clock::execution::RegisterPort<Dependency>
+    for ModemExecution<'_, H, B, P>
 {
     type Device = ModemClockDevice;
     type Clock = PlatformClock;
@@ -424,7 +425,8 @@ impl<H: ModemClockPort, B: PlatformClockBackend, P>
     }
 }
 impl<H: ModemClockPort, B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
-    oer_chips_family_modem_clock::execution::AcquirePort<Dependency> for ModemExecution<'_, H, B, &P>
+    oer_chips_family_modem_clock::execution::AcquirePort<Dependency>
+    for ModemExecution<'_, H, B, &P>
 {
     fn prepare_power_state(&mut self) {
         self.port.prepare_power_state();

@@ -516,9 +516,13 @@ impl ProbeCatalog {
                 length: section.size,
             },
         );
-        let bytes =
-            oer_tools_analysis_blobray_application::data::export(&request, executables, memory, control)?
-                .bytes;
+        let bytes = oer_tools_analysis_blobray_application::data::export(
+            &request,
+            executables,
+            memory,
+            control,
+        )?
+        .bytes;
         let catalog: Catalog = serde_json::from_slice(&bytes)?;
         Self::new(catalog, |name| {
             let selected = symbol(inventory, input, name)?;

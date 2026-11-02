@@ -30,7 +30,9 @@ use tx_budget::TxCredit;
 use tx_queue::TxQueue;
 
 use crate::{FrameLengthError, NetworkInterfaceId, RxEnqueueError};
-use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader, HEADER_LEN as ETHERNET_HEADER_LEN};
+use oer_protocols_network_wire::ethernet::{
+    EtherType, EthernetHeader, HEADER_LEN as ETHERNET_HEADER_LEN,
+};
 
 #[derive(Clone, Copy)]
 struct LinkSnapshot {

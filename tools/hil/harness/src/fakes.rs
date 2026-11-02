@@ -3,8 +3,8 @@
 
 use std::{cell::Cell, thread, time::Duration};
 
-use oer_tools_hil_link::{Link, test_support::Device};
 use oer_protocols_hil_protocol::base::{GetHello, Hello, RejectReason, Rejected};
+use oer_tools_hil_link::{Link, test_support::Device};
 use oer_tools_lab_model::rom::{RecoveryStep, Rung};
 
 use crate::finish::{Board, Waits};
@@ -77,7 +77,8 @@ pub(crate) struct FakeBoard {
     pub serve: fn(Device),
     /// The router operations the cases ran, and how the router answers.
     pub routed: std::cell::RefCell<Vec<oer_tools_lab_client::protocol::RouterOperation>>,
-    pub router: fn(&oer_tools_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
+    pub router:
+        fn(&oer_tools_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
 }
 
 impl FakeBoard {

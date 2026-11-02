@@ -130,7 +130,7 @@ fn points_without_the_trace_cfg_compile_to_the_code_of_an_owner_without_them() {
         format!(
             "[package]\nname = \"observe-codegen\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
              [workspace]\n[lib]\npath = \"case.rs\"\n\
-             [dependencies]\noer-trace = {{ path = {manifest:?} }}\n\
+             [dependencies]\noer-portable-trace = {{ path = {manifest:?} }}\n\
              [lints.rust]\nunexpected_cfgs = {{ level = \"warn\", check-cfg = [\"cfg(oer_trace)\"] }}\n\
              [profile.release]\nopt-level = 3\ncodegen-units = 1\npanic = \"abort\"\ndebug = false\n"
         ),

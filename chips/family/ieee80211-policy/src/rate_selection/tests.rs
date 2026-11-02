@@ -23,7 +23,9 @@ use crate::rate_schedule::schedule_state;
 use oer_protocols_ieee80211_contracts_port::{
     Air, IndeterminateCause, SingleEnd, SingleResponse, TxOutcome, WithdrawCause,
 };
-use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, LinkMetric, RxMeta, RxMetadata};
+use oer_protocols_ieee80211_contracts_port::{
+    Channel, ChannelWidth, LinkMetric, RxMeta, RxMetadata,
+};
 
 struct Caps;
 

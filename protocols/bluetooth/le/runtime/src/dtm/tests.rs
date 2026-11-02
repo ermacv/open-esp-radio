@@ -16,10 +16,10 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
+use oer_portable_time::Duration;
 use oer_protocols_bluetooth_le_model::{Backend, Environment, ModelCaps, Resources};
 use oer_protocols_radio_port::conformance::registration::guarded;
 use oer_protocols_radio_port::*;
-use oer_portable_time::Duration;
 use std::{rc::Rc, vec::Vec};
 
 struct Random(Result<[u8; 8], EntropyUnavailable>);

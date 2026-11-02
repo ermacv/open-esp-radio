@@ -33,7 +33,9 @@ where
     }
 }
 
-pub(super) fn backend_fault(value: oer_chips_esp32s31_ieee80211_driver::port::Fault) -> BackendFault {
+pub(super) fn backend_fault(
+    value: oer_chips_esp32s31_ieee80211_driver::port::Fault,
+) -> BackendFault {
     use oer_chips_esp32s31_ieee80211_driver::port::Fault as Source;
     match value {
         Source::Core(v0) => BackendFault::Core(lower_mac_fault(v0)),
@@ -362,7 +364,9 @@ pub(super) fn radio_poison(value: oer_chips_esp32s31_radio_client::Poison) -> Ra
     }
 }
 
-pub(super) fn radio_operation(value: oer_chips_esp32s31_radio_client::PoisonOrigin) -> RadioOperation {
+pub(super) fn radio_operation(
+    value: oer_chips_esp32s31_radio_client::PoisonOrigin,
+) -> RadioOperation {
     use oer_chips_esp32s31_radio_client::PoisonOrigin as Source;
     match value {
         Source::TrackingTick => RadioOperation::TrackingTick,
@@ -482,7 +486,9 @@ pub(super) fn registration_failure(
     }
 }
 
-pub(super) fn phy_register_stage(value: oer_chips_esp32s31_phy::PhyRegisterStage) -> PhyRegisterStage {
+pub(super) fn phy_register_stage(
+    value: oer_chips_esp32s31_phy::PhyRegisterStage,
+) -> PhyRegisterStage {
     use oer_chips_esp32s31_phy::PhyRegisterStage as Source;
     match value {
         Source::Mmio => PhyRegisterStage::Mmio,
@@ -743,6 +749,8 @@ pub(crate) fn released(
     }
 }
 
-pub(crate) fn still_active(error: oer_chips_esp32s31_hal::owner::maintenance::Error) -> ReleaseCause {
+pub(crate) fn still_active(
+    error: oer_chips_esp32s31_hal::owner::maintenance::Error,
+) -> ReleaseCause {
     ReleaseCause::StillActive(maintenance_error(error))
 }

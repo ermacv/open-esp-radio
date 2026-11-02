@@ -165,9 +165,9 @@ impl Io<'_> {
         let _ = action;
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => Ok(
-                oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
-            ),
+            Self::Shared(registers) => {
+                Ok(oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers))
+            }
             #[cfg(test)]
             Self::Test(io) => io.power_gain_base(action),
         }
@@ -176,9 +176,9 @@ impl Io<'_> {
     pub(super) fn channel_gain_base(&mut self) -> Result<u8, Failure> {
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => Ok(
-                oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers),
-            ),
+            Self::Shared(registers) => {
+                Ok(oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(*registers))
+            }
             #[cfg(test)]
             Self::Test(io) => io.channel_gain_base(),
         }
@@ -213,7 +213,10 @@ impl Io<'_> {
 
     #[cfg(target_arch = "riscv32")]
     #[inline(always)]
-    fn rfpll_frequency<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
+    fn rfpll_frequency<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + ?Sized,
+    >(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -258,7 +261,10 @@ impl Io<'_> {
     /// Execute at most one bus command, retaining partial helper/transaction
     /// state across the waker checkpoint. Memory entries remain whole.
     #[inline(never)]
-    pub(super) fn advance_rfpll<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    pub(super) fn advance_rfpll<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock,
+    >(
         &mut self,
         clock: &C,
         run: &mut super::rfpll::Run<'_>,
@@ -572,7 +578,9 @@ impl Io<'_> {
     pub(super) fn temperature_code(&mut self) -> u8 {
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => oer_chips_esp32s31_hal::phy::temperature::read_code(*registers),
+            Self::Shared(registers) => {
+                oer_chips_esp32s31_hal::phy::temperature::read_code(*registers)
+            }
             #[cfg(test)]
             Self::Test(io) => io.temperature_code(),
         }

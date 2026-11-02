@@ -365,8 +365,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             MacCcmpKeyIdentity::Pairwise { peer } => (
                 peer,
                 oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Pairwise.bits(),
-                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise
+                    .bits() as u8,
             ),
             MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => (
                 [u8::MAX; 6],

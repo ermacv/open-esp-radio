@@ -24,7 +24,8 @@ pub(crate) struct Candidate<'a> {
 /// provenance, with independent function budgets.
 pub(crate) struct ReadObservations<'f, 'a, 'm> {
     evaluator: oer_tools_analysis_blobray_analysis::registers::ReadUsesEvaluator<'f, 'a, 'm>,
-    provenance: oer_tools_analysis_blobray_analysis::registers::StoredProvenanceEvaluator<'f, 'a, 'm>,
+    provenance:
+        oer_tools_analysis_blobray_analysis::registers::StoredProvenanceEvaluator<'f, 'a, 'm>,
     facts: &'f Facts<'a, 'm>,
     memory: &'m WorkingMemory,
     decoder: &'f dyn FunctionSemantics,
@@ -58,9 +59,10 @@ impl<'f, 'a, 'm> ReadObservations<'f, 'a, 'm> {
             evaluator: oer_tools_analysis_blobray_analysis::registers::ReadUsesEvaluator::new(
                 facts, memory,
             ),
-            provenance: oer_tools_analysis_blobray_analysis::registers::StoredProvenanceEvaluator::new(
-                facts, memory,
-            ),
+            provenance:
+                oer_tools_analysis_blobray_analysis::registers::StoredProvenanceEvaluator::new(
+                    facts, memory,
+                ),
             facts,
             memory,
             decoder,

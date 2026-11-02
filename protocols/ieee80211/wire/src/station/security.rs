@@ -69,7 +69,8 @@ impl SelectedRsn {
         oer_portable_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
             .write(rsnxe)
             .ok()?;
-        resumed.length = oer_portable_wire::PrefixLength::new(rsnxe_start.checked_add(rsnxe.len())?)?;
+        resumed.length =
+            oer_portable_wire::PrefixLength::new(rsnxe_start.checked_add(rsnxe.len())?)?;
         Some(resumed)
     }
 }
@@ -108,8 +109,9 @@ impl SelectedRsn {
                 &mut selected.bytes,
                 &rsnx_element(extended),
             );
-            selected.length =
-                oer_portable_wire::PrefixLength::constant::<{ SELECTED_RSN_IE_LEN + RSNXE_ONE_OCTET_LEN }>();
+            selected.length = oer_portable_wire::PrefixLength::constant::<
+                { SELECTED_RSN_IE_LEN + RSNXE_ONE_OCTET_LEN },
+            >();
         }
         selected
     }

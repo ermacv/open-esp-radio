@@ -213,7 +213,8 @@ impl Ieee802154Channel {
 
 // Each closed channel selects a compile-time calculation. No raw channel or
 // frequency arithmetic, or fallible span construction, runs on the radio path.
-const fn channel_properties<const CHANNEL: u8>() -> (u8, oer_protocols_radio_regulatory::FrequencySpan) {
+const fn channel_properties<const CHANNEL: u8>()
+-> (u8, oer_protocols_radio_regulatory::FrequencySpan) {
     const {
         if CHANNEL < IEEE802154_MIN_CHANNEL || CHANNEL > IEEE802154_MAX_CHANNEL {
             panic!("channel properties require a supported 2.4 GHz channel");
@@ -221,11 +222,13 @@ const fn channel_properties<const CHANNEL: u8>() -> (u8, oer_protocols_radio_reg
         let offset = CHANNEL - IEEE802154_MIN_CHANNEL;
         let frequency_code = offset * 5 + 3;
         let center_khz = (2405 + 5 * offset as u32) * 1000;
-        let span =
-            match oer_protocols_radio_regulatory::FrequencySpan::new(center_khz - 1000, center_khz + 1000) {
-                Some(span) => span,
-                None => panic!("a channel has a width"),
-            };
+        let span = match oer_protocols_radio_regulatory::FrequencySpan::new(
+            center_khz - 1000,
+            center_khz + 1000,
+        ) {
+            Some(span) => span,
+            None => panic!("a channel has a width"),
+        };
         (frequency_code, span)
     }
 }

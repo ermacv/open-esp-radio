@@ -23,9 +23,9 @@ use oer_chips_esp32s31_radio_client::{
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
-use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 use oer_portable_time::{Clock as _, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_wire::channel::{WifiChannel, WifiChannelWidth};
 
 use super::*;
 
@@ -41,7 +41,11 @@ pub(super) const PREPARE_POISON: Poison = Poison {
 const TICK_CAUSE: PoisonCause = PoisonCause::Tracking(PhyFault::EdgeTimedOut);
 
 pub(super) const fn wifi_poison(request: RequestKind, cause: PoisonCause) -> Poison {
-    Poison::request(oer_chips_esp32s31_hal::domain::RadioClient::Wifi, request, cause)
+    Poison::request(
+        oer_chips_esp32s31_hal::domain::RadioClient::Wifi,
+        request,
+        cause,
+    )
 }
 const TRACK_POISON: Poison = wifi_poison(
     RequestKind::Track,
@@ -280,14 +284,18 @@ fn track_request(wifi: WifiClocked) -> WifiTrack {
     WifiTrack {
         wifi,
         channel: oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap(),
         tx_ceiling: oer_protocols_radio_regulatory::TEST_DOMAIN
-            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
-            ))
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    WifiChannel::new_2_4_ghz(6, WifiChannelWidth::Mhz20).unwrap(),
+                ),
+            )
             .unwrap()
             .tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
                 antenna_gain_mbm: 0,
@@ -711,12 +719,13 @@ fn a_failed_tracking_tick_ends_the_run_and_a_later_request_names_it() {
 #[test]
 fn a_tracking_deadline_the_clock_cannot_hold_ends_the_run_before_any_tick() {
     let clock = clock();
-    let overflow =
-        PoisonCause::TrackingRefused(oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
+    let overflow = PoisonCause::TrackingRefused(
+        oer_chips_esp32s31_phy::concurrent::ConcurrentPhyError::Time(
             oer_chips_esp32s31_phy::state::client::PhyTrackTimeError::DeadlineOverflow {
                 class: oer_chips_esp32s31_phy::state::client::PhyPllTrackClass::Wifi,
             },
-        ));
+        ),
+    );
     let model = model(Script {
         deadline_fault: Some(overflow),
         ..Script::default()

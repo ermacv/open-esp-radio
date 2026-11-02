@@ -130,7 +130,9 @@ impl oer_chips_family_bluetooth_engine::port::OutputTaskPort for super::TaskOwne
     }
 }
 
-impl oer_chips_family_bluetooth_engine::port::OutputInterruptPort for super::InterruptRegistersOwner {
+impl oer_chips_family_bluetooth_engine::port::OutputInterruptPort
+    for super::InterruptRegistersOwner
+{
     fn sample_idle<C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         admitted: &Self::Admitted,

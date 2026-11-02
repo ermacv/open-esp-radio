@@ -31,8 +31,8 @@ impl<'a> ObjectTables<'a> {
         control: &mut dyn RunControl,
     ) -> Result<Self> {
         control.bytes(bytes.len())?;
-        let file =
-            oer_tools_analysis_elf::Elf::parse(bytes).map_err(|error| invalid(error.to_string()))?;
+        let file = oer_tools_analysis_elf::Elf::parse(bytes)
+            .map_err(|error| invalid(error.to_string()))?;
         // The sections each RELA section relocates, sorted, to count the
         // RELA sections of a section by a search.
         let mut relocated = AdmittedVec::new(memory);

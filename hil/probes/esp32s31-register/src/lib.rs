@@ -157,8 +157,9 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
     probe_halt()
 }
 #[cfg(target_arch = "riscv32")]
-static PHY_FAULT: oer_portable_memory::OnceValue<oer_chips_esp32s31_hal::domain::transaction::Fault> =
-    oer_portable_memory::OnceValue::new();
+static PHY_FAULT: oer_portable_memory::OnceValue<
+    oer_chips_esp32s31_hal::domain::transaction::Fault,
+> = oer_portable_memory::OnceValue::new();
 #[cfg(target_arch = "riscv32")]
 fn report_phy_fault(fault: oer_chips_esp32s31_hal::domain::transaction::Fault) -> ! {
     let _first = PHY_FAULT.set(fault);

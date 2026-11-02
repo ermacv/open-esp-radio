@@ -528,7 +528,12 @@ impl<P: Placement, Q: Placement, R: Placement, S: Placement> MemoryClockRegister
 
 #[cfg(any(test, feature = "test-support"))]
 impl<'a, 'b, 'c, 'd>
-    ClockRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>, oer_portable_mmio::Host<'c>, oer_portable_mmio::Host<'d>>
+    ClockRegisters<
+        oer_portable_mmio::Host<'a>,
+        oer_portable_mmio::Host<'b>,
+        oer_portable_mmio::Host<'c>,
+        oer_portable_mmio::Host<'d>,
+    >
 {
     /// The clock owner over host memory from each instance's base.
     pub fn host(

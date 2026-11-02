@@ -56,7 +56,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             config,
             StationResources::<_, 4, 4, 1> {
                 configure: station_commands.configure,
-                epochs: oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(connection_epoch),
+                epochs: oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource::new(
+                    connection_epoch,
+                ),
                 tickets: station_tickets,
                 buffers: <[_; 4]>::try_from(small).ok().unwrap(),
                 place,
@@ -101,10 +103,9 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         let [ap_group, _] = access_point_group;
         if let ContractCase::Disable { prior, overflow } = self.0 {
             let mut owner = owner.enable().await.ok().unwrap();
-            let (bank, places) = service
-                .state
-                .station
-                .finish(oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested);
+            let (bank, places) = service.state.station.finish(
+                oer_protocols_ieee80211_core_roles_sta::machine::StaDisconnectReason::Requested,
+            );
             let RetiredArbiter::Stopped(stopped) = service.arbiter.finish(ArbiterEnd::Stopped)
             else {
                 panic!()
@@ -113,9 +114,11 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 .restart(
                     SupportedChannel::new(
                         oer_protocols_radio_regulatory::TEST_DOMAIN
-                            .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                                channel6(),
-                            ))
+                            .permit(
+                                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                                    channel6(),
+                                ),
+                            )
                             .unwrap(),
                     )
                     .unwrap(),
@@ -251,8 +254,10 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
                 phase.access_point().install_pairwise_key(
                     &access_point_association,
                     ap_installed,
-                    oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 7])
-                        .unwrap(),
+                    oer_protocols_ieee80211_wire::address::IndividualAddress::new([
+                        2, 0, 0, 0, 0, 7,
+                    ])
+                    .unwrap(),
                     oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[5; 16]),
                 );
                 let Ok(Ok(LowerMacEvent::Terminal(

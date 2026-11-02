@@ -29,7 +29,9 @@ pub(super) fn run_clocked<F: Future>(future: F, clock: &VirtualClock) -> F::Outp
             return value;
         }
         if wakes.count.load(Ordering::SeqCst) == before {
-            clock.advance(oer_portable_time::Duration::from_micros(10)).unwrap();
+            clock
+                .advance(oer_portable_time::Duration::from_micros(10))
+                .unwrap();
         }
     }
     panic!("harness did not honor its independent timer");
@@ -84,7 +86,11 @@ fn admitted(slot: u8, permission: u8) -> Owners {
 }
 fn terminal<'id, Id: SlotIdentity + 'id>(
     event: LowerMacEvent<'id, ModelTypes<ModelBackend<Id>>>,
-    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<'id, ModelTickets, ModelPool<Id, 1>>,
+    access: &mut oer_protocols_ieee80211_contracts_port::TerminalAccess<
+        'id,
+        ModelTickets,
+        ModelPool<Id, 1>,
+    >,
 ) -> Completion {
     let (mutation, owners) = match event {
         LowerMacEvent::Terminal(LowerMacTerminal::GroupKeyInstalled(InstalledGroup::Station {
@@ -191,7 +197,9 @@ impl Exercise<'_> {
             admitted: owners,
             timing: Timing {
                 admitted_at: self.probe.admitted.get().unwrap(),
-                completed_at: oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros()),
+                completed_at: oer_portable_time::Instant::from_micros(
+                    self.air.monotonic_now().as_micros(),
+                ),
             },
             events,
             retained,
@@ -250,9 +258,11 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Exercise<'_> {
                 permission.index(),
             );
             self.air.hold_group_commands(true);
-            self.probe.admitted.set(Some(oer_portable_time::Instant::from_micros(
-                self.air.monotonic_now().as_micros(),
-            )));
+            self.probe
+                .admitted
+                .set(Some(oer_portable_time::Instant::from_micros(
+                    self.air.monotonic_now().as_micros(),
+                )));
             match mutation {
                 Mutation::Install => phase.station().install_group_key(
                     &station_association,
@@ -375,10 +385,14 @@ impl Exercise<'_> {
                     buffer,
                     frame,
                     body: None,
-                    protection: TxProtection::Ccmp(oer_protocols_ieee80211_contracts_port::NumberedKey {
-                        key: AttemptKey::Group(&key),
-                        packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(1).unwrap(),
-                    }),
+                    protection: TxProtection::Ccmp(
+                        oer_protocols_ieee80211_contracts_port::NumberedKey {
+                            key: AttemptKey::Group(&key),
+                            packet_number:
+                                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(1)
+                                    .unwrap(),
+                        },
+                    ),
                 })
                 .check()
                 .ok()
@@ -407,9 +421,11 @@ impl Exercise<'_> {
                 yield_now().await;
             }
             assert_eq!(self.air.sent().len(), 1);
-            self.probe.admitted.set(Some(oer_portable_time::Instant::from_micros(
-                self.air.monotonic_now().as_micros(),
-            )));
+            self.probe
+                .admitted
+                .set(Some(oer_portable_time::Instant::from_micros(
+                    self.air.monotonic_now().as_micros(),
+                )));
             phase.access_point().remove_group_key(permission, key);
             for _ in 0..3 {
                 yield_now().await;

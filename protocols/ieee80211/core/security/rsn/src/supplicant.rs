@@ -28,8 +28,8 @@ use oer_portable_crypto::{
     Aes128Key, KeyUnwrapError, KeyUnwrapRequest,
     block::{Aes128Engine, BlockError},
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Hardware-qualified open-STA compatibility window for the first EAPOL-Key

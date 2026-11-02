@@ -35,7 +35,9 @@ impl Probe {
     }
 }
 
-fn prepared_probe(queues: Option<&Probe>) -> Result<&Probe, oer_protocols_radio_port::SlotInitError> {
+fn prepared_probe(
+    queues: Option<&Probe>,
+) -> Result<&Probe, oer_protocols_radio_port::SlotInitError> {
     queues.ok_or(oer_protocols_radio_port::SlotInitError::QueuesUnprepared)
 }
 

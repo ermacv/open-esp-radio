@@ -1,6 +1,8 @@
 //! Hardware boundary for switching from scan to associated STA RX policy.
 
-use oer_chips_esp32s31_hal::{ieee80211::mac::WifiMacHal, owner::RadioAccess, types::MacStaPolicyMode};
+use oer_chips_esp32s31_hal::{
+    ieee80211::mac::WifiMacHal, owner::RadioAccess, types::MacStaPolicyMode,
+};
 
 pub trait StaLinkRxPolicyHardware {
     fn apply_sta_link_policy(&mut self, bssid: [u8; 6]);

@@ -74,7 +74,8 @@ impl TransmitKeyToken {
 /// An installed station group key, usable only for receive and removal.
 /// Neither `admit_key` nor `number` accepts this owner.
 #[must_use = "remove the receive key through its core"]
-pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+pub struct ReceiveKeyHandle<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>>
+{
     pub(super) slot: super::association::VacantKeySlot<'core, Path>,
     pub(super) index: usize,
     pub(super) token: StaGroupCcmpSlot,
@@ -206,7 +207,8 @@ impl<Path: PoolPath> TxAdmission<'_, Path> {
         let Some(field) = frame.and_then(|frame| frame.first_chunk::<2>()) else {
             return false;
         };
-        let control = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes(*field));
+        let control =
+            oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes(*field));
         match self {
             Self::Open(_) => control.is_none_or(|control| !control.protected()),
             Self::Protected(key) => {
@@ -247,7 +249,10 @@ impl<'core, Path: PoolPath> KeyRemoved<'core, Path> {
 
 /// Admission did not grant a key right; the caller retains its ticket.
 #[must_use = "retain the returned ticket and handle the refusal"]
-pub struct KeyAdmissionRefused<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+pub struct KeyAdmissionRefused<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+> {
     pub ticket: TxTicket<'core, Path>,
     pub reason: KeyAdmissionError,
 }
@@ -262,6 +267,9 @@ pub enum KeyAdmissionError {
 /// An admission returned after the core was poisoned remains in custody.
 /// It cannot be submitted again or turned into a reusable ticket.
 #[must_use = "retain the admission in the poisoned backend's resource bank"]
-pub struct QuarantinedAdmission<'core, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>> {
+pub struct QuarantinedAdmission<
+    'core,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+> {
     pub(super) _admission: TxAdmission<'core, Path>,
 }

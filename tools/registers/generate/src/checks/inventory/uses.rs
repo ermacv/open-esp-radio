@@ -7,7 +7,9 @@ use oer_tools_analysis_blobray_domain::{
     IndexedAddress, ReadPrecision, ReadUses, RegisterAccess, RegisterAccessSummary, RegisterMask,
     RegisterMaskKind, StoredBits, StoredBitsSource,
 };
-use oer_tools_analysis_riscv_model::{ArtifactId, CallAbi, FunctionRecord, MemoryKind, ReadOnlyWindow};
+use oer_tools_analysis_riscv_model::{
+    ArtifactId, CallAbi, FunctionRecord, MemoryKind, ReadOnlyWindow,
+};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 

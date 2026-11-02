@@ -77,13 +77,12 @@ impl Hooks for &Recorder {
 
 #[test]
 fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
-    let placed =
-        oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-            oer_chips_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
-                RxDmaStorage::<COUNT, BUFFER, BUFFER, HostDma>::new(),
-            ))),
-        )
-        .unwrap();
+    let placed = oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
+            RxDmaStorage::<COUNT, BUFFER, BUFFER, HostDma>::new(),
+        ))),
+    )
+    .unwrap();
     let storage = placed.storage();
     let buffers = storage.buffer_addresses();
     let base = placed.descriptor_base();
@@ -109,7 +108,11 @@ fn a_chain_longer_than_the_length_field_is_a_counted_oversized_drop() {
         );
     }
     storage.descriptors()[2].write_word0(
-        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(BUFFER as u32, 100, true),
+        oer_chips_esp32s31_hal::ieee80211::dma::descriptor::rx_landed_word(
+            BUFFER as u32,
+            100,
+            true,
+        ),
     );
     hardware.set_cursor(base, 2, Some(3));
 
@@ -200,8 +203,8 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
         frame: NetworkRxFrame<'pool, SLOTS, CAPACITY>,
     ) -> Result<(), NetworkRxFrame<'pool, SLOTS, CAPACITY>> {
         let offset = frame.segment().descriptor_address - self.base;
-        let index =
-            (offset / oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES) as usize;
+        let index = (offset / oer_chips_esp32s31_hal::ieee80211::dma::descriptor::DESCRIPTOR_BYTES)
+            as usize;
         self.seen
             .borrow_mut()
             .push(self.storage.descriptors()[index].word0());
@@ -212,7 +215,9 @@ impl<'pool> Publisher<'pool, CAPACITY, SLOTS> for WordAtPublish {
 #[test]
 fn a_staged_frame_is_published_only_after_its_descriptor_owner_bit_is_clear() {
     let placed = oer_chips_esp32s31_hal::ieee80211::dma::rx_storage::RxDmaStorage::place(
-        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(Storage::new()))),
+        oer_chips_esp32s31_hal::memory::dma_static::Placed::host(Box::leak(Box::new(
+            Storage::new(),
+        ))),
     )
     .unwrap();
     let storage = placed.storage();

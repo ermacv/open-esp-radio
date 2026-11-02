@@ -493,7 +493,8 @@ fn both_resolvers_keep_an_addend_among_exact_typed_uses() {
         let rela = file
             .sections()
             .find(|s| {
-                s.kind == oer_tools_analysis_elf::SectionKind::Rela && s.relocates == Some(section.index)
+                s.kind == oer_tools_analysis_elf::SectionKind::Rela
+                    && s.relocates == Some(section.index)
             })
             .unwrap();
         let index = rela

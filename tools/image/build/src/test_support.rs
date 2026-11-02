@@ -65,7 +65,7 @@ pub fn refuse(root: &Path, package: &str, target: &str) -> Result<()> {
 mod tests {
     #[test]
     fn no_image_may_link_test_support_cases() {
-        let tree = "oer-protocols-ieee80211-contracts-port v0.1.0 (/port)|test-support\noer-esp32s31-hal v0.1.0 (/hal)|test-support\n";
+        let tree = "oer-protocols-ieee80211-contracts-port v0.1.0 (/port)|test-support\noer-chips-esp32s31-hal v0.1.0 (/hal)|test-support\n";
         assert_eq!(
             super::forbidden_packages(tree),
             [
@@ -76,10 +76,13 @@ mod tests {
     }
     #[test]
     fn an_image_with_test_support_is_named() {
-        let tree = "oer-hil-probes-boot-smoke v0.1.0 (/boot-smoke)|\noer-esp32s31-hal v0.1.0 (/hal)|test-support\noer-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
+        let tree = "oer-hil-probes-esp32s31-boot-smoke v0.1.0 (/boot-smoke)|\noer-chips-esp32s31-hal v0.1.0 (/hal)|test-support\noer-portable-memory v0.1.0 (/m)|serde,test-support\nbytemuck v1.0.0|derive\n";
         assert_eq!(
             super::packages(tree),
-            ["oer-chips-esp32s31-hal v0.1.0", "oer-portable-memory v0.1.0"]
+            [
+                "oer-chips-esp32s31-hal v0.1.0",
+                "oer-portable-memory v0.1.0"
+            ]
         );
         assert!(super::packages("a v1|derive\n").is_empty());
     }

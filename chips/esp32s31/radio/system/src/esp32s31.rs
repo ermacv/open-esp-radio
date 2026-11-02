@@ -553,7 +553,9 @@ where
         if self.bluetooth_attached {
             if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return Err(Failed {
-                    returned: <Wifi as oer_chips_esp32s31_radio_client::Client>::join_returned(join),
+                    returned: <Wifi as oer_chips_esp32s31_radio_client::Client>::join_returned(
+                        join,
+                    ),
                     cause: wifi_poisoned(RequestKind::Join, cause),
                 });
             }
@@ -918,7 +920,9 @@ where
             if let Err(Fault(cause)) = Boundary::new(self.track_tick()).await {
                 return (
                     oer_chips_esp32s31_radio_client::wifi::WifiLeft {
-                        wifi: oer_chips_esp32s31_radio_client::wifi::WifiReturned::Clocked(leave.wifi),
+                        wifi: oer_chips_esp32s31_radio_client::wifi::WifiReturned::Clocked(
+                            leave.wifi,
+                        ),
                     },
                     Exit {
                         last: false,

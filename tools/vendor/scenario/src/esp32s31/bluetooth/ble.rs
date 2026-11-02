@@ -148,7 +148,9 @@ const MODIFY_STATES: &[u32] = &[
 
 /// The multiplexed diagnostic port answering `sequences` of agreeing
 /// sample pairs per selector.
-fn diagnostic_port(sequences: &[(u32, &[u32])]) -> oer_tools_analysis_blobray_domain::DeviceDeclaration {
+fn diagnostic_port(
+    sequences: &[(u32, &[u32])],
+) -> oer_tools_analysis_blobray_domain::DeviceDeclaration {
     oer_tools_analysis_blobray_domain::DeviceDeclaration {
         id: "scheduler-diagnostic".into(),
         applicability: "the scheduler diagnostic multiplexer: agreeing pairs per selector".into(),
@@ -734,7 +736,9 @@ const PLATFORM_GATE_ACCESSES: u32 = 1;
 
 /// The vendor's read-modify-write of a platform-owned `MODEM_LPCON.CLK_CONF`
 /// gate, which production leaves to the platform for `reason`.
-pub(crate) fn platform_gate_rules(reason: &str) -> Vec<oer_tools_analysis_blobray_domain::EffectRule> {
+pub(crate) fn platform_gate_rules(
+    reason: &str,
+) -> Vec<oer_tools_analysis_blobray_domain::EffectRule> {
     vec![
         crate::esp32s31::contracts::omitted_read(
             "platform-gate-read".into(),

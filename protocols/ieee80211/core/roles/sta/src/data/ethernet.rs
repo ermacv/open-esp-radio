@@ -123,7 +123,10 @@ impl EthernetFrame {
 impl oer_protocols_network_port::EthernetFrame for EthernetFrame {
     fn view(
         &self,
-    ) -> Result<oer_protocols_network_port::EthernetFrameView<'_>, oer_protocols_network_port::FrameLengthError> {
+    ) -> Result<
+        oer_protocols_network_port::EthernetFrameView<'_>,
+        oer_protocols_network_port::FrameLengthError,
+    > {
         let parts = self.parts();
         Ok(oer_protocols_network_port::EthernetFrameView {
             destination: parts.destination,

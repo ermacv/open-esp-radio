@@ -124,13 +124,13 @@ fn drain() -> Result<()> {
     };
     let mut client = oer_tools_lab_client::client::Client::connect(stream, "cargo stand install")
         .map_err(|refused| {
-            format!(
-                "the running LAB service cannot be asked to drain: {refused}. Wait until \
+        format!(
+            "the running LAB service cannot be asked to drain: {refused}. Wait until \
                  `cargo stand queue` from a checkout of its version shows no lease, stop it \
                  with its socket, `systemctl --user stop {SOCKET_UNIT} {UNIT}` (the socket \
                  alone would start it again for this installer), and install again"
-            )
-        })?;
+        )
+    })?;
     println!("waiting for the running LAB service to finish its leases");
     client.administer(oer_tools_lab_client::protocol::Request::Drain)?;
     Ok(())
@@ -141,10 +141,12 @@ fn drain() -> Result<()> {
 /// a schema 1 stand file rewritten first.
 fn install_service(binary: &Path, root: &Path) -> Result<()> {
     if std::env::var_os(oer_tools_lab_model::paths::ARBITER_ENV).is_none() {
-        let previous = oer_tools_os_durable::xdg::path(oer_tools_os_durable::xdg::Base::Cache, "arbiter")?;
-        if let Some(imported) =
-            oer_tools_lab_arbiter::import::previous(&previous, &oer_tools_lab_arbiter::Arbiter::open()?)?
-        {
+        let previous =
+            oer_tools_os_durable::xdg::path(oer_tools_os_durable::xdg::Base::Cache, "arbiter")?;
+        if let Some(imported) = oer_tools_lab_arbiter::import::previous(
+            &previous,
+            &oer_tools_lab_arbiter::Arbiter::open()?,
+        )? {
             println!(
                 "imported the stand's earlier records: {} balance(s), {} board(s) under \
                  maintenance, {} quarantined, {}",
@@ -157,7 +159,8 @@ fn install_service(binary: &Path, root: &Path) -> Result<()> {
     }
     // Every client switches to this service now: its stand file too.
     let stand_file = oer_tools_lab_model::paths::stand_file()?;
-    if fs::read_to_string(&stand_file).is_ok_and(|text| oer_tools_lab_model::convert::is_schema_1(&text))
+    if fs::read_to_string(&stand_file)
+        .is_ok_and(|text| oer_tools_lab_model::convert::is_schema_1(&text))
     {
         crate::stand_file::convert(&stand_file, &stand_file)?;
     }
@@ -213,14 +216,17 @@ pub fn run(ctx: &Checkout) -> Result<()> {
         oer_tools_os_process::git::command(&source).args(["fetch", "--quiet", "origin", "main"]),
     )?;
     let commit = String::from_utf8(
-        process::capture(oer_tools_os_process::git::command(&source).args(["rev-parse", "FETCH_HEAD"]))?
-            .stdout,
+        process::capture(
+            oer_tools_os_process::git::command(&source).args(["rev-parse", "FETCH_HEAD"]),
+        )?
+        .stdout,
     )?
     .trim()
     .to_owned();
     if stage.join(".git").exists() {
         process::run(
-            oer_tools_os_process::git::command(&stage).args(["checkout", "--quiet", "--detach", &commit]),
+            oer_tools_os_process::git::command(&stage)
+                .args(["checkout", "--quiet", "--detach", &commit]),
         )?;
     } else {
         process::run(
@@ -258,7 +264,8 @@ pub fn run(ctx: &Checkout) -> Result<()> {
     // the update here.
     drain()?;
     process::run(
-        oer_tools_os_process::git::command(&source).args(["checkout", "--quiet", "--detach", &commit]),
+        oer_tools_os_process::git::command(&source)
+            .args(["checkout", "--quiet", "--detach", &commit]),
     )?;
     for (_, staged, live) in &staged {
         fs::rename(staged, live)?;

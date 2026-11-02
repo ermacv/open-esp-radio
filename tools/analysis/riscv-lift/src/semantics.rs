@@ -499,7 +499,11 @@ fn lift_float(float: oer_tools_analysis_riscv_decode::Float) -> SemanticOp {
             memory(MemoryKind::FloatStore, base, offset)
         }
         oer_tools_analysis_riscv_decode::Float::Operation {
-            operands: [Some(oer_tools_analysis_riscv_decode::Register::Integer(dest)), ..],
+            operands:
+                [
+                    Some(oer_tools_analysis_riscv_decode::Register::Integer(dest)),
+                    ..,
+                ],
             ..
         } => SemanticOp::Opaque { dest },
         oer_tools_analysis_riscv_decode::Float::Operation { .. } => SemanticOp::None,

@@ -199,7 +199,8 @@ fn pair_bytes(elf: &[u8]) -> PairBytes {
     let rela = file
         .sections()
         .find(|s| {
-            s.kind == oer_tools_analysis_elf::SectionKind::Rela && s.relocates == Some(section.index)
+            s.kind == oer_tools_analysis_elf::SectionKind::Rela
+                && s.relocates == Some(section.index)
         })
         .unwrap();
     let offset = |r: &oer_tools_analysis_elf::Relocation| {
@@ -561,7 +562,8 @@ fn normalization_and_proof_temporary_storage_obey_resource_limits() {
         for stop in [1, total / 3, total * 2 / 3, total] {
             let mut checkpoints = 0;
             {
-                let mut keep = oer_tools_analysis_riscv_model::Ledger::new(&memory, &mut || Ok(()))?;
+                let mut keep =
+                    oer_tools_analysis_riscv_model::Ledger::new(&memory, &mut || Ok(()))?;
                 let error =
                     audit_function_addresses(image, &analysis, &types, &mut keep, &mut || {
                         checkpoints += 1;

@@ -287,9 +287,9 @@ pub(crate) fn configure_edca<P: Placement>(
         writer.set_contention_window(bits(u32::from(contention_window)));
     });
     registers.modify_config(bank, |writer| {
-        writer.set_interface(oer_chips_esp32s31_pac::wifi_mac::config::Interface::from_field(
-            interface.bits(),
-        ));
+        writer.set_interface(
+            oer_chips_esp32s31_pac::wifi_mac::config::Interface::from_field(interface.bits()),
+        );
     });
 }
 

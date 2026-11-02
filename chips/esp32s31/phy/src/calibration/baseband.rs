@@ -399,7 +399,9 @@ impl PhyTxCfrMmioBinding {
     ) -> PhyTxCfrCompletion {
         match self.action {
             PhyTxCfrAction::ReadStartIndex => PhyTxCfrCompletion::StartIndexRead {
-                base_index: oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(registers),
+                base_index: oer_chips_esp32s31_hal::phy::memory::read_table_memory_base_index(
+                    registers,
+                ),
             },
             PhyTxCfrAction::ProgramEntry(entry) => {
                 oer_chips_esp32s31_hal::phy::memory::program_tx_cfr_entry(
@@ -533,10 +535,15 @@ impl PhyBbMmioBinding {
                 oer_chips_esp32s31_hal::phy::frequency::set_wifi_enabled(registers, enabled)
             }
             PhyBbMmioAction::ConfigureTxPowerTracking { enabled } => {
-                oer_chips_esp32s31_hal::phy::baseband::configure_tx_power_tracking(registers, enabled)
+                oer_chips_esp32s31_hal::phy::baseband::configure_tx_power_tracking(
+                    registers, enabled,
+                )
             }
             PhyBbMmioAction::ConfigureRfRxSaturation { phase } => {
-                oer_chips_esp32s31_hal::phy::agc::configure_rf_rx_saturation(registers, phase.enabled())
+                oer_chips_esp32s31_hal::phy::agc::configure_rf_rx_saturation(
+                    registers,
+                    phase.enabled(),
+                )
             }
             PhyBbMmioAction::ConfigureI2cTxRate => {
                 oer_chips_esp32s31_hal::phy::baseband::configure_i2c_tx_rate(registers)

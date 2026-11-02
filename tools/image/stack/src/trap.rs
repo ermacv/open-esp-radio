@@ -38,13 +38,13 @@
 //! into it.
 use crate::image::Function;
 use crate::sweep::destination;
+use oer_portable_riscv::clic::MINTTHRESH;
+use oer_portable_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
+use oer_portable_riscv::trigger::TCONTROL;
 use oer_tools_analysis_elf::rv32::{self, Role};
 use oer_tools_analysis_riscv_decode::{Extension, Extensions, Inst, Instruction, decode};
 use oer_tools_analysis_riscv_model::{Error, ErrorCode, Result, RunControl};
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
-use oer_portable_riscv::clic::MINTTHRESH;
-use oer_portable_riscv::machine::{MCAUSE, MEPC, MSCRATCH, MSTATUS, status};
-use oer_portable_riscv::trigger::TCONTROL;
 use std::collections::BTreeMap;
 
 /// The image symbol whose words an interrupt entry may store into outside

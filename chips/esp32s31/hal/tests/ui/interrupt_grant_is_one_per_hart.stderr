@@ -50,7 +50,7 @@ note: required because it appears within the type `InterruptController<Interrupt
    | pub struct InterruptController<
    |            ^^^^^^^^^^^^^^^^^^^
 note: required because it appears within the type `Router<InterruptController<InterruptCore0, oer_portable_mmio::Fixed<276824064>>, 0>`
-  --> $WORKSPACE/chips/espressif/interrupt-table/src/router.rs
+  --> $WORKSPACE/chips/family/interrupt-table/src/router.rs
    |
    | pub struct Router<C: Controller, const H: u8> {
    |            ^^^^^^

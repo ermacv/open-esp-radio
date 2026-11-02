@@ -1,5 +1,7 @@
 use super::*;
-use oer_protocols_ieee80211_testing_conformance::{BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot};
+use oer_protocols_ieee80211_testing_conformance::{
+    BarrierCase, BarrierEvent, BarrierTrace, HeldSnapshot,
+};
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 type Terminal = BarrierEvent<ModelAck, ModelAirDenied>;
 pub type Trace = BarrierTrace<Vec<Terminal>, Vec<u8>, Vec<Vec<u8>>, Terminal>;
@@ -410,7 +412,10 @@ mod tests {
             assert_eq!(air.transmissions.get(), u16::from(budget));
             assert_eq!(air.rate, PhyRate::Legacy(LegacyRate::Ofdm6M));
             assert_eq!(
-                oer_protocols_ieee80211_testing_conformance::verify_barrier(BarrierCase::GateRetry, trace),
+                oer_protocols_ieee80211_testing_conformance::verify_barrier(
+                    BarrierCase::GateRetry,
+                    trace
+                ),
                 Ok(())
             );
         }

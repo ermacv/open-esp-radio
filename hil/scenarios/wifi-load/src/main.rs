@@ -24,8 +24,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_protocols_hil_agent::base::Service as _;
-use oer_tools_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_hil_services_load::{
     CacheGeometry, CacheLevel, Collect, CollectCounters, CollectLink, CollectParts,
     CollectTracking, Collected, Counters, CountersCollected, DataBus, InstructionBus, Link,
@@ -33,9 +31,13 @@ use oer_hil_services_load::{
     TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
+use oer_protocols_hil_agent::base::Service as _;
+use oer_tools_hil_harness::{
+    Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
+};
 
 /// The image the scenario runs.
-const IMAGE: &str = "esp32s31-sdk-station";
+const IMAGE: &str = "station";
 
 const SCENARIO: Scenario = Scenario::new(
     "wifi-load",

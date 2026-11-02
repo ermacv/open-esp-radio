@@ -119,7 +119,9 @@ pub fn audit_bootstrap_stack(
     let audit = StackAudit::of(
         image,
         policy,
-        &[oer_tools_chip_profile::policy::StackRoot::bootstrap(bootstrap)],
+        &[oer_tools_chip_profile::policy::StackRoot::bootstrap(
+            bootstrap,
+        )],
     )?;
     std::fs::write(output.join(BOOTSTRAP_REPORT), audit.render())?;
     std::fs::write(
@@ -157,7 +159,11 @@ pub struct Image {
 impl Image {
     /// The analysis of `elf` with the chip's pinned ROM ELF and its
     /// reviewed summaries (`[rom]` of the chip profile).
-    pub fn read(root: &Path, profile: &oer_tools_chip_profile::Profile, elf: &Path) -> Result<Self> {
+    pub fn read(
+        root: &Path,
+        profile: &oer_tools_chip_profile::Profile,
+        elf: &Path,
+    ) -> Result<Self> {
         Self::read_with_inputs(
             root,
             profile,
@@ -429,7 +435,10 @@ impl Image {
 
     /// The linked bounds of `storage`, or `None` when the image links
     /// none of its symbols.
-    pub fn storage(&self, storage: Storage<'_>) -> Result<Option<oer_tools_analysis_elf::StorageBounds>> {
+    pub fn storage(
+        &self,
+        storage: Storage<'_>,
+    ) -> Result<Option<oer_tools_analysis_elf::StorageBounds>> {
         let file = oer_tools_analysis_elf::Elf::parse(&self.elf)?;
         let bounds = match storage {
             Storage::Symbol(name) => oer_tools_analysis_elf::StorageBounds::symbol(&file, name)?,

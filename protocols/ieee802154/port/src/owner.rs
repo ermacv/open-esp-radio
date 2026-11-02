@@ -786,7 +786,13 @@ pub type OperationPermits<'id, P, Path = Root<oer_protocols_radio_port::LocalId<
 
 /// Body-loaned access to owned Id capacity retained in the caller slot.
 /// The conversion authority stays private; admitted permits contain no body loan.
-pub struct LentWorkPermits<'p, K, P, Path: PoolPath, S: oer_protocols_radio_port::SlotOwner<Path::Identity>> {
+pub struct LentWorkPermits<
+    'p,
+    K,
+    P,
+    Path: PoolPath,
+    S: oer_protocols_radio_port::SlotOwner<Path::Identity>,
+> {
     owned: &'p WorkPermits<'static, K, P, Path>,
     loan: oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
 }

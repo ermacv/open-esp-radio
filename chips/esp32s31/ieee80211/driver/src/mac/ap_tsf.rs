@@ -22,7 +22,8 @@ use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 
 /// The uncertainty of an access-point TSF sample: a count of the timer's
 /// microseconds.
-pub const ACCESS_POINT_TSF_SAMPLE_UNCERTAINTY: oer_protocols_ieee80211_contracts_port::tsf::TsfDuration =
+pub const ACCESS_POINT_TSF_SAMPLE_UNCERTAINTY:
+    oer_protocols_ieee80211_contracts_port::tsf::TsfDuration =
     oer_protocols_ieee80211_contracts_port::tsf::TsfDuration::from_micros(1);
 
 /// The capability to write the access-point TSF, which only

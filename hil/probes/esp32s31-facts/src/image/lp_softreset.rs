@@ -79,7 +79,12 @@ fn wait_wrap(s: &Session<'_>, tag: u32) -> bool {
     while oer_portable_riscv::cycle32().wrapping_sub(start) < LIMIT {
         let now = counter(s);
         if now < prior {
-            emit(tag, prior, now, oer_portable_riscv::cycle32().wrapping_sub(start));
+            emit(
+                tag,
+                prior,
+                now,
+                oer_portable_riscv::cycle32().wrapping_sub(start),
+            );
             return true;
         }
         prior = now;

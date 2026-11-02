@@ -2,8 +2,8 @@
 //! Admission never waits. Freeze refuses an in-flight producer; observations
 //! after a successful cut are ignored. The image owns its lifetime and cut.
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
-use oer_protocols_hil_protocol::capture::{Counter, Error};
 use oer_portable_trace::{Event, Observer};
+use oer_protocols_hil_protocol::capture::{Counter, Error};
 struct Slot {
     kind: AtomicU32,
     count: AtomicU32,

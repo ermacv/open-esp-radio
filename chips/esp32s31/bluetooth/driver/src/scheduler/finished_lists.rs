@@ -6,7 +6,9 @@
 
 use crate::interrupt::SchedulerWakeBatch;
 
-use oer_chips_esp32s31_hal::bluetooth::engine::{EngineFinishedListObservation, EngineFinishedListPop};
+use oer_chips_esp32s31_hal::bluetooth::engine::{
+    EngineFinishedListObservation, EngineFinishedListPop,
+};
 
 pub use oer_chips_esp32s31_hal::bluetooth::BluetoothSchedulerHardwareListIndex;
 pub use oer_chips_esp32s31_hal::bluetooth::engine::EngineFinishedHardwareListObserved;

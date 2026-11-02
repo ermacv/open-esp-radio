@@ -121,6 +121,8 @@ use oer_protocols_ieee80211_core_roles_sta::machine::TxRefusal;
 use core::future::{Future, poll_fn};
 use core::task::Poll;
 use embassy_futures::yield_now;
+use oer_portable_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
     LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
@@ -131,7 +133,9 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_core_arbiter::{
     Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice, NoReservation, RetiredArbiter, RetuneRefused,
 };
-use oer_protocols_ieee80211_core_roles_sta::port::{PortDataTokens, PortStaTokens, StationPairwiseKey};
+use oer_protocols_ieee80211_core_roles_sta::port::{
+    PortDataTokens, PortStaTokens, StationPairwiseKey,
+};
 use oer_protocols_ieee80211_core_roles_sta::{
     data,
     data::{
@@ -145,14 +149,12 @@ use oer_protocols_ieee80211_core_roles_sta::{
 };
 use oer_protocols_ieee80211_core_upper_mac::block_ack::{Parked, RxDisposition};
 use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_portable_memory::{SlotReceiver, WakingSpscReceiver, WakingSpscSender};
 use oer_protocols_network_port::LentFrame;
 use oer_protocols_radio_port::Slot;
 use oer_protocols_radio_port::{
     DisableFailed, Disabled, Enabled, Ended, EventEnd, EventsLost, FailStopRequested, Failed,
     Owner, PoisonedOwner, PortBackend,
 };
-use oer_portable_time::{Instant, Timer};
 
 /// The composition's mapping from its concrete backend to station resources.
 /// This is a mapping rather than a backend supertrait because orphan rules and
@@ -269,7 +271,9 @@ pub enum TxContext<
     'id,
     K,
     C,
-    Path: oer_protocols_radio_port::PoolPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>,
+    Path: oer_protocols_radio_port::PoolPath = oer_protocols_radio_port::Root<
+        oer_protocols_radio_port::LocalId<'id>,
+    >,
 > {
     /// A station protocol operation, including its connection epoch and purpose.
     Station(StaTxContext<'id, Path>),
@@ -1375,7 +1379,8 @@ impl<
         >,
         timer: &impl Timer,
     ) -> oer_portable_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>> {
-        let (arbiter, mut state) = oer_portable_memory::unpack_placed!(service, Self { arbiter, state });
+        let (arbiter, mut state) =
+            oer_portable_memory::unpack_placed!(service, Self { arbiter, state });
         let mut custody_storage = core::mem::MaybeUninit::uninit();
         let mut custody = oer_portable_memory::Placed::init(&mut custody_storage, |place| {
             place.write(TerminalCustody::Clear)
@@ -3172,9 +3177,9 @@ impl<
     ) -> Result<(), ContractFault<'id, B>> {
         let control = match &terminal {
             LowerMacTerminal::GateClosed(_) => Some(ControlTerminal::GateClosed),
-            LowerMacTerminal::Configured(oer_protocols_ieee80211_contracts_port::Configured::Station(_)) => {
-                Some(ControlTerminal::Configure)
-            }
+            LowerMacTerminal::Configured(
+                oer_protocols_ieee80211_contracts_port::Configured::Station(_),
+            ) => Some(ControlTerminal::Configure),
             LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => {
                 Some(ControlTerminal::PairwiseRemoval)
             }
@@ -3237,9 +3242,9 @@ impl<
                 self.aggregate_terminal(now, terminal)?;
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
-            LowerMacTerminal::Configured(oer_protocols_ieee80211_contracts_port::Configured::Station(
-                permission,
-            )) => {
+            LowerMacTerminal::Configured(
+                oer_protocols_ieee80211_contracts_port::Configured::Station(permission),
+            ) => {
                 self.station
                     .input(now, StaInput::Configured(permission), &mut self.events);
             }
@@ -3463,7 +3468,8 @@ impl<
                     let Some(mpdu) = rest.next() else {
                         break;
                     };
-                    let (buffer, body) = oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
+                    let (buffer, body) =
+                        oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
                     if let Some(body) = body {
                         match body {}
                     }
@@ -3529,8 +3535,11 @@ impl<
             u16::try_from(marks.delivered.count_ones()).unwrap_or(u16::MAX)
         });
         if let Some(tally) = attempted.and_then(|attempted| {
-            oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(attempted, acknowledged)
-                .ok()
+            oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
+                attempted,
+                acknowledged,
+            )
+            .ok()
         }) {
             self.rates.learn_aggregate(now, current, tally, &outcome);
         }
@@ -3884,14 +3893,16 @@ where
         },
         Err(reason) => {
             // The empty builder holds no subframe: cancelling it releases none.
-            let _cancelled = oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
+            let _cancelled =
+                oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
             refuse!(context, reason);
         }
     };
     let mut builder = match pushed {
         Ok(builder) => builder,
         Err((empty, mpdu, reason)) => {
-            let _cancelled = oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
+            let _cancelled =
+                oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
             data.aggregate_mpdu_returned(&context, 0, mpdu, &mut *events);
             refuse!(context, reason);
         }

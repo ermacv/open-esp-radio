@@ -20,7 +20,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_tx_block_stop_request_low(true)
                 .set_power_save_tx_block(PowerSaveTxBlock::Blocked)
                 .set_tx_block_stop_request_high(Bits::truncate(
-                    oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll.bits(),
+                    oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll
+                        .bits(),
                 ));
         });
         oer_portable_riscv::fence();

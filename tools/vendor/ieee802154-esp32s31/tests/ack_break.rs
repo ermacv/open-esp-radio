@@ -1,4 +1,6 @@
-use oer_tools_vendor_ieee802154_esp32s31::{Record, Verdict, catalog, claim, compare_scenario, port};
+use oer_tools_vendor_ieee802154_esp32s31::{
+    Record, Verdict, catalog, claim, compare_scenario, port,
+};
 
 #[test]
 fn external_ack_break_notification_survives_the_comparison_filter() {

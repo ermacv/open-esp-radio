@@ -62,7 +62,9 @@ use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};
 pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
 pub use oer_tools_analysis_riscv_analysis::TrapSemantics;
-use oer_tools_analysis_riscv_analysis::{JumpTableSource, KnownJump, ProvenTables, RecognizedTables};
+use oer_tools_analysis_riscv_analysis::{
+    JumpTableSource, KnownJump, ProvenTables, RecognizedTables,
+};
 pub use producers::{BaseBarrier, LoadBase, RegisterWitness};
 pub use relocations::taken_addresses;
 pub use resolutions::{Assumption, Fact, Resolution, Resolutions, task_poll_sites};

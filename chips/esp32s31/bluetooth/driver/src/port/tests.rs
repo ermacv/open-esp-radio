@@ -1,7 +1,7 @@
 use super::*;
 use core::pin::pin;
-use oer_protocols_bluetooth_le_wire::TestChannel;
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_bluetooth_le_wire::TestChannel;
 use std::{rc::Rc, task::Waker};
 
 #[derive(Clone)]
@@ -41,7 +41,9 @@ impl ClockClient for TestClock {
         }
         Ok(())
     }
-    async fn now(&mut self) -> PortResult<oer_portable_time::RadioInstant<LeRadio>, ClockError, Fault> {
+    async fn now(
+        &mut self,
+    ) -> PortResult<oer_portable_time::RadioInstant<LeRadio>, ClockError, Fault> {
         Ok(Ok(oer_portable_time::RadioInstant::from_micros(
             self.0.now().as_micros(),
         )))
@@ -431,7 +433,11 @@ fn cancelled_fifo_leader_does_not_block_the_next_original_seat() {
         let returned = pool.take(s1).await;
         pool.release(returned);
         // The production credit pool meets the shared permit pool rule.
-        oer_protocols_radio_port::conformance::permits_serve_takers_in_arrival_order(pool, &mut seats, []);
+        oer_protocols_radio_port::conformance::permits_serve_takers_in_arrival_order(
+            pool,
+            &mut seats,
+            [],
+        );
         *p.resources = Some((seats, session));
         drop(front);
         drop(registration);

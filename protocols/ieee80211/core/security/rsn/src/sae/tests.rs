@@ -167,9 +167,11 @@ fn an_access_point_refuses_commit_values_off_the_scalar_range_or_curve() {
 fn a_comeback_token_is_bound_to_its_station_and_used_once() {
     let station = [2, 0, 0, 0, 0, 7];
     let mut tokens = SaeComebackTokens::new();
-    let token = tokens.issue(station, oer_portable_time::Instant::from_micros(1_000), || {
-        [0x42; 32]
-    });
+    let token = tokens.issue(
+        station,
+        oer_portable_time::Instant::from_micros(1_000),
+        || [0x42; 32],
+    );
     assert_eq!(token[..2], [0, 1]);
     assert_eq!(
         tokens.issue(
@@ -186,9 +188,11 @@ fn a_comeback_token_is_bound_to_its_station_and_used_once() {
     assert!(tokens.check(station, &token));
     assert!(!tokens.check(station, &token));
 
-    let reissued = tokens.issue(station, oer_portable_time::Instant::from_micros(70_000_000), || {
-        [0x43; 32]
-    });
+    let reissued = tokens.issue(
+        station,
+        oer_portable_time::Instant::from_micros(70_000_000),
+        || [0x43; 32],
+    );
     assert_ne!(reissued, token);
     assert!(tokens.check(station, &reissued));
 }

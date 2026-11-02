@@ -290,8 +290,8 @@ pub struct DataTxInfo<K, C, A> {
     attempts: u8,
 }
 
-impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p> oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
-    for DataTxContext<'p, K, C, A, Path>
+impl<'p, K: 'p, C: 'p, A: 'p, Path: PoolPath + 'p>
+    oer_protocols_radio_port::LoanedContext<'p, Path::Identity> for DataTxContext<'p, K, C, A, Path>
 where
     Path::Identity: 'p,
 {
@@ -311,7 +311,9 @@ where
         })
     }
 
-    fn restore(context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>) -> Self {
+    fn restore(
+        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
+    ) -> Self {
         let (link, data) = context.into_parts();
         Self {
             admission: data.admission,
@@ -391,7 +393,9 @@ impl<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities, C, A, Pat
 
 impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
     /// The checked MPDU description selected when the bytes were encoded.
-    pub const fn frame(&self) -> &oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K> {
+    pub const fn frame(
+        &self,
+    ) -> &oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K> {
         &self.frame
     }
 
@@ -952,7 +956,9 @@ impl<
     }
 }
 
-pub(crate) fn integrity(meta: &RxMeta) -> oer_protocols_ieee80211_core_upper_mac::receive::Integrity {
+pub(crate) fn integrity(
+    meta: &RxMeta,
+) -> oer_protocols_ieee80211_core_upper_mac::receive::Integrity {
     use oer_protocols_ieee80211_core_upper_mac::receive::Integrity;
     match meta.crypto {
         RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)

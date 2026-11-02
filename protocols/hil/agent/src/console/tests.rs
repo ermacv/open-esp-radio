@@ -188,7 +188,10 @@ fn hello_comes_first_and_base_requests_are_answered_in_order() {
     let frames = host.frames();
     assert_eq!(frames[0], (0, 0, Hello::KEY));
     assert_eq!(frames[1], (5, 1, BootEvidence::KEY));
-    assert_eq!(frames[2], (6, 2, oer_protocols_hil_protocol::base::LinkHealth::KEY));
+    assert_eq!(
+        frames[2],
+        (6, 2, oer_protocols_hil_protocol::base::LinkHealth::KEY)
+    );
 }
 
 #[test]
@@ -222,7 +225,10 @@ fn a_rejection_names_the_request() {
         |host| host.frames().len() == 2,
     );
     let (request, _, key) = host.frames()[1];
-    assert_eq!((request, key), (4, oer_protocols_hil_protocol::base::Rejected::KEY));
+    assert_eq!(
+        (request, key),
+        (4, oer_protocols_hil_protocol::base::Rejected::KEY)
+    );
     let _ = RejectReason::InvalidState;
 }
 

@@ -5,8 +5,8 @@ use super::*;
 use oer_chips_esp32s31_radio_client::{
     Failure, PhyFault, Poison, PoisonCause, PoisonOrigin, RequestKind,
 };
-use oer_protocols_ieee80211_wire::channel::Channel;
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_wire::channel::Channel;
 
 async fn yield_once() {
     let mut yielded = false;
@@ -56,9 +56,11 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for Retune {
                     oer_protocols_radio_regulatory::Country::new(*b"DE").expect("test country"),
                 )
                 .expect("domain fixture")
-                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    Channel::from_wifi_channel(channel(1)),
-                ))
+                .permit(
+                    oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                        Channel::from_wifi_channel(channel(1)),
+                    ),
+                )
                 .expect("permitted test channel"),
             )
             .expect("supported test channel"),
@@ -115,9 +117,9 @@ fn a_failed_retune_poisons_the_port_with_its_named_cause() {
             PoisonCause::Channel(PhyFault::UnexpectedBinding),
         ))),
         WifiRetuneError::Radio(Failure::Refused),
-        WifiRetuneError::NotStopped(oer_chips_esp32s31_hal::owner::maintenance::Error::MacActive {
-            state: 3,
-        }),
+        WifiRetuneError::NotStopped(
+            oer_chips_esp32s31_hal::owner::maintenance::Error::MacActive { state: 3 },
+        ),
     ] {
         let (parts, observed, _) = installed(Vec::new());
         crate::port::FIRST_POISON.with(|first| first.set(None));

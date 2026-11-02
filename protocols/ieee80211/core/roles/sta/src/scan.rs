@@ -1,7 +1,7 @@
 //! Station-owned BSS observations and candidate selection.
 
-use oer_protocols_ieee80211_wire::scan::{ScanFrame, ScanRecord};
 use oer_portable_time::Instant;
+use oer_protocols_ieee80211_wire::scan::{ScanFrame, ScanRecord};
 
 pub const SCAN_RECORD_CAPACITY: usize = 32;
 

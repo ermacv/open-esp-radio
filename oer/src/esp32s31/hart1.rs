@@ -16,7 +16,6 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_hal::{
     cores::{Cores, LaunchPermit},
     peripherals::{
@@ -30,6 +29,7 @@ use oer_chips_family_boot::wait::{BootBudget, BootDeadline, BootWait};
 use oer_chips_family_executor::{AlarmGrant, Executor, Root, TimeDriverReady};
 use oer_chips_family_interrupt_table::signal::{FromPeerHart, IrqSignal, PeerNotify};
 use oer_chips_family_staged_runtime::{Mailbox, Running, SecondaryHandoff};
+use oer_portable_embassy_time::EmbassyClock;
 
 use super::{
     Error, Esp32s31, Hart1AlarmToken, Hart1Boot, Hart1Peripherals, Hart1Started, Hart1WakeToken,

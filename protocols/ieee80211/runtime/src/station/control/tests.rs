@@ -1,8 +1,8 @@
 use super::*;
+use oer_portable_memory::WakingSpscQueue;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_testing_model::ModelLentRx;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
-use oer_portable_memory::WakingSpscQueue;
 use oer_protocols_network_port::{EthernetFrameView, FrameLengthError};
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
@@ -590,8 +590,9 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     type Two = AcrossHarts<Side, Side>;
     let (network, station) = (Side::new(), Side::new());
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
-    let mut tx =
-        oer_portable_memory::WakingSlotQueue::<TxMsdu, 1, Side, Side>::across_harts(station, network);
+    let mut tx = oer_portable_memory::WakingSlotQueue::<TxMsdu, 1, Side, Side>::across_harts(
+        station, network,
+    );
     let mut rx =
         WakingSpscQueue::<Received<ModelLentRx>, 1, Side, Side>::across_harts(network, station);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH, Side, Side>::across_harts(

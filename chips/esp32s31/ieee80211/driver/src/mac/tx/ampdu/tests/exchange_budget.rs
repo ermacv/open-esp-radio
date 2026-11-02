@@ -31,7 +31,8 @@ fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner()
                 .unwrap()
         );
         let (index, ()) = pool.claim_network(index).unwrap().publish(
-            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+            oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32)
+                .expect("test frame length"),
             |_| {},
         );
         owner

@@ -144,17 +144,19 @@ impl BootError {
         match self {
             Self::WrongHart { .. } => oer_portable_diagnostics::name!("interrupt-hart"; 32),
             Self::NoInterruptStack { .. } => oer_portable_diagnostics::name!("interrupt-stack"; 32),
-            Self::InvalidStackGuard { .. } => oer_portable_diagnostics::name!("interrupt-stack-guard"; 32),
+            Self::InvalidStackGuard { .. } => {
+                oer_portable_diagnostics::name!("interrupt-stack-guard"; 32)
+            }
             Self::ForeignVectors => oer_portable_diagnostics::name!("interrupt-vectors"; 32),
-            Self::InterruptController(oer_chips_family_interrupt_table::Error::WrongControlBits {
-                ..
-            }) => oer_portable_diagnostics::name!("interrupt-control-bits"; 32),
+            Self::InterruptController(
+                oer_chips_family_interrupt_table::Error::WrongControlBits { .. },
+            ) => oer_portable_diagnostics::name!("interrupt-control-bits"; 32),
             Self::InterruptController(
                 oer_chips_family_interrupt_table::Error::WrongInterruptCount { .. },
             ) => oer_portable_diagnostics::name!("interrupt-count"; 32),
-            Self::InterruptController(oer_chips_family_interrupt_table::Error::WrongLevelBits {
-                ..
-            }) => oer_portable_diagnostics::name!("interrupt-level-bits"; 32),
+            Self::InterruptController(
+                oer_chips_family_interrupt_table::Error::WrongLevelBits { .. },
+            ) => oer_portable_diagnostics::name!("interrupt-level-bits"; 32),
             Self::InterruptController(_) => oer_portable_diagnostics::name!("interrupt-table"; 32),
         }
     }
@@ -190,7 +192,9 @@ pub struct Handoff<P> {
 impl<P> Handoff<P> {
     #[doc(hidden)]
     /// Wrap the proof minted by [`entry!`].
-    pub const fn from_proof(proof: oer_chips_family_staged_layout::handoff::StageTwoHandoff) -> Self {
+    pub const fn from_proof(
+        proof: oer_chips_family_staged_layout::handoff::StageTwoHandoff,
+    ) -> Self {
         Self {
             proof,
             #[cfg(chip_vectors)]
@@ -251,7 +255,8 @@ impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
             return Err(BootError::WrongHart { actual, expected });
         }
         stacks::install_interrupt_stack(&mut self.admission)?;
-        let router = oer_chips_family_interrupt_table::Router::install(controller, interrupt_table)?;
+        let router =
+            oer_chips_family_interrupt_table::Router::install(controller, interrupt_table)?;
         // Interrupts are disabled and trigger 0 is the runtime's;
         // the generated table names this checked hart's word-aligned task bottom.
         let hart = oer_chips_family_platform_port::BOOT_HART;
@@ -286,7 +291,12 @@ const DEFAULT_HART: u8 = 0;
 impl<C: oer_chips_family_interrupt_table::Controller, const H: u8> Adopted<C, H> {
     /// Borrow the local execution identity and router together before admission.
     #[cfg(chip_vectors)]
-    pub fn parts(&mut self) -> (&Hart<H>, &mut oer_chips_family_interrupt_table::Router<C, H>) {
+    pub fn parts(
+        &mut self,
+    ) -> (
+        &Hart<H>,
+        &mut oer_chips_family_interrupt_table::Router<C, H>,
+    ) {
         (self.admission.hart(), &mut self.router)
     }
 

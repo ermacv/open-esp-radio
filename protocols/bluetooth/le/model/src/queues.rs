@@ -6,6 +6,7 @@ use super::{
 };
 use alloc::{collections::VecDeque, rc::Rc, vec::Vec};
 use core::{cell::Cell, future::poll_fn, task::Poll};
+use oer_portable_time::Instant;
 use oer_protocols_bluetooth_le_port::{
     backend::{OwnedCommand, OwnedRequest, OwnedSession},
     *,
@@ -14,7 +15,6 @@ use oer_protocols_radio_port::{
     BodyLoan, Child, Correlation, FifoPermitPool, Permit, PermitPool, PortContext, PortPhase, Root,
     Seat, SlotIdentity,
 };
-use oer_portable_time::Instant;
 
 pub(crate) const CAPACITY: usize = 2;
 pub(crate) const SEATS: usize = 3;
@@ -318,11 +318,12 @@ impl<Id: SlotIdentity> Initial<Id> {
         initial: &mut Option<Self>,
         loan: &BodyLoan<'p, Id, Backend<Id, X>>,
     ) -> Result<super::Resources<'p, Id>, oer_protocols_radio_port::SlotInitError> {
-        let initial = initial
-            .take()
-            .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
-                "BLE initial resources",
-            ))?;
+        let initial =
+            initial
+                .take()
+                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
+                    "BLE initial resources",
+                ))?;
         Ok(super::Resources {
             seats: initial.seats.map(|seat| loan.lend_seat(seat)),
             session: initial.idle.lend(loan),

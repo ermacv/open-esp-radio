@@ -54,7 +54,10 @@ impl Encoding {
 
     /// The application image's encoding of the chip flash map `flash`, with
     /// MMU pages of `mmu_page_size` bytes.
-    pub fn application(flash: &oer_chips_family_facts::FlashMap, mmu_page_size: u32) -> Result<Self> {
+    pub fn application(
+        flash: &oer_chips_family_facts::FlashMap,
+        mmu_page_size: u32,
+    ) -> Result<Self> {
         let settings = &flash.application_encoding;
         Ok(Self {
             mode: Some(mode(settings.mode)),
@@ -66,7 +69,10 @@ impl Encoding {
 
     /// The encoding the ROM reads the bootloader in: the application's, in
     /// the flash map's bootloader mode.
-    pub fn bootloader(flash: &oer_chips_family_facts::FlashMap, mmu_page_size: u32) -> Result<Self> {
+    pub fn bootloader(
+        flash: &oer_chips_family_facts::FlashMap,
+        mmu_page_size: u32,
+    ) -> Result<Self> {
         Ok(Self {
             mode: Some(mode(flash.bootloader_mode)),
             ..Self::application(flash, mmu_page_size)?

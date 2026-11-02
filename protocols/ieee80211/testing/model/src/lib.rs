@@ -173,6 +173,7 @@ use core::{
     num::NonZeroU16,
     task::{Poll, Waker},
 };
+use oer_portable_time::{Clock, Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{EdcaAcParameters, EdcaParameterSet};
 use oer_protocols_ieee80211_contracts_port::{
     association,
@@ -189,15 +190,14 @@ use oer_protocols_radio_port::{
     SlotStopped, SlotWakes,
 };
 use oer_protocols_radio_port::{ClockRelation, GenerationSource, RelationSample};
-use oer_portable_time::{Clock, Duration, Instant};
 
+use oer_portable_time::RadioInstant;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
 use oer_protocols_radio_port::{
     Abandon, Call, ClockError, EnableResult, EventEnd, InstallParts, PortBackend, PortPhase,
     Quarantine,
 };
 use oer_protocols_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
-use oer_portable_time::RadioInstant;
 
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, BufferMemoryUnavailable,
@@ -403,7 +403,8 @@ impl TxBufferClass for ModelLarge {
 }
 
 /// Paths of the model's fixed installation layout. They add no runtime state.
-pub type ModelPool<Id, const I: u8> = oer_protocols_radio_port::Child<oer_protocols_radio_port::Root<Id>, I>;
+pub type ModelPool<Id, const I: u8> =
+    oer_protocols_radio_port::Child<oer_protocols_radio_port::Root<Id>, I>;
 
 /// The distinct key pools belonging to each modeled interface role.
 pub trait ModelRole: oer_protocols_ieee80211_contracts_port::InterfaceRole {
@@ -418,7 +419,8 @@ impl ModelRole for Station {
 }
 impl ModelRole for AccessPoint {
     type AssociationPath<Id: SlotIdentity> = ModelPool<Id, 6>;
-    type GroupPermissionPath<Id: SlotIdentity> = oer_protocols_radio_port::Child<ModelPool<Id, 9>, 0>;
+    type GroupPermissionPath<Id: SlotIdentity> =
+        oer_protocols_radio_port::Child<ModelPool<Id, 9>, 0>;
 }
 
 /// The kind of the one GTK mutation permission per interface.
@@ -1375,7 +1377,10 @@ impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for ModelLentRx {
     fn mpdu_len(&self) -> usize {
         self.mpdu_len
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
         let refused = oer_protocols_ieee80211_contracts_port::AdvanceRefused {
             by,
             mpdu_len: self.mpdu_len,
@@ -1955,7 +1960,10 @@ impl Default for InterfaceAssociations {
     }
 }
 impl InterfaceAssociations {
-    fn get(&self, role: VifRole) -> oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation {
+    fn get(
+        &self,
+        role: VifRole,
+    ) -> oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation {
         oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(match role {
             VifRole::Station => self.station,
             VifRole::AccessPoint => self.access_point,
@@ -2011,7 +2019,8 @@ impl ModelAir {
             .map_err(|_| ModelCcmpError::MalformedHeader)?
             .key_id()
             .value();
-        let group = oer_protocols_ieee80211_contracts_port::GroupAddress::new(header.receiver()).is_some();
+        let group =
+            oer_protocols_ieee80211_contracts_port::GroupAddress::new(header.receiver()).is_some();
         let installations = self.key_installations.take();
         let result = (|| {
             let material = installations
@@ -2193,7 +2202,11 @@ impl ModelAir {
 
     /// Keep the queue of `access_category` busy, or free it: its attempts
     /// wait unpublished meanwhile, as behind a long transmission.
-    pub fn hold(&self, access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory, held: bool) {
+    pub fn hold(
+        &self,
+        access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
+        held: bool,
+    ) {
         let mut queues = self.held.get();
         *access_category.select_mut(&mut queues) = held;
         self.held.set(queues);
@@ -3340,9 +3353,11 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
 
 /// Synthetic model latency, in model time; hardware backends declare their
 /// own PPDU + response/timeout bound. It does not scale with retry-plan length.
-pub const MODEL_PUBLICATION_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(1);
+pub const MODEL_PUBLICATION_BOUND: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_millis(1);
 /// Synthetic admission-to-GTK-terminal bound, driven by the supplied clock's owner.
-pub const MODEL_GROUP_COMMAND_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(2);
+pub const MODEL_GROUP_COMMAND_BOUND: oer_portable_time::Duration =
+    oer_portable_time::Duration::from_millis(2);
 
 struct TxQueue<'id, B: ModelComposition> {
     waiting: VecDeque<Work<'id, B>>,
@@ -3847,9 +3862,10 @@ where
                     oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
                 ),
             ))) => return Ok(key),
-            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
-                phase.recycle(frame)
-            }
+            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received {
+                frame,
+                ..
+            })) => phase.recycle(frame),
             _ => return Err("the station PTK installation terminal"),
         }
     }
@@ -3884,9 +3900,10 @@ where
                     oer_protocols_ieee80211_contracts_port::InstalledPairwise::AccessPoint(key),
                 ),
             ))) => return Ok(key),
-            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received { frame, .. })) => {
-                phase.recycle(frame)
-            }
+            Ok(Ok(oer_protocols_ieee80211_contracts_port::LowerMacEvent::Received {
+                frame,
+                ..
+            })) => phase.recycle(frame),
             _ => return Err("the access point PTK installation terminal"),
         }
     }
@@ -4127,11 +4144,13 @@ fn stages<C: Ieee80211Capabilities>(
     }
 }
 fn one_stage(rate: PhyRate) -> oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate> {
-    oer_protocols_ieee80211_contracts_port::RetryPlan::new(oer_protocols_ieee80211_contracts_port::RetryStage {
-        rate,
-        transmissions: core::num::NonZeroU8::MIN,
-        protection: oer_protocols_ieee80211_contracts_port::Protection::None,
-    })
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
+        oer_protocols_ieee80211_contracts_port::RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
+        },
+    )
 }
 
 fn retry_stages<K>(
@@ -4909,7 +4928,12 @@ where
     }
     fn submit_ampdu<'k>(
         &mut self,
-        attempt: oer_protocols_ieee80211_contracts_port::InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
+        attempt: oer_protocols_ieee80211_contracts_port::InterfaceAggregateSubmission<
+            'k,
+            'p,
+            'id,
+            Self,
+        >,
     ) -> Result<(), Poisoned<ModelFault>>
     where
         'id: 'k,

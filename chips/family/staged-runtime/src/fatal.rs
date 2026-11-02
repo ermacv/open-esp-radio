@@ -151,7 +151,10 @@ mod tests {
     fn boot_failure_keeps_the_reason_without_a_retry_counter() {
         let record = super::encode_boot_failure("interrupt-vectors", 0).unwrap();
         let view = record.peek().unwrap();
-        assert_eq!(view.class, oer_portable_diagnostics::fault::Class::ConfigurationBoot);
+        assert_eq!(
+            view.class,
+            oer_portable_diagnostics::fault::Class::ConfigurationBoot
+        );
         assert_eq!(view.payload, b"interrupt-vectors");
     }
 }

@@ -185,7 +185,10 @@ impl TxHardware for Hardware {
         self.block_ack_completion[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex) -> bool {
+    fn begin_tx_timeout_abort(
+        &mut self,
+        queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
+    ) -> bool {
         let queue = queue.get() as u8;
         if !self.timeout_pending[usize::from(queue)] {
             return false;
@@ -509,7 +512,8 @@ impl<'id> TestAssociations<'id> {
         let (ap_pairwise, ap_group) = ap_bank.into_parts();
         Self {
             station: start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated),
-            access_point: ap_start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated),
+            access_point: ap_start
+                .begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated),
             sta_pairwise: Some(pairwise),
             sta_group: Some(group),
             ap_pairwise: ap_pairwise.map(Some),
@@ -666,9 +670,10 @@ impl<'core> Core<'core> {
         let ticket = self.take_ticket();
         let key_use = self.inner.admit_key(key, ticket).ok().expect("TX key");
         let frame = &mut request.slot.buffer_mut().unwrap()[TX_METADATA_SIZE..];
-        let control =
-            oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
-                .unwrap();
+        let control = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+            frame[0], frame[1],
+        ]))
+        .unwrap();
         frame[..2].copy_from_slice(&control.with_protected(true).get().to_le_bytes());
         self.inner.submit_checked(
             hardware,
@@ -768,9 +773,9 @@ fn installed<R>(body: impl for<'core> FnOnce(CoreResources<'core>) -> R) -> R {
         future::Future,
         task::{Context, Poll, Waker},
     };
-    let mut future = core::pin::pin!(oer_protocols_radio_port::branded::<CorePools, _>(async |mint| {
-        body(mint.into_pools())
-    }));
+    let mut future = core::pin::pin!(oer_protocols_radio_port::branded::<CorePools, _>(
+        async |mint| { body(mint.into_pools()) }
+    ));
     match future
         .as_mut()
         .poll(&mut Context::from_waker(Waker::noop()))
@@ -2355,7 +2360,8 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
             let header = &queued_free_slot(slot.as_mut()).into_buffer().unwrap()
                 [TX_METADATA_SIZE + 26..][..8];
             let header =
-                oer_protocols_ieee80211_wire::ccmp::CcmpHeader::parse(header.try_into().unwrap()).unwrap();
+                oer_protocols_ieee80211_wire::ccmp::CcmpHeader::parse(header.try_into().unwrap())
+                    .unwrap();
             assert_eq!(header.packet_number().value(), expected);
             assert_eq!(
                 header.key_id(),
@@ -2638,7 +2644,8 @@ fn a_closed_gate_blocks_the_queues_and_holds_the_attempt_until_it_opens() {
         assert_eq!(
             core.next_deadline(),
             Some(at(
-                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME
+                    .as_micros()
             ))
         );
         let mut core = core.open_gate(&mut hardware).unwrap();
@@ -2795,7 +2802,8 @@ fn a_closed_gate_holds_every_queue_and_opening_it_publishes_them() {
         assert_eq!(
             core.next_deadline(),
             Some(at(
-                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
+                oer_protocols_ieee80211_contracts_port::EdcaParameterSet::DEFAULT_MSDU_LIFETIME
+                    .as_micros()
             ))
         );
 
@@ -2898,7 +2906,9 @@ fn the_station_s_he_bss_color_is_installed() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
-        core.set_checked_he_bss_color(oer_protocols_ieee80211_contracts_port::BssColor::new(63).unwrap());
+        core.set_checked_he_bss_color(
+            oer_protocols_ieee80211_contracts_port::BssColor::new(63).unwrap(),
+        );
         assert_eq!(core.tx.policy().he_bss_color(), 63);
     });
 }
@@ -3038,13 +3048,14 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
         core.set_checked_edca(VifRole::Station, wmm_with_best_effort_txop(94))
             .unwrap();
         // A best-effort ECWmax of 11 lies outside the hardware's exponents.
-        let record = |aifsn, ecw_max| oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters {
-            admission_control_mandatory: false,
-            aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
-            ecw_min: oer_portable_wire::U8::constant::<4>(),
-            ecw_max: oer_portable_wire::U8::new(ecw_max).unwrap(),
-            txop_limit_units_32_us: 47,
-        };
+        let record =
+            |aifsn, ecw_max| oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters {
+                admission_control_mandatory: false,
+                aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
+                ecw_min: oer_portable_wire::U8::constant::<4>(),
+                ecw_max: oer_portable_wire::U8::new(ecw_max).unwrap(),
+                txop_limit_units_32_us: 47,
+            };
         let outside = oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
             false,
@@ -3578,7 +3589,9 @@ fn he_aggregates_publish_an_he_program_with_the_station_bss_color() {
                 .formats
                 .contains_rate(he_rate())
         );
-        core.set_checked_he_bss_color(oer_protocols_ieee80211_contracts_port::BssColor::new(0x2a).unwrap());
+        core.set_checked_he_bss_color(
+            oer_protocols_ieee80211_contracts_port::BssColor::new(0x2a).unwrap(),
+        );
 
         let mut buffer = aggregate_of(source, 3, 26);
         let plan = core
@@ -4080,10 +4093,11 @@ fn key_right_is_retained_by_an_aggregate_through_completion_or_quarantine() {
             for _ in 0..2 {
                 let frame = buffer.push_from(source, 26, at(0)).unwrap();
                 frame.copy_from_slice(&data_frame(BSSID));
-                let fc = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
-                    frame[0], frame[1],
-                ]))
-                .unwrap();
+                let fc =
+                    oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+                        frame[0], frame[1],
+                    ]))
+                    .unwrap();
                 frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
             }
             let plan = core
@@ -4308,9 +4322,10 @@ fn a_protected_wire_frame_cannot_publish_with_an_open_ticket() {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
         let mut frame = data_frame(BSSID);
-        let fc =
-            oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([frame[0], frame[1]]))
-                .unwrap();
+        let fc = oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([
+            frame[0], frame[1],
+        ]))
+        .unwrap();
         frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
         let refused = core
             .submit_checked(&mut hardware, values(&frame, false))
@@ -4333,66 +4348,69 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
         future::Future,
         task::{Context, Poll, Waker},
     };
-    let mut future = core::pin::pin!(oer_protocols_radio_port::branded::<CorePools<256>, _>(async |mint| {
-        let resources = mint.into_pools();
-        let mut owner = LowerMacCore::new(
-            resources.authority,
-            OrdinaryTxOwner::new(WifiTxResources {
-                slot: slot(),
-                policy: WifiTxRuntimePolicy::vendor_defaults(),
-                power: Power,
-                entropy: entropy as fn() -> u32,
-                timer: Timer::default(),
-            })
-            .into_idle()
-            .ok()
-            .expect("fresh core transmitter is idle"),
-            LowerMacConfig {
-                station_address: STATION,
-                channel: channel(6),
-                publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
-                tsf_epoch: 1,
-            },
-            &RadioNine,
-        );
-        let CoreView::Disabled(mut core) = owner.view() else {
-            panic!("fresh owner is disabled")
-        };
-        let (start, bank) = resources.station_association.into_parts();
-        let association = start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
-        let ([slot], [_group]) = bank.into_parts();
-        let mut hardware = Hardware::default();
-        let key = core
-            .install_checked_key(
-                &mut hardware,
-                association::TransmitKeyInstallation::StationPairwise {
-                    association: &association,
-                    slot,
-                    peer: BSSID,
-                },
-                &[0x6b; 16],
-            )
-            .unwrap();
-        let index = key.index;
-        let mut rights = resources
-            .tickets
-            .map(|ticket| core.admit_key(&key, ticket).ok().unwrap());
-        assert_eq!(core.keys.uses[index].get(), 256);
-        let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
-        assert!(hardware.cleared_keys.is_empty());
-        rights.reverse();
-        for (ordinal, right) in rights.into_iter().enumerate() {
-            let ticket = core
-                .return_admission(&mut hardware, TxAdmission::Protected(right), &mut events)
+    let mut future = core::pin::pin!(oer_protocols_radio_port::branded::<CorePools<256>, _>(
+        async |mint| {
+            let resources = mint.into_pools();
+            let mut owner = LowerMacCore::new(
+                resources.authority,
+                OrdinaryTxOwner::new(WifiTxResources {
+                    slot: slot(),
+                    policy: WifiTxRuntimePolicy::vendor_defaults(),
+                    power: Power,
+                    entropy: entropy as fn() -> u32,
+                    timer: Timer::default(),
+                })
+                .into_idle()
                 .ok()
+                .expect("fresh core transmitter is idle"),
+                LowerMacConfig {
+                    station_address: STATION,
+                    channel: channel(6),
+                    publication_timeout: oer_portable_time::Duration::from_micros(TIMEOUT),
+                    tsf_epoch: 1,
+                },
+                &RadioNine,
+            );
+            let CoreView::Disabled(mut core) = owner.view() else {
+                panic!("fresh owner is disabled")
+            };
+            let (start, bank) = resources.station_association.into_parts();
+            let association =
+                start.begin(oer_protocols_ieee80211_wire::security::Spp::NotNegotiated);
+            let ([slot], [_group]) = bank.into_parts();
+            let mut hardware = Hardware::default();
+            let key = core
+                .install_checked_key(
+                    &mut hardware,
+                    association::TransmitKeyInstallation::StationPairwise {
+                        association: &association,
+                        slot,
+                        peer: BSSID,
+                    },
+                    &[0x6b; 16],
+                )
                 .unwrap();
-            assert_eq!(ticket.index(), 255 - ordinal);
-            assert_eq!(core.keys.uses[index].get() as usize, 255 - ordinal);
-            assert_eq!(events.removed.len(), usize::from(ordinal == 255));
+            let index = key.index;
+            let mut rights = resources
+                .tickets
+                .map(|ticket| core.admit_key(&key, ticket).ok().unwrap());
+            assert_eq!(core.keys.uses[index].get(), 256);
+            let mut events = Events::default();
+            core.remove_checked_key(&mut hardware, key, &mut events);
+            assert!(hardware.cleared_keys.is_empty());
+            rights.reverse();
+            for (ordinal, right) in rights.into_iter().enumerate() {
+                let ticket = core
+                    .return_admission(&mut hardware, TxAdmission::Protected(right), &mut events)
+                    .ok()
+                    .unwrap();
+                assert_eq!(ticket.index(), 255 - ordinal);
+                assert_eq!(core.keys.uses[index].get() as usize, 255 - ordinal);
+                assert_eq!(events.removed.len(), usize::from(ordinal == 255));
+            }
+            assert_eq!(hardware.cleared_keys, [4]);
         }
-        assert_eq!(hardware.cleared_keys, [4]);
-    }));
+    ));
     assert!(matches!(
         future
             .as_mut()
@@ -4683,12 +4701,14 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
                 [lifetime; 4],
             )
         };
-        let station =
-            oer_protocols_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(3, 4, 6, 94, 500))
-                .unwrap();
-        let ap =
-            oer_protocols_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(7, 2, 3, 350, 100))
-                .unwrap();
+        let station = oer_protocols_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(
+            table(3, 4, 6, 94, 500),
+        )
+        .unwrap();
+        let ap = oer_protocols_ieee80211_contracts_port::SupportedEdca::<WideEdca>::new(table(
+            7, 2, 3, 350, 100,
+        ))
+        .unwrap();
         core.set_checked_edca(VifRole::Station, station).unwrap();
         core.set_checked_edca(VifRole::AccessPoint, ap).unwrap();
         for role in [VifRole::Station, VifRole::AccessPoint, VifRole::Station] {

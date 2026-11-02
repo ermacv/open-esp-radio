@@ -170,8 +170,10 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
                 mint,
                 3,
                 StaSecurity::Personal {
-                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
-                        .unwrap(),
+                    password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(
+                        b"password",
+                    )
+                    .unwrap(),
                     pmk: Pmk::from_bytes(PMK),
                 },
                 [Slot(1), Slot(2)],

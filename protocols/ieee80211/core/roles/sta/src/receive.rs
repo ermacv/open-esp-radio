@@ -9,8 +9,8 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use oer_protocols_ieee80211_contracts_port::{RxEvidence, RxMetadata};
 use oer_portable_time::Instant;
+use oer_protocols_ieee80211_contracts_port::{RxEvidence, RxMetadata};
 use {
     crate::scan::{ScanObservation, ScanTable},
     oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason,

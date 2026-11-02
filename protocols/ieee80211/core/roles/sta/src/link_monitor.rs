@@ -5,8 +5,10 @@
 //! owns the resulting disconnect edge. Power-save policy can consume the same
 //! TIM observation without importing vendor PM contexts or RTOS timers.
 
-use oer_protocols_ieee80211_wire::station_beacon::{StaBeaconFrame, StaBeaconObservation, StaTimObservation};
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::station_beacon::{
+    StaBeaconFrame, StaBeaconObservation, StaTimObservation,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaBeaconLossConfigError {

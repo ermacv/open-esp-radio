@@ -53,13 +53,15 @@ pub struct BipFrame<'a>(oer_protocols_ieee80211_wire::bip::BipFrame<'a>);
 impl<'a> BipFrame<'a> {
     pub fn parse(frame: &'a [u8], key_id: u8) -> Result<Self, BipError> {
         let frame =
-            oer_protocols_ieee80211_wire::bip::BipFrame::parse(frame).map_err(|error| match error {
-                BipFormatError::MissingManagementMic => BipError::MissingManagementMic,
-                BipFormatError::NotManagement => BipError::NotManagement,
-                BipFormatError::Truncated | BipFormatError::PacketNumberOutOfRange => {
-                    BipError::Truncated
-                }
-            })?;
+            oer_protocols_ieee80211_wire::bip::BipFrame::parse(frame).map_err(
+                |error| match error {
+                    BipFormatError::MissingManagementMic => BipError::MissingManagementMic,
+                    BipFormatError::NotManagement => BipError::NotManagement,
+                    BipFormatError::Truncated | BipFormatError::PacketNumberOutOfRange => {
+                        BipError::Truncated
+                    }
+                },
+            )?;
         if frame.key_id() != u16::from(key_id) {
             return Err(BipError::UnknownKeyId);
         }

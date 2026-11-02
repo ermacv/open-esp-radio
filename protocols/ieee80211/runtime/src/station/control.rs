@@ -14,15 +14,19 @@ use core::{
     task::{Context, Poll},
 };
 use embassy_futures::select::{Either, select};
-use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
-use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
-use oer_portable_memory::{QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender};
-use oer_protocols_network_port::{LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused};
+use oer_portable_memory::{
+    QueueNotify, SlotSendError, SlotSender, WakingSpscReceiver, WakingSpscSender,
+};
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::connected_tasks::{
     ConnectedTaskControlError, ConnectedTaskControlResources, ConnectedTaskController,
     ConnectedTaskEndpoint, ConnectedTaskGroup,
+};
+use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
+use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, TxMsdu};
+use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
+use oer_protocols_network_port::{
+    LinkSnapshot, LinkState, NetDevice, TransmitError, TransmitRefused,
 };
 
 /// Latest product state. Events and command owners still reach the callback once.
@@ -560,8 +564,12 @@ impl<'c, L, const TX: usize, const RX: usize, N: Notifies> Device<'c, L, TX, RX,
         }
     }
 }
-impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const TX: usize, const RX: usize, N: Notifies>
-    NetDevice for Device<'_, L, TX, RX, N>
+impl<
+    L: oer_protocols_ieee80211_contracts_port::LentRxBuffer,
+    const TX: usize,
+    const RX: usize,
+    N: Notifies,
+> NetDevice for Device<'_, L, TX, RX, N>
 {
     type RxFrame = Received<L>;
     fn link(&self) -> LinkSnapshot {

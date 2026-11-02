@@ -356,7 +356,8 @@ where
     pub(crate) fn port_power(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<oer_chips_esp32s31_hal::types::MacPowerInterruptObservation, WifiRxCause>> {
+    ) -> Poll<Result<oer_chips_esp32s31_hal::types::MacPowerInterruptObservation, WifiRxCause>>
+    {
         self.power
             .poll(cx)
             .map(|r| r.map_err(|_| WifiRxCause::ForeignExecutor))

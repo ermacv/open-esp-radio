@@ -101,7 +101,7 @@ fn the_dictionary_stays_below_execution_and_apache_consumers_state_the_license()
             .filter(|name| {
                 name.as_str() == ENGINE
                     || name.as_str() == "oer-chips-esp32s31-hal"
-                    || name.starts_with("oer-ieee802154-")
+                    || name.starts_with("oer-protocols-ieee802154-")
             })
             .collect::<Vec<_>>();
         assert!(forbidden.is_empty(), "{owner} reaches {forbidden:?}");

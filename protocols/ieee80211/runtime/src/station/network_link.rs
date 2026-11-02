@@ -5,8 +5,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::Context;
 
 use oer_portable_memory::QueueNotify;
-use oer_protocols_network_port::{LinkSnapshot, LinkState};
 use oer_portable_sync::PriorityWaker;
+use oer_protocols_network_port::{LinkSnapshot, LinkState};
 
 /// One word: the link's epoch in bits 1 to 31 and its level in bit 0, and
 /// `N`, how a publication tells the network device: a local waker, or the

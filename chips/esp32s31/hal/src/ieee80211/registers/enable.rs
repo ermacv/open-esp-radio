@@ -1,6 +1,8 @@
 //! Register-local cold MAC preparation and runtime start.
 
-use oer_chips_esp32s31_pac::wifi_mac::{control::PowerSaveTxBlock, core_enable_control::Bits4_7Opaque};
+use oer_chips_esp32s31_pac::wifi_mac::{
+    control::PowerSaveTxBlock, core_enable_control::Bits4_7Opaque,
+};
 use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters};

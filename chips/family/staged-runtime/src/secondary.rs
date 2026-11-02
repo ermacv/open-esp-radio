@@ -477,7 +477,9 @@ impl<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> SecondaryHa
         P::Controller: oer_chips_family_interrupt_table::Controller,
     {
         let controller = P::controller(self.interrupts)?;
-        let actual = usize::from(oer_chips_family_interrupt_table::Controller::hart(&controller));
+        let actual = usize::from(oer_chips_family_interrupt_table::Controller::hart(
+            &controller,
+        ));
         if actual != usize::from(H) {
             return Err(crate::BootError::WrongHart {
                 actual,
@@ -552,9 +554,10 @@ where
             crate::halt()
         }
     }
-    HANDSHAKE
-        .ready_sp
-        .store(oer_portable_riscv::stack_pointer() as u32, Ordering::Relaxed);
+    HANDSHAKE.ready_sp.store(
+        oer_portable_riscv::stack_pointer() as u32,
+        Ordering::Relaxed,
+    );
     HANDSHAKE.ready.store(READY, Ordering::Release);
     // The image's main never returns (`-> !`); a main that does idles masked.
     let _never = main(

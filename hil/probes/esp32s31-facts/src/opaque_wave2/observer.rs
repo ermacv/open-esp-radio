@@ -129,7 +129,8 @@ fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, t
     let mut matrix4 = first.matrix4 | after_reset.matrix4;
     let mut seen_busy = first.busy | after_reset.busy | reset_mask;
     let mut polls = 2u32;
-    while last.busy != 0 && oer_portable_riscv::cycle32().wrapping_sub(start_cycle) < COMMAND_CYCLES {
+    while last.busy != 0 && oer_portable_riscv::cycle32().wrapping_sub(start_cycle) < COMMAND_CYCLES
+    {
         last = sample(s, start_cycle);
         matrix3 |= last.matrix3;
         matrix4 |= last.matrix4;

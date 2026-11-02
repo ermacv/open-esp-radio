@@ -20,9 +20,9 @@ pub use credentials::{
     Callbacks, CredentialsError, NonceExhausted, NonceSource, OpenCallbacks, PreparedCredentials,
     StationSettings,
 };
+use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
 use oer_protocols_ieee80211_core_roles_sta::data::TxMsdu;
 use oer_protocols_ieee80211_runtime::station as runtime;
-use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
 use oer_protocols_network_port::{EthernetFrame, LinkSnapshot, NetDevice, TransmitRefused};
 pub use runtime::StopPolicy;
 pub use runtime::{ControlError, OperationEnd};
@@ -252,7 +252,10 @@ impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for Unlent {
     fn mpdu_len(&self) -> usize {
         match *self {}
     }
-    fn advance(&mut self, _: usize) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
+    fn advance(
+        &mut self,
+        _: usize,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::AdvanceRefused> {
         match *self {}
     }
 }
@@ -280,14 +283,19 @@ impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N
     fn bytes_mut(&mut self) -> &mut [u8] {
         self.0.bytes_mut()
     }
-    fn advance(&mut self, by: usize) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
+    fn advance(
+        &mut self,
+        by: usize,
+    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
         self.0.advance(by)
     }
 }
 impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
     type Storage = ReceivedStorage<N>;
     type Copied = Copied;
-    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
+    fn into_lent(
+        self,
+    ) -> Result<oer_protocols_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
         match self.inner {
             runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
             runtime::Received::Copied(mark) => Err(Copied(mark)),
@@ -694,8 +702,10 @@ mod tests {
     impl EthernetFrame for Packet {
         fn view(
             &self,
-        ) -> Result<oer_protocols_network_port::EthernetFrameView<'_>, oer_protocols_network_port::FrameLengthError>
-        {
+        ) -> Result<
+            oer_protocols_network_port::EthernetFrameView<'_>,
+            oer_protocols_network_port::FrameLengthError,
+        > {
             Ok(oer_protocols_network_port::EthernetFrameView {
                 destination: [2; 6],
                 source: [4; 6],
@@ -738,7 +748,10 @@ mod tests {
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
         let refused = net.try_transmit(Packet(dropped.clone())).err().unwrap();
-        assert_eq!(refused.reason, oer_protocols_network_port::TransmitError::LinkDown);
+        assert_eq!(
+            refused.reason,
+            oer_protocols_network_port::TransmitError::LinkDown
+        );
         assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
         assert_eq!(dropped.get(), 0);
         let credentials =

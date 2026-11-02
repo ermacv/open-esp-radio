@@ -23,9 +23,9 @@ use oer_chips_esp32s31_radio_client::{
     Untracked,
     wifi::{TrackReport, Wifi, WifiJoin, WifiJoined, WifiReturned, WifiTrack, WifiTracked},
 };
+use oer_portable_time::Duration;
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::channel::WifiChannel;
-use oer_portable_time::Duration;
 
 use crate::runtime::{WifiStopped, enter_esp32s31_wifi_runtime};
 use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
@@ -43,7 +43,8 @@ pub trait WifiMacPlatform: MacDelayEntropy + MacSlowClockCalibrationSource {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiColdStartConfig {
     /// The channel the regulatory domain permits.
-    pub initial_channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+    pub initial_channel:
+        Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
     /// The most any transmission radiates: the domain's, the board's and the
     /// chip's limits together.
     pub tx_ceiling: TxCeiling,
@@ -51,7 +52,9 @@ pub struct WifiColdStartConfig {
 
 impl WifiColdStartConfig {
     pub const fn new(
-        initial_channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>>,
+        initial_channel: Permitted<
+            oer_protocols_ieee80211_contracts_port::RegulatedChannel<WifiChannel>,
+        >,
         tx_ceiling: TxCeiling,
     ) -> Self {
         Self {
@@ -185,7 +188,12 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         .await
     {
         Ok(answer) => answer,
-        Err(reason) => return Err(oer_portable_memory::RequestQuarantine::new(reason, Some(platform))),
+        Err(reason) => {
+            return Err(oer_portable_memory::RequestQuarantine::new(
+                reason,
+                Some(platform),
+            ));
+        }
     };
     let Joined {
         member,
@@ -209,7 +217,12 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
     };
     let (cell, tracked) = match cell.track(member, request).await {
         Ok(answer) => answer,
-        Err(reason) => return Err(oer_portable_memory::RequestQuarantine::new(reason, Some(platform))),
+        Err(reason) => {
+            return Err(oer_portable_memory::RequestQuarantine::new(
+                reason,
+                Some(platform),
+            ));
+        }
     };
     let TrackedMember {
         member,

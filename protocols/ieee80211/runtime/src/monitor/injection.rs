@@ -16,12 +16,14 @@
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use oer_portable_memory::{
+    AffineSpscTrySendError, ClaimCell, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
+};
 use oer_protocols_ieee80211_contracts_port::{
     MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest, MonitorSink,
 };
-use oer_protocols_ieee80211_core_upper_mac::monitor::{MonitorInjectionFrameError, stored_injection_request};
-use oer_portable_memory::{
-    AffineSpscTrySendError, ClaimCell, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
+use oer_protocols_ieee80211_core_upper_mac::monitor::{
+    MonitorInjectionFrameError, stored_injection_request,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

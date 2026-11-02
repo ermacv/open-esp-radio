@@ -14,21 +14,29 @@ use oer_tools_image_checks::{Enforced, interrupts::Required};
 /// The chip every image is built for.
 pub const CHIP: &str = "esp32s31";
 
-/// Where image packages live: the applications and the HIL scenarios'
-/// images. An image's name is its directory; no name may be in both.
-pub const DIRECTORIES: [&str; 2] = ["firmware/apps", "hil-scenarios/images"];
+/// Where image packages live: the examples, the HIL scenarios' images and
+/// the probes. An image's name is its directory; no name may be in two.
+pub const DIRECTORIES: [&str; 3] = ["examples", "hil/images", "hil/probes"];
+
+/// The application entry: an image that depends on it gets the chip's
+/// feature from the build, never from its own manifest.
+const ENTRY: &str = "oer";
 
 /// An image's bundle directory below the repository `root`.
 pub fn output(root: &Path, image: &str) -> PathBuf {
     root.join("target/fw").join(image)
 }
 
-/// The package directory of `image`: its directory of [`DIRECTORIES`]. A
-/// relative path (`../probes/<probe>`) names a package beside the
-/// applications.
+/// The package directory of `image`: its directory of [`DIRECTORIES`]. An
+/// image is named by its directory alone, so its bundle directory stays
+/// below `target/fw/`.
 fn directory(root: &Path, image: &str) -> Result<PathBuf> {
-    if image.contains('/') {
-        return Ok(root.join(DIRECTORIES[0]).join(image));
+    if image.is_empty() || image.starts_with('.') || image.contains(['/', '\\']) {
+        return Err(format!(
+            "`{image}` is not an image name: name an image by its directory in {}",
+            DIRECTORIES.join(", ")
+        )
+        .into());
     }
     let found = DIRECTORIES
         .iter()
@@ -48,26 +56,44 @@ fn directory(root: &Path, image: &str) -> Result<PathBuf> {
 
 /// The package of the image `image`.
 pub fn package(root: &Path, image: &str) -> Result<String> {
-    #[derive(Deserialize)]
-    struct Manifest {
-        package: Package,
-    }
-    #[derive(Deserialize)]
-    struct Package {
-        name: String,
-    }
+    Ok(manifest(root, image)?.package.name)
+}
+
+#[derive(Deserialize)]
+struct Manifest {
+    package: Package,
+    #[serde(default)]
+    dependencies: std::collections::BTreeMap<String, toml::Value>,
+}
+
+#[derive(Deserialize)]
+struct Package {
+    name: String,
+}
+
+fn manifest(root: &Path, image: &str) -> Result<Manifest> {
     let path = directory(root, image)?.join("Cargo.toml");
     let text = std::fs::read_to_string(&path)
         .map_err(|error| format!("no image `{image}`: {}: {error}", path.display()))?;
-    let manifest: Manifest =
-        toml::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
-    Ok(manifest.package.name)
+    toml::from_str(&text).map_err(|error| format!("{}: {error}", path.display()).into())
+}
+
+/// The features the build gives `image`: the chip's feature of the
+/// application entry when the image depends on it.
+fn chip_features(manifest: &Manifest, chip: &str) -> Vec<String> {
+    if manifest.dependencies.contains_key(ENTRY) {
+        vec![format!("{ENTRY}/{chip}")]
+    } else {
+        Vec::new()
+    }
 }
 
 /// The pipeline's spec of `image`, with the caller's enforcement policy. Every check runs.
 pub fn spec(root: &Path, image: &str, enforced: Enforced) -> Result<ImageSpec> {
     let profile = oer_tools_chip_profile::Profile::load(root, CHIP)?;
-    let package = package(root, image)?;
+    let manifest = manifest(root, image)?;
+    let features = chip_features(&manifest, CHIP);
+    let package = manifest.package.name;
     Ok(ImageSpec {
         purpose: Purpose::Flash,
         root: root.to_owned(),
@@ -75,7 +101,7 @@ pub fn spec(root: &Path, image: &str, enforced: Enforced) -> Result<ImageSpec> {
         application: Application {
             binary: package.clone(),
             package,
-            features: Vec::new(),
+            features,
             default_features: true,
         },
         stack_policy: profile.stack_policy(),
@@ -128,20 +154,14 @@ mod tests {
     #[test]
     fn applications_scenario_images_and_probes_keep_the_pipeline_checks_and_configuration() {
         let directory = repository(&[
-            "hil/probes/boot-smoke",
+            "hil/probes/esp32s31-boot-smoke",
             "hil/images/aes",
             "hil/probes/esp32s31-radio",
         ]);
         for (image, package) in [
-            ("boot-smoke", "oer-hil-probes-boot-smoke"),
-            (
-                "esp32s31-sdk-rpc",
-                "oer-hil-images-aes",
-            ),
-            (
-                "../probes/esp32s31-radio",
-                "oer-hil-probes-esp32s31-radio",
-            ),
+            ("esp32s31-boot-smoke", "oer-hil-probes-esp32s31-boot-smoke"),
+            ("aes", "oer-hil-images-aes"),
+            ("esp32s31-radio", "oer-hil-probes-esp32s31-radio"),
         ] {
             for enforced in [
                 Enforced::Only([Check::Interrupts].into()),
@@ -166,11 +186,45 @@ mod tests {
 
     #[test]
     fn a_name_in_both_directories_or_in_none_is_refused() {
-        let directory = repository(&["firmware/apps/twin", "hil-scenarios/images/twin"]);
+        let directory = repository(&["examples/twin", "hil/images/twin"]);
         let twin = package(directory.path(), "twin").unwrap_err().to_string();
         assert!(twin.contains("more than one"), "{twin}");
         let none = package(directory.path(), "absent").unwrap_err().to_string();
         assert!(none.contains("no image"), "{none}");
+    }
+
+    #[test]
+    fn an_image_is_named_by_its_directory_and_never_by_a_path() {
+        let directory = repository(&["hil/images/station"]);
+        for path in [
+            "../../hil/images/station",
+            "hil/images/station",
+            ".station",
+            "",
+        ] {
+            let refused = package(directory.path(), path).unwrap_err().to_string();
+            assert!(refused.contains("not an image name"), "{path}: {refused}");
+        }
+        assert_eq!(
+            package(directory.path(), "station").unwrap(),
+            "oer-hil-images-station"
+        );
+    }
+
+    #[test]
+    fn an_image_on_the_entry_gets_the_chip_feature_from_the_build() {
+        let directory = repository(&["examples/plain"]);
+        let manifest = directory.path().join("examples/entry/Cargo.toml");
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        std::fs::write(
+            manifest,
+            "[package]\nname = \"oer-examples-entry\"\n[dependencies]\noer = { path = \"../../oer\" }\n",
+        )
+        .unwrap();
+        let entry = spec(directory.path(), "entry", Enforced::Reported).unwrap();
+        assert_eq!(entry.application.features, [format!("oer/{CHIP}")]);
+        let plain = spec(directory.path(), "plain", Enforced::Reported).unwrap();
+        assert!(plain.application.features.is_empty());
     }
 
     #[test]

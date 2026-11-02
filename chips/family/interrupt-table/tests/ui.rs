@@ -18,7 +18,7 @@ fn executor_level_raisers_are_checked_during_codegen() {
     fs::write(
         scratch.path().join("Cargo.toml"),
         format!(
-            "[package]\nname = \"signal-executor-level\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-espressif-interrupt-table = {{ path = {manifest:?}, features = [\"host-signal\"] }}\n"
+            "[package]\nname = \"signal-executor-level\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-family-interrupt-table = {{ path = {manifest:?}, features = [\"host-signal\"] }}\n"
         ),
     )
     .expect("write isolated compiler manifest");

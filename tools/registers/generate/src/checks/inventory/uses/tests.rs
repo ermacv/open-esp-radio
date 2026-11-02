@@ -964,17 +964,19 @@ fn rom_header_diagnostics_do_not_fail_the_inventory() {
         .corpus
         .summary
         .rom_signature_summary_unavailable
-        .push(oer_tools_analysis_blobray_domain::SignatureAuditIncomplete {
-            function: LibraryFunction {
-                input: 0,
-                symbol: symbol(b"fixture"),
-                name: Some(b"large_synthetic_rom".to_vec()),
+        .push(
+            oer_tools_analysis_blobray_domain::SignatureAuditIncomplete {
+                function: LibraryFunction {
+                    input: 0,
+                    symbol: symbol(b"fixture"),
+                    name: Some(b"large_synthetic_rom".to_vec()),
+                },
+                reason: oer_tools_analysis_riscv_model::Error::new(
+                    oer_tools_analysis_riscv_model::ErrorCode::ResourceLimited,
+                    "synthetic ROM diagnostic limit",
+                ),
             },
-            reason: oer_tools_analysis_riscv_model::Error::new(
-                oer_tools_analysis_riscv_model::ErrorCode::ResourceLimited,
-                "synthetic ROM diagnostic limit",
-            ),
-        });
+        );
     let directory = tempfile::tempdir().unwrap();
     crate::checks::inventory::run::write_report(directory.path(), "fixture", &report, &resources())
         .unwrap();

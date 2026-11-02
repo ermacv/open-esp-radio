@@ -1,8 +1,8 @@
 use super::*;
-use oer_protocols_ieee80211_testing_conformance::group_keys as contract;
 #[cfg(feature = "test-support")]
 use oer_portable_time::{Clock, Timer};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee80211_testing_conformance::group_keys as contract;
 
 mod ingress;
 #[cfg(feature = "test-support")]
@@ -169,7 +169,8 @@ impl Work for Boundary<'_> {
                 phase.station().select_group_key(permission, a)
             }
         }
-        let admitted_at = oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros());
+        let admitted_at =
+            oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros());
         self.finish(
             phase,
             (original, submitted_slot),
@@ -255,7 +256,8 @@ impl Boundary<'_> {
             }
         };
         events.push(Event::Terminal(numbers.snapshot(&key)));
-        let completed_at = oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros());
+        let completed_at =
+            oer_portable_time::Instant::from_micros(self.air.monotonic_now().as_micros());
         let continuous_rx_at_terminal = self.air.rx_stream.inspect().is_some();
         self.air.stop_continuous_receive();
         let inactive = if self.case == contract::Case::SelectCurrent {
@@ -314,7 +316,8 @@ impl contract::Harness for Harness<'_> {
     type Completions = Vec<contract::Completion>;
     type Retained = Vec<contract::Owners>;
     const GROUP_COMMAND_BOUND: oer_portable_time::Duration = MODEL_GROUP_COMMAND_BOUND;
-    const SCENARIO_BOUND: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(20);
+    const SCENARIO_BOUND: oer_portable_time::Duration =
+        oer_portable_time::Duration::from_millis(20);
     async fn exercise(&mut self, case: contract::Case) -> contract::Trace<Self::Events> {
         let (backend, air) = backend_on(self.0.clone());
         let trace = RefCell::new(None);

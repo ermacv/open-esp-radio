@@ -946,7 +946,8 @@ impl PhyTxCapSearchTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapSearchTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(())
+                {
                     TxCapSearchStep::Measure(PhyToneSarTransition::new_nonzero(PhyToneSarRequest {
                         measurement: self.bank.wrapping_mul(16).wrapping_add(self.candidate),
                         samples: 1,
@@ -1199,7 +1200,8 @@ impl PhyTxCapTransition {
                 transition
                     .advance(completion)
                     .map_err(|_| PhyTxCapTransitionError::WrongCompletion)?;
-                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(()) {
+                self.step = if transition.action() == oer_chips_family_analog::Action::Complete(())
+                {
                     TxCapStep::SetHigh(crate::analog::i2c::field_write(
                         analog_i2c::txrf::tx_capacitor_low::TX_CAPACITOR_HIGH,
                         13,

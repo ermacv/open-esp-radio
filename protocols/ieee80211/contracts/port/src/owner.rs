@@ -1025,7 +1025,9 @@ impl<K> TxFrame<'_, '_, K> {
             Self::Individual { frame, .. } => frame.len.len as usize,
             Self::IndividualNoAck { frame, .. } => frame.len.len as usize,
             Self::Group { frame, .. } => frame.len.len as usize,
-            Self::BlockAckRequest { .. } => oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN,
+            Self::BlockAckRequest { .. } => {
+                oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN
+            }
         }
     }
 }

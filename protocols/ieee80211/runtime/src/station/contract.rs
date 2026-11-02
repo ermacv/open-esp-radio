@@ -261,7 +261,10 @@ pub struct TransmitPacket(pub(crate) oer_protocols_ieee80211_core_roles_sta::dat
 impl oer_protocols_network_port::EthernetFrame for TransmitPacket {
     fn view(
         &self,
-    ) -> Result<oer_protocols_network_port::EthernetFrameView<'_>, oer_protocols_network_port::FrameLengthError> {
+    ) -> Result<
+        oer_protocols_network_port::EthernetFrameView<'_>,
+        oer_protocols_network_port::FrameLengthError,
+    > {
         self.0.frame.view()
     }
 }
@@ -531,7 +534,9 @@ pub enum AccessPointCommand<K> {
     Start(oer_protocols_ieee80211_contracts_port::SupportedChannel<K>),
     Stop,
 }
-impl<K> From<oer_protocols_ieee80211_core_arbiter::AccessPointCommand<K>> for AccessPointCommand<K> {
+impl<K> From<oer_protocols_ieee80211_core_arbiter::AccessPointCommand<K>>
+    for AccessPointCommand<K>
+{
     fn from(value: oer_protocols_ieee80211_core_arbiter::AccessPointCommand<K>) -> Self {
         use oer_protocols_ieee80211_core_arbiter::AccessPointCommand as C;
         match value {

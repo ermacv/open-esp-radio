@@ -174,7 +174,9 @@ fn difference(
 ) -> String {
     let named = match difference {
         Some(oer_tools_analysis_blobray_domain::ComparisonDifference::Memory {
-            pair, offset, ..
+            pair,
+            offset,
+            ..
         }) => request
             .cases
             .get(case as usize)

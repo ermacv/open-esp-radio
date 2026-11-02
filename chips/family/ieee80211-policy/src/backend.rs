@@ -9,7 +9,9 @@ impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
     /// Apply hardware facts after the queue has been detached.
     pub fn observe(
         &mut self,
-        completion: impl Into<oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion>,
+        completion: impl Into<
+            oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion,
+        >,
         subframes: u8,
         now: oer_portable_time::Instant,
         operational: bool,
@@ -35,7 +37,8 @@ impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
         subframes: u8,
         lifetime: oer_portable_time::Duration,
         retain_single_mpdu: bool,
-    ) -> Result<Self, oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryError> {
+    ) -> Result<Self, oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryError>
+    {
         oer_protocols_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState::new(
             first,
             subframes,
@@ -45,7 +48,8 @@ impl<const CAPACITY: usize> EspressifAmpduRetryState<CAPACITY> {
     }
 }
 impl<const C: usize> core::ops::Deref for EspressifAmpduRetryState<C> {
-    type Target = oer_protocols_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState<C>;
+    type Target =
+        oer_protocols_ieee80211_core_upper_mac::backend_aggregate::BoundedAmpduRetryState<C>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

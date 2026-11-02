@@ -25,9 +25,9 @@
 
 use crate::sequence::SequenceSpace;
 
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::BlockAckReport;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_portable_time::{Duration, Instant};
 
 /// Subframes one A-MPDU exchange tracks: the width of a 64-bit BlockAck
 /// bitmap.

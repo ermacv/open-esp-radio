@@ -11,7 +11,7 @@ fn zeroed_rx_storage_checks_geometry_before_cpu_access_or_dma_placement() {
     fs::write(
         scratch.path().join("Cargo.toml"),
         format!(
-            "[package]\nname = \"rx-storage-geometry\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-esp32s31-hal = {{ path = {manifest:?}, features = [\"test-support\"] }}\noer-memory = {{ path = {:?} }}\n",
+            "[package]\nname = \"rx-storage-geometry\"\nversion = \"0.0.0\"\nedition = \"2024\"\n[workspace]\n[lib]\npath = \"case.rs\"\n[dependencies]\noer-chips-esp32s31-hal = {{ path = {manifest:?}, features = [\"test-support\"] }}\noer-portable-memory = {{ path = {:?} }}\n",
             manifest.join("../../../portable/memory"),
         ),
     ).expect("write isolated compiler manifest");

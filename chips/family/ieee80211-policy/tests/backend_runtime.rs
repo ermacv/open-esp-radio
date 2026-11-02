@@ -255,7 +255,10 @@ fn cts_timeout_republishes_the_unchanged_aggregate_then_requests_its_block_ack()
     assert_eq!(state.current_subframes(), 3);
 }
 
-fn block_ack(starting_sequence: u16, bitmap: u64) -> oer_protocols_ieee80211_contracts_port::BlockAckReport {
+fn block_ack(
+    starting_sequence: u16,
+    bitmap: u64,
+) -> oer_protocols_ieee80211_contracts_port::BlockAckReport {
     oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
         SequenceNumber::new(starting_sequence).unwrap(),
         bitmap,

@@ -346,7 +346,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Owners {
                 let oer_protocols_ieee80211_contracts_port::TerminalParts {
                     ticket, payload, ..
                 } = terminal.into_parts(&mut resources.terminal_access);
-                let (buffer, _) = oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(payload);
+                let (buffer, _) =
+                    oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(payload);
                 assert_eq!(ticket.index(), ticket_index);
                 assert_eq!(matches!(buffer, ModelAnyBuffer::LargeSent(_)), large);
                 if !large {

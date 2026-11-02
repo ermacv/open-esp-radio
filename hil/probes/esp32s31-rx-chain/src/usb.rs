@@ -55,12 +55,11 @@ pub(crate) fn open<const H: u8, C: Controller>(
 ) -> Result<(Console, UsbPads), OpenError> {
     let (endpoint, interrupt, pads) =
         retire_early_writer().map_err(|_held: RetireError| OpenError::Retire)?;
-    let bound =
-        router.bind(token, interrupt).unwrap_or_else(|error| {
-            oer_chips_family_staged_runtime::interrupts::reset_binding::<
-                oer_chips_esp32s31_hal::platform::Port,
-                _,
-            >(error)
-        });
+    let bound = router.bind(token, interrupt).unwrap_or_else(|error| {
+        oer_chips_family_staged_runtime::interrupts::reset_binding::<
+            oer_chips_esp32s31_hal::platform::Port,
+            _,
+        >(error)
+    });
     Ok((Endpoint::new(endpoint, INTERRUPT.signal(), &bound), pads))
 }

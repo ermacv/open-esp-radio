@@ -135,8 +135,11 @@ impl<R: InterfaceRole, Path: PoolPath, C: core::fmt::Debug> core::fmt::Debug
 }
 /// One outstanding TSF request on this installation's interface.
 #[must_use = "TSF sampling admission returns only at its terminal"]
-pub struct TsfPermission<'id, R: InterfaceRole, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>
-{
+pub struct TsfPermission<
+    'id,
+    R: InterfaceRole,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     slot: Slot<'id, TsfKind<R>, Child<Path, 1>>,
 }
 

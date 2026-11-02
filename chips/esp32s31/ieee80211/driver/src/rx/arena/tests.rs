@@ -16,8 +16,14 @@ use crate::rx::{
     upper::{QueueSink, RxFrameEnds},
 };
 
-type HostStatic =
-    WifiRxStatic<32, 1_664, 1_664, 32, oer_chips_family_interrupt_table::signal::host::Host, HostDma>;
+type HostStatic = WifiRxStatic<
+    32,
+    1_664,
+    1_664,
+    32,
+    oer_chips_family_interrupt_table::signal::host::Host,
+    HostDma,
+>;
 
 #[test]
 fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {

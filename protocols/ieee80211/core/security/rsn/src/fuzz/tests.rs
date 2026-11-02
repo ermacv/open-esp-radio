@@ -202,9 +202,9 @@ fn bip_never_panics_full() {
 
 fn ccmp(count: usize) {
     let wire = management_wire();
-    let key = oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|index| {
-        index as u8
-    }));
+    let key = oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(
+        |index| index as u8,
+    ));
     let mut copy = Vec::new();
     inputs(&[&wire], count, 120, |bytes| {
         for spp in [Spp::NotNegotiated, Spp::Negotiated] {
@@ -214,9 +214,9 @@ fn ccmp(count: usize) {
         }
         copy.clear();
         copy.extend_from_slice(bytes);
-        let _ = ManagementCcmpReceiver::new(oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(
-            key.as_bytes(),
-        ))
+        let _ = ManagementCcmpReceiver::new(
+            oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(key.as_bytes()),
+        )
         .open(&mut SoftwareAes128, &mut copy);
     });
 }

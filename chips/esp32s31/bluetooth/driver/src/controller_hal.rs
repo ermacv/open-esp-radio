@@ -108,8 +108,10 @@ impl<M: ControllerMemory> ControllerHalInitialized<M> {
         initialize: impl FnOnce(
             &mut TaskResources<M>,
             BluetoothControllerHalInitConfig,
-        )
-            -> Result<(), oer_chips_esp32s31_hal::bluetooth::engine::EngineInitError>,
+        ) -> Result<
+            (),
+            oer_chips_esp32s31_hal::bluetooth::engine::EngineInitError,
+        >,
     ) -> Result<Self, ControllerHalInitializationFailure<M>> {
         let config = BluetoothControllerHalInitConfig::reviewed_standalone();
         let standalone_dtm_profile = StandaloneAlwaysAwakeDtmProfile::mint();

@@ -201,7 +201,8 @@ impl FtmRequestParameters {
         format_and_bandwidth: FtmFormatAndBandwidth,
         burst_period_100ms: u16,
     ) -> Result<Self, FtmParameterError> {
-        let number_of_bursts_exponent = match oer_portable_wire::U8::new(number_of_bursts_exponent) {
+        let number_of_bursts_exponent = match oer_portable_wire::U8::new(number_of_bursts_exponent)
+        {
             Some(value) => value,
             None => return Err(FtmParameterError::ValueOutOfRange),
         };
@@ -268,7 +269,9 @@ impl FtmRequestParameters {
         element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
         let mut fields = FtmParameterFields::from_bytes([0; 9]);
         fields = fields.with_bursts(self.number_of_bursts_exponent);
-        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(self.burst_duration.wire()));
+        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(
+            self.burst_duration.wire(),
+        ));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         let partial_tsf = self.partial_tsf_timer.unwrap_or(0).to_le_bytes();
@@ -394,8 +397,8 @@ impl FtmResponseParameters {
     pub fn encode_element(self) -> Result<[u8; FTM_PARAMETERS_ELEMENT_LEN], FtmParameterError> {
         let bursts = oer_portable_wire::U8::new(self.number_of_bursts_exponent)
             .ok_or(FtmParameterError::ValueOutOfRange)?;
-        let ftms =
-            oer_portable_wire::U8::new(self.ftms_per_burst).ok_or(FtmParameterError::ValueOutOfRange)?;
+        let ftms = oer_portable_wire::U8::new(self.ftms_per_burst)
+            .ok_or(FtmParameterError::ValueOutOfRange)?;
         let mut element = [0_u8; FTM_PARAMETERS_ELEMENT_LEN];
         element[0] = FTM_PARAMETERS_ELEMENT_ID;
         element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
@@ -411,7 +414,9 @@ impl FtmResponseParameters {
         };
         let mut fields = FtmParameterFields::from_bytes([0; 9]);
         fields = fields.with_bursts(bursts);
-        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(self.burst_duration.wire()));
+        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(
+            self.burst_duration.wire(),
+        ));
         element[3] = fields.to_bytes()[1];
         element[4] = self.min_delta_ftm_100us;
         crate::encoding::write_array::<5, _, _>(

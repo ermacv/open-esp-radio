@@ -47,7 +47,9 @@ impl OwnedNetworkTxFrame<'_> {
                 }
                 Err(refused) => Err(refused.reason),
             },
-            Err(reason) => Err(oer_protocols_network_port::TransmitError::InvalidLength(reason)),
+            Err(reason) => Err(oer_protocols_network_port::TransmitError::InvalidLength(
+                reason,
+            )),
         };
         result.map_err(|reason| TransmitRefused {
             frame: self,

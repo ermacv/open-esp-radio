@@ -11,13 +11,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_protocols_hil_agent::base::Service as _;
-use oer_tools_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
 use oer_hil_services_wifi_station::{GetStatus, Join, Joined, Leave, Left, Status};
+use oer_protocols_hil_agent::base::Service as _;
+use oer_tools_hil_harness::{
+    Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
+};
 
 const SCENARIO: Scenario = Scenario::new(
     "wifi-station",
-    "esp32s31-sdk-station",
+    "station",
     &[oer_hil_services_wifi_station::Request::KEYS],
 )
 .using_router();
@@ -243,7 +245,10 @@ mod tests {
     #[test]
     fn a_generated_network_fits_the_service_and_differs_by_run() {
         let (ssid, passphrase) = network();
-        assert!(ssid.len() <= oer_hil_services_wifi_station::MAX_SSID, "{ssid}");
+        assert!(
+            ssid.len() <= oer_hil_services_wifi_station::MAX_SSID,
+            "{ssid}"
+        );
         assert!(
             (8..=oer_hil_services_wifi_station::MAX_PASSPHRASE).contains(&passphrase.len()),
             "{passphrase}"

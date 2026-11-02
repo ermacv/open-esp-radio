@@ -1,5 +1,5 @@
 //! The HIL SDK station scenario: the `oer` station of the
-//! `esp32s31-sdk-station` image meets the lab router's isolated WPA2
+//! `station` image meets the lab router's isolated WPA2
 //! network. A wrong passphrase is a handled result without a reset; the
 //! station joins, takes its DHCP address, exchanges a line over TCP with
 //! this host, rejoins by itself after the router deauthenticates it, and a
@@ -17,20 +17,22 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_protocols_hil_agent::base::Service as _;
-use oer_tools_hil_harness::{Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check};
-use oer_protocols_hil_protocol::base::{
-    BootEvidence, ExceptionFault, Fault, GetBootStatus, PostMortemSummary,
-};
 use oer_hil_services_fault::{RaiseException, Raising};
 use oer_hil_services_sdk_station::{
     Address, Connect, Connection, Exchange, Exchanged, GetStatus, Ipv4, LinkLoss, MAX_LINE, Status,
     WaitIpv4, WaitLinkDown,
 };
+use oer_protocols_hil_agent::base::Service as _;
+use oer_protocols_hil_protocol::base::{
+    BootEvidence, ExceptionFault, Fault, GetBootStatus, PostMortemSummary,
+};
+use oer_tools_hil_harness::{
+    Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
+};
 
 const SCENARIO: Scenario = Scenario::new(
     "sdk-station",
-    "esp32s31-sdk-station",
+    "station",
     &[
         oer_hil_services_sdk_station::Request::KEYS,
         oer_hil_services_fault::Request::KEYS,
@@ -614,7 +616,10 @@ mod tests {
     #[test]
     fn a_generated_network_and_its_wrong_passphrase_fit_the_service() {
         let (ssid, passphrase) = network();
-        assert!(ssid.len() <= oer_hil_services_sdk_station::MAX_SSID, "{ssid}");
+        assert!(
+            ssid.len() <= oer_hil_services_sdk_station::MAX_SSID,
+            "{ssid}"
+        );
         let wrong = format!("not-{passphrase}");
         for passphrase in [&passphrase, &wrong] {
             assert!(

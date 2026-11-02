@@ -146,7 +146,11 @@ enum Width {
 }
 
 /// Read the payload length that starts `offset` octets into `header`.
-fn payload_length(header: &[u8], offset: usize, width: Width) -> Result<usize, oer_portable_wire::Error> {
+fn payload_length(
+    header: &[u8],
+    offset: usize,
+    width: Width,
+) -> Result<usize, oer_portable_wire::Error> {
     let mut reader = Reader::new(header);
     reader.take(offset)?;
     let length = match width {

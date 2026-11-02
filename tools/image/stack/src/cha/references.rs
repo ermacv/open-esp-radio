@@ -136,7 +136,9 @@ pub(super) fn visit(
                 PreparedReferences::new(&raw, section as u32, &RiscvDecoder, memory, control)?;
             for (index, raw) in references.iter().enumerate() {
                 control.checkpoint(1)?;
-                if oer_tools_analysis_elf::rv32::kind(raw.relocation_type).role == Role::PcRelativeLow {
+                if oer_tools_analysis_elf::rv32::kind(raw.relocation_type).role
+                    == Role::PcRelativeLow
+                {
                     let normalized = references.normalized(index);
                     let high = references
                         .pair(index)

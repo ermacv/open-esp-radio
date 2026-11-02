@@ -212,8 +212,10 @@ pub type TsfGeneration = oer_protocols_radio_port::Generation<TsfInstant, crate:
 /// How an interface's TSF advances against the port's radio clock: at its
 /// rate within [`TSF_DRIFT_PPM`] (the access point's timer and the
 /// station's crystal).
-pub const TSF_RELATION: oer_protocols_radio_port::ClockRelation<TsfInstant, crate::Ieee80211Instant> =
-    oer_protocols_radio_port::ClockRelation::affine(TSF_DRIFT_PPM);
+pub const TSF_RELATION: oer_protocols_radio_port::ClockRelation<
+    TsfInstant,
+    crate::Ieee80211Instant,
+> = oer_protocols_radio_port::ClockRelation::affine(TSF_DRIFT_PPM);
 
 /// Why a TSF projection has no value.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -232,7 +234,9 @@ pub enum TsfProjectionError {
 /// own generation checked on top.
 impl TsfSample {
     /// The relation sample of this reading, without its interface.
-    fn relation(&self) -> oer_protocols_radio_port::RelationSample<TsfInstant, crate::Ieee80211Instant> {
+    fn relation(
+        &self,
+    ) -> oer_protocols_radio_port::RelationSample<TsfInstant, crate::Ieee80211Instant> {
         oer_protocols_radio_port::RelationSample {
             source: self.tsf.at,
             target: self.local.at,

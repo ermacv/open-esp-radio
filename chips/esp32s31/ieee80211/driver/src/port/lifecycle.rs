@@ -63,8 +63,12 @@ pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
     tuned: &'s mut Cell<Channel>,
     identity: &'s mut Cell<u64>,
     timer: D::Timer,
-    clock_replies:
-        oer_portable_memory::AffineSpscReceiver<'s, handoff::ClockAnswer, 1, oer_portable_memory::CompactSpscCursor>,
+    clock_replies: oer_portable_memory::AffineSpscReceiver<
+        's,
+        handoff::ClockAnswer,
+        1,
+        oer_portable_memory::CompactSpscCursor,
+    >,
     clock_use: &'s mut Cell<handoff::ClockUse>,
     addresses: [IndividualAddress; 2],
 }
@@ -356,7 +360,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 Ok(deadline) => deadline,
                 Err(cause) => {
                     storage.poison(cause);
-                    retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
+                    retire
+                        .request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                     match core::future::pending::<core::convert::Infallible>().await {}
                 }
             };
@@ -365,7 +370,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             let done = poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
                 if storage.shared.poisoned.is_requested() {
-                    retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
+                    retire
+                        .request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
                     return Poll::Pending;
                 }
                 if held.publishing.get() {
@@ -377,14 +383,18 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         Ok(mut device) => device.radio_now(),
                         Err(fault) => {
                             storage.poison(fault);
-                            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
+                            retire.request_failure(
+                                oer_protocols_radio_port::LifecycleError::StopUnconfirmed,
+                            );
                             return Poll::Pending;
                         }
                     };
                     // Room was checked above: one outstanding clock latch.
                     if held.clock_replies.push(answer).is_err() {
                         storage.poison(Fault::Capacity);
-                        retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
+                        retire.request_failure(
+                            oer_protocols_radio_port::LifecycleError::StopUnconfirmed,
+                        );
                         return Poll::Pending;
                     }
                     storage.shared.wake_body();
@@ -398,7 +408,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         Poll::Ready(Ok(())) => return Poll::Ready(true),
                         Poll::Ready(Err(cause)) => {
                             storage.poison(cause);
-                            retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
+                            retire.request_failure(
+                                oer_protocols_radio_port::LifecycleError::StopUnconfirmed,
+                            );
                             return Poll::Pending;
                         }
                         Poll::Pending => {
@@ -418,7 +430,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     Ok(next) => next,
                     Err(cause) => {
                         storage.poison(cause);
-                        retire.request_failure(oer_protocols_radio_port::LifecycleError::StopUnconfirmed);
+                        retire.request_failure(
+                            oer_protocols_radio_port::LifecycleError::StopUnconfirmed,
+                        );
                         return Poll::Pending;
                     }
                 };
@@ -521,13 +535,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotBodyOw
         Id: 's,
         's: 'p,
     {
-        let resources =
-            frontend
-                .resources
-                .take()
-                .ok_or(oer_protocols_radio_port::SlotInitError::MissingResource(
-                    "Wi-Fi resources",
-                ))?;
+        let resources = frontend.resources.take().ok_or(
+            oer_protocols_radio_port::SlotInitError::MissingResource("Wi-Fi resources"),
+        )?;
         Ok(BodyViews {
             view: Frontend {
                 held: FrontHeld {

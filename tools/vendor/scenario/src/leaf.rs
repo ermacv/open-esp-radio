@@ -701,7 +701,10 @@ impl LeafRun {
     }
 
     /// Exact code endpoint of the vendor function of `leaf`.
-    fn vendor_endpoint(&self, leaf: &Leaf) -> Result<oer_tools_analysis_blobray_domain::CallEndpoint> {
+    fn vendor_endpoint(
+        &self,
+        leaf: &Leaf,
+    ) -> Result<oer_tools_analysis_blobray_domain::CallEndpoint> {
         if leaf.rom {
             self.session
                 .input_endpoint(crate::chip().rom_input, leaf.vendor)
@@ -1248,12 +1251,14 @@ pub fn exercise(ctx: &mut LeafRun) -> Result<()> {
                     let argument = crate::evidence::events(own, case, side)
                         .iter()
                         .rev()
-                        .find_map(|e| match e {
+                        .find_map(|e| {
+                            match e {
                             oer_tools_analysis_blobray_domain::ExecutionEvent::TransferArgument {
                                 word,
                                 value,
                             } if *word == at => value.value(),
                             _ => None,
+                        }
                         });
                     if argument != Some(expected) {
                         return Err(invalid(format!(
@@ -1267,7 +1272,9 @@ pub fn exercise(ctx: &mut LeafRun) -> Result<()> {
             if let Some(expect) = leaf.expect {
                 let observed = Observed {
                     returned: match crate::evidence::stop(own, case, false) {
-                        oer_tools_analysis_blobray_domain::ExecutionStop::Returned { low, .. } => low,
+                        oer_tools_analysis_blobray_domain::ExecutionStop::Returned {
+                            low, ..
+                        } => low,
                         _ => None,
                     },
                     effects: crate::evidence::phy_effects(&crate::evidence::events(

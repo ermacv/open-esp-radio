@@ -1,6 +1,8 @@
 //! Actual FIFO context returns across running, queued and posted disable.
 use super::*;
-use oer_protocols_ieee80211_testing_conformance::interface_commands::{Case, Drain, Identity, Trace};
+use oer_protocols_ieee80211_testing_conformance::interface_commands::{
+    Case, Drain, Identity, Trace,
+};
 
 struct Witness {
     allocation: alloc::boxed::Box<u8>,

@@ -1,8 +1,8 @@
 //! The variant paths of the PHY's errors, for diagnostics that do not
 //! format. Each `match` is exhaustive: a new variant breaks the build.
 
-use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 use oer_chips_esp32s31_hal::domain::RadioClient;
+use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use crate::calibration::registration::PhyCalibrationPath;
 use crate::concurrent::{ConcurrentAcquire, ConcurrentPhyError, JoinRefused};
@@ -14,7 +14,9 @@ impl PhyCalibrationPath {
         match self {
             Self::FullUncached => oer_portable_diagnostics::name!("FullUncached"; 32),
             Self::FullForCache => oer_portable_diagnostics::name!("FullForCache"; 32),
-            Self::FullAfterRejectedCache => oer_portable_diagnostics::name!("FullAfterRejectedCache"; 32),
+            Self::FullAfterRejectedCache => {
+                oer_portable_diagnostics::name!("FullAfterRejectedCache"; 32)
+            }
             Self::PartialFromCache => oer_portable_diagnostics::name!("PartialFromCache"; 32),
         }
     }

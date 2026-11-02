@@ -1,8 +1,8 @@
 //! Wi-Fi fatal source observations, retained until complete successful output.
+use oer_chips_family_staged_runtime::retained_fault;
 #[cfg(any(test, target_arch = "riscv32"))]
 use oer_portable_diagnostics::fault::Class;
 use oer_portable_diagnostics::fault::{Domain, Record};
-use oer_chips_family_staged_runtime::retained_fault;
 oer_chips_family_staged_runtime::retained_static! { static WIFI_FAULT: Record; }
 
 #[cfg(target_arch = "riscv32")]

@@ -19,7 +19,10 @@ pub struct HubPort {
 /// The hub port that powers `board` when its reset ladder includes `power`:
 /// the port it is attached to, found on the host, if the hub switches it
 /// and the stand's hub policy allows it.
-pub fn hub_port(stand: &oer_tools_lab_model::Stand, board: &oer_tools_lab_model::Board) -> Option<HubPort> {
+pub fn hub_port(
+    stand: &oer_tools_lab_model::Stand,
+    board: &oer_tools_lab_model::Board,
+) -> Option<HubPort> {
     if !board.reset.contains(&oer_tools_lab_model::ResetStep::Power) {
         return None;
     }

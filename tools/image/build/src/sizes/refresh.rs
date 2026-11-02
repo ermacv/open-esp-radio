@@ -70,7 +70,8 @@ fn one(input: &Path, output: &Path, root: &Path) -> Result<()> {
             return Err(format!("sizes-refresh: configuration {name} differs; --source-root must supply the original image configuration").into());
         }
     }
-    let policy = oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&provenance.stack_policy))?;
+    let policy =
+        oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&provenance.stack_policy))?;
     let profile = oer_tools_chip_profile::Profile::load(root, &provenance.chip)?;
     if profile.facts.rust_target != provenance.target {
         return Err("sizes-refresh: configuration target differs from original build".into());

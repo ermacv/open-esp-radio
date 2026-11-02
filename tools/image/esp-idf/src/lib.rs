@@ -341,7 +341,10 @@ pub fn output(root: &Path, project: &Project) -> PathBuf {
 /// directory with its contents. Files the project names outside its
 /// directory, such as a shared partition table, are not part of it.
 pub fn recipe(root: &Path, pins: &str, project: &Project) -> Result<String> {
-    project_recipe(&oer_tools_pins_artifacts::git_pins(root, pins)?, &project.source)
+    project_recipe(
+        &oer_tools_pins_artifacts::git_pins(root, pins)?,
+        &project.source,
+    )
 }
 
 fn project_recipe(pins: &[GitPin], source: &Path) -> Result<String> {

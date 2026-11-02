@@ -168,7 +168,10 @@ impl oer_protocols_radio_regulatory::RadioChannel for Channel {
 
 fn span<const CENTER_KHZ: u32>() -> oer_protocols_radio_regulatory::FrequencySpan {
     const {
-        match oer_protocols_radio_regulatory::FrequencySpan::new(CENTER_KHZ - 1000, CENTER_KHZ + 1000) {
+        match oer_protocols_radio_regulatory::FrequencySpan::new(
+            CENTER_KHZ - 1000,
+            CENTER_KHZ + 1000,
+        ) {
             Some(span) => span,
             None => panic!("a channel has a width"),
         }

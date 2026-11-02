@@ -178,7 +178,10 @@ impl PhyBluetoothTxGainPublication {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub fn execute_target(self, registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess) {
+    pub fn execute_target(
+        self,
+        registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
+    ) {
         crate::hardware::publish_bluetooth_tx_gain_memory(registers, &self.image);
     }
 }
@@ -1253,7 +1256,8 @@ impl PhyBluetoothPbusReadBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::owner::SharedPhyAccess,
     ) -> PhyBluetoothTxPowerCompletion {
-        let value = oer_chips_esp32s31_hal::phy::pbus::read_result(registers, self.selector, self.path);
+        let value =
+            oer_chips_esp32s31_hal::phy::pbus::read_result(registers, self.selector, self.path);
         debug_assert!(
             value.is_some(),
             "Bluetooth parent emitted an unknown PBus selector"

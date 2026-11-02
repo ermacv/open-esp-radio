@@ -1,4 +1,5 @@
 use super::{BssObservation, ScanCompleteness, ScanObservation, ScanTable, best_matching_ssid};
+use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::{
     ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
     scan::{
@@ -8,7 +9,6 @@ use oer_protocols_ieee80211_wire::{
         he_extended_range_single_user_disabled, parse_management,
     },
 };
-use oer_portable_time::Instant;
 
 #[test]
 fn a_zero_bssid_cannot_enter_the_scan_table() {
@@ -204,7 +204,8 @@ fn parses_beacon_into_owned_bounded_record() {
     assert_eq!(
         record.bssid,
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 2, 3, 4, 5, 6]).unwrap()
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 2, 3, 4, 5, 6])
+                .unwrap()
         )
         .unwrap()
     );
@@ -384,7 +385,8 @@ fn the_scan_table_keeps_the_stations_erp_decision() {
 fn ht40_geometry_requires_matching_capability_and_operation() {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                .unwrap(),
         )
         .unwrap(),
     );
@@ -416,7 +418,8 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
 fn ht_short_guard_intervals_are_read_from_capability_info() {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                .unwrap(),
         )
         .unwrap(),
     );
@@ -530,7 +533,8 @@ fn latest_hidden_beacon_preserves_probe_response_ssid() {
 fn strongest_exact_ssid_ignores_invalid_channel() {
     let mut records = [ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                .unwrap(),
         )
         .unwrap(),
     ); 3];
@@ -832,7 +836,8 @@ fn a_setter_refuses_a_value_longer_than_its_buffer_and_keeps_the_record() {
     let value = [0xa5_u8; 300];
     let empty = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap(),
+            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                .unwrap(),
         )
         .unwrap(),
     );

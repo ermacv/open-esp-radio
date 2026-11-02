@@ -222,7 +222,9 @@ impl PlacementProjection {
         const N: usize,
         P: oer_portable_memory::DmaReadPrepare,
     >(
-        placed: crate::memory::dma_static::Placed<oer_portable_memory::PinnedDmaTxPool<F, H, T, N, P>>,
+        placed: crate::memory::dma_static::Placed<
+            oer_portable_memory::PinnedDmaTxPool<F, H, T, N, P>,
+        >,
     ) -> Result<
         (
             &'static mut oer_portable_memory::PinnedDmaTxPool<F, H, T, N, P>,

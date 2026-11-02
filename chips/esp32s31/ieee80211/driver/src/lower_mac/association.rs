@@ -41,7 +41,11 @@ pub type AccessPointGroupSlot<'id, P = Root<oer_protocols_radio_port::LocalId<'i
     GroupKeySlot<'id, AccessPoint, 15, 3, Child<P, 3>>;
 
 /// An installation cannot name material without the association and its slot.
-pub enum TransmitKeyInstallation<'a, 'id, P: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+pub enum TransmitKeyInstallation<
+    'a,
+    'id,
+    P: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     StationPairwise {
         association: &'a StationAssociation<'id, P>,
         slot: StationPairwiseSlot<'id, P>,

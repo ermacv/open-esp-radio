@@ -330,9 +330,9 @@ fn mark_description(
 
 fn review_annotation_is_assertion(annotation: &ReviewAnnotation) -> bool {
     !annotation.sources.is_empty()
-        && annotation
-            .provenance
-            .is_some_and(|provenance| provenance != oer_tools_registers_contracts::FactProvenance::Hint)
+        && annotation.provenance.is_some_and(|provenance| {
+            provenance != oer_tools_registers_contracts::FactProvenance::Hint
+        })
         && annotation.accuracy.is_some()
         && annotation.completeness.is_some()
 }

@@ -66,8 +66,11 @@ pub fn run(context: &Checkout, chip: &str, list_roles: bool) -> Result<()> {
         std::env::var_os(JOBS).as_deref(),
         |probe, jobs| {
             let package = probe.probe.package.as_str();
-            let built =
-                oer_tools_image_build::probe::build(&context.root, package, jobs.map(NonZeroUsize::get))?;
+            let built = oer_tools_image_build::probe::build(
+                &context.root,
+                package,
+                jobs.map(NonZeroUsize::get),
+            )?;
             let elf = output(context, probe);
             std::fs::create_dir_all(elf.parent().ok_or("probe output has no parent")?)?;
             std::fs::copy(&built, &elf)?;

@@ -76,7 +76,8 @@ fn compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words() {
     );
     assert_eq!(
         r.signatures["wide"].sha256,
-        oer_tools_os_durable::sha256_file(&root.path().join("components/api/include/api.h")).unwrap()
+        oer_tools_os_durable::sha256_file(&root.path().join("components/api/include/api.h"))
+            .unwrap()
     );
 }
 

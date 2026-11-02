@@ -16,10 +16,10 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
+use oer_portable_time::Duration;
 use oer_protocols_bluetooth_le_port::{conformance::*, *};
 use oer_protocols_bluetooth_le_wire::{TestChannel, TestPayloadType};
 use oer_protocols_radio_port::*;
-use oer_portable_time::Duration;
 
 /// Reference fixture. Every case creates a fresh environment and local slots;
 /// all deadlines and packet arrivals are driven by that environment's owner.

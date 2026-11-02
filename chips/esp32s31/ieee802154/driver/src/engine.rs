@@ -2,7 +2,9 @@
 
 use super::ll::S31Mac;
 use core::{mem::ManuallyDrop, ops::Deref};
-use oer_chips_esp32s31_hal::{ieee802154::frames, layouts::DmaWindowAddress, memory::dma_static::Placed};
+use oer_chips_esp32s31_hal::{
+    ieee802154::frames, layouts::DmaWindowAddress, memory::dma_static::Placed,
+};
 use oer_chips_family_ieee802154_engine::{
     engine::{
         Fault, Ieee802154Engine as SharedEngine, Ieee802154Interfaces,

@@ -194,9 +194,10 @@ impl I2c {
                 "phy_reg_update_new",
             ]);
         }
-        let select = |input: usize, name: &str| -> Result<oer_tools_analysis_riscv_model::SymbolId> {
-            Ok(symbol(inventory, input, name)?.id.clone())
-        };
+        let select =
+            |input: usize, name: &str| -> Result<oer_tools_analysis_riscv_model::SymbolId> {
+                Ok(symbol(inventory, input, name)?.id.clone())
+            };
         // ROM first; the SDK firmware supplies the crystal-clock symbols
         // the ROM lacks.
         let mut candidates = vec![ROM_INPUT];

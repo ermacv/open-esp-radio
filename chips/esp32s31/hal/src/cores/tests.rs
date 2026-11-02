@@ -557,7 +557,8 @@ mod launch {
         assert_eq!(controller.hart(), 1);
         drop(controller);
         drop(released);
-        let (_, config) = oer_chips_esp32s31_pac::clic::clic_host(&mut permit.clic).expect("host CLIC");
+        let (_, config) =
+            oer_chips_esp32s31_pac::clic::clic_host(&mut permit.clic).expect("host CLIC");
         assert_eq!(
             u32::from(crate::platform::interrupt_controller::facts::LEVEL_BITS),
             config.read_int_config().mnlbits().get()

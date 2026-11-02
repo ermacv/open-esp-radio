@@ -241,7 +241,12 @@ fn collision(s: &mut Session<'_>, kind: u32) {
     }
     let saved0 = s.ble.bank.sample_bluetooth_primary_interrupt_bank_0();
     let saved1 = s.ble.bank.sample_bluetooth_primary_interrupt_bank_1();
-    emit(0x21b0, saved0.bits(), saved1.bits(), oer_portable_riscv::cycle32());
+    emit(
+        0x21b0,
+        saved0.bits(),
+        saved1.bits(),
+        oer_portable_riscv::cycle32(),
+    );
     let cause = match kind {
         0 | 2 => 0,
         1 => 1,
@@ -369,7 +374,12 @@ pub(super) fn retention(s: &mut Session<'_>) {
     } else {
         // Retain the failed post-release crossing as a measured diagnostic,
         // then discriminate it from an APB/reset or permanent latch failure.
-        emit(0x225f, 218, oer_portable_riscv::cycle32().wrapping_sub(started), 0);
+        emit(
+            0x225f,
+            218,
+            oer_portable_riscv::cycle32().wrapping_sub(started),
+            0,
+        );
         latch_state(s, 0x2260);
         // SOURCE: HW9_S31_BTLC_START_20261027: CONTROL0=1 starts BTLC.
         // This is a diagnostic reopening after the release observation,

@@ -165,8 +165,8 @@ members = [
     "chips/esp32s31/board",
     "chips/esp32s31/bootstrap",
     "chips/esp32s31/layout",
-    "hil/probes/boot-smoke",
-    "hil/probes/radio-root",
+    "hil/probes/esp32s31-boot-smoke",
+    "hil/probes/esp32s31-radio-root",
     "examples/wifi-station",
 ]
 # Host builds and tests: every member but the chip-only firmware packages.

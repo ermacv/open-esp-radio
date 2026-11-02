@@ -18,13 +18,13 @@ error[E0080]: evaluation panicked: a secondary entry names a secondary hart
   |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_chips_esp32s31_hal::cores::SecondaryEntry::new::<0>::{constant#0}` failed here
   |
- ::: $WORKSPACE/chips/espressif/staged-layout/src/handoff.rs
+ ::: $WORKSPACE/chips/family/staged-layout/src/handoff.rs
   |
   |                 panic!("a secondary entry names a secondary hart");
   |                 -------------------------------------------------- in this macro invocation
 
 note: erroneous constant encountered
- --> $WORKSPACE/chips/espressif/staged-layout/src/handoff.rs
+ --> $WORKSPACE/chips/family/staged-layout/src/handoff.rs
   |
   | /         const {
   | |             if H as usize == crate::boot::BOOT_HART {

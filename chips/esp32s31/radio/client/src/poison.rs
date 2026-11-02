@@ -7,7 +7,9 @@
 //! PHY's target errors into [`PhyFault`].
 
 use oer_chips_esp32s31_hal::domain::{CommonRadioPowerError, ModemClockError, RadioClient};
-use oer_chips_esp32s31_phy::{PhyRegisterBindingError, PhyRegisterStage, concurrent::ConcurrentPhyError};
+use oer_chips_esp32s31_phy::{
+    PhyRegisterBindingError, PhyRegisterStage, concurrent::ConcurrentPhyError,
+};
 
 /// The first failure that poisoned the PHY domain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -104,8 +104,12 @@ impl<K, const N: usize> PoolSet for BlockAckSlots<K, N> {
 /// One receive Block Ack slot of a pool of `N`: an agreement holds it.
 /// Only [`BlockAckSlots`] mints it.
 #[must_use = "a Block Ack slot is capacity; dropping it loses it until the next install"]
-pub struct BlockAckSlot<'id, K, const N: usize, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>
-{
+pub struct BlockAckSlot<
+    'id,
+    K,
+    const N: usize,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
+> {
     slot: Slot<'id, K, Path>,
 }
 

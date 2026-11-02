@@ -10,8 +10,8 @@
 
 use core::num::NonZeroU16;
 
-use oer_protocols_ieee80211_contracts_port::{BlockAckSnr, LinkMetric};
 use oer_portable_time::Instant;
+use oer_protocols_ieee80211_contracts_port::{BlockAckSnr, LinkMetric};
 use {
     crate::phy_mode::PhyMode,
     oer_protocols_ieee80211_wire::{

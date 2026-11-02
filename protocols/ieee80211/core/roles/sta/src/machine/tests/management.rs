@@ -94,9 +94,11 @@ fn associated<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
     beacon[55..].copy_from_slice(&rsn);
     let (world, ptk) = wpa2_associated_by::<2>(mint, &beacon);
     let plain = key_data(Some(&rsn), 0x99, 0x77);
-    let wrapped =
-        oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(ptk.kek(), &plain)
-            .unwrap();
+    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
+        ptk.kek(),
+        &plain,
+    )
+    .unwrap();
     let m3 = RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
         .unwrap()
         .authenticate(&ptk, &mut SoftwareAes128)
@@ -257,12 +259,12 @@ fn query_requests_are_protected_and_replays_cannot_create_another_response() {
 
 #[test]
 fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once() {
+    use oer_portable_time::Clock;
     use oer_protocols_ieee80211_wire::{
         block_ack::frame::{BlockAckAction, encode_addba_request, parse_block_ack_action},
         ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
         sequence::SequenceNumber,
     };
-    use oer_portable_time::Clock;
     installed(|mint| {
         let (mut world, ptk, _) = connected(mint);
         let clock = oer_portable_time_virtual::VirtualClock::<8>::starting_at(at(40));

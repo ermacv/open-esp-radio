@@ -489,7 +489,8 @@ mod tests {
     use super::*;
     use alloc::vec::Vec;
     fn at(elapsed: u64) -> oer_portable_time::Instant {
-        let clock: oer_portable_time_virtual::VirtualClock = oer_portable_time_virtual::VirtualClock::new();
+        let clock: oer_portable_time_virtual::VirtualClock =
+            oer_portable_time_virtual::VirtualClock::new();
         clock
             .advance(Duration::from_micros(elapsed))
             .expect("fixture elapsed time fits its virtual clock")

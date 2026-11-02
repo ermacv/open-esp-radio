@@ -5,7 +5,8 @@ pub struct ReconnectPolicy(oer_protocols_ieee80211_runtime::station::ReconnectPo
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ZeroReconnectInterval;
 impl ReconnectPolicy {
-    pub const DISABLED: Self = Self(oer_protocols_ieee80211_runtime::station::ReconnectPolicy::DISABLED);
+    pub const DISABLED: Self =
+        Self(oer_protocols_ieee80211_runtime::station::ReconnectPolicy::DISABLED);
     pub const fn every(interval: Duration) -> Result<Self, ZeroReconnectInterval> {
         match oer_protocols_ieee80211_runtime::station::ReconnectPolicy::every(interval) {
             Ok(policy) => Ok(Self(policy)),

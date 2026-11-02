@@ -619,8 +619,11 @@ impl Service {
                 let mut inner = lock(&self.shared.inner);
                 inner.scheduler.merge_owner(&old, &new);
                 self.persist(&inner);
-                match oer_tools_lab_arbiter::history::rename_owner(&self.shared.history_path, &old, &new)
-                {
+                match oer_tools_lab_arbiter::history::rename_owner(
+                    &self.shared.history_path,
+                    &old,
+                    &new,
+                ) {
                     Ok(()) => outbox.push(&Reply::Done { changed: true }),
                     Err(error) => outbox.push(&Reply::Refused {
                         reason: error.to_string(),
@@ -745,10 +748,12 @@ impl Service {
             .clone()
             .map(|reason| (request.owner.clone(), reason));
         let divisible = request.divisible;
-        let history = oer_tools_lab_arbiter::history::read(&self.shared.history_path).unwrap_or_default();
-        let estimate_secs = oer_tools_lab_arbiter::estimate(&request.work, &request.scenarios, &history)
-            .0
-            .as_secs();
+        let history =
+            oer_tools_lab_arbiter::history::read(&self.shared.history_path).unwrap_or_default();
+        let estimate_secs =
+            oer_tools_lab_arbiter::estimate(&request.work, &request.scenarios, &history)
+                .0
+                .as_secs();
         let client = inner
             .clients
             .get(&connection)

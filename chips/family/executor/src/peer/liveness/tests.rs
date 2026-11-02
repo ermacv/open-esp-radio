@@ -27,7 +27,8 @@ fn slot() -> &'static RequestSlot<Beat, (), InPlace> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 
-fn table<C: oer_chips_family_interrupt_table::signal::SignalExecutor>() -> &'static Obligations<C, 2> {
+fn table<C: oer_chips_family_interrupt_table::signal::SignalExecutor>() -> &'static Obligations<C, 2>
+{
     Box::leak(Box::new(Obligations::new()))
 }
 

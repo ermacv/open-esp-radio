@@ -331,7 +331,8 @@ fn a_flash_read_waits_for_every_command_of_the_word_before_writing_its_phases() 
     let mut spi0 = memory(instances::spi0::SIZE, 0);
     let mut spi1 = qio_spi1();
     spi1[oer_chips_esp32s31_pac::spi1_mem_c::cmd::OFFSET / 4] =
-        oer_chips_esp32s31_pac::spi1_mem_c::cmd::BUSY & !oer_chips_esp32s31_pac::spi1_mem_c::cmd::COMMANDS;
+        oer_chips_esp32s31_pac::spi1_mem_c::cmd::BUSY
+            & !oer_chips_esp32s31_pac::spi1_mem_c::cmd::COMMANDS;
     let before = spi1.clone();
     let virtual_clock = VirtualClock::new();
     let ticking = Ticking(&virtual_clock);
@@ -458,7 +459,11 @@ impl PsramMemory {
 
     fn owner(
         &mut self,
-    ) -> PsramRegisters<oer_portable_mmio::Host<'_>, oer_portable_mmio::Host<'_>, oer_portable_mmio::Host<'_>> {
+    ) -> PsramRegisters<
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+        oer_portable_mmio::Host<'_>,
+    > {
         PsramRegisters::host(&mut self.memspi2, &mut self.memspi3, &mut self.pins)
             .expect("host memory holds them")
     }

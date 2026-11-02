@@ -108,7 +108,10 @@ pub fn start_session(options: &PhyOptions, extra: &[Input<'_>], purpose: &str) -
 /// Requested-delay ABI at `address`: every call returns zero and records its
 /// first argument as requested microseconds. The call count is evidence, not
 /// a declared budget; scenarios compare the ordered delay values instead.
-pub fn delay_calls(id: &str, address: u32) -> Vec<oer_tools_analysis_blobray_domain::CallDeclaration> {
+pub fn delay_calls(
+    id: &str,
+    address: u32,
+) -> Vec<oer_tools_analysis_blobray_domain::CallDeclaration> {
     use oer_tools_analysis_blobray_domain::{
         CallBinding, CallBoundary, CallDeclaration, CallRepetition, CallResponse, CallValue,
     };

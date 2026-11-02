@@ -11,8 +11,8 @@ use core::convert::Infallible;
 
 use oer::observe::{self, Hart0, Sampler};
 use oer::{ApplicationEnd, Channel, SecondEnd};
-use oer_protocols_hil_protocol::RequestIdentity;
 use oer_hil_services_load::{LoadError, SamplesCollected};
+use oer_protocols_hil_protocol::RequestIdentity;
 
 use super::report::Snapshot;
 

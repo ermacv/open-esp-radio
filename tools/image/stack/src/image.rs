@@ -100,8 +100,9 @@ impl TableEntries for ReadOnlyTables<'_, '_> {
         memory: &'m WorkingMemory,
         control: &mut dyn RunControl,
     ) -> Result<Option<TableWords<'m>>> {
-        let Some(words) = oer_tools_analysis_riscv_program::tables::ImageTables { image: self.image }
-            .entries(base, count, section, memory, control)?
+        let Some(words) =
+            oer_tools_analysis_riscv_program::tables::ImageTables { image: self.image }
+                .entries(base, count, section, memory, control)?
         else {
             return Ok(None);
         };

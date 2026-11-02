@@ -675,7 +675,10 @@ fn report_names(image: &Image, harts: &[HartStack]) -> BTreeMap<u32, String> {
 
 /// The names of the reviewed ROM summaries of `profile`'s chip; none for a
 /// chip that reviews none.
-pub fn rom_summaries(root: &Path, profile: &oer_tools_chip_profile::Profile) -> Result<Vec<String>> {
+pub fn rom_summaries(
+    root: &Path,
+    profile: &oer_tools_chip_profile::Profile,
+) -> Result<Vec<String>> {
     let Some(path) = profile
         .facts
         .rom
@@ -692,7 +695,10 @@ pub fn rom_summaries(root: &Path, profile: &oer_tools_chip_profile::Profile) -> 
 /// a source to it would run a handler on a stack nobody bounded. An entry the
 /// build left out (no handler) routes nothing, as the router binds only
 /// entries with a handler.
-fn reject_unstacked_cores(table: &[oer_tools_image_stack::TableEntry], harts: &[u32]) -> Result<()> {
+fn reject_unstacked_cores(
+    table: &[oer_tools_image_stack::TableEntry],
+    harts: &[u32],
+) -> Result<()> {
     match table
         .iter()
         .find(|entry| entry.handler.is_some() && !harts.contains(&entry.core))
@@ -839,7 +845,8 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         exception_copies: oer_tools_image_stack::exception_copies(facts.file())?,
         resolutions,
     };
-    let harts = oer_tools_image_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
+    let harts =
+        oer_tools_image_stack::interrupt_stacks(analysis, &inputs, &mut keep, &mut control)?;
     let panic_code = panic_path_code(
         analysis,
         names,

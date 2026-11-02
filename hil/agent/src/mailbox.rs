@@ -1,7 +1,7 @@
 //! The hand-over of one request from the console to the image's worker.
 
-use oer_protocols_hil_protocol::RequestIdentity;
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_protocols_hil_protocol::RequestIdentity;
 
 type Entry<R> = (RequestIdentity, R);
 

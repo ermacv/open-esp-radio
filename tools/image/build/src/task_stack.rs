@@ -77,8 +77,8 @@ mod tests {
     #[test]
     fn the_workspace_images_declare_their_task_stacks() {
         let packages: Vec<_> = [
-            include_str!("../../../../hil/probes/boot-smoke/Cargo.toml"),
-            include_str!("../../../../hil/probes/radio-root/Cargo.toml"),
+            include_str!("../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"),
+            include_str!("../../../../hil/probes/esp32s31-radio-root/Cargo.toml"),
         ]
         .into_iter()
         .map(|text| {
@@ -92,7 +92,7 @@ mod tests {
         .collect();
         let metadata = serde_json::json!({"packages": packages});
         let proven = |package| proven_of_metadata(&metadata, package).unwrap();
-        assert!(proven("oer-hil-probes-boot-smoke"));
-        assert!(proven("oer-hil-probes-radio-root"));
+        assert!(proven("oer-hil-probes-esp32s31-boot-smoke"));
+        assert!(proven("oer-hil-probes-esp32s31-radio-root"));
     }
 }

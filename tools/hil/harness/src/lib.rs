@@ -21,8 +21,8 @@
 
 use std::{process::ExitCode, time::Duration};
 
-use oer_tools_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
 use oer_protocols_hil_protocol::{Endpoint, Key, Message};
+use oer_tools_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
 
 mod dut;
 #[cfg(test)]

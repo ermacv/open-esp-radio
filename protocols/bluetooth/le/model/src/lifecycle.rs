@@ -8,9 +8,9 @@ use core::{
     ops::ControlFlow,
     task::Poll,
 };
+use oer_portable_time::{Clock as _, Duration, RadioInstant, Timer};
 use oer_protocols_bluetooth_le_port::{backend::OwnedSession, *};
 use oer_protocols_radio_port::*;
-use oer_portable_time::{Clock as _, Duration, RadioInstant, Timer};
 
 type Composition<Id, X> = PhantomData<fn(Id, X) -> (Id, X)>;
 

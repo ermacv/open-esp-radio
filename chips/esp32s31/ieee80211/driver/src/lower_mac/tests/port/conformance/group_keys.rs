@@ -710,7 +710,9 @@ struct CutBody {
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
     released: super::super::Released,
-    seen: Rc<RefCell<Option<oer_protocols_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>>,
+    seen: Rc<
+        RefCell<Option<oer_protocols_ieee80211_testing_conformance::group_keys::Trace<Vec<Event>>>>,
+    >,
 }
 use oer_protocols_ieee80211_testing_conformance::group_keys::{Event, Installation};
 
@@ -871,18 +873,20 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for CutBody {
                     _ => panic!("an unexpected cut event"),
                 }
             }
-            *self.seen.borrow_mut() = Some(oer_protocols_ieee80211_testing_conformance::group_keys::Trace {
-                original,
-                submitted_slot: original.slot,
-                timing: Timing {
-                    admitted_at,
-                    completed_at,
+            *self.seen.borrow_mut() = Some(
+                oer_protocols_ieee80211_testing_conformance::group_keys::Trace {
+                    original,
+                    submitted_slot: original.slot,
+                    timing: Timing {
+                        admitted_at,
+                        completed_at,
+                    },
+                    events,
+                    writes: self.observed.borrow().key_writes - writes,
+                    inactive_material_accepted: inactive_accepted,
+                    continuous_rx_at_terminal: continuous,
                 },
-                events,
-                writes: self.observed.borrow().key_writes - writes,
-                inactive_material_accepted: inactive_accepted,
-                continuous_rx_at_terminal: continuous,
-            });
+            );
         }
         let Ok(owner) = owner
             .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))

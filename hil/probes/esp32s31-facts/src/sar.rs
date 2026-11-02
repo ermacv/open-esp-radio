@@ -170,11 +170,15 @@ impl Sar {
             w.set_clk_wifibb_160x1_en(
                 oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
             );
-            w.set_clk_wifi_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled);
+            w.set_clk_wifi_apb_en(
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled,
+            );
             w.set_clk_fe_80m_en(true);
             w.set_clk_fe_160m_en(true);
             w.set_clk_fe_apb_en(true);
-            w.set_clk_bt_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
+            w.set_clk_bt_apb_en(
+                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled,
+            );
             w.set_clk_btbb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
             w.set_clk_fe_pwdet_adc_en(true);
             w.set_clk_fe_adc_en(true);

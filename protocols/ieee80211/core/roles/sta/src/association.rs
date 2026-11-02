@@ -84,11 +84,14 @@ pub fn select_association_phy(
     preference: Preference,
     ht40_capable: bool,
 ) -> PhyMode {
-    let he20_available =
-        oer_protocols_ieee80211_wire::he::parse_he20_capabilities(access_point.he_capability_ie_bytes())
-            .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-            && oer_protocols_ieee80211_wire::he::parse_he20_operation(access_point.he_operation_ie_bytes())
-                .is_ok();
+    let he20_available = oer_protocols_ieee80211_wire::he::parse_he20_capabilities(
+        access_point.he_capability_ie_bytes(),
+    )
+    .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
+        && oer_protocols_ieee80211_wire::he::parse_he20_operation(
+            access_point.he_operation_ie_bytes(),
+        )
+        .is_ok();
     select_phy(
         preference,
         access_point.ht_capability_ie_bytes().is_some(),
@@ -138,7 +141,9 @@ pub enum StaAssociatedPeerError {
 
 impl StaAssociatedPeer {
     /// What the station's rate control knows of its access point.
-    pub const fn rate_peer(&self) -> oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer {
+    pub const fn rate_peer(
+        &self,
+    ) -> oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer {
         oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer {
             phy: self.phy,
             legacy_rates: self.legacy_rates,

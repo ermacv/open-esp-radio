@@ -501,7 +501,9 @@ impl PhyTxPowerTrackingExternalBinding {
                 enabled,
                 phase,
             }) => {
-                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(registers, *enabled, *phase);
+                oer_chips_esp32s31_hal::phy::pbus::configure_force_txrx(
+                    registers, *enabled, *phase,
+                );
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
                     enabled: *enabled,
                     phase: *phase,

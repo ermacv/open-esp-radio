@@ -968,8 +968,10 @@ fn forgotten_aggregate_retains_allocation_after_borrowed_metadata_ends() {
         let mut retention = RetainedAmpduDmaStorage::new();
         let mut owner = RetainedAmpduDma::new(descriptor_only_storage(), &mut retention);
         owner.begin().unwrap();
-        let lease =
-            oer_portable_memory::TaggedStableDmaBacking::new(&mut tag, TestBacking::new(drops.clone()));
+        let lease = oer_portable_memory::TaggedStableDmaBacking::new(
+            &mut tag,
+            TestBacking::new(drops.clone()),
+        );
         let (backing, region) = owner.push_backing_region(lease).unwrap();
         region[0] = 0x5d;
         dma_address = region.as_ptr();

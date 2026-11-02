@@ -146,7 +146,9 @@ fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
 #[test]
 fn association_encoder_uses_the_explicit_local_profile() {
     let mut record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    record.set_ht_capability_ie(Some([0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN]));
+    record.set_ht_capability_ie(Some(
+        [0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN],
+    ));
     let mut capabilities = TEST_ASSOCIATION_CAPABILITIES;
     capabilities.ht20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
     capabilities.wmm = [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0];

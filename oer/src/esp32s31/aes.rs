@@ -22,6 +22,8 @@ impl AesPeripheral {
             .router()
             .silent::<AesInterrupt>()
             .map_err(|_| Error::InterruptRouted)?;
-        Ok(oer_chips_esp32s31_compose::crypto::aes_engine(self.0, silent))
+        Ok(oer_chips_esp32s31_compose::crypto::aes_engine(
+            self.0, silent,
+        ))
     }
 }

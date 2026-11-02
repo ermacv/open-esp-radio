@@ -316,7 +316,8 @@ impl RegisteredPhyState {
     pub(crate) fn publish_btbb_gain(
         &self,
         publisher: oer_chips_esp32s31_hal::domain::BtbbPublisher<'_>,
-    ) -> Result<oer_chips_esp32s31_hal::domain::BtbbGain, oer_chips_esp32s31_hal::domain::BtbbError> {
+    ) -> Result<oer_chips_esp32s31_hal::domain::BtbbGain, oer_chips_esp32s31_hal::domain::BtbbError>
+    {
         publisher.publish(
             &self.grant,
             self.state.register_init_parameters().parameter_120,

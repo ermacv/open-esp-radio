@@ -50,7 +50,11 @@ impl<const Q: usize, const RB: usize> ReceiveUnit for StagedReceive<Q, RB> {
     fn bytes(&self) -> &[u8] {
         self.0.segment().buffer
     }
-    fn narrow(&mut self, offset: usize, length: usize) -> Result<(), oer_portable_memory::FrameRangeError> {
+    fn narrow(
+        &mut self,
+        offset: usize,
+        length: usize,
+    ) -> Result<(), oer_portable_memory::FrameRangeError> {
         self.0.narrow(offset, length)
     }
     fn storage(&self) -> &[u8] {
@@ -333,9 +337,9 @@ where
                     } = wifi.into_runtime_parts();
                     let permit = self
                         .domain
-                        .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                            channel,
-                        ))
+                        .permit(
+                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel),
+                        )
                         .map_err(|_| Fault::Capacity)?;
                     self.power = Some(Power::new(report.tx_power, permit.tx_ceiling(self.limits)));
                     self.active = Some(Active {
@@ -367,9 +371,7 @@ where
             }
             let permit = self
                 .domain
-                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
-                    channel,
-                ))
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
                 .map_err(|_| Fault::Capacity)?;
             let ceiling = permit.tx_ceiling(self.limits);
             // The paused radio and its actor cell leave together, or the

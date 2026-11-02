@@ -715,7 +715,8 @@ impl<P: Placement, E: Placement, B: Placement> Ieee802154TaskOwner<P, E, B> {
     pub(crate) fn notify_enhanced_ack_generated(&mut self) {
         self.mac.write_enhanced_ack_notify(|writer| {
             writer.set_notify_image(
-                oer_chips_esp32s31_pac::ieee802154::enhanced_ack_notify::NotifyImage::GenerateDone.bits(),
+                oer_chips_esp32s31_pac::ieee802154::enhanced_ack_notify::NotifyImage::GenerateDone
+                    .bits(),
             );
         });
     }

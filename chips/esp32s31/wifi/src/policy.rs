@@ -1,8 +1,8 @@
 //! The single-channel image still validates the arbiter's complete move budget.
+use oer_portable_time::Duration;
 use oer_protocols_ieee80211_core_arbiter::{
     ArbiterPolicy, ArbiterPolicyError, CheckedArbiterPolicy, NoReservation,
 };
-use oer_portable_time::Duration;
 
 /// Fit two publication/retune bounds and the minimum listen window. W3
 /// performs no off-channel work once associated; this is the constructor's

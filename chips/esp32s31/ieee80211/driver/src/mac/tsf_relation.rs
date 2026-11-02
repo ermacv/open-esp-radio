@@ -18,7 +18,8 @@ use oer_protocols_ieee80211_contracts_port::{Ieee80211Instant, TSF_DRIFT_PPM, Ts
 /// one generation always compare in order.
 #[derive(Debug, Eq, PartialEq)]
 pub struct TsfRelation {
-    generations: oer_protocols_ieee80211_contracts_port::GenerationSource<TsfInstant, Ieee80211Instant>,
+    generations:
+        oer_protocols_ieee80211_contracts_port::GenerationSource<TsfInstant, Ieee80211Instant>,
     last_sample: LastSample,
     sample_uncertainty: TsfDuration,
 }
