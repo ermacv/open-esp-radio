@@ -1,6 +1,7 @@
-//! A program-counter sampler on TIMG1 T0, for any image that selects it.
+//! A program-counter sampler on a TIMG1 timer, for any image that selects
+//! it: T0 for hart 0, T1 for hart 1.
 //!
-//! The image binds TIMG1 T0's interrupt above every level it wants to see
+//! The image binds the timer's interrupt above every level it wants to see
 //! and names the [`oer_portable_trace::Observer`] that receives the samples. A
 //! session runs only between [`Sampler::start`] and [`Sampler::stop`];
 //! otherwise the timer is stopped and masked: no tick, no handler entry.
@@ -275,66 +276,178 @@ impl<A: Alarm + 'static> Sampler<A> {
 }
 
 #[cfg(target_arch = "riscv32")]
-pub use chip::{Storage, Timer};
+pub use chip::{SamplerTimer, Storage, Timer, Timer0, Timer1};
 
 #[cfg(target_arch = "riscv32")]
 mod chip {
     use super::{Alarm, Ended, Handler, Lost, Sampler, Session, Shared, StartError};
     use core::marker::PhantomData;
     use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{
-        Timg1AlarmInterrupt, Timg1AlarmParts, Timg1AlarmProgram,
+        Timg1AlarmInterrupt, Timg1AlarmParts, Timg1AlarmProgram, Timg1Timer1Interrupt,
+        Timg1Timer1Parts, Timg1Timer1Program,
     };
-    use oer_chips_family_interrupt_table::{Bound, Controller, Entry, Router};
+    use oer_chips_family_interrupt_table::{
+        Bound, Controller, Entry, EventAuthority, InterruptSources, Router,
+    };
     use oer_portable_memory::{AffineSpscQueue, CompactSpscCursor, HandlerCell};
     use oer_portable_time::{Duration, Instant, Timer as _};
     use oer_portable_trace::Observer;
     use static_cell::StaticCell;
 
-    /// TIMG1 T0's program part with the handler's binding.
-    pub struct Timer<I: Entry<Part = Timg1AlarmInterrupt> + 'static> {
-        program: Timg1AlarmProgram,
+    /// The timer a sampler ticks on: its parts, program and interrupt part.
+    pub trait SamplerTimer: 'static {
+        type Parts;
+        type Program: 'static;
+        type Interrupt: InterruptSources + Send + 'static;
+        /// The program and interrupt parts, the timer stopped and a stale
+        /// event discarded.
+        fn quiet(parts: Self::Parts) -> (Self::Program, Self::Interrupt);
+        fn arm_after(
+            program: &mut Self::Program,
+            period_us: u64,
+            authority: &impl EventAuthority<Self::Interrupt>,
+        ) -> bool;
+        fn alarm_at(
+            program: &mut Self::Program,
+            target_us: u64,
+            authority: &impl EventAuthority<Self::Interrupt>,
+        ) -> bool;
+        fn disarm(program: &mut Self::Program);
+        /// Acknowledge the handler's event; whether it was pending.
+        fn acknowledge(interrupt: &mut Self::Interrupt) -> bool;
+    }
+
+    /// TIMG1 T0: hart 0's sampler.
+    pub enum Timer0 {}
+
+    impl SamplerTimer for Timer0 {
+        type Parts = Timg1AlarmParts;
+        type Program = Timg1AlarmProgram;
+        type Interrupt = Timg1AlarmInterrupt;
+        fn quiet(parts: Timg1AlarmParts) -> (Timg1AlarmProgram, Timg1AlarmInterrupt) {
+            let Timg1AlarmParts {
+                mut program,
+                mut interrupt,
+            } = parts;
+            program.disarm();
+            let _stale = interrupt.acknowledge();
+            (program, interrupt)
+        }
+        fn arm_after(
+            program: &mut Timg1AlarmProgram,
+            period_us: u64,
+            authority: &impl EventAuthority<Timg1AlarmInterrupt>,
+        ) -> bool {
+            program
+                .arm_after(Duration::from_micros(period_us), authority)
+                .is_ok()
+        }
+        fn alarm_at(
+            program: &mut Timg1AlarmProgram,
+            target_us: u64,
+            authority: &impl EventAuthority<Timg1AlarmInterrupt>,
+        ) -> bool {
+            program
+                .alarm_at(Duration::from_micros(target_us), authority)
+                .is_ok()
+        }
+        fn disarm(program: &mut Timg1AlarmProgram) {
+            program.disarm();
+        }
+        fn acknowledge(interrupt: &mut Timg1AlarmInterrupt) -> bool {
+            interrupt.acknowledge().pending
+        }
+    }
+
+    /// TIMG1 T1: hart 1's sampler. Its enable lane is T0's program
+    /// owner's to open ([`Timg1AlarmProgram::open_timer1`]).
+    pub enum Timer1 {}
+
+    impl SamplerTimer for Timer1 {
+        type Parts = Timg1Timer1Parts;
+        type Program = Timg1Timer1Program;
+        type Interrupt = Timg1Timer1Interrupt;
+        fn quiet(parts: Timg1Timer1Parts) -> (Timg1Timer1Program, Timg1Timer1Interrupt) {
+            let Timg1Timer1Parts {
+                mut program,
+                mut interrupt,
+            } = parts;
+            program.disarm();
+            interrupt.acknowledge();
+            (program, interrupt)
+        }
+        fn arm_after(
+            program: &mut Timg1Timer1Program,
+            period_us: u64,
+            authority: &impl EventAuthority<Timg1Timer1Interrupt>,
+        ) -> bool {
+            program
+                .arm_after(Duration::from_micros(period_us), authority)
+                .is_ok()
+        }
+        fn alarm_at(
+            program: &mut Timg1Timer1Program,
+            target_us: u64,
+            authority: &impl EventAuthority<Timg1Timer1Interrupt>,
+        ) -> bool {
+            program
+                .alarm_at(Duration::from_micros(target_us), authority)
+                .is_ok()
+        }
+        fn disarm(program: &mut Timg1Timer1Program) {
+            program.disarm();
+        }
+        fn acknowledge(interrupt: &mut Timg1Timer1Interrupt) -> bool {
+            // T1's line asserts only for its pending alarm: the entry is
+            // the observation.
+            interrupt.acknowledge();
+            true
+        }
+    }
+
+    /// The timer's program part with the handler's binding.
+    pub struct Timer<I: Entry<Part = T::Interrupt> + 'static, T: SamplerTimer = Timer0> {
+        program: T::Program,
         bound: Bound<I>,
     }
 
-    impl<I: Entry<Part = Timg1AlarmInterrupt> + 'static> Alarm for Timer<I> {
+    impl<I: Entry<Part = T::Interrupt> + 'static, T: SamplerTimer> Alarm for Timer<I, T> {
         fn start(&mut self, period_us: u64) -> bool {
-            self.program
-                .arm_after(Duration::from_micros(period_us), &self.bound)
-                .is_ok()
+            T::arm_after(&mut self.program, period_us, &self.bound)
         }
 
         fn alarm_at(&mut self, target_us: u64) -> bool {
-            self.program
-                .alarm_at(Duration::from_micros(target_us), &self.bound)
-                .is_ok()
+            T::alarm_at(&mut self.program, target_us, &self.bound)
         }
 
         fn disarm(&mut self) {
-            self.program.disarm();
+            T::disarm(&mut self.program);
         }
     }
 
-    type Queue<I> = AffineSpscQueue<Session<Timer<I>>, 1, CompactSpscCursor>;
+    type Queue<I, T> = AffineSpscQueue<Session<Timer<I, T>>, 1, CompactSpscCursor>;
 
-    struct Cells<I: Entry<Part = Timg1AlarmInterrupt> + 'static> {
-        request: Queue<I>,
-        reply: Queue<I>,
+    struct Cells<I: Entry<Part = T::Interrupt> + 'static, T: SamplerTimer> {
+        request: Queue<I, T>,
+        reply: Queue<I, T>,
     }
 
     /// The sampler's storage: place it once in the image's critical data,
-    /// as the handler reaches it. `O` receives the samples.
-    pub struct Storage<I: Entry<Part = Timg1AlarmInterrupt> + 'static, O> {
-        cells: StaticCell<Cells<I>>,
-        state: StaticCell<Handler<Timer<I>>>,
-        handler: HandlerCell<Handler<Timer<I>>>,
+    /// as the handler reaches it. `O` receives the samples; `T` is the
+    /// timer it ticks on.
+    pub struct Storage<I: Entry<Part = T::Interrupt> + 'static, O, T: SamplerTimer = Timer0> {
+        cells: StaticCell<Cells<I, T>>,
+        state: StaticCell<Handler<Timer<I, T>>>,
+        handler: HandlerCell<Handler<Timer<I, T>>>,
         shared: Shared,
         observer: PhantomData<fn() -> O>,
     }
 
-    impl<I, O> Storage<I, O>
+    impl<I, O, T> Storage<I, O, T>
     where
-        I: Entry<Part = Timg1AlarmInterrupt> + 'static,
+        I: Entry<Part = T::Interrupt> + 'static,
         O: Observer + Default,
+        T: SamplerTimer,
     {
         pub const fn new() -> Self {
             Self {
@@ -346,20 +459,15 @@ mod chip {
             }
         }
 
-        /// Stop and mask the timer, discard a stale event and bind the
-        /// handler. `None` when the storage was initialized before.
+        /// Stop the timer, discard a stale event and bind the handler on
+        /// `router`'s hart. `None` when the storage was initialized before.
         pub fn init<const H: u8>(
             &'static self,
-            parts: Timg1AlarmParts,
+            parts: T::Parts,
             router: &mut Router<impl Controller, H>,
             token: I,
-        ) -> Option<Sampler<Timer<I>>> {
-            let Timg1AlarmParts {
-                mut program,
-                mut interrupt,
-            } = parts;
-            program.disarm();
-            let _stale = interrupt.acknowledge();
+        ) -> Option<Sampler<Timer<I, T>>> {
+            let (program, interrupt) = T::quiet(parts);
             let cells = self.cells.try_init_with(|| Cells {
                 request: Queue::new(),
                 reply: Queue::new(),
@@ -389,7 +497,7 @@ mod chip {
             not(oer_trace),
             allow(unused_variables, reason = "only a trace build reports samples")
         )]
-        pub fn interrupt(&self, part: &mut Timg1AlarmInterrupt) {
+        pub fn interrupt(&self, part: &mut T::Interrupt) {
             // SOURCE: RISC-V CLIC specification 3f8ee744, "mcause" (`mpil`
             // in bits 23:16), and the staged entry (`vectors.s`), which
             // restores `mepc` and `mcause` only on exit: with no level
@@ -402,7 +510,7 @@ mod chip {
             let ra = oer_chips_family_staged_runtime::stacks::interrupted_ra();
             #[cfg(not(oer_trace))]
             let ra = None;
-            let pending = part.acknowledge().pending;
+            let pending = T::acknowledge(part);
             let observer = O::default();
             if let Some(Some(tick)) = self
                 .handler
@@ -416,17 +524,18 @@ mod chip {
         }
     }
 
-    impl<I, O> Default for Storage<I, O>
+    impl<I, O, T> Default for Storage<I, O, T>
     where
-        I: Entry<Part = Timg1AlarmInterrupt> + 'static,
+        I: Entry<Part = T::Interrupt> + 'static,
         O: Observer + Default,
+        T: SamplerTimer,
     {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl<I: Entry<Part = Timg1AlarmInterrupt> + 'static> Sampler<Timer<I>> {
+    impl<I: Entry<Part = T::Interrupt> + 'static, T: SamplerTimer> Sampler<Timer<I, T>> {
         /// Start a session of one tick every `period_us`.
         ///
         /// # Errors

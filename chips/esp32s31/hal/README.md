@@ -114,8 +114,14 @@ software state or lock; each transition takes its own owner's `&mut`.
 `Hardware::timg1_alarm` is the same pair for TIMG1 T0, with the same
 operations, and `alarm_at`, which moves the alarm of the running counter to
 an absolute target and enables it without a stop, reload or divider reset;
-no product timer uses it. Runtime startup also selects XTAL and
-enables TIMG1 T0 in group one's clock word, after the group's reset pulse.
+no product timer uses it. `Hardware::timg1_timer1` is TIMG1 T1's pair, with
+`arm_after`, `alarm_at` and `disarm`: its program part holds T1's counter,
+alarm and load words, and its interrupt part only T1's acknowledgement
+strobe. The group's one enable word stays with T0's program part, which
+opens T1's lane once (`open_timer1`) before T1's handler is bound; T1's
+`disarm` stops its alarm instead of masking it, so no two owners write that
+word. Runtime startup also selects XTAL and enables TIMG1 T0 and T1 in group
+one's clock word, after the group's reset pulse.
 
 `Hardware::cache_counters` owns the L1 cache's access counters of
 instruction buses 0 and 1 and data buses 0 and 1 (the enable/clear word,

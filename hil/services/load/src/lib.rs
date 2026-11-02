@@ -29,9 +29,9 @@
 //! how busy its harts were. The load itself never crosses the HIL link:
 //! the link carries the parameters and the counters.
 //!
-//! A run can also sample where the image's measured hart (its README names
-//! it) spends its window
-//! ([`Profile`], [`CollectSamples`]).
+//! A run can also sample where each of the image's harts spends its window
+//! ([`Profile`], [`CollectSamples`]); an image samples the harts it has a
+//! sampler on.
 //!
 //! [`header`] is the datagram header both ends write and read. RX and TX
 //! are named from the image's side: [`Receive`] is load the image
@@ -838,12 +838,15 @@ pub struct CacheLevel {
     pub ways: Option<u32>,
 }
 
-/// The samples of run `run`'s window, from the sample numbered `from`: at
-/// most [`MAX_PAGE_SAMPLES`] an answer, fewer at the end.
+/// Hart `hart`'s samples of run `run`'s window, from the sample numbered
+/// `from`: at most [`MAX_PAGE_SAMPLES`] an answer, fewer at the end. An
+/// image without a sampler on that hart refuses with
+/// [`LoadError::NoSampler`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct CollectSamples {
     pub run: u32,
     pub from: u16,
+    pub hart: u8,
 }
 
 /// The answer to [`CollectSamples`].
@@ -883,7 +886,7 @@ pub struct Samples {
     pub samples: heapless::Vec<Sample, MAX_PAGE_SAMPLES>,
 }
 
-/// One kept tick: where the measured hart was when the timer interrupted it.
+/// One kept tick: where the sampled hart was when the timer interrupted it.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Sample {
     /// The tick's number from the window's first, 0.

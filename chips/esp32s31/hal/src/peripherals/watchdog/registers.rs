@@ -112,9 +112,9 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
         Self { wdt, clock }
     }
 
-    /// Run timer group 1 from reset with its watchdog and T0 on the XTAL
-    /// clock: bus clock on, a reset pulse, then the watchdog's and T0's
-    /// source XTAL and their clocks on. T1's lanes are untouched.
+    /// Run timer group 1 from reset with its watchdog, T0 and T1 on the
+    /// XTAL clock: bus clock on, a reset pulse, then the watchdog's, T0's
+    /// and T1's source XTAL and their clocks on.
     ///
     /// SOURCE: ESP-IDF 4d80c1b2
     /// `components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:273-301`
@@ -123,8 +123,8 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
     /// (`TIMERGRP1_CTRL0`: APB clock, reset, watchdog gate/source) and
     /// `components/esp_hal_timg/esp32s31/include/hal/timg_ll.h`
     /// (`timg_ll_enable_bus_clock`, `timg_ll_reset_register`);
-    /// ESP_IDF_4D59230D_S31_TIMER0_LL in the register model (T0's source
-    /// and gate).
+    /// ESP_IDF_4D59230D_S31_TIMER0_LL and ESP_IDF_4D80C1B2_S31_TIMER1_LL in
+    /// the register model (T0's and T1's source and gate).
     pub fn start_clock(&mut self) {
         self.clock.modify_timergrp1_ctrl0(|w| {
             w.set_reg_timergrp1_apb_clk_en(true);
@@ -144,7 +144,14 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
                             .bits()
                     },
                 >())
-                .set_reg_timergrp1_t0_clk_en(true);
+                .set_reg_timergrp1_t0_clk_en(true)
+                .set_reg_timergrp1_t1_src_sel(Bits::constant::<
+                    {
+                        oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T1SrcSel::Xtal
+                            .bits()
+                    },
+                >())
+                .set_reg_timergrp1_t1_clk_en(true);
         });
     }
 }

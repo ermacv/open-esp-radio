@@ -6,10 +6,11 @@
 //! reads the CPU, the named parts, the counters, the link's rates and the
 //! PHY tracking ticks at the window's ends (the cache's counters cleared
 //! just before its start), sampling the boot hart between them when it
-//! asks; after its drain it closes the socket and keeps what it read until
-//! the next run starts. The boot hart's counters and sampler come through
-//! its relay ([`super::relay`]); the answers go back to the worker, which
-//! publishes them.
+//! asks, and hart 1 beside it; after its drain it closes the socket and
+//! keeps what it read until the next run starts. The boot hart's counters
+//! and sampler come through its relay ([`super::relay`]); hart 1's sampler
+//! is the server's own. The answers go back to the worker, which publishes
+//! them.
 
 use core::cell::Cell;
 use core::convert::Infallible;
@@ -94,11 +95,12 @@ impl Answer {
 type Socket = UdpSocket<'static, IpDevice<RX, TX>>;
 
 /// Serve the load requests until the chip resets, sampling and reading
-/// the boot hart through `hart0`.
+/// the boot hart through `hart0` and sampling hart 1 with `hart1`.
 pub(crate) async fn serve(
     net: &Net<RX, TX>,
     mut requests: Requests,
     mut hart0: Client,
+    mut hart1: observe::Hart1,
     tally: RunTally,
 ) -> Infallible {
     let mut kept: Option<(u32, Ended)> = None;
@@ -117,8 +119,15 @@ pub(crate) async fn serve(
                         requests.send(Answer::Started(Started::Running)).await;
                         // Built where it stays: an awaited call would build
                         // the run's future on this poll's stack, then move it.
-                        let mut running =
-                            pin!(run(&mut requests, socket, start, tally, net, &mut hart0));
+                        let mut running = pin!(run(
+                            &mut requests,
+                            socket,
+                            start,
+                            tally,
+                            net,
+                            &mut hart0,
+                            &mut hart1,
+                        ));
                         let ended = running.as_mut().await;
                         kept = Some((start.run, ended));
                         continue;
@@ -129,7 +138,9 @@ pub(crate) async fn serve(
             Action::Answer(decided) => decided_answer(decided),
             Action::Cpu => Answer::Cpu(cpu_load().await),
             Action::Kept(kind) => match &kept {
-                Some((_, ended)) => kept_answer(ended, kind, identity, &mut hart0).await,
+                Some((_, ended)) => {
+                    kept_answer(ended, kind, identity, &mut hart0, &mut hart1).await
+                }
                 None => decided_answer(Decided::UnknownRun(kind)),
             },
         };
@@ -143,6 +154,7 @@ async fn kept_answer(
     kind: Kept,
     identity: RequestIdentity,
     hart0: &mut Client,
+    hart1: &mut observe::Hart1,
 ) -> Answer {
     match kind {
         Kept::Report => Answer::Collected(Collected::Report(ended.report.clone())),
@@ -152,21 +164,38 @@ async fn kept_answer(
         Kept::Counters => Answer::Counters(CountersCollected::Report(ended.counters)),
         Kept::Link => Answer::Link(LinkCollected::Report(ended.link)),
         Kept::Tracking => Answer::Tracking(TrackingCollected::Report(ended.tracking)),
-        Kept::Samples { from } => match ended.sampled {
-            // The samples are in the boot hart's buffer: its relay
+        Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
+            // Hart 0's samples are in the boot hart's buffer: its relay
             // answers with the page.
-            Some(Ok(())) => {
+            Some(Some(Ok(()))) if hart == 0 => {
                 relay::page_of(hart0, identity, from).await;
                 Answer::Relayed
             }
-            Some(Err(error)) => Answer::Samples(SamplesCollected::Refused(error)),
-            None => Answer::Samples(SamplesCollected::Refused(LoadError::NotSampled)),
+            Some(Some(Ok(()))) => Answer::Samples(hart1_page(hart1, from)),
+            Some(Some(Err(error))) => Answer::Samples(SamplesCollected::Refused(*error)),
+            Some(None) => Answer::Samples(SamplesCollected::Refused(LoadError::NotSampled)),
+            None => Answer::Samples(SamplesCollected::Refused(LoadError::NoSampler)),
         },
     }
 }
 
+/// Hart 1's last session's page from the sample numbered `from`.
+fn hart1_page(hart1: &mut observe::Hart1, from: u16) -> SamplesCollected {
+    let sampler = hart1.sampler();
+    let page = sampler.session().and_then(|session| {
+        sampler.samples(|buffer| {
+            report::samples(buffer, from, session.ticks, session.stray, session.cut)
+        })
+    });
+    page.map_or(
+        SamplesCollected::Refused(LoadError::NoSampler),
+        SamplesCollected::Page,
+    )
+}
+
 /// Whether the image can sample `start`: a run that asks for samples
-/// needs the sampler disarmed.
+/// needs the boot hart's sampler disarmed; hart 1's refusal leaves only
+/// hart 1 unsampled.
 async fn sampled(start: &Start, hart0: &mut Client) -> Result<(), LoadError> {
     match start.profile {
         Some(_) => relay::sampler_available(hart0).await,
@@ -241,18 +270,22 @@ struct Ends {
     counters: Counters,
     link: Link,
     tracking: Tracking,
-    sampled: Option<Result<(), LoadError>>,
+    sampled: Sampled,
 }
 
-/// What an ended run keeps until the next starts; its samples stay in the
-/// boot hart's sampler. `sampled` is `None` for a run that asked for none.
+/// How each hart's sampler served the window, by hart: `None` for a run
+/// that asked for no samples.
+type Sampled = [Option<Result<(), LoadError>>; 2];
+
+/// What an ended run keeps until the next starts; its samples stay in
+/// each hart's sampler.
 struct Ended {
     report: Report,
     parts: Windows,
     counters: Counters,
     link: Link,
     tracking: Tracking,
-    sampled: Option<Result<(), LoadError>>,
+    sampled: Sampled,
 }
 
 /// Run `start` on `socket` beside the requests until its drain ended, with
@@ -266,6 +299,7 @@ async fn run(
     tally: &mut Tally<TALLY_WORDS>,
     net: &Net<RX, TX>,
     hart0: &mut Client,
+    hart1: &mut observe::Hart1,
 ) -> Ended {
     tally.clear();
     let window = Window {
@@ -277,7 +311,9 @@ async fn run(
     let ends = {
         // Each future built where it stays, as in `serve`.
         let mut receiver = pin!(receive(&socket, start.run, tally, &mut receiving, &window));
-        let mut measuring = pin!(measure(&socket, &start, &window, &mut sent, net, hart0));
+        let mut measuring = pin!(measure(
+            &socket, &start, &window, &mut sent, net, hart0, hart1
+        ));
         let mut activity = select(receiver.as_mut(), measuring.as_mut());
         loop {
             let running = Phase::Running { run: start.run };
@@ -357,9 +393,9 @@ async fn receive(
 
 /// The run's window and drain: open the window `delay_ms` after now, read
 /// the CPU and the parts, clear the cache's counters and read the counters
-/// (both on the boot hart), sample when asked, send within it, close it
-/// after `duration_ms`, read them again, stop sampling, then wait out the
-/// drain.
+/// (both on the boot hart), sample both harts when asked, send within it,
+/// close it after `duration_ms`, read them again, stop sampling, then wait
+/// out the drain.
 async fn measure(
     socket: &Socket,
     start: &Start,
@@ -367,6 +403,7 @@ async fn measure(
     sent: &mut Sent,
     net: &Net<RX, TX>,
     hart0: &mut Client,
+    hart1: &mut observe::Hart1,
 ) -> Ends {
     let planned_start = now_us().saturating_add(millis(start.delay_ms));
     let planned_end = planned_start.saturating_add(millis(start.duration_ms));
@@ -380,6 +417,12 @@ async fn measure(
         Some(profile) => Some(relay::start_sampler(hart0, profile.period_us).await),
         None => None,
     };
+    let sampling1 = start.profile.map(|profile| {
+        hart1
+            .sampler()
+            .start(profile.period_us)
+            .map_err(|_| LoadError::NoSampler)
+    });
     if let Some(transmit) = start.transmit {
         send(socket, start.run, transmit, start_us, planned_end, sent).await;
     }
@@ -387,11 +430,22 @@ async fn measure(
     let end_us = now_us();
     window.end_us.set(Some(end_us));
     relay::request_stop(hart0).await;
+    hart1.sampler().request_stop();
     let cpu_end = cpu_load().await;
     let (parts_end, tracking_end) = readings(false).await;
     let counters_end = snapshot(hart0, false, net).await;
     let sampled = match sampling {
         Some(Ok(())) => Some(relay::stop_sampler(hart0).await),
+        other => other,
+    };
+    let sampled1 = match sampling1 {
+        Some(Ok(())) => Some(
+            hart1
+                .sampler()
+                .stop()
+                .await
+                .map_err(|_| LoadError::NoSampler),
+        ),
         other => other,
     };
     wait_until(end_us.saturating_add(millis(start.drain_ms))).await;
@@ -404,7 +458,7 @@ async fn measure(
         counters: report::counters(&counters_start, &counters_end),
         link: report::link_window(&counters_start, &counters_end),
         tracking: report::tracking(&tracking_start, &tracking_end),
-        sampled,
+        sampled: [sampled, sampled1],
     }
 }
 
