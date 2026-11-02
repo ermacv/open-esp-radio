@@ -29,6 +29,7 @@ fn the_zero_bytes_bind_with_the_storage_placed_inside_the_static() {
         oer_esp32s31_hal::memory::dma_static::Placed::host(placed),
         crate::rx::arena::WifiIrqSignals {
             mac: oer_espressif_interrupt_table::signal::host::signal().0,
+            receive: oer_espressif_interrupt_table::signal::host::signal().0,
             power: oer_espressif_interrupt_table::signal::host::signal().0,
         },
     )

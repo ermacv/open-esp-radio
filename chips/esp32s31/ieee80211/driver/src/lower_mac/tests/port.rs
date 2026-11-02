@@ -407,6 +407,10 @@ impl Device<512> for TestDevice {
         let observed = self.observed.borrow();
         !observed.received.is_empty()
     }
+    fn poll_received_facts(&mut self, _: &mut Context<'_>) -> Result<bool, Fault> {
+        self.assert_task_context();
+        Ok(self.receive_due())
+    }
     fn pull_received(
         &mut self,
         receive_room: usize,

@@ -71,6 +71,7 @@ fn parts() -> (
 ) {
     let (mac, irq) = leak(IrqStorage::new(
         oer_espressif_interrupt_table::signal::host::signal().0,
+        oer_espressif_interrupt_table::signal::host::signal().0,
     ))
     .split();
     let (power, power_consumer) = leak(PowerIrqStorage::new(

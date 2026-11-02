@@ -193,7 +193,7 @@ the drain and the walker stop; a freeze masks it and its resume activates
 it again. The station's receive pull requests `UnmaskRx` only after the RX frontier drained with no
 released buffer left to rearm. Installing a line clears a stale request. A
 lease the upper layer returns posts the RX-capacity fact
-(`RxReturnNotifier`), so the runner rearms the returned descriptors even
+(`RxReturnNotifier`) in the receive signal, so the pull rearms the returned descriptors even
 when an exhausted walker raises no RX interrupt; the notice touches no ring
 state.
 
@@ -203,12 +203,16 @@ The station takes received units in its own turn. When its event queue is
 empty, its next event is its receive pull: a staged unit, or the ring
 serviced once when the RX interrupt left work, one unit per event and at
 most 32 refused units per pull. A unit it returns goes straight back to the
-ring, and its lends come off its count at its next pull. The driver task
-takes the interrupt facts, serves the transmit and TBTT ones and wakes the
-station when they leave ring work; the RX interrupt stays masked until the
-pull drained the ring. A pull runs only while the ring has work for it
-(the driver's wake, a returned unit or work the last pull left); otherwise
-it touches neither the device nor the driver's state. A cut's units and every terminal reach the station
+ring, and its lends come off its count at its next pull. The MAC's receive
+facts (a received unit, a returned staging credit) travel in their own
+signal, which only the station's pull polls, so they wake the station
+directly; the driver task takes the other MAC facts and serves the transmit
+and TBTT ones. The RX interrupt stays masked until the pull drained the
+ring. A pull services the ring only while it has work (a receive fact, the
+driver's wake, a returned unit or work the last pull left); otherwise it
+takes no more than the receive facts and leaves the driver's state alone.
+While a cut or a stop holds the ring, the driver task's batches take both
+signals' facts. A cut's units and every terminal reach the station
 through the event queue, ahead of what the ring holds. The driver task and
 the pull borrow the device and the driver's state only within one
 synchronous step of their own task on the station's executor.
@@ -231,11 +235,11 @@ left, so this split keeps a full reorder window's hole-closing MPDU staged.
 One received frame and the owner of its DMA buffer at each step:
 
 1. **P3.** The radio handler masks RX delivery, acknowledges and raises
-   the RX fact in the image's static `IrqSignal` of the driver's executor
-   (`oer_espressif_interrupt_table::signal`), the station's, which pends it
-   and touches no waker; the buffer is the DMA engine's.
-2. **Station.** The executor's next round hands the fact to the driver
-   task, which wakes the station; the station's receive pull runs the
+   the RX fact in the image's static receive `IrqSignal` of the station's
+   executor (`oer_espressif_interrupt_table::signal`), which pends it and
+   touches no waker; the buffer is the DMA engine's.
+2. **Station.** The executor's next round wakes the station, the signal's
+   one waiter; the station's receive pull runs the
    product service (`rx/transaction`), which takes the completed unit
    and stages it: the original buffer becomes a `NetworkRxFrame` lease of
    the staging pool, with no copy. Chained, oversized, empty and too-long
@@ -252,7 +256,8 @@ One received frame and the owner of its DMA buffer at each step:
 5. **Station.** The MPDU and `portable::rx_meta` on the configured channel go to
    `sta::receive::classify` and `observe_scan`.
 6. **Station.** Dropping the held frame releases the lease and posts the
-   RX-capacity fact (a raise of its own executor's signal, `FromOwnTask`);
+   RX-capacity fact (a raise of its own executor's receive signal,
+   `FromOwnTask`);
    the station's next pull rearms the buffer.
 
 The driver task and the station share one executor, so neither preempts the

@@ -33,10 +33,12 @@ use super::{
 };
 use crate::irq::{WifiIrqLine, WifiIrqLineParts, WifiIrqRequests};
 
-/// The image's two static signals of the radio executor that carry the
-/// line's facts to the receive runner: the MAC facts and the power facts.
+/// The image's three static signals of the radio executor that carry the
+/// line's facts: the MAC facts but the receive ones, the receive facts and
+/// the power facts.
 pub struct WifiIrqSignals<X: SignalExecutor> {
     pub mac: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
+    pub receive: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
     pub power: &'static oer_espressif_interrupt_table::signal::IrqSignal<X>,
 }
 
@@ -170,7 +172,9 @@ impl<
         } = arena.into_inner();
         let (requests, counters): (&'static WifiIrqRequests, &'static WifiRxCounters) =
             (requests, counters);
-        let (irq_publisher, irq) = irq.write(IrqStorage::new(signals.mac)).split();
+        let (irq_publisher, irq) = irq
+            .write(IrqStorage::new(signals.mac, signals.receive))
+            .split();
         let irq_publisher: &'static IrqPublisher<'static, X> = publisher_slot.write(irq_publisher);
         let (power_publisher, power) = power.write(PowerIrqStorage::new(signals.power)).split();
         let (control, stop) = ReceiveControl::init_in_place(control).split();

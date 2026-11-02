@@ -1,9 +1,11 @@
 //! Publication through a static typed signal and exclusive, finite IRQ
 //! consumption.
 //!
-//! Each storage raises the image's [`IrqSignal`] of the radio executor: the
+//! Each storage raises the image's [`IrqSignal`]s of the radio executor: the
 //! ISR ORs its facts in and pends that executor, never a waker; the
-//! executor wakes the consumer in its own context. Splitting storage lends
+//! executor wakes the consumer in its own context. The MAC storage carries
+//! its receive facts in their own signal, so the task that takes received
+//! units waits for them alone, and its other facts in the MAC signal. Splitting storage lends
 //! one affine consumer. Every wait borrows that consumer exclusively until
 //! completion or cancellation. There are no lane waits competing with a
 //! batch for the same facts. The ISR owns only a publisher; neither polling
@@ -25,6 +27,8 @@ use oer_espressif_interrupt_table::signal::{IrqSignal, SignalExecutor, SignalPen
 use super::{EVENT_KNOWN_MASK, EVENT_RX_SUCCESS, IrqSnapshot, IrqWork, next_irq_work};
 
 const RX_CAPACITY: u32 = 1 << 4;
+/// The facts the receive signal carries; the MAC signal carries the rest.
+const RECEIVE_FACTS: u32 = EVENT_RX_SUCCESS | RX_CAPACITY;
 /// Both interrupt banks of the epoch were masked. Not a hardware event: the
 /// owner of the interrupt line posts it once, after applying the mask.
 const MASKED: u32 = 1 << 5;
@@ -64,9 +68,10 @@ impl Iterator for IrqBatch {
 }
 
 /// Storage owned by an installation; its facts travel in the image's
-/// static signal.
+/// static signals.
 pub struct IrqStorage<E: SignalExecutor> {
     signal: &'static IrqSignal<E>,
+    receive: &'static IrqSignal<E>,
     #[cfg(test)]
     rx_posts: AtomicU32,
     #[cfg(test)]
@@ -87,10 +92,11 @@ pub struct IrqStorage<E: SignalExecutor> {
 
 impl<E: SignalExecutor> IrqStorage<E> {
     /// The storage of `signal`, the image's MAC signal of the radio
-    /// executor.
-    pub const fn new(signal: &'static IrqSignal<E>) -> Self {
+    /// executor, and `receive`, its receive signal on the same executor.
+    pub const fn new(signal: &'static IrqSignal<E>, receive: &'static IrqSignal<E>) -> Self {
         Self {
             signal,
+            receive,
             #[cfg(test)]
             rx_posts: AtomicU32::new(0),
             #[cfg(test)]
@@ -154,13 +160,21 @@ impl<E: SignalExecutor> IrqStorage<E> {
 
     #[inline(always)]
     fn post(&self, events: u32) -> IrqPublication<E> {
-        let raised = self.signal.raise_deferred(events);
+        let raise = |signal: &'static IrqSignal<E>, facts: u32| {
+            (facts != 0).then(|| signal.raise_deferred(facts))
+        };
+        let received = raise(self.receive, events & RECEIVE_FACTS);
+        let other = raise(self.signal, events & !RECEIVE_FACTS);
+        #[cfg(test)]
+        let previous = received.as_ref().map_or(0, |r| r.previous & RECEIVE_FACTS)
+            | other.as_ref().map_or(0, |r| r.previous & !RECEIVE_FACTS);
         IrqPublication {
             #[cfg(test)]
-            added: events & !raised.previous,
+            added: events & !previous,
             #[cfg(test)]
-            previous: raised.previous,
-            pend: raised.pend,
+            previous,
+            receive: received.and_then(|raised| raised.pend),
+            pend: other.and_then(|raised| raised.pend),
         }
     }
 }
@@ -334,6 +348,8 @@ fn irq_cycles() -> u32 {
 }
 
 /// The sole MAC waiter and consumer of an installation's coalesced facts.
+/// A batch takes both signals' facts; the receive and MAC halves take one
+/// signal each, so each registers only its own polling task.
 #[must_use = "the driver must retain its exclusive IRQ consumer"]
 pub struct IrqConsumer<'irq, E: SignalExecutor> {
     storage: &'irq IrqStorage<E>,
@@ -347,17 +363,16 @@ impl<E: SignalExecutor> IrqConsumer<'_, E> {
     ///
     /// The caller runs outside the signal's executor.
     pub fn has_pending(&self) -> Result<bool, ForeignContext> {
-        self.storage.signal.has_pending()
+        Ok(self.storage.receive.has_pending()? || self.storage.signal.has_pending()?)
     }
 
     /// # Errors
     ///
     /// The caller runs outside the signal's executor; the facts stay.
     pub fn take_batch(&mut self) -> Result<IrqBatch, ForeignContext> {
-        self.storage
-            .signal
-            .take()
-            .map(|pending| IrqBatch { pending })
+        let received = self.storage.receive.take()?;
+        let pending = received | self.storage.signal.take()?;
+        Ok(IrqBatch { pending })
     }
 
     /// Registration precedes the Acquire snapshot, including after
@@ -367,6 +382,44 @@ impl<E: SignalExecutor> IrqConsumer<'_, E> {
     ///
     /// The caller runs outside the signal's executor.
     pub fn poll_batch(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, ForeignContext>> {
+        match (self.poll_received(cx), self.poll_mac(cx)) {
+            (Poll::Pending, Poll::Pending) => Poll::Pending,
+            (Poll::Ready(Err(error)), _) | (_, Poll::Ready(Err(error))) => Poll::Ready(Err(error)),
+            (received, other) => {
+                let facts = |poll: Poll<Result<IrqBatch, ForeignContext>>| match poll {
+                    Poll::Ready(Ok(batch)) => batch.pending,
+                    _ => 0,
+                };
+                Poll::Ready(Ok(IrqBatch {
+                    pending: facts(received) | facts(other),
+                }))
+            }
+        }
+    }
+
+    /// The receive facts alone (a received unit, a returned staging
+    /// credit); registers the polling task on the receive signal only.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::poll_batch`].
+    pub fn poll_received(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<IrqBatch, ForeignContext>> {
+        self.storage
+            .receive
+            .poll_take(cx)
+            .map(|facts| facts.map(|pending| IrqBatch { pending }))
+    }
+
+    /// Every fact but the receive ones (TX completion and timeout, color,
+    /// masking); registers the polling task on the MAC signal only.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::poll_batch`].
+    pub fn poll_mac(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, ForeignContext>> {
         self.storage
             .signal
             .poll_take(cx)
@@ -444,6 +497,7 @@ impl<E: SignalExecutor> PowerIrqPublisher<'_, E> {
             added: events & !raised.previous,
             #[cfg(test)]
             previous: raised.previous,
+            receive: None,
             pend: raised.pend,
         }
     }
@@ -456,6 +510,7 @@ pub struct IrqPublication<E: SignalExecutor> {
     added: u32,
     #[cfg(test)]
     previous: u32,
+    receive: Option<SignalPend<E>>,
     pend: Option<SignalPend<E>>,
 }
 
@@ -463,6 +518,9 @@ impl<E: SignalExecutor> IrqPublication<E> {
     /// Pend the radio executor when a fact was new; no waker runs here.
     #[inline(always)]
     pub fn wake(self) {
+        if let Some(pend) = self.receive {
+            pend.pend();
+        }
         if let Some(pend) = self.pend {
             pend.pend();
         }

@@ -433,11 +433,8 @@ where
             }
         }
         if let Poll::Ready(facts) = session.poll(cx) {
-            let mut facts = facts.map_err(Fault::Receive)?;
-            self.rx_pending |= facts.rx_capacity_returned();
-            for work in &mut facts {
+            for work in facts.map_err(Fault::Receive)? {
                 match work {
-                    IrqWork::RxSuccess => self.rx_pending = true,
                     IrqWork::TxComplete => self.tx_pending |= EVENT_TX_COMPLETE,
                     IrqWork::TxTimeout => self.tx_pending |= EVENT_TX_TIMEOUT,
                     _ => {}
@@ -460,6 +457,19 @@ where
             && !self.pausing
             && (!self.received.0.get_mut().is_empty()
                 || (self.rx_pending && self.continuation.is_none_or(|at| self.timer.now() >= at)))
+    }
+    fn poll_received_facts(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
+        if self.cut || self.pausing {
+            return Ok(false);
+        }
+        let session = self.session.as_mut().map_err(|e| *e)?;
+        if let Poll::Ready(facts) = session.poll_received(cx) {
+            let facts = facts.map_err(Fault::Receive)?;
+            // A returned staging credit rearms the ring as a received unit
+            // fills it: both are ring work.
+            self.rx_pending |= !facts.is_empty();
+        }
+        Ok(<Self as Device<B>>::receive_due(self))
     }
     fn pull_received(
         &mut self,
