@@ -1910,10 +1910,11 @@ impl<
             let stepped = if skip {
                 skipped = skipped.saturating_add(1);
                 // A taken MSDU changed the data machine alone: its attempts
-                // pass is the whole step. An attempt that came back refused
-                // may change what the station owes, so the whole step
-                // follows at once.
-                if core::mem::take(&mut data_taken) {
+                // pass is the whole step, unless the MSDUs left the last
+                // pass's wait standing (they join the growing aggregate).
+                // An attempt that came back refused may change what the
+                // station owes, so the whole step follows at once.
+                if core::mem::take(&mut data_taken) && !self.data.attempts_wait() {
                     B::span(ServiceSpan::Step, false);
                     let attempted = self.attempt_data(turn, phase, io);
                     B::span(ServiceSpan::Step, true);

@@ -1905,3 +1905,68 @@ fn an_mpdu_beyond_the_window_waits_for_the_window_to_move() {
     drop(second);
     assert_eq!(tokens_lost(&events), 0);
 }
+
+#[test]
+fn msdus_joining_a_growing_aggregate_leave_the_attempt_wait_until_it_is_full() {
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    let mut events = Kept::default();
+    let mut input = |data: &mut StaData<'static, Data<'static>, Caps, 8>, priority: u8| {
+        data.input(
+            DataInput {
+                msdu: msdu(priority),
+                link: &mut link,
+            },
+            &mut events,
+        )
+        .unwrap();
+    };
+    let mut attempts = Kept::default();
+    input(&mut data, 0);
+    let first = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
+    assert!(!data.attempts_wait(), "an attempt went");
+    // 1 waits to grow behind the attempt out: the pass made none.
+    input(&mut data, 0);
+    assert!(
+        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts)
+            .is_none()
+    );
+    assert!(data.attempts_wait());
+    // 2 and 3 join it, and an MSDU of another category queues behind it.
+    input(&mut data, 0);
+    input(&mut data, 6);
+    input(&mut data, 0);
+    assert!(data.attempts_wait(), "the aggregate still grows");
+    // 4 fills it: the next pass sends it, full, at once.
+    input(&mut data, 0);
+    assert!(!data.attempts_wait());
+    let full = aggregate(data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts));
+    assert_eq!(full.context.len(), 4);
+    // Both tickets are out: no MSDU makes an attempt before a terminal.
+    assert!(
+        data.poll_attempt(|_| window(0, 4, u32::MAX), &mut attempts)
+            .is_none()
+    );
+    assert!(data.attempts_wait());
+    input(&mut data, 0);
+    assert!(data.attempts_wait());
+    // A terminal ends the wait.
+    let _marks = data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: first.context,
+            ticket: first.ticket,
+            completion: block_ack(0, 0b1),
+        },
+        oer_time::Instant::from_micros(2_000),
+        Some(RETRY),
+        &mut attempts,
+    );
+    assert!(!data.attempts_wait());
+    drop(full);
+    assert_eq!(tokens_lost(&attempts), 0);
+}

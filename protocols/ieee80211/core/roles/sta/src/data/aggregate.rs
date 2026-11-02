@@ -48,6 +48,72 @@ pub struct AggregateWindow {
     pub rate: Option<oer_ieee80211_contracts_port::PhyRate>,
 }
 
+/// Why an attempt pass made no attempt, kept while only MSDUs come: an
+/// MSDU that leaves it standing changes no attempt, so the service skips
+/// the next pass.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum AttemptWait {
+    /// No ticket is free: nothing goes before a terminal returns one.
+    NoTicket,
+    /// The next aggregate of `tid` could still grow and waits while an
+    /// attempt of its category is out.
+    Growing {
+        tid: WmmUserPriority,
+        window: AggregateWindow,
+        /// Its members so far, below `limit`.
+        count: usize,
+        limit: usize,
+        /// Their octets.
+        length: u32,
+        /// The sequence number of its last member.
+        last: SequenceNumber,
+    },
+}
+
+impl AttemptWait {
+    /// The wait after one more owed MPDU, or `None` once an attempt pass
+    /// would make an attempt: the aggregate it joins is full, or it does
+    /// not join it.
+    pub(crate) fn after_input(
+        self,
+        tid: WmmUserPriority,
+        sequence: SequenceNumber,
+        mpdu: usize,
+        protection: DataProtection<()>,
+    ) -> Option<Self> {
+        match self {
+            Self::NoTicket => Some(self),
+            Self::Growing {
+                tid: growing,
+                window,
+                count,
+                limit,
+                length,
+                last,
+            } => {
+                // An MPDU of another TID queues behind the growing one.
+                if tid != growing {
+                    return Some(self);
+                }
+                let follows =
+                    oer_ieee80211_core_upper_mac::sequence::forward_distance(last, sequence) == 1;
+                let length = subframe_octets(mpdu, protection)
+                    .and_then(|octets| length.checked_add(octets))
+                    .filter(|total| window.fits(*total))?;
+                let count = count.checked_add(1).filter(|count| *count < limit)?;
+                (follows && window.holds(sequence)).then_some(Self::Growing {
+                    tid,
+                    window,
+                    count,
+                    limit,
+                    length,
+                    last: sequence,
+                })
+            }
+        }
+    }
+}
+
 /// The octets one member takes in an aggregate: its delimiter, its MPDU
 /// with the CCMP MIC the port appends to a protected one and the FCS,
 /// padded to a four-octet boundary.
@@ -446,6 +512,11 @@ impl<
         window: impl FnOnce(WmmUserPriority) -> Option<AggregateWindow>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<DataAttempt<'id, D, K>> {
+        self.waits = None;
+        if self.tickets.is_empty() {
+            self.waits = Some(AttemptWait::NoTicket);
+            return None;
+        }
         let tid = self.next_tid()?;
         let front = self.owed.first(|owed| owed.context.tid == tid)?;
         let window = window(tid);
@@ -515,6 +586,14 @@ impl<
         if grows && outstanding {
             self.admission.put(category, permit);
             self.tickets.put(ticket, &mut ());
+            self.waits = previous.map(|last| AttemptWait::Growing {
+                tid,
+                window,
+                count,
+                limit,
+                length,
+                last,
+            });
             return None;
         }
         let mut places = heapless::Vec::new();
@@ -646,6 +725,7 @@ impl<
         retry: Option<AggregateRetry>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<BlockAckMarks> {
+        self.waits = None;
         // Without a policy a missing member is not retried.
         let retry = retry.unwrap_or(AggregateRetry {
             lifetime: oer_time::Duration::ZERO,
