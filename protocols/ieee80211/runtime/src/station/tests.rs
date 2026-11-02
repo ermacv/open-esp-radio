@@ -90,6 +90,16 @@ impl oer_protocols_ieee80211_testing_model::ModelContext for ServiceContexts {
 
 struct ServicePort<Id: SlotIdentity>(PhantomData<Id>);
 
+std::thread_local! {
+    /// The passes of this test thread's service that took network MSDUs.
+    static TRANSMIT_PASSES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// The passes this test thread's service made over the network's MSDUs.
+fn transmit_passes() -> usize {
+    TRANSMIT_PASSES.with(core::cell::Cell::get)
+}
+
 impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     type Backend = ModelBackend<Id, ModelCaps24, ServiceContexts>;
     type LentRx = ModelLentRx;
@@ -105,6 +115,11 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     type Small = ModelSmall;
     type Large = ModelLarge;
 
+    fn span(span: ServiceSpan, end: bool) {
+        if span == ServiceSpan::Transmit && !end {
+            TRANSMIT_PASSES.with(|passes| passes.set(passes.get() + 1));
+        }
+    }
     fn lend_phase<'a, 'p, 'r>(
         phase: &'r mut ModelPhase<'a, 'p, ModelCaps24, Self::Backend>,
     ) -> &'r mut impl LowerMacPhase<'a, 'p, Caps = ModelCaps24, Types = ModelTypes<Self::Backend>>

@@ -775,3 +775,35 @@ fn only_a_bar_from_the_associated_transmitter_moves_its_tid_window() {
         })
     });
 }
+
+#[test]
+fn one_pass_takes_every_msdu_the_network_queued() {
+    run_with(tx_block_ack_config(ht_config()), |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            connected(world, &mut seen).await;
+            world.send_msdu(BSSID);
+            let BlockAckAction::AddbaRequest { dialog_token, .. } =
+                response(&world.sent(&mut seen, 0xd0).await)
+            else {
+                panic!("an ADDBA Request");
+            };
+            world
+                .air
+                .receive(&addba_response(dialog_token, 0, 32), meta());
+            assert!(world.delivered().await.is_empty());
+            // The network fills its queue before the service runs again:
+            // the service's next pass takes both MSDUs.
+            world.air.hold(WmmAccessCategory::BestEffort, true);
+            let before = super::transmit_passes();
+            assert!(world.try_send_msdu(BSSID));
+            assert!(world.try_send_msdu(BSSID));
+            assert!(world.delivered().await.is_empty());
+            assert_eq!(super::transmit_passes() - before, 1);
+            assert!(world.try_send_msdu(BSSID), "both slots are free again");
+            assert!(world.try_send_msdu(BSSID));
+            world.air.hold(WmmAccessCategory::BestEffort, false);
+            world.command(ControlCommand::Stop).await;
+        })
+    });
+}
