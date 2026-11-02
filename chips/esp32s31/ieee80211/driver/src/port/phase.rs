@@ -393,17 +393,35 @@ where
         // Admission happens on this call, before the driver's queue is serviced;
         // a returned subframe keeps its first admission.
         let oldest = attempt.operation.execute().admit(self.held.timer.now());
-        self.held
-            .command(driver::Command::SubmitAggregate(driver::PendingAggregate {
-                category: aggregate_category(attempt.execution.tid),
-                operation: attempt.operation,
-                execution: attempt.execution,
-                protection: attempt.protection,
-                power: attempt.power.get(),
-                min_mpdu_start_spacing: attempt.min_mpdu_start_spacing.get(),
-                oldest,
-            }));
+        // It stays open as its category's last submission, after the one
+        // before it.
+        let category = aggregate_category(attempt.execution.tid);
+        self.held.close(Some(category));
+        self.held.hold_open(driver::PendingAggregate {
+            category,
+            operation: attempt.operation,
+            execution: attempt.execution,
+            protection: attempt.protection,
+            power: attempt.power.get(),
+            min_mpdu_start_spacing: attempt.min_mpdu_start_spacing.get(),
+            oldest,
+        });
         self.held.storage.check()
+    }
+
+    fn open_ampdu(
+        &mut self,
+        ticket: u8,
+    ) -> Option<super::aggregate::OpenAggregate<'_, 'id, Id, D, B, O>> {
+        // A borrowed driver state, which the front never meets, is closed.
+        let driver = self.held.driver.try_borrow_mut().ok()?;
+        let queue = driver.open_queue(ticket)?;
+        Some(super::aggregate::OpenAggregate {
+            driver,
+            queue,
+            loan: self.loan,
+            now: self.held.timer.now(),
+        })
     }
 }
 

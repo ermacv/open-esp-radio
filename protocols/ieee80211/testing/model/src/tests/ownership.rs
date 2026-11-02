@@ -864,11 +864,14 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
             );
             let quarantined = phase.held.quarantined.items.inspect();
             let commands = phase.held.commands.items.inspect();
+            let open = phase.held.open.borrow();
             assert!(quarantined.is_empty());
-            let (single, aggregate) = match commands.back().unwrap() {
-                super::super::Command::Submit(operation) => (Some(operation), None),
-                super::super::Command::SubmitAmpdu(operation) => (None, Some(operation)),
-                _ => panic!("poisoned submission stays owned in the command queue"),
+            // A poisoned single stays owned in the command queue, a poisoned
+            // aggregate where it was held open.
+            let (single, aggregate) = match (commands.back(), open.iter().flatten().next()) {
+                (Some(super::super::Command::Submit(operation)), None) => (Some(operation), None),
+                (None, Some(operation)) => (None, Some(operation)),
+                _ => panic!("poisoned submission stays owned"),
             };
             let mpdu = match (single, aggregate) {
                 (Some(operation), None) => {

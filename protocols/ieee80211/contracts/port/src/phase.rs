@@ -769,6 +769,11 @@ pub trait PhaseTypes<'id>: Sized {
         K: Ieee80211Capabilities,
         S: crate::AggregateState,
         'id: 'k;
+    /// A submitted aggregate the backend lends while it holds it open
+    /// ([`AmpduPhase::open_ampdu`](crate::AmpduPhase::open_ampdu)).
+    type OpenAggregate<'a>
+    where
+        Self: 'a;
     /// An external MPDU body. A `Sent` MPDU retains its body internally
     /// for a retry; renewing that MPDU returns the body with its memory.
     type TxBody: crate::TxBody;
@@ -1534,6 +1539,19 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PhaseTypes<'id> {
         K: Ieee80211Capabilities,
         S: crate::AggregateState,
         'id: 'k + 'p;
+
+    /// Append `subframe` to an open aggregate, after its other subframes,
+    /// under the rules its builder applied: the subframe count, the
+    /// BlockAck window rooted at its first sequence number, no repeated
+    /// sequence number, a retransmission's key, role, recipient and TID,
+    /// and its length budget; a fresh one is laid out for its protection,
+    /// recipient and TID. It comes back with the aggregate's terminal at
+    /// the next index, as a pushed one does. A refusal returns it unchanged.
+    #[allow(clippy::result_large_err, reason = "a refusal returns the subframe")]
+    fn extend_aggregate<K: Ieee80211Capabilities>(
+        open: &mut Self::OpenAggregate<'_>,
+        subframe: crate::PoolSubframe<'id, Self, C, K>,
+    ) -> Result<(), crate::ExtendRefused<crate::PoolSubframe<'id, Self, C, K>>>;
 
     /// The buffer, as any class's.
     fn erase(buffer: Self::Buffer) -> Self::AnyTxBuffer;

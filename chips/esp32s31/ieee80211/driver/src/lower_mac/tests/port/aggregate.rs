@@ -547,3 +547,189 @@ fn a_builder_refuses_what_its_window_count_or_length_cannot_hold_and_returns_it(
     assert_eq!(seen.held, [1, 1, 32, 13]);
     assert_eq!(observed.borrow().publications, 0);
 }
+
+/// What the open aggregate's scenario observed.
+#[derive(Debug, Default)]
+struct Opened {
+    /// The refusal of a subframe the open aggregate cannot take, and
+    /// whether it came back at its place.
+    refused: Option<(ExtendError, bool)>,
+    /// Each terminal's subframes, by buffer place, in order.
+    terminals: Vec<Vec<u8>>,
+    /// The second aggregate's buffer places, in order of admission.
+    admitted: Vec<u8>,
+    /// Whether the second aggregate was still open after its terminal.
+    open_after: bool,
+}
+
+/// Submits two aggregates of one category in one step: the second stays
+/// open behind the first and takes two more subframes.
+struct OpenBody {
+    seen: Rc<RefCell<Opened>>,
+}
+
+/// Add `source` to the open aggregate of `ticket`.
+#[allow(clippy::result_large_err, reason = "a refusal returns the subframe")]
+fn extend<'p, 'v, 'id: 'p, Id: radio::SlotIdentity + 'id>(
+    station: &mut Esp32s31Interface<'p, 'v, 'id, Id, TestDevice, 512, Draws, Station>,
+    ticket: u8,
+    source: PoolSubframe<'id, Family<Id>, BufferClass<512>, Caps>,
+) -> Result<(), ExtendRefused<PoolSubframe<'id, Family<Id>, BufferClass<512>, Caps>>> {
+    let Some(mut open) = station.open_ampdu(ticket) else {
+        return Err(ExtendRefused {
+            reason: ExtendError::Closed,
+            subframe: source,
+        });
+    };
+    <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::extend_aggregate(&mut open, source)
+}
+
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OpenBody {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("enable")
+        };
+        let mut resources = resources;
+        {
+            let mut phase = owner.phase();
+            let permission = resources
+                .station_commands
+                .configure
+                .with_context(Tag(42, None));
+            phase.station().configure(
+                permission,
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_)))) =
+                phase.next_event().await
+            else {
+                panic!("configuration terminal")
+            };
+            let mut buffers = resources.buffers.into_iter();
+            let mut tickets = resources.tickets.into_iter();
+            let rate = PhyRate::Ht(
+                HtRate::new(HtMcs::new(7).expect("MCS"), PpduBandwidth::Mhz20, false)
+                    .expect("HT rate"),
+            );
+            let rate = phase.rate(rate).expect("a supported rate");
+            let mut station = phase.station();
+            let rate = station.ampdu_rate(rate).ok().expect("an aggregate rate");
+            let mut fresh = |sequence| {
+                let buffer = buffers.next().expect("a pool buffer");
+                let place = buffer.index();
+                (
+                    place,
+                    SubframeSource::Fresh {
+                        numbering: TxNumbering::Open,
+                        buffer,
+                        frame: subframe(sequence, 64),
+                        body: None,
+                    },
+                )
+            };
+            // The first goes; the second, of its category, stays open
+            // behind it as the category's last submission.
+            let (_, first) = fresh(100);
+            let aggregate = push(station_aggregate(&mut station, rate), first);
+            submit(&mut station, aggregate, tickets.next().expect("a ticket"));
+            let (place, second) = fresh(200);
+            let mut admitted = std::vec![place];
+            let aggregate = push(station_aggregate(&mut station, rate), second);
+            let ticket = tickets.next().expect("a second ticket");
+            let open = ticket.index();
+            submit(&mut station, aggregate, ticket);
+            for sequence in [201, 202] {
+                let (place, source) = fresh(sequence);
+                admitted.push(place);
+                assert!(
+                    extend(&mut station, open, source).is_ok(),
+                    "the open aggregate takes {sequence}"
+                );
+            }
+            // A repeated sequence number comes back unchanged.
+            let (place, repeated) = fresh(202);
+            let refused = match extend(&mut station, open, repeated) {
+                Err(ExtendRefused { reason, subframe }) => Some((
+                    reason,
+                    matches!(subframe, SubframeSource::Fresh { ref buffer, .. } if buffer.index() == place),
+                )),
+                Ok(()) => None,
+            };
+            drop(station);
+            self.seen.borrow_mut().refused = refused;
+            self.seen.borrow_mut().admitted = admitted;
+            let seen = Rc::new(RefCell::new(Seen::default()));
+            for _ in 0..2 {
+                let _returned = terminal(&mut phase, &mut resources.terminal_access, &seen).await;
+                let returned = seen
+                    .borrow()
+                    .returned
+                    .iter()
+                    .map(|(place, _)| *place)
+                    .collect();
+                self.seen.borrow_mut().terminals.push(returned);
+            }
+            self.seen.borrow_mut().open_after = phase.station().open_ampdu(open).is_some();
+        }
+        let Ok(owner) = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+        else {
+            panic!("disable")
+        };
+        radio::Ended::uninstall(owner, (), ())
+    }
+}
+
+/// An empty builder for TID 0 to the BSS.
+fn station_aggregate<'k, 'p, 'v, 'id: 'k + 'p, Id: radio::SlotIdentity + 'id>(
+    station: &mut Esp32s31Interface<'p, 'v, 'id, Id, TestDevice, 512, Draws, Station>,
+    rate: AmpduRate<'p, 'id, Caps>,
+) -> Builder<'k, 'p, 'id, Id, EmptyAggregate> {
+    station.aggregate(
+        IndividualAddress::new(BSSID).expect("receiver"),
+        Tid::new(0).expect("TID"),
+        rate,
+        TxProtection::Open,
+    )
+}
+
+#[test]
+fn an_aggregate_behind_one_of_its_category_stays_open_and_goes_whole_after_it() {
+    let (parts, observed, _) = installed(std::vec![(5, 0), (5, 0)]);
+    observed.borrow_mut().block_ack = Some((0, 0, false));
+    let seen = Rc::new(RefCell::new(Opened::default()));
+    let body = OpenBody { seen: seen.clone() };
+    let Report::Uninstalled { .. } = block_on(run_body(parts, body)) else {
+        panic!("clean uninstall")
+    };
+    let seen = seen.take();
+    assert_eq!(
+        seen.refused,
+        Some((
+            ExtendError::Preparation(PreparationError::BlockAckWindow),
+            true
+        ))
+    );
+    assert_eq!(seen.terminals.len(), 2);
+    assert_eq!(seen.terminals[0].len(), 1, "the first went alone");
+    assert_eq!(
+        seen.terminals[1], seen.admitted,
+        "the open one went with every subframe it took, in order"
+    );
+    assert_eq!(observed.borrow().publications, 2);
+    assert!(!seen.open_after, "a published aggregate is no longer open");
+}

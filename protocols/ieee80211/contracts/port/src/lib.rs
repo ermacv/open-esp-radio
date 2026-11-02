@@ -68,7 +68,7 @@ pub mod capabilities;
 mod layout;
 pub use layout::{
     CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, LaidOut,
-    LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection,
+    LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection, SubframeLayoutResult,
 };
 pub mod control;
 pub mod extensions;
@@ -143,10 +143,10 @@ pub use owner::{
 pub use owner::{
     AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
     AggregateRefused, AggregateState, AirReservationPhase, AmpduPhase, AmpduRate,
-    BeaconTimingPhase, BeaconWindow, ClassSubframe, EmptyAggregate, InterfaceAggregate,
-    InterfaceAggregateAttempt, InterfaceAggregateSubmission, InterfaceProtection, MonitorPhase,
-    MpduStartSpacing, NonEmptyAggregate, NonEmptyState, PhaseAggregate, PoolSubframe,
-    SubframeSource, TbttPlan,
+    BeaconTimingPhase, BeaconWindow, ClassSubframe, EmptyAggregate, ExtendError, ExtendRefused,
+    InterfaceAggregate, InterfaceAggregateAttempt, InterfaceAggregateSubmission,
+    InterfaceProtection, MonitorPhase, MpduStartSpacing, NonEmptyAggregate, NonEmptyState,
+    PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
 };
 mod interface_commands;
 pub use interface_commands::{

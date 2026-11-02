@@ -30,11 +30,11 @@ use oer_protocols_ieee80211_contracts_port::{
     SingleOutcome, SizedFrame, TxBufferMemory, TxOutcome,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
+/// The access category of a data attempt.
+pub use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 /// The TID of a data attempt ([`StaData::attempt_tid`]).
 pub use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
-use oer_protocols_ieee80211_wire::{
-    qos::WmmAccessCategory, sequence::SequenceNumber, station::StaProtectedDataFrame,
-};
+use oer_protocols_ieee80211_wire::{sequence::SequenceNumber, station::StaProtectedDataFrame};
 
 use crate::epoch::LinkEpoch;
 use crate::machine::{LinkMode, LinkProtection, LinkView, StaTokens};
@@ -371,8 +371,6 @@ pub struct AcPermit {
 /// it. No increment/decrement or metadata lookup reconstructs admission.
 struct Admissions {
     by_category: [u8; 4],
-    /// Every category's permits, none out.
-    full: u8,
 }
 
 impl Admissions {
@@ -381,17 +379,11 @@ impl Admissions {
         let mask = (0..count).fold(0u8, |mask, _| (mask << 1) | 1);
         Self {
             by_category: [mask; 4],
-            full: mask,
         }
     }
 
     fn available(&self, category: WmmAccessCategory) -> u8 {
         *category.select(&self.by_category)
-    }
-
-    /// Whether an attempt of `category` is out at the port.
-    fn outstanding(&self, category: WmmAccessCategory) -> bool {
-        self.available(category) != self.full
     }
 
     fn take(&mut self, category: WmmAccessCategory) -> Option<AcPermit> {
@@ -539,7 +531,9 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     /// The current link: [`Self::leave`] ends it.
     link: Option<LinkEpoch<'id, D::EpochPath>>,
     /// Why the last attempt pass made none, while only MSDUs came since.
-    waits: Option<aggregate::AttemptWait>,
+    /// The last attempt pass found no free ticket, and only MSDUs came
+    /// since.
+    waits: bool,
     /// The network's memory ended MPDUs held, until the network takes it.
     freed: Fifo<D::Memory, CAP>,
 }
@@ -598,7 +592,7 @@ impl<
             admission,
             next_order,
             link: None,
-            waits: None,
+            waits: false,
             freed,
         }
     }
@@ -695,7 +689,7 @@ impl<
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
-            waits: None,
+            waits: false,
             freed: Fifo::new(),
         }
     }
@@ -721,7 +715,7 @@ impl<
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
-            waits: None,
+            waits: false,
             freed => |place| Fifo::init_in_place(place),
         })
     }
@@ -730,7 +724,7 @@ impl<
     /// for it drains into its tokens, counted; its submitted ones return
     /// their tokens with their terminals and never go again.
     pub fn leave(&mut self, events: &mut impl EventSink<StaEvent>) {
-        self.waits = None;
+        self.waits = false;
         while let Some(owed) = self.owed.pop() {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
             self.retire(owed.buffer, events);
@@ -758,7 +752,7 @@ impl<
         input: DataReturn<'id, D, K>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<BlockAckMarks> {
-        self.waits = None;
+        self.waits = false;
         match input {
             DataReturn::Refused {
                 context,
@@ -935,20 +929,12 @@ impl<
             sequence: sequence_number,
             attempts: 0,
         };
-        self.waits = self.waits.take().and_then(|waits| {
-            waits.after_input(
-                context.tid,
-                context.sequence,
-                context.frame.frame().len().get(),
-                context.protection,
-            )
-        });
         let owed = OwedMpdu {
             context,
             buffer: ReturnedMpdu::Fresh(buffer),
         };
         if let Err(owed) = self.owed.push(owed) {
-            self.waits = None;
+            self.waits = false;
             self.overflowed(owed, events);
         }
         Ok(slot)
@@ -1033,12 +1019,12 @@ impl<
         self.next_tid()
     }
 
-    /// Whether the last attempt pass made no attempt and only MSDUs that
-    /// change none came since: no free ticket, or the next aggregate still
-    /// grows behind an attempt of its category. A service skips its next
-    /// attempt pass then; every other change to the machine ends the wait.
+    /// Whether the last attempt pass found no free ticket and only MSDUs
+    /// came since: a service skips its next attempt pass then, unless an
+    /// aggregate it can extend is open. Every other change to the machine
+    /// ends the wait.
     pub fn attempts_wait(&self) -> bool {
-        self.waits.is_some()
+        self.waits
     }
 
     /// The TID of the earliest owed MSDU of an admitted category, whatever
@@ -1060,7 +1046,7 @@ impl<
     /// action the ticket until their return; queued work consumes neither.
     /// The service takes every action before waiting.
     pub fn poll_action(&mut self) -> Option<DataTransmit<'id, D, K>> {
-        self.waits = None;
+        self.waits = false;
         let tid = self.next_tid()?;
         // A queue can be empty or an AC can have no free permit: both are
         // normal polling states. Reserve and pop under the same exclusive

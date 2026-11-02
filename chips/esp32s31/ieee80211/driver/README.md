@@ -292,7 +292,17 @@ descriptor chains (`AMPDU_CHAINS`), one in the air while the next is
 published; an aggregate whose head finds no free chain waits in its access
 category's FIFO. Each queue executes an MPDU's supplied retry plan; an
 aggregate is one attempt, and the planner above the port resends what its
-BlockAck report misses. While an aggregate is built, queued or published,
+BlockAck report misses. A submitted aggregate stays open as its access
+category's last submission (`Driver::open`, one per queue) while it would
+not go next: the station appends subframes to it in place
+(`AmpduPhase::open_ampdu`, `TxBufferPool::extend_aggregate`, under the
+builder's rules), with no ticket and no command. The front sends it to the
+driver before any later command (a submission of its category, or any
+other), and the driver takes it into its queue once every command before
+it is in and nothing of its category is published or queued, so it goes in
+the same turn that ends the one before it. Station and driver share the
+station's executor; the front borrows the driver's state only within one
+synchronous step. While an aggregate is built, queued or published,
 its subframes' records wait in the installation's subframe table at their
 buffers' places; only the places travel through the port's queues. The
 builder refuses, at push, every subframe the window, the subframe count or
