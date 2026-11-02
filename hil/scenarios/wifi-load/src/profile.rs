@@ -16,8 +16,8 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    CollectSamples, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Profile, Sample, Samples,
-    SamplesCollected,
+    CollectSamples, LoadError, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Profile, Sample,
+    Samples, SamplesCollected,
 };
 use oer_tools_hil_harness::{Cx, Failure};
 use oer_tools_image_checks::copies::Copies;
@@ -57,30 +57,39 @@ pub(crate) struct Collected {
     pub samples: Vec<Sample>,
 }
 
-/// Every sample of `run`, page by page.
+/// Every sample of hart `hart` in `run`, page by page; `None` when the
+/// image has no sampler on that hart.
 pub(crate) fn collect(
     cx: &mut Cx<'_>,
     run: u32,
+    hart: u8,
     call: std::time::Duration,
-) -> Result<Collected, Failure> {
+) -> Result<Option<Collected>, Failure> {
     let mut samples = Vec::new();
     loop {
         let from = u16::try_from(samples.len())
             .map_err(|_| Failure::Fail("the image kept too many samples".to_owned()))?;
-        match cx.call(CollectSamples { run, from }, call)? {
+        match cx.call(CollectSamples { run, from, hart }, call)? {
             SamplesCollected::Page(mut page) => {
                 let last = page.samples.is_empty()
                     || samples.len() + page.samples.len() >= usize::from(page.kept);
                 samples.extend(page.samples.iter().copied());
                 if last {
                     page.samples.clear();
-                    return Ok(Collected {
+                    return Ok(Some(Collected {
                         summary: page,
                         samples,
-                    });
+                    }));
                 }
             }
-            other => return Err(Failure::Fail(format!("the image's samples: {other:?}"))),
+            SamplesCollected::Refused(LoadError::NoSampler) if samples.is_empty() => {
+                return Ok(None);
+            }
+            other => {
+                return Err(Failure::Fail(format!(
+                    "the image's samples of hart {hart}: {other:?}"
+                )));
+            }
         }
     }
 }

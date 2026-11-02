@@ -95,7 +95,7 @@ one already in SRAM, one the strict selection moves, one without a single
 defining input section and one that does not fit stay where they are; the
 placement record and `strict-placement.toml` list them with their reason.
 The list never fails a link and changes no strict selection, stack sizing or
-other placement. `cargo fw hot-code` writes the list from a PC profile
+other placement. `cargo fw hot-code` writes the list from the PC profiles of every sampled hart
 (`tools/image/cli`).
 
 `strict-placement.toml` retains first-pass bounds, selected sizes and their

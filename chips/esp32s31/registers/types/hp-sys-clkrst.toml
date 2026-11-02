@@ -2749,6 +2749,7 @@ name = "REG_TIMERGRP1_T1_SRC_SEL"
 bits = "7:6"
 class = "plain"
 description = "need_des"
+values = [{ name = "XTAL", value = 0, sources = ["ESP_IDF_4D80C1B2_S31_TIMER1_LL"] }, { name = "RC_FAST", value = 1, sources = ["ESP_IDF_4D80C1B2_S31_TIMER1_LL"] }, { name = "REF_F80M", value = 2, sources = ["ESP_IDF_4D80C1B2_S31_TIMER1_LL"] }]
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_T1_CLK_EN"

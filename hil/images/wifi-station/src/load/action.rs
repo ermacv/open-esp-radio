@@ -45,9 +45,10 @@ pub(crate) enum Kept {
     Counters,
     Link,
     Tracking,
-    /// The samples from the one numbered `from`.
+    /// Hart `hart`'s samples from the one numbered `from`.
     Samples {
         from: u16,
+        hart: u8,
     },
 }
 
@@ -79,8 +80,8 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectCounters(CollectCounters { run })) => {
             collect(phase, run, Kept::Counters)
         }
-        (phase, Request::CollectSamples(CollectSamples { run, from })) => {
-            collect(phase, run, Kept::Samples { from })
+        (phase, Request::CollectSamples(CollectSamples { run, from, hart })) => {
+            collect(phase, run, Kept::Samples { from, hart })
         }
         (phase, Request::CollectLink(CollectLink { run })) => collect(phase, run, Kept::Link),
         (phase, Request::CollectTracking(CollectTracking { run })) => {
@@ -259,8 +260,12 @@ mod tests {
             (Kept::Counters, |run| {
                 Request::CollectCounters(CollectCounters { run })
             }),
-            (Kept::Samples { from: 40 }, |run| {
-                Request::CollectSamples(CollectSamples { run, from: 40 })
+            (Kept::Samples { from: 40, hart: 1 }, |run| {
+                Request::CollectSamples(CollectSamples {
+                    run,
+                    from: 40,
+                    hart: 1,
+                })
             }),
             (Kept::Link, |run| Request::CollectLink(CollectLink { run })),
             (Kept::Tracking, |run| {

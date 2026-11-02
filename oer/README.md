@@ -107,7 +107,7 @@ with the source it takes, otherwise the library does once the timer runs.
 | application | 1 | executor wake (line 40), its alarm (system timer comparator 1, line 41), console (USB Serial/JTAG, line 42) |
 | radio executor | 2 | SAR/PWDET pilot (line 16), executor (line 17) |
 | radio | 3 | radio alarm (comparator 0, line 19), Wi-Fi MAC and doorbell (line 21) |
-| profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22) |
+| profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22); with `group`, hart 1's PC sampler (TIMG1 T1, line 22 of hart 1) |
 | hart 1 application (`group`) | 1 | hart 1's executor wake (line 40), its alarm (comparator 2, line 41) |
 
 The radio entries exist with the `wifi` feature, the console's with
@@ -230,6 +230,7 @@ image translates them into whatever reports them:
 | `counters()` | the network bridge's frames, the station's receive decisions, its transmit agreements' settlements, the link's rates and the receive driver's counters |
 | `tracking()` | the RF actor's PHY tracking ticks, with the epoch's temperatures and longest tick |
 | `Boot::observe` | the boot hart's handle (`Hart0`, `!Send`): its cycle and instruction counters, the L1 cache's counters and the PC sampler on TIMG1 T0, once |
+| `GroupBoot::observe` (`group`) | hart 1's handle (`Hart1`, `!Send`): its PC sampler on TIMG1 T1, once; each hart's sampler keeps 1024 samples |
 
 `start_epoch()` starts a new epoch of the longest polls and the extremes.
 Each counter has one writer; a reader in thread mode on either hart takes a

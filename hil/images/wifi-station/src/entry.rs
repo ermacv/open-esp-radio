@@ -106,15 +106,16 @@ async fn application(
 
 /// The group: the IP service with the image's pools over the
 /// station's device, the line exchanges and the load server on its sockets.
-fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
+fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
+    let hart1 = boot.observe().ok_or(Error::ObserveTaken)?;
     let (net, mut boot) = Net::start_with(device, &POOLS, NetConfig::Dhcpv4, boot)?;
     let exchanges = EXCHANGES.group(&mut boot)?;
     let load = load::serve::LOAD.group(&mut boot)?;
     let relay = load::relay::RELAY.group(&mut boot)?;
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
     let part = observe::Part::claim("load")?;
-    Ok(boot.run(move || sockets(net, exchanges, load, relay, tally, part)))
+    Ok(boot.run(move || sockets(net, exchanges, load, relay, hart1, tally, part)))
 }
 
 /// The line exchanges beside the load server, which never ends.
@@ -123,10 +124,11 @@ async fn sockets(
     exchanges: GroupEnd<Exchange, Exchanged, 1>,
     load: load::serve::Requests,
     relay: load::relay::Client,
+    hart1: observe::Hart1,
     tally: load::serve::RunTally,
     part: observe::Part,
 ) -> AppResult {
-    let mut server = pin!(load::serve::serve(&net, load, relay, tally));
+    let mut server = pin!(load::serve::serve(&net, load, relay, hart1, tally));
     match select(exchange_lines(&net, exchanges), part.polled(server.as_mut())).await {
         Raced::First(result) => result,
         Raced::Second(never) => match never {},

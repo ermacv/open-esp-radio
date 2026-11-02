@@ -74,6 +74,7 @@ what it needs there: the boot hart's cycle, instruction and cache counters
 (`Boot::observe`) with the library's counts (`observe::counters`), read
 together, the PC sampler, and a page of samples, which the relay answers
 itself. The server sends one command at a time and waits for its reply.
+Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
 
 - **Start** binds one UDP socket on its port of the station's DHCP address
   and answers `Running` at once; without an address it is refused
@@ -111,10 +112,11 @@ itself. The server sends one command at a time and waits for its reply.
   cache's counts (cleared just before the window) and geometry, the
   receive driver's and the station's receive counts, the transmit
   agreements', the link's rates and the PHY tracking ticks.
-- **Samples:** a run whose `Start` has a `profile` samples the boot hart
-  every period over the window (`observe::Sampler`, 2048 samples), 27
-  an answer; a sampler a session kept refuses the next sampled run
-  (`NoSampler`).
+- **Samples:** a run whose `Start` has a `profile` samples both harts
+  every period over the window (`observe::Sampler`, 1024 samples each), 27
+  an answer, by hart (`CollectSamples::hart`); a boot-hart sampler a
+  session kept refuses the next sampled run (`NoSampler`), and hart 1's
+  refusal leaves only hart 1 unsampled.
 
 A stop of the station closes the run's socket with the IP service (its
 queued datagrams return their lent buffers); the run then receives and

@@ -157,6 +157,10 @@ oer_chips_family_staged_runtime::interrupt_table! {
     /// The PC sampler (TIMG1 T0), above every other level of hart 0 so that
     /// it sees what it interrupts; it ticks only while a session runs.
     sampler: SamplerToken = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => observed::on_sampler, line 22, context profile, hart 0, Hardware;
+    #[cfg(all(feature = "observe", feature = "group"))]
+    /// Hart 1's PC sampler (TIMG1 T1), above every other level of hart 1;
+    /// it ticks only while a session runs.
+    sampler1: Sampler1Token = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Interrupt => observed::on_sampler1, line 22, context profile, hart 1, Hardware;
     #[cfg(feature = "group")]
     /// Hart 1's executor's wake (thread mode).
     hart1_wake: Hart1WakeToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq => oer_chips_family_executor::wake_handler::<Esp32s31, 1, oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu1Irq>, line 40, context hart1_app, hart 1, Hardware;
@@ -377,14 +381,37 @@ pub struct GroupPeripherals {
 /// returns it with the service.
 pub struct GroupBoot<N = NoNet> {
     net: N,
+    /// What hart 1 observes only there, bound at its start.
+    #[cfg(all(feature = "observe", feature = "group"))]
+    observe: Option<observed::Hart1>,
 }
 
 impl GroupBoot {
+    /// The group's context before its IP service.
+    pub(crate) const fn new() -> Self {
+        Self {
+            net: NoNet,
+            #[cfg(all(feature = "observe", feature = "group"))]
+            observe: None,
+        }
+    }
+
     /// The same context with `net` as its IP service.
     #[cfg(feature = "wifi")]
     pub(crate) fn with_net<M>(self, net: M) -> GroupBoot<M> {
-        let Self { net: NoNet } = self;
-        GroupBoot { net }
+        GroupBoot {
+            net,
+            #[cfg(all(feature = "observe", feature = "group"))]
+            observe: self.observe,
+        }
+    }
+}
+
+#[cfg(all(feature = "observe", feature = "group"))]
+impl<N> GroupBoot<N> {
+    /// What hart 1 observes only there, once: its PC sampler.
+    pub fn observe(&mut self) -> Option<observed::Hart1> {
+        self.observe.take()
     }
 }
 
@@ -702,6 +729,8 @@ pub fn start<S: Started, H: GroupStarted>(
                     causes,
                     #[cfg(feature = "observe")]
                     timg1_alarm: hardware.timg1_alarm,
+                    #[cfg(all(feature = "observe", feature = "group"))]
+                    timg1_timer1: hardware.timg1_timer1,
                     #[cfg(feature = "observe")]
                     cache_counters: hardware.cache_counters,
                     #[cfg(feature = "wifi")]
@@ -782,7 +811,7 @@ pub fn start<S: Started, H: GroupStarted>(
     };
     // On hart 0 the group runs here; with `group` on hart 1, below.
     #[cfg(not(feature = "group"))]
-    let (net, second) = hart1(handed, GroupBoot { net: NoNet })
+    let (net, second) = hart1(handed, GroupBoot::new())
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     #[cfg(feature = "group")]
@@ -840,6 +869,8 @@ pub fn start<S: Started, H: GroupStarted>(
                 irq: software.irq1,
                 wake: interrupts.hart1_wake,
                 alarm: interrupts.hart1_alarm,
+                #[cfg(feature = "observe")]
+                sampler: (hardware.timg1_timer1, interrupts.sampler1),
             },
             handed,
         )
@@ -952,6 +983,8 @@ struct Owned {
     causes: oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses,
     #[cfg(feature = "observe")]
     timg1_alarm: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
+    #[cfg(all(feature = "observe", feature = "group"))]
+    timg1_timer1: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Parts,
     #[cfg(feature = "observe")]
     cache_counters: oer_chips_esp32s31_hal::peripherals::cache_counters::CacheCounters,
     #[cfg(feature = "wifi")]

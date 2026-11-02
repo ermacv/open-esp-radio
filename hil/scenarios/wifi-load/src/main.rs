@@ -987,8 +987,17 @@ fn level(
     let after = link::read(cx, station);
     let span = since.elapsed();
     let ended = collect(cx, run)?;
+    // Hart 0's samples, which a sampled run always has, and hart 1's,
+    // where the image samples hart 1.
     let samples = match profile {
-        Some(_) => Some(profile::collect(cx, run, CALL)?),
+        Some(_) => match profile::collect(cx, run, 0, CALL)? {
+            Some(samples) => Some((samples, profile::collect(cx, run, 1, CALL)?)),
+            None => {
+                return Err(Failure::Fail(
+                    "the image sampled no hart 0 in a sampled run".to_owned(),
+                ));
+            }
+        },
         None => None,
     };
     let mut received = endpoint.close();
@@ -1001,21 +1010,24 @@ fn level(
         let tracking = tracking_measurement(&name, &ended);
         object.insert("tracking".to_owned(), tracking);
     }
-    if let (Some(samples), Some(object)) = (samples, value.as_object_mut()) {
+    if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(IMAGE);
-        let symbols = elf
-            .as_ref()
-            .map_err(Clone::clone)
-            .and_then(|elf| profile::symbolize(elf, &samples.samples));
         let sites = elf
             .as_ref()
             .map_err(Clone::clone)
             .and_then(|elf| profile::copy_sites(elf));
-        let elf = elf.unwrap_or_default();
-        object.insert(
-            "profile".to_owned(),
-            profile::report(&samples, &elf, &symbols, &sites),
-        );
+        let report = |samples: &profile::Collected| {
+            let symbols = elf
+                .as_ref()
+                .map_err(Clone::clone)
+                .and_then(|elf| profile::symbolize(elf, &samples.samples));
+            let path = elf.clone().unwrap_or_default();
+            profile::report(samples, &path, &symbols, &sites)
+        };
+        object.insert("profile".to_owned(), report(&hart0));
+        if let Some(hart1) = hart1 {
+            object.insert("profile_hart1".to_owned(), report(&hart1));
+        }
     }
     cx.measure(name, value);
     Ok(())

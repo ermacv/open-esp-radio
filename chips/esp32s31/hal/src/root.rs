@@ -205,6 +205,7 @@ impl Root {
         } = WatchdogRegisters::new(watchdog);
         // Each hart's CLIC parts go with its own route bank: hart 0's to the
         // interrupt blocks, hart 1's to the launch permit.
+        let (timg1_alarm, timg1_timer1) = Timg1AlarmParts::new(timer_group1);
         let InterruptMatrixPeripherals {
             clic: [clic0, clic1],
             clic_observer: [clic_observer0, clic_observer1],
@@ -245,7 +246,8 @@ impl Root {
                 aes: crate::peripherals::aes::AesParts::new(aes, crypto_clock, axi_dma),
                 system_timer: SystemTimer::new(system_timer),
                 timg0_alarm: Timg0AlarmParts::new(timer_group0),
-                timg1_alarm: Timg1AlarmParts::new(timer_group1),
+                timg1_alarm,
+                timg1_timer1,
                 cache_counters: CacheCounters::new(cache_counters),
                 software_interrupts: SoftwareInterrupts::new(
                     software_interrupt_0,

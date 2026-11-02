@@ -24,8 +24,9 @@ cargo fw hot-code --results <results.json> --measurement <name>... --elf <runtim
 
 `hot-code` writes an image's hot-code list from the PC profiles of the
 measurements it names (`--measurement` repeats) in a scenario's results
-(`value.profile.samples`, each `[tick, pc, level, ra]`, such as
-`wifi-load`'s with `OER_WIFI_LOAD_PROFILE_US`), their samples ranked
+(`value.profile.samples` of hart 0 and, where the image samples hart 1,
+`value.profile_hart1.samples`, each `[tick, pc, level, ra]`, such as
+`wifi-load`'s with `OER_WIFI_LOAD_PROFILE_US`), every hart's samples ranked
 together: the functions of the profiled ELF's cached
 `.text` and of its `.hot.text` (those an earlier list moved, so a list
 regenerated from an image that applied one keeps them) with at least two

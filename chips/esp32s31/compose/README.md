@@ -57,9 +57,12 @@ service returns custody through the same P2 signal; neither a task waker nor a
 hardware owner crosses into the handler. Existing retained faults and explicit
 reset policy apply to setup failure and an orphan alarm.
 
-`sampler::Storage<I, O>` is a program-counter sampler on TIMG1 T0 for an
-image that binds its entry `I` above the levels it wants to see and names
-the observer `O` of its `oer_portable_trace::profile::PcSample`s. Between `start`
+`sampler::Storage<I, O, T>` is a program-counter sampler on a TIMG1 timer
+`T` (`Timer0` on hart 0, `Timer1` on hart 1) for an image that binds its
+entry `I` above the levels it wants to see and names the observer `O` of
+its `oer_portable_trace::profile::PcSample`s. T1's handler takes its entry
+as the event: its interrupt part strobes T1's acknowledgement and cannot
+read the group's status words. Between `start`
 and `stop` the timer runs an absolute schedule: tick `k` is due
 `(k + 1) * period` after the start on the timer's own counter, and each
 tick moves the alarm one period on without a reload, so handler latency

@@ -9,8 +9,8 @@ use serde_json::Value;
 
 /// Write the list of the functions of `elf` that hold the most samples of
 /// the `measurements`' profiles in `results` (a scenario's results file),
-/// ranked together, within `budget_bytes`, to `output`. Prints the listed
-/// functions.
+/// every hart's ranked together, within `budget_bytes`, to `output`. Prints
+/// the listed functions.
 pub fn write(
     results: &Path,
     measurements: &[String],
@@ -57,8 +57,12 @@ pub fn write(
     Ok(())
 }
 
-/// The sampled PCs of `measurement`'s profile: each entry of its
-/// `value.profile.samples` is `[tick, pc, level, ra]`.
+/// The profiles of a measurement: hart 0's, which a sampled measurement
+/// always has, and hart 1's where the image samples hart 1.
+const PROFILES: [&str; 2] = ["/value/profile/samples", "/value/profile_hart1/samples"];
+
+/// The sampled PCs of `measurement`'s profiles, every hart's: each entry of
+/// a profile's `samples` is `[tick, pc, level, ra]`.
 fn profile_pcs(document: &Value, measurement: &str) -> Result<Vec<u32>> {
     let entry = document
         .get("measurements")
@@ -67,12 +71,12 @@ fn profile_pcs(document: &Value, measurement: &str) -> Result<Vec<u32>> {
         .flatten()
         .find(|entry| entry.get("name").and_then(Value::as_str) == Some(measurement))
         .ok_or_else(|| format!("the results have no measurement `{measurement}`"))?;
-    let samples = entry
-        .pointer("/value/profile/samples")
-        .and_then(Value::as_array)
-        .ok_or_else(|| format!("measurement `{measurement}` has no profile samples"))?;
-    samples
+    let [hart0, hart1] = PROFILES.map(|pointer| entry.pointer(pointer).and_then(Value::as_array));
+    let hart0 =
+        hart0.ok_or_else(|| format!("measurement `{measurement}` has no profile samples"))?;
+    hart0
         .iter()
+        .chain(hart1.into_iter().flatten())
         .map(|sample| {
             sample
                 .get(1)
@@ -109,5 +113,23 @@ mod tests {
             { "name": "x", "value": { "profile": { "samples": [[0, 4294967296_u64, 0, null]] } } }
         ] });
         assert!(profile_pcs(&wide, "x").is_err());
+    }
+
+    #[test]
+    fn hart_1_s_samples_rank_beside_hart_0_s() {
+        let document = serde_json::json!({ "measurements": [
+            { "name": "tx 100 Mbit/s", "value": {
+                "profile": { "samples": [[0, 1342177280_u64, 0, null]] },
+                "profile_hart1": { "samples": [[0, 1342177288_u64, 0, null]] }
+            } },
+            { "name": "hart 1 only", "value": {
+                "profile_hart1": { "samples": [[0, 1342177288_u64, 0, null]] }
+            } },
+        ] });
+        assert_eq!(
+            profile_pcs(&document, "tx 100 Mbit/s").unwrap(),
+            [0x5000_0000, 0x5000_0008]
+        );
+        assert!(profile_pcs(&document, "hart 1 only").is_err());
     }
 }

@@ -21,10 +21,13 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
 use embassy_futures::yield_now;
-use oer_chips_esp32s31_compose::sampler::{self, Ended, StartError, Storage, Timer};
+use oer_chips_esp32s31_compose::sampler::{self, Ended, SamplerTimer, StartError, Storage, Timer};
 use oer_chips_esp32s31_hal::peripherals::cache_counters::{Buses, CacheCounters};
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1AlarmInterrupt, Timg1AlarmParts};
+#[cfg(feature = "group")]
+use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1Timer1Interrupt, Timg1Timer1Parts};
 use oer_chips_esp32s31_wifi::observation as station;
+use oer_chips_family_interrupt_table::Entry;
 use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
@@ -438,20 +441,58 @@ pub(crate) fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {
     BRIDGE.copied();
 }
 
-/// The samples one session keeps.
+/// The samples one session of one hart's sampler keeps.
+#[cfg(not(feature = "group"))]
 pub const SAMPLES: usize = 2048;
+/// The samples one session of one hart's sampler keeps: hart 1's sampler
+/// shares the one hart's SRAM between both.
+#[cfg(feature = "group")]
+pub const SAMPLES: usize = 1024;
+
+/// A sampler's buffer, lent to the observer in the sampler's handler while
+/// a session runs and to the sampler's owner once it ended.
+type Kept = ClaimCell<&'static mut Thinning<SAMPLES>>;
 
 oer_chips_family_staged_runtime::placed_static! {
     static SAMPLER: Storage<SamplerToken, Observer> = Storage::new(), in critical_data "pc_sampler";
     static BUFFER: ConstStaticCell<Thinning<SAMPLES>> = ConstStaticCell::new(Thinning::new()), in critical_data "pc_samples";
-    /// The buffer, lent to the observer in the sampler's handler while a
-    /// session runs and to the sampler's owner once it ended.
-    static KEPT: ClaimCell<&'static mut Thinning<SAMPLES>> = ClaimCell::new(), in critical_data "pc_samples_claim";
+    static KEPT: Kept = ClaimCell::new(), in critical_data "pc_samples_claim";
+}
+
+#[cfg(feature = "group")]
+oer_chips_family_staged_runtime::placed_static! {
+    static SAMPLER1: Storage<super::Sampler1Token, Hart1Samples, sampler::Timer1> = Storage::new(), in critical_data "pc_sampler1";
+    static BUFFER1: ConstStaticCell<Thinning<SAMPLES>> = ConstStaticCell::new(Thinning::new()), in critical_data "pc_samples1";
+    static KEPT1: Kept = ClaimCell::new(), in critical_data "pc_samples1_claim";
 }
 
 /// The sampler's interrupt entry (TIMG1 T0).
 pub(crate) fn on_sampler(part: &mut Timg1AlarmInterrupt) {
     SAMPLER.interrupt(part);
+}
+
+/// Hart 1's sampler's interrupt entry (TIMG1 T1).
+#[cfg(feature = "group")]
+pub(crate) fn on_sampler1(part: &mut Timg1Timer1Interrupt) {
+    SAMPLER1.interrupt(part);
+}
+
+/// Hart 1's sampler's observer: its samples go to hart 1's buffer.
+#[cfg(feature = "group")]
+#[derive(Clone, Copy, Default)]
+pub struct Hart1Samples;
+
+#[cfg(feature = "group")]
+impl oer_portable_trace::Observer for Hart1Samples {
+    fn event<E: oer_portable_trace::Event + Copy + 'static>(&self, event: E) {
+        if let Some(sample) = Observer::decoded::<E, PcSample>(event) {
+            let _ = KEPT1.lend(|buffer| buffer.record(sample));
+        }
+        if let Some(ret) = Observer::decoded::<E, oer_portable_trace::profile::ReturnSample>(event)
+        {
+            let _ = KEPT1.lend(|buffer| buffer.record_return(ret));
+        }
+    }
 }
 
 /// What the boot hart observes only there: its cycle and retired
@@ -462,6 +503,26 @@ pub struct Hart0 {
     sampler: Sampler,
     _hart: PhantomData<*mut ()>,
 }
+
+/// What hart 1 observes only there: its PC sampler. It stays on hart 1.
+#[cfg(feature = "group")]
+pub struct Hart1 {
+    sampler: Hart1Sampler,
+    _hart: PhantomData<*mut ()>,
+}
+
+#[cfg(feature = "group")]
+impl Hart1 {
+    /// Hart 1's PC sampler.
+    pub fn sampler(&mut self) -> &mut Hart1Sampler {
+        &mut self.sampler
+    }
+}
+
+/// Hart 1's PC sampler, on TIMG1 T1 at P4 above every other level of
+/// hart 1.
+#[cfg(feature = "group")]
+pub type Hart1Sampler = Sampler<Timer<super::Sampler1Token, sampler::Timer1>>;
 
 /// The boot hart's counters at one instant.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -519,16 +580,17 @@ pub struct Session {
     pub stray: u32,
 }
 
-/// The PC sampler on TIMG1 T0, at P4 above every other level of the boot
-/// hart: one sample of the interrupted PC and `ra` every period while a
-/// session runs, into one buffer of [`SAMPLES`].
-pub struct Sampler {
-    sampler: sampler::Sampler<Timer<SamplerToken>>,
+/// A PC sampler, by default hart 0's on TIMG1 T0, at P4 above every other
+/// level of its hart: one sample of the interrupted PC and `ra` every
+/// period while a session runs, into its one buffer of [`SAMPLES`].
+pub struct Sampler<A: 'static = Timer<SamplerToken>> {
+    sampler: sampler::Sampler<A>,
+    kept: &'static Kept,
     period_us: u32,
     ended: Option<Ended>,
 }
 
-impl Sampler {
+impl<I: Entry<Part = T::Interrupt> + 'static, T: SamplerTimer> Sampler<Timer<I, T>> {
     /// Whether a session can start.
     pub fn available(&self) -> bool {
         self.sampler.available()
@@ -540,7 +602,7 @@ impl Sampler {
     /// [`SamplerError::Unavailable`] or [`SamplerError::Period`]; no
     /// session runs.
     pub fn start(&mut self, period_us: u32) -> Result<(), SamplerError> {
-        if !self.available() || KEPT.lend(|buffer| buffer.restart(period_us)).is_err() {
+        if !self.available() || self.kept.lend(|buffer| buffer.restart(period_us)).is_err() {
             return Err(SamplerError::Unavailable);
         }
         self.ended = None;
@@ -570,7 +632,7 @@ impl Sampler {
             .await
             .map_err(|sampler::Lost| SamplerError::Lost)?;
         if let Some(ended) = ended {
-            let _ = KEPT.lend(|buffer| buffer.normalize());
+            let _ = self.kept.lend(|buffer| buffer.normalize());
             self.ended = Some(ended);
         }
         Ok(())
@@ -589,7 +651,7 @@ impl Sampler {
     /// Read the last session's samples; none before one ended.
     pub fn samples<R>(&self, read: impl FnOnce(&Thinning<SAMPLES>) -> R) -> Option<R> {
         self.ended?;
-        KEPT.lend(|buffer| read(buffer)).ok()
+        self.kept.lend(|buffer| read(buffer)).ok()
     }
 }
 
@@ -597,11 +659,15 @@ impl Sampler {
 /// buffer: the boot hart's handle. Fails the boot when its storage was
 /// taken before.
 pub(crate) fn hart0(
-    timg1: Timg1AlarmParts,
+    #[cfg_attr(not(feature = "group"), allow(unused_mut))] mut timg1: Timg1AlarmParts,
     cache: CacheCounters,
     boot: &mut Boot,
     token: SamplerToken,
 ) -> Hart0 {
+    // T1's lane opens here, before hart 1 binds its sampler: T0's program
+    // part is the enable word's one owner.
+    #[cfg(feature = "group")]
+    timg1.program.open_timer1();
     let (Some(sampler), Some(buffer)) =
         (SAMPLER.init(timg1, boot.router(), token), BUFFER.try_take())
     else {
@@ -614,6 +680,37 @@ pub(crate) fn hart0(
         cache,
         sampler: Sampler {
             sampler,
+            kept: &KEPT,
+            period_us: 0,
+            ended: None,
+        },
+        _hart: PhantomData,
+    }
+}
+
+/// Stop TIMG1 T1, bind hart 1's sampler on hart 1's `router` and install
+/// its buffer: hart 1's handle. Fails the boot when its storage was taken
+/// before.
+#[cfg(feature = "group")]
+pub(crate) fn hart1(
+    timg1: Timg1Timer1Parts,
+    router: &mut oer_chips_family_interrupt_table::Router<
+        impl oer_chips_family_interrupt_table::Controller,
+        1,
+    >,
+    token: super::Sampler1Token,
+) -> Hart1 {
+    let (Some(sampler), Some(buffer)) = (SAMPLER1.init(timg1, router, token), BUFFER1.try_take())
+    else {
+        super::fail(Error::Storage.name());
+    };
+    if KEPT1.install(buffer).is_err() {
+        super::fail(Error::Storage.name());
+    }
+    Hart1 {
+        sampler: Sampler {
+            sampler,
+            kept: &KEPT1,
             period_us: 0,
             ended: None,
         },
