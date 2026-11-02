@@ -8,15 +8,39 @@
 
 use oer_protocols_ieee80211_contracts_port::BlockAckReport;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-/// Strict S31 TX window recovered from the fixed vendor queue geometry.
-pub const TX_BLOCK_ACK_MAX_WINDOW: u16 = 32;
-pub const TX_AMPDU_SLOT_CAPACITY: usize = TX_BLOCK_ACK_MAX_WINDOW as usize;
+/// The widest TX BlockAck window the S31 serves: the positions one queue's
+/// result bank captures
+/// ([`TX_BLOCK_ACK_BITMAP_BITS`](oer_chips_esp32s31_hal::ieee80211::registers::block_ack::TX_BLOCK_ACK_BITMAP_BITS)),
+/// within those of the compressed BlockAck the port reports
+/// ([`BlockAckReport::BITMAP_BITS`]). A window is the agreement's: the
+/// MPDUs of every aggregate out under it lie inside it.
+pub const TX_BLOCK_ACK_MAX_WINDOW: u16 = {
+    let hardware =
+        oer_chips_esp32s31_hal::ieee80211::registers::block_ack::TX_BLOCK_ACK_BITMAP_BITS;
+    let report = BlockAckReport::BITMAP_BITS as u32;
+    let window = if hardware < report { hardware } else { report };
+    if window > u16::MAX as u32 {
+        panic!("a BlockAck window fits a u16");
+    }
+    window as u16
+};
+
+/// The subframes one aggregate's DMA chain holds: one per bit of the port's
+/// subframe masks. An aggregate is no wider than the BlockAck window, which
+/// may hold more than one aggregate.
+pub const TX_AMPDU_SLOT_CAPACITY: usize =
+    oer_protocols_ieee80211_contracts_port::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
+
+const _: () = {
+    if TX_AMPDU_SLOT_CAPACITY > TX_BLOCK_ACK_MAX_WINDOW as usize {
+        panic!("an aggregate fits the BlockAck window");
+    }
+};
 
 /// Semantic BlockAck information decoded by the PAC completion owner.
 ///
 /// Bit zero acknowledges `starting_sequence`, bit one the following sequence,
-/// and so on. The S31 completion block exposes 64 bits even though strict mode
-/// deliberately negotiates a window of at most 32 frames.
+/// and so on, across the result bank's [`TX_BLOCK_ACK_MAX_WINDOW`] positions.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxBlockAckBitmap {
     pub starting_sequence: SequenceNumber,

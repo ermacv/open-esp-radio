@@ -31,6 +31,10 @@ fn profile_limits_are_derived_from_the_owners_that_enforce_them() {
     );
     assert_eq!(resources.rx_block_ack_max_window, RX_BLOCK_ACK_MAX_WINDOW);
     assert_eq!(resources.tx_block_ack_max_window, TX_BLOCK_ACK_MAX_WINDOW);
+    assert!(
+        usize::from(resources.tx_block_ack_max_window) >= 2 * TX_AMPDU_SLOT_CAPACITY,
+        "the window holds an aggregate on the air and the next one"
+    );
     assert_eq!(
         resources.tx_ampdu_max_subframes as usize,
         TX_AMPDU_SLOT_CAPACITY
