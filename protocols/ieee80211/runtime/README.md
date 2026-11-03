@@ -13,7 +13,17 @@ The station unwraps its key data in its own step, over the block
 primitive its callbacks supply; the runtime carries no unwrap.
 
 `station` provides `Control` and the port-generic `Runner`; `monitor` holds the capture and
-injection handoffs of a monitor. The frames a monitor keeps and the channels
+injection handoffs of a monitor. `datapath` is the station's datapath actor
+over a `DataPort`: the one task that owns the radio, carries the data both
+ways, numbers the link's frames, owns the receive agreements and the rate
+selection, and runs the lifecycle's port commands; the lifecycle talks to it
+only in messages (`ToActor`, `FromActor`), owners too large for them travel
+beside them (the return, parcel, group and link queues). Each turn reads the
+clock once and serves the transmit facts, at most 32 received units, the
+network's MSDUs, the freed memory and the lifecycle's messages; the actor
+wakes itself only when a budget ran out with work left. Air input never ends
+it: only the port's named fault or the actor's own broken contract does,
+with every owner kept. The frames a monitor keeps and the channels
 it visits are `oer-protocols-ieee80211-core-upper-mac`'s `monitor`; the requested owner
 topology is checked by `oer-protocols-ieee80211-core-arbiter`'s `configuration`.
 

@@ -144,6 +144,16 @@ pub struct ForeignCcmpTxKey<I, K> {
     pub key: K,
 }
 
+impl<I> PendingCcmpTxKey<I> {
+    /// The pending key of the installation `installation` that the port's
+    /// command issuer
+    /// ([`PortCommands::install_pairwise`](oer_protocols_ieee80211_contracts_port::PortCommands::install_pairwise))
+    /// minted with its command, numbering its MPDUs by `step`.
+    pub const fn issued(installation: I, step: CcmpPacketNumberStep) -> Self {
+        Self { step, installation }
+    }
+}
+
 impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Pair the key the installation terminal returned with its new PN
     /// allocator; the token is spent. A key of another installation, which

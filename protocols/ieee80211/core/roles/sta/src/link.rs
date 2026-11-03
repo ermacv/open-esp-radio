@@ -42,7 +42,7 @@ use oer_protocols_ieee80211_wire::eapol::PAE_GROUP_ADDRESS;
 use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::frame::{DecodedHeader, MacHeader};
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
-use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+pub use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_radio_port::PoolPath;
 
 use crate::data::MsduDelivery;
@@ -169,16 +169,34 @@ impl<P> TxNumbers<P> {
         &mut self,
         transmit: &mut StaTransmit<'_, T, K>,
     ) -> Result<(), TxRefusal> {
-        let FrameNumber::Link { space, .. } = transmit.number else {
-            return Ok(());
-        };
-        let sequence = self.space(space).ok_or(TxRefusal::LinkChanged)?.take();
-        renumber(
+        self.number_frame(
+            transmit.number,
             &mut transmit.frame,
             &mut transmit.buffer,
             transmit.plan,
-            sequence,
         )
+    }
+
+    /// Number one station frame of the link from its parts, as
+    /// [`Self::number`] does for a whole transmission: the frame's
+    /// description `frame`, the `buffer` holding it, its rate `plan` and who
+    /// numbers it (`number`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::number`].
+    pub fn number_frame<K: Ieee80211Capabilities, C: TxBufferClass>(
+        &mut self,
+        number: FrameNumber,
+        frame: &mut StaFrame<K, C>,
+        buffer: &mut impl TxBufferMemory,
+        plan: crate::machine::StaRatePlan,
+    ) -> Result<(), TxRefusal> {
+        let FrameNumber::Link { space, .. } = number else {
+            return Ok(());
+        };
+        let sequence = self.space(space).ok_or(TxRefusal::LinkChanged)?.take();
+        renumber(frame, buffer, plan, sequence)
     }
 
     pub(crate) fn into_parts(self) -> (SequenceCounter, Option<[SequenceCounter; 8]>, Option<P>) {
@@ -488,21 +506,36 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
         &mut self,
         input: &mut StaInput<'id, T, K>,
     ) {
+        let lane = match input {
+            StaInput::GroupKeyInstalled { pending, .. } => GroupLane::Installed(pending),
+            StaInput::GroupKeySelected { pending, .. } => GroupLane::Selected(pending),
+            StaInput::GroupKeyReplaced { pending, .. } => GroupLane::Replaced(pending),
+            StaInput::GroupKeyRemoved { pending, .. } => GroupLane::Removed(pending),
+            _ => return,
+        };
+        self.group_lane(lane);
+    }
+
+    /// Apply the terminal of the group change `lane` names to the link's
+    /// replay epoch, as [`Self::group_terminal`] does for the station's
+    /// input: the pending token of the change, before it goes back to the
+    /// station with its terminal.
+    pub fn group_lane(&mut self, lane: GroupLane<'_, 'id, Path>) {
         let Some(replay) = self.rx.replay.as_mut() else {
             return;
         };
-        match input {
-            StaInput::GroupKeyInstalled { pending, .. } => {
+        match lane {
+            GroupLane::Installed(pending) => {
                 if pending.epoch == self.epoch {
                     pending.activate(replay);
                 }
             }
-            StaInput::GroupKeySelected { pending, .. } => {
+            GroupLane::Selected(pending) => {
                 if pending.install.epoch == self.epoch {
                     pending.install.activate(replay);
                 }
             }
-            StaInput::GroupKeyReplaced { pending, .. } => {
+            GroupLane::Replaced(pending) => {
                 if pending.install.epoch == self.epoch {
                     if let Some(retired) = pending.retired_lane() {
                         replay.remove_group(retired);
@@ -510,11 +543,45 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
                     pending.install.activate(replay);
                 }
             }
-            StaInput::GroupKeyRemoved { pending, .. } if pending.active() => {
-                replay.remove_group(pending.key_id);
+            GroupLane::Removed(pending) => {
+                if pending.active() {
+                    replay.remove_group(pending.key_id);
+                }
             }
-            _ => {}
         }
+    }
+
+    /// The station's RSN failed on an EAPOL frame of the link that its
+    /// holder handed it: the link gives no more data until it returns.
+    pub fn eapol_faulted(&mut self) {
+        self.rx.faulted = true;
+    }
+
+    /// An open link of the connection `sequence` for a host test of its
+    /// holder: own `address`, `bssid`, the profile's protection
+    /// (`protected`), QoS sequence spaces when `qos`, the pairwise `key`
+    /// its protected frames draw packet numbers from, and the data plane's
+    /// state of it.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn for_test(
+        sequence: u64,
+        address: OwnAddress,
+        bssid: Bssid,
+        protected: bool,
+        qos: bool,
+        key: Option<P>,
+        data: Option<DataLink>,
+    ) -> Self {
+        Self::new(
+            LinkEpoch::for_test(sequence),
+            data,
+            TxNumbers::new(
+                SequenceCounter::new(SequenceNumber::ZERO),
+                qos.then_some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
+                key,
+            ),
+            RxLink::new(address, bssid, protected, None),
+        )
     }
 
     /// Give the link back to the station: what it needs to number its
@@ -533,6 +600,19 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
 pub struct LinkReturn<P> {
     pub(crate) numbers: TxNumbers<P>,
     pub(crate) rx: RxLink,
+}
+
+/// The pending token of one group key change whose terminal the link's
+/// holder applies to the link's replay epoch ([`LinkHandover::group_lane`]).
+pub enum GroupLane<'a, 'id, Path: PoolPath> {
+    /// An installation.
+    Installed(&'a mut crate::machine::PendingGroupKey<'id, Path>),
+    /// A selection of a retained installation.
+    Selected(&'a mut crate::machine::PendingGroupSelection<'id, Path>),
+    /// A replacement.
+    Replaced(&'a mut crate::machine::PendingGroupReplacement<'id, Path>),
+    /// A removal.
+    Removed(&'a crate::machine::PendingGroupRemoval<'id, Path>),
 }
 
 /// What the station tells its link's holder.

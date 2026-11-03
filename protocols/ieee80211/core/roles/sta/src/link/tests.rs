@@ -224,3 +224,38 @@ fn unprotected_data_of_a_protected_link_is_refused_and_foreign_open_eapol_goes_n
     .unwrap();
     assert!(station.is_empty());
 }
+
+/// The link's holder hands EAPOL to the station in its own task: the
+/// station's later RSN fault ends the link's data as the fault inside the
+/// call does.
+#[test]
+fn a_fault_the_station_reports_later_ends_the_links_data() {
+    let address = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let mut link = LinkHandover::<
+        '_,
+        oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'_>>,
+        (),
+    >::for_test(1, address, bssid, false, false, None, None);
+    link.hold(false);
+    let frame = received_frame(0x0288, 0x0800, 0, 0);
+    let deliveries = |link: &mut LinkHandover<'_, _, ()>| {
+        let mut count = 0;
+        let routed = link.receive(
+            &frame,
+            &meta(RxEvidence::Unavailable),
+            |_| count += 1,
+            |_, _| Ok(StaEapol::Taken),
+        );
+        (routed, count)
+    };
+    assert_eq!(
+        deliveries(&mut link),
+        (LinkRx::Taken(Ok(StaReceived::Data)), 1)
+    );
+    link.eapol_faulted();
+    assert_eq!(
+        deliveries(&mut link).0,
+        LinkRx::Taken(Err(RxDropReason::NotConnected.into()))
+    );
+}

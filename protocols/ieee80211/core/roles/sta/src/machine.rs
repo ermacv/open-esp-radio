@@ -7320,7 +7320,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
 /// that goes by `plan`: a group frame for a group plan, an acknowledged
 /// individual frame otherwise. `None` for a frame whose header or length
 /// the port cannot take.
-pub(crate) fn sta_frame<
+pub fn sta_frame<
     K: Ieee80211Capabilities,
     C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
 >(

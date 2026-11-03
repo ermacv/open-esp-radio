@@ -13,7 +13,7 @@ use oer_protocols_network_port::{FrameStorage, LentFrame, ReceivedFrame};
 
 /// A lent receive buffer as network storage: the MPDU, then the rest of its
 /// allocation.
-pub struct NetworkRx<L>(pub(super) L);
+pub struct NetworkRx<L>(pub(crate) L);
 
 impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     fn bytes(&self) -> &[u8] {
@@ -56,7 +56,7 @@ pub enum Received<L> {
 pub struct CopiedMark(());
 
 impl CopiedMark {
-    pub(super) const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(())
     }
 }
