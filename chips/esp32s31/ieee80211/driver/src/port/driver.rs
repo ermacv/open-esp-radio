@@ -849,14 +849,18 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             held.receive_due.set(true);
             held.storage.shared.wake_body();
         }
-        // Returns wake the driver only when it asks, with many units in
-        // the network, where the radio may run short. Otherwise the next
-        // interrupt's poll counts them.
+        // Returns wake the task only when the driver asks, with many units
+        // in the network, where the radio may run short: every wake's idle
+        // turn takes them back. Otherwise the next interrupt's poll counts
+        // them.
         let network = &held.storage.shared.network;
-        let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
+        if network.held() >= D::LENT_RX / 2 && network.want_units(cx) {
+            // Units came back meanwhile: the next wake's idle turn.
+            held.storage.shared.driver.nudge();
+        }
         // A notification, not the bare waker: the driver's turn checks it
         // before its work.
-        if again || served_tx || short {
+        if again || served_tx {
             held.storage.shared.driver.wake();
         }
         // A configuration barrier waits for its role's published aggregates

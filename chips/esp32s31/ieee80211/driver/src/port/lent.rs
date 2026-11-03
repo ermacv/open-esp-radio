@@ -68,7 +68,8 @@ impl LentNotifies for SameHart {
     }
     fn register_driver(&self, _: &mut Context<'_>) {}
     fn wake_driver(&self, local: &PriorityWaker) {
-        local.wake();
+        // The driver's idle turn takes the returned units.
+        local.nudge();
     }
 }
 
