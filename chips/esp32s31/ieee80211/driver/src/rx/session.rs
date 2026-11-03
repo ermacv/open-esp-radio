@@ -155,19 +155,6 @@ where
 
     /// Whether MAC or power facts wait for the driver, without taking
     /// them; `true` outside the signals' executor, which then decides.
-    pub fn pending_detail(&self) -> u8 {
-        let mac = match self.irq.mac_pending() {
-            Ok(true) => 2,
-            Ok(false) => 0,
-            Err(_) => 8,
-        };
-        let power = match self.power.has_pending() {
-            Ok(true) => 4,
-            Ok(false) => 0,
-            Err(_) => 16,
-        };
-        mac | power
-    }
     pub fn events_pending(&self) -> bool {
         self.irq.mac_pending().unwrap_or(true) || self.power.tbtt_pending().unwrap_or(true)
     }

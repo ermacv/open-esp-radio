@@ -420,6 +420,9 @@ impl Device<512> for TestDevice {
             Poll::Pending
         }
     }
+    fn events_pending(&self) -> bool {
+        true
+    }
     fn receive_due(&mut self) -> bool {
         self.capture();
         let observed = self.observed.borrow();

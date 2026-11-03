@@ -458,13 +458,6 @@ where
         }
         Poll::Pending
     }
-    fn pending_detail(&self) -> u8 {
-        let held = u8::from(self.tx_pending != 0 || self.tbtt_pending);
-        held | self
-            .session
-            .as_ref()
-            .map_or(32, |session| session.pending_detail())
-    }
     fn events_pending(&self) -> bool {
         self.tx_pending != 0
             || self.tbtt_pending

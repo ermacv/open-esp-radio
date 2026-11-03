@@ -254,17 +254,10 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// which wake the body ([`Self::poll_received_facts`]), and return a
     /// transmit or TBTT event. This never services the ring.
     fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Result<DeviceEvent, Fault>>;
-    /// Whether transmit, TBTT, MAC or power facts wait for
-    /// [`Self::poll_event`], without taking them: `true` when the device
+    /// Whether a TX end, a TX timeout or the station's TBTT waits for
+    /// [`Self::poll_event`], without taking it: `true` when the device
     /// cannot tell.
-    fn events_pending(&self) -> bool {
-        true
-    }
-    /// Diagnostic: which facts wait, by bit: 1 device-held TX/TBTT, 2 MAC
-    /// signal, 4 power signal.
-    fn pending_detail(&self) -> u8 {
-        7
-    }
+    fn events_pending(&self) -> bool;
     /// Whether the body's pull has a staged unit to take or ring work to
     /// service now. The driver wakes the body when it has.
     fn receive_due(&mut self) -> bool;

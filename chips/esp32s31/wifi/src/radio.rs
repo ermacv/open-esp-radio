@@ -472,6 +472,9 @@ impl<W: Binding> port::Device<TX> for Device<W> {
         }
         result
     }
+    fn events_pending(&self) -> bool {
+        <Inner<W> as port::Device<TX>>::events_pending(&self.0)
+    }
     fn receive_due(&mut self) -> bool {
         <Inner<W> as port::Device<TX>>::receive_due(&mut self.0)
     }
