@@ -401,11 +401,81 @@ fn script(script: impl for<'a, 'b> FnOnce(&'a World<'b>) -> Script<'a> + 'static
 }
 
 /// The lifecycle of a fresh installation's `resources`.
+/// A lifecycle's parts before it is built: the station, its arbiter, the
+/// issuer, the first channel and the terminal access.
+struct Parts<'s> {
+    station: crate::lifecycle::LifecycleConstructed<'s, P<'s>, Callbacks, 2>,
+    arbiter: LifecycleArbiter<'s, P<'s>>,
+    issuer: Issuer<'s>,
+    channel: SupportedChannel<ModelCaps24>,
+    terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
+        's,
+        <Types<'s> as PhaseTypes<'s>>::TicketKind,
+        <Types<'s> as PhaseTypes<'s>>::TicketPath,
+    >,
+}
+
+impl<'s> Parts<'s> {
+    /// Run the lifecycle to its end: placed, as a composition places it,
+    /// when placement is built.
+    async fn run(
+        self,
+        actor: &mut crate::lifecycle::ActorEnds<'_, 's, P<'s>, TO, FROM, RETURNS>,
+        io: &mut LifecycleIo<
+            '_,
+            ModelCaps24,
+            impl crate::station::ServiceOutputSink<ModelCaps24>,
+            COMMANDS,
+            SameHart,
+        >,
+        clock: &VirtualClock,
+    ) -> Completed<'s> {
+        let Self {
+            station,
+            arbiter,
+            issuer,
+            channel,
+            terminal_access,
+        } = self;
+        #[cfg(feature = "placement")]
+        {
+            let (station, credits) = station;
+            let placed = Lifecycle::init_in_place(
+                Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
+                |place| (place.write(station), credits),
+                arbiter,
+                issuer,
+                CcmpPacketNumberStep::ONE,
+                channel,
+                terminal_access,
+                (),
+            );
+            let output = Box::leak(Box::new(core::mem::MaybeUninit::uninit()));
+            Lifecycle::run_placed(placed, output, actor, io, clock)
+                .await
+                .read()
+        }
+        #[cfg(not(feature = "placement"))]
+        {
+            let lifecycle: TestLifecycle<'s> = Lifecycle::new(
+                station,
+                arbiter,
+                issuer,
+                CcmpPacketNumberStep::ONE,
+                channel,
+                terminal_access,
+                (),
+            );
+            lifecycle.run(actor, io, clock).await
+        }
+    }
+}
+
 fn lifecycle<'s>(
     config: TestConfig,
     resources: ModelResources<'s, Backend<'s>>,
     issuer: Issuer<'s>,
-) -> (TestLifecycle<'s>, RxBlockAckStorage<'s, Types<'s>, 2, 4>) {
+) -> (Parts<'s>, RxBlockAckStorage<'s, Types<'s>, 2, 4>) {
     let ModelResources {
         connection_epoch,
         block_acks,
@@ -453,15 +523,13 @@ fn lifecycle<'s>(
         group_permission: station_group_permission,
     };
     let station = Station::new(sta_config, resources, GroupCapacity::new());
-    let lifecycle = Lifecycle::new(
+    let lifecycle = Parts {
         station,
         arbiter,
         issuer,
-        CcmpPacketNumberStep::ONE,
         channel,
         terminal_access,
-        (),
-    );
+    };
     let storage = RxBlockAckStorage::new(block_acks, Duration::from_millis(100));
     (lifecycle, storage)
 }
@@ -617,7 +685,7 @@ fn pair(
                     *completed.borrow_mut() = Some(
                         life.take()
                             .unwrap()
-                            .run(&mut lifecycle_ends, &mut io, &*clock)
+                            .run(&mut lifecycle_ends, &mut io, &clock)
                             .await,
                     );
                 };

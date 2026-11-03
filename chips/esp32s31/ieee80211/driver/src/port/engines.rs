@@ -183,6 +183,37 @@ impl PortSettings {
     }
 }
 
+/// The driver state of one port, placed by its owner: the first
+/// installation takes it, and every later one reuses it in place.
+pub struct PortDriver<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>(
+    Driver<'static, Id, D, B, O>,
+);
+
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortDriver<Id, D, B, O> {
+    /// A driver with no installation.
+    pub const fn vacant() -> Self {
+        Self(Driver::vacant())
+    }
+}
+
+/// Why [`Esp32s31Port::reinstall`] installed nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReinstallRefused {
+    /// The port runs, faulted, or holds admitted work, a received unit or
+    /// a transmit allocation: it stays as it was.
+    NotRetired,
+    /// The next installation's TSF epoch repeats the current one.
+    SameEpoch,
+    /// The port's channel names no Wi-Fi channel.
+    ChannelUnset,
+    /// The receipt is gone or names another installation, or the
+    /// generations are used up: the port stays as it was.
+    Receipt,
+    /// The retired driver kept its transmitter or a descriptor: the port
+    /// keeps its fault and the new receipt.
+    Resources,
+}
+
 /// One installation's port, its command issuer and its resources.
 pub struct PortInstallation<
     'id,
@@ -204,15 +235,15 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
 {
     device: &'static mut D,
     shared: &'static PortSharedStorage<B, D::Lent>,
-    driver: Driver<'static, Id, D, B, O>,
+    driver: &'id mut Driver<'static, Id, D, B, O>,
     settings: PortSettings,
     state: PortState,
     gate: GateIssuer<'static, Part<Id, 1>>,
     loan: Loan<'id, Id, D, B, O>,
-    receipt: Receipt<Id, InstallationPools>,
+    /// The installation's receipt; the next installation takes it.
+    receipt: Option<Receipt<Id, InstallationPools>>,
     channel: Channel,
     addresses: [IndividualAddress; 2],
-    timer: D::Timer,
     config: LowerMacConfig,
     coex: &'static D::Coex,
     /// The received units the caller holds.
@@ -340,6 +371,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     pub fn install(
         parts: PortParts<D, B, O>,
         minted: Minted<Id, InstallationPools>,
+        driver: &'id mut PortDriver<Id, D, B, O>,
     ) -> Result<PortInstallation<'id, Id, D, B, O>, InstallRefused<Id, D, B, O>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
             return Err((parts, minted));
@@ -355,6 +387,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 + crate::ordinary_tx::TX_FCS_SIZE
             || usize::from(parts.bank) > TX_BUFFERS
             || !parts.descriptors.idle()
+            || !driver.0.retired()
             || parts.storage.shared.poisoned.get().is_some()
             || !parts.storage.shared.returned.none_out()
         {
@@ -386,17 +419,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             });
         }
         let shared: &'static PortSharedStorage<B, D::Lent> = shared;
-        let timer = device.timer().clone();
         let mut installation = Self::assemble(Assembly {
             device,
             shared,
+            driver: &mut driver.0,
             transmitter,
             descriptors,
             observations,
             config,
             coex,
             addresses: [station, access_point_address],
-            timer,
             minted,
         });
         if !seeded {
@@ -407,78 +439,37 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
     /// Build an installation's port over its device, from its mint.
     #[inline(never)]
-    fn assemble(parts: Assembly<Id, D, B, O>) -> PortInstallation<'id, Id, D, B, O> {
+    fn assemble(parts: Assembly<'id, Id, D, B, O>) -> PortInstallation<'id, Id, D, B, O> {
         let Assembly {
             device,
             shared,
+            driver,
             transmitter,
             descriptors,
             observations,
             config,
             coex,
             addresses,
-            timer,
-            minted: Minted { mint, installation },
+            minted,
         } = parts;
-        let loan: Loan<'id, Id, D, B, O> = installation.loan();
-        let (
-            core,
-            (gate, issuer, arbiter_authority),
-            (tickets, terminal_access),
-            buffers,
-            [connection_epoch],
-            [station_group_permission],
-            [access_point_group_permission],
-            block_acks,
-            station_commands,
-            access_point_commands,
-        ) = mint.into_pools();
-        let CoreResources {
-            authority,
-            tickets: core_tickets,
-            station_association,
-            access_point_association,
-            queues,
-        } = core;
-        let core = LowerMacCore::new(authority, transmitter, config, coex);
-        // The caller checked every allocation home: each place takes its own.
-        let buffers = buffers.map(|place| {
-            let pair = shared.returned.take(usize::from(place.index()));
-            Buffer {
-                place,
-                dma: buffer::ReturnableBuffer::taken(pair),
-                loan: None,
-                admission: None,
-            }
-        });
-        let mut driver = Driver::vacant();
-        let prepared = driver.prepare(
-            core,
-            core_tickets,
-            queues,
-            descriptors,
-            observations,
-            device.timer().now(),
+        let now = device.timer().now();
+        let Fresh {
+            issuer,
+            loan,
+            receipt,
+            generation,
+            prepared,
+            commands,
+            resources,
+        } = Fresh::mint(
+            &mut *driver,
+            shared,
+            (transmitter, descriptors, observations),
+            config,
+            coex,
+            minted,
+            now,
         );
-        // The lend credit outlives the previous installation: units the
-        // network still holds stay counted and rejoin this ring.
-        shared.network.reset();
-        let generation = installation.generation();
-        let resources = Resources {
-            tickets: tickets.map(|slot| loan.lend_slot(slot)),
-            terminal_access: terminal_access.lend(&loan),
-            buffers: buffers.map(|buffer| buffer.lend(&loan)),
-            connection_epoch: loan.lend_slot(connection_epoch),
-            station_association: station_association.lend(&loan),
-            access_point_association: access_point_association.lend(&loan),
-            station_commands: station_commands.lend(&loan),
-            access_point_commands: access_point_commands.lend(&loan),
-            block_acks: block_acks.map(|slot| slot.lend(&loan)),
-            station_group_permission: loan.lend_slot(station_group_permission),
-            access_point_group_permission: loan.lend_slot(access_point_group_permission),
-            gate: gate.lend(&loan),
-            arbiter_authority: arbiter_authority.lend(&loan),
-        };
         let port = Self {
             device,
             shared,
@@ -487,10 +478,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             state: PortState::Stopped,
             gate: issuer,
             loan,
-            receipt: installation,
+            receipt: Some(receipt),
             channel: Channel::from_wifi_channel(config.channel),
             addresses,
-            timer,
             config,
             coex,
             rx_out: Cell::new(0),
@@ -511,13 +501,105 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         };
         PortInstallation {
             port,
-            commands: Esp32s31Commands {
-                key_live: &shared.key_live,
-                serials: Serials::new(generation),
-                loan,
-            },
+            commands,
             resources,
         }
+    }
+
+    /// Install the next installation in place, on the same device, driver
+    /// and allocations, with a distinct TSF epoch, once the stopped port
+    /// passed its retire checks: no admitted work, no received unit held,
+    /// every transmit allocation home. Units the network still holds stay
+    /// counted by the lend credit and rejoin the new ring when it drops
+    /// them; the reinstall neither waits for them nor resets the chip.
+    ///
+    /// # Errors
+    ///
+    /// Why nothing was installed; every refusal but
+    /// [`ReinstallRefused::Resources`] leaves the port as it was.
+    #[inline(never)]
+    pub fn reinstall(
+        &mut self,
+        installations: &mut Installations<Id, InstallationPools>,
+        tsf_epoch: u32,
+    ) -> Result<
+        (
+            Esp32s31Commands<'id, Id, D, B, O>,
+            Resources<'id, Id, D, B, O>,
+        ),
+        ReinstallRefused,
+    > {
+        if !self.retirable() {
+            return Err(ReinstallRefused::NotRetired);
+        }
+        if tsf_epoch == self.config.tsf_epoch {
+            return Err(ReinstallRefused::SameEpoch);
+        }
+        let Some(channel) = self.channel.wifi_channel() else {
+            return Err(ReinstallRefused::ChannelUnset);
+        };
+        let Some(receipt) = self.receipt.take() else {
+            return Err(ReinstallRefused::Receipt);
+        };
+        let minted = match installations.remint(receipt) {
+            Ok(minted) => minted,
+            Err(
+                oer_protocols_radio_port::RemintRefused::Foreign(receipt)
+                | oer_protocols_radio_port::RemintRefused::Exhausted(receipt),
+            ) => {
+                self.receipt = Some(receipt);
+                return Err(ReinstallRefused::Receipt);
+            }
+        };
+        let Some(reusable) = self.retire_driver() else {
+            // The mint drops unissued; its receipt names the current
+            // installation, which keeps the fault.
+            self.receipt = Some(minted.installation);
+            self.record(Fault::InstallationResources);
+            return Err(ReinstallRefused::Resources);
+        };
+        self.config.channel = channel;
+        self.config.tsf_epoch = tsf_epoch;
+        let now = self.device.timer().now();
+        let Fresh {
+            issuer,
+            loan,
+            receipt,
+            generation,
+            prepared,
+            commands,
+            resources,
+        } = Fresh::mint(
+            &mut *self.driver,
+            self.shared,
+            reusable,
+            self.config,
+            self.coex,
+            minted,
+            now,
+        );
+        self.settings = PortSettings::new();
+        self.state = PortState::Stopped;
+        self.gate = issuer;
+        self.loan = loan;
+        self.receipt = Some(receipt);
+        self.channel = Channel::from_wifi_channel(channel);
+        self.rx_out.set(0);
+        self.serials = Serials::new(generation);
+        self.expired = 0;
+        self.now = Instant::from_micros(0);
+        self.deadline = None;
+        self.rx_later = None;
+        self.group_since = None;
+        self.holding = None;
+        self.cut_retry = false;
+        self.cut_due = false;
+        self.reopen = false;
+        self.stop_served = false;
+        self.core_disabled = false;
+        self.fault = prepared.err();
+        self.retained = None;
+        Ok((commands, resources))
     }
 
     /// The MSDUs that expired before publication in this installation.
@@ -530,52 +612,51 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.fault
     }
 
-    /// End the stopped installation after its retire checks: no admitted
-    /// work, no received unit held, every transmit allocation home. Units
-    /// the network still holds stay counted by the lend credit, which the
-    /// next installation keeps.
-    ///
-    /// # Errors
-    ///
-    /// The port, unchanged, while it runs, faulted or holds work.
-    pub fn retire(mut self) -> Result<StoppedDataPort<Id, D, B, O>, Self> {
+    /// Whether the stopped installation passes its retire checks: no
+    /// admitted work, no received unit held, every transmit allocation
+    /// home. Units the network still holds stay counted by the lend
+    /// credit, which the next installation keeps.
+    fn retirable(&mut self) -> bool {
         // Units the caller lent leave its count here, as at its next pull.
         if let Err(fault) = settle_lent(&self.shared.network, &self.rx_out, self.device) {
             self.record(fault);
-            return Err(self);
+            return false;
         }
-        if self.state != PortState::Stopped
-            || self.fault.is_some()
-            || self.rx_out.get() != 0
-            || !self.shared.returned.none_out()
-            || self.driver.queues.iter().any(|queue| !queue.is_empty())
-            || self.driver.running.iter().any(Option::is_some)
-        {
-            return Err(self);
-        }
+        self.state == PortState::Stopped
+            && self.fault.is_none()
+            && self.rx_out.get() == 0
+            && self.shared.returned.none_out()
+            && self.driver.queues.iter().all(|queue| queue.is_empty())
+            && self.driver.running.iter().all(Option::is_none)
+    }
+
+    /// Retire the driver's installation and detach the device: the
+    /// reusable owners, unless the driver kept one.
+    fn retire_driver(&mut self) -> Option<Reusable<D, B, O>> {
         let reusable = self.driver.retire();
         for activity in &self.shared.key_live {
             activity.set(0);
         }
         self.device.detach();
-        let mut config = self.config;
-        let reusable = match self.channel.wifi_channel() {
-            Some(channel) => {
-                config.channel = channel;
-                reusable
-            }
-            None => None,
-        };
-        Ok(StoppedDataPort {
-            device: self.device,
-            shared: self.shared,
-            reusable,
-            config,
-            addresses: self.addresses,
-            coex: self.coex,
-            timer: self.timer,
-            receipt: self.receipt,
-        })
+        reusable
+    }
+
+    /// End the stopped port's installations after the retire checks,
+    /// returning its device.
+    ///
+    /// # Errors
+    ///
+    /// The port, unchanged, while it runs, faulted or holds work.
+    #[expect(
+        clippy::result_large_err,
+        reason = "a refused port comes back by value to its owner"
+    )]
+    pub fn release(mut self) -> Result<&'static mut D, Self> {
+        if !self.retirable() {
+            return Err(self);
+        }
+        let _reusable = self.retire_driver();
+        Ok(self.device)
     }
 
     fn check(&self) -> Result<(), Fault> {
@@ -1210,125 +1291,113 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 }
 
+/// One installation's fresh owners, minted onto a retired driver.
+struct Fresh<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> {
+    issuer: GateIssuer<'static, Part<Id, 1>>,
+    loan: Loan<'id, Id, D, B, O>,
+    receipt: Receipt<Id, InstallationPools>,
+    generation: u32,
+    prepared: Result<(), Fault>,
+    commands: Esp32s31Commands<'id, Id, D, B, O>,
+    resources: Resources<'id, Id, D, B, O>,
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    Fresh<'id, Id, D, B, O>
+{
+    /// Mint the installation `minted` onto `driver`, which holds no
+    /// installation, with the reusable owners and the configuration.
+    #[inline(never)]
+    fn mint(
+        driver: &mut Driver<'static, Id, D, B, O>,
+        shared: &'static PortSharedStorage<B, D::Lent>,
+        reusable: Reusable<D, B, O>,
+        config: LowerMacConfig,
+        coex: &'static D::Coex,
+        minted: Minted<Id, InstallationPools>,
+        now: Instant,
+    ) -> Self {
+        let (transmitter, descriptors, observations) = reusable;
+        let Minted { mint, installation } = minted;
+        let loan: Loan<'id, Id, D, B, O> = installation.loan();
+        let (
+            core,
+            (gate, issuer, arbiter_authority),
+            (tickets, terminal_access),
+            buffers,
+            [connection_epoch],
+            [station_group_permission],
+            [access_point_group_permission],
+            block_acks,
+            station_commands,
+            access_point_commands,
+        ) = mint.into_pools();
+        let CoreResources {
+            authority,
+            tickets: core_tickets,
+            station_association,
+            access_point_association,
+            queues,
+        } = core;
+        let core = LowerMacCore::new(authority, transmitter, config, coex);
+        // The caller checked every allocation home: each place takes its own.
+        let buffers = buffers.map(|place| {
+            let pair = shared.returned.take(usize::from(place.index()));
+            Buffer {
+                place,
+                dma: buffer::ReturnableBuffer::taken(pair),
+                loan: None,
+                admission: None,
+            }
+        });
+        let prepared = driver.prepare(core, core_tickets, queues, descriptors, observations, now);
+        // The lend credit outlives the previous installation: units the
+        // network still holds stay counted and rejoin this ring.
+        shared.network.reset();
+        let generation = installation.generation();
+        let resources = Resources {
+            tickets: tickets.map(|slot| loan.lend_slot(slot)),
+            terminal_access: terminal_access.lend(&loan),
+            buffers: buffers.map(|buffer| buffer.lend(&loan)),
+            connection_epoch: loan.lend_slot(connection_epoch),
+            station_association: station_association.lend(&loan),
+            access_point_association: access_point_association.lend(&loan),
+            station_commands: station_commands.lend(&loan),
+            access_point_commands: access_point_commands.lend(&loan),
+            block_acks: block_acks.map(|slot| slot.lend(&loan)),
+            station_group_permission: loan.lend_slot(station_group_permission),
+            access_point_group_permission: loan.lend_slot(access_point_group_permission),
+            gate: gate.lend(&loan),
+            arbiter_authority: arbiter_authority.lend(&loan),
+        };
+        Self {
+            issuer,
+            loan,
+            receipt: installation,
+            generation,
+            prepared,
+            commands: Esp32s31Commands {
+                key_live: &shared.key_live,
+                serials: Serials::new(generation),
+                loan,
+            },
+            resources,
+        }
+    }
+}
+
 /// What [`Esp32s31Port::assemble`] builds an installation from.
-struct Assembly<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+struct Assembly<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     device: &'static mut D,
     shared: &'static PortSharedStorage<B, D::Lent>,
+    driver: &'id mut Driver<'static, Id, D, B, O>,
     transmitter: OrdinaryTxIdleOwner<'static, D::Power, D::Entropy, D::Timer, B>,
     descriptors: TxDescriptors<B>,
     observations: O,
     config: LowerMacConfig,
     coex: &'static D::Coex,
     addresses: [IndividualAddress; 2],
-    timer: D::Timer,
     minted: Minted<Id, InstallationPools>,
-}
-
-/// A retired installation's device and reusable owners, between
-/// installations.
-pub struct StoppedDataPort<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    device: &'static mut D,
-    shared: &'static PortSharedStorage<B, D::Lent>,
-    reusable: Option<Reusable<D, B, O>>,
-    config: LowerMacConfig,
-    addresses: [IndividualAddress; 2],
-    coex: &'static D::Coex,
-    timer: D::Timer,
-    receipt: Receipt<Id, InstallationPools>,
-}
-
-impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedDataPort<Id, D, B, O> {
-    /// Install the next installation on the same device and allocations,
-    /// with a distinct TSF epoch. Units the network still holds stay
-    /// counted and rejoin the new ring when it drops them; the reinstall
-    /// neither waits for them nor resets the chip.
-    ///
-    /// # Errors
-    ///
-    /// The stopped port, unchanged, when an allocation is not home, its
-    /// reusable owners are gone, the epoch repeats or the mint refuses.
-    #[inline(never)]
-    pub fn reinstall<'id>(
-        mut self,
-        installations: &mut Installations<Id, InstallationPools>,
-        tsf_epoch: u32,
-    ) -> Result<PortInstallation<'id, Id, D, B, O>, Self>
-    where
-        Id: 'id,
-    {
-        if !self.shared.returned.none_out()
-            || tsf_epoch == self.config.tsf_epoch
-            || self.reusable.is_none()
-        {
-            return Err(self);
-        }
-        let Self {
-            device,
-            shared,
-            reusable,
-            mut config,
-            addresses,
-            coex,
-            timer,
-            receipt,
-        } = self;
-        let minted = match installations.remint(receipt) {
-            Ok(minted) => minted,
-            Err(
-                oer_protocols_radio_port::RemintRefused::Foreign(receipt)
-                | oer_protocols_radio_port::RemintRefused::Exhausted(receipt),
-            ) => {
-                self = Self {
-                    device,
-                    shared,
-                    reusable,
-                    config,
-                    addresses,
-                    coex,
-                    timer,
-                    receipt,
-                };
-                return Err(self);
-            }
-        };
-        let Some((transmitter, descriptors, observations)) = reusable else {
-            // Checked above; the mint drops unissued with its receipt kept.
-            return Err(Self {
-                device,
-                shared,
-                reusable: None,
-                config,
-                addresses,
-                coex,
-                timer,
-                receipt: minted.installation,
-            });
-        };
-        config.tsf_epoch = tsf_epoch;
-        Ok(Esp32s31Port::assemble(Assembly {
-            device,
-            shared,
-            transmitter,
-            descriptors,
-            observations,
-            config,
-            coex,
-            addresses,
-            timer,
-            minted,
-        }))
-    }
-
-    /// The receive units the network still holds from earlier
-    /// installations.
-    pub fn lent(&self) -> usize {
-        self.shared.network.held()
-    }
-
-    /// End the installations, returning the device.
-    pub fn release(self) -> &'static mut D {
-        self.device
-    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> DataPort<'id>

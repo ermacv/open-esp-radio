@@ -422,7 +422,9 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
             ),
         ));
         let events = Recorder::default();
-        let mut actor = Actor::<P<'_>, _, _>::new(
+        // The actor is placed, as a composition places it.
+        let mut actor = Actor::<P<'_>, _, _>::init_in_place(
+            Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
             port,
             EspressifRateSelection::<ModelCaps24>::new(),
             storage.view(),
@@ -1197,4 +1199,48 @@ fn a_due_port_deadline_reposts_a_bounded_number_of_turns_then_the_actor_sleeps()
         assert_eq!(bench.wakes(), wakes);
         assert_eq!(bench.clock.reads.get(), reads);
     });
+}
+
+#[test]
+fn a_reinstall_in_place_runs_on_the_placed_port_and_a_refusal_leaves_the_actor() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let clock = Rc::new(VirtualClock::<4>::new());
+        let mut installations = Installations::claim(claim);
+        let (install, _air) = ModelPort::install(
+            &mut installations,
+            channel6(),
+            [
+                IndividualAddress::new(LOCAL).unwrap(),
+                IndividualAddress::new(BSSID).unwrap(),
+            ],
+            clock,
+        )
+        .unwrap();
+        let ModelInstall {
+            port, resources, ..
+        } = install;
+        let storage = Box::leak(Box::new(
+            crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
+                resources.block_acks,
+                oer_portable_time::Duration::from_millis(100),
+            ),
+        ));
+        let mut actor = Actor::<P<'_>, _, _>::init_in_place(
+            Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
+            port,
+            EspressifRateSelection::<ModelCaps24>::new(),
+            storage.view(),
+            Recorder::default(),
+        );
+        let mut seen = 0;
+        assert_eq!(
+            actor.reinstall_in_place(|_| {
+                seen += 1;
+                Err("refused")
+            }),
+            Err("refused")
+        );
+        assert_eq!(actor.reinstall_in_place(|_| Ok::<(), ()>(())), Ok(()));
+        assert_eq!(seen, 1);
+    }));
 }

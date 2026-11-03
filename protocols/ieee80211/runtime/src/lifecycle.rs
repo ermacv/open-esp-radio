@@ -545,6 +545,24 @@ where
         io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
         timer: &impl Timer,
     ) -> LifecycleCompleted<'id, D, C, X, T, GROUPS, O> {
+        let end = self.drive(actor, io, timer).await;
+        self.finish(end, io)
+    }
+
+    /// Start the radio and serve until the lifecycle ends.
+    async fn drive<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        const COMMAND_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        actor: &mut ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
+        timer: &impl Timer,
+    ) -> LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>
+    {
         if actor
             .to_actor
             .try_send(ToActor::Start(self.inner.channel))
@@ -552,12 +570,260 @@ where
         {
             self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
         }
-        let end = {
-            let arm = |at: Option<Instant>| alarm_at(timer, at);
-            let mut alarm = core::pin::pin!(arm(None));
-            poll_fn(|cx| self.poll(cx, actor, io, timer, alarm.as_mut(), &arm)).await
+        let arm = |at: Option<Instant>| alarm_at(timer, at);
+        let mut alarm = core::pin::pin!(arm(None));
+        poll_fn(|cx| self.poll(cx, actor, io, timer, alarm.as_mut(), &arm)).await
+    }
+
+    /// The lifecycle of [`Self::new`], constructed in the caller's backing
+    /// `storage`: the station in its own place through `station`, which
+    /// returns it with its command credits. No complete lifecycle is built
+    /// on a stack.
+    #[cfg(feature = "placement")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the machines, the issuer and the installation's tokens"
+    )]
+    #[inline(never)]
+    pub fn init_in_place<'s>(
+        storage: &'s mut core::mem::MaybeUninit<Self>,
+        station: impl for<'a> FnOnce(
+            &'a mut core::mem::MaybeUninit<LifecycleStation<'id, D, C, GROUPS>>,
+        ) -> (
+            &'a mut LifecycleStation<'id, D, C, GROUPS>,
+            oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<
+                'id,
+                <Ty<'id, D> as PhaseTypes<'id>>::StationCommandPath,
+            >,
+        ),
+        arbiter: LifecycleArbiter<'id, D>,
+        issuer: X,
+        step: CcmpPacketNumberStep,
+        channel: SupportedChannel<D::Caps>,
+        terminal_access: TerminalAccess<
+            'id,
+            <Ty<'id, D> as PhaseTypes<'id>>::TicketKind,
+            <Ty<'id, D> as PhaseTypes<'id>>::TicketPath,
+        >,
+        events: O,
+    ) -> oer_portable_memory::Placed<'s, Self> {
+        let credits = core::cell::Cell::new(CommandCredits::empty());
+        oer_portable_memory::Placed::init(storage, |place| {
+            oer_portable_memory::init_in_place!(place, Self {
+                station => |place| {
+                    let (station, granted) = station(place);
+                    credits.set(CommandCredits::new(granted));
+                    station
+                },
+                inner => |place: &mut core::mem::MaybeUninit<Inner<'id, D, X, T, O>>| {
+                    oer_portable_memory::init_in_place!(place, Inner {
+                        arbiter: Some(ArbiterCell::Running(arbiter)),
+                        commands: credits.replace(CommandCredits::empty()),
+                        issuer: issuer,
+                        step: step,
+                        channel: channel,
+                        events: events,
+                        terminal_access: terminal_access,
+                        tx_contexts: T::empty(),
+                        admissions: Admissions::default(),
+                        pairwise: None,
+                        group: None,
+                        retune: None,
+                        radio: Radio::Starting,
+                        link: LinkCustody::default(),
+                        reply: None,
+                        ending: None,
+                        rejected: None,
+                        end: None,
+                        lesson: None,
+                        stop: false,
+                        blocked: false,
+                        armed: None,
+                        now: Instant::EPOCH,
+                    })
+                },
+            })
+        })
+    }
+
+    /// Run the placed lifecycle as [`Self::run`] does, and retire it into
+    /// the caller's `output`: neither the lifecycle nor its end moves
+    /// through the running future.
+    #[cfg(feature = "placement")]
+    pub async fn run_placed<
+        's,
+        'out,
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        const COMMAND_DEPTH: usize,
+        N: Notifies,
+    >(
+        lifecycle: oer_portable_memory::Placed<'s, Self>,
+        output: &'out mut core::mem::MaybeUninit<LifecycleCompleted<'id, D, C, X, T, GROUPS, O>>,
+        actor: &mut ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
+        timer: &impl Timer,
+    ) -> oer_portable_memory::Placed<'out, LifecycleCompleted<'id, D, C, X, T, GROUPS, O>> {
+        let mut lifecycle = lifecycle;
+        let end = lifecycle.drive(actor, io, timer).await;
+        Self::finish_placed(lifecycle, end, output, io)
+    }
+
+    /// [`Self::finish`] of a placed lifecycle into `output`.
+    #[cfg(feature = "placement")]
+    #[inline(never)]
+    fn finish_placed<'s, 'out, const COMMAND_DEPTH: usize, N: Notifies>(
+        lifecycle: oer_portable_memory::Placed<'s, Self>,
+        end: LifecycleEnd<
+            <D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault,
+        >,
+        output: &'out mut core::mem::MaybeUninit<LifecycleCompleted<'id, D, C, X, T, GROUPS, O>>,
+        io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
+    ) -> oer_portable_memory::Placed<'out, LifecycleCompleted<'id, D, C, X, T, GROUPS, O>> {
+        let (station, inner) =
+            oer_portable_memory::unpack_placed!(lifecycle, Self { station, inner });
+        let (
+            arbiter,
+            commands,
+            issuer,
+            _step,
+            _channel,
+            events,
+            _terminal_access,
+            tx_contexts,
+            _admissions,
+            _pairwise,
+            _group,
+            _retune,
+            _radio,
+            _link,
+            _reply,
+            _ending,
+            rejected,
+            _end,
+            _lesson,
+            _stop,
+            _blocked,
+            _armed,
+            _now,
+        ) = oer_portable_memory::unpack_placed!(
+            inner,
+            Inner {
+                arbiter,
+                commands,
+                issuer,
+                step,
+                channel,
+                events,
+                terminal_access,
+                tx_contexts,
+                admissions,
+                pairwise,
+                group,
+                retune,
+                radio,
+                link,
+                reply,
+                ending,
+                rejected,
+                end,
+                lesson,
+                stop,
+                blocked,
+                armed,
+                now
+            }
+        );
+        let (reason, arbiter_end) = Self::reasons(&end);
+        let mut commands = commands.read();
+        // The retired station passes through this frame once, as the
+        // runner's did; the lifecycle's other banks move in place.
+        let mut retired_station = core::mem::MaybeUninit::uninit();
+        let (station, places) = Station::finish_placed(station, &mut retired_station, reason);
+        let arbiter = match arbiter.read() {
+            Some(ArbiterCell::Running(arbiter)) => Some(arbiter.finish(arbiter_end)),
+            Some(ArbiterCell::Retired(retired)) => Some(retired),
+            None => None,
         };
-        self.finish(end, io)
+        let mut completed = oer_portable_memory::Placed::init(output, |place| {
+            oer_portable_memory::init_in_place!(place, LifecycleCompleted {
+                end: end,
+                retired => |place: &mut core::mem::MaybeUninit<RetiredLifecycle<'id, D, C, X, T, GROUPS, O>>| {
+                    oer_portable_memory::init_in_place!(place, RetiredLifecycle {
+                        station => |place| station.move_to(place).into_mut(),
+                        places: places,
+                        arbiter: arbiter,
+                        issuer: issuer.read(),
+                        tx_contexts: tx_contexts.read(),
+                        rejected: rejected.read(),
+                        events: events.read(),
+                    })
+                },
+            })
+        });
+        let LifecycleCompleted { end, retired } = &mut *completed;
+        Self::report_retired(
+            &mut retired.station,
+            &mut retired.places,
+            retired.arbiter.as_mut(),
+            &mut commands,
+            io,
+        );
+        // A restart keeps the application's connection for the next
+        // installation's service.
+        if !matches!(end, LifecycleEnd::Restart(_)) {
+            io.control.complete();
+        }
+        completed
+    }
+
+    /// The station's and the arbiter's ends for the lifecycle's `end`.
+    fn reasons(
+        end: &LifecycleEnd<
+            <D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault,
+        >,
+    ) -> (StaDisconnectReason, ArbiterEnd) {
+        match end {
+            LifecycleEnd::Stopped => (StaDisconnectReason::Requested, ArbiterEnd::Stopped),
+            _ => (
+                StaDisconnectReason::Arbiter(
+                    oer_protocols_ieee80211_core_arbiter::LeaveReason::PortFailed,
+                ),
+                ArbiterEnd::PortFailed,
+            ),
+        }
+    }
+
+    /// Hand the retired arbiter's notices to the station's places and the
+    /// application, then the retired station's final outputs.
+    fn report_retired<const COMMAND_DEPTH: usize, N: Notifies>(
+        station: &mut RetiredStation<'id, LifecycleTokens<'id, D, GROUPS>, D::Caps, C>,
+        places: &mut StationPlaceReturns<'id, ActorGatePath<'id, D>>,
+        mut arbiter: Option<
+            &mut RetiredArbiter<'id, D::Caps, NoReservation, ActorGatePath<'id, D>>,
+        >,
+        commands: &mut CommandCredits<'id, <Ty<'id, D> as PhaseTypes<'id>>::StationCommandPath>,
+        io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
+    ) {
+        while let Some(notice) = arbiter.as_deref_mut().and_then(RetiredArbiter::poll_notice) {
+            match notice {
+                ArbiterNotice::Station(notice) => places.returned(notice),
+                ArbiterNotice::AccessPoint(command) => {
+                    io.output.emit(ServiceOutput::AccessPoint(command.into()))
+                }
+            }
+        }
+        while let Some(output) = station.poll_output() {
+            match output {
+                StaFinalOutput::CommandCompleted(terminal) => io.output.emit(
+                    ServiceOutput::CommandCompleted(commands.completed(terminal)),
+                ),
+                StaFinalOutput::Notify(notice) => {
+                    io.output.emit(ServiceOutput::Notice(notice.into()))
+                }
+            }
+        }
     }
 
     /// One poll: register on every source, take what is ready at one clock
@@ -838,39 +1104,20 @@ where
             rejected,
             ..
         } = inner;
-        let (reason, arbiter_end) = match &end {
-            LifecycleEnd::Stopped => (StaDisconnectReason::Requested, ArbiterEnd::Stopped),
-            _ => (
-                StaDisconnectReason::Arbiter(
-                    oer_protocols_ieee80211_core_arbiter::LeaveReason::PortFailed,
-                ),
-                ArbiterEnd::PortFailed,
-            ),
-        };
+        let (reason, arbiter_end) = Self::reasons(&end);
         let (mut station, mut places) = station.finish(reason);
         let mut arbiter = match arbiter {
             Some(ArbiterCell::Running(arbiter)) => Some(arbiter.finish(arbiter_end)),
             Some(ArbiterCell::Retired(retired)) => Some(retired),
             None => None,
         };
-        while let Some(notice) = arbiter.as_mut().and_then(RetiredArbiter::poll_notice) {
-            match notice {
-                ArbiterNotice::Station(notice) => places.returned(notice),
-                ArbiterNotice::AccessPoint(command) => {
-                    io.output.emit(ServiceOutput::AccessPoint(command.into()))
-                }
-            }
-        }
-        while let Some(output) = station.poll_output() {
-            match output {
-                StaFinalOutput::CommandCompleted(terminal) => io.output.emit(
-                    ServiceOutput::CommandCompleted(commands.completed(terminal)),
-                ),
-                StaFinalOutput::Notify(notice) => {
-                    io.output.emit(ServiceOutput::Notice(notice.into()))
-                }
-            }
-        }
+        Self::report_retired(
+            &mut station,
+            &mut places,
+            arbiter.as_mut(),
+            &mut commands,
+            io,
+        );
         // A restart keeps the application's connection for the next
         // installation's service.
         if !matches!(end, LifecycleEnd::Restart(_)) {

@@ -3,6 +3,7 @@
 //! room, lend credit across a reinstall and named faults.
 use super::*;
 use crate::mac::tx::TxBacking;
+use crate::port::{PortDriver, PortInstallation};
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
@@ -397,7 +398,8 @@ fn with_fixture<R>(test: impl for<'id> FnOnce(&mut Fixture<'id, radio::LocalId<'
         let (parts, observed, timer) = installed(Vec::new());
         let mut installations = Installations::<_, InstallationPools>::claim(claim);
         let minted: Minted<_, InstallationPools> = installations.first().expect("first mint");
-        let installation = Port::install(parts, minted).ok().expect("install");
+        let driver = Box::leak(Box::new(PortDriver::vacant()));
+        let installation = Port::install(parts, minted, driver).ok().expect("install");
         let mut fixture = Fixture::new(installation, observed, timer);
         test(&mut fixture)
     }))
@@ -422,7 +424,8 @@ fn with_installations<R>(
         let (parts, observed, timer) = installed(Vec::new());
         let mut installations = Installations::<_, InstallationPools>::claim(claim);
         let minted: Minted<_, InstallationPools> = installations.first().expect("first mint");
-        let installation = Port::install(parts, minted).ok().expect("install");
+        let driver = Box::leak(Box::new(PortDriver::vacant()));
+        let installation = Port::install(parts, minted, driver).ok().expect("install");
         let fixture = Fixture::new(installation, observed, timer);
         test(fixture, &mut installations)
     }))
@@ -804,7 +807,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
         assert_eq!(fixture.port.lent(), 1);
         fixture.stop();
         let Fixture {
-            port,
+            mut port,
             observed,
             timer,
             buffers,
@@ -812,12 +815,14 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
         } = fixture;
         // The fixture's transmit buffers go home before the retire checks.
         drop(buffers);
-        let stopped = port.retire().ok().expect("retired with a unit still lent");
-        assert_eq!(stopped.lent(), 1);
-        let installation = stopped
+        let (commands, resources) = port
             .reinstall(installations, 18)
-            .ok()
             .expect("reinstalled without waiting for the network");
+        let installation = PortInstallation {
+            port,
+            commands,
+            resources,
+        };
         let mut second = Fixture::new(installation, observed, timer);
         assert_eq!(
             second.port.lent(),
@@ -836,5 +841,17 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
             "the unit rejoined the ring"
         );
         assert_eq!(second.observed.borrow().stops, 1);
+    });
+}
+
+#[test]
+fn a_running_port_refuses_its_reinstall_and_keeps_running() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        assert_eq!(
+            fixture.port.reinstall(installations, 18).err(),
+            Some(crate::port::ReinstallRefused::NotRetired)
+        );
+        fixture.stop();
     });
 }

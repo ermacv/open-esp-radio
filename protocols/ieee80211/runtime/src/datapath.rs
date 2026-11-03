@@ -465,6 +465,71 @@ where
         }
     }
 
+    /// The actor of [`Self::new`], constructed in the caller's backing
+    /// `storage` field by field: no complete actor is built on a stack.
+    #[inline(never)]
+    pub fn init_in_place<'s>(
+        storage: &'s mut core::mem::MaybeUninit<Self>,
+        port: D::Port,
+        rates: S,
+        receive: RxBlockAckView<'id, D::Types>,
+        events: O,
+    ) -> oer_portable_memory::Placed<'s, Self> {
+        const {
+            if D::RX_HELD as usize <= LIFECYCLE_FRAMES {
+                panic!("the actor holds more received units than the lifecycle's lane");
+            }
+        };
+        oer_portable_memory::Placed::init(storage, |place| {
+            oer_portable_memory::init_in_place!(place, Self {
+                port: port,
+                rates: rates,
+                events: events,
+                receive: receive,
+                link: None,
+                pairwise: None,
+                sequence_hold: None,
+                data => |place: &mut core::mem::MaybeUninit<DataTx<D::TxMemory>>| {
+                    oer_portable_memory::init_in_place!(place, DataTx {
+                        plane: None,
+                        deferred: None,
+                        freed: heapless::Deque::new(),
+                    })
+                },
+                radio: Radio::Stopped,
+                held: None,
+                stash: None,
+                group: None,
+                stage => |place: &mut core::mem::MaybeUninit<Stage<'id, D>>| {
+                    oer_portable_memory::init_in_place!(place, Stage {
+                        cut: heapless::Deque::new(),
+                        group_terminal: None,
+                        tbtt: None,
+                        overflow: None,
+                    })
+                },
+                frames_out: 0,
+                reply_out: None,
+                owed: Owed::new(),
+                facts: Facts::default(),
+                rx_later: None,
+                again: false,
+                armed: None,
+                due_streak: 0,
+                now: Instant::EPOCH,
+                retained: Retained {
+                    link: None,
+                    returned: None,
+                    completed: None,
+                    link_return: None,
+                    pairwise: None,
+                    group: None,
+                },
+                end: None,
+            })
+        })
+    }
+
     /// The port, for its owner's checks between runs.
     pub const fn port(&self) -> &D::Port {
         &self.port
@@ -504,13 +569,33 @@ where
                 return Err((self, error));
             }
         };
-        // A new installation lends new arenas; the plane over the old ones
-        // ended with them.
         let mut next = Self { port, ..self };
-        next.data.plane = None;
-        next.radio = Radio::Stopped;
-        next.end = None;
+        next.reinstalled();
         Ok(next)
+    }
+
+    /// Replace the port in place with the next installation's, keeping the
+    /// data plane's state and the network's memory: `reinstall` turns the
+    /// stopped port into the new one, or refuses and leaves it.
+    ///
+    /// # Errors
+    ///
+    /// `reinstall`'s refusal; the actor stays as it was.
+    pub fn reinstall_in_place<E>(
+        &mut self,
+        reinstall: impl FnOnce(&mut D::Port) -> Result<(), E>,
+    ) -> Result<(), E> {
+        reinstall(&mut self.port)?;
+        self.reinstalled();
+        Ok(())
+    }
+
+    /// The state a new installation starts from: it lends new arenas, so
+    /// the plane over the old ones ended with them, and its radio stopped.
+    fn reinstalled(&mut self) {
+        self.data.plane = None;
+        self.radio = Radio::Stopped;
+        self.end = None;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract
