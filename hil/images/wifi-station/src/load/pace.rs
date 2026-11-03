@@ -1,8 +1,13 @@
 //! The schedule of paced transmission: datagram `n` is due `n` payload
 //! times after the start, the payload time being its UDP payload bits over
 //! the rate. The sender wakes on the Embassy timer, sends what is due in
-//! batches and sleeps at least [`GRANULARITY_US`] between them. Nothing is
-//! sent once the window ended: what was due and not sent by then is missed.
+//! batches and sleeps at least [`GRANULARITY_US`] between them. A datagram
+//! the socket has no room for waits for room: the schedule moves on only
+//! with a datagram the socket took, and once room came, a schedule further
+//! behind than one batch's sleep or [`CATCH_UP`] payload times starts
+//! again from the present.
+//! Nothing is sent once the window ended: what the window held and was not
+//! sent by then is missed.
 
 /// The shortest sleep between two batches: at 65 Mbit/s of 1400-byte
 /// datagrams a batch holds some six of them.
@@ -10,6 +15,10 @@ pub(crate) const GRANULARITY_US: u64 = 1000;
 /// The most datagrams one batch sends before it yields to the executor:
 /// the IP stack's transmit credits.
 pub(crate) const MAX_BATCH: u32 = 16;
+/// The most payload times a schedule runs behind before it starts again
+/// from the present: a sender held back by the socket catches up with at
+/// most this many datagrams at once.
+pub(crate) const CATCH_UP: u64 = 4;
 
 /// What the sender does after a batch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -18,6 +27,9 @@ pub(crate) enum Next {
     Yield,
     /// Sleep until this image microsecond.
     Wait(u64),
+    /// The socket had no room for the due datagram: wait for room and
+    /// send it ([`Schedule::taken`]).
+    Blocked,
     /// The transmission's window ended.
     Done,
 }
@@ -25,11 +37,15 @@ pub(crate) enum Next {
 /// A paced transmission between two image microseconds.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Schedule {
+    /// Where the window began, for [`Self::missed`].
+    start_us: u64,
+    /// Where the schedule's datagram 0 lies: the window's start, moved on
+    /// when the schedule started again from the present.
     begin_us: u64,
     end_us: u64,
     payload: u16,
     rate_bps: u32,
-    /// Datagrams the schedule handed to the sender, taken or refused.
+    /// Datagrams the socket took.
     attempts: u64,
     /// One payload time, `payload` bits over the rate: whole microseconds
     /// and the rest, in units of 1 / `rate_bps` µs.
@@ -49,6 +65,7 @@ impl Schedule {
         let bits = u64::from(payload).saturating_mul(8_000_000);
         let rate = u64::from(rate_bps);
         Some(Self {
+            start_us: begin_us,
             begin_us,
             end_us,
             payload,
@@ -69,6 +86,12 @@ impl Schedule {
             .filter(|due| *due < self.end_us)
     }
 
+    /// The socket took the due datagram.
+    fn sent_one(&mut self) {
+        self.attempts = self.attempts.saturating_add(1);
+        self.advance();
+    }
+
     /// The next datagram's time: one payload time later, its rest carried
     /// into a whole microsecond once it reaches the rate.
     fn advance(&mut self) {
@@ -86,10 +109,11 @@ impl Schedule {
             .and_then(|after| after.checked_add(carry));
     }
 
-    /// Datagrams the window holds that were never handed to the sender:
-    /// the executor reached their time only after the window ended.
+    /// Datagrams the window holds that the socket never took: the sender
+    /// reached their time only after the window ended, or waited for room
+    /// past them.
     pub(crate) fn missed(&self) -> u64 {
-        let span = u128::from(self.end_us.saturating_sub(self.begin_us));
+        let span = u128::from(self.end_us.saturating_sub(self.start_us));
         let per_datagram = u128::from(self.payload).saturating_mul(8_000_000);
         let held = span
             .saturating_mul(u128::from(self.rate_bps))
@@ -99,11 +123,33 @@ impl Schedule {
             .saturating_sub(self.attempts)
     }
 
+    /// The socket took the due datagram after the sender waited for room,
+    /// at `now_us`: the next one is due a payload time later, or now when
+    /// that lies further behind than [`GRANULARITY_US`] or [`CATCH_UP`]
+    /// payload times.
+    pub(crate) fn taken(&mut self, now_us: u64) {
+        self.sent_one();
+        let Some(due) = self
+            .after_us
+            .and_then(|after| self.begin_us.checked_add(after))
+        else {
+            return;
+        };
+        let behind = self
+            .step_us
+            .saturating_add(1)
+            .saturating_mul(CATCH_UP)
+            .max(GRANULARITY_US);
+        if now_us.saturating_sub(due) > behind {
+            self.begin_us = self.begin_us.saturating_add(now_us.saturating_sub(due));
+        }
+    }
+
     /// Send, through `send`, every datagram due at `now_us`, at most
     /// [`MAX_BATCH`] of them, and none once the window ended at `now_us`;
-    /// a datagram the socket refuses is dropped, its time passes all the
-    /// same.
-    pub(crate) fn batch(&mut self, now_us: u64, mut send: impl FnMut()) -> Next {
+    /// `send` says whether the socket took it, and the batch ends
+    /// [`Next::Blocked`] at the first it did not.
+    pub(crate) fn batch(&mut self, now_us: u64, mut send: impl FnMut() -> bool) -> Next {
         if now_us >= self.end_us {
             return Next::Done;
         }
@@ -118,10 +164,11 @@ impl Schedule {
             if sent == MAX_BATCH {
                 return Next::Yield;
             }
-            send();
+            if !send() {
+                return Next::Blocked;
+            }
             sent += 1;
-            self.attempts = self.attempts.saturating_add(1);
-            self.advance();
+            self.sent_one();
         }
     }
 }
@@ -132,7 +179,10 @@ mod tests {
 
     fn batch(schedule: &mut Schedule, now_us: u64) -> (u32, Next) {
         let mut sent = 0;
-        let next = schedule.batch(now_us, || sent += 1);
+        let next = schedule.batch(now_us, || {
+            sent += 1;
+            true
+        });
         (sent, next)
     }
 
@@ -179,6 +229,22 @@ mod tests {
             assert_eq!(schedule.due(), Some(7 + exact));
             schedule.advance();
         }
+    }
+
+    #[test]
+    fn a_refused_datagram_waits_and_a_late_schedule_starts_again_from_the_present() {
+        // 1400 bytes at 11.2 Mbit/s: one datagram each 1000 µs.
+        let mut schedule = Schedule::new(0, 100_000, 1400, 11_200_000).unwrap();
+        assert_eq!(schedule.batch(0, || false), Next::Blocked);
+        assert_eq!(schedule.attempts, 0, "a refused datagram is still due");
+        // Room came 2.5 payload times later: the schedule catches up.
+        schedule.taken(2_500);
+        assert_eq!(schedule.due(), Some(1_000));
+        // Room came far later: the next one is due a payload time on.
+        schedule.taken(50_000);
+        assert_eq!(schedule.due(), Some(50_000));
+        assert_eq!(schedule.attempts, 2);
+        assert_eq!(schedule.missed(), 98, "the window held 100");
     }
 
     #[test]

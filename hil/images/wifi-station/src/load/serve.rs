@@ -537,18 +537,52 @@ async fn send(
                 let now = now_us();
                 match write(datagram, run, sent.datagrams, now) {
                     Some(datagram) => match socket.try_send_to(datagram, peer) {
-                        Ok(()) => taken(sent, datagram.len(), now),
+                        Ok(()) => {
+                            taken(sent, datagram.len(), now);
+                            true
+                        }
                         Err(TryError::WouldBlock) => {
                             sent.refused = sent.refused.saturating_add(1);
+                            false
                         }
-                        Err(TryError::Other(_)) => sent.failed = sent.failed.saturating_add(1),
+                        // The datagram is lost; its time passes.
+                        Err(TryError::Other(_)) => {
+                            sent.failed = sent.failed.saturating_add(1);
+                            true
+                        }
                     },
-                    None => sent.failed = sent.failed.saturating_add(1),
+                    None => {
+                        sent.failed = sent.failed.saturating_add(1);
+                        true
+                    }
                 }
             });
             match next {
                 Next::Yield => yield_now().await,
                 Next::Wait(at) => wait_until(at).await,
+                // The socket had no room: the due datagram waits for it,
+                // as an application's send does.
+                Next::Blocked => {
+                    let Some(datagram) = write(datagram, run, sent.datagrams, now_us()) else {
+                        sent.failed = sent.failed.saturating_add(1);
+                        sent.missed = schedule.missed();
+                        return;
+                    };
+                    match select(socket.send_to(datagram, peer), wait_until(end)).await {
+                        Either::First(result) => {
+                            let now = now_us();
+                            match result {
+                                Ok(()) => taken(sent, datagram.len(), now),
+                                Err(_) => sent.failed = sent.failed.saturating_add(1),
+                            }
+                            schedule.taken(now);
+                        }
+                        Either::Second(()) => {
+                            sent.missed = schedule.missed();
+                            return;
+                        }
+                    }
+                }
                 Next::Done => {
                     sent.missed = schedule.missed();
                     return;
