@@ -260,6 +260,11 @@ pub trait Device<const B: usize>: Sized + 'static {
     fn events_pending(&self) -> bool {
         true
     }
+    /// Diagnostic: which facts wait, by bit: 1 device-held TX/TBTT, 2 MAC
+    /// signal, 4 power signal.
+    fn pending_detail(&self) -> u8 {
+        7
+    }
     /// Whether the body's pull has a staged unit to take or ring work to
     /// service now. The driver wakes the body when it has.
     fn receive_due(&mut self) -> bool;

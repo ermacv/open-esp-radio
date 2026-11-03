@@ -434,17 +434,23 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     .device()
                     .map_or(true, |device| device.events_pending());
                 let due = forced || notified || busy || events;
+                let detail = storage.device().map_or(7, |device| device.pending_detail());
                 if let Ok(mut state) = driver() {
                     use crate::lower_mac::TxEdge;
-                    state.note(if notified || forced {
-                        TxEdge::GateNotified
-                    } else if busy {
-                        TxEdge::GateBusy
-                    } else if events {
-                        TxEdge::GateEvents
-                    } else {
-                        TxEdge::GateIdle
-                    });
+                    // Diagnostic: notified = device-held facts, busy = MAC
+                    // signal, events = power signal, idle = idle turn.
+                    if detail & 1 != 0 {
+                        state.note(TxEdge::GateNotified);
+                    }
+                    if detail & 2 != 0 {
+                        state.note(TxEdge::GateBusy);
+                    }
+                    if detail & 4 != 0 {
+                        state.note(TxEdge::GateEvents);
+                    }
+                    if !(forced || notified || busy || events) {
+                        state.note(TxEdge::GateIdle);
+                    }
                 }
                 if !due {
                     let idle = storage
