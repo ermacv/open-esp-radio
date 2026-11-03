@@ -46,7 +46,7 @@ pub use model::{
 #[cfg(test)]
 pub(crate) use model::{TX_BUFFER_END_BIT, TX_DESCRIPTOR_HE_BIT};
 pub use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDmaStorage;
-pub use owner::{HtAmpduTxResources, RetainedDmaAmpduTx};
+pub use owner::{AmpduIntakeRefused, HtAmpduTxResources, RetainedDmaAmpduTx, SingleTxConfig};
 pub use request::{
     AmpduFrameLayout, AmpduFrameSize, HeAmpduFrameRequest, HeAmpduPolicy, HtAmpduFrameRequest,
 };

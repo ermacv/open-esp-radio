@@ -3,7 +3,9 @@
 //!
 //! [`ModelArena`] holds each arena's memories and MPDU lengths by position.
 //! Publication records what the hardware would read
-//! ([`ModelArena::published`]); the air answers each publication with the
+//! ([`ModelArena::published`]). A publication whose sent frames carry a
+//! Protected bit its encryption contradicts, or an A-MPDU past an optional
+//! octet limit, is refused. The air answers each publication with the
 //! next scripted [`ModelArenaAnswer`], and a publication without an answer
 //! ends `Aborted` at its [`MODEL_ARENA_TIMEOUT`] deadline. Settlement sets
 //! the Retry bit of a kept frame that may have reached the air. A fault,
@@ -22,7 +24,7 @@ use oer_protocols_ieee80211_contracts_port::{
     Air, BlockAckReport, Ieee80211Capabilities, MpduProtection, MpduStartSpacing, PhyRate,
     Protection, TxPower,
 };
-use oer_protocols_ieee80211_wire::frame::{sequence_control, set_retry_bit};
+use oer_protocols_ieee80211_wire::frame::{FrameControlFields, sequence_control, set_retry_bit};
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
@@ -81,7 +83,8 @@ pub struct ModelArenaPublication {
     pub encryption: MpduProtection,
     /// The transmit power.
     pub power: TxPower,
-    /// Each MPDU, positions in order, without FCS and MIC.
+    /// Each MPDU sent, positions in order, without FCS and MIC: every frame
+    /// of an A-MPDU, position 0 of a single MPDU.
     pub frames: Vec<Vec<u8>>,
 }
 
@@ -93,7 +96,11 @@ enum State {
         aggregate: bool,
         rate: PhyRate,
     },
-    Completed,
+    /// The publication ended; `aggregate` when it was an A-MPDU, which sent
+    /// every frame, else only position 0 went.
+    Completed {
+        aggregate: bool,
+    },
 }
 
 struct Slots<const N: usize> {
@@ -131,6 +138,7 @@ pub struct ModelArena<C, const N: usize = MODEL_ARENA_FRAMES> {
     claimed: bool,
     key: bool,
     answers: VecDeque<ModelArenaAnswer>,
+    length_limit: Option<usize>,
     published: Vec<ModelArenaPublication>,
     fault: Option<ModelArenaFault>,
     caps: PhantomData<fn() -> C>,
@@ -158,6 +166,7 @@ impl<C, const N: usize> ModelArena<C, N> {
             claimed: false,
             key: false,
             answers: VecDeque::new(),
+            length_limit: None,
             published: Vec::new(),
             fault: None,
             caps: PhantomData,
@@ -168,6 +177,12 @@ impl<C, const N: usize> ModelArena<C, N> {
     /// publications need.
     pub fn set_key(&mut self, installed: bool) {
         self.key = installed;
+    }
+
+    /// Refuse an A-MPDU whose MPDUs exceed `octets` in all, as hardware
+    /// refuses one past its length limit; `None` sets no limit.
+    pub fn set_length_limit(&mut self, octets: Option<usize>) {
+        self.length_limit = octets;
     }
 
     /// Queue the air's answer to the next publication served.
@@ -299,14 +314,31 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, const N: usize> TxArena<'p, 'id> for
                 reason: PublishRefused::Busy,
             });
         };
+        let single = match publication.format {
+            ArenaFormat::Single(_) => Some(()),
+            ArenaFormat::Aggregate { .. } => None,
+        };
+        let sent = if single.is_some() { 1 } else { usize::MAX };
+        let encrypted = publication.encryption == MpduProtection::Ccmp;
+        let contradicted = slots.frames().take(sent).any(|frame| {
+            frame
+                .first_chunk::<2>()
+                .is_none_or(|field| FrameControlFields::from_bytes(*field).protected() != encrypted)
+        });
+        let octets = slots
+            .frames()
+            .map(<[u8]>::len)
+            .fold(0_usize, usize::saturating_add);
         let reason = if other_on_air || slots.state != State::Idle {
             Some(PublishRefused::Busy)
         } else if slots.len == 0 {
             Some(PublishRefused::Empty)
-        } else if matches!(publication.format, ArenaFormat::Single(_)) && slots.len != 1 {
-            Some(PublishRefused::NotSingle)
-        } else if publication.encryption == MpduProtection::Ccmp && !self.key {
+        } else if encrypted && !self.key {
             Some(PublishRefused::NoKey)
+        } else if contradicted {
+            Some(PublishRefused::Protection)
+        } else if single.is_none() && self.length_limit.is_some_and(|limit| octets > limit) {
+            Some(PublishRefused::Length)
         } else {
             None
         };
@@ -329,7 +361,11 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, const N: usize> TxArena<'p, 'id> for
             protection: publication.protection,
             encryption: publication.encryption,
             power: publication.power.get(),
-            frames: slots.frames().map(<[u8]>::to_vec).collect(),
+            frames: slots
+                .frames()
+                .take(if aggregate.is_some() { usize::MAX } else { 1 })
+                .map(<[u8]>::to_vec)
+                .collect(),
         });
         slots.state = State::OnAir {
             deadline: now.saturating_add(MODEL_ARENA_TIMEOUT),
@@ -399,7 +435,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, const N: usize> TxArena<'p, 'id> for
         let Some(arena) = slots.held.take() else {
             return Err(self.quarantine(ModelArenaFault::State));
         };
-        slots.state = State::Completed;
+        slots.state = State::Completed { aggregate };
         Ok(Some(Completion::new(arena, slots.len, end)))
     }
 
@@ -413,8 +449,11 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, const N: usize> TxArena<'p, 'id> for
         let Some(slots) = self
             .arenas
             .get_mut(settlement.arena().index())
-            .filter(|slots| slots.state == State::Completed && slots.len == settlement.frames())
+            .filter(|slots| slots.len == settlement.frames())
         else {
+            return Err(self.quarantine(ModelArenaFault::State));
+        };
+        let State::Completed { aggregate } = slots.state else {
             return Err(self.quarantine(ModelArenaFault::State));
         };
         let mut kept = 0_u8;
@@ -427,7 +466,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, const N: usize> TxArena<'p, 'id> for
                 returned(memory);
                 continue;
             }
-            if settlement.retransmission() {
+            if settlement.retransmission() && (aggregate || index.get() == 0) {
                 set_retry_bit(memory.as_mut_slice());
             }
             let Some(length) = slots.lengths.get(position).copied() else {
@@ -476,7 +515,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, const N: usize> TxArena<'p, 'id> for
     fn deadline(&self) -> Option<Instant> {
         self.arenas.iter().find_map(|slots| match slots.state {
             State::OnAir { deadline, .. } => Some(deadline),
-            State::Idle | State::Completed => None,
+            State::Idle | State::Completed { .. } => None,
         })
     }
 }

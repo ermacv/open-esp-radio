@@ -815,54 +815,7 @@ where
             }
         }
         let aggregate = owner.prepared_aggregate(cookie)?;
-        let publication = plan.publication;
-        match plan.format {
-            AmpduFormat::Ht {
-                rate,
-                protection_spacing,
-            } => {
-                let config = ht_ampdu_publication_config(
-                    plan.role,
-                    HtAmpduPublicationInputs {
-                        rate,
-                        aggregate_length: aggregate.bytes,
-                        subframes: aggregate.subframes,
-                        protection_spacing,
-                        data_power_primary: publication.data_power_primary,
-                        data_power_alternate: publication.data_power_alternate,
-                        control: publication.control,
-                        aifsn: publication.aifsn,
-                        contention_window: publication.contention_window,
-                        scheduler_priority: publication.scheduler_priority,
-                        packet_priority: publication.packet_priority,
-                    },
-                )
-                .ok_or(HtAmpduTxError::AggregateConfigurationMismatch)?;
-                owner.submit(hardware, cookie, plan.queue, config)?;
-            }
-            AmpduFormat::He { policy, bss_color } => {
-                let mut config = HeAmpduTxConfig::new_with_txop(
-                    policy.rate(),
-                    bss_color,
-                    aggregate.bytes,
-                    aggregate.subframes,
-                    policy.density(),
-                    policy.txop_limit(),
-                )
-                .ok_or(HtAmpduTxError::AggregateConfigurationMismatch)?;
-                config.data_power_primary = publication.data_power_primary;
-                config.data_power_alternate = publication.data_power_alternate;
-                config.control = publication.control;
-                config.aifsn = publication.aifsn;
-                config.contention_window = publication.contention_window;
-                config.interface = plan.role.interface;
-                config.scheduler_priority = publication.scheduler_priority;
-                config.pti = publication.packet_priority;
-                config.pti_count = 1;
-                config.hardware_key_selector = plan.role.hardware_key_selector;
-                owner.submit_he(hardware, cookie, plan.queue, config)?;
-            }
-        }
+        submit_planned(hardware, &mut owner, cookie, &plan, aggregate)?;
         Ok((cookie, deadline))
     })();
     match result {
@@ -883,6 +836,69 @@ where
             _admission: admission,
             _admitted_at: admitted_at,
         })),
+    }
+}
+
+/// Program and start the reserved batch `cookie` of `owner`, `aggregate`
+/// long, as the aggregate `plan` describes.
+pub(super) fn submit_planned<L, H, const SLOTS: usize>(
+    hardware: &mut H,
+    owner: &mut Esp32s31AmpduOwner<'_, L, SLOTS>,
+    cookie: TxCookie,
+    plan: &AmpduSettings,
+    aggregate: crate::mac::tx::ampdu::HtAmpduLength,
+) -> Result<(), HtAmpduTxError>
+where
+    L: PlacedBacking,
+    H: HtAmpduHardware,
+{
+    let publication = plan.publication;
+    match plan.format {
+        AmpduFormat::Ht {
+            rate,
+            protection_spacing,
+        } => {
+            let config = ht_ampdu_publication_config(
+                plan.role,
+                HtAmpduPublicationInputs {
+                    rate,
+                    aggregate_length: aggregate.bytes,
+                    subframes: aggregate.subframes,
+                    protection_spacing,
+                    data_power_primary: publication.data_power_primary,
+                    data_power_alternate: publication.data_power_alternate,
+                    control: publication.control,
+                    aifsn: publication.aifsn,
+                    contention_window: publication.contention_window,
+                    scheduler_priority: publication.scheduler_priority,
+                    packet_priority: publication.packet_priority,
+                },
+            )
+            .ok_or(HtAmpduTxError::AggregateConfigurationMismatch)?;
+            owner.submit(hardware, cookie, plan.queue, config)
+        }
+        AmpduFormat::He { policy, bss_color } => {
+            let mut config = HeAmpduTxConfig::new_with_txop(
+                policy.rate(),
+                bss_color,
+                aggregate.bytes,
+                aggregate.subframes,
+                policy.density(),
+                policy.txop_limit(),
+            )
+            .ok_or(HtAmpduTxError::AggregateConfigurationMismatch)?;
+            config.data_power_primary = publication.data_power_primary;
+            config.data_power_alternate = publication.data_power_alternate;
+            config.control = publication.control;
+            config.aifsn = publication.aifsn;
+            config.contention_window = publication.contention_window;
+            config.interface = plan.role.interface;
+            config.scheduler_priority = publication.scheduler_priority;
+            config.pti = publication.packet_priority;
+            config.pti_count = 1;
+            config.hardware_key_selector = plan.role.hardware_key_selector;
+            owner.submit_he(hardware, cookie, plan.queue, config)
+        }
     }
 }
 

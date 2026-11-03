@@ -1147,3 +1147,212 @@ fn a_bound_descriptor_refuses_a_second_binding() {
     drop(owner.pop_last_backing(backing).unwrap());
     assert_eq!(drops.get(), 1);
 }
+
+/// Push a counting backing through [`RetainedAmpduDma::push_written`],
+/// tagging its first octet; returns its region's address.
+fn push_tagged<const SLOTS: usize>(
+    owner: &mut RetainedAmpduDma<'static, TestBacking, SLOTS, 0>,
+    drops: &Rc<Cell<usize>>,
+    regions: &Rc<Cell<usize>>,
+    tag: u8,
+) -> usize {
+    let mut at = 0;
+    let pushed = owner.push_written(
+        TestBacking::counting(drops.clone(), regions.clone()),
+        &mut (),
+        |(), region| {
+            at = region.as_ptr().addr();
+            region[0] = tag;
+            Ok::<_, ()>((
+                WrittenBuffer {
+                    offset: 0,
+                    capacity: 64,
+                    transfer_length: 40,
+                },
+                (),
+            ))
+        },
+        |(), ()| Ok(()),
+    );
+    assert!(pushed.is_ok());
+    at
+}
+
+fn tag_of(mut backing: TestBacking) -> u8 {
+    backing.stable_dma_region().as_mut_slice()[0]
+}
+
+#[test]
+fn a_written_push_binds_its_word_once_and_a_retained_retry_relinks_it() {
+    let (drops, regions) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+    let mut owner = retained_owner_with_slots::<4>();
+    owner.begin().unwrap();
+    for tag in 0..3 {
+        push_tagged(&mut owner, &drops, &regions, tag);
+    }
+    // A host lease samples its region once at placement, the owner once.
+    assert_eq!(regions.get(), 6, "each region sampled once, at intake");
+    let words: std::vec::Vec<_> = (0..3).map(|at| owner.bound_word0(at).unwrap()).collect();
+    owner.publish_retained_chain(3).unwrap().commit(|_| {});
+    owner.mark_completed().unwrap();
+    owner
+        .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+
+    let mut returned = std::vec::Vec::new();
+    let kept = owner
+        .retain_detached(0b101, |backing| returned.push(tag_of(backing)))
+        .unwrap();
+    assert_eq!((kept, returned), (2, std::vec![1]));
+    assert_eq!(owner.state(), AmpduDmaState::Reserved);
+    assert_eq!(owner.held_backing_count(), 2);
+    // The kept images moved with their leases, unchanged.
+    assert_eq!(owner.bound_word0(0), Some(words[0]));
+    assert_eq!(owner.bound_word0(1), Some(words[2]));
+    assert_eq!(owner.software_region_mut(1).unwrap()[0], 2);
+    let sampled = regions.get();
+    owner.publish_retained_chain(2).unwrap().commit(|_| {});
+    assert_eq!(regions.get(), sampled, "no region sampled at republication");
+    assert_eq!(owner.state(), AmpduDmaState::HardwareOwned);
+    owner.mark_completed().unwrap();
+    owner
+        .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+    let mut returned = std::vec::Vec::new();
+    owner
+        .release_detached(|backing| returned.push(tag_of(backing)))
+        .unwrap();
+    assert_eq!(returned, std::vec![0, 2]);
+    assert_eq!(drops.get(), 3);
+}
+
+#[test]
+fn a_retained_chain_takes_further_leases_after_its_kept_ones() {
+    let (drops, regions) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+    let mut owner = retained_owner_with_slots::<4>();
+    owner.begin().unwrap();
+    for tag in 0..2 {
+        push_tagged(&mut owner, &drops, &regions, tag);
+    }
+    owner.publish_retained_chain(2).unwrap().commit(|_| {});
+    owner
+        .mark_aborted_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+    assert_eq!(owner.held_backing_count(), 2, "an abort keeps its leases");
+    assert_eq!(owner.retain_detached(0b10, drop).unwrap(), 1);
+    push_tagged(&mut owner, &drops, &regions, 7);
+    let mut returned = std::vec::Vec::new();
+    owner
+        .cancel(|backing| returned.push(tag_of(backing)))
+        .unwrap();
+    assert_eq!(returned, std::vec![1, 7]);
+}
+
+#[test]
+fn a_retention_outside_the_chain_or_of_a_live_chain_changes_nothing() {
+    let (drops, regions) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+    let mut owner = retained_owner_with_slots::<4>();
+    owner.begin().unwrap();
+    push_tagged(&mut owner, &drops, &regions, 0);
+    assert_eq!(
+        owner.retain_detached(1, drop),
+        Err(AmpduDmaStorageError::State)
+    );
+    owner.publish_retained_chain(1).unwrap().commit(|_| {});
+    owner.mark_completed().unwrap();
+    owner
+        .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+    assert_eq!(
+        owner.retain_detached(0b10, drop),
+        Err(AmpduDmaStorageError::Count)
+    );
+    assert_eq!(owner.state(), AmpduDmaState::Detached);
+    assert_eq!(drops.get(), 0);
+    owner.release_detached(drop).unwrap();
+}
+
+#[test]
+fn a_refused_written_push_returns_its_backing_as_written() {
+    let drops = Rc::new(Cell::new(0));
+    let mut owner = retained_owner_with_slots::<4>();
+    let written = WrittenBuffer {
+        offset: 0,
+        capacity: 64,
+        transfer_length: 40,
+    };
+    let refused = owner.push_written(
+        TestBacking::new(drops.clone()),
+        &mut (),
+        |(), _| Ok::<_, &str>((written, ())),
+        |(), ()| Ok(()),
+    );
+    let Err((backing, PushRefused::Storage(AmpduDmaStorageError::State))) = refused else {
+        panic!("an unreserved chain refuses");
+    };
+    owner.begin().unwrap();
+    let refused = owner.push_written(
+        backing,
+        &mut (),
+        |(), region| {
+            region[0] = 9;
+            Err::<(WrittenBuffer, ()), _>("declined")
+        },
+        |(), ()| Ok(()),
+    );
+    let Err((backing, PushRefused::Written("declined"))) = refused else {
+        panic!("the writer refused");
+    };
+    let refused = owner.push_written(
+        backing,
+        &mut (),
+        |(), _| Ok((written, ())),
+        |(), ()| Err("late"),
+    );
+    let Err((backing, PushRefused::Written("late"))) = refused else {
+        panic!("the commit refused");
+    };
+    assert_eq!(tag_of(backing), 9);
+    let outside = WrittenBuffer {
+        offset: 100,
+        ..written
+    };
+    let refused = owner.push_written(
+        TestBacking::new(drops.clone()),
+        &mut (),
+        |(), _| Ok::<_, &str>((outside, ())),
+        |(), ()| Ok(()),
+    );
+    assert!(matches!(
+        refused,
+        Err((_, PushRefused::Storage(AmpduDmaStorageError::Address)))
+    ));
+    drop(refused);
+    assert_eq!(owner.held_backing_count(), 0);
+    assert_eq!(
+        drops.get(),
+        2,
+        "only the test dropped the returned backings"
+    );
+}
+
+#[test]
+fn a_published_head_keeps_the_leases_behind_it_until_the_release() {
+    let (drops, regions) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+    let mut owner = retained_owner_with_slots::<4>();
+    owner.begin().unwrap();
+    for tag in 0..3 {
+        push_tagged(&mut owner, &drops, &regions, tag);
+    }
+    assert!(owner.publish_retained_chain(4).is_err());
+    owner.publish_retained_chain(1).unwrap().commit(|_| {});
+    owner.mark_completed().unwrap();
+    owner
+        .mark_detached(MacTxQueueDetached::new_model(DESCRIPTOR_BASE))
+        .unwrap();
+    let mut returned = std::vec::Vec::new();
+    owner
+        .release_detached(|backing| returned.push(tag_of(backing)))
+        .unwrap();
+    assert_eq!(returned, std::vec![0, 1, 2]);
+}

@@ -186,7 +186,7 @@ fn the_model_passes_every_arena_case() {
             assert_eq!(usize::from(report.passed), suite::Case::ALL.len());
             assert_eq!(report.model_only, 0);
             let report = check(|| fixture(single, aggregate), Environment::Hardware).unwrap();
-            assert_eq!((report.passed, report.model_only), (4, 3));
+            assert_eq!((report.passed, report.model_only), (5, 3));
         }
     }
     with_rates(Case);
@@ -217,9 +217,29 @@ fn encryption_needs_the_pairwise_key() {
                 panic!("an encrypted publication without a key is refused");
             };
             fixture.port.set_key(true);
+            // The frame's Protected bit contradicts the encryption.
+            let Err(PublishError::Refused {
+                publication,
+                reason: PublishRefused::Protection,
+            }) = fixture.port.publish(publication, Instant::from_micros(2))
+            else {
+                panic!("an unprotected frame is not encrypted");
+            };
+            let first = publication.arena;
+            fixture.port.withdraw(&first, drop).unwrap();
             fixture
                 .port
-                .publish(publication, Instant::from_micros(2))
+                .intake(&first, memory(), |region| {
+                    let length = write_tagged(1, region)?;
+                    region[1] |= 0x40;
+                    Some(length)
+                })
+                .unwrap();
+            let mut publication = fixture.single(first);
+            publication.encryption = MpduProtection::Ccmp;
+            fixture
+                .port
+                .publish(publication, Instant::from_micros(3))
                 .unwrap();
             assert_eq!(fixture.port.published()[0].encryption, MpduProtection::Ccmp);
         }
@@ -337,4 +357,66 @@ fn intake_refuses_a_declined_or_oversized_frame_with_its_memory() {
     })
     .unwrap();
     assert_eq!(returned, [Some(3)]);
+}
+
+#[test]
+fn an_aggregate_past_the_length_limit_is_refused_and_a_single_carries_position_0() {
+    struct Case;
+    impl WithRates for Case {
+        fn run<'p, 'id: 'p>(
+            self,
+            single: PhaseRate<'p, 'id, ModelCaps>,
+            aggregate: AmpduRate<'p, 'id, ModelCaps>,
+        ) {
+            let mut fixture = fixture(single, aggregate);
+            fixture.port.set_length_limit(Some(59));
+            let [first, _] = fixture.port.arenas().unwrap();
+            for tag in [1, 2] {
+                fixture
+                    .port
+                    .intake(&first, memory(), |region| write_tagged(tag, region))
+                    .unwrap();
+            }
+            let publication = fixture.aggregate(first);
+            let Err(PublishError::Refused {
+                publication,
+                reason: PublishRefused::Length,
+            }) = fixture.port.publish(publication, Instant::from_micros(1))
+            else {
+                panic!("two 30-octet MPDUs exceed 59 octets");
+            };
+            // A single MPDU carries position 0 alone; the limit is an A-MPDU's.
+            let first = publication.arena;
+            let publication = fixture.single(first);
+            fixture
+                .port
+                .publish(publication, Instant::from_micros(2))
+                .unwrap();
+            assert_eq!(fixture.published().unwrap().tags(), [1]);
+            fixture.port.answer(ModelArenaAnswer::NoResponse);
+            let done = fixture
+                .port
+                .service((), Instant::from_micros(3))
+                .unwrap()
+                .unwrap();
+            assert_eq!(done.frames(), 2);
+            let first = fixture
+                .port
+                .retain(done, FrameMask::first(2).unwrap(), |_| panic!("kept"))
+                .unwrap();
+            fixture.port.set_length_limit(None);
+            let publication = fixture.aggregate(first);
+            fixture
+                .port
+                .publish(publication, Instant::from_micros(4))
+                .unwrap();
+            // Only the published frame went out before: only it is a retry.
+            let published = fixture.published().unwrap();
+            assert_eq!(
+                (published.tags(), published.retried.bits()),
+                (&[1, 2][..], 0b01)
+            );
+        }
+    }
+    with_rates(Case);
 }

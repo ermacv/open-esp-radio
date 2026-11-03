@@ -457,6 +457,18 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         self.transition(AmpduDmaState::Completed, AmpduDmaState::Detached)
     }
 
+    /// Detach a hardware-owned chain the queue left without a completion (a
+    /// collision or a settled timeout abort), keeping its buffers.
+    pub fn mark_aborted_detached(
+        &mut self,
+        detached: MacTxQueueDetached<'_>,
+    ) -> Result<(), AmpduDmaStorageError> {
+        if !detached.confirms_descriptor_head(self.binding.descriptors.base()) {
+            return Err(AmpduDmaStorageError::Address);
+        }
+        self.transition(AmpduDmaState::HardwareOwned, AmpduDmaState::Detached)
+    }
+
     pub fn detached_buffer(
         &self,
         index: usize,
@@ -617,6 +629,39 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         self.held
     }
 
+    /// The whole region of the lease at logical `position` in any state,
+    /// for host observation of what a model publication carries.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn observed_region_mut(&mut self, position: usize) -> Option<&mut [u8]>
+    where
+        B: PlacedBacking,
+    {
+        let retention = self.retention.as_deref_mut()?;
+        let index = usize::from(*retention.active_backing_indices.get(position)?);
+        Some(
+            retention
+                .backings
+                .get_mut(index)?
+                .as_mut()?
+                .stable_dma_region()
+                .into_mut_slice(),
+        )
+    }
+
+    /// The descriptor word bound to the lease at logical `position`, for
+    /// host observation.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn bound_word0(&self, position: usize) -> Option<WifiTxDmaDescriptorControl> {
+        let retention = self.retention().ok()?;
+        let index = usize::from(*retention.active_backing_indices.get(position)?);
+        retention
+            .backing_descriptors
+            .get(index)
+            .copied()
+            .flatten()
+            .map(|descriptor| descriptor.word0)
+    }
+
     pub fn descriptor_head(&self) -> Result<u32, AmpduDmaStorageError> {
         Ok(self.dma()?.binding().descriptor_head())
     }
@@ -730,6 +775,93 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), AmpduDmaStorageError> {
         self.dma_mut()?.mark_detached(detached)
+    }
+
+    /// Detach a chain the queue left without a completion, keeping every
+    /// lease for a retained retry or a release.
+    pub fn mark_aborted_detached(
+        &mut self,
+        detached: MacTxQueueDetached<'_>,
+    ) -> Result<(), AmpduDmaStorageError> {
+        self.dma_mut()?.mark_aborted_detached(detached)
+    }
+
+    /// Keep the leases at the logical positions of `keep` for another
+    /// publication, compacted in their order to positions `0..k`, and hand
+    /// every other lease to `returned` in position order: the detached chain
+    /// is reserved again with its kept descriptor images unchanged, and
+    /// further leases append after them. Returns `k`.
+    ///
+    /// Only a chain whose leases sit at their own positions (every chain
+    /// [`Self::push_written`] built) is retained this way.
+    pub fn retain_detached(
+        &mut self,
+        keep: u64,
+        mut returned: impl FnMut(B),
+    ) -> Result<usize, AmpduDmaStorageError> {
+        if self.state() != AmpduDmaState::Detached {
+            return Err(AmpduDmaStorageError::State);
+        }
+        let count = self.active_count;
+        let outside = u32::try_from(count)
+            .ok()
+            .and_then(|count| keep.checked_shr(count))
+            .unwrap_or(0);
+        if self.held != count || outside != 0 {
+            return Err(AmpduDmaStorageError::Count);
+        }
+        let in_place = self
+            .retention()?
+            .active_backing_indices
+            .iter()
+            .take(count)
+            .enumerate()
+            .all(|(position, index)| usize::from(*index) == position);
+        if !in_place {
+            return Err(AmpduDmaStorageError::State);
+        }
+        self.dma_mut()?
+            .transition(AmpduDmaState::Detached, AmpduDmaState::Reserved)?;
+        let retention = self.retention_mut()?;
+        let mut kept = 0_usize;
+        for position in 0..count {
+            let selected = u32::try_from(position)
+                .ok()
+                .and_then(|position| keep.checked_shr(position))
+                .is_some_and(|bits| bits & 1 != 0);
+            let backing = retention.backings.get_mut(position).and_then(Option::take);
+            let identity = retention
+                .backing_identities
+                .get_mut(position)
+                .and_then(Option::take);
+            let descriptor = retention
+                .backing_descriptors
+                .get_mut(position)
+                .and_then(Option::take);
+            if !selected {
+                if let Some(backing) = backing {
+                    returned(ManuallyDrop::into_inner(backing));
+                }
+                continue;
+            }
+            // The target lies at or before `position`: it was emptied above.
+            if let Some(slot) = retention.backings.get_mut(kept) {
+                *slot = backing;
+            }
+            if let Some(slot) = retention.backing_identities.get_mut(kept) {
+                *slot = identity;
+            }
+            if let Some(slot) = retention.backing_descriptors.get_mut(kept) {
+                *slot = descriptor;
+            }
+            kept = kept.saturating_add(1);
+        }
+        for (position, index) in retention.active_backing_indices.iter_mut().enumerate() {
+            *index = u8::try_from(position).unwrap_or(u8::MAX);
+        }
+        self.held = kept;
+        self.active_count = kept;
+        Ok(kept)
     }
 
     /// Release the detached chain and hand every retained lease to
@@ -1012,6 +1144,138 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         ))
     }
 
+    /// Retain `backing` at the next position once `write` accepts it, and
+    /// bind its descriptor image at once: `write` receives the backing's
+    /// whole region and names the descriptor's buffer in it
+    /// ([`WrittenBuffer`]) with a record `T` that `commit` takes once every
+    /// check of the owner passed, the last fallible step before the lease
+    /// is retained; both borrow the caller's `context` in turn. Every later
+    /// publication relinks that image without sampling the region again. A
+    /// refusal, by `write`, `commit` or the owner, returns the backing as
+    /// `write` left it and retains nothing.
+    pub fn push_written<C, T, R>(
+        &mut self,
+        mut backing: B,
+        context: &mut C,
+        write: impl FnOnce(&mut C, &mut [u8]) -> Result<(WrittenBuffer, T), R>,
+        commit: impl FnOnce(&mut C, T) -> Result<(), R>,
+    ) -> Result<(), (B, PushRefused<R>)> {
+        let index = match self.vacant_position() {
+            Ok(index) => index,
+            Err(error) => return Err((backing, PushRefused::Storage(error))),
+        };
+        let Ok(dma_region) = backing.dma_region() else {
+            return Err((backing, PushRefused::Storage(AmpduDmaStorageError::Address)));
+        };
+        let bytes = backing.stable_dma_region().into_mut_slice();
+        let (address, len) = (bytes.as_ptr().addr(), bytes.len());
+        let (written, record) = match write(context, bytes) {
+            Ok(written) => written,
+            Err(refused) => return Err((backing, PushRefused::Written(refused))),
+        };
+        let identity = RetainedDmaBackingIdentity {
+            generation: 0,
+            address,
+            len,
+            dma_region,
+        };
+        let descriptor = match bound_descriptor(identity, written) {
+            Ok(descriptor) => descriptor,
+            Err(error) => return Err((backing, PushRefused::Storage(error))),
+        };
+        let generation = match self.next_lease_generation() {
+            Ok(generation) => generation,
+            Err(error) => return Err((backing, PushRefused::Storage(error))),
+        };
+        let Some(retention) = self.retention.as_deref_mut() else {
+            return Err((backing, PushRefused::Storage(AmpduDmaStorageError::Retired)));
+        };
+        let Some(slot) = retention.backings.get_mut(index) else {
+            return Err((backing, PushRefused::Storage(AmpduDmaStorageError::Count)));
+        };
+        if let Err(refused) = commit(context, record) {
+            return Err((backing, PushRefused::Written(refused)));
+        }
+        *slot = Some(ManuallyDrop::new(backing));
+        // `vacant_position` found all three places of `index` empty.
+        if let Some(slot) = retention.backing_identities.get_mut(index) {
+            *slot = Some(RetainedDmaBackingIdentity {
+                generation,
+                ..identity
+            });
+        }
+        if let Some(slot) = retention.backing_descriptors.get_mut(index) {
+            *slot = Some(descriptor);
+        }
+        if let Some(slot) = retention.active_backing_indices.get_mut(index) {
+            *slot = u8::try_from(index).unwrap_or(u8::MAX);
+        }
+        self.held = index.saturating_add(1);
+        self.active_count = self.held;
+        Ok(())
+    }
+
+    /// The next position of a reserved chain whose leases sit at their own
+    /// positions, when its three places are empty.
+    fn vacant_position(&self) -> Result<usize, AmpduDmaStorageError> {
+        if self.state() != AmpduDmaState::Reserved {
+            return Err(AmpduDmaStorageError::State);
+        }
+        let index = self.held;
+        if index >= SLOTS || index != self.active_count {
+            return Err(AmpduDmaStorageError::Count);
+        }
+        self.dma()?
+            .binding
+            .descriptor(index)
+            .ok_or(AmpduDmaStorageError::Address)?;
+        let retention = self.retention()?;
+        let vacant = retention.backings.get(index).is_some_and(Option::is_none)
+            && retention
+                .backing_identities
+                .get(index)
+                .is_some_and(Option::is_none)
+            && retention
+                .backing_descriptors
+                .get(index)
+                .is_some_and(Option::is_none);
+        if !vacant {
+            return Err(AmpduDmaStorageError::StaleBacking);
+        }
+        Ok(index)
+    }
+
+    /// The whole region of the lease at logical `position` while software
+    /// owns the chain: reserved or detached.
+    pub fn software_region_mut(
+        &mut self,
+        position: usize,
+    ) -> Result<&mut [u8], AmpduDmaStorageError> {
+        if !matches!(
+            self.state(),
+            AmpduDmaState::Reserved | AmpduDmaState::Detached
+        ) {
+            return Err(AmpduDmaStorageError::State);
+        }
+        if position >= self.active_count {
+            return Err(AmpduDmaStorageError::Count);
+        }
+        let retention = self.retention_mut()?;
+        let index = usize::from(
+            *retention
+                .active_backing_indices
+                .get(position)
+                .ok_or(AmpduDmaStorageError::Count)?,
+        );
+        Ok(retention
+            .backings
+            .get_mut(index)
+            .and_then(Option::as_mut)
+            .ok_or(AmpduDmaStorageError::StaleBacking)?
+            .stable_dma_region()
+            .into_mut_slice())
+    }
+
     /// Borrow a detached range through its retained identity in O(1).
     pub fn detached_backing_region_mut(
         &mut self,
@@ -1281,7 +1545,9 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         })
     }
 
-    /// Publish descriptor images previously bound to current retained leases.
+    /// Publish the descriptor images bound to the first `count` retained
+    /// leases in logical order; any lease after them stays retained,
+    /// unpublished, until the chain's release or retention.
     pub fn publish_retained_chain(
         &mut self,
         count: usize,
@@ -1292,7 +1558,7 @@ impl<'retention, B: PlacedBacking, const SLOTS: usize, const BUFFER_SIZE: usize>
         if self.state() != AmpduDmaState::Reserved {
             return Err(AmpduDmaStorageError::State);
         }
-        if count == 0 || count > SLOTS || count != self.active_count {
+        if count == 0 || count > SLOTS || count > self.active_count {
             return Err(AmpduDmaStorageError::Count);
         }
 
@@ -1378,6 +1644,52 @@ impl<B, const SLOTS: usize, const BUFFER_SIZE: usize> Drop
             self.drop_backings();
         }
     }
+}
+
+/// The descriptor buffer a [`RetainedAmpduDma::push_written`] writer names
+/// in the region it received: `capacity` bytes from `offset`, of which the
+/// DMA reads `transfer_length`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WrittenBuffer {
+    pub offset: usize,
+    pub capacity: u32,
+    pub transfer_length: u32,
+}
+
+/// Why [`RetainedAmpduDma::push_written`] returned its backing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PushRefused<R> {
+    /// The owner refused the backing or the buffer its writer named.
+    Storage(AmpduDmaStorageError),
+    /// The writer refused.
+    Written(R),
+}
+
+/// The descriptor image of `written` inside the region `identity` names.
+fn bound_descriptor(
+    identity: RetainedDmaBackingIdentity,
+    written: WrittenBuffer,
+) -> Result<RetainedDmaDescriptor, AmpduDmaStorageError> {
+    let WrittenBuffer {
+        offset,
+        capacity,
+        transfer_length,
+    } = written;
+    if capacity == 0 || transfer_length == 0 || transfer_length > capacity {
+        return Err(AmpduDmaStorageError::InvalidLength);
+    }
+    let end = usize::try_from(capacity)
+        .ok()
+        .and_then(|capacity| offset.checked_add(capacity))
+        .ok_or(AmpduDmaStorageError::Address)?;
+    if end > identity.len {
+        return Err(AmpduDmaStorageError::Address);
+    }
+    Ok(RetainedDmaDescriptor {
+        buffer_address: external_dma_address(identity, offset)?,
+        word0: tx_owned_word(capacity, transfer_length)
+            .ok_or(AmpduDmaStorageError::InvalidLength)?,
+    })
 }
 
 /// The DMA address `offset` bytes into a retained region. The region is a

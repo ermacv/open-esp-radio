@@ -1,6 +1,5 @@
 //! Allocation-free A-MPDU byte accounting recovered from the PP formatter.
 
-#[cfg(any(test, feature = "test-support"))]
 use core::pin::Pin;
 
 use super::{HtAmpduTxError, HtAmpduTxStorage, block_ack::TX_AMPDU_SLOT_CAPACITY};
@@ -243,20 +242,21 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
             .map_err(|_| HtAmpduTxError::Length(HtAmpduLengthError::AggregateTooLong(next)))
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn recalculate_prepared_length(
         self: Pin<&mut Self>,
     ) -> Result<HtAmpduLength, HtAmpduTxError> {
         let storage = self.as_ref().get_ref();
         let mut length = HtAmpduLengthAccumulator::new(storage.count, storage.max_aggregate_bytes)
             .map_err(HtAmpduTxError::Length)?;
-        for index in 0..usize::from(storage.count) {
+        for ((psdu, delimiters), he_control) in storage
+            .psdu_lengths
+            .iter()
+            .zip(&storage.empty_delimiters)
+            .zip(&storage.hardware_he_control)
+            .take(usize::from(storage.count))
+        {
             length
-                .push_with_hardware_he_control(
-                    u32::from(storage.psdu_lengths[index]),
-                    storage.empty_delimiters[index],
-                    storage.hardware_he_control[index],
-                )
+                .push_with_hardware_he_control(u32::from(*psdu), *delimiters, *he_control)
                 .map_err(HtAmpduTxError::Length)?;
         }
         let aggregate = length.finish().map_err(HtAmpduTxError::Length)?;

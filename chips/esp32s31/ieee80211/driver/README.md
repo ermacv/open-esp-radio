@@ -316,6 +316,26 @@ the DMA allocations quarantined. RX buffers require explicit recycling.
 GTK changes freeze ingress and drain preceding RX before returning their
 permission. An erased key cannot authorize a returned MPDU's retransmission.
 
+`lower_mac::arena` implements the port's `TxArena` over the same two
+chains (`Esp32s31TxArena`, built from the chains and two tickets;
+`ArenaPort` lends it the core, hardware, free queues, pairwise key, sink and
+contention observer for one step); the composition does not use it yet.
+Intake moves the network's buffer into the chain's next retention slot,
+hands the writer the region after the eight-byte prefix and binds the
+descriptor word once, its MIC room from the MPDU's Protected bit; every
+publication, a retry included, relinks the bound words. Publication refuses
+a Protected bit the encryption contradicts and an A-MPDU past its rate's
+octet ceiling or the chain's slots, admits the pairwise key for an
+encrypted arena and programs an HT/HE A-MPDU of every frame or position 0
+alone as a legacy, HT or HE single MPDU. Completion maps a valid BlockAck,
+an ACK, an ACK or CTS timeout, a collision detach and a timeout abort onto
+`AttemptEnd`; a collision or abort detach keeps every buffer. Retention
+returns the frames not kept in position order, compacts the kept ones with
+their bound words and sets the Retry bit only on kept frames the
+publication sent. The key right stays with the arena until no frame it
+encrypted is published or retained. Its one deadline is the publication
+watchdog.
+
 The port exposes ordinary MPDUs, aggregates (`AmpduPhase` of both
 interfaces) and RX BlockAck agreements. It does not expose the optional
 beacon-timing, monitor or air-reservation phases.

@@ -4,7 +4,8 @@
 //! holds one affine [`Arena`] right per arena: with it the caller fills the
 //! arena frame by frame ([`TxArena::intake`]), each frame written once into
 //! the memory the caller hands over, then publishes the arena as one PPDU
-//! ([`TxArena::publish`]), a single MPDU or an A-MPDU. Publication moves the
+//! ([`TxArena::publish`]): an A-MPDU of every frame, or a single MPDU of the
+//! frame at position 0 while the others wait in the arena. Publication moves the
 //! right into the backend; one arena is on the air at a time while the other
 //! is filled. [`TxArena::service`] reports the arena's end as an affine
 //! [`ArenaCompleted`], which carries the right back, and only consuming it
@@ -15,7 +16,9 @@
 //! position and [`FrameMask`] a set of them, bit `i` for position `i`.
 //! Retaining keeps the selected frames in their arena in their relative
 //! order, compacted to positions `0..k`, and returns every other memory in
-//! position order; releasing returns every memory in position order.
+//! position order; releasing returns every memory in position order. A
+//! caller drains an arena as single MPDUs by keeping every position but 0
+//! after each.
 //! Sequence numbers, packet numbers, BlockAck windows, ageing and the retry
 //! policy belong to the caller, which writes each frame's header at intake;
 //! descriptors, the Retry bit of a retransmission, the MAC program and
@@ -255,7 +258,9 @@ impl Arena {
 
 /// How an arena goes on the air, at a rate the phase checked.
 pub enum ArenaFormat<'p, 'id, K> {
-    /// One MPDU that solicits an ACK; the arena holds exactly one frame.
+    /// One MPDU that solicits an ACK: the frame at position 0, under the
+    /// port's ordinary single-MPDU retry plan. The arena's other frames stay
+    /// unsent in it, and its completion reports every frame it holds.
     Single(PhaseRate<'p, 'id, K>),
     /// An A-MPDU that solicits a BlockAck.
     Aggregate {
@@ -346,12 +351,16 @@ pub enum IntakeRefused {
 pub enum PublishRefused {
     /// The arena holds no frame.
     Empty,
-    /// A single-MPDU publication of an arena with more than one frame.
-    NotSingle,
     /// The other arena is on the air, or this one is not idle.
     Busy,
     /// Encryption without an installed pairwise key.
     NoKey,
+    /// A frame the publication sends carries a Protected bit its
+    /// encryption contradicts.
+    Protection,
+    /// The A-MPDU exceeds the backend's hardware octet or subframe limit at
+    /// its rate; the backend checks it, never trusting the caller.
+    Length,
 }
 
 /// A failed publication.
@@ -532,8 +541,10 @@ impl Settlement {
         self.keep
     }
 
-    /// Whether a kept frame may have reached the air: the backend sets its
-    /// Retry bit before it goes again.
+    /// Whether the publication may have reached a receiver: the backend
+    /// sets the Retry bit of each kept frame it sent (every frame of an
+    /// A-MPDU, position 0 of a single MPDU) before it goes again; a kept
+    /// frame the publication did not send keeps its header.
     pub const fn retransmission(&self) -> bool {
         self.retransmission
     }

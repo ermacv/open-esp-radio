@@ -35,9 +35,13 @@ pub enum Case {
     ReleaseOrder,
     /// Withdrawal returns an unpublished arena's memories in order.
     Withdraw,
-    /// Empty, multi-frame single and concurrent publications are refused
-    /// with the publication returned.
+    /// Empty and concurrent publications are refused with the publication
+    /// returned.
     PublishRefusals,
+    /// A single MPDU sends only position 0 and completes with every frame:
+    /// keeping the others drains the arena one MPDU at a time, a kept frame
+    /// that did not go without its Retry bit.
+    SingleDrain,
     /// A protection failure republishes without the Retry bit, a missing
     /// response with it.
     ProtectionRepublish,
@@ -47,12 +51,13 @@ pub enum Case {
 
 impl Case {
     /// Every arena case, in suite order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::IntakeUntilFull,
         Self::PartialBlockAck,
         Self::ReleaseOrder,
         Self::Withdraw,
         Self::PublishRefusals,
+        Self::SingleDrain,
         Self::ProtectionRepublish,
         Self::Fault,
     ];
@@ -466,8 +471,6 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             let first = refuse(fixture, empty, PublishRefused::Empty)?;
             if capacity >= 2 {
                 fill(fixture, &first, &[60, 61])?;
-                let single = fixture.single(first);
-                let first = refuse(fixture, single, PublishRefused::NotSingle)?;
                 fill(fixture, &second, &[62])?;
                 let aggregate = fixture.aggregate(first);
                 publish(fixture, aggregate)?;
@@ -489,6 +492,38 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
                 withdraw(fixture, &first, &[])?;
                 withdraw(fixture, &second, &[])
             }
+        }
+        Case::SingleDrain => {
+            let frames = capacity.min(3);
+            let sent = Tags::range(80, frames);
+            fill(fixture, &first, sent.get())?;
+            let mut arena = first;
+            for (at, &tag) in (0_u8..).zip(sent.get()) {
+                let single = fixture.single(arena);
+                publish(fixture, single)?;
+                expect_published(fixture, &[tag], false, false)?;
+                fixture.answer(Answer::Ack);
+                let remaining = frames.saturating_sub(at);
+                let done = serve(fixture, ArenaId::First, remaining)?;
+                if !matches!(done.end(), AttemptEnd::Acked { .. }) {
+                    return Err(Violation::Completion);
+                }
+                let rest = FrameMask::first(remaining)
+                    .zip(FrameMask::first(1))
+                    .map(|(all, head)| all.difference(head))
+                    .ok_or(Violation::Fixture)?;
+                let mut returned = Returned::new();
+                arena = fixture
+                    .port()
+                    .retain(done, rest, |memory| returned.push(F::tag(&memory)))
+                    .map_err(|_| Violation::Fault)?;
+                returned.expect(&[tag])?;
+                if fixture.port().len(arena.id()) != rest.count() {
+                    return Err(Violation::Owners);
+                }
+            }
+            withdraw(fixture, &arena, &[])?;
+            withdraw(fixture, &second, &[])
         }
         Case::ProtectionRepublish => {
             let frames = capacity.min(3);

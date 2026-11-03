@@ -335,13 +335,17 @@ its type, and lists the world's outcomes that stay. Compile-fail tests in
 arenas of DMA slots (`ArenaId`), the caller one affine `Arena` right per
 arena. The caller fills an arena frame by frame (`intake`, which writes the
 MPDU once into the memory the caller hands over and names its `FrameIndex`)
-and publishes it as one single MPDU or A-MPDU (`ArenaPublication`: format
+and publishes it as one A-MPDU of every frame or one single MPDU of the frame
+at position 0, the others staying unsent in the arena (`ArenaPublication`: format
 and phase-checked rate, access category, RTS/CTS protection, encryption
-under the installed pairwise key, power). Publication moves the right into
+under the installed pairwise key, power). The backend refuses a frame to
+send whose Protected bit the encryption contradicts and an A-MPDU past its
+hardware octet or subframe limit. Publication moves the right into
 the backend; one arena is on the air at a time. `service` reports the end
 (`AttemptEnd`) as an affine `ArenaCompleted`; only `retain` (keep a
 `FrameMask` of frames, compacted in order, the Retry bit set when a frame
-may have reached the air) or `release` consume it and return the right, so
+may have reached the air, on the frames the publication sent) or `release`
+consume it and return the right, so
 a completed arena is settled before it is filled or published again. Every
 returned memory comes back in position order. Sequence and packet numbers,
 BlockAck windows, ageing and the retry policy stay with the caller.

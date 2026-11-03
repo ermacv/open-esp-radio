@@ -201,6 +201,7 @@ use oer_protocols_ieee80211_wire::{
 };
 
 pub mod ampdu;
+pub mod arena;
 pub mod association;
 mod resources;
 pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
@@ -1631,8 +1632,6 @@ where
             return Err(AmpduRefusal::GroupRecipient);
         }
 
-        let queue = common.queue;
-        let ceiling = common.single.power_ceiling_dbm;
         let density = HtAmpduDensity::from_ampdu_parameters((min_mpdu_start_spacing & 0x07) << 2);
         let mic_and_fcs = common.hardware_mic_length + TX_FCS_SIZE;
         // HT: the rate's ceiling and the declared maximum; the access
@@ -1643,9 +1642,22 @@ where
         for psdu in buffer.lengths().map(|len| len + mic_and_fcs) {
             budget.push(psdu)?;
         }
+        self.ampdu_program(common, min_mpdu_start_spacing, budget.he_policy())
+    }
+
+    /// The program of an aggregate of `common`'s values whose length a
+    /// budget checked, with the HE policy that budget follows.
+    fn ampdu_program(
+        &self,
+        common: CommonAdmission,
+        min_mpdu_start_spacing: u8,
+        he: Option<crate::mac::tx::ampdu::HeAmpduPolicy>,
+    ) -> Result<ampdu::AmpduSettings, AmpduRefusal> {
+        let queue = common.queue;
+        let ceiling = common.single.power_ceiling_dbm;
         let (power_code, format) = match common.rate {
             TxPhyRate::Ht(rate) => (rate.power_lookup_code(), None),
-            TxPhyRate::He(rate) => (rate.power_lookup_code(), budget.he_policy()),
+            TxPhyRate::He(rate) => (rate.power_lookup_code(), he),
             TxPhyRate::Legacy(_) => return Err(AmpduRefusal::LegacyRate),
         };
         let data_power = self.tx.single_attempt_power_pair(power_code, ceiling);
@@ -2244,6 +2256,194 @@ where
         Ok(uses.admit(key, ticket))
     }
 
+    /// The program of an arena's A-MPDU of `values`, admitted under
+    /// `admission`, whose length its budget checked
+    /// ([`Self::arena_budget`]).
+    pub(in crate::lower_mac) fn arena_aggregate(
+        &self,
+        values: ArenaValues,
+        admission: &TxAdmission<'core, Path>,
+        min_mpdu_start_spacing: u8,
+        he: Option<crate::mac::tx::ampdu::HeAmpduPolicy>,
+    ) -> Result<ampdu::AmpduSettings, AmpduRefusal> {
+        let common = self.arena_common(values, admission);
+        self.ampdu_program(common, min_mpdu_start_spacing, he)
+    }
+
+    /// The length rule of an arena's A-MPDU of `values` up to `slots`
+    /// subframes: the rate's ceiling, and for HE the access category's
+    /// installed TXOP limit at the recipient's spacing.
+    pub(in crate::lower_mac) fn arena_budget(
+        &self,
+        values: ArenaValues,
+        min_mpdu_start_spacing: u8,
+        slots: usize,
+    ) -> Result<ampdu::AmpduBudget, AmpduRefusal> {
+        let queue = LegacyTxQueue::from_access_category(values.access_category);
+        let txop = self
+            .tx
+            .policy()
+            .access_policy(values.role, queue)
+            .txop_limit_units_32_us();
+        let density = HtAmpduDensity::from_ampdu_parameters((min_mpdu_start_spacing & 0x07) << 2);
+        ampdu::AmpduBudget::new(values.rate, txop, density, slots)
+    }
+
+    /// The program of an arena's single MPDU of `values`, `mpdu_length`
+    /// octets with a hardware MIC of `hardware_mic_length`, admitted under
+    /// `admission`: what the ordinary transmitter programs for an MPDU at
+    /// that rate.
+    pub(in crate::lower_mac) fn arena_single(
+        &self,
+        values: ArenaValues,
+        admission: &TxAdmission<'core, Path>,
+        mpdu_length: u16,
+        hardware_mic_length: u8,
+        individual: bool,
+    ) -> Result<crate::mac::tx::ampdu::SingleTxConfig, AmpduRefusal> {
+        let common = self.arena_common(values, admission);
+        let queue = common.queue;
+        let ceiling = common.single.power_ceiling_dbm;
+        let policy = self.tx.policy();
+        let aifsn = policy.contention_parameters(common.role, queue).aifsn();
+        let control =
+            self.tx
+                .single_attempt_control_frame(common.rate, common.single.protection, ceiling);
+        let interface = mac_interface(common.role);
+        let scheduler_priority = queue.vendor_data_scheduler_priority();
+        let packet_priority = queue.vendor_data_packet_priority();
+        let with_mic = mpdu_length
+            .checked_add(u16::from(hardware_mic_length))
+            .ok_or(AmpduRefusal::Length)?;
+        Ok(match common.rate {
+            TxPhyRate::Legacy(rate) => {
+                let signal = with_mic
+                    .checked_add(TX_FCS_SIZE as u16)
+                    .ok_or(AmpduRefusal::Length)?;
+                let mut config = crate::mac::tx::LegacyTxConfig::management(rate, signal);
+                config.control = control;
+                config.data_power = self
+                    .tx
+                    .single_attempt_power_pair(rate.code(), ceiling)
+                    .primary as u8;
+                config.aifsn = aifsn;
+                config.contention_window = common.single.backoff_slots;
+                config.scheduler_priority = scheduler_priority;
+                config.pti = packet_priority;
+                config.pti_count = 1;
+                config.response = if individual {
+                    oer_chips_esp32s31_hal::types::MacLegacyTxResponse::Ack
+                } else {
+                    oer_chips_esp32s31_hal::types::MacLegacyTxResponse::None
+                };
+                config.hardware_key_selector = common.hardware_key_selector;
+                config.interface = interface;
+                crate::mac::tx::ampdu::SingleTxConfig::Legacy(config)
+            }
+            TxPhyRate::Ht(rate) => {
+                let mut config =
+                    crate::mac::tx::HtTxConfig::single_mpdu(rate, mpdu_length, hardware_mic_length)
+                        .ok_or(AmpduRefusal::Length)?;
+                let power = self
+                    .tx
+                    .single_attempt_power_pair(rate.power_lookup_code(), ceiling);
+                config.data_power_primary = power.primary as u8;
+                config.data_power_alternate = power.alternate as u8;
+                config.control = control;
+                config.protection_spacing = policy.ht_ampdu().protection_spacing();
+                config.aifsn = aifsn;
+                config.contention_window = common.single.backoff_slots;
+                config.scheduler_priority = scheduler_priority;
+                config.pti = packet_priority;
+                config.pti_count = 1;
+                config.hardware_key_selector = common.hardware_key_selector;
+                config.interface = interface;
+                crate::mac::tx::ampdu::SingleTxConfig::Ht(config)
+            }
+            TxPhyRate::He(rate) => {
+                let mut config =
+                    crate::mac::tx::HeSmpduTxConfig::new(rate, policy.he_bss_color(), with_mic)
+                        .ok_or(AmpduRefusal::Length)?;
+                let power = self
+                    .tx
+                    .single_attempt_power_pair(rate.power_lookup_code(), ceiling);
+                config.data_power_primary = power.primary as u8;
+                config.data_power_alternate = power.alternate as u8;
+                config.control = control;
+                config.aifsn = aifsn;
+                config.contention_window = common.single.backoff_slots;
+                config.scheduler_priority = scheduler_priority;
+                config.pti = packet_priority;
+                config.pti_count = 1;
+                config.hardware_key_selector = common.hardware_key_selector;
+                config.interface = interface;
+                crate::mac::tx::ampdu::SingleTxConfig::He(config)
+            }
+        })
+    }
+
+    fn arena_common(
+        &self,
+        values: ArenaValues,
+        admission: &TxAdmission<'core, Path>,
+    ) -> CommonAdmission {
+        self.plan_common(
+            values.access_category,
+            values.role,
+            values.rate,
+            values.protection,
+            admission,
+            values.power_ceiling_dbm,
+            values.backoff_slots,
+        )
+    }
+
+    /// Return an arena's key right once no frame it admitted is published
+    /// or retained: its ticket comes back, and a removal waiting for the
+    /// last use finishes, reported to `sink`.
+    pub(in crate::lower_mac) fn release_arena_key<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    >(
+        &mut self,
+        hardware: &mut H,
+        key: KeyUse<'core, Path>,
+        sink: &mut K,
+    ) -> TxTicket<'core, Path> {
+        let (index, ticket) = self.release_key(key);
+        self.finish_key_removal(hardware, index, sink);
+        ticket
+    }
+
+    /// Begin serving a published arena on the hardware queue `index`:
+    /// whether its timeout abort may begin, no other abort forcing CCA.
+    pub(in crate::lower_mac) fn begin_arena_service(&mut self, index: usize) -> bool {
+        let bit = 1_u8.checked_shl(index as u32).unwrap_or(0);
+        self.ampdu_settling &= !bit;
+        !self.abort_settling()
+    }
+
+    /// End serving a published arena on the hardware queue `index`, its
+    /// timeout abort `settling` or not.
+    pub(in crate::lower_mac) fn end_arena_service(&mut self, index: usize, settling: bool) {
+        let bit = 1_u8.checked_shl(index as u32).unwrap_or(0);
+        if settling {
+            self.ampdu_settling |= bit;
+        } else {
+            self.ampdu_settling &= !bit;
+        }
+    }
+
+    /// The configured publication watchdog.
+    pub(in crate::lower_mac) const fn publication_timeout(&self) -> oer_portable_time::Duration {
+        self.config.publication_timeout
+    }
+
+    /// The fault that poisoned the core.
+    pub(in crate::lower_mac) const fn fault(&self) -> Option<LowerMacFault> {
+        self.fault
+    }
+
     /// Consume the sole installed handle at removal's FIFO position. The
     /// programmed material stays until the last admitted use returns. No
     /// further right can be obtained from the moved handle.
@@ -2739,6 +2939,20 @@ pub struct AmpduValues {
     /// HE aggregate's program carries: the value its subframes were
     /// admitted under.
     pub txop_limit_units_32_us: u16,
+}
+
+/// The values of one arena publication a caller's types guarantee, as
+/// [`AmpduValues`] are an aggregate's: `role` configured, the power and
+/// backoff within the capabilities.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArenaValues {
+    pub role: VifRole,
+    pub access_category: WmmAccessCategory,
+    pub rate: TxPhyRate,
+    pub protection: Protection,
+    pub power_ceiling_dbm: Option<i8>,
+    /// The backoff selected for this publication, in slots.
+    pub backoff_slots: u16,
 }
 
 /// A refused aggregate plan returns its admission without publishing.

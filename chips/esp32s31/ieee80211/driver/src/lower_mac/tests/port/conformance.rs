@@ -6,6 +6,7 @@
 use super::*;
 use oer_protocols_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
 
+mod arena;
 mod barrier;
 mod edca;
 mod group_keys;
