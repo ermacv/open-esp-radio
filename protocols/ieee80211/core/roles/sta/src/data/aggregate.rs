@@ -10,7 +10,7 @@ use super::DataProtection;
 /// The most subframes one data aggregate holds: the width of the port's
 /// subframe masks.
 pub const MAX_AGGREGATE: usize =
-    oer_protocols_ieee80211_contracts_port::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
+    oer_protocols_ieee80211_contracts_port::arena::AMPDU_SUBFRAME_MASK_BITS;
 
 /// The most one aggregate takes: subframes, and octets with delimiters and
 /// padding. The octet bound holds the length limits and the rate's PPDU

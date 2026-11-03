@@ -36,13 +36,15 @@
 //! }
 //! ```
 
-use crate::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
 use crate::{
     Air, AmpduRate, BlockAckReport, Ieee80211Capabilities, MpduProtection, MpduStartSpacing,
     PhaseRate, PhyRate, Protection, RetryPlan, SupportedPower,
 };
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+
+/// Number of frame positions carried by the port's `u32` retry/aging masks.
+pub const AMPDU_SUBFRAME_MASK_BITS: usize = u32::BITS as usize;
 
 /// Frame positions of one arena: the width of the port's A-MPDU subframe
 /// masks, at most the 64 positions of [`FrameMask`].

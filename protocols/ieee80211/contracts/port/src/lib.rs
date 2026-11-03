@@ -211,6 +211,4 @@ pub use monitor::{
 
 pub mod backend;
 
-pub mod backend_aggregate;
-
 pub use phase::NumberedKey;

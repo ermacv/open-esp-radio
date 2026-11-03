@@ -438,9 +438,7 @@ stage's `Protection` value. EDCA backoff and MSDU age remain backend work.
 
 `backend` carries the values a backend shares with the family policy and
 the retry owner: a rate-schedule record's format family (`RateScheduleKind`)
-and a frame's retry counters (`RetryCounters`). `backend_aggregate` carries
-detached BlockAck facts, the aggregate retry decision a backend executes and
-the trait through which it asks the core's retry owner. A chip's
+and a frame's retry counters (`RetryCounters`). A chip's
 contention, transmit-cost model and publication work are its own, as the
 S31 MAC's `edca::contention`, `tx_cost` and `tx_work`; its direct ordinary
 path takes a `MacTxPlan` from the S31 driver's `ordinary_tx`.
