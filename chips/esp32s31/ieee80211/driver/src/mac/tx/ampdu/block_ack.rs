@@ -29,7 +29,7 @@ pub const TX_BLOCK_ACK_MAX_WINDOW: u16 = {
 /// subframe masks. An aggregate is no wider than the BlockAck window, which
 /// may hold more than one aggregate.
 pub const TX_AMPDU_SLOT_CAPACITY: usize =
-    oer_protocols_ieee80211_contracts_port::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
+    oer_protocols_ieee80211_contracts_port::arena::AMPDU_SUBFRAME_MASK_BITS;
 
 const _: () = {
     if TX_AMPDU_SLOT_CAPACITY > TX_BLOCK_ACK_MAX_WINDOW as usize {

@@ -1,7 +1,5 @@
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{
-    AggregateAttempt, LayoutError, MpduStartSpacing, PoolSource,
-};
+use oer_protocols_ieee80211_contracts_port::{LayoutError, PoolSource};
 // The fixture classifies port refusals; no station transition is involved.
 #[derive(Debug, Eq, PartialEq)]
 enum TxRefusal {
@@ -234,9 +232,7 @@ impl Drop for ChangingBody {
     }
 }
 
-struct BodyView {
-    aggregate: bool,
-}
+struct BodyView;
 impl Work for BodyView {
     async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         self,
@@ -256,32 +252,7 @@ impl Work for BodyView {
                 drops: drops.clone(),
                 later_length,
             });
-            let (returned, body, layout) = if self.aggregate {
-                let rate = aggregate_rate(phase);
-                let aggregate = phase.station().aggregate(
-                    IndividualAddress::new(ACCESS_POINT).unwrap(),
-                    Tid::new(5).unwrap(),
-                    rate,
-                    TxProtection::Open,
-                );
-                let source: SubframeSource<_, (), _, _> = SubframeSource::Fresh {
-                    numbering: oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
-                    buffer,
-                    frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
-                        .ok()
-                        .unwrap(),
-                    body,
-                };
-                let checked = CheckedAggregate::new(aggregate, source).ok().unwrap();
-                let (aggregate, source) = checked.into_parts();
-                let oer_protocols_ieee80211_contracts_port::CheckedSubframe::Fresh(source) = source
-                else {
-                    panic!("fresh subframe stays fresh before backend preparation");
-                };
-                let (source, layout) = source.into_parts();
-                assert!(aggregate.into_parts().is_empty());
-                (source.buffer, source.body, layout)
-            } else {
+            let (returned, body, layout) = {
                 let source: TxSource<_, (), _, _, (), _> = TxSource::Fresh {
                     buffer,
                     frame: frame(phase, 40, false),
@@ -315,27 +286,9 @@ impl Work for BodyView {
 #[test]
 fn a_single_source_copies_exactly_the_body_view_whose_length_it_checked() {
     let (backend, _) = backend();
-    let _port_end = block_on(run_model(backend, Body(BodyView { aggregate: false })));
+    let _port_end = block_on(run_model(backend, Body(BodyView)));
 }
 
-#[test]
-fn an_aggregate_copies_exactly_the_body_view_whose_length_it_checked() {
-    let (backend, _) = backend();
-    let _port_end = block_on(run_model(backend, Body(BodyView { aggregate: true })));
-}
-
-fn aggregate_rate<'p, 'id: 'p, Id: SlotIdentity + 'id>(
-    phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-) -> AmpduRate<'p, 'id, ModelCaps> {
-    let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
-        HtMcs::new(7).unwrap(),
-        oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-        false,
-    )
-    .unwrap();
-    let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
-    phase.station().ampdu_rate(rate).ok().unwrap()
-}
 struct RetryIdentity;
 impl Work for RetryIdentity {
     async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
@@ -450,31 +403,6 @@ impl Work for RetryIdentity {
         assert_eq!(mpdu.body().unwrap().0.as_ptr(), body_pointer);
         assert_eq!(replacement.last(), 0);
         assert!(phase.held.events.is_empty());
-        // The builder also refuses the retained installation, even when a slot
-        // has been reinstalled with identical material. The whole Sent returns.
-        let rate = aggregate_rate(phase);
-        let aggregate = phase.station().aggregate(
-            IndividualAddress::new(PEER).unwrap(),
-            Tid::new(0).unwrap(),
-            rate,
-            TxProtection::Ccmp(&replacement),
-        );
-        let refused = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(
-            CheckedAggregate::new(aggregate, SubframeSource::Sent(mpdu))
-                .ok()
-                .unwrap(),
-        )
-        .err()
-        .unwrap();
-        assert_eq!(refused.reason, PreparationError::RetransmissionKey);
-        assert_eq!(refused.aggregate.subframes(), 0);
-        let SubframeSource::Sent(mpdu) = refused.subframe else {
-            unreachable!()
-        };
-        assert_eq!(mpdu.packet_number(), pn);
-        assert_eq!(mpdu.body().unwrap().0.as_ptr(), body_pointer);
-        assert_eq!(&mpdu.buffer.memory[..40], expected.as_slice());
-        assert_eq!(replacement.last(), 0);
         let _ticket = ticket;
         assert!(phase.held.events.is_empty());
     }
@@ -483,161 +411,6 @@ impl Work for RetryIdentity {
 fn retry_owns_its_mpdu_and_body_allows_a_new_rate_and_refuses_a_reinstalled_key() {
     let (backend, _) = backend();
     let _port_end = block_on(run_model(backend, Body(RetryIdentity)));
-}
-
-struct AggregateBoundaries;
-impl Work for AggregateBoundaries {
-    async fn work<'p, 'id: 'p, Id: SlotIdentity + 'id>(
-        self,
-        phase: &mut ModelPhase<'p, 'id, ModelCaps, ModelBackend<Id>>,
-        resources: ModelResources<'id, ModelBackend<Id>>,
-    ) {
-        let station_association = ModelKeys::<ModelBackend<Id>, Station>::begin_association(
-            resources.station_association,
-            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
-        );
-
-        let mut terminal_access = resources.terminal_access;
-        let ModelResources {
-            mut tickets,
-            mut small,
-            station_pairwise: [slot, _],
-            ..
-        } = resources;
-        let key = installed_station_pairwise(
-            phase,
-            &station_association,
-            slot,
-            IndividualAddress::new(PEER).unwrap(),
-            Ccmp128Key::new(&[7; 16]),
-        )
-        .await
-        .expect("the PTK installation terminal")
-        .into_core_key();
-        let rate = aggregate_rate(phase);
-        let receiver = IndividualAddress::new(ACCESS_POINT).unwrap();
-        let tid = Tid::new(5).unwrap();
-        for protected in [false, true] {
-            let protection = if protected {
-                TxProtection::Ccmp(&key.backend)
-            } else {
-                TxProtection::Open
-            };
-            let aggregate = phase.station().aggregate(receiver, tid, rate, protection);
-            let mut buffer = small.remove(0);
-            buffer.memory.fill(0xa5);
-            let pointer = buffer.memory.as_ptr();
-            let body = ModelBody(alloc::vec![0x99;16]);
-            let body_pointer = body.0.as_ptr();
-            let numbering = if protected {
-                oer_protocols_ieee80211_contracts_port::TxNumbering::Open
-            } else {
-                oer_protocols_ieee80211_contracts_port::TxNumbering::Ccmp(
-                    oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(55).unwrap(),
-                )
-            };
-            let source: ModelSubframe<'id, ModelBackend<Id>, ModelSmall, ModelCaps> =
-                SubframeSource::Fresh {
-                    numbering,
-                    buffer,
-                    frame: ClassSubframe::new(subframe_frame(0)).ok().unwrap(),
-                    body: Some(body),
-                };
-            let refused = CheckedAggregate::new(aggregate, source).err().unwrap();
-            assert_eq!(refused.reason, LayoutError::NumberingProtectionMismatch);
-            let (aggregate, SubframeSource::Fresh { buffer, body, .. }) = refused.operation else {
-                unreachable!()
-            };
-            assert_eq!(aggregate.subframes(), 0);
-            assert_eq!(buffer.memory.as_ptr(), pointer);
-            assert!(buffer.memory.iter().all(|byte| *byte == 0xa5));
-            assert_eq!(body.unwrap().0.as_ptr(), body_pointer);
-            assert_eq!(key.last(), 0);
-            small.push(buffer);
-        }
-        let aggregate = phase
-            .station()
-            .aggregate(receiver, tid, rate, TxProtection::Ccmp(&key));
-        let mut buffer = small.remove(0);
-        buffer.memory.fill(0xa5);
-        let memory = buffer.memory.as_ptr();
-        let body = ModelBody(alloc::vec![0x99; 16]);
-        let body_pointer = body.0.as_ptr();
-        let source: ModelSubframe<'id, ModelBackend<Id>, ModelSmall, ModelCaps> =
-            SubframeSource::Fresh {
-                numbering: key.numbering(),
-                buffer,
-                frame: ClassSubframe::<ModelSmall, _>::new(subframe_frame(0))
-                    .ok()
-                    .unwrap(),
-                body: Some(body),
-            };
-        let refused = CheckedAggregate::new(aggregate, source).err().unwrap();
-        assert_eq!(refused.reason, LayoutError::BodyOverlap);
-        let (aggregate, subframe) = refused.operation;
-        assert_eq!(aggregate.subframes(), 0);
-        let SubframeSource::Fresh {
-            numbering,
-            buffer,
-            frame,
-            body,
-        } = subframe
-        else {
-            unreachable!()
-        };
-        assert_eq!(buffer.memory.as_ptr(), memory);
-        assert!(buffer.memory.iter().all(|byte| *byte == 0xa5));
-        assert_eq!(body.as_ref().unwrap().0.as_ptr(), body_pointer);
-        assert_eq!(key.last(), 1);
-        assert!(phase.held.events.is_empty());
-        // QoS header 26 + CCMP 8 + body 16: exact boundary is 50.
-        let frame = SizedFrame::new(*frame.frame().header(), MpduLength::new(50).unwrap()).unwrap();
-        let aggregate = push_subframe(aggregate, numbering, buffer, frame, body);
-        let mut subframes = aggregate.into_parts();
-        let (buffer, body) = subframes.next().unwrap().into_parts();
-        assert!(subframes.next().is_none());
-        let ModelAnyBuffer::Small(buffer) = buffer else {
-            unreachable!()
-        };
-        let body = body.unwrap();
-        assert_eq!(buffer.memory.as_ptr(), memory);
-        assert_eq!(body.0.as_ptr(), body_pointer);
-        let aggregate = phase
-            .station()
-            .aggregate(receiver, tid, rate, TxProtection::Ccmp(&key));
-        let aggregate = push_subframe(aggregate, numbering, buffer, frame, Some(body));
-        phase
-            .station()
-            .submit_ampdu(
-                (AggregateAttempt {
-                    context: (),
-                    ticket: tickets.remove(0),
-                    aggregate,
-                    protection: Protection::None,
-                    power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                    min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
-                })
-                .admit(),
-            )
-            .unwrap();
-        let (_, subframes, _) = aggregate_completion(phase, &mut terminal_access).await;
-        let (buffer, body) = subframes.into_iter().next().unwrap().into_parts();
-        assert!(body.is_none());
-        let ModelAnyBuffer::SmallSent(mpdu) = buffer else {
-            unreachable!()
-        };
-        assert_eq!(mpdu.buffer.memory.as_ptr(), memory);
-        assert_eq!(mpdu.body().unwrap().0.as_ptr(), body_pointer);
-        assert_eq!(&mpdu.buffer.memory[34..50], &[0x99; 16]);
-        assert_eq!(mpdu.packet_number(), Some(1));
-        assert_eq!(&mpdu.buffer.memory[4..10], &receiver.get());
-        assert_eq!(mpdu.buffer.memory[24] & 0xf, tid.get());
-    }
-}
-#[test]
-fn aggregate_builder_checks_ccmp_before_mutating_and_returns_all_owners() {
-    let (backend, _) = backend();
-    let _port_end = block_on(run_model(backend, Body(AggregateBoundaries)));
 }
 
 struct PreparedRemoval {

@@ -1,6 +1,6 @@
 #![no_std]
 use oer_chips_esp32s31_hal::memory::dma_static::PlacedTxLease;
-use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDma;
+use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::{RetainedAmpduDma, WrittenBuffer};
 use oer_portable_memory::PinnedDmaTxRadioLease;
 
 // An aggregate publishes a retained backing's address without a check, so
@@ -10,7 +10,7 @@ pub fn placed(
     owner: &mut RetainedAmpduDma<'_, PlacedTxLease<PinnedDmaTxRadioLease<'static, 64, 0, 0>>, 2, 0>,
     lease: PlacedTxLease<PinnedDmaTxRadioLease<'static, 64, 0, 0>>,
 ) {
-    let _ = owner.push_backing(lease);
+    let _ = owner.push_written(lease, &mut (), |(), _| Err::<(WrittenBuffer, ()), ()>(()), |(), ()| Ok(()));
 }
 
 #[cfg(ui_reject)]
@@ -18,5 +18,5 @@ pub fn unplaced(
     owner: &mut RetainedAmpduDma<'_, PinnedDmaTxRadioLease<'static, 64, 0, 0>, 2, 0>,
     lease: PinnedDmaTxRadioLease<'static, 64, 0, 0>,
 ) {
-    let _ = owner.push_backing(lease); // ui-error: E0599
+    let _ = owner.push_written(lease, &mut (), |(), _| Err::<(WrittenBuffer, ()), ()>(()), |(), ()| Ok(())); // ui-error: E0599
 }

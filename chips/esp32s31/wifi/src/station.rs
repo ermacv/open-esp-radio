@@ -16,7 +16,6 @@ use oer_portable_memory::{Placed, StaticPlace};
 use oer_portable_time::Clock;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_roles_sta::{
-    data::StaData,
     epoch::{EpochContext, LinkEpochSource},
     machine::{self, Station, StationResources},
 };
@@ -47,12 +46,9 @@ impl<W: Binding> Composition for ImageComposition<W> {
 }
 pub struct StationComposition<W: Binding, Id: SlotIdentity>(PhantomData<(W, Id)>);
 /// The pool places the station's management frames take, holding the
-/// port's own buffers; the data machine takes the next [`DATA_BUFFERS`],
-/// which hold the network's memory for one MSDU each.
+/// port's own buffers. Data goes through the port's data arenas, which hold
+/// the network's memory itself.
 const MANAGEMENT: u8 = crate::supply::PORT_BUFFERS;
-/// The buffers the data machine holds: every pool buffer the station's
-/// management frames do not take, within its queue (`PortData`'s capacity).
-const DATA_BUFFERS: usize = port::TX_BUFFERS - MANAGEMENT as usize;
 #[cfg(oer_trace)]
 pub(crate) static TARGET: oer_portable_memory::OnceValue<([u8; 6], Option<[u8; 6]>)> =
     oer_portable_memory::OnceValue::new();
@@ -102,7 +98,6 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     type TerminalStorage<T> = heapless::Deque<T, { port::TERMINAL_CAPACITY }>;
     type TxContextStorage<T> = [Option<T>; port::TX_TICKETS];
     type Small = port::BufferClass<TX>;
-    type Large = port::BufferClass<TX>;
     type TxMemory = crate::TxMemory;
     fn lend_phase<'a, 'id, 'r>(
         phase: &'r mut <Backend<Id, W> as PortBackend<Id>>::Phase<'a, 'id>,
@@ -204,26 +199,29 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
     }
     fn tx_buffer<'id>(
         buffer: port::AnyBuffer<'id, Id, Device<W>, TX, ()>,
-    ) -> StationTxBuffer<'id, Self>
+    ) -> Result<StationTxBuffer<'id, Self>, port::AnyBuffer<'id, Id, Device<W>, TX, ()>>
     where
         Self: 'id,
         Id: 'id,
     {
-        // The identical pool buffers are split once by their affine pool
-        // indices: the first four remain with Station, the next with StaData.
-        let (small, mpdu) = match buffer {
-            port::AnyBuffer::Fresh(buffer) => {
-                (buffer.index() < MANAGEMENT, ReturnedMpdu::Fresh(buffer))
+        // The station takes the pool's first places; no buffer beyond
+        // them is ever submitted.
+        match buffer {
+            port::AnyBuffer::Fresh(buffer) if buffer.index() < MANAGEMENT => {
+                Ok(ReturnedMpdu::Fresh(buffer))
             }
-            port::AnyBuffer::Sent(buffer) => {
-                (buffer.index() < MANAGEMENT, ReturnedMpdu::Sent(buffer))
+            port::AnyBuffer::Sent(buffer) if buffer.index() < MANAGEMENT => {
+                Ok(ReturnedMpdu::Sent(buffer))
             }
-        };
-        if small {
-            StationTxBuffer::Small(mpdu)
-        } else {
-            StationTxBuffer::Large(mpdu)
+            buffer => Err(buffer),
         }
+    }
+    fn arena_ack<'id>(response: port::BlockAckAnswer) -> Option<port::Ack>
+    where
+        Self: 'id,
+        Id: 'id,
+    {
+        response.snr_db.map(|snr_db| port::Ack { snr_db })
     }
 }
 
@@ -478,15 +476,16 @@ fn initialize_service<'id, W: Binding>(
         resources.arbiter_authority,
         resources.gate,
     );
-    let [t0, t1, t2, t3, t4, t5, t6, t7] = resources.tickets;
-    let [b0, b1, b2, b3, data @ ..] = resources.buffers;
+    // The station's frames take four tickets and the pool's first four
+    // buffers; the port's other tickets and buffer places have no owner
+    // here: data goes through the port's data arenas.
+    let [t0, t1, t2, t3, ..] = resources.tickets;
+    let [b0, b1, b2, b3, ..] = resources.buffers;
     const {
-        if MANAGEMENT != 4 || DATA_BUFFERS > oer_protocols_ieee80211_runtime::station::DATA_BUFFERS
-        {
-            panic!("four management buffers, and the data machine's queue holds the rest");
+        if MANAGEMENT != 4 {
+            panic!("four management buffers");
         }
     }
-    let data: [_; DATA_BUFFERS] = data;
     let Profile {
         station,
         observer,
@@ -516,14 +515,6 @@ fn initialize_service<'id, W: Binding>(
                 station,
                 station_resources,
                 machine::GroupCapacity::new(),
-            )
-        },
-        |place| {
-            StaData::init_in_place(
-                place,
-                [t4, t5, t6, t7],
-                data,
-                Backend::<W::Id, W>::TX_QUEUE_DEPTH,
             )
         },
         arbiter,
@@ -619,40 +610,47 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
         .unwrap_or_else(|error| W::fail(InitializationError::Request(error)));
     runner.frontend = poster;
     let exit = match front {
-        Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
-            rp::PortEnd::Uninstalled {
-                joined,
-                output,
-                deadline,
-            } => {
-                // The exit is published only after the radio release ended,
-                // or once the stop's deadline passed first.
-                let mut pending = retire.post(joined);
-                let released = release_answer::<W>(&mut pending, deadline).await;
-                released_exit(output, released)
-            }
-            rp::PortEnd::FailStopped { outcome, output } => {
-                // A body that ended for uninstall reports the fail-stop; a
-                // body that requested one already reports its own cause.
-                let retirement = |failure| {
-                    StationExit::RetirementFailed(crate::failure::convert::retirement(
-                        failure,
-                        outcome.cause(),
-                        matches!(outcome.outcome(), rp::Abandon::Stopped(_)),
+        Ok(mut front) => {
+            let first_fault = front.ports().first_fault();
+            match rp::run_port(front, Body { runner, profile }).await {
+                rp::PortEnd::Uninstalled {
+                    joined,
+                    output,
+                    deadline,
+                } => {
+                    // The exit is published only after the radio release ended,
+                    // or once the stop's deadline passed first.
+                    let mut pending = retire.post(joined);
+                    let released = release_answer::<W>(&mut pending, deadline).await;
+                    released_exit(output, released)
+                }
+                rp::PortEnd::FailStopped { outcome, output } => {
+                    // A body that ended for uninstall reports the fail-stop; a
+                    // body that requested one already reports its own cause.
+                    let retirement = |failure| {
+                        StationExit::RetirementFailed(crate::failure::convert::retirement(
+                            failure,
+                            outcome.cause(),
+                            matches!(outcome.outcome(), rp::Abandon::Stopped(_)),
+                        ))
+                    };
+                    match output {
+                        StationExit::Stopped => retirement(None),
+                        StationExit::Failed(failed) => retirement(Some(failed)),
+                        StationExit::Poisoned(_)
+                        | StationExit::Quarantined(_)
+                        | StationExit::RetirementFailed(_)
+                        | StationExit::ReleaseFailed(_)
+                        | StationExit::Unavailable(_) => output,
+                    }
+                }
+                rp::PortEnd::Abandoned { cause, .. } => {
+                    StationExit::Unavailable(UnavailableCause::Abandoned(
+                        crate::failure::convert::abandoned(cause, first_fault.get()),
                     ))
-                };
-                match output {
-                    StationExit::Stopped => retirement(None),
-                    StationExit::Failed(failed) => retirement(Some(failed)),
-                    StationExit::Poisoned(_)
-                    | StationExit::Quarantined(_)
-                    | StationExit::RetirementFailed(_)
-                    | StationExit::ReleaseFailed(_)
-                    | StationExit::Unavailable(_) => output,
                 }
             }
-            rp::PortEnd::Abandoned { .. } => StationExit::Unavailable(UnavailableCause::Abandoned),
-        },
+        }
         Err(error) => {
             runner
                 .connection

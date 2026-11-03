@@ -3,7 +3,7 @@ use crate::mac::tx::{HtChannelWidth, HtGuardInterval, HtMcs, TxPhyRate};
 use oer_chips_esp32s31_hal::types::MacLegacyRate;
 
 #[test]
-fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner() {
+fn exchange_byte_limit_refuses_the_next_frame_and_hands_its_lease_back() {
     let rate = HtRate::new(
         HtMcs::Mcs0,
         HtGuardInterval::Long800Ns,
@@ -25,36 +25,42 @@ fn exchange_byte_limit_stops_existing_builder_without_consuming_the_next_owner()
     owner.configure_max_aggregate_bytes(limit).unwrap();
     let cookie = owner.begin().unwrap();
     for index in 0..2 {
-        assert!(
-            owner
-                .can_commit_referenced_ht_frame(cookie, 32, 8, 0, rate, 256)
-                .unwrap()
-        );
         let (index, ()) = pool.claim_network(index).unwrap().publish(
             oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32)
                 .expect("test frame length"),
             |_| {},
         );
-        owner
-            .commit_ht(
-                cookie,
-                pool.claim_radio(index).expect("ready placed slot"),
-                ht_frame_request(0, 32, 8, 0, rate),
-            )
-            .unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            pool.claim_radio(index).expect("ready placed slot"),
+            32,
+            8,
+        )
+        .unwrap();
     }
-    let next = pool.claim_network(2).unwrap();
-    let before = owner.prepared_aggregate(cookie).unwrap();
-    assert!(
-        !owner
-            .can_commit_referenced_ht_frame(cookie, 32, 8, 0, rate, 256)
-            .unwrap()
+    let before = prepared(&mut owner, cookie).unwrap();
+    // A third MPDU passes the exchange's byte limit: intake refuses it and
+    // hands its lease back, the batch unchanged.
+    let (index, ()) = pool.claim_network(2).unwrap().publish(
+        oer_portable_memory::FrameLen::new(TX_AMPDU_METADATA_SIZE + 32).expect("test frame length"),
+        |_| {},
     );
-    let after = owner.prepared_aggregate(cookie).unwrap();
+    assert_eq!(
+        commit(
+            &mut owner,
+            cookie,
+            pool.claim_radio(index).expect("ready placed slot"),
+            32,
+            8
+        ),
+        Err(HtAmpduTxError::AggregateFull)
+    );
+    let after = prepared(&mut owner, cookie).unwrap();
     assert_eq!(before, after);
     assert_eq!(after.subframes, 2);
     assert_eq!(owner.held_backing_count(), 2);
-    assert_eq!(next.release(), 2);
+    assert_eq!(pool.claimed_slots(), 2);
     assert!(
         TxPhyRate::Ht(rate)
             .ppdu_timing()

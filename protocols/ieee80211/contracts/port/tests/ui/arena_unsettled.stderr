@@ -1,0 +1,29 @@
+error[E0616]: field `arena` of struct `ArenaCompleted` is private
+  --> tests/ui/arena_unsettled.rs:11:22
+   |
+11 |     return Some(done.arena); // ui-error: E0616
+   |                      ^^^^^ private field
+
+error[E0423]: cannot initialize a tuple struct which contains private fields
+  --> tests/ui/arena_unsettled.rs:21:17
+   |
+21 |     return Some(Arena(oer_protocols_ieee80211_contracts_port::arena::ArenaId::First)); // ui-error: E0423
+   |                 ^^^^^
+   |
+note: constructor is not visible here due to private fields
+  --> src/arena.rs
+   |
+   | pub struct Arena(ArenaId);
+   |                  ^^^^^^^ private field
+
+error[E0382]: borrow of moved value: `arena`
+  --> tests/ui/arena_unsettled.rs:44:22
+   |
+28 |     arena: Arena,
+   |     ----- move occurs because `arena` has type `oer_protocols_ieee80211_contracts_port::Arena`, which does not implement the `Copy` trait
+...
+35 |         arena,
+   |         ----- value moved here
+...
+44 |     drop(port.intake(&arena, memory, |_| None)); // ui-error: E0382
+   |                      ^^^^^^ value borrowed here after move

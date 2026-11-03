@@ -197,3 +197,40 @@ fn a_release_into_a_poisoned_domain_or_with_an_active_mac_is_not_a_stop() {
         ReleaseCause::StillActive(MaintenanceError::RxWalkerEnabled)
     );
 }
+#[test]
+fn an_abandoned_station_keeps_the_lifecycle_cause_and_the_ports_first_fault_as_one_path() {
+    use oer_chips_esp32s31_ieee80211_driver::{
+        lower_mac::arena::ArenaFault as Arena, mac::tx::ampdu::HtAmpduTxError as Chain, port::Fault,
+    };
+    use oer_protocols_radio_port::{LifecycleError, SlotInitError};
+    let abandoned = super::convert::abandoned(
+        SlotInitError::Lifecycle(LifecycleError::StopUnconfirmed),
+        Some(Fault::Arena(Arena::Chain(Chain::DetachFailed))),
+    );
+    assert_eq!(
+        abandoned,
+        Abandoned {
+            cause: AbandonCause::Lifecycle(RetirementCause::StopUnconfirmed),
+            fault: Some(BackendFault::Arena(ArenaFault::Chain(
+                AggregateTxError::DetachFailed
+            ))),
+        }
+    );
+    let path = oer_portable_diagnostics::DiagPath::of(&abandoned);
+    assert_eq!(
+        path.names(),
+        [
+            "Lifecycle",
+            "StopUnconfirmed",
+            "Arena",
+            "Chain",
+            "DetachFailed"
+        ]
+    );
+    assert!(path.words().is_empty() && !path.overflowed());
+    // A cancellation without a recorded fault names the lifecycle alone.
+    let cancelled =
+        super::convert::abandoned(SlotInitError::Lifecycle(LifecycleError::Cancelled), None);
+    let path = oer_portable_diagnostics::DiagPath::of(&cancelled);
+    assert_eq!(path.names(), ["Lifecycle", "Cancelled"]);
+}

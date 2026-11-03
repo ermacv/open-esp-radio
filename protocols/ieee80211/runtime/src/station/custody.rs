@@ -30,10 +30,10 @@ impl<T, const N: usize> TerminalStorage<T> for heapless::Deque<T, N> {
     }
 }
 
-/// A TX return whose context and memory class disagree, or that no
-/// admitted context waited for. It still owns the original ticket, the
-/// operation context the service held for it, if any, and the complete
-/// fresh or Sent MPDU.
+/// A TX return that no admitted context waited for, or of a buffer class
+/// not the station's. It still owns the original ticket, the operation
+/// context the service held for it, if any, and the complete fresh or Sent
+/// MPDU.
 pub struct UnroutedTx<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     pub context: Option<StationTxContext<'id, B>>,
     pub ticket: Slot<
@@ -41,34 +41,14 @@ pub struct UnroutedTx<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
         <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
         <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
     >,
-    pub buffer: StationTxBuffer<'id, B>,
+    pub buffer: <B::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer,
     pub outcome: PortReturnedTx<'id, B>,
-}
-
-/// An aggregate terminal that cannot belong to the submitted aggregate. It
-/// still owns the ticket, the context and every subframe the port returned
-/// that Data did not take back: subframes of a data aggregate already given
-/// back to their members' places wait in Data's bank.
-pub struct UnroutedAggregate<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
-    /// The context the service held for the ticket, if any.
-    pub context: Option<StationTxContext<'id, B>>,
-    pub ticket: Slot<
-        'id,
-        <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
-        <B::Types<'id> as PhaseTypes<'id>>::TicketPath,
-    >,
-    /// A subframe of the station's class, or one beyond the aggregate's bound.
-    pub stray: Option<StationTxBuffer<'id, B>>,
-    /// The subframes not taken.
-    pub rest: <<B::Types<'id> as PhaseTypes<'id>>::TxAggregate as IntoIterator>::IntoIter,
-    pub outcome: oer_protocols_ieee80211_contracts_port::PhaseAggregateOutcome<'id, B::Types<'id>>,
 }
 
 /// The first offending return, with every resource still owned.
 pub enum RejectedTerminal<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     Sealed(LowerMacTerminal<'id, B::Types<'id>>),
     Transmit(UnroutedTx<'id, B>),
-    Aggregate(UnroutedAggregate<'id, B>),
     /// A transmission's context the port took the ticket of, which found no
     /// place at that ticket's index; the ticket stays with the port.
     Context(StationTxContext<'id, B>),

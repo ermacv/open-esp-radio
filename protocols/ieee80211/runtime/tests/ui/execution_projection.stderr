@@ -1,7 +1,7 @@
 error[E0308]: mismatched types
-  --> tests/ui/execution_projection.rs:15:51
+  --> tests/ui/execution_projection.rs:13:51
    |
-15 |         let _: &mut ModelMpdu<'id, Composition> = &mut single; // ui-error: E0308
+13 |         let _: &mut ModelMpdu<'id, Composition> = &mut single; // ui-error: E0308
    |                --------------------------------   ^^^^^^^^^^^ expected `&mut ModelMpdu<'_, ModelBackend<...>>`, found `&mut ModelMpduExecution<'_, '_, ...>`
    |                |
    |                expected due to this
@@ -9,38 +9,8 @@ error[E0308]: mismatched types
    = note: expected mutable reference `&mut ModelMpdu<'id, ModelBackend<StaticId<UiSlot>>>`
               found mutable reference `&mut ModelMpduExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`
 
-error[E0308]: mismatched types
-  --> tests/ui/execution_projection.rs:16:56
-   |
-16 |         let _: &mut ModelSubframes<'id, Composition> = &mut aggregate; // ui-error: E0308
-   |                -------------------------------------   ^^^^^^^^^^^^^^ expected `&mut ModelSubframes<'_, ...>`, found `&mut ...`
-   |                |
-   |                expected due to this
-   |
-   = note: expected mutable reference `&mut ModelSubframes<'id, ModelBackend<StaticId<UiSlot>>>`
-              found mutable reference `&mut ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`
-
 error[E0599]: no method named `into_parts` found for struct `ModelMpduExecution<'a, 'id, B>` in the current scope
-  --> tests/ui/execution_projection.rs:17:16
+  --> tests/ui/execution_projection.rs:14:16
    |
-17 |         single.into_parts(); // ui-error: E0599
+14 |         single.into_parts(); // ui-error: E0599
    |                ^^^^^^^^^^ method not found in `ModelMpduExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`
-
-error[E0599]: the method `into_iter` exists for struct `ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>`, but its trait bounds were not satisfied
-  --> tests/ui/execution_projection.rs:18:19
-   |
-18 |         aggregate.into_iter(); // ui-error: E0599
-   |                   ^^^^^^^^^ method cannot be called due to unsatisfied trait bounds
-   |
-  ::: $WORKSPACE/protocols/ieee80211/testing/model/src/lib.rs
-   |
-   | pub struct ModelSubframesExecution<'a, 'id, B: ModelComposition> {
-   | ---------------------------------------------------------------- doesn't satisfy `_: IntoIterator` or `_: Iterator`
-   |
-   = note: the following trait bounds were not satisfied:
-           `ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: Iterator`
-           which is required by `ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: IntoIterator`
-           `&ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: Iterator`
-           which is required by `&ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: IntoIterator`
-           `&mut ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: Iterator`
-           which is required by `&mut ModelSubframesExecution<'_, 'id, ModelBackend<StaticId<UiSlot>>>: IntoIterator`

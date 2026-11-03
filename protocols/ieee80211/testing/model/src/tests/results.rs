@@ -1,21 +1,9 @@
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
 
-use oer_protocols_ieee80211_testing_conformance::{
-    self as conformance,
-    outcomes::{self, Form},
-};
-type OutcomeTrace = outcomes::Trace<ModelAck, ModelBlockAckEvidence, ModelAirDenied>;
-
-/// A returned outcome, of the operation's form.
-#[derive(Debug, Eq, PartialEq)]
-enum Returned {
-    Single(ModelSingleOutcome),
-    Aggregate(ModelAggregateOutcome),
-}
+use oer_protocols_ieee80211_testing_conformance::{self as conformance, outcomes};
+type OutcomeTrace = outcomes::Trace<ModelAck, ModelAirDenied>;
 
 struct Results {
-    form: Form,
     result: AirAnswer,
     trace: Option<Rc<RefCell<Option<OutcomeTrace>>>>,
 }
@@ -38,14 +26,10 @@ impl Work for Results {
         let original_buffer = buffer.slot.index();
         let air = phase.held.air.clone();
         air.answer(self.result);
-        // The second operation has no injection and must get the default ACK,
-        // including when the first operation was an aggregate.
-        for (round, (form, result)) in [(self.form, self.result), (Form::Single, AirAnswer::Ack)]
-            .into_iter()
-            .enumerate()
-        {
-            let rate = match form {
-                Form::Single => {
+        // The second operation has no injection and must get the default ACK.
+        for (round, result) in [self.result, AirAnswer::Ack].into_iter().enumerate() {
+            let rate = {
+                {
                     let TxFrame::Individual { frame, plan } = data_frame(phase, false) else {
                         panic!()
                     };
@@ -72,54 +56,14 @@ impl Work for Results {
                     );
                     PhyRate::Legacy(LegacyRate::Ofdm6M)
                 }
-                Form::Aggregate => {
-                    let rate = PhyRate::Ht(
-                        oer_protocols_ieee80211_wire::phy::HtRate::new(
-                            HtMcs::new(7).unwrap(),
-                            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                            false,
-                        )
-                        .unwrap(),
-                    );
-                    let checked_rate = phase.rate(rate).unwrap();
-                    let mut station = phase.station();
-                    let checked_rate = station.ampdu_rate(checked_rate).ok().unwrap();
-                    let aggregate = station.aggregate(
-                        IndividualAddress::new(PEER).unwrap(),
-                        Tid::new(0).unwrap(),
-                        checked_rate,
-                        TxProtection::Open,
-                    );
-                    let aggregate = push_subframe(
-                        aggregate,
-                        oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
-                        buffer,
-                        subframe_frame(0),
-                        None,
-                    );
-                    station
-                        .submit_ampdu(
-                            (AggregateAttempt {
-                                context: (),
-                                ticket,
-                                aggregate,
-                                protection: Protection::None,
-                                power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                                min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
-                            })
-                            .admit(),
-                        )
-                        .unwrap();
-                    rate
-                }
             };
             let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(completed)))) =
                 phase.next_event().await
             else {
                 panic!()
             };
-            let (returned_ticket, returned_buffer, outcome) = match (form, completed) {
-                (Form::Single, TxCompleted::Single(terminal)) => {
+            let (returned_ticket, returned_buffer, outcome) = match completed {
+                TxCompleted::Single(terminal) => {
                     let oer_protocols_ieee80211_contracts_port::TerminalParts {
                         ticket,
                         outcome: completion,
@@ -129,19 +73,7 @@ impl Work for Results {
                     let (buffer, body) = payload.into_parts();
 
                     assert!(body.is_none());
-                    (ticket, buffer, Returned::Single(completion))
-                }
-                (Form::Aggregate, TxCompleted::Aggregate(terminal)) => {
-                    let oer_protocols_ieee80211_contracts_port::TerminalParts {
-                        ticket,
-                        payload,
-                        outcome,
-                        ..
-                    } = terminal.into_parts(&mut terminal_access);
-                    assert_eq!(payload.len(), 1);
-                    let (buffer, body) = payload.into_iter().next().unwrap().into_parts();
-                    assert!(body.is_none());
-                    (ticket, buffer, Returned::Aggregate(outcome))
+                    (ticket, buffer, completion)
                 }
                 _ => panic!("terminal changed operation kind"),
             };
@@ -149,81 +81,36 @@ impl Work for Results {
                 transmissions: NonZeroU16::MIN,
                 rate,
             };
-            let expected = match (form, result) {
-                (Form::Single, AirAnswer::HardwareTimeout) => Returned::Single(
-                    TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
-                ),
-                (Form::Aggregate, AirAnswer::HardwareTimeout) => Returned::Aggregate(
-                    TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
-                ),
-                (Form::Single, AirAnswer::Ack) => {
-                    Returned::Single(TxOutcome::Ended(SingleEnd::Delivered {
-                        air,
-                        response: SingleResponse::Ack(ModelAck {
-                            snr_db: MODEL_ACK_SNR_DB,
-                        }),
-                    }))
+            let expected = match result {
+                AirAnswer::HardwareTimeout => {
+                    TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
                 }
-                (
-                    Form::Aggregate,
-                    AirAnswer::BlockAck(bits) | AirAnswer::BlockAckUnmeasured(bits),
-                ) => Returned::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
+                AirAnswer::Ack => TxOutcome::Ended(SingleEnd::Delivered {
                     air,
-                    report: BlockAckReport {
-                        start_sequence: SequenceNumber::new(0).unwrap(),
-                        bitmap: bits & 1,
-                    },
-                    ack: if matches!(result, AirAnswer::BlockAck(_)) {
-                        ModelBlockAckEvidence::Measured(MODEL_ACK_SNR_DB)
-                    } else {
-                        ModelBlockAckEvidence::Unmeasured
-                    },
-                })),
-                (Form::Single, AirAnswer::NoResponse) => {
-                    Returned::Single(TxOutcome::Ended(SingleEnd::AckTimeout(air)))
+                    response: SingleResponse::Ack(ModelAck {
+                        snr_db: MODEL_ACK_SNR_DB,
+                    }),
+                }),
+                AirAnswer::NoResponse => TxOutcome::Ended(SingleEnd::AckTimeout(air)),
+                AirAnswer::Collision => TxOutcome::Ended(SingleEnd::ContentionLimit(None)),
+                AirAnswer::AirDenied => TxOutcome::Ended(SingleEnd::AirDenied {
+                    denial: ModelAirDenied,
+                    air: None,
+                }),
+                AirAnswer::BlockAck(_) | AirAnswer::BlockAckUnmeasured(_) => {
+                    panic!("not an answer a single MPDU takes")
                 }
-                (Form::Aggregate, AirAnswer::NoResponse) => {
-                    Returned::Aggregate(TxOutcome::Ended(AggregateEnd::AckTimeout(air)))
-                }
-                (Form::Single, AirAnswer::Collision) => {
-                    Returned::Single(TxOutcome::Ended(SingleEnd::ContentionLimit(None)))
-                }
-                (Form::Aggregate, AirAnswer::Collision) => {
-                    Returned::Aggregate(TxOutcome::Ended(AggregateEnd::ContentionLimit(None)))
-                }
-                (Form::Single, AirAnswer::AirDenied) => {
-                    Returned::Single(TxOutcome::Ended(SingleEnd::AirDenied {
-                        denial: ModelAirDenied,
-                        air: None,
-                    }))
-                }
-                (Form::Aggregate, AirAnswer::AirDenied) => {
-                    Returned::Aggregate(TxOutcome::Ended(AggregateEnd::AirDenied {
-                        denial: ModelAirDenied,
-                        air: None,
-                    }))
-                }
-                (Form::Single, AirAnswer::BlockAck(_) | AirAnswer::BlockAckUnmeasured(_))
-                | (Form::Aggregate, AirAnswer::Ack) => panic!("not an answer this form takes"),
             };
-            assert_eq!(outcome, expected, "{form:?}");
+            assert_eq!(outcome, expected);
             if round == 0 {
                 if let Some(trace) = &self.trace {
-                    let (actual_buffer, state, sequence) = match &returned_buffer {
-                        ModelAnyBuffer::SmallSent(mpdu) => (
-                            mpdu.buffer.slot.index(),
-                            conformance::MpduState::Sent,
-                            SequenceNumber::from_sequence_control(u16::from_le_bytes(
-                                mpdu.buffer.memory[22..24]
-                                    .try_into()
-                                    .expect("the fixture submitted a complete sequence control"),
-                            )),
-                        ),
-                        ModelAnyBuffer::Small(buffer) => (
-                            buffer.slot.index(),
-                            conformance::MpduState::Fresh,
-                            SequenceNumber::ZERO,
-                        ),
+                    let (actual_buffer, state) = match &returned_buffer {
+                        ModelAnyBuffer::SmallSent(mpdu) => {
+                            (mpdu.buffer.slot.index(), conformance::MpduState::Sent)
+                        }
+                        ModelAnyBuffer::Small(buffer) => {
+                            (buffer.slot.index(), conformance::MpduState::Fresh)
+                        }
                         _ => panic!("the fixture submitted a small MPDU"),
                     };
                     trace.replace(Some(outcomes::Trace {
@@ -237,12 +124,8 @@ impl Work for Results {
                         },
                         state,
                         rate,
-                        sequence,
                         publications: phase.held.air.sent().len(),
-                        outcome: match outcome {
-                            Returned::Single(outcome) => outcomes::Outcome::Single(outcome),
-                            Returned::Aggregate(outcome) => outcomes::Outcome::Aggregate(outcome),
-                        },
+                        outcome,
                     }));
                 }
             }
@@ -276,23 +159,20 @@ impl Work for Results {
 struct ModelOutcomeHarness;
 impl outcomes::Harness for ModelOutcomeHarness {
     type Ack = ModelAck;
-    type BlockAck = ModelBlockAckEvidence;
     type AirDenied = ModelAirDenied;
     async fn exercise(&mut self, case: outcomes::Case) -> OutcomeTrace {
         let result = match case {
             outcomes::Case::Ack => AirAnswer::Ack,
-            outcomes::Case::BlockAck => AirAnswer::BlockAck(1),
-            outcomes::Case::NoResponse(_) => AirAnswer::NoResponse,
-            outcomes::Case::Collision(_) => AirAnswer::Collision,
-            outcomes::Case::AirDenied(_) => AirAnswer::AirDenied,
-            outcomes::Case::HardwareTimeout(_) => AirAnswer::HardwareTimeout,
+            outcomes::Case::NoResponse => AirAnswer::NoResponse,
+            outcomes::Case::Collision => AirAnswer::Collision,
+            outcomes::Case::AirDenied => AirAnswer::AirDenied,
+            outcomes::Case::HardwareTimeout => AirAnswer::HardwareTimeout,
         };
         let (backend, _) = backend();
         let trace = Rc::new(RefCell::new(None));
         let _port_end = run_model(
             backend,
             Body(Results {
-                form: case.form(),
                 result,
                 trace: Some(trace.clone()),
             }),
@@ -303,7 +183,7 @@ impl outcomes::Harness for ModelOutcomeHarness {
     }
 }
 #[test]
-fn shared_outcome_suite_observes_each_actual_single_or_aggregate_terminal() {
+fn shared_outcome_suite_observes_each_actual_single_terminal() {
     block_on(outcomes::check(
         &mut ModelOutcomeHarness,
         conformance::Environment::Model,
@@ -312,68 +192,23 @@ fn shared_outcome_suite_observes_each_actual_single_or_aggregate_terminal() {
 }
 
 #[test]
-fn every_result_is_consumed_by_exactly_one_single_or_aggregate_attempt() {
-    for form in [Form::Single, Form::Aggregate] {
-        for result in [
-            match form {
-                Form::Single => AirAnswer::Ack,
-                Form::Aggregate => AirAnswer::BlockAck(1),
-            },
-            AirAnswer::NoResponse,
-            AirAnswer::Collision,
-            AirAnswer::AirDenied,
-            AirAnswer::HardwareTimeout,
-        ] {
-            let (backend, _) = backend();
-            let _port_end = block_on(run_model(
-                backend,
-                Body(Results {
-                    form,
-                    result,
-                    trace: None,
-                }),
-            ));
-        }
+fn every_result_is_consumed_by_exactly_one_attempt() {
+    for result in [
+        AirAnswer::Ack,
+        AirAnswer::NoResponse,
+        AirAnswer::Collision,
+        AirAnswer::AirDenied,
+        AirAnswer::HardwareTimeout,
+    ] {
+        let (backend, _) = backend();
+        let _port_end = block_on(run_model(
+            backend,
+            Body(Results {
+                result,
+                trace: None,
+            }),
+        ));
     }
-}
-
-#[test]
-fn aggregate_honors_timeout_injection() {
-    let (backend, _) = backend();
-    let _port_end = block_on(run_model(
-        backend,
-        Body(Results {
-            trace: None,
-            form: Form::Aggregate,
-            result: AirAnswer::HardwareTimeout,
-        }),
-    ));
-}
-
-#[test]
-fn an_empty_block_ack_is_consumed_before_the_following_single() {
-    let (backend, _) = backend();
-    let _port_end = block_on(run_model(
-        backend,
-        Body(Results {
-            trace: None,
-            form: Form::Aggregate,
-            result: AirAnswer::BlockAck(0),
-        }),
-    ));
-}
-
-#[test]
-fn an_aggregate_s_unmeasured_block_ack_still_delivers_it() {
-    let (backend, _) = backend();
-    let _port_end = block_on(run_model(
-        backend,
-        Body(Results {
-            trace: None,
-            form: Form::Aggregate,
-            result: AirAnswer::BlockAckUnmeasured(1),
-        }),
-    ));
 }
 
 #[test]
@@ -402,18 +237,11 @@ fn an_answer_incompatible_with_the_checked_response_policy_is_refused_and_consum
         assert!(air.single_result(form).is_err());
         assert!(air.answers.inspect().is_empty());
     }
-    air.answer(AirAnswer::Ack);
-    assert!(air.aggregate_result().is_err());
-    assert!(air.answers.inspect().is_empty());
 }
 
 #[test]
-fn failed_responses_keep_each_withdrawal_reason_for_both_forms() {
+fn failed_responses_keep_each_withdrawal_reason() {
     let rate = PhyRate::Legacy(LegacyRate::Ofdm6M);
-    let report = BlockAckReport {
-        start_sequence: SequenceNumber::ZERO,
-        bitmap: 0,
-    };
     for cause in [
         WithdrawCause::Disabled,
         WithdrawCause::KeyRemoved,
@@ -427,16 +255,6 @@ fn failed_responses_keep_each_withdrawal_reason_for_both_forms() {
             let (outcome, _) =
                 single_outcome(answer, Some((NonZeroU16::MIN, rate)), rate, Some(cause));
             assert_eq!(outcome, TxOutcome::Withdrawn(cause));
-        }
-        for answer in [
-            AggregateAnswer::Unanswered,
-            AggregateAnswer::Collision,
-            AggregateAnswer::AirDenied,
-        ] {
-            assert_eq!(
-                aggregate_outcome(answer, rate, report, Some(cause)),
-                TxOutcome::Withdrawn(cause)
-            );
         }
     }
 }
@@ -479,7 +297,7 @@ impl Work for WrongAnswer {
         assert!(phase.next_event().await.is_err());
         assert!(phase.held.air.sent().is_empty());
         let held = phase.held.quarantined.items.inspect();
-        let Some(super::super::Work::Single(operation)) = held.front() else {
+        let Some(operation) = held.front() else {
             panic!("the rejected operation stays owned")
         };
         assert_eq!(operation.operation.ticket().index(), index);

@@ -121,5 +121,3 @@ pub(crate) const fn seq(value: u16) -> oer_protocols_ieee80211_wire::sequence::S
         None => panic!("test sequence number exceeds twelve bits"),
     }
 }
-
-pub mod backend_aggregate;

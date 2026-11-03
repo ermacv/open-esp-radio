@@ -398,7 +398,7 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Operations {
             Some(why) => Err(why),
             None => {
                 let publication_events = conformance::observed_order(
-                    self.air.sent().iter().map(|frame| frame.ticket),
+                    self.air.sent().iter().filter_map(|frame| frame.ticket),
                     seen.markers,
                 )
                 .collect();

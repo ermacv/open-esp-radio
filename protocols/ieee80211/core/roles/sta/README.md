@@ -34,11 +34,10 @@ key removal or TX effects to the failed port. Idle channel places return
 separately in `StationPlaceReturns`, without advancing scan/join transitions. The stopped arbiter consumes this collection
 and the cancelled lease returns, then hands out the complete `StationPlaces`
 by value. The infallible station restart requires that complete owner.
-`StaData::finish` returns queued frames to its own terminal bank. A complete station bank can
+A complete station bank can
 consume itself through `restart(self, StationPlaces)`, preserving its epoch
 source and all minted resources. The resulting station reclaims old keys and receive configuration
-before accepting commands; the data bank preserves admission permits and its
-ordering frontier. Deferred EAPOL owners return separately for the old association.
+before accepting commands. Deferred EAPOL owners return separately for the old association.
 Only the service's ordinary Stop continuation supplies the reusable disabled
 port owner needed to run these banks again. Healthy disable returns every frame
 and key owner before these banks or the installation are destroyed; poisoned
@@ -46,10 +45,10 @@ work still owned by the backend remains in that installation's retirement custod
 The `test-support` feature exposes the retired station's resource counts for
 composition tests; those diagnostic methods are absent from product builds.
 
-The station and its data machine keep no diagnostic counters and hold no
+The station and its data plane keep no diagnostic counters and hold no
 sink. The calls that can lose or drop something (`Station::input`,
-`receive`, `poll_action`, `try_block_ack_reply` and the data machine's
-`input`, `returned`, `leave` and `finish`) take the caller's
+`receive`, `poll_action`, `try_block_ack_reply` and the data plane's
+`completed`, `stop` and `withdraw_unpublished`) take the caller's
 `&mut impl EventSink<StaEvent>`. They report a token returned to a full pool
 (`TokenLost`), a lost data MSDU or MPDU with its reason (`DataLost`), an RSN
 input dropped without a returned error (`RsnInputDropped`: key data that did
@@ -166,51 +165,52 @@ Module map:
   recipient ends an agreement without an answer; an agreement idle for the
   policy's inactivity ends with the station's DELBA (reason 39), and new
   data negotiates again. `Station::tx_block_ack` reads an operational
-  agreement; other Block Ack actions stay with the receive agreements;
-- `data`: the connected station's data machine beside it: MSDUs into QoS or
-  non-QoS Data MPDUs in its own buffers, under the pairwise key the
-  station's `LinkView` lends, and the BSS's data MPDUs into MSDUs. An owed
-  MPDU holds only its buffer; a ticket, at most eight, belongs to an attempt
-  and is taken when the MPDU goes to the port, so the buffers (up to the
-  machine's `CAP`, one queue for every TID in their order) may outnumber
-  the tickets. `data::aggregate`: under an operational transmit agreement
-  (`Station::tx_aggregate_window`, asked only for the TID of the next
-  attempt) a TID's owed MPDUs whose sequence numbers follow one another
-  inside the window go as one A-MPDU (`StaData::poll_attempt`), at most the
-  port's subframes, the lower of the access point's Maximum A-MPDU Length
-  and the port's length at the aggregate's rate
-  (`AmpduCapabilities::max_length`), and the rate's PPDU time limit
-  (`PhyRate::max_txtime_micros`, 5484 us for HT-mixed), counted before any
-  MSDU leaves its queue; one ticket and
-  one admission permission serve the aggregate. A first owed MPDU beyond
-  the window's end goes neither alone nor aggregated: it waits until the
-  terminals of the MPDUs before it move the window. An aggregate goes as
-  soon as a ticket and a permission are free; while the port holds it open,
-  owed MPDUs that follow its last member inside the window join it with no
-  ticket (`StaData::extend_aggregate`), and one the port refuses goes back
-  to its queue (`StaData::unbuilt`). Every MPDU stays at one place of
-  the machine's bank of MPDUs (one place per buffer, `CAP`) from its input
-  until it ends or goes alone to the port: the owed queue names it by its
-  place, and so does an aggregate's context, in subframe order, so the
-  context is no larger than a single MPDU's and joining or retrying moves
-  no MPDU. Each member's memory
-  waits at its place too until the port's builder takes it
-  (`StaData::aggregate_mpdu`), and a terminal gives it back there
-  (`StaData::aggregate_mpdu_returned`): neither the attempt nor its return
-  carries the members' memory by value. Its terminal (`StaData::aggregate_returned`) retires
-  acknowledged members and returns missing ones, published, to their queue
-  until their MSDU lifetime or the policy's attempts on the air run out
-  (`StaTxBlockAckPolicy::retry_members`). Each data terminal reports what it
-  settled as `BlockAckMarks`; `Station::tx_block_ack_settled` moves the
-  agreement's window and owes a BlockAckReq (`StaFrame::BlockAckRequest`,
-  encoded by the port) when the window passed a dropped member. The
-  per-aggregate vendor retry machine (`oer-protocols-ieee80211-core-upper-mac`
-  `ampdu`) is not used. No reorder, replay check or power save yet. It owns
-  the
-  network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
-  attempt's protection exchange, power and coexistence class;
-- `port`: the station's and data machine's tokens on a lower-MAC port
-  (`PortStaTokens`, `PortDataTokens`) and the installed pairwise key
+  agreement, whose window the data plane keeps from its starting sequence
+  on; `Station::tx_block_ack_request` owes the BlockAckReq the plane names
+  after a drop, owed again at that head when it goes unanswered. Other
+  Block Ack actions stay with the receive agreements;
+- `data`: the connected station's data: the network boundary's checked
+  `EthernetFrame` and where an MSDU sits in a frame region
+  (`MSDU_ETHERNET_OFFSET`), the BSS's data MPDUs into MSDUs, and the A-MPDU
+  limits (`PpduLimit`: the port's subframes, the lower of the access
+  point's Maximum A-MPDU Length and the port's length at the aggregate's
+  rate, and the rate's PPDU time limit, `PhyRate::max_txtime_micros`) and
+  the retry policy (`AggregateRetry`, `StaTxBlockAckPolicy::retry_members`)
+  under the station's transmit agreements. No reorder, replay check or
+  power save yet;
+- `data::plane`: the station's data transmission over the port's two DMA
+  arenas (`TxArena`). `DataPlane::handover` takes one link's `DataLink`
+  (`DataLink::for_link`: header template, `AcAdmission`, retry policy, HT
+  limits and each TID's `TxWindow`) and `DataPlane::stop` returns it,
+  after returning the frames of unpublished arenas;
+  `DataPlane::withdraw_unpublished` returns them alone, before a pairwise
+  key changes. `DataPlane::intake` writes an MSDU once, as the standby
+  arena takes it: the next sequence number of its TID and packet number of
+  the key, drawn from the station's link (`LinkNumbers`: its `LinkMode`
+  spaces and its `StationPairwiseKey::packet_numbers`, which the station's
+  own EAPOL and Block Ack negotiation share), the header from the template
+  and the CCMP header. The standby belongs to one TID, holds
+  consecutive sequence numbers inside its window, within the TID's
+  `PpduLimit` (computed when the aggregate rate or the agreement changes)
+  and the arena's slots; a TID without agreement takes one frame. An MSDU
+  the standby cannot take waits in the network's queue (`Intake::Wait`).
+  `DataPlane::publication` puts one arena on the air at a time, one rate
+  plan each: an arena holding frames from an earlier publication first,
+  then the standby; more frames than one as an A-MPDU under the TID's
+  agreement, else a single MPDU of the arena's position 0, so the frames
+  of a TID whose agreement ended drain one MPDU at a time.
+  `DataPlane::completed` decodes an A-MPDU's BlockAck in one pass over the
+  arena's frames: acknowledged frames are delivered, missing ones retried
+  in the same arena with the same numbers until their MSDU's lifetime or
+  the policy's attempts run out, then dropped. A single MPDU had the port's
+  retry plan and is never republished: it is delivered or dropped, and the
+  arena keeps the frames it did not send. A drop under an agreement moves
+  its window and owes a BlockAckReq (`Settled::bar`, which
+  `Station::tx_block_ack_request` takes), and the end's `RateLesson` teaches
+  the rate selection, a single MPDU's response through the caller's ACK
+  evidence;
+- `port`: the station's tokens on a lower-MAC port (`PortStaTokens`) and
+  the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
   CCMP packet-number allocator; a retransmission keeps its number. Its
   request (`StationPairwiseKey::request`) enqueues the installation and
@@ -406,27 +406,13 @@ needs reconciliation through TIM when an earlier PM=1 may have reached the
 access point. The Null retry budget is a `NonZeroU8` from its constant
 definition through the service's retry-plan limit.
 
-A data context keeps the link epoch, original TID, order, checked
-`SizedFrame<AckHeader, K>`, access category and protection. The immutable
-frame description preserves its header/length proof through an unpublished
-return; no constructor or frame-byte inspection runs again. `DataTransmit`
-has closed fields and consumes into context, ticket and buffer. Frame and
-access category occur only in the context; the admission permission holds
-only its pool bit. `DataProtection` records Open or CCMP at encoding and
-borrows the matching link's key at submission. A changed epoch or protection
-returns `TxRefusal::LinkChanged` with every resource, before preparation;
-a protected encoding cannot fall through to an open transmission. A submitted
-context owns an `AcPermit` from the pool sized by backend queue depth
-(and bounded by the tickets granted to Data), and a ticket from Data's
-ticket pool. Returning the context returns
-that permission; there is no `at_port` counter, in-flight metadata FIFO or
-TID decoding at completion. Voice keeps the same data depth bound, so a
-station operation waits for at most that depth plus one on-air attempt. An unpublished return is inserted by its original order,
-so a batch of returns preserves both per-TID and shared-AC order. An old
-link's terminal returns its tokens without requeueing or affecting the new
-link; the service checks the same epoch before updating rate selection.
-`LinkView` still borrows sequence/replay/key state only for a synchronous
-step. No queued context borrows the station or data machine.
+The data plane keeps each arena's frames in a book beside its arena right:
+their TID, first sequence number, admission instants and the attempts on
+the air; the arena holds their memory. An arena of an ended link settles
+by releasing every frame, without moving any window or teaching rate
+selection. `LinkView` lends the sequence spaces, replay check and key only
+for a synchronous step; the plane borrows the spaces and the key's packet
+numbers through `LinkNumbers` for one intake.
 
 `Station::receive` admits Data and EAPOL together through MAC's checked
 `DecodedHeader` and `AdmittedData`. The header owns the MAC/QoS/HT boundary;
@@ -515,19 +501,14 @@ carry `ReturnedMpdu::Fresh` or `Sent`; service preserves that state. Only
 the machine renews a published MPDU when retiring it, releasing its body
 and returning fresh memory to its pool.
 
-`StaData::returned` consumes a complete terminal or preparation refusal and
-has no `Result`. The service exhaustively pairs `TxContext` with the closed
-Small/Large fresh-or-sent buffer enum. A mismatched pair, or an aggregate
-terminal without its aggregate context, with a station buffer or with
-another number of subframes than its members, is a backend contract
-violation: it takes the Poisoned fail-stop path without a stray-terminal
-counter or resource reuse. `Indeterminate` retires and counts the MSDU; Station treats
-it as unconfirmed. Neither it nor `ContentionLimit` trains rate selection.
+A station frame whose terminal returns a buffer of another class than the
+station's is a backend contract violation: it takes the Poisoned fail-stop
+path without a stray-terminal counter or resource reuse. `Indeterminate`
+retires the frame; Station treats it as unconfirmed. Neither it nor
+`ContentionLimit` trains rate selection.
 
-A gate withdrawal retains the MPDU at its original TID/order. Fresh memory
-is prepared normally; Sent goes through retransmission with the same SN/PN.
-KeyRemoved retires that MSDU and releases admission and resources. A barrier
-waits only the current publication; rate selection ignores every withdrawal.
+A barrier waits only the current publication; rate selection ignores every
+withdrawal.
 
 
 ## Design decisions

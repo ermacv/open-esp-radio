@@ -44,12 +44,6 @@ pub enum LibraryPart {
     Transmit,
     Recycle,
     Attempt,
-    Extend,
-    Subframe,
-    PortExtend,
-    Window,
-    Submit,
-    Open,
 }
 
 impl LibraryPart {
@@ -71,12 +65,6 @@ impl LibraryPart {
         LibraryPart::Transmit,
         LibraryPart::Recycle,
         LibraryPart::Attempt,
-        LibraryPart::Extend,
-        LibraryPart::Subframe,
-        LibraryPart::PortExtend,
-        LibraryPart::Window,
-        LibraryPart::Submit,
-        LibraryPart::Open,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -98,18 +86,12 @@ impl LibraryPart {
             LibraryPart::Transmit => "transmit",
             LibraryPart::Recycle => "recycle",
             LibraryPart::Attempt => "attempt",
-            LibraryPart::Extend => "extend",
-            LibraryPart::Subframe => "subframe",
-            LibraryPart::PortExtend => "port-extend",
-            LibraryPart::Window => "window",
-            LibraryPart::Submit => "submit",
-            LibraryPart::Open => "open",
         }
     }
 }
 
 /// The library's parts.
-pub const LIBRARY_PARTS: usize = 23;
+pub const LIBRARY_PARTS: usize = 17;
 /// The parts an image names, after the library's.
 pub const IMAGE_PARTS: usize = 4;
 /// Every part: the library's, then the image's.

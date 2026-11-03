@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn prefix_budget_matches_commit_with_final_padding_and_delimiters() {
+fn prefix_budget_matches_the_prepared_batch_with_final_padding_and_delimiters() {
     let mut storage = core::pin::pin!(HtAmpduTxStorage::<4>::new());
     let pool = frame_pool::<256, 3>();
     let mut retention = RetainedAmpduDmaStorage::new();
@@ -13,28 +13,41 @@ fn prefix_budget_matches_commit_with_final_padding_and_delimiters() {
         crate::mac::tx::HtGuardInterval::Long800Ns,
         crate::mac::tx::HtChannelWidth::Mhz40,
     );
-    let commit = unlimited_ht_rate();
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 0, 101, |bytes| bytes.fill(0x42)),
-            ht_frame_request(0, 101, 8, 2, commit),
-        )
-        .unwrap();
-    let before = owner.prepared_aggregate(cookie).unwrap();
+    // Each PSDU's empty delimiters, by its length: 113 octets take two,
+    // 115 one, 44 none.
+    let delimiters = |psdu: u16| match psdu {
+        113 => Some(2),
+        115 => Some(1),
+        _ => Some(0),
+    };
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 101, |bytes| bytes.fill(0x42)),
+        101,
+        8,
+    )
+    .unwrap();
+    let before = owner.prepare_format(cookie, delimiters, false).unwrap();
+    // The budget starts from the prepared prefix.
     let mut budget = owner.ht_length_budget(rate).unwrap();
+    assert_eq!(budget.finish().unwrap(), before);
     budget.push(103 + 8 + 4, 1).unwrap();
-    assert_eq!(owner.prepared_aggregate(cookie).unwrap(), before);
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 1, 103, |bytes| bytes.fill(0x43)),
-            ht_frame_request(0, 103, 8, 1, commit),
-        )
-        .unwrap();
+    assert_eq!(
+        owner.prepare_format(cookie, delimiters, false).unwrap(),
+        before
+    );
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 1, 103, |bytes| bytes.fill(0x43)),
+        103,
+        8,
+    )
+    .unwrap();
     assert_eq!(
         budget.finish().unwrap(),
-        owner.prepared_aggregate(cookie).unwrap()
+        owner.prepare_format(cookie, delimiters, false).unwrap()
     );
     assert!(matches!(
         budget.push(200, 0),
@@ -42,19 +55,20 @@ fn prefix_budget_matches_commit_with_final_padding_and_delimiters() {
     ));
     assert_eq!(
         budget.finish().unwrap(),
-        owner.prepared_aggregate(cookie).unwrap()
+        owner.prepare_format(cookie, delimiters, false).unwrap()
     );
     budget.push(32 + 8 + 4, 0).unwrap();
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 2, 32, |bytes| bytes.fill(0x44)),
-            ht_frame_request(0, 32, 8, 0, commit),
-        )
-        .unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 2, 32, |bytes| bytes.fill(0x44)),
+        32,
+        8,
+    )
+    .unwrap();
     assert_eq!(
         budget.finish().unwrap(),
-        owner.prepared_aggregate(cookie).unwrap()
+        owner.prepare_format(cookie, delimiters, false).unwrap()
     );
     owner.cancel(cookie, drop).unwrap();
 }

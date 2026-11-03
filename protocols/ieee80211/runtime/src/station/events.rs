@@ -2,7 +2,7 @@
 //! composition lends the service for its cores' events too.
 //!
 //! The service holds the composition's sink `O` and lends it, for one call
-//! at a time, to the station, its data machine and its receive agreements.
+//! at a time, to the station, its data plane and its receive agreements.
 //! It keeps no count of these events; `()` keeps none either. A refusal
 //! the service returns to the application (`ServiceOutput::MsduRefused`,
 //! `ServiceOutput::TxRefused`) is the application's to count and is no event.
@@ -35,10 +35,10 @@ pub enum ServiceEvent {
 }
 
 /// The network's transmit memory a station service holds, by where it
-/// waits: frames in the network's queue to the service, MPDUs the data
-/// machine owes, members of aggregates out at the port, memory freed but
-/// not yet given back, and memory in the queue back to the network. Each
-/// count saturates at `u8::MAX`.
+/// waits: frames in the network's queue to the service, the MSDU that waits
+/// for the standby data arena (`owed`), frames the data arenas hold
+/// (`members`), memory freed but not yet given back, and memory in the
+/// queue back to the network. Each count saturates at `u8::MAX`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct TxMemoryHeld {
     pub incoming: u8,

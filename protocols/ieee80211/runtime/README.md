@@ -60,13 +60,14 @@ implementing a foreign trait for a foreign backend or replacing its body-loan
 identity. The radio and lower-MAC port contracts remain the common boundary.
 The service reports the start and end of each stretch of its own work
 (`ServiceSpan`: a step, the pending frames, a sources poll, a received frame,
-its delivery and network hand-off, a terminal, a transmit, a recycle) to
+its delivery and network hand-off, a terminal, a transmit, a recycle, a
+pass of the data plane) to
 `StationPort::span`, which by default observes nothing.
 
 `station::Runner` retains the station's concrete `StaCallbacks` provider with
 its resource bank across stop/restart. It keeps no counters: it holds the
 composition's `O: StationEvents` sink (by default `()`), lends it to each call
-of its station, data machine and receive agreements, and reports lost port
+of its station, data plane and receive agreements, and reports lost port
 events, receive drops with their reason, the MSDUs of a received frame the
 network queue did not take (one `RxMsdusRefused` count per reason and frame,
 after the station's own events of that frame) and group key installations as
@@ -82,14 +83,32 @@ Commands and network frames travel through `oer_portable_memory::WakingSpscQueue
 
 Every transmission's parameters come from the cores: a station frame's rate
 plan, coexistence class, access category, protection exchange and power from
-`sta`'s action, its CCMP packet number from the station's pairwise key, and a
-data MPDU's from `sta::data`. The service prepares the port's source in the
-buffer pool, submits it and routes each terminal back; a terminal's rate
-sample reaches `RateSelection::learn` with its frame class. Before each
-data attempt, owed MPDUs join the data aggregate of their category the port
-holds open (`AmpduPhase::open_ampdu`), with no ticket; the service keeps
-each category's last aggregate ticket for it, which the port's `None`, a
-refused member, a later submission of the category or the terminal clears.
+`sta`'s action and its CCMP packet number from the station's pairwise key.
+The service prepares the port's source in the buffer pool, submits it and
+routes each terminal back; a terminal's rate sample reaches
+`RateSelection::learn` with its frame class.
+
+Data goes through the station phase's two data arenas
+(`StationPhase::data_arena`), filled and published by `sta`'s data plane
+(`station::data_tx`). The service claims the arenas' rights at its first
+step, hands the plane the station's link once it connects
+(`DataLink::for_link`) and takes it back once the connection ends, and
+tells it each transmit agreement that starts or ends and the port's A-MPDU
+limits at the aggregate rate whenever a rate lesson may have changed them.
+Each network MSDU goes to the plane with the turn's instant, its numbers
+drawn from the station's link; one the standby arena cannot take waits in
+the service (one MSDU), and the network's queue is not read meanwhile. Each
+publication takes one rate plan, single or aggregate; a refused one goes
+again at the next pass. An arena's completion comes back as the port's
+terminal, admitted as `PendingTerminal::Arena`, and the next step settles
+it: the memory of its ended frames goes back to the network as the
+network's queue takes it, a BlockAckReq the plane owes goes to the
+station's transmit agreement, and the lesson teaches the rate selection
+(a single MPDU's response through `StationPort::arena_ack`). Before a new
+pairwise key or a key removal, the frames the arenas hold unpublished go
+back to the network. At Stop the plane's frames go back and the service
+serves events until the arena on the air settled, so the port retires its
+arenas empty.
 The station's
 PTK installation is pending until its `PairwiseKeyInstalled` terminal: only
 then does `sta` receive `PairwiseKeyInstalled` with the key numbered from the
@@ -117,10 +136,9 @@ at that instant is refused with a typed result (`DwellChanging`,
 - **`station.rs::serve` steps once per loop**, then handles the
   event, tick, command and transmit in one pass; a later input sees the
   machine before the previous one was stepped.
-- **Queue bounds are not tied to the backend.** `sta`'s `StaData::new`
-  takes a caller `depth` and `ArbiterPolicy::checked` a caller
-  `publication_bound`; neither comes from `TX_QUEUE_DEPTH` /
-  `PUBLICATION_BOUND` of the lower-MAC owner, so they can disagree.
+- **Publication bound not tied to the backend.** `ArbiterPolicy::checked`
+  takes a caller `publication_bound`, not `PUBLICATION_BOUND` of the
+  lower-MAC owner, so they can disagree.
 - **No bound on a gate cycle or a drain.** `drain_port_error` has no
   deadline for a gate that never closes, and `MAX_INPUT_STEPS_PER_BATCH`
   only yields instead of raising a contract fault.

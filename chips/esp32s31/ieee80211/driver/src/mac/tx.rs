@@ -2391,7 +2391,7 @@ impl HtTxConfig {
         })
     }
 
-    const fn pac_parameters(self) -> MacHtTxParameters {
+    pub(crate) const fn pac_parameters(self) -> MacHtTxParameters {
         MacHtTxParameters {
             control: self.control.pac(TxPhyRate::Ht(self.rate)),
             rate: self.rate.pac_rate(),
@@ -2500,7 +2500,7 @@ impl HeSmpduTxConfig {
             && self.protection_spacing <= 0x03ff
     }
 
-    const fn pac_parameters(self) -> MacHeTxParameters {
+    pub(crate) const fn pac_parameters(self) -> MacHeTxParameters {
         MacHeTxParameters {
             control: self.control.pac(TxPhyRate::He(self.rate)),
             rate: self.rate.pac_rate(),
@@ -2915,6 +2915,25 @@ impl AmpduTxConfig {
 }
 
 impl LegacyTxConfig {
+    /// The program's register values.
+    pub(crate) const fn pac_parameters(self) -> MacLegacyTxParameters {
+        MacLegacyTxParameters {
+            control: self.control.pac(TxPhyRate::Legacy(self.rate)),
+            rate: self.rate,
+            signal: self.signal,
+            data_power: self.data_power,
+            response: self.response,
+            hardware_key_selector: self.hardware_key_selector,
+            interface: self.interface,
+            aifsn: self.aifsn,
+            contention_window: self.contention_window,
+            timeout: self.timeout,
+            scheduler_priority: self.scheduler_priority,
+            packet_priority: self.pti,
+            priority_count: self.pti_count,
+        }
+    }
+
     /// Direct-MPDU queue profile at the caller-selected legacy rate.
     ///
     /// The timeout is the exact q0 image observed while the pinned vendor
@@ -3229,25 +3248,8 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         }
         let index = queue.hardware_index();
         let publication = slot.dma.publication().map_err(map_dma_storage_error)?;
-        let program = MacLegacyTxProgram::new(
-            &publication,
-            MacLegacyTxParameters {
-                control: config.control.pac(TxPhyRate::Legacy(config.rate)),
-                rate: config.rate,
-                signal: config.signal,
-                data_power: config.data_power,
-                response: config.response,
-                hardware_key_selector: config.hardware_key_selector,
-                interface: config.interface,
-                aifsn: config.aifsn,
-                contention_window: config.contention_window,
-                timeout: config.timeout,
-                scheduler_priority: config.scheduler_priority,
-                packet_priority: config.pti,
-                priority_count: config.pti_count,
-            },
-        )
-        .ok_or(TxError::Invalid)?;
+        let program = MacLegacyTxProgram::new(&publication, config.pac_parameters())
+            .ok_or(TxError::Invalid)?;
         if !hardware.prepare_bound_legacy_tx(&publication, index, program) {
             return Err(TxError::QueueActive);
         }

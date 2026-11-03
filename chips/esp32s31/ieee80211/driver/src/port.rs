@@ -38,10 +38,6 @@ use oer_protocols_radio_port::{
     BodyLoan, ClockError, LoanedContext, SlotBodyOwner, SlotIdentity, SlotOwner,
 };
 
-mod aggregate;
-pub use aggregate::{
-    Aggregate, AggregateExecution, OpenAggregate, SubframeMpdus, Subframes, TX_AMPDU_SUBFRAMES,
-};
 mod atomic_words;
 use atomic_words::KeyActivity;
 mod buffer;
@@ -65,21 +61,27 @@ pub use buffer::*;
 pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
 mod loan;
 mod owned;
+pub use crate::lower_mac::arena::BlockAckAnswer;
 pub use crate::lower_mac::{ContentionDraw, Observations};
+pub use driver::StationArena;
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
 pub use settings::SettingFault;
 
-/// Shared admission capacity across the four access categories. An
-/// aggregate takes one ticket, as an MPDU does.
+/// Shared admission capacity across the four access categories. Each MPDU
+/// takes one ticket; the station's two data arenas hold one each.
 pub const TX_TICKETS: usize = 8;
+
+/// Frames of one data arena: the DMA chain's slots, at most the BlockAck
+/// window and report.
+pub const TX_AMPDU_SUBFRAMES: usize = crate::mac::tx::ampdu::TX_AMPDU_SLOT_CAPACITY;
 
 /// The transmit pool's buffers: three complete aggregates, one in the air,
 /// the next one growing and the network's queue behind them, and three for
 /// MPDUs beside them.
 pub const TX_BUFFERS: usize = 3 * TX_AMPDU_SUBFRAMES + 3;
 
-/// The aggregate descriptor chains: the one an aggregate in the air holds
-/// and the one the next aggregate publishes through.
+/// The data arenas' descriptor chains: the arena on the air holds one while
+/// the station fills the other.
 pub const AMPDU_CHAINS: usize = 2;
 
 /// The ordinary descriptors: one per EDCA queue, which holds one published
@@ -96,6 +98,11 @@ const _: () = {
     }
     if TX_DESCRIPTORS != crate::lower_mac::LOWER_MAC_TX_QUEUES {
         panic!("one ordinary descriptor per EDCA queue");
+    }
+    if TX_AMPDU_SUBFRAMES > crate::mac::tx::ampdu::TX_BLOCK_ACK_MAX_WINDOW as usize
+        || TX_AMPDU_SUBFRAMES > BlockAckReport::BITMAP_BITS as usize
+    {
+        panic!("an arena's frames fit its BlockAck window and report");
     }
 };
 
@@ -305,12 +312,9 @@ pub enum Fault {
     Retune(WifiRetuneError),
     /// The device lost its registers to an earlier failure.
     Abandoned,
-    /// An aggregate's descriptor chain refused or quarantined its
-    /// publication; its owners stay quarantined.
-    Aggregate(crate::mac::tx::ampdu::HtAmpduTxError),
-    /// Planning refused an aggregate its builder accepted under the same
-    /// rule; its owners stay quarantined.
-    AggregatePlan(crate::lower_mac::AmpduRefusal),
+    /// The data arenas quarantined themselves; every chain, ticket, key
+    /// right and queue they hold stays with them.
+    Arena(crate::lower_mac::arena::ArenaFault),
     /// The core asked for a retune right after recording the channel it was
     /// tuned to.
     TuneNotRecorded,
@@ -345,7 +349,7 @@ impl<const B: usize> Ieee80211Capabilities for Esp32s31Caps<B> {
 /// device `RefCell`, both from tasks of the station's executor.
 pub struct PortStorage<D: Device<B>, const B: usize> {
     device: RefCell<&'static mut D>,
-    shared: &'static mut PortSharedStorage<B, D::Lent, D::Body>,
+    shared: &'static mut PortSharedStorage<B, D::Lent>,
     identity: Cell<u64>,
     expired: Cell<u32>,
     /// The station and AP tables the driver last installed in its policy.
@@ -356,11 +360,7 @@ pub struct PortStorage<D: Device<B>, const B: usize> {
 /// Caller-placed cross-context state, with no device, Cell, RefCell or shared
 /// producer. Place once before constructing `PortStorage`; quarantine keeps
 /// its DMA return places and key activity unavailable for reuse.
-pub struct PortSharedStorage<
-    const B: usize,
-    P: LentNotifies = SameHart,
-    Body = core::convert::Infallible,
-> {
+pub struct PortSharedStorage<const B: usize, P: LentNotifies = SameHart> {
     poisoned: oer_portable_memory::OnceValue<Fault>,
     // The driver's waker keeps a slot for a notifier the driver preempts;
     // beside the station on its executor none does. The body's consumer
@@ -370,8 +370,6 @@ pub struct PortSharedStorage<
     key_live: [KeyActivity; 20],
     /// Each pool buffer's place, holding it while the CPU owns it.
     returned: oer_portable_memory::ReturnBank<TxBacking<B>, TX_BUFFERS>,
-    /// Each pool buffer's subframe record while an aggregate names it.
-    subframes: aggregate::SubframeTable<B, Body>,
     /// The receive units lent to the network.
     network: lent::NetworkCredit<P>,
     settings: settings::Settings,
@@ -420,7 +418,7 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
     #[inline(never)]
     pub const fn new(
         device: &'static mut D,
-        shared: &'static mut PortSharedStorage<B, D::Lent, D::Body>,
+        shared: &'static mut PortSharedStorage<B, D::Lent>,
     ) -> Self {
         Self {
             device: RefCell::new(device),
@@ -444,13 +442,13 @@ impl<D: Device<B>, const B: usize> PortStorage<D, B> {
         self.shared.check()
     }
 }
-impl<const B: usize, Body> PortSharedStorage<B, SameHart, Body> {
+impl<const B: usize> PortSharedStorage<B, SameHart> {
     /// Vacant cross-context backing, placed separately from the driver's device.
     pub const fn new() -> Self {
         Self::with_network(lent::SameHart::new())
     }
 }
-impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
+impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     // Keep the waker's typed scope at the indirect call, independently of
     // the large terminal dispatchers that notify the body.
     #[inline(never)]
@@ -467,7 +465,6 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
             body: AtomicWaker::new(),
             key_live: [const { KeyActivity::new() }; 20],
             returned: oer_portable_memory::ReturnBank::new(),
-            subframes: oer_portable_memory::ReturnBank::new(),
             network,
             settings: settings::Settings::new(),
             #[cfg(test)]
@@ -492,6 +489,19 @@ impl<const B: usize, P: LentNotifies, Body> PortSharedStorage<B, P, Body> {
     }
 }
 
+/// The first fault an installation's port recorded: what poisoned it before
+/// its driver or body ended. A copied observation that grants nothing; the
+/// quarantine keeps every owner.
+#[derive(Clone, Copy)]
+pub struct FirstFault(&'static oer_portable_memory::OnceValue<Fault>);
+
+impl FirstFault {
+    /// The recorded fault, `None` while the port recorded none.
+    pub fn get(&self) -> Option<Fault> {
+        self.0.get()
+    }
+}
+
 /// The bytes of one event-queue message, and of a received frame's own
 /// fields, which every received frame moves through that queue.
 #[cfg(test)]
@@ -511,7 +521,7 @@ std::thread_local! {
         const { core::cell::Cell::new(None) };
 }
 
-impl<const B: usize, Body> Default for PortSharedStorage<B, SameHart, Body> {
+impl<const B: usize> Default for PortSharedStorage<B, SameHart> {
     fn default() -> Self {
         Self::new()
     }
@@ -573,8 +583,8 @@ enum BackendState<D: Device<B>, const B: usize, O: Observations> {
     Running,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Backend<Id, D, B, O> {
-    /// The aggregates this port sends: up to [`TX_AMPDU_SUBFRAMES`]
-    /// subframes, through [`AmpduPhase`] of either interface.
+    /// The A-MPDUs this port's data arenas send: up to
+    /// [`TX_AMPDU_SUBFRAMES`] subframes.
     pub const AMPDU: Option<AmpduCapabilities> =
         Some(esp32s31_ampdu_capabilities(TX_AMPDU_SUBFRAMES));
 
@@ -610,16 +620,15 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Ba
             coex,
             observations,
         } = parts;
-        // The port takes each of its pool buffers at its place, and each
-        // place's subframe record starts empty. A buffer the pool does not
-        // give, or a place already held, poisons this installation: the
-        // allocation stays out of the bank and enable refuses with the fault.
+        // The port takes each of its pool buffers at its place. A buffer
+        // the pool does not give, or a place already held, poisons this
+        // installation: the allocation stays out of the bank and enable
+        // refuses with the fault.
         for index in 0..TX_BUFFERS {
             let seeded = u8::try_from(index).ok().is_some_and(|place| {
-                (place >= bank
+                place >= bank
                     || claim(pool, place)
-                        .is_some_and(|memory| storage.shared.returned.seed(index, memory).is_ok()))
-                    && storage.shared.subframes.seed(index, None).is_ok()
+                        .is_some_and(|memory| storage.shared.returned.seed(index, memory).is_ok())
             });
             if !seeded {
                 storage.shared.poison(Fault::Capacity);
@@ -680,7 +689,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> StoppedPor
     pub fn reinstall(mut self, tsf_epoch: u32) -> Result<Esp32s31Backend<Id, D, B, O>, Self> {
         if self.storage.shared.poisoned.get().is_some()
             || !self.storage.shared.returned.none_out()
-            || !self.storage.shared.subframes_vacant()
             || tsf_epoch == self.config.tsf_epoch
         {
             return Err(self);
@@ -801,22 +809,6 @@ impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ack {
     pub snr_db: i8,
-}
-
-/// What the port observed of an aggregate's BlockAck: its SNR, when the
-/// completion carried a sample.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BlockAckAnswer {
-    pub snr_db: Option<i8>,
-}
-
-impl BlockAckSnr for BlockAckAnswer {
-    fn snr_sample(&self) -> SnrSample {
-        match self.snr_db {
-            Some(snr_db) => SnrSample::Measured(snr_db),
-            None => SnrSample::Unmeasured,
-        }
-    }
 }
 
 impl Ack {

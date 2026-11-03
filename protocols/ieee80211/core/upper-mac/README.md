@@ -193,11 +193,10 @@ rate control, which chooses a frame's first rate from the reports, is the
 caller's.
 
 `retry` owns portable retry state and a detached rate-series selector over
-`RateLadder`; neither retains backend policy. `backend_aggregate` owns bounded
-aggregate retry state; `block_ack::batch` returns each retained MPDU exactly
-once. Its `next_completion` returns a typed `MissingCompletion` with the
-unchanged completing owner if a retained entry is absent; the caller keeps
-that owner and its remaining frames. Reorder admission resolves the incoming
+`RateLadder`; neither retains backend policy. `block_ack::batch` returns each
+retained MPDU exactly once. Its `next_completion` returns a typed
+`MissingCompletion` with the unchanged completing owner if a retained entry
+is absent; the caller keeps that owner and its remaining frames. Reorder admission resolves the incoming
 frame's array position before any state changes and returns `InvalidPosition`
 with its position and capacity if that internal proof fails.
 The family rate controller selects rates above the backend. Protection

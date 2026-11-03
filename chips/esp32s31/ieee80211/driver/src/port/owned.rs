@@ -75,15 +75,11 @@ pub(super) enum OwnedTxCompleted<
             SingleOutcome<Ack, Infallible>,
         >,
     ),
-    Aggregate(
-        Completed<
-            D::OwnedContext<Id>,
-            Slot<'o, Tickets, Part<Id, 2>>,
-            Subframes<'o, Id, D, B, O>,
-            AggregateOutcome<BlockAckAnswer, Infallible>,
-        >,
-    ),
 }
+/// A published data arena's end, which carries its arena right and no
+/// body-loaned owner.
+pub(super) type ArenaDone =
+    oer_protocols_ieee80211_contracts_port::arena::ArenaCompleted<BlockAckAnswer, Infallible>;
 /// Every terminal but a transmission's, which waits at its ticket's place
 /// in the installation's completion table while only that place travels
 /// through the event queue ([`handoff::ParkedCompletion`]).
@@ -110,6 +106,8 @@ pub(super) enum OwnedTerminal<'o, Id: SlotIdentity, D: Device<B>, const B: usize
 pub(super) enum Retained<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     Terminal(OwnedTerminal<'o, Id, D, B>),
     TxCompleted(OwnedTxCompleted<'o, Id, D, B, O>),
+    #[allow(dead_code, reason = "a retained arena end is never read, only kept")]
+    Arena(ArenaDone),
 }
 impl<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     From<OwnedTerminal<'o, Id, D, B>> for Retained<'o, Id, D, B, O>
@@ -130,6 +128,8 @@ impl<'o, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 pub(super) enum OwnedEvent<'o, Id: SlotIdentity, D: Device<B>, const B: usize> {
     Terminal(OwnedTerminal<'o, Id, D, B>),
     TxCompleted(handoff::ParkedCompletion),
+    /// A published data arena ended.
+    ArenaCompleted(ArenaDone),
     Received {
         frame: ReceiveBuffer<'o, Id, D::Receive>,
         meta: Esp32s31RxMeta,
@@ -311,8 +311,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedTerminal<'static, Id, 
             LowerMacTerminal::TxCompleted(TxCompleted::Single(t)) => {
                 return Retained::TxCompleted(OwnedTxCompleted::Single(t.into_owned(loan)));
             }
-            LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(t)) => {
-                return Retained::TxCompleted(OwnedTxCompleted::Aggregate(t.into_owned(loan)));
+            LowerMacTerminal::TxCompleted(TxCompleted::Arena(done)) => {
+                return Retained::Arena(done);
             }
             LowerMacTerminal::TsfSampled { sample, permission } => Self::TsfSampled {
                 sample,
@@ -358,10 +358,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     where
         Id: 'p,
     {
-        LowerMacTerminal::TxCompleted(match self {
-            Self::Single(t) => TxCompleted::Single(t.lend(loan)),
-            Self::Aggregate(t) => TxCompleted::Aggregate(t.lend(loan)),
-        })
+        let Self::Single(t) = self;
+        LowerMacTerminal::TxCompleted(TxCompleted::Single(t.lend(loan)))
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedEvent<'static, Id, D, B> {
@@ -379,6 +377,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize> OwnedEvent<'static, Id, D, 
             Self::Terminal(t) => LowerMacEvent::Terminal(t.lend(loan)),
             Self::TxCompleted(parked) => {
                 LowerMacEvent::Terminal(handoff::take_completion(completions, parked)?.lend(loan))
+            }
+            Self::ArenaCompleted(done) => {
+                LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Arena(done)))
             }
             Self::Received { frame, meta } => LowerMacEvent::Received {
                 frame: frame.lend(),

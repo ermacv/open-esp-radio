@@ -18,7 +18,7 @@ mod edca;
 pub use edca::{EdcaTrace, edca};
 
 /// A trace whose owners and terminals were read from ModelBackend.
-pub type OutcomeTrace = outcomes::Trace<ModelAck, ModelBlockAckEvidence, ModelAirDenied>;
+pub type OutcomeTrace = outcomes::Trace<ModelAck, ModelAirDenied>;
 
 /// Execute an elementary single-MPDU air case on the model with owner time.
 pub async fn outcome(
@@ -27,19 +27,15 @@ pub async fn outcome(
     rate: LegacyRate,
     clock: Rc<dyn Clock>,
 ) -> Result<OutcomeTrace, &'static str> {
-    if case.form() != outcomes::Form::Single {
-        return Err("aggregate fixture required");
-    }
     let station = IndividualAddress::new([2, 0, 0, 0, 0, 1]).ok_or("fixture station")?;
     let ap = IndividualAddress::new([2, 0, 0, 0, 0, 2]).ok_or("fixture AP")?;
     let (backend, air) = Fixture::<ModelCaps>::new(channel, [station, ap], clock);
     let answer = match case {
         outcomes::Case::Ack => AirAnswer::Ack,
-        outcomes::Case::NoResponse(_) => AirAnswer::NoResponse,
-        outcomes::Case::Collision(_) => AirAnswer::Collision,
-        outcomes::Case::AirDenied(_) => AirAnswer::AirDenied,
-        outcomes::Case::HardwareTimeout(_) => AirAnswer::HardwareTimeout,
-        _ => return Err("single outcome required"),
+        outcomes::Case::NoResponse => AirAnswer::NoResponse,
+        outcomes::Case::Collision => AirAnswer::Collision,
+        outcomes::Case::AirDenied => AirAnswer::AirDenied,
+        outcomes::Case::HardwareTimeout => AirAnswer::HardwareTimeout,
     };
     air.answer(answer);
     match run_model(backend, OutcomeBody { rate }).await {
@@ -172,21 +168,12 @@ async fn exchange<'p, 'id: 'p, Id: SlotIdentity + 'id>(
         ticket: parts.ticket.index(),
         buffer: sent.buffer.slot.index(),
     };
-    let sequence = SequenceNumber::from_sequence_control(u16::from_le_bytes(
-        sent.buffer
-            .memory
-            .get(22..24)
-            .ok_or("model sequence")?
-            .try_into()
-            .map_err(|_| "model sequence")?,
-    ));
     Ok(outcomes::Trace {
         admitted,
         returned,
         state: MpduState::Sent,
         rate: PhyRate::Legacy(legacy),
-        sequence,
         publications: phase.held.air.sent().len(),
-        outcome: outcomes::Outcome::Single(parts.outcome),
+        outcome: parts.outcome,
     })
 }

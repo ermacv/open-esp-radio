@@ -107,44 +107,6 @@ impl<B: ModelComposition> OwnedPayload<B::Identity, B> for ModelMpdu<'static, B>
         }
     }
 }
-impl<'p, B: ModelComposition> BodyPayload<'p, B::Identity, B> for ModelSubframes<'p, B> {
-    type Owned = ModelSubframes<'static, B>;
-    fn into_owned(self, loan: &BodyLoan<'p, B::Identity, B>) -> Self::Owned {
-        ModelSubframes(
-            self.0
-                .into_iter()
-                .map(|subframe| Subframe {
-                    mpdu: subframe.mpdu.into_owned(loan),
-                    acknowledgement_bit: subframe.acknowledgement_bit,
-                })
-                .collect(),
-        )
-    }
-}
-impl<B: ModelComposition> OwnedPayload<B::Identity, B> for ModelSubframes<'static, B> {
-    type Lent<'p>
-        = ModelSubframes<'p, B>
-    where
-        Self: 'p,
-        B::Identity: 'p,
-        B: 'p;
-    fn lend<'p>(self, loan: &BodyLoan<'p, B::Identity, B>) -> Self::Lent<'p>
-    where
-        Self: 'p,
-        B::Identity: 'p,
-        B: 'p,
-    {
-        ModelSubframes(
-            self.0
-                .into_iter()
-                .map(|subframe| Subframe {
-                    mpdu: subframe.mpdu.lend(loan),
-                    acknowledgement_bit: subframe.acknowledgement_bit,
-                })
-                .collect(),
-        )
-    }
-}
 impl<'p, B: ModelComposition, R: ModelRole> ModelPairwiseKey<'p, B, R> {
     pub(super) fn into_owned(
         self,

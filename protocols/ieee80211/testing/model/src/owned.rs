@@ -98,15 +98,10 @@ type SingleTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
     ModelMpdu<'o, B>,
     ModelSingleOutcome,
 >;
-type AggregateTerminal<'o, B> = oer_protocols_ieee80211_contracts_port::Completed<
-    ModelContextOf<B>,
-    Slot<'o, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
-    ModelSubframes<'o, B>,
-    ModelAggregateOutcome,
->;
 pub(super) enum OwnedTxCompleted<'o, B: ModelComposition> {
     Single(SingleTerminal<'o, B>),
-    Aggregate(AggregateTerminal<'o, B>),
+    /// A data arena's end: it names no install, so it needs no loan.
+    Arena(ModelArenaCompleted),
 }
 
 pub(super) enum OwnedSampledTsfPermission<'o, B: ModelComposition> {
@@ -320,8 +315,8 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             Self::TxCompleted(OwnedTxCompleted::Single(done)) => {
                 LowerMacTerminal::TxCompleted(TxCompleted::Single(done.lend(loan)))
             }
-            Self::TxCompleted(OwnedTxCompleted::Aggregate(done)) => {
-                LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(done.lend(loan)))
+            Self::TxCompleted(OwnedTxCompleted::Arena(done)) => {
+                LowerMacTerminal::TxCompleted(TxCompleted::Arena(done))
             }
             Self::GateClosed(gate) => LowerMacTerminal::GateClosed(gate.lend(loan)),
             Self::Configured(context) => LowerMacTerminal::Configured(context.lend(loan)),
@@ -351,8 +346,8 @@ impl<B: ModelComposition> OwnedLowerMacTerminal<'static, B> {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(done)) => {
                 Self::TxCompleted(OwnedTxCompleted::Single(done.into_owned(loan)))
             }
-            LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(done)) => {
-                Self::TxCompleted(OwnedTxCompleted::Aggregate(done.into_owned(loan)))
+            LowerMacTerminal::TxCompleted(TxCompleted::Arena(done)) => {
+                Self::TxCompleted(OwnedTxCompleted::Arena(done))
             }
             LowerMacTerminal::GateClosed(gate) => Self::GateClosed(gate.into_owned(loan)),
             LowerMacTerminal::Configured(context) => {

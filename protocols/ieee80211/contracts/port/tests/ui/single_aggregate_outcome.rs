@@ -1,6 +1,6 @@
 #![no_std]
 use oer_protocols_ieee80211_contracts_port::{
-    InFlight, PhaseAggregateOutcome, PhaseSingleOutcome, PhaseTypes, TxCompleted,
+    AggregateOutcome, InFlight, PhaseSingleOutcome, PhaseTypes, TxCompleted,
 };
 use oer_protocols_radio_port::Slot;
 
@@ -10,7 +10,7 @@ type Ticket<'id, P> =
 pub fn finish<'id, P: PhaseTypes<'id>>(
     operation: InFlight<P::Context, Ticket<'id, P>, P::TxMpdu>,
     single: PhaseSingleOutcome<'id, P>,
-    aggregate: PhaseAggregateOutcome<'id, P>,
+    aggregate: AggregateOutcome<P::BlockAckEvidence, P::AirDenied>,
 ) -> TxCompleted<'id, P> {
     let _ = (&single, &aggregate);
     #[cfg(ui_reject)]

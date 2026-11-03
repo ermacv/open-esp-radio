@@ -744,17 +744,6 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
             .with_protected(matches!(protection, crate::MpduProtection::Ccmp));
         self
     }
-    /// Encode a fresh aggregate subframe with its builder's receiver and TID.
-    /// `ClassSubframe` admits only a QoS data header, so the header keeps
-    /// its QoS Control field.
-    pub(crate) fn in_aggregate(mut self, receiver: A, qos: QosControl) -> Self {
-        let header = self.header.with_address1(receiver.address());
-        self.receiver = receiver;
-        self.header = header
-            .with_qos(qos.field(QosAckPolicy::Normal))
-            .unwrap_or(header);
-        self
-    }
     /// The header, when its fields agree with its Frame Control.
     #[allow(clippy::too_many_arguments, reason = "the fields of a MAC header")]
     pub fn new(
@@ -1145,12 +1134,8 @@ pub trait AddressSetup: LowerMacSetup {
 mod extensions;
 
 pub use extensions::{
-    AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
-    AggregateRefused, AggregateState, AirReservationPhase, AmpduPhase, AmpduRate,
-    BeaconTimingPhase, BeaconWindow, CheckedPoolAggregate, ClassSubframe, EmptyAggregate,
-    ExtendError, ExtendRefused, InterfaceAggregate, InterfaceAggregateAttempt,
-    InterfaceAggregateSubmission, InterfaceProtection, MonitorPhase, MpduStartSpacing,
-    NonEmptyAggregate, NonEmptyState, PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
+    AirReservationPhase, AmpduPhase, AmpduRate, BeaconTimingPhase, BeaconWindow, MonitorPhase,
+    MpduStartSpacing, TbttPlan,
 };
 
 #[cfg(test)]

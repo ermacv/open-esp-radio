@@ -314,6 +314,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         self.storage.shared.wake_body();
     }
+    /// Post a published data arena's end to the station; a full queue
+    /// keeps it quarantined and poisons the installation.
+    pub(super) fn arena_completed(&self, done: owned::ArenaDone) {
+        if let Err(owned::OwnedEvent::ArenaCompleted(done)) =
+            self.events.push(owned::OwnedEvent::ArenaCompleted(done))
+        {
+            retain_terminal(self.failed_terminal, owned::Retained::Arena(done));
+            self.storage.poison(Fault::Capacity);
+        } else {
+            #[cfg(all(oer_trace, oer_debug_control))]
+            oer_chips_family_staged_runtime::trace::emit(&trace::TerminalPosted);
+        }
+        self.storage.shared.wake_body();
+    }
     /// Whether no transmission terminal waits at its place.
     pub(super) fn completions_vacant(&self) -> bool {
         completions_vacant(self.completions)
@@ -321,7 +335,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
 }
 
 pub(super) struct FrontHeld<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub(super) storage: &'static PortSharedStorage<B, D::Lent, D::Body>,
+    pub(super) storage: &'static PortSharedStorage<B, D::Lent>,
     pub(super) commands:
         LocalSpscSender<'p, Cmd<'static, Id, D, B, O>, COMMANDS, CompactSpscCursor>,
     pub(super) events: LocalSpscReceiver<
@@ -363,54 +377,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         }
         serial
     }
-    /// Send `command` to the driver after the open aggregates it follows:
-    /// a submission after its category's, any other after every one.
+    /// Send `command` to the driver, in order.
     pub(super) fn command(&self, command: Cmd<'static, Id, D, B, O>) {
-        let category = match &command {
-            driver::Command::Submit(pending) => Some(pending.category),
-            driver::Command::SubmitAggregate(pending) => Some(pending.category),
-            _ => None,
-        };
-        self.close(category);
         self.send(command);
-    }
-    /// Send the open aggregate of `category`, or of every category, to the
-    /// driver: it is no longer open.
-    pub(super) fn close(
-        &self,
-        category: Option<oer_protocols_ieee80211_wire::qos::WmmAccessCategory>,
-    ) {
-        // Only the driver's own turn borrows its state, which a front call
-        // never meets.
-        let Ok(mut driver) = self.driver.try_borrow_mut() else {
-            self.storage.poison(Fault::HardwareUnavailable);
-            return;
-        };
-        for queue in 0..4 {
-            if category.is_none_or(|category| driver::queue(category) == queue)
-                && let Some(pending) = driver.take_open(queue)
-            {
-                self.send(driver::Command::SubmitAggregate(pending));
-            }
-        }
-    }
-    /// Hold `pending` open as its category's last submission; the driver
-    /// takes it at its next turn when it would go next.
-    pub(super) fn hold_open(&self, pending: driver::PendingAggregate<'static, Id, D, B, O>) {
-        let held = match self.driver.try_borrow_mut() {
-            Ok(mut driver) => driver.hold_open(pending),
-            Err(_) => Err(pending),
-        };
-        match held {
-            Ok(false) => {}
-            Ok(true) => self.storage.driver.wake(),
-            Err(pending) => {
-                // A held driver state, or an aggregate already open: it goes
-                // closed, and the installation poisons.
-                self.storage.poison(Fault::HardwareUnavailable);
-                self.send(driver::Command::SubmitAggregate(pending));
-            }
-        }
     }
     fn send(&self, command: Cmd<'static, Id, D, B, O>) {
         if let Err(error) = self.commands.try_send(command) {

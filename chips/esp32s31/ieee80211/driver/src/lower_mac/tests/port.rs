@@ -543,7 +543,7 @@ type Family<Id> = Types<Id, TestDevice, 512, Draws>;
 type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
-mod aggregate;
+mod arena;
 mod barriers;
 mod conformance;
 mod retune;
@@ -904,6 +904,136 @@ fn port_exhausts_supplied_retry_plan_with_one_terminal() {
     // Standard BE CWmin=15 doubles after each unanswered publication;
     // the fixed entropy selects 8, 24 and 56 slots from those windows.
     assert_eq!(observed.borrow().backoffs, [8, 24, 56]);
+}
+
+/// Sends one BlockAckReq under a plan of two transmissions and returns its
+/// outcome.
+struct BlockAckRequest;
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for BlockAckRequest {
+    type Output = SingleOutcome<Ack, Infallible>;
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        resources: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, Self::Output>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("enable")
+        };
+        let mut resources = resources;
+        let outcome;
+        {
+            let mut phase = owner.phase();
+            let permission = resources
+                .station_commands
+                .configure
+                .with_context(Tag(42, None));
+            phase.station().configure(
+                permission,
+                StationReceive::Bss {
+                    bssid: IndividualAddress::new(BSSID).expect("BSSID"),
+                    filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).expect("filter"),
+                },
+            );
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::Configured(_)))) =
+                phase.next_event().await
+            else {
+                panic!("configuration terminal")
+            };
+            let rate = phase
+                .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+                .expect("supported rate");
+            let Ok(rate) = rate.legacy() else {
+                panic!("a legacy rate")
+            };
+            let [buffer, ..] = resources.buffers;
+            let [ticket, ..] = resources.tickets;
+            let frame = ClassFrame::new(TxFrame::BlockAckRequest {
+                receiver: IndividualAddress::new(BSSID).expect("receiver"),
+                transmitter: STATION,
+                tid: Tid::new(0).expect("TID"),
+                starting_sequence:
+                    oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(0x10),
+                plan: RetryPlan::new(RetryStage {
+                    rate,
+                    transmissions: core::num::NonZeroU8::new(2).expect("retry count"),
+                    protection: Protection::None,
+                }),
+            })
+            .ok()
+            .expect("class length");
+            let source = TxSource::Fresh {
+                buffer,
+                frame,
+                body: None,
+                protection: TxProtection::Open,
+            }
+            .check()
+            .ok()
+            .expect("checked source");
+            let prepared = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::prepare::<
+                Station,
+                Caps,
+            >(source)
+            .ok()
+            .expect("prepared source");
+            phase
+                .station()
+                .submit(
+                    Attempt {
+                        context: Tag(72, None),
+                        ticket,
+                        source: prepared,
+                        access_category:
+                            oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                        protection: Protection::None,
+                        power: SupportedPower::new(TxPower::Calibrated).expect("power"),
+                        coex_operation: TxOperation::Data,
+                    }
+                    .admit(),
+                )
+                .expect("submit");
+            let Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
+                TxCompleted::Single(completed),
+            )))) = phase.next_event().await
+            else {
+                panic!("the BlockAckReq's terminal, not a port fault")
+            };
+            outcome = completed.into_parts(&mut resources.terminal_access).outcome;
+        }
+        let Ok(owner) = owner
+            .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
+            .await
+        else {
+            panic!("disable")
+        };
+        radio::Ended::uninstall(owner, (), outcome)
+    }
+}
+
+#[test]
+fn an_unanswered_block_ack_request_is_sent_again_without_a_retry_bit() {
+    // Neither publication draws a BlockAck: the ordinary transmitter ends
+    // each as unanswered, and the plan sends the request again. A control
+    // frame has no Retry bit to set (IEEE Std 802.11-2020, 9.2.4.1.5).
+    let (backend, observed, _) = installed(std::vec![(0, 0); 2]);
+    observed.borrow_mut().block_ack = Some((0x10, 0, false));
+    let result = block_on(run_body(backend, BlockAckRequest));
+    let Report::Uninstalled { output, .. } = result else {
+        panic!(
+            "clean uninstall, poisoned by {:?}",
+            crate::port::FIRST_POISON.with(Cell::get)
+        )
+    };
+    assert!(
+        matches!(output, TxOutcome::Ended(SingleEnd::AckTimeout(air)) if air.transmissions.get() == 2),
+        "the plan ran out without an answer: {output:?}"
+    );
+    assert_eq!(observed.borrow().publications, 2, "the plan resent it");
 }
 
 /// Install the station PTK for the BSS and take the key its installation

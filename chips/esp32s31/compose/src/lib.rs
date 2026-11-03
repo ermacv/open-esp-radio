@@ -30,6 +30,8 @@
 //!   record, its reset and the next boot's report;
 //! - `radio_fault` (feature `radio-fault`): the shared RF actor's failed
 //!   periodic PHY tracking, its record, reset and the next boot's report.
+//! - [`diagnostic_text`]: a variant path as a record's text, which those
+//!   records and the image's boot-failure reasons share;
 //! - [`exception`]: the exception hook every image passes to `entry!`,
 //!   which retains what the interrupt controller showed after the trap
 //!   beside the runtime's trap-time frame, and the next boot's report.
@@ -42,6 +44,7 @@
 //! interrupt grant and the image's parts for it.
 
 pub mod crypto;
+pub mod diagnostic_text;
 pub mod exception;
 pub mod phy_fault;
 

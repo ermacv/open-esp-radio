@@ -382,10 +382,6 @@ pub trait Events {
 impl Events for () {
     fn event(&mut self, _: Event) {}
 }
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a refused original frame reaches its callback without allocation or loss"
-)]
 pub enum Event {
     Connected {
         bssid: [u8; 6],
@@ -395,7 +391,6 @@ pub enum Event {
     CommandRefused(runtime::CommandRefused),
     CommandCompleted(runtime::CommandTerminal),
     TxRefused {
-        operation: runtime::TxOperation,
         reason: runtime::contract::TransmitRefusal,
     },
     CommandStarted {
@@ -424,9 +419,7 @@ impl<E: Events, N: crate::Notifies> runtime::ServiceOutputSink<Caps> for Output<
             }
             runtime::ServiceOutput::CommandRefused(r) => Event::CommandRefused(r),
             runtime::ServiceOutput::CommandCompleted(r) => Event::CommandCompleted(r),
-            runtime::ServiceOutput::TxRefused { operation, reason } => {
-                Event::TxRefused { operation, reason }
-            }
+            runtime::ServiceOutput::TxRefused { reason } => Event::TxRefused { reason },
             runtime::ServiceOutput::CommandStarted(request) => Event::CommandStarted {
                 request,
                 status: self.status.status(),
@@ -560,7 +553,8 @@ pub enum StationExit {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UnavailableCause {
-    Abandoned,
+    /// The port ended the station's body loan before the station returned.
+    Abandoned(crate::failure::Abandoned),
     Initialization(InitializationError),
 }
 /// The station's network end over `W`'s transmit memory and its packets.

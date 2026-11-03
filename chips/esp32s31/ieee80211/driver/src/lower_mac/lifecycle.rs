@@ -6,7 +6,7 @@ use core::{
 };
 
 mod bank;
-pub use bank::{AggregateView, CoreOwner, CoreRetained, CoreView, VacantView};
+pub use bank::{ArenaCore, CoreOwner, CoreRetained, CoreView, VacantView};
 use bank::{Phase, Prepared};
 
 /// New attempts publish immediately.
