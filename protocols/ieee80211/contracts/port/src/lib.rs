@@ -54,6 +54,10 @@
 //! [`TxArena`] ([`arena`]). Codecs, policy, vendor records and chip
 //! models live in the layers that own them.
 //!
+//! The station's datapath actor owns the radio as a [`DataPort`] and runs
+//! the lifecycle's [`PortCommand`]s in its turns; the phase traits above
+//! remain for the slot-loan path until it moves onto that port.
+//!
 //! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
 //! are the portable ones of `oer-protocols-ieee80211-wire`. This package only declares
 //! the port and its values; it never waits on it.
@@ -72,6 +76,14 @@ pub use arena::{
 };
 pub mod association;
 pub mod capabilities;
+mod command;
+pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
+mod data_port;
+pub use data_port::{
+    CommandProgress, CommandRefusal, DataPort, Facts, PortArena, PortCompleted, PortRate,
+    PortRxBuffer, PortRxPull, PortSink, RxPull, StartRefused, StationSubmission, StopCause,
+    StopObservations, StopUnconfirmed, SubmitRefusal, SubmitRefused, TxFacts,
+};
 mod layout;
 pub use layout::{
     CheckedTxSource, FreshSource, LaidOut, LayoutError, LayoutRefused, MpduKind, MpduLayout,

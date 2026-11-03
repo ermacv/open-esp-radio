@@ -35,6 +35,11 @@ impl<K> Clone for AmpduRate<'_, '_, K> {
     }
 }
 impl<'p, 'id, K> AmpduRate<'p, 'id, K> {
+    /// A rate a port's arena checked; nothing outside this crate mints one.
+    pub(crate) const fn checked(rate: PhaseRate<'p, 'id, K>) -> Self {
+        Self(rate)
+    }
+
     /// The rate.
     pub const fn rate(&self) -> &PhaseRate<'p, 'id, K> {
         &self.0
@@ -77,7 +82,7 @@ pub trait AmpduPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id> {
         if capabilities.formats.contains_rate(rate.get())
             && capabilities.max_length.at(rate.get()).is_ok()
         {
-            Ok(AmpduRate(rate))
+            Ok(AmpduRate::checked(rate))
         } else {
             Err(rate)
         }
