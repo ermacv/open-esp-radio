@@ -25,7 +25,8 @@
 //!
 //! # Errors
 //!
-//! A refusal ([`CommandProgress::Refused`], [`SubmitRefused`],
+//! A refusal ([`CommandProgress::Refused`], [`SubmitRefusal`] with the
+//! attempt's withdrawn terminal in the sink,
 //! [`LendRefused`](crate::LendRefused), [`StartRefused`]) changed nothing
 //! and returns every owner. [`DataPort::Fault`] names a broken contract of
 //! the backend's own state; it keeps its observations, and the backend
@@ -211,14 +212,6 @@ pub enum CommandRefusal {
     EdcaUnsupported,
     /// The radio is not running.
     NotEnabled,
-}
-
-/// An admitted single MPDU the port refused; the attempt comes back whole.
-pub struct SubmitRefused<A> {
-    /// The unchanged attempt, with its context, ticket and buffer.
-    pub attempt: A,
-    /// Why.
-    pub reason: SubmitRefusal,
 }
 
 /// Why [`DataPort::submit`] refused an attempt.
@@ -426,12 +419,16 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// The attempt, unchanged, when the radio does not run.
+    /// Why the port did not take the attempt: the radio does not run or
+    /// stops. The attempt ended at once, withdrawn and never published
+    /// ([`TxOutcome::Withdrawn`](crate::TxOutcome::Withdrawn)), and its
+    /// terminal, with its context, ticket and fresh buffer, is in `sink`.
     fn submit(
         &mut self,
         attempt: Self::Admitted,
         now: Instant,
-    ) -> Result<(), SubmitRefused<Self::Admitted>>;
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<(), SubmitRefusal>;
 
     /// One received unit, while the caller holds fewer than `room`.
     ///

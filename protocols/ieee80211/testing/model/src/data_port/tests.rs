@@ -457,9 +457,31 @@ fn refusals_before_the_start_return_every_owner_unchanged() {
         let attempt = harness.mpdu().unwrap();
         let ticket = attempt.operation.ticket().index();
         let now = harness.clock.now();
-        let refused = harness.port.submit(attempt, now).err().unwrap();
-        assert_eq!(refused.reason, SubmitRefusal::NotEnabled);
-        assert_eq!(refused.attempt.operation.ticket().index(), ticket);
+        let refused = harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .err()
+            .unwrap();
+        assert_eq!(refused, SubmitRefusal::NotEnabled);
+        // The attempt ended withdrawn at once: its terminal returns its
+        // ticket and buffer, never published.
+        match harness.sink.terminals.pop() {
+            Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal))) => {
+                let TerminalParts {
+                    ticket: back,
+                    outcome,
+                    ..
+                } = terminal.into_parts(&mut harness.terminal_access);
+                assert_eq!(back.index(), ticket);
+                assert!(matches!(
+                    outcome,
+                    oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(_)
+                ));
+                harness.tickets.push(back);
+            }
+            _ => panic!("the withdrawn terminal"),
+        }
+        assert!(harness.air.sent().is_empty());
         let color = oer_protocols_ieee80211_contracts_port::BssColor::new(5).unwrap();
         match harness.command(PortCommand::SetBssColor(color)) {
             CommandProgress::Refused(
@@ -495,7 +517,11 @@ fn no_data_port_call_wakes_its_caller() {
         assert!(facts.rx, "the delivered units are receive work");
         let _ = harness.port.deadline();
         let attempt = harness.mpdu().unwrap();
-        harness.port.submit(attempt, now).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
         harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
@@ -587,7 +613,11 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         harness.air.hold(CATEGORY, true);
         let attempt = harness.mpdu().unwrap();
         let admitted = harness.clock.now();
-        harness.port.submit(attempt, admitted).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, admitted, &mut harness.sink)
+            .ok()
+            .unwrap();
         let lifetime = harness
             .air
             .edca(VifRole::Station)
@@ -612,7 +642,11 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         harness.air.hold_completion(CATEGORY, true);
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
-        harness.port.submit(attempt, now).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
         assert_eq!(
             harness.port.deadline(),
             Some(now),
@@ -637,7 +671,11 @@ fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
         harness.air.hold_completion(CATEGORY, true);
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
-        harness.port.submit(attempt, now).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
         harness.service();
         let command = harness.configure().unwrap();
         let CommandProgress::Held(command) = harness.command(command) else {
@@ -731,7 +769,11 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         harness.air.hold_completion(CATEGORY, true);
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
-        harness.port.submit(attempt, now).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
         harness.service();
         harness.deliver(1);
         let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
@@ -776,7 +818,11 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         let lent = harness.port.lend(frame).ok().unwrap();
         harness.air.hold(CATEGORY, true);
         let attempt = harness.mpdu().unwrap();
-        harness.port.submit(attempt, now).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
         let waker = harness.waker();
         let mut cx = Context::from_waker(&waker);
         // The withdrawal's terminal goes out through the next service.
@@ -858,7 +904,11 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
         let buffer = harness.small.pop().unwrap();
         let attempt = harness.admitted_under(ticket, buffer, Some(&key));
         let now = harness.clock.now();
-        harness.port.submit(attempt, now).ok().unwrap();
+        harness
+            .port
+            .submit(attempt, now, &mut harness.sink)
+            .ok()
+            .unwrap();
         harness.service();
         let CommandProgress::Held(remove) =
             harness.command(PortCommand::RemovePairwise { association, key })

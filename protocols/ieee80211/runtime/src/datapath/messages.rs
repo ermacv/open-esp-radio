@@ -275,8 +275,6 @@ pub enum ActorViolation {
     /// A data arena's end named an arena the plane did not publish, or
     /// another number of frames.
     ArenaCompletion,
-    /// The running port refused a station frame the actor admitted.
-    SubmitRefused,
     /// A link came while the actor held one, or none came with its message.
     LinkMailbox,
     /// A parcel's announcement came without its parcel.

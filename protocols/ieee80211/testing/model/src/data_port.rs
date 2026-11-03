@@ -27,8 +27,7 @@ use oer_protocols_ieee80211_contracts_port::{
     AdmittedTxParts, CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts,
     LendRefusal, LendRefused, LowerMacEvent, PairwiseIssue, PortArena, PortCommand, PortCommands,
     PortCompleted, PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartRefused,
-    StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, SubmitRefused,
-    TxFacts,
+    StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -511,6 +510,25 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 terminal(&self.held, *work, TxOutcome::Expired { msdus: 1 });
             }
         }
+    }
+
+    /// End a refused attempt at once, withdrawn and never published: its
+    /// terminal, with every owner, goes to `sink`.
+    fn withdraw(
+        &mut self,
+        attempt: ModelAdmitted<Id, C, X>,
+        reason: SubmitRefusal,
+        sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>,
+    ) -> SubmitRefusal {
+        self.held.post(OwnedLowerMacEvent::Terminal(
+            OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Single(
+                attempt
+                    .operation
+                    .complete(TxOutcome::Withdrawn(WithdrawCause::Disabled)),
+            )),
+        ));
+        self.drain(sink);
+        reason
     }
 
     /// Close a closing gate once nothing it waits for is on the air.
@@ -1070,7 +1088,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         attempt: ModelAdmitted<Id, C, X>,
         now: Instant,
-    ) -> Result<(), SubmitRefused<ModelAdmitted<Id, C, X>>> {
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<(), SubmitRefusal> {
         let refusal = match self.radio {
             Radio::Stopped => Some(SubmitRefusal::NotEnabled),
             Radio::Stopping { .. } => Some(SubmitRefusal::Stopping),
@@ -1085,7 +1104,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             Radio::Running => None,
         };
         if let Some(reason) = refusal {
-            return Err(SubmitRefused { attempt, reason });
+            return Err(self.withdraw(attempt, reason, sink));
         }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
@@ -1093,10 +1112,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let mpdu = attempt.operation.execute().mpdu;
         mpdu.admit(now);
         if mpdu.project_admission(&air).is_err() {
-            return Err(SubmitRefused {
-                attempt,
-                reason: SubmitRefusal::NotEnabled,
-            });
+            return Err(self.withdraw(attempt, SubmitRefusal::NotEnabled, sink));
         }
         let ModelTxExecution { plan, key } = attempt.execution;
         let prepared = Box::new(Prepared {

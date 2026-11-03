@@ -160,9 +160,14 @@ where
     }
 
     /// Whether the port's deadline asks for its service now: work the turn
-    /// left, which the next turn takes after one repost. A port whose
-    /// deadline stays due through [`DUE_REPOSTS`] turns in a row waits for
-    /// its signals instead, so a stuck deadline never spins the executor.
+    /// left, which the next turn takes after one repost. A deadline that is
+    /// still due after the service is the port's "call again": a station
+    /// MPDU queued in this turn publishes at the next service, and a
+    /// published one ends there. After [`DUE_REPOSTS`] turns in a row the
+    /// actor sleeps instead: the alarm never arms a deadline already passed,
+    /// so only the port's next signal or a later deadline wakes it, and a
+    /// port that never moves its deadline meets its own named bounds (a held
+    /// command's, a publication's), which end the run as faults.
     pub(super) fn due_again(&mut self) -> bool {
         let due = self.port.deadline().is_some_and(|at| at <= self.now);
         if !due {

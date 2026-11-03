@@ -82,7 +82,7 @@ mod data_port;
 pub use data_port::{
     CommandProgress, CommandRefusal, DataPort, Facts, PortArena, PortCompleted, PortRate,
     PortRxBuffer, PortRxPull, PortSink, RxPull, StartRefused, StationSubmission, StopCause,
-    StopObservations, StopUnconfirmed, SubmitRefusal, SubmitRefused, TxFacts,
+    StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
 };
 mod layout;
 pub use layout::{

@@ -207,14 +207,15 @@ fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Viol
 
 fn refusals<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
-    let identity = H::identity(&attempt);
     let now = harness.now();
-    let (port, _) = harness.parts();
-    match port.submit(attempt, now) {
-        Err(refused)
-            if refused.reason == SubmitRefusal::NotEnabled
-                && H::identity(&refused.attempt) == identity => {}
-        _ => return Err(Violation::Refusal),
+    let (port, sink) = harness.parts();
+    if port.submit(attempt, now, sink) != Err(SubmitRefusal::NotEnabled) {
+        return Err(Violation::Refusal);
+    }
+    // The refused attempt ended withdrawn at once: its terminal returns its
+    // owners, and nothing else ended.
+    if harness.take_completed() != 1 {
+        return Err(Violation::Refusal);
     }
     let command = harness.configure().ok_or(Violation::Fixture)?;
     let now = harness.now();
@@ -317,8 +318,9 @@ fn deadline<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     harness.hold_air(true);
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
-    let (port, _) = harness.parts();
-    port.submit(attempt, now).map_err(|_| Violation::Refusal)?;
+    let (port, sink) = harness.parts();
+    port.submit(attempt, now, sink)
+        .map_err(|_| Violation::Refusal)?;
     let _ = service(harness)?;
     let published = {
         let (port, _) = harness.parts();

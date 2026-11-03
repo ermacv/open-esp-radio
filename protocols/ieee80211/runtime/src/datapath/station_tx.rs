@@ -5,7 +5,7 @@
 use super::turn::Failed;
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{
-    Attempt, Protection, Station, SubmitRefused, TxProtection, TxSource,
+    Attempt, Protection, Station, TxProtection, TxSource,
 };
 use oer_protocols_ieee80211_core_roles_sta::machine::calibrated_power;
 
@@ -154,14 +154,19 @@ where
                 );
             }
         };
-        match self.port.submit(admitted, self.now) {
-            Ok(()) => Ok(()),
-            Err(SubmitRefused { attempt, .. }) => {
-                // The running port refused it: its owners stay with the
-                // actor, sealed, and the run ends.
-                self.retained.admitted = Some(attempt);
-                Err(ActorFault::Contract(ActorViolation::SubmitRefused))
-            }
+        // A port that does not take the attempt ends it at once, withdrawn:
+        // its terminal returns the owners to the lifecycle like any other,
+        // and the station hears the frame did not go.
+        let mut outbox = super::turn::Outbox {
+            from_actor: &lifecycle.from_actor,
+            returns: &lifecycle.returns,
+            stage: &mut self.stage,
+            grouped: false,
+        };
+        let _refused = self.port.submit(admitted, self.now, &mut outbox);
+        match self.stage.overflow.take() {
+            Some(violation) => Err(ActorFault::Contract(violation)),
+            None => Ok(()),
         }
     }
 }

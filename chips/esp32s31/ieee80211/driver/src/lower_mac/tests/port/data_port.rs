@@ -489,7 +489,11 @@ fn no_data_port_call_wakes_its_caller() {
         fixture.deliver(2);
         let attempt = fixture.station_mpdu().expect("attempt");
         let now = fixture.now();
-        fixture.port.submit(attempt, now).ok().expect("submitted");
+        fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .ok()
+            .expect("submitted");
         for _ in 0..4 {
             fixture.turn();
         }
@@ -573,13 +577,16 @@ fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
 fn a_refused_submission_and_command_return_their_owners_unchanged() {
     with_fixture(|fixture| {
         let attempt = fixture.station_mpdu().expect("attempt");
-        let ticket = attempt.operation.ticket().index();
         let now = fixture.now();
-        let Err(SubmitRefused { attempt, reason }) = fixture.port.submit(attempt, now) else {
-            panic!("a stopped port refuses the submission");
-        };
-        assert_eq!(reason, SubmitRefusal::NotEnabled);
-        assert_eq!(attempt.operation.ticket().index(), ticket);
+        let refused = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        assert_eq!(refused, Err(SubmitRefusal::NotEnabled));
+        // The attempt ended withdrawn at once: its terminal returns its
+        // owners.
+        assert!(matches!(
+            fixture.outbox.terminals.as_slice(),
+            [LowerMacTerminal::TxCompleted(TxCompleted::Single(_))]
+        ));
+        assert_eq!(fixture.take_completed(), 1);
         let gate = fixture.gate.take().expect("gate");
         let refused = fixture
             .port
@@ -590,9 +597,14 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
             panic!("a stopped port refuses the gate with it");
         };
         assert!(fixture.outbox.terminals.is_empty());
-        // The same owners run once the port does.
+        // A new attempt runs once the port does.
         fixture.start();
-        fixture.port.submit(attempt, now).ok().expect("submitted");
+        let attempt = fixture.station_mpdu().expect("attempt");
+        fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .ok()
+            .expect("submitted");
         assert!(matches!(
             fixture.run(PortCommand::CloseGate(gate)),
             Ok(CommandProgress::Done)
@@ -630,7 +642,11 @@ fn a_queued_mpdu_bounds_the_deadline_until_it_expires_behind_a_closed_gate() {
         let idle = fixture.port.deadline();
         let attempt = fixture.station_mpdu().expect("attempt");
         let admitted = fixture.now();
-        fixture.port.submit(attempt, admitted).ok().expect("queued");
+        fixture
+            .port
+            .submit(attempt, admitted, &mut fixture.outbox)
+            .ok()
+            .expect("queued");
         let lifetime = EdcaParameterSet::STANDARD_DEFAULT
             .access_category(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort)
             .msdu_lifetime;
@@ -674,7 +690,11 @@ fn a_pairwise_removal_is_held_while_its_key_is_on_air_then_runs() {
         fixture.hold_air(true);
         let attempt = fixture.protected_mpdu(&key).expect("attempt");
         let now = fixture.now();
-        fixture.port.submit(attempt, now).ok().expect("published");
+        fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .ok()
+            .expect("published");
         let removal = PortCommand::RemovePairwise { association, key };
         let removal = match fixture.port.command(removal, now, &mut fixture.outbox) {
             Ok(CommandProgress::Held(removal)) => removal,
@@ -759,7 +779,14 @@ fn a_stalled_group_command_becomes_a_named_fault_that_keeps_the_command() {
         ));
         assert!(matches!(fixture.port.receive(4, now), Err(found) if found == fault));
         let attempt = fixture.station_mpdu().expect("attempt");
-        assert!(fixture.port.submit(attempt, now).is_err());
+        assert!(
+            fixture
+                .port
+                .submit(attempt, now, &mut fixture.outbox)
+                .is_err()
+        );
+        // The refused attempt's withdrawn terminal returns its owners.
+        assert_eq!(fixture.take_completed(), 1);
         assert!(fixture.outbox.terminals.is_empty());
     });
 }

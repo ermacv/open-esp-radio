@@ -675,16 +675,29 @@ fn frames_for_the_station_wait_in_the_ring_while_the_lifecycle_holds_its_lane() 
 /// A protected QoS Data frame of the station, an EAPOL packet in it, that
 /// the link numbers in TID `tid`.
 fn station_frame<'s>(bench: &mut Bench<'_, 's>, tid: u8) -> StationTx<'s, P<'s>> {
+    station_frame_under(bench, tid, true)
+}
+
+/// The station's QoS Data frame of TID `tid`, protected under the link's
+/// key or open, numbered by the station.
+fn station_frame_under<'s>(
+    bench: &mut Bench<'_, 's>,
+    tid: u8,
+    protected: bool,
+) -> StationTx<'s, P<'s>> {
     use oer_protocols_ieee80211_contracts_port::TxBufferMemory;
     let ticket = bench.tickets.pop().unwrap();
     let mut buffer = bench.small.pop().unwrap();
     let mut frame = std::vec![0_u8; 26];
-    frame[0..2].copy_from_slice(&0x4188_u16.to_le_bytes());
+    let control: u16 = if protected { 0x4188 } else { 0x0188 };
+    frame[0..2].copy_from_slice(&control.to_le_bytes());
     frame[4..10].copy_from_slice(&BSSID);
     frame[10..16].copy_from_slice(&LOCAL);
     frame[16..22].copy_from_slice(&BSSID);
     frame[24] = tid;
-    frame.extend_from_slice(&[0; 8]);
+    if protected {
+        frame.extend_from_slice(&[0; 8]);
+    }
     frame.extend_from_slice(&[0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e, 2, 3, 0, 0]);
     let bytes = buffer.bytes_mut().unwrap();
     bytes[..frame.len()].copy_from_slice(&frame);
@@ -696,9 +709,13 @@ fn station_frame<'s>(bench: &mut Bench<'_, 's>, tid: u8) -> StationTx<'s, P<'s>>
         class: StaFrameClass::Normal,
         plan: StaRatePlan::Management,
         access_category: WmmUserPriority::new(tid).unwrap().access_category(),
-        number: FrameNumber::Link {
-            space: LinkSpace::Tid(WmmUserPriority::new(tid).unwrap()),
-            protected: true,
+        number: if protected {
+            FrameNumber::Link {
+                space: LinkSpace::Tid(WmmUserPriority::new(tid).unwrap()),
+                protected: true,
+            }
+        } else {
+            FrameNumber::Open
         },
     }
 }
@@ -1042,4 +1059,61 @@ fn a_stopped_port_reinstalls_under_the_same_actor_without_a_reset() {
         assert_eq!(actor.port().generation(), generation + 1);
         assert_eq!(air.disable_calls(), 0, "no stop, no reset");
     }));
+}
+
+#[test]
+fn a_frame_the_running_port_refuses_ends_withdrawn_and_the_actor_runs_on() {
+    bench(|bench| {
+        bench.start();
+        // The port closes its admission while the actor still runs it.
+        bench.air.poison();
+        let transmit = station_frame_under(bench, 0, false);
+        assert!(
+            bench
+                .to_actor
+                .try_send(ToActor::StationTx(transmit))
+                .is_ok()
+        );
+        bench.poll();
+        match bench.returned() {
+            Some(Returned::Terminal {
+                terminal:
+                    LowerMacTerminal::TxCompleted(
+                        oer_protocols_ieee80211_contracts_port::TxCompleted::Single(_),
+                    ),
+                grouped: false,
+            }) => {}
+            _ => panic!("the frame's withdrawn terminal"),
+        }
+        assert!(bench.air.sent().is_empty(), "never on the air");
+        assert!(bench.end.is_none(), "a refusal ends nothing");
+    });
+}
+
+#[test]
+fn a_due_port_deadline_reposts_a_bounded_number_of_turns_then_the_actor_sleeps() {
+    bench(|bench| {
+        bench.start();
+        // A queued station frame makes the model's deadline due at once,
+        // and again while its publication waits for the next service.
+        let transmit = station_frame_under(bench, 0, false);
+        assert!(
+            bench
+                .to_actor
+                .try_send(ToActor::StationTx(transmit))
+                .is_ok()
+        );
+        let polls = bench.settle();
+        assert!(
+            polls <= 1 + usize::from(DUE_REPOSTS),
+            "{polls} polls for one frame"
+        );
+        assert_eq!(bench.air.sent().len(), 1);
+        // Asleep: a poll finds nothing and wakes nothing.
+        let wakes = bench.wakes();
+        let reads = bench.clock.reads.get();
+        bench.poll();
+        assert_eq!(bench.wakes(), wakes);
+        assert_eq!(bench.clock.reads.get(), reads);
+    });
 }

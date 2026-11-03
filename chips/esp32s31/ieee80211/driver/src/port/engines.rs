@@ -24,7 +24,7 @@ use oer_protocols_ieee80211_contracts_port::{
     CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, PairwiseIssue, PortArena,
     PortCommand, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull,
     StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal,
-    SubmitRefused, TxFacts,
+    TxFacts,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -1432,14 +1432,23 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         mut attempt: Self::Admitted,
         now: Instant,
-    ) -> Result<(), SubmitRefused<Self::Admitted>> {
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<(), SubmitRefusal> {
         let reason = match self.state {
             PortState::Running if self.check().is_ok() => None,
             PortState::Stopping { .. } => Some(SubmitRefusal::Stopping),
             _ => Some(SubmitRefusal::NotEnabled),
         };
         if let Some(reason) = reason {
-            return Err(SubmitRefused { attempt, reason });
+            // The attempt ends at once, withdrawn and never published: its
+            // terminal returns every owner.
+            let completed = owned::OwnedTxCompleted::Single(attempt.operation.complete(
+                oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
+                ),
+            ));
+            sink.terminal(completed.lend(&self.loan));
+            return Err(reason);
         }
         self.now = now;
         // Admission happens on this call: the MSDU ages from here.

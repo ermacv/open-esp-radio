@@ -390,7 +390,6 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
 struct Retained<'id, D: DatapathPort<'id>> {
     link: Option<ActorLink<'id, D>>,
     returned: Option<Returned<'id, D>>,
-    admitted: Option<<D::Port as DataPort<'id>>::Admitted>,
     completed: Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, D::Port>>,
     link_return: Option<ActorLinkReturn<'id, D>>,
     group: Option<GroupPending<'id, ActorEpochPath<'id, D>>>,
@@ -446,7 +445,6 @@ where
             retained: Retained {
                 link: None,
                 returned: None,
-                admitted: None,
                 completed: None,
                 link_return: None,
                 group: None,
