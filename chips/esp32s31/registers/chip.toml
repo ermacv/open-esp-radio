@@ -84,6 +84,10 @@ layouts = [
     "layouts/phy-rfpll-capacitor-code.toml",
     "layouts/phy-rfpll-sdm-code.toml",
     "layouts/wifi-rx-dma-descriptor.toml",
+    "layouts/wifi-beacon-rx-descriptor.toml",
+    "layouts/wifi-txop-entry.toml",
+    "layouts/wifi-txop-list.toml",
+    "layouts/wifi-txop-lists.toml",
     "layouts/wifi-tx-dma-descriptor.toml",
     "layouts/axi-dma-descriptor.toml",
     "layouts/wifi-rx-control-prefix.toml",
@@ -212,7 +216,7 @@ resets = [
 name = "WIFI_MAC"
 type = "WIFI_MAC"
 base = 0x20104000
-extent = { size = 0x2004, partial = true, sources = ["S31_MMIO_USE_20106000"] }
+extent = { size = 0x2000, partial = true, sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"] }
 sources = ["ESP_IDF_ESP32S31_MODEM_REG_BASE"]
 clocks = [
   { role = "mac", field = "MODEM_SYSCON.CLK_CONF1.CLK_WIFIMAC_EN", sources = ["ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L489"] },
@@ -2218,3 +2222,21 @@ extent = { size = 0xd8, partial = true, sources = ["ESP_IDF_4D80C1B2_S31_AES"] }
 sources = ["ESP_IDF_4D80C1B2_S31_AES"]
 clocks = [{ role = "bus", field = "HP_SYS_CLKRST.CRYPTO_CTRL0.REG_CRYPTO_AES_CLK_EN", sources = ["ESP_IDF_4D80C1B2_S31_AES"] }]
 resets = [{ role = "module", field = "HP_SYS_CLKRST.CRYPTO_CTRL0.REG_CRYPTO_AES_RST_EN", sources = ["ESP_IDF_4D80C1B2_S31_AES"] }]
+
+# Two observed bus views of the same fixed beacon memory, not independent allocations.
+# SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103. No allocator or alias access owner is exposed.
+[[ram-regions]]
+name = "wifi-beacon-apb"
+base = 0x20106000
+size = 0x400
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+
+[[ram-regions]]
+name = "wifi-beacon-dma"
+base = 0x408f0000
+size = 0x400
+sources = ["BLOB_MAC_BEACON_RX_MEMORY_20261103"]
+
+[[layout-placements]]
+layout = "WIFI_BEACON_RX_DESCRIPTOR"
+regions = ["wifi-beacon-apb", "wifi-beacon-dma"]

@@ -64,7 +64,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_bits_8_15_opaque(Bits8_15Opaque::Initialized);
         });
 
-        rx_dma.set_mac_rx_control_bit_27();
+        rx_dma.enable_mac_rx_hw_beacon_reload();
 
         let rtc = &mut self.mac.wifi_mac_rtc_timer_update;
         rtc.modify_rtc_timer_update_control(|w| {

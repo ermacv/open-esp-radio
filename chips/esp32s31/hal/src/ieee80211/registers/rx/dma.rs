@@ -157,14 +157,14 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
         !self.mac_rx_walker_enabled()
     }
 
-    /// Set `RX_CONTROL` bit 27, the edge complete `hal_init` takes on the
-    /// walker's control word.
+    /// Enable the hardware-beacon selection for RX-buffer reload, the edge
+    /// complete `hal_init` takes on the walker's control word.
     ///
     /// SOURCE: complete pinned `libpp.a[hal_mac.o]::hal_init`, offsets
     /// `0xcc..0x12a`.
-    pub(crate) fn set_mac_rx_control_bit_27(&mut self) {
+    pub(crate) fn enable_mac_rx_hw_beacon_reload(&mut self) {
         self.dma.modify_rx_control(|w| {
-            w.set_bit_27_opaque(true);
+            w.set_rxbuf_reload_use_hw_beacon_enable(true);
         });
     }
 

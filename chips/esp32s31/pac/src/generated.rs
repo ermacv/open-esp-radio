@@ -725,7 +725,7 @@ pub mod instances {
         /// The instance's base address.
         pub const BASE: usize = 0x20104000;
         /// The bytes of the instance's window.
-        pub const SIZE: usize = 0x2004;
+        pub const SIZE: usize = 0x2000;
 
         /// The interrupt source of the output `PRIMARY`.
         #[allow(non_upper_case_globals, reason = "the vendor's source name")]
@@ -139465,12 +139465,40 @@ pub mod modem_pwr {
         /// Positioned bits of `VALUE`.
         pub const VALUE_MASK: u32 = 0xffff;
 
-        /// Width of `BITS_16_31_OPAQUE` in bits.
-        pub const BITS_16_31_OPAQUE_WIDTH: u32 = 16;
-        /// Greatest unsigned image of `BITS_16_31_OPAQUE`.
-        pub const BITS_16_31_OPAQUE_MAX: u32 = 0xffff;
-        /// Positioned bits of `BITS_16_31_OPAQUE`.
-        pub const BITS_16_31_OPAQUE_MASK: u32 = 0xffff0000;
+        /// Width of `BIT_16_OPAQUE` in bits.
+        pub const BIT_16_OPAQUE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MAX: u32 = 0x1;
+        /// Positioned bits of `BIT_16_OPAQUE`.
+        pub const BIT_16_OPAQUE_MASK: u32 = 0x10000;
+
+        /// Width of `BEACON_MEMORY_TAG_START_OFFSET` in bits.
+        pub const BEACON_MEMORY_TAG_START_OFFSET_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `BEACON_MEMORY_TAG_START_OFFSET`.
+        pub const BEACON_MEMORY_TAG_START_OFFSET_MAX: u32 = 0xff;
+        /// Positioned bits of `BEACON_MEMORY_TAG_START_OFFSET`.
+        pub const BEACON_MEMORY_TAG_START_OFFSET_MASK: u32 = 0x1fe0000;
+
+        /// Width of `BEACON_MEMORY_TAG_OFFSET_RESET` in bits.
+        pub const BEACON_MEMORY_TAG_OFFSET_RESET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MEMORY_TAG_OFFSET_RESET`.
+        pub const BEACON_MEMORY_TAG_OFFSET_RESET_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MEMORY_TAG_OFFSET_RESET`.
+        pub const BEACON_MEMORY_TAG_OFFSET_RESET_MASK: u32 = 0x2000000;
+
+        /// Width of `BEACON_MEMORY_TAG_ENABLE` in bits.
+        pub const BEACON_MEMORY_TAG_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `BEACON_MEMORY_TAG_ENABLE`.
+        pub const BEACON_MEMORY_TAG_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `BEACON_MEMORY_TAG_ENABLE`.
+        pub const BEACON_MEMORY_TAG_ENABLE_MASK: u32 = 0x4000000;
+
+        /// Width of `BITS_27_31_OPAQUE` in bits.
+        pub const BITS_27_31_OPAQUE_WIDTH: u32 = 5;
+        /// Greatest unsigned image of `BITS_27_31_OPAQUE`.
+        pub const BITS_27_31_OPAQUE_MAX: u32 = 0x1f;
+        /// Positioned bits of `BITS_27_31_OPAQUE`.
+        pub const BITS_27_31_OPAQUE_MASK: u32 = 0xf8000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -139485,8 +139513,32 @@ pub mod modem_pwr {
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+            pub const fn bit_16_opaque(self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name. Eight-bit tag-offset code supplied by pwr_hal_set_mac_beacon_memory_tag_start_offset. The beacon-memory helper derives it from a byte count in four-byte units.
+            #[inline]
+            pub const fn beacon_memory_tag_start_offset(self) -> u8 {
+                (self.0 >> 17) as u8
+            }
+
+            /// Project-assigned name. Set-one tag-offset reset request used after tag enable. Self-clear and hardware replay semantics are unestablished; the existing ordinary RMW classification is retained.
+            #[inline]
+            pub const fn beacon_memory_tag_offset_reset(self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Beacon-memory tag enable changed by paired named enable/disable leaves. Tag contents are unestablished.
+            #[inline]
+            pub const fn beacon_memory_tag_enable(self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_27_31_opaque(self) -> oer_portable_mmio::Bits<5> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 27)
             }
         }
 
@@ -139502,8 +139554,32 @@ pub mod modem_pwr {
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+            pub const fn bit_16_opaque(&self) -> bool {
+                (self.0 & 0x00010000) != 0
+            }
+
+            /// Project-assigned name. Eight-bit tag-offset code supplied by pwr_hal_set_mac_beacon_memory_tag_start_offset. The beacon-memory helper derives it from a byte count in four-byte units.
+            #[inline]
+            pub const fn beacon_memory_tag_start_offset(&self) -> u8 {
+                (self.0 >> 17) as u8
+            }
+
+            /// Project-assigned name. Set-one tag-offset reset request used after tag enable. Self-clear and hardware replay semantics are unestablished; the existing ordinary RMW classification is retained.
+            #[inline]
+            pub const fn beacon_memory_tag_offset_reset(&self) -> bool {
+                (self.0 & 0x02000000) != 0
+            }
+
+            /// Project-assigned name. Beacon-memory tag enable changed by paired named enable/disable leaves. Tag contents are unestablished.
+            #[inline]
+            pub const fn beacon_memory_tag_enable(&self) -> bool {
+                (self.0 & 0x04000000) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_27_31_opaque(&self) -> oer_portable_mmio::Bits<5> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 27)
             }
 
             /// Set `VALUE`.
@@ -139513,10 +139589,41 @@ pub mod modem_pwr {
                 self
             }
 
-            /// Set `BITS_16_31_OPAQUE`.
+            /// Set `BIT_16_OPAQUE`.
             #[inline]
-            pub fn set_bits_16_31_opaque(&mut self, value: u16) -> &mut Self {
-                self.0 = (self.0 & 0x0000ffff) | (u32::from(value) << 16);
+            pub fn set_bit_16_opaque(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+                self
+            }
+
+            /// Set `BEACON_MEMORY_TAG_START_OFFSET`.
+            #[inline]
+            pub fn set_beacon_memory_tag_start_offset(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xfe01ffff) | (u32::from(value) << 17);
+                self
+            }
+
+            /// Set `BEACON_MEMORY_TAG_OFFSET_RESET`.
+            #[inline]
+            pub fn set_beacon_memory_tag_offset_reset(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+                self
+            }
+
+            /// Set `BEACON_MEMORY_TAG_ENABLE`.
+            #[inline]
+            pub fn set_beacon_memory_tag_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+                self
+            }
+
+            /// Set `BITS_27_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_27_31_opaque(
+                &mut self,
+                value: oer_portable_mmio::Bits<5>,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0x07ffffff) | (value.get() << 27);
                 self
             }
         }
@@ -271537,7 +271644,7 @@ pub mod wifi_bb_brx {
 /// Words 0x48-0xe04: Complete hal_he_init prefix through hal_init_tb_tx, stopping immediately before hal_init_tx_pwr. Twenty-two separate RMW edges and one final synchronization/status read.
 /// Words 0x5c-0x60: Four interface-address pairs consumed by MAC receive filtering.
 /// Words 0x7c-0xc70: Descriptor-walker registers recovered from complete rev0 ROM leaves and qualified with the open driver's rotating 32-entry RX ring.
-/// Words 0x90-0x2000: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.
+/// Words 0x90-0x1f94: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown. The beacon descriptor at 0x20106000 is modeled as memory, not as a configuration register.
 /// Word 0x98: Multifunction receive/CSI word. Complete mac_last_rxbuf_init sets bit 27; complete hal_init later replaces its low and second bytes through separate RMWs.
 /// Word 0xa0: WDEV_RX_POWER_SAVE_CONF decoded by complete dbg_read_rx_misc. Complete hal_he_set_power_save sets the interface-zero intra-PPDU and BSS-color-check bits as the tail of hal_he_bssid_init; open associated-STA HIL read both bits set.
 /// Word 0xa8: Receive-end state word returned by the complete hal_mac_rx_get_end_state and hal_mac_rx_get_end_info leaves.
@@ -271583,6 +271690,9 @@ pub mod wifi_bb_brx {
 /// Words 0x1800-0x1824: Twenty-five entries of ten 32-bit words. Complete hal_crypto_clr_key_entry proves the 0x28-byte stride and all ten ordered stores; set/get leaves prove the peer/control/key layout: the peer address and control word, four words of temporal key and four words the CCMP transaction only clears.
 /// Word 0x1f94: Complete esp_test_get_bfr_avgsnr reads the low byte at 0x20105f94 as stream-zero average-SNR code. Code 0x7f is a special saturated/invalid value rendered with a greater-than-or-equal prefix; every other code is converted to dB as (code + 88) / 4.
 pub mod wifi_mac {
+    /// Ascending start of the three continuation lists. Slot s and one-based position p select word 15*s+15-p. The top six words overlap HE_SCRATCH; this format grants no independent MMIO owner.
+    /// Hardware geometry. SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+    pub const TXOP_LIST_MEMORY_OFFSET: u32 = 5460;
     /// The `BSSID_LOW%s` register.
     ///
     /// BSSID bytes 0..3 for interfaces 0..3; hal_mac_set_bssid publishes a complete full-word store.
@@ -273090,19 +273200,47 @@ pub mod wifi_mac {
         /// Positioned bits of `WALKER_ENABLE`.
         pub const WALKER_ENABLE_MASK: u32 = 0x80000000;
 
-        /// Width of `BIT_27_OPAQUE` in bits.
-        pub const BIT_27_OPAQUE_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `BIT_27_OPAQUE`.
-        pub const BIT_27_OPAQUE_MAX: u32 = 0x1;
-        /// Positioned bits of `BIT_27_OPAQUE`.
-        pub const BIT_27_OPAQUE_MASK: u32 = 0x8000000;
+        /// Width of `RXBUF_RELOAD_USE_HW_BEACON_ENABLE` in bits.
+        pub const RXBUF_RELOAD_USE_HW_BEACON_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `RXBUF_RELOAD_USE_HW_BEACON_ENABLE`.
+        pub const RXBUF_RELOAD_USE_HW_BEACON_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `RXBUF_RELOAD_USE_HW_BEACON_ENABLE`.
+        pub const RXBUF_RELOAD_USE_HW_BEACON_ENABLE_MASK: u32 = 0x8000000;
 
-        /// Width of `BITS_1_26_OPAQUE` in bits.
-        pub const BITS_1_26_OPAQUE_WIDTH: u32 = 26;
-        /// Greatest unsigned image of `BITS_1_26_OPAQUE`.
-        pub const BITS_1_26_OPAQUE_MAX: u32 = 0x3ffffff;
-        /// Positioned bits of `BITS_1_26_OPAQUE`.
-        pub const BITS_1_26_OPAQUE_MASK: u32 = 0x7fffffe;
+        /// Width of `TIMESTAMP_USE_TSF` in bits.
+        pub const TIMESTAMP_USE_TSF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `TIMESTAMP_USE_TSF`.
+        pub const TIMESTAMP_USE_TSF_MAX: u32 = 0x1;
+        /// Positioned bits of `TIMESTAMP_USE_TSF`.
+        pub const TIMESTAMP_USE_TSF_MASK: u32 = 0x2;
+
+        /// Width of `BEACON_MEMORY_ADDRESS_MAP` in bits.
+        pub const BEACON_MEMORY_ADDRESS_MAP_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `BEACON_MEMORY_ADDRESS_MAP`.
+        pub const BEACON_MEMORY_ADDRESS_MAP_MAX: u32 = 0xff;
+        /// Positioned bits of `BEACON_MEMORY_ADDRESS_MAP`.
+        pub const BEACON_MEMORY_ADDRESS_MAP_MASK: u32 = 0x3fc;
+
+        /// Width of `BITS_10_16_OPAQUE` in bits.
+        pub const BITS_10_16_OPAQUE_WIDTH: u32 = 7;
+        /// Greatest unsigned image of `BITS_10_16_OPAQUE`.
+        pub const BITS_10_16_OPAQUE_MAX: u32 = 0x7f;
+        /// Positioned bits of `BITS_10_16_OPAQUE`.
+        pub const BITS_10_16_OPAQUE_MASK: u32 = 0x1fc00;
+
+        /// Width of `ABORT_FRAMES_FROM_TRANS_BSSID` in bits.
+        pub const ABORT_FRAMES_FROM_TRANS_BSSID_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ABORT_FRAMES_FROM_TRANS_BSSID`.
+        pub const ABORT_FRAMES_FROM_TRANS_BSSID_MAX: u32 = 0x1;
+        /// Positioned bits of `ABORT_FRAMES_FROM_TRANS_BSSID`.
+        pub const ABORT_FRAMES_FROM_TRANS_BSSID_MASK: u32 = 0x20000;
+
+        /// Width of `BITS_18_26_OPAQUE` in bits.
+        pub const BITS_18_26_OPAQUE_WIDTH: u32 = 9;
+        /// Greatest unsigned image of `BITS_18_26_OPAQUE`.
+        pub const BITS_18_26_OPAQUE_MAX: u32 = 0x1ff;
+        /// Positioned bits of `BITS_18_26_OPAQUE`.
+        pub const BITS_18_26_OPAQUE_MASK: u32 = 0x7fc0000;
 
         /// Width of `BITS_28_30_OPAQUE` in bits.
         pub const BITS_28_30_OPAQUE_WIDTH: u32 = 3;
@@ -273128,16 +273266,40 @@ pub mod wifi_mac {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW.
+            /// Project-assigned name. Hardware-beacon selection for RX-buffer reload, set by hal_mac_set_rxbuf_reload_use_hw_beacon_enable during hal_init. No standalone beacon-memory lifecycle is established.
             #[inline]
-            pub const fn bit_27_opaque(self) -> bool {
+            pub const fn rxbuf_reload_use_hw_beacon_enable(self) -> bool {
                 (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. Selects TSF for the receive-control timestamp through the named enable/disable leaves; the alternate clock and timestamp synchronization behavior are unestablished.
+            #[inline]
+            pub const fn timestamp_use_tsf(self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Eight-bit mapping code passed to hal_mac_set_rx_beacon_memory_addr_map; the beacon initializer writes 0xf0. This is not a general address encoding.
+            #[inline]
+            pub const fn beacon_memory_address_map(self) -> u8 {
+                (self.0 >> 2) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_1_26_opaque(self) -> oer_portable_mmio::Bits<26> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 1)
+            pub const fn bits_10_16_opaque(self) -> oer_portable_mmio::Bits<7> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Project-assigned name. Frame-abort selection for the transmitted BSSID, independently set/read by hal_mac_rx_*abort_frames_from_transbss and set by the multi-BSSID path. Exact frame acceptance behavior is unqualified.
+            #[inline]
+            pub const fn abort_frames_from_trans_bssid(self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_26_opaque(self) -> oer_portable_mmio::Bits<9> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 18)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -273163,16 +273325,40 @@ pub mod wifi_mac {
                 (self.0 & 0x80000000) != 0
             }
 
-            /// Complete hal_mac_set_rxbuf_reload_use_hw_beacon_enable sets bit 27 through one fresh-read RMW.
+            /// Project-assigned name. Hardware-beacon selection for RX-buffer reload, set by hal_mac_set_rxbuf_reload_use_hw_beacon_enable during hal_init. No standalone beacon-memory lifecycle is established.
             #[inline]
-            pub const fn bit_27_opaque(&self) -> bool {
+            pub const fn rxbuf_reload_use_hw_beacon_enable(&self) -> bool {
                 (self.0 & 0x08000000) != 0
+            }
+
+            /// Project-assigned name. Selects TSF for the receive-control timestamp through the named enable/disable leaves; the alternate clock and timestamp synchronization behavior are unestablished.
+            #[inline]
+            pub const fn timestamp_use_tsf(&self) -> bool {
+                (self.0 & 0x00000002) != 0
+            }
+
+            /// Project-assigned name. Eight-bit mapping code passed to hal_mac_set_rx_beacon_memory_addr_map; the beacon initializer writes 0xf0. This is not a general address encoding.
+            #[inline]
+            pub const fn beacon_memory_address_map(&self) -> u8 {
+                (self.0 >> 2) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_1_26_opaque(&self) -> oer_portable_mmio::Bits<26> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 1)
+            pub const fn bits_10_16_opaque(&self) -> oer_portable_mmio::Bits<7> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 10)
+            }
+
+            /// Project-assigned name. Frame-abort selection for the transmitted BSSID, independently set/read by hal_mac_rx_*abort_frames_from_transbss and set by the multi-BSSID path. Exact frame acceptance behavior is unqualified.
+            #[inline]
+            pub const fn abort_frames_from_trans_bssid(&self) -> bool {
+                (self.0 & 0x00020000) != 0
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_18_26_opaque(&self) -> oer_portable_mmio::Bits<9> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 18)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -273188,20 +273374,51 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BIT_27_OPAQUE`.
+            /// Set `RXBUF_RELOAD_USE_HW_BEACON_ENABLE`.
             #[inline]
-            pub fn set_bit_27_opaque(&mut self, value: bool) -> &mut Self {
+            pub fn set_rxbuf_reload_use_hw_beacon_enable(&mut self, value: bool) -> &mut Self {
                 self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
                 self
             }
 
-            /// Set `BITS_1_26_OPAQUE`.
+            /// Set `TIMESTAMP_USE_TSF`.
             #[inline]
-            pub fn set_bits_1_26_opaque(
+            pub fn set_timestamp_use_tsf(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+                self
+            }
+
+            /// Set `BEACON_MEMORY_ADDRESS_MAP`.
+            #[inline]
+            pub fn set_beacon_memory_address_map(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xfffffc03) | (u32::from(value) << 2);
+                self
+            }
+
+            /// Set `BITS_10_16_OPAQUE`.
+            #[inline]
+            pub fn set_bits_10_16_opaque(
                 &mut self,
-                value: oer_portable_mmio::Bits<26>,
+                value: oer_portable_mmio::Bits<7>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xf8000001) | (value.get() << 1);
+                self.0 = (self.0 & 0xfffe03ff) | (value.get() << 10);
+                self
+            }
+
+            /// Set `ABORT_FRAMES_FROM_TRANS_BSSID`.
+            #[inline]
+            pub fn set_abort_frames_from_trans_bssid(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+                self
+            }
+
+            /// Set `BITS_18_26_OPAQUE`.
+            #[inline]
+            pub fn set_bits_18_26_opaque(
+                &mut self,
+                value: oer_portable_mmio::Bits<9>,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xf803ffff) | (value.get() << 18);
                 self
             }
 
@@ -277306,12 +277523,26 @@ pub mod wifi_mac {
         /// Positioned bits of `UNICAST_WAKEUP_ENABLE`.
         pub const UNICAST_WAKEUP_ENABLE_MASK: u32 = 0x4;
 
-        /// Width of `BITS_3_31_OPAQUE` in bits.
-        pub const BITS_3_31_OPAQUE_WIDTH: u32 = 29;
-        /// Greatest unsigned image of `BITS_3_31_OPAQUE`.
-        pub const BITS_3_31_OPAQUE_MAX: u32 = 0x1fffffff;
-        /// Positioned bits of `BITS_3_31_OPAQUE`.
-        pub const BITS_3_31_OPAQUE_MASK: u32 = 0xfffffff8;
+        /// Width of `ABORT_ENABLE` in bits.
+        pub const ABORT_ENABLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `ABORT_ENABLE`.
+        pub const ABORT_ENABLE_MAX: u32 = 0x1;
+        /// Positioned bits of `ABORT_ENABLE`.
+        pub const ABORT_ENABLE_MASK: u32 = 0x8;
+
+        /// Width of `ABORT_LENGTH` in bits.
+        pub const ABORT_LENGTH_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `ABORT_LENGTH`.
+        pub const ABORT_LENGTH_MAX: u32 = 0xfff;
+        /// Positioned bits of `ABORT_LENGTH`.
+        pub const ABORT_LENGTH_MASK: u32 = 0xfff0;
+
+        /// Width of `BITS_16_31_OPAQUE` in bits.
+        pub const BITS_16_31_OPAQUE_WIDTH: u32 = 16;
+        /// Greatest unsigned image of `BITS_16_31_OPAQUE`.
+        pub const BITS_16_31_OPAQUE_MAX: u32 = 0xffff;
+        /// Positioned bits of `BITS_16_31_OPAQUE`.
+        pub const BITS_16_31_OPAQUE_MASK: u32 = 0xffff0000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -277336,10 +277567,22 @@ pub mod wifi_mac {
                 (self.0 & 0x00000004) != 0
             }
 
+            /// Project-assigned name. Beacon-filter abort gate changed by the paired named enable/disable leaves. Abort timing is unestablished.
+            #[inline]
+            pub const fn abort_enable(self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Twelve-bit beacon-filter abort-length code supplied by the power-management wakeup paths; units are unestablished.
+            #[inline]
+            pub const fn abort_length(self) -> oer_portable_mmio::Bits<12> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 4)
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_3_31_opaque(self) -> oer_portable_mmio::Bits<29> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 3)
+            pub const fn bits_16_31_opaque(self) -> u16 {
+                (self.0 >> 16) as u16
             }
         }
 
@@ -277365,10 +277608,22 @@ pub mod wifi_mac {
                 (self.0 & 0x00000004) != 0
             }
 
+            /// Project-assigned name. Beacon-filter abort gate changed by the paired named enable/disable leaves. Abort timing is unestablished.
+            #[inline]
+            pub const fn abort_enable(&self) -> bool {
+                (self.0 & 0x00000008) != 0
+            }
+
+            /// Project-assigned name. Twelve-bit beacon-filter abort-length code supplied by the power-management wakeup paths; units are unestablished.
+            #[inline]
+            pub const fn abort_length(&self) -> oer_portable_mmio::Bits<12> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 4)
+            }
+
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
-            pub const fn bits_3_31_opaque(&self) -> oer_portable_mmio::Bits<29> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 3)
+            pub const fn bits_16_31_opaque(&self) -> u16 {
+                (self.0 >> 16) as u16
             }
 
             /// Set `BEACON_FILTER_ENABLE`.
@@ -277392,13 +277647,24 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_3_31_OPAQUE`.
+            /// Set `ABORT_ENABLE`.
             #[inline]
-            pub fn set_bits_3_31_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<29>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0x00000007) | (value.get() << 3);
+            pub fn set_abort_enable(&mut self, value: bool) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+                self
+            }
+
+            /// Set `ABORT_LENGTH`.
+            #[inline]
+            pub fn set_abort_length(&mut self, value: oer_portable_mmio::Bits<12>) -> &mut Self {
+                self.0 = (self.0 & 0xffff000f) | (value.get() << 4);
+                self
+            }
+
+            /// Set `BITS_16_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_16_31_opaque(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & 0x0000ffff) | (u32::from(value) << 16);
                 self
             }
         }
@@ -302147,12 +302413,56 @@ pub mod wifi_mac {
         /// Positioned bits of `HT20_TXOP_COUNT`.
         pub const HT20_TXOP_COUNT_MASK: u32 = 0xf000000;
 
-        /// Width of `BITS_28_31_OPAQUE` in bits.
-        pub const BITS_28_31_OPAQUE_WIDTH: u32 = 4;
-        /// Greatest unsigned image of `BITS_28_31_OPAQUE`.
-        pub const BITS_28_31_OPAQUE_MAX: u32 = 0xf;
-        /// Positioned bits of `BITS_28_31_OPAQUE`.
-        pub const BITS_28_31_OPAQUE_MASK: u32 = 0xf0000000;
+        /// Width of `TXOP_LIST_SELECT` in bits.
+        pub const TXOP_LIST_SELECT_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `TXOP_LIST_SELECT`.
+        pub const TXOP_LIST_SELECT_MAX: u32 = 0x3;
+        /// Positioned bits of `TXOP_LIST_SELECT`.
+        pub const TXOP_LIST_SELECT_MASK: u32 = 0x30000000;
+
+        /// The declared values of the `TXOP_LIST_SELECT` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum TxopListSelect {
+            List0 = 0x0,
+            List1 = 0x1,
+            List2 = 0x2,
+        }
+
+        impl TxopListSelect {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 28
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::List0),
+                    0x1 => Some(Self::List1),
+                    0x2 => Some(Self::List2),
+                    _ => None,
+                }
+            }
+        }
+
+        /// Width of `BITS_30_31_OPAQUE` in bits.
+        pub const BITS_30_31_OPAQUE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BITS_30_31_OPAQUE`.
+        pub const BITS_30_31_OPAQUE_MAX: u32 = 0x3;
+        /// Positioned bits of `BITS_30_31_OPAQUE`.
+        pub const BITS_30_31_OPAQUE_MASK: u32 = 0xc0000000;
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -302225,10 +302535,22 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
             }
 
-            /// The `BITS_28_31_OPAQUE` field.
+            /// Project-assigned name. Selects one of the three continuation lists admitted by mac_tx_set_txop_q. Software no-slot sentinel three is not a published hardware selector.
             #[inline]
-            pub const fn bits_28_31_opaque(self) -> oer_portable_mmio::Bits<4> {
+            pub const fn txop_list_select(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// The `TXOP_LIST_SELECT` field as its declared value, if it is one.
+            #[inline]
+            pub const fn txop_list_select_variant(self) -> Option<TxopListSelect> {
+                TxopListSelect::from_bits((self.0 >> 28) & 0x3)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_30_31_opaque(self) -> oer_portable_mmio::Bits<2> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 30)
             }
         }
 
@@ -302302,10 +302624,22 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
             }
 
-            /// The `BITS_28_31_OPAQUE` field.
+            /// Project-assigned name. Selects one of the three continuation lists admitted by mac_tx_set_txop_q. Software no-slot sentinel three is not a published hardware selector.
             #[inline]
-            pub const fn bits_28_31_opaque(&self) -> oer_portable_mmio::Bits<4> {
+            pub const fn txop_list_select(&self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// The `TXOP_LIST_SELECT` field as its declared value, if it is one.
+            #[inline]
+            pub const fn txop_list_select_variant(&self) -> Option<TxopListSelect> {
+                TxopListSelect::from_bits((self.0 >> 28) & 0x3)
+            }
+
+            /// Observed source use; the individual hardware meaning is unknown.
+            #[inline]
+            pub const fn bits_30_31_opaque(&self) -> oer_portable_mmio::Bits<2> {
+                oer_portable_mmio::Bits::truncate(self.0 >> 30)
             }
 
             /// Set `TXRX_QUEUE_ANTENNA_LAST`.
@@ -302378,13 +302712,20 @@ pub mod wifi_mac {
                 self
             }
 
-            /// Set `BITS_28_31_OPAQUE`.
+            /// Set `TXOP_LIST_SELECT`.
             #[inline]
-            pub fn set_bits_28_31_opaque(
+            pub fn set_txop_list_select(&mut self, value: TxopListSelect) -> &mut Self {
+                self.0 = (self.0 & 0xcfffffff) | (value.bits() << 28);
+                self
+            }
+
+            /// Set `BITS_30_31_OPAQUE`.
+            #[inline]
+            pub fn set_bits_30_31_opaque(
                 &mut self,
-                value: oer_portable_mmio::Bits<4>,
+                value: oer_portable_mmio::Bits<2>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0x0fffffff) | (value.get() << 28);
+                self.0 = (self.0 & 0x3fffffff) | (value.get() << 30);
                 self
             }
         }
@@ -305321,88 +305662,6 @@ pub mod wifi_mac {
             #[inline]
             pub const fn stream_0_code_variant(self) -> Option<Stream0Code> {
                 Stream0Code::from_bits(self.0 & 0xff)
-            }
-        }
-    }
-
-    /// The `WORD_2000_OPAQUE` register.
-    ///
-    /// Aligned 32-bit bus view explicitly addressed by the cited vendor source. No reset or hardware write effect is established.
-    pub mod word_2000_opaque {
-        /// The bits of the register's declared fields.
-        pub const FIELDS: u32 = 0xefffffff;
-        /// The register's width in bits.
-        pub const WIDTH: u32 = 32;
-
-        /// The register's byte offset in its block.
-        pub const OFFSET: usize = 0x2000;
-
-        /// Width of `BITS_0_27_OPAQUE` in bits.
-        pub const BITS_0_27_OPAQUE_WIDTH: u32 = 28;
-        /// Greatest unsigned image of `BITS_0_27_OPAQUE`.
-        pub const BITS_0_27_OPAQUE_MAX: u32 = 0xfffffff;
-        /// Positioned bits of `BITS_0_27_OPAQUE`.
-        pub const BITS_0_27_OPAQUE_MASK: u32 = 0xfffffff;
-
-        /// Width of `BITS_29_31_OPAQUE` in bits.
-        pub const BITS_29_31_OPAQUE_WIDTH: u32 = 3;
-        /// Greatest unsigned image of `BITS_29_31_OPAQUE`.
-        pub const BITS_29_31_OPAQUE_MAX: u32 = 0x7;
-        /// Positioned bits of `BITS_29_31_OPAQUE`.
-        pub const BITS_29_31_OPAQUE_MASK: u32 = 0xe0000000;
-
-        /// One observation of the register.
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        pub struct R(pub(super) u32);
-
-        impl R {
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_0_27_opaque(self) -> oer_portable_mmio::Bits<28> {
-                oer_portable_mmio::Bits::truncate(self.0)
-            }
-
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_29_31_opaque(self) -> oer_portable_mmio::Bits<3> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 29)
-            }
-        }
-
-        /// The register's value while it is changed.
-        pub struct W(pub(super) u32);
-
-        impl W {
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_0_27_opaque(&self) -> oer_portable_mmio::Bits<28> {
-                oer_portable_mmio::Bits::truncate(self.0)
-            }
-
-            /// Observed source use; the individual hardware meaning is unknown.
-            #[inline]
-            pub const fn bits_29_31_opaque(&self) -> oer_portable_mmio::Bits<3> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 29)
-            }
-
-            /// Set `BITS_0_27_OPAQUE`.
-            #[inline]
-            pub fn set_bits_0_27_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<28>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0xf0000000) | value.get();
-                self
-            }
-
-            /// Set `BITS_29_31_OPAQUE`.
-            #[inline]
-            pub fn set_bits_29_31_opaque(
-                &mut self,
-                value: oer_portable_mmio::Bits<3>,
-            ) -> &mut Self {
-                self.0 = (self.0 & 0x1fffffff) | (value.get() << 29);
-                self
             }
         }
     }
@@ -317673,6 +317932,12 @@ pub mod layouts {
     /// The `dma-window` RAM region of the memory map.
     pub const DMA_WINDOW: core::ops::Range<u32> = 0x2f000000..0x2f080000;
 
+    /// The `wifi-beacon-apb` RAM region of the memory map.
+    pub const WIFI_BEACON_APB: core::ops::Range<u32> = 0x20106000..0x20106400;
+
+    /// The `wifi-beacon-dma` RAM region of the memory map.
+    pub const WIFI_BEACON_DMA: core::ops::Range<u32> = 0x408f0000..0x408f0400;
+
     /// The [`DMA_WINDOW`] region as `oer-portable-memory`'s typed addresses name it.
     pub struct DmaWindow;
 
@@ -319372,6 +319637,542 @@ pub mod layouts {
                 Some(reference) => reference.bits(),
                 None => 0,
             })
+        }
+    }
+
+    /// Project-assigned name. The twelve-byte descriptor at the start of the fixed 1-KiB beacon receive memory. wDev_BeaconMemory_Init initializes it through the CPU/APB view; wdevProcessModemStateRxBeacon copies it and substitutes the CPU buffer address before delivery. The two sourced bus views are not independently allocatable. No completion predicate, release protocol or general alias mapping is established.
+    ///
+    /// 12 bytes, aligned to 4; its zero bytes are an all-zero structure.
+    /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+    #[repr(C, align(4))]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiBeaconRxDescriptor {
+        control: WifiBeaconRxDescriptorControlCell,
+        buffer: WifiBeaconRxDescriptorBufferCell,
+        next: WifiBeaconRxDescriptorNextCell,
+    }
+
+    const _: () = {
+        assert!(core::mem::size_of::<WifiBeaconRxDescriptor>() == 12);
+        assert!(core::mem::align_of::<WifiBeaconRxDescriptor>() == 4);
+    };
+
+    impl WifiBeaconRxDescriptor {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 12;
+        /// The alignment the hardware requires, in bytes.
+        pub const ALIGN: usize = 4;
+        /// The RAM regions the structure must lie in.
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[WIFI_BEACON_APB, WIFI_BEACON_DMA];
+
+        /// The all-zero structure.
+        pub const fn zeroed() -> Self {
+            Self {
+                control: WifiBeaconRxDescriptorControlCell(oer_portable_memory::VolatileCell::new(
+                    0,
+                )),
+                buffer: WifiBeaconRxDescriptorBufferCell(oer_portable_memory::VolatileCell::new(0)),
+                next: WifiBeaconRxDescriptorNextCell(oer_portable_memory::VolatileCell::new(0)),
+            }
+        }
+
+        /// The `CONTROL` word at offset 0x0.
+        pub const fn control(&self) -> &WifiBeaconRxDescriptorControlCell {
+            &self.control
+        }
+
+        /// The `BUFFER` word at offset 0x4.
+        pub const fn buffer(&self) -> &WifiBeaconRxDescriptorBufferCell {
+            &self.buffer
+        }
+
+        /// The `NEXT` word at offset 0x8.
+        pub const fn next(&self) -> &WifiBeaconRxDescriptorNextCell {
+            &self.next
+        }
+    }
+
+    /// The `WIFI_BEACON_RX_DESCRIPTOR.CONTROL` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiBeaconRxDescriptorControlCell(oer_portable_memory::VolatileCell<u32>);
+
+    impl WifiBeaconRxDescriptorControlCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiBeaconRxDescriptorControl {
+            WifiBeaconRxDescriptorControl(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiBeaconRxDescriptorControl) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_BEACON_RX_DESCRIPTOR.CONTROL` word.
+    /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiBeaconRxDescriptorControl(u32);
+
+    impl WifiBeaconRxDescriptorControl {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `SIZE` in bits.
+        pub const SIZE_WIDTH: u32 = 14;
+        /// Greatest unsigned image of `SIZE`.
+        pub const SIZE_MAX: u32 = 0x3fff;
+        /// Project-assigned name. Project-assigned name. Buffer capacity initialized to 0x3f0 bytes.
+        ///
+        /// `SIZE`, bits 13:0; written by the CPU.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn size(self) -> u16 {
+            (self.0 & 0x3fff) as u16
+        }
+
+        /// This value with `SIZE` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_size(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xffffc000) | value as u32))
+            }
+        }
+
+        /// This value with `SIZE` set to `VALUE`, checked at compile time.
+        pub const fn with_size_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xffffc000) | value as u32)
+        }
+
+        /// Width of `LENGTH` in bits.
+        pub const LENGTH_WIDTH: u32 = 14;
+        /// Greatest unsigned image of `LENGTH`.
+        pub const LENGTH_MAX: u32 = 0x3fff;
+        /// Project-assigned name. Project-assigned name. Init copies SIZE here; beacon delivery consumes this field as the received byte count. Hardware participation during receive is conservative and establishes no commit frontier.
+        ///
+        /// `LENGTH`, bits 27:14; written by the participants in the declared phases. Phase `initialize`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn length(self) -> u16 {
+            ((self.0 >> 14) & 0x3fff) as u16
+        }
+
+        /// This value with `LENGTH` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_length(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xf0003fff) | (value as u32) << 14))
+            }
+        }
+
+        /// This value with `LENGTH` set to `VALUE`, checked at compile time.
+        pub const fn with_length_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xf0003fff) | (value as u32) << 14)
+        }
+
+        /// Width of `OFFSET` in bits.
+        pub const OFFSET_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OFFSET`.
+        pub const OFFSET_MAX: u32 = 0x1;
+        /// Vendor diagnostic spelling transferred from the matching ordinary RX descriptor geometry. The initial memory clear writes zero; later init RMWs preserve it. Units, one-valued modes and hardware writeback are unestablished.
+        ///
+        /// `OFFSET`, bit 28; written by the participants in the declared phases. Phase `initialize`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn offset(self) -> bool {
+            self.0 & 0x10000000 != 0
+        }
+
+        /// This value with `OFFSET` set to `value`.
+        pub const fn with_offset(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x10000000)
+            } else {
+                Self(self.0 & 0xefffffff)
+            }
+        }
+
+        /// Width of `SOSF` in bits.
+        pub const SOSF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SOSF`.
+        pub const SOSF_MAX: u32 = 0x1;
+        /// Vendor diagnostic spelling transferred from the matching ordinary RX descriptor geometry. Beacon init explicitly clears it. The acronym, physical effect and hardware writeback are unestablished.
+        ///
+        /// `SOSF`, bit 29; written by the participants in the declared phases. Phase `initialize`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn sosf(self) -> bool {
+            self.0 & 0x20000000 != 0
+        }
+
+        /// This value with `SOSF` set to `value`.
+        pub const fn with_sosf(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x20000000)
+            } else {
+                Self(self.0 & 0xdfffffff)
+            }
+        }
+
+        /// Width of `EOF` in bits.
+        pub const EOF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `EOF`.
+        pub const EOF_MAX: u32 = 0x1;
+        /// Vendor diagnostic spelling for this layout lane. Beacon init already sets it to one, so it is not an established receive-completion predicate. Hardware participation is conservative.
+        ///
+        /// `EOF`, bit 30; written by the participants in the declared phases. Phase `initialize`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn eof(self) -> bool {
+            self.0 & 0x40000000 != 0
+        }
+
+        /// This value with `EOF` set to `value`.
+        pub const fn with_eof(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x40000000)
+            } else {
+                Self(self.0 & 0xbfffffff)
+            }
+        }
+
+        /// Width of `OWNER` in bits.
+        pub const OWNER_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `OWNER`.
+        pub const OWNER_MAX: u32 = 0x1;
+        /// Vendor diagnostic spelling for this layout lane. Beacon init sets it to one. No owner-clear, CPU barrier or detach/release contract is established for this special descriptor. Hardware participation is conservative.
+        ///
+        /// `OWNER`, bit 31; written by the participants in the declared phases. Phase `initialize`: the CPU. Phase `receive`: the hardware.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn owner(self) -> bool {
+            self.0 & 0x80000000 != 0
+        }
+
+        /// This value with `OWNER` set to `value`.
+        pub const fn with_owner(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x80000000)
+            } else {
+                Self(self.0 & 0x7fffffff)
+            }
+        }
+    }
+
+    /// The `WIFI_BEACON_RX_DESCRIPTOR.BUFFER` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiBeaconRxDescriptorBufferCell(oer_portable_memory::VolatileCell<u32>);
+
+    impl WifiBeaconRxDescriptorBufferCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiBeaconRxDescriptorBuffer {
+            WifiBeaconRxDescriptorBuffer(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiBeaconRxDescriptorBuffer) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_BEACON_RX_DESCRIPTOR.BUFFER` word.
+    /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiBeaconRxDescriptorBuffer(u32);
+
+    impl WifiBeaconRxDescriptorBuffer {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `ADDRESS` in bits.
+        pub const ADDRESS_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ADDRESS`.
+        pub const ADDRESS_MAX: u32 = 0xffffffff;
+        /// Project-assigned name. Project-assigned name. Init stores the fixed DMA-view payload address, sixteen bytes after the region start. The CPU consumer substitutes the corresponding CPU/APB address. This raw image is not a pointer into the allocatable dma-window.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
+        }
+    }
+
+    /// The `WIFI_BEACON_RX_DESCRIPTOR.NEXT` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiBeaconRxDescriptorNextCell(oer_portable_memory::VolatileCell<u32>);
+
+    impl WifiBeaconRxDescriptorNextCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiBeaconRxDescriptorNext {
+            WifiBeaconRxDescriptorNext(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiBeaconRxDescriptorNext) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_BEACON_RX_DESCRIPTOR.NEXT` word.
+    /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiBeaconRxDescriptorNext(u32);
+
+    impl WifiBeaconRxDescriptorNext {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `ADDRESS` in bits.
+        pub const ADDRESS_WIDTH: u32 = 32;
+        /// Greatest unsigned image of `ADDRESS`.
+        pub const ADDRESS_MAX: u32 = 0xffffffff;
+        /// Project-assigned name. Project-assigned name. Init stores the fixed descriptor's own DMA-view address. A general linked-list or live-reload contract is not established.
+        ///
+        /// `ADDRESS`, bits 31:0; written by the CPU.
+        /// SOURCE: BLOB_MAC_BEACON_RX_MEMORY_20261103.
+        pub const fn address(self) -> u32 {
+            self.0
+        }
+
+        /// This value with `ADDRESS` set to `value`.
+        pub const fn with_address(self, value: u32) -> Self {
+            Self(value)
+        }
+    }
+
+    /// Project-assigned name. One continuation-list word published by hal_mac_fill_hwtxop. This alternate format overlaps six HE MPLEN words and is deliberately unplaced: it grants no second MMIO owner or DMA allocation.
+    ///
+    /// 4 bytes, aligned to 4; its zero bytes are an all-zero structure.
+    /// SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+    #[repr(C, align(4))]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiTxopEntry {
+        control: WifiTxopEntryControlCell,
+    }
+
+    const _: () = {
+        assert!(core::mem::size_of::<WifiTxopEntry>() == 4);
+        assert!(core::mem::align_of::<WifiTxopEntry>() == 4);
+    };
+
+    impl WifiTxopEntry {
+        /// The structure's size in bytes.
+        pub const SIZE: usize = 4;
+        /// The alignment the hardware requires, in bytes.
+        pub const ALIGN: usize = 4;
+        /// The RAM regions the structure must lie in.
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[];
+
+        /// The all-zero structure.
+        pub const fn zeroed() -> Self {
+            Self {
+                control: WifiTxopEntryControlCell(oer_portable_memory::VolatileCell::new(0)),
+            }
+        }
+
+        /// The `CONTROL` word at offset 0x0.
+        pub const fn control(&self) -> &WifiTxopEntryControlCell {
+            &self.control
+        }
+    }
+
+    /// The `WIFI_TXOP_ENTRY.CONTROL` word as the hardware may change it: volatile access only.
+    #[repr(transparent)]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiTxopEntryControlCell(oer_portable_memory::VolatileCell<u32>);
+
+    impl WifiTxopEntryControlCell {
+        /// One volatile read of the word.
+        #[inline]
+        pub fn read(&self) -> WifiTxopEntryControl {
+            WifiTxopEntryControl(self.0.get())
+        }
+
+        /// One volatile write of the whole word.
+        #[inline]
+        pub fn write(&self, value: WifiTxopEntryControl) {
+            self.0.set(value.0);
+        }
+    }
+
+    /// Project-assigned name.
+    ///
+    /// A value of the `WIFI_TXOP_ENTRY.CONTROL` word.
+    /// SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+    pub struct WifiTxopEntryControl(u32);
+
+    impl WifiTxopEntryControl {
+        /// The all-zero word.
+        pub const ZERO: Self = Self(0);
+
+        /// The value of a word image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The word image.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// Width of `DESCRIPTOR_ADDRESS_LOW` in bits.
+        pub const DESCRIPTOR_ADDRESS_LOW_WIDTH: u32 = 20;
+        /// Greatest unsigned image of `DESCRIPTOR_ADDRESS_LOW`.
+        pub const DESCRIPTOR_ADDRESS_LOW_MAX: u32 = 0xfffff;
+        /// Project-assigned name. Project-assigned name. Low twenty bits of the successor DMA-descriptor address. This format alone establishes neither a full address nor an allocation.
+        ///
+        /// `DESCRIPTOR_ADDRESS_LOW`, bits 19:0; written by the CPU.
+        /// SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+        pub const fn descriptor_address_low(self) -> u32 {
+            self.0 & 0xfffff
+        }
+
+        /// This value with `DESCRIPTOR_ADDRESS_LOW` set to `value`, or `None` when `value` does not
+        /// fit its 20 bits.
+        pub const fn with_descriptor_address_low(self, value: u32) -> Option<Self> {
+            if value > 0xfffff {
+                None
+            } else {
+                Some(Self((self.0 & 0xfff00000) | value))
+            }
+        }
+
+        /// This value with `DESCRIPTOR_ADDRESS_LOW` set to `VALUE`, checked at compile time.
+        pub const fn with_descriptor_address_low_constant<const VALUE: u32>(self) -> Self {
+            const { assert!(VALUE <= 0xfffff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xfff00000) | value)
+        }
+
+        /// Width of `MPDU_LENGTH` in bits.
+        pub const MPDU_LENGTH_WIDTH: u32 = 12;
+        /// Greatest unsigned image of `MPDU_LENGTH`.
+        pub const MPDU_LENGTH_MAX: u32 = 0xfff;
+        /// Project-assigned name. Project-assigned name. Low twelve bits copied from the descriptor buffer's first metadata word. The formatter's truncation does not establish safety for arbitrary fourteen-bit MPDU lengths.
+        ///
+        /// `MPDU_LENGTH`, bits 31:20; written by the CPU.
+        /// SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+        pub const fn mpdu_length(self) -> u16 {
+            (self.0 >> 20) as u16
+        }
+
+        /// This value with `MPDU_LENGTH` set to `value`, or `None` when `value` does not
+        /// fit its 12 bits.
+        pub const fn with_mpdu_length(self, value: u16) -> Option<Self> {
+            if value > 0xfff {
+                None
+            } else {
+                Some(Self((self.0 & 0xfffff) | (value as u32) << 20))
+            }
+        }
+
+        /// This value with `MPDU_LENGTH` set to `VALUE`, checked at compile time.
+        pub const fn with_mpdu_length_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xfffff) | (value as u32) << 20)
+        }
+    }
+
+    /// Project-assigned name. Fifteen continuation entries in ascending physical order. The vendor's one-based continuation position p selects element 15-p. ppCalTxopDur caps the software continuation count at fifteen.
+    /// SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+    #[repr(C, align(4))]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiTxopList {
+        entries: [WifiTxopEntry; 15],
+    }
+    const _: () = {
+        assert!(core::mem::size_of::<WifiTxopList>() == 60);
+        assert!(core::mem::align_of::<WifiTxopList>() == 4);
+    };
+    impl WifiTxopList {
+        pub const SIZE: usize = 60;
+        pub const ALIGN: usize = 4;
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[];
+        pub const fn zeroed() -> Self {
+            Self {
+                entries: [const { WifiTxopEntry::zeroed() }; 15],
+            }
+        }
+        pub fn entry(&self, index: usize) -> Option<&WifiTxopEntry> {
+            self.entries.get(index)
+        }
+    }
+
+    /// Project-assigned name. The three continuation lists selected by TXOP_LIST_SELECT, starting at WIFI_MAC.TXOP_LIST_MEMORY_OFFSET. Slots are ascending; positions are reversed within each slot. The top six words overlap HE_SCRATCH elements zero through five. This unplaced format grants no independent owner or concurrent-use authority.
+    /// SOURCE: BLOB_MAC_TXOP_LIST_20261103.
+    #[repr(C, align(4))]
+    #[derive(bytemuck::Zeroable)]
+    pub struct WifiTxopLists {
+        entries: [WifiTxopEntry; 45],
+    }
+    const _: () = {
+        assert!(core::mem::size_of::<WifiTxopLists>() == 180);
+        assert!(core::mem::align_of::<WifiTxopLists>() == 4);
+    };
+    impl WifiTxopLists {
+        pub const SIZE: usize = 180;
+        pub const ALIGN: usize = 4;
+        pub const PLACEMENT: &'static [core::ops::Range<u32>] = &[];
+        pub const fn zeroed() -> Self {
+            Self {
+                entries: [const { WifiTxopEntry::zeroed() }; 45],
+            }
+        }
+        pub fn entry(&self, index: usize) -> Option<&WifiTxopEntry> {
+            self.entries.get(index)
         }
     }
 

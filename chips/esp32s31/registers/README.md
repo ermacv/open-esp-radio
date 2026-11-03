@@ -78,6 +78,33 @@ similarity is not sufficient evidence for an ESP32-S31 address or bit. Reviewed
 source assertions, vendor comparison and dated hardware observations retain
 their distinct strength.
 
+## MAC offload formats
+
+The RX-control timestamp source, beacon-memory mapping and reload selection,
+transmitted-BSSID abort, beacon-filter abort and beacon-memory tag fields
+have function-derived names. Their sources are in
+[`blobray-mac-offload-names.toml`](evidence/blobray-mac-offload-names.toml).
+Abort-length units and the tag-offset reset request's self-clear behavior
+remain unestablished; the reset lane retains its existing ordinary RMW class.
+
+`LENGTH_CONTROL.TXOP_LIST_SELECT` admits the three list slots the vendor
+publishes. The software no-slot sentinel is not a writable hardware selector.
+`WIFI_TXOP_ENTRY`, `WIFI_TXOP_LIST` and `WIFI_TXOP_LISTS` describe the
+continuation format and its fifteen-entry/three-list geometry. They are
+unplaced formats: the aperture at `WIFI_MAC.TXOP_LIST_MEMORY_OFFSET` overlaps
+the first six HE MPLEN words, and these formats grant no second MMIO owner
+or concurrent-use authority.
+
+`WIFI_BEACON_RX_DESCRIPTOR` describes the twelve-byte descriptor at the start
+of the fixed 1-KiB beacon memory. The root records its CPU/APB and DMA bus
+views as `wifi-beacon-apb` and `wifi-beacon-dma`; these are two views of the
+same backing, not independent allocations or general alias mappings. Its
+buffer and next words retain raw address images outside the allocatable
+`dma-window`. The descriptor is memory, not a MAC configuration register.
+EOF is already one during initialization; neither it nor OWNER establishes
+a completion or detach/release predicate for this special descriptor.
+The model supplies no beacon-memory access owner or running offload lifecycle.
+
 ## Shared TSF snapshot words
 
 `MODEM_PWR.TSF_LOAD_CONTROL` publishes separate station and SoftAP snapshot

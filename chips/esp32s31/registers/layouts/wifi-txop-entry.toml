@@ -1,0 +1,31 @@
+schema = 1
+
+[layout]
+name = "WIFI_TXOP_ENTRY"
+description = "Project-assigned name. One continuation-list word published by hal_mac_fill_hwtxop. This alternate format overlaps six HE MPLEN words and is deliberately unplaced: it grants no second MMIO owner or DMA allocation."
+size = 4
+align = 4
+
+[layout.review]
+sources = ["BLOB_MAC_TXOP_LIST_20261103"]
+provenance = "observed"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[layout.words]]
+name = "CONTROL"
+offset = 0
+access = "shared"
+
+[[layout.words.fields]]
+name = "DESCRIPTOR_ADDRESS_LOW"
+bits = "19:0"
+writer = "cpu"
+description = "Project-assigned name. Low twenty bits of the successor DMA-descriptor address. This format alone establishes neither a full address nor an allocation."
+
+[[layout.words.fields]]
+name = "MPDU_LENGTH"
+bits = "31:20"
+writer = "cpu"
+description = "Project-assigned name. Low twelve bits copied from the descriptor buffer's first metadata word. The formatter's truncation does not establish safety for arbitrary fourteen-bit MPDU lengths."

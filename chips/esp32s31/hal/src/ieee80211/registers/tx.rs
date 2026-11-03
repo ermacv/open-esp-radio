@@ -8,7 +8,7 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use core::marker::PhantomData;
 
-use oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate as PlcpRate;
+use oer_chips_esp32s31_pac::wifi_mac::{length_control::TxopListSelect, plcp1::Rate as PlcpRate};
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 
 use crate::ieee80211::registers::{
@@ -1183,7 +1183,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     .set_bits_14_21_opaque(0)
                     .set_ht20_eof_count(bits(u32::from(ht20_eof_count)))
                     .set_ht20_txop_count(bits(0))
-                    .set_bits_28_31_opaque(bits(0));
+                    .set_txop_list_select(TxopListSelect::List0)
+                    .set_bits_30_31_opaque(bits(0));
             });
     }
 

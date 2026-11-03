@@ -464,10 +464,6 @@ sources = ["BLOB_LIBPP_HAL_COEX_RUNTIME", "BLOB_LIBPP_HAL_PWR"]
 accuracy = "unknown"
 completeness = "unknown"
 
-[review.entity."RX_BEACON_TIME_LOW.BITS_16_31_OPAQUE"]
-sources = ["S31_MMIO_USE_2010D854", "S31_MMIO_DECLARED_2010D854"]
-completeness = "partial"
-
 [review.entity."STA_TSF_CONTROL"]
 sources = ["BLOB_LIBPP_HAL_TSF", "BLOB_LIBPP_HAL_PWR", "BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027"]
 completeness = "partial"
@@ -1054,6 +1050,26 @@ sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTR
 
 [review.entity."CLEAR.TBTT_0"]
 sources = ["BLOB_LIBPP_HAL_TSF_TBTT_20260927", "BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027", "HW30_S31_TBTT_DOMAINS_20261027"]
+
+[review.entity."RX_BEACON_TIME_LOW.BIT_16_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D854"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_TIME_LOW.BEACON_MEMORY_TAG_START_OFFSET"]
+sources = ["BLOB_MAC_BEACON_TAG_20261103"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_TIME_LOW.BEACON_MEMORY_TAG_OFFSET_RESET"]
+sources = ["BLOB_MAC_BEACON_TAG_20261103"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_TIME_LOW.BEACON_MEMORY_TAG_ENABLE"]
+sources = ["BLOB_MAC_BEACON_TAG_20261103"]
+completeness = "partial"
+
+[review.entity."RX_BEACON_TIME_LOW.BITS_27_31_OPAQUE"]
+sources = ["S31_MMIO_DECLARED_2010D854"]
+completeness = "partial"
 
 [[registers]]
 name = "RUNTIME_TIMER_START_COMMAND"
@@ -1872,8 +1888,32 @@ class = "plain"
 write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
-name = "BITS_16_31_OPAQUE"
-bits = "31:16"
+name = "BIT_16_OPAQUE"
+bits = "16"
+class = "plain"
+description = "Observed source use; the individual hardware meaning is unknown."
+
+[[registers.fields]]
+name = "BEACON_MEMORY_TAG_START_OFFSET"
+bits = "24:17"
+class = "plain"
+description = "Project-assigned name. Eight-bit tag-offset code supplied by pwr_hal_set_mac_beacon_memory_tag_start_offset. The beacon-memory helper derives it from a byte count in four-byte units."
+
+[[registers.fields]]
+name = "BEACON_MEMORY_TAG_OFFSET_RESET"
+bits = "25"
+class = "plain"
+description = "Project-assigned name. Set-one tag-offset reset request used after tag enable. Self-clear and hardware replay semantics are unestablished; the existing ordinary RMW classification is retained."
+
+[[registers.fields]]
+name = "BEACON_MEMORY_TAG_ENABLE"
+bits = "26"
+class = "plain"
+description = "Project-assigned name. Beacon-memory tag enable changed by paired named enable/disable leaves. Tag contents are unestablished."
+
+[[registers.fields]]
+name = "BITS_27_31_OPAQUE"
+bits = "31:27"
 class = "plain"
 description = "Observed source use; the individual hardware meaning is unknown."
 
