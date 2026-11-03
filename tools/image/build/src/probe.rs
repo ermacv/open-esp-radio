@@ -232,7 +232,6 @@ fn analysis(
         stack_policy: profile.stack_policy(),
         diagnostic: true,
         task_stack_proven: false,
-        hot_code: None,
         harts: crate::harts::of_metadata(metadata, package, profile)?,
     })
 }
@@ -433,11 +432,6 @@ mod tests {
         };
         std::fs::write(root.join(PLACEMENT), toml::to_string(&placement).unwrap()).unwrap();
         std::fs::write(root.join(FRAGMENT), placement.fragment()).unwrap();
-        std::fs::write(
-            root.join(oer_tools_image_checks::linker::hot::FRAGMENT),
-            placement.hot_fragment(),
-        )
-        .unwrap();
         for fresh in [false, true] {
             let messages = [
                 serde_json::json!({"reason":"compiler-artifact", "executable":null}),
