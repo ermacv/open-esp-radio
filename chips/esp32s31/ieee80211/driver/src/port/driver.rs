@@ -1144,7 +1144,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 backoff_slots,
                 no_ack: mpdu.layout.kind() == MpduKind::IndividualNoAck,
                 operation: pending.coex,
-                retry: mpdu.published,
+                // A data or management frame sent again carries the Retry
+                // bit; a BlockAckReq, a control frame, never does (IEEE Std
+                // 802.11-2020, 9.2.4.1.5).
+                retry: mpdu.published && mpdu.layout.kind() != MpduKind::BlockAckRequest,
             },
         )
         .map_err(|_| Fault::Capacity)?;
