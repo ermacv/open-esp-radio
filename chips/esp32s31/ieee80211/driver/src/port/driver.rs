@@ -197,6 +197,9 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     applied_ba: [Option<RxBlockAckValues>; 8],
     transition: Option<Instant>,
     clock_deadline: Instant,
+    /// A TX turn served an edge: the next wake takes one more TX turn, for
+    /// a BlockAck result that came after its completion's interrupt.
+    tx_recheck: bool,
     /// The one receiver of this driver's publication observations, present
     /// from preparation until retirement.
     observations: Option<O>,
@@ -269,6 +272,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             applied_ba: [None; 8],
             transition: None,
             clock_deadline: Instant::from_micros(0),
+            tx_recheck: false,
             observations: None,
         }
     }
@@ -326,6 +330,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// Whether the driver is between steady states (starting, stopping,
     /// configuring, closing, a command in hand): its every wake then takes
     /// a whole turn.
+    /// Whether the next wake takes a TX turn even without facts.
+    pub(super) fn tx_recheck(&self) -> bool {
+        self.tx_recheck
+    }
     pub(super) fn busy(&self, held: &Held<'_, 'id, Id, D, B, O>) -> bool {
         !held.enabled.get()
             || !held.want_enabled.get()
@@ -642,6 +650,125 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.withdraw(held);
         Ok(())
     }
+    /// Publish each idle queue's head: an MPDU, or an aggregate once a
+    /// chain is free; aged heads end first.
+    fn publish_heads(
+        &mut self,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        device: &mut D,
+        now: Instant,
+        stopping: bool,
+    ) -> Result<(), Fault> {
+        for index in 0..4 {
+            if self.running[index].is_some() {
+                continue;
+            }
+            // Expiry continues behind a gate or a command barrier.
+            while self.queues[index]
+                .front()
+                .is_some_and(|p| Self::expired(held, p, now))
+            {
+                match self.queues[index].pop_front() {
+                    Some(Queued::Single(pending)) => {
+                        self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
+                    }
+                    Some(Queued::Aggregate(pending)) => {
+                        if let Err(pending) = self.expire_aggregate(held, pending, now) {
+                            // Its oldest admission aged and no subframe did:
+                            // the record lost its admission.
+                            drop(pending);
+                            return Err(Fault::Capacity);
+                        }
+                    }
+                    None => break,
+                }
+            }
+            if stopping
+                || self.closed
+                || self.closing.is_some()
+                || core_views::configuring::<Id, D, B>(self.core.view())
+                || self.queues[index].front().is_some_and(|p| self.blocked(p))
+            {
+                continue;
+            }
+            #[cfg(oer_debug_control)]
+            if held.publication_hold.get() & (1 << index) != 0 {
+                continue;
+            }
+            // An aggregate waits at the head until a chain is free.
+            if matches!(
+                self.queues.get(index).and_then(|queue| queue.front()),
+                Some(Queued::Aggregate(_))
+            ) && !self.chain_free()
+            {
+                continue;
+            }
+            match self.queues[index].pop_front() {
+                Some(Queued::Single(pending)) => self.publish(held, device, index, pending)?,
+                Some(Queued::Aggregate(pending)) => {
+                    self.publish_aggregate(held, device, index, pending)?
+                }
+                None => {}
+            }
+        }
+        Ok(())
+    }
+    /// The station's TBTT: its beacon-time work and terminals.
+    fn serve_tbtt(
+        &mut self,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        device: &mut D,
+        stopping: bool,
+    ) -> Result<(), Fault> {
+        let mut sink = Sink::default();
+        if !core_views::configuring::<Id, D, B>(self.core.view()) {
+            self.core
+                .view()
+                .commands()
+                .ok_or(Fault::Capacity)?
+                .station_tbtt(device.hardware()?, &mut sink);
+        }
+        self.collect(held, &mut sink, stopping)
+    }
+    /// The turn of a wake that brought TX or TBTT facts alone, in a steady
+    /// state, as the archive's data path serves a TX interrupt: the facts'
+    /// edges, then each idle queue's head, the open aggregates included.
+    /// Commands, settings and deadlines wait for a whole turn.
+    pub(super) fn tx_turn(
+        &mut self,
+        cx: &mut Context<'_>,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        device: &mut D,
+    ) -> Result<(), Fault> {
+        settle_lent(&held.storage.shared.network, held.rx_out, device)?;
+        let recheck = core::mem::take(&mut self.tx_recheck);
+        let mut served = false;
+        for _ in 0..EVENTS_PER_POLL {
+            match device.poll_event(cx) {
+                Poll::Ready(Ok(DeviceEvent::Tx(wake))) => {
+                    self.service_tx(held, device, wake, false)?;
+                    served = true;
+                }
+                Poll::Ready(Ok(DeviceEvent::Tbtt)) => self.serve_tbtt(held, device, false)?,
+                Poll::Ready(Err(cause)) => return Err(cause),
+                Poll::Pending => break,
+            }
+        }
+        if served {
+            self.tx_recheck = true;
+            held.storage.shared.driver.nudge();
+        } else if recheck {
+            self.service_tx(held, device, WifiTxWake::Deadline, false)?;
+        }
+        self.take_idle_open(held, false)?;
+        let now = device.timer().now();
+        self.publish_heads(held, device, now, false)?;
+        if device.receive_due() {
+            held.receive_due.set(true);
+            held.storage.shared.wake_body();
+        }
+        Ok(())
+    }
     /// Offer one TX edge to the core's MPDUs and to the published
     /// aggregates. Their timeout aborts force CCA one at a time: when one
     /// side's settle ends, the other side's latched timeouts are offered
@@ -764,6 +891,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         device: &mut D,
     ) -> Result<(), Fault> {
         settle_lent(&held.storage.shared.network, held.rx_out, device)?;
+        self.tx_recheck = false;
         let now = device.timer().now();
         // A start in flight may lend the device's registers to the radio
         // actor (a retune): the clock is sampled once the start ended.
@@ -827,17 +955,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     self.service_tx(held, device, wake, stopping)?;
                     served_tx = true;
                 }
-                Poll::Ready(Ok(DeviceEvent::Tbtt)) => {
-                    let mut sink = Sink::default();
-                    if !core_views::configuring::<Id, D, B>(self.core.view()) {
-                        self.core
-                            .view()
-                            .commands()
-                            .ok_or(Fault::Capacity)?
-                            .station_tbtt(device.hardware()?, &mut sink);
-                    }
-                    self.collect(held, &mut sink, stopping)?;
-                }
+                Poll::Ready(Ok(DeviceEvent::Tbtt)) => self.serve_tbtt(held, device, stopping)?,
                 Poll::Ready(Err(cause)) => return Err(cause),
                 Poll::Pending => {
                     again = false;
@@ -860,8 +978,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         // A notification, not the bare waker: the driver's turn checks it
         // before its work.
-        if again || served_tx {
+        if again {
             held.storage.shared.driver.wake();
+        }
+        if served_tx {
+            self.tx_recheck = true;
+            held.storage.shared.driver.nudge();
         }
         // A configuration barrier waits for its role's published aggregates
         // as the core waits for its MPDUs.
@@ -1080,58 +1202,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             self.closed = true;
             held.terminal(owned::OwnedTerminal::GateClosed(gate));
         }
-        for index in 0..4 {
-            if self.running[index].is_some() {
-                continue;
-            }
-            // Expiry continues behind a gate or a command barrier.
-            while self.queues[index]
-                .front()
-                .is_some_and(|p| Self::expired(held, p, now))
-            {
-                match self.queues[index].pop_front() {
-                    Some(Queued::Single(pending)) => {
-                        self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
-                    }
-                    Some(Queued::Aggregate(pending)) => {
-                        if let Err(pending) = self.expire_aggregate(held, pending, now) {
-                            // Its oldest admission aged and no subframe did:
-                            // the record lost its admission.
-                            drop(pending);
-                            return Err(Fault::Capacity);
-                        }
-                    }
-                    None => break,
-                }
-            }
-            if stopping
-                || self.closed
-                || self.closing.is_some()
-                || core_views::configuring::<Id, D, B>(self.core.view())
-                || self.queues[index].front().is_some_and(|p| self.blocked(p))
-            {
-                continue;
-            }
-            #[cfg(oer_debug_control)]
-            if held.publication_hold.get() & (1 << index) != 0 {
-                continue;
-            }
-            // An aggregate waits at the head until a chain is free.
-            if matches!(
-                self.queues.get(index).and_then(|queue| queue.front()),
-                Some(Queued::Aggregate(_))
-            ) && !self.chain_free()
-            {
-                continue;
-            }
-            match self.queues[index].pop_front() {
-                Some(Queued::Single(pending)) => self.publish(held, device, index, pending)?,
-                Some(Queued::Aggregate(pending)) => {
-                    self.publish_aggregate(held, device, index, pending)?
-                }
-                None => {}
-            }
-        }
+        self.publish_heads(held, device, now, stopping)?;
         if stopping
             && !self.aggregate_running(None)
             && self.open.iter().all(Option::is_none)

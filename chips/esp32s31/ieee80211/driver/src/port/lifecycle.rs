@@ -427,12 +427,37 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 // The task polls the driver beside the station: a wake that
                 // brought the driver no notification, fact or deadline, in a
                 // steady state, takes only the idle turn.
-                let due = core::mem::take(&mut force)
+                let full = core::mem::take(&mut force)
                     || storage.shared.driver.take_notified()
-                    || driver().map_or(true, |state| state.busy(held))
-                    || storage
+                    || driver().map_or(true, |state| state.busy(held));
+                let tx = !full
+                    && (storage
                         .device()
-                        .map_or(true, |device| device.events_pending());
+                        .map_or(true, |device| device.events_pending())
+                        || driver().is_ok_and(|state| state.tx_recheck()));
+                if tx {
+                    let turn = storage
+                        .device()
+                        .and_then(|mut device| driver()?.tx_turn(cx, held, &mut **device));
+                    if let Err(cause) = turn {
+                        storage.poison(cause);
+                        retire.request_failure(
+                            oer_protocols_radio_port::LifecycleError::StopUnconfirmed,
+                        );
+                        return Poll::Pending;
+                    }
+                    // A publication moves the deadline: the loop takes the new one.
+                    let next = driver().and_then(|mut state| state.deadline(held));
+                    if next.is_ok_and(|next| next < deadline) {
+                        return Poll::Ready(false);
+                    }
+                    if delay.as_mut().poll(cx).is_ready() {
+                        whole = true;
+                        return Poll::Ready(false);
+                    }
+                    return Poll::Pending;
+                }
+                let due = full;
                 if !due {
                     let idle = storage
                         .device()
