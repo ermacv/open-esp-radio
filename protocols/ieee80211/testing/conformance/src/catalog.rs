@@ -1,7 +1,8 @@
 //! One catalog for the host and physical conformance fixtures.
 
 use super::{
-    BarrierCase, Execution, Scenario, edca, group_keys, interface_commands, msdu_age, outcomes,
+    BarrierCase, Execution, Scenario, arena, edca, group_keys, interface_commands, msdu_age,
+    outcomes,
 };
 
 /// An optional operation required by a case, independently of its air stimulus.
@@ -9,6 +10,8 @@ use super::{
 pub enum Extension {
     /// Aggregate admission through `AmpduPhase`.
     Ampdu,
+    /// Data transmission on the two arenas of `TxArena`.
+    TxArena,
 }
 
 /// One case from the shared suites.
@@ -30,6 +33,8 @@ pub enum Case {
     GroupBoundary(group_keys::Case),
     /// Owner-controlled virtual age boundaries.
     Age(msdu_age::Case),
+    /// Intake, publication and settlement on the two TX arenas.
+    Arena(arena::Case),
 }
 
 impl Case {
@@ -49,7 +54,9 @@ impl Case {
             .chain(edca::Case::ALL.into_iter().map(Self::Edca))
             .chain(group_keys::Case::ALL.into_iter().map(Self::GroupBoundary))
             .chain(msdu_age::Case::ALL.into_iter().map(Self::Age))
-            // Append new hardware cases so deployed request ordinals stay stable.
+            .chain(arena::Case::ALL.into_iter().map(Self::Arena))
+            // The fail-stop rollback stays last: no later case needs the
+            // quarantined radio.
             .chain([Self::Group(group_keys::ProgressCase::ReplacementRollback)])
     }
 
@@ -64,6 +71,7 @@ impl Case {
             Self::Edca(case) => case.execution(),
             Self::GroupBoundary(case) => case.execution(),
             Self::Age(case) => case.execution(),
+            Self::Arena(case) => case.execution(),
         }
     }
 
@@ -74,6 +82,7 @@ impl Case {
                 outcomes::Form::Aggregate => Some(Extension::Ampdu),
                 outcomes::Form::Single => None,
             },
+            Self::Arena(_) => Some(Extension::TxArena),
             _ => None,
         }
     }
@@ -105,6 +114,11 @@ mod tests {
                 Case::Outcome(outcomes::Case::BlockAck),
                 Case::Outcome(outcomes::Case::NoResponse(outcomes::Form::Aggregate))
             ]
+        );
+        assert!(
+            Case::all()
+                .filter(|case| matches!(case, Case::Arena(_)))
+                .all(|case| case.extension() == Some(Extension::TxArena))
         );
         for case in outcomes::Case::ALL {
             assert_eq!(

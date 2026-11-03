@@ -29,6 +29,7 @@
 
 /// Allocation lifetime identities used by backend fixtures.
 pub mod allocations;
+pub mod arena;
 pub mod catalog;
 pub mod edca;
 /// GTK installation, replacement and selection RX boundaries.
@@ -75,6 +76,10 @@ pub enum ModelOnlyReason {
     HeldContention,
     /// Explicit age boundaries and held publications require virtual time.
     MsduAge,
+    /// A BlockAck that misses chosen MPDUs requires an injected answer.
+    PartialBlockAck,
+    /// A protection exchange without a CTS requires an injected answer.
+    ProtectionFailure,
 }
 
 /// A case's physical execution requirements, independent of its fixture.

@@ -7,8 +7,8 @@ package: a backend takes it as a test dependency, the reference model
 no product package depends on it (`oer-tools-test-layers`). It takes the port, the
 wire formats and portable support alone.
 
-Backend tests implement its ownership, publication-barrier, configuration, GTK and outcome
-harness traits; they need no dependency on `oer-protocols-ieee80211-runtime`. The model
+Backend tests implement its ownership, publication-barrier, configuration, GTK, outcome
+and TX arena harness traits; they need no dependency on `oer-protocols-ieee80211-runtime`. The model
 in `oer-protocols-ieee80211-testing-model` runs the same runners with virtual time. Traces contain observations
 from actual submitted/returned owners, publication observers and event streams;
 expected identities cannot substitute for observations.
@@ -28,6 +28,7 @@ not prove a hardware implementation.
 | Outcomes (`outcomes::check`) | Single ACK, aggregate BlockAck, single/aggregate NoResponse | Single/aggregate Collision, AirDenied, HardwareTimeout |
 | GTK (`group_keys::check`) | Disable before/after each of four mutations, published-key removal | Four independently delayed-ingress RX cuts, four stalled-command expiries |
 | EDCA (`edca::check`) | Two VIFs with different tables, every AC | None |
+| TX arena (`arena::check`) | Intake until full, release order, withdrawal, publish refusals | Partial BlockAck retention, protection-failure republication, fault |
 | MSDU age (`msdu_age::check`) | None | Before publication, between retries, re-formation with a core BAR, delivery before head expiry, hardware-owned completion |
 
 Hardware ACK uses a reachable peer and NoResponse an absent address. Collision,

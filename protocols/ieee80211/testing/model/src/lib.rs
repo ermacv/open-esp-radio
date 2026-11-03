@@ -74,6 +74,9 @@
 //! its first subframe, using sequence arithmetic modulo 4096. Refusal returns
 //! both the unchanged builder and the rejected subframe before publication.
 //!
+//! Data frames also go out through [`ModelArena`], the model's two-arena
+//! `TxArena` over plain slot arrays with scripted answers ([`arena`]).
+//!
 //! Each concrete class pool uses the portable `MpduLayout` proof before
 //! writing headers or copying an external body. Its allocation is privately
 //! minted at the class capacity; `ClassFrame` proves the MPDU fits it.
@@ -148,6 +151,11 @@ mod fixture;
 #[cfg(any(test, feature = "test-support"))]
 use fixture::plain_context;
 
+pub mod arena;
+pub use arena::{
+    MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer, ModelArenaFault,
+    ModelArenaPublication,
+};
 mod contention;
 mod loan;
 mod owned;

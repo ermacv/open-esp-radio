@@ -50,7 +50,8 @@
 //! The values that cross the port (attempts, settings, key installs,
 //! A-MPDU and beacon timing values, outcomes and the backend's service
 //! description) live beside it ([`tx`], [`control`], [`extensions`],
-//! [`contract`], [`monitor`]). Codecs, policy, vendor records and chip
+//! [`contract`], [`monitor`]). Data frames go out on the two DMA arenas of
+//! [`TxArena`] ([`arena`]). Codecs, policy, vendor records and chip
 //! models live in the layers that own them.
 //!
 //! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
@@ -63,6 +64,12 @@ pub use in_flight::{
     TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
 };
 
+pub mod arena;
+pub use arena::{
+    ARENA_FRAMES, Arena, ArenaCompleted, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd,
+    CompletedOf, Completion, CompletionOf, FrameIndex, FrameIter, FrameMask, IntakeRefused,
+    PublishError, PublishRefused, RetainError, RetainErrorOf, Settlement, TxArena,
+};
 pub mod association;
 pub mod capabilities;
 mod layout;

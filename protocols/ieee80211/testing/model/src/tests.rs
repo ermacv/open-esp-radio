@@ -2011,6 +2011,8 @@ mod results;
 
 mod block_ack;
 
+mod arena;
+
 mod group_keys;
 
 mod association;

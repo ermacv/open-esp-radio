@@ -329,6 +329,25 @@ The module `owner`'s table maps every refusal of the old lower-MAC port to
 its type, and lists the world's outcomes that stay. Compile-fail tests in
 `owner` and `phase` pin each rule a type carries.
 
+## Data on two arenas
+
+`TxArena` (module `arena`) is the data transmit path: the backend owns two
+arenas of DMA slots (`ArenaId`), the caller one affine `Arena` right per
+arena. The caller fills an arena frame by frame (`intake`, which writes the
+MPDU once into the memory the caller hands over and names its `FrameIndex`)
+and publishes it as one single MPDU or A-MPDU (`ArenaPublication`: format
+and phase-checked rate, access category, RTS/CTS protection, encryption
+under the installed pairwise key, power). Publication moves the right into
+the backend; one arena is on the air at a time. `service` reports the end
+(`AttemptEnd`) as an affine `ArenaCompleted`; only `retain` (keep a
+`FrameMask` of frames, compacted in order, the Retry bit set when a frame
+may have reached the air) or `release` consume it and return the right, so
+a completed arena is settled before it is filled or published again. Every
+returned memory comes back in position order. Sequence and packet numbers,
+BlockAck windows, ageing and the retry policy stay with the caller.
+Required methods are the backend's; the provided ones alone mint rights,
+indices and completions (`tests/ui/arena_*.rs`).
+
 ## Optional features
 
 Extension traits of the phase: `AmpduPhase` (one attempt sends one A-MPDU,
