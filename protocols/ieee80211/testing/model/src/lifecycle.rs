@@ -116,26 +116,117 @@ impl<C: Ieee80211Capabilities> LowerMacSetup for ModelSetup<'_, C> {
     }
 }
 
+/// The installation's pool layout, which its one mint issues: the slot
+/// loan's and the data port's alike.
+pub type ModelPools = (
+    oer_protocols_ieee80211_contracts_port::ArbiterPool,
+    oer_protocols_ieee80211_contracts_port::TransmitPool<ModelTickets, MODEL_TICKETS>,
+    oer_protocols_radio_port::Slots<ModelSmall, MODEL_SMALL_BUFFERS>,
+    oer_protocols_radio_port::Slots<ModelLarge, MODEL_LARGE_BUFFERS>,
+    oer_protocols_radio_port::Slots<ConnectionEpochKind, 1>,
+    ModelAssociationPool<Station>,
+    ModelAssociationPool<AccessPoint>,
+    ModelBlockAckPool,
+    oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
+    (
+        oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
+        InterfaceCommandPool<Station>,
+        InterfaceCommandPool<AccessPoint>,
+    ),
+);
+
+/// One installation's driver queues and owned resources from its mint,
+/// with the air reset for it.
+pub(super) fn installation_parts<B: ModelComposition>(
+    air: &Rc<ModelAir>,
+    mint: Mint<'static, ModelPools, B::Identity>,
+) -> (ModelHeld<'static, B>, ModelResources<'static, B>) {
+    let (
+        (gate, gate_issuer, arbiter_authority),
+        (tickets, terminal_access),
+        small,
+        large,
+        [epoch_slot],
+        station_vacant,
+        access_point_vacant,
+        block_acks,
+        [station_group_permission],
+        ([access_point_group_permission], station_commands, access_point_commands),
+    ) = mint.into_pools();
+    let (station_association, station_bank) = station_vacant.into_parts();
+    let (station_pairwise, station_group) = station_bank.into_parts();
+    let (access_point_association, access_point_bank) = access_point_vacant.into_parts();
+    let (access_point_pairwise, access_point_group) = access_point_bank.into_parts();
+    air.stream.set(ModelStream::Running);
+    air.receive_agreements.take().clear();
+    air.associations.set(InterfaceAssociations::default());
+    air.observation.set(DriverObservation::default());
+    let held = ModelHeld {
+        air: air.clone(),
+        commands: Bounded::new(MODEL_COMMANDS, "command"),
+        recycled: Bounded::new(MODEL_RX_EVENTS, "recycle"),
+        settings: Cell::default(),
+        events: Bounded::new(MODEL_EVENTS, "event"),
+        quarantined: Bounded::new(1, "answer shape rejection"),
+        failed_group: Bounded::new(2, "failed GTK command"),
+        failed_group_terminal: Bounded::new(2, "uncertain GTK terminal"),
+        rx_out: Cell::new(0),
+        network: Default::default(),
+        lost: Cell::new(false),
+        body: Cell::default(),
+        gate_issuer,
+        draining: Cell::new(false),
+        returned: Cell::new(true),
+        arenas: core::cell::RefCell::new(arena::StationArenas::new()),
+        gate_closed: Cell::new(false),
+        configuring_station: Cell::new(false),
+    };
+    let resources = ModelResources {
+        station_association,
+        access_point_association,
+        station_commands,
+        access_point_commands,
+        connection_epoch: epoch_slot,
+        tickets: tickets.into_iter().collect(),
+        terminal_access,
+        small: small
+            .into_iter()
+            .map(|slot| ModelBuffer {
+                slot,
+                loan: None,
+                memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
+                admitted_at: None,
+                admitted: None,
+            })
+            .collect(),
+        large: large
+            .into_iter()
+            .map(|slot| ModelBuffer {
+                slot,
+                loan: None,
+                memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
+                admitted_at: None,
+                admitted: None,
+            })
+            .collect(),
+        station_pairwise,
+        station_group,
+        access_point_pairwise,
+        access_point_group,
+        block_acks,
+        station_group_permission,
+        access_point_group_permission,
+        gate,
+        arbiter_authority,
+    };
+    (held, resources)
+}
+
 impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
     for ModelBackend<Id, C, X>
 {
     type Vacant = ModelVacant<Id, C, X>;
-    type Pools = (
-        oer_protocols_ieee80211_contracts_port::ArbiterPool,
-        oer_protocols_ieee80211_contracts_port::TransmitPool<ModelTickets, MODEL_TICKETS>,
-        oer_protocols_radio_port::Slots<ModelSmall, MODEL_SMALL_BUFFERS>,
-        oer_protocols_radio_port::Slots<ModelLarge, MODEL_LARGE_BUFFERS>,
-        oer_protocols_radio_port::Slots<ConnectionEpochKind, 1>,
-        ModelAssociationPool<Station>,
-        ModelAssociationPool<AccessPoint>,
-        ModelBlockAckPool,
-        oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
-        (
-            oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
-            InterfaceCommandPool<Station>,
-            InterfaceCommandPool<AccessPoint>,
-        ),
-    );
+    type Pools = ModelPools;
     type Queues = Option<ModelQueues<Self>>;
     const VACANT_QUEUES: Self::Queues = None;
     type Frontend<'s>
@@ -150,84 +241,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
         Id: 's;
 
     fn prepare_queues(&mut self, backing: &mut Self::Queues, mint: Mint<'static, Self::Pools, Id>) {
-        let (
-            (gate, gate_issuer, arbiter_authority),
-            (tickets, terminal_access),
-            small,
-            large,
-            [epoch_slot],
-            station_vacant,
-            access_point_vacant,
-            block_acks,
-            [station_group_permission],
-            ([access_point_group_permission], station_commands, access_point_commands),
-        ) = mint.into_pools();
-        let (station_association, station_bank) = station_vacant.into_parts();
-        let (station_pairwise, station_group) = station_bank.into_parts();
-        let (access_point_association, access_point_bank) = access_point_vacant.into_parts();
-        let (access_point_pairwise, access_point_group) = access_point_bank.into_parts();
-        self.air.stream.set(ModelStream::Running);
-        self.air.receive_agreements.take().clear();
-        self.air.associations.set(InterfaceAssociations::default());
-        self.air.observation.set(DriverObservation::default());
-        let held = ModelHeld {
-            air: self.air.clone(),
-            commands: Bounded::new(MODEL_COMMANDS, "command"),
-            recycled: Bounded::new(MODEL_RX_EVENTS, "recycle"),
-            settings: Cell::default(),
-            events: Bounded::new(MODEL_EVENTS, "event"),
-            quarantined: Bounded::new(1, "answer shape rejection"),
-            failed_group: Bounded::new(2, "failed GTK command"),
-            failed_group_terminal: Bounded::new(2, "uncertain GTK terminal"),
-            rx_out: Cell::new(0),
-            network: Default::default(),
-            lost: Cell::new(false),
-            body: Cell::default(),
-            gate_issuer,
-            draining: Cell::new(false),
-            returned: Cell::new(true),
-            arenas: core::cell::RefCell::new(arena::StationArenas::new()),
-            gate_closed: Cell::new(false),
-            configuring_station: Cell::new(false),
-        };
-        let resources = ModelResources {
-            station_association,
-            access_point_association,
-            station_commands,
-            access_point_commands,
-            connection_epoch: epoch_slot,
-            tickets: tickets.into_iter().collect(),
-            terminal_access,
-            small: small
-                .into_iter()
-                .map(|slot| ModelBuffer {
-                    slot,
-                    loan: None,
-                    memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
-                    admitted_at: None,
-                    admitted: None,
-                })
-                .collect(),
-            large: large
-                .into_iter()
-                .map(|slot| ModelBuffer {
-                    slot,
-                    loan: None,
-                    memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
-                    admitted_at: None,
-                    admitted: None,
-                })
-                .collect(),
-            station_pairwise,
-            station_group,
-            access_point_pairwise,
-            access_point_group,
-            block_acks,
-            station_group_permission,
-            access_point_group_permission,
-            gate,
-            arbiter_authority,
-        };
+        let (held, resources) = installation_parts(&self.air, mint);
         *backing = Some(ModelQueues {
             held,
             resources: Some(resources),

@@ -36,6 +36,12 @@
 //! (`oer_protocols_ieee80211_contracts_port::phase`), for host tests of the shape and of
 //! the code that drives it.
 //!
+//! [`ModelPort`] is the same model as a data port
+//! (`oer_protocols_ieee80211_contracts_port::DataPort`): one actor owns it by value
+//! and calls it synchronously with the instant of its turn, and
+//! [`ModelCommands`] issues its installation commands. Its installations
+//! come from `Installations` under the identity's brand.
+//!
 //! [`ModelBackend::new`] takes the install's channel, interface addresses
 //! and monotonic clock, and returns the P2 owner and the [`ModelAir`] it
 //! plays on. A caller places its generative local slot outside the frontend
@@ -869,6 +875,15 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             ModelAnyBuffer::Large(buffer) => buffer.project_admission(air),
             ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.project_admission(air),
             ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.project_admission(air),
+        }
+    }
+    /// The monotonic instant the MPDU was admitted at, once it was.
+    fn admitted_monotonic(&self) -> Option<Instant> {
+        match &self.buffer {
+            ModelAnyBuffer::Small(buffer) => buffer.admitted,
+            ModelAnyBuffer::Large(buffer) => buffer.admitted,
+            ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.admitted,
+            ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.admitted,
         }
     }
     fn expired(&self, now: Instant, lifetime: Duration) -> bool {
@@ -1788,6 +1803,12 @@ pub struct ModelAir {
     deadline: Cell<Option<Waker>>,
     /// P2 does not answer a requested retirement while this is set.
     retirement_held: Cell<bool>,
+    /// The instant a data port call was given: the model's time for the
+    /// call, read instead of the image clock while it is set.
+    turn: Cell<Option<Instant>>,
+    /// The data port's actor, which the air's world wakes; the port's own
+    /// steps never do.
+    actor: Cell<Option<Waker>>,
 }
 impl ModelAir {
     /// Inspect P2's last published snapshot without borrowing its driver.
@@ -1827,17 +1848,27 @@ impl ModelAir {
             expired_msdus: Default::default(),
             deadline: Default::default(),
             retirement_held: Default::default(),
+            turn: Cell::new(None),
+            actor: Cell::new(None),
         }
     }
 
     fn monotonic_now(&self) -> Instant {
-        self.time.clock.now()
+        self.turn.get().unwrap_or_else(|| self.time.clock.now())
+    }
+
+    /// Wake the driver and the data port's actor: the world changed.
+    fn wake_world(&self) {
+        self.wake_driver();
+        if let Some(waker) = self.actor.take() {
+            waker.wake();
+        }
     }
 
     /// Wake the driver and a stop-deadline wait after the clock owner
     /// advances virtual time. This notification never changes the clock.
     pub fn clock_advanced(&self) {
-        self.wake_driver();
+        self.wake_world();
         if let Some(waker) = self.deadline.take() {
             waker.wake();
         }
@@ -2080,7 +2111,7 @@ impl ModelAir {
     /// admitted commands instead of waiting for this test hold to be released.
     pub fn hold_group_commands(&self, held: bool) {
         self.group_held.set(held);
-        self.wake_driver();
+        self.wake_world();
     }
 
     /// Actual material writes, including replacement and excluding selection.
@@ -2124,7 +2155,7 @@ impl ModelAir {
             installation: RawKeyIdentity(installation),
             stage,
         });
-        self.wake_driver();
+        self.wake_world();
         true
     }
 
@@ -2156,7 +2187,7 @@ impl ModelAir {
     /// continuously ready source, rather than a finite queued burst.
     pub fn receive_continuously(&self, frame: &[u8], meta: ModelRxMeta) {
         self.rx_stream.set(Some((frame.into(), meta)));
-        self.wake_driver();
+        self.wake_world();
     }
 
     /// Stop generating RX events. Already returned buffers still require
@@ -2168,7 +2199,7 @@ impl ModelAir {
     /// Deliver `frame` to the radio.
     pub fn receive(&self, frame: &[u8], meta: ModelRxMeta) {
         self.rx.push_back((frame.into(), meta));
-        self.wake_driver();
+        self.wake_world();
     }
 
     /// Keep the queue of `access_category` busy, or free it: its attempts
@@ -2181,7 +2212,7 @@ impl ModelAir {
         let mut queues = self.held.get();
         *access_category.select_mut(&mut queues) = held;
         self.held.set(queues);
-        self.wake_driver();
+        self.wake_world();
     }
 
     /// Delay the current publication's result until released or its bound
@@ -2194,7 +2225,7 @@ impl ModelAir {
         let mut results = self.held_results.get();
         *category.select_mut(&mut results) = held;
         self.held_results.set(results);
-        self.wake_driver();
+        self.wake_world();
     }
     /// Refuse the next enable.
     pub fn refuse_enable(&self) {
@@ -2643,7 +2674,13 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
 }
 
 mod lifecycle;
-pub use lifecycle::{ModelBackend, ModelFrontend, ModelSetup, ModelVacant};
+pub use lifecycle::{ModelBackend, ModelFrontend, ModelPools, ModelSetup, ModelVacant};
+mod data_port;
+pub use data_port::{
+    MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAdmitted, ModelCommands, ModelGroupInstall,
+    ModelInstall, ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
+    ModelPortObservation, ModelReinstallRefused,
+};
 
 /// The composition's initial software depth for each access category.
 pub const MODEL_TX_QUEUE_DEPTH: core::num::NonZeroU8 = core::num::NonZeroU8::MIN.saturating_add(1);

@@ -735,6 +735,22 @@ impl StationArenas {
         Ok(done.map(|done| (done, access_category)))
     }
 
+    /// When the arena on the air needs service: its hardware deadline while
+    /// its result is held, at once otherwise; `None` with none on the air.
+    pub(crate) fn due(
+        &self,
+        now: Instant,
+        held_result: impl Fn(WmmAccessCategory) -> bool,
+        abort: bool,
+    ) -> Option<Instant> {
+        let (access_category, deadline) = self.arenas.on_air_queue()?;
+        if held_result(access_category) && !abort {
+            Some(deadline)
+        } else {
+            Some(now)
+        }
+    }
+
     /// Return a key whose arena holds no frame any more.
     fn release_keys(&mut self) {
         for id in [ArenaId::First, ArenaId::Second] {
@@ -779,6 +795,11 @@ impl<'a, C, B: ModelComposition> ModelDataArena<'a, '_, '_, C, B> {
             caps: PhantomData,
             brand: PhantomData,
         }
+    }
+
+    /// The arenas' own recorded fault.
+    pub(crate) fn arena_fault(&self) -> Option<ModelArenaFault> {
+        self.state.as_ref().and_then(|state| state.arenas.fault())
     }
 
     fn state(&mut self) -> Result<&mut StationArenas, ModelFault> {

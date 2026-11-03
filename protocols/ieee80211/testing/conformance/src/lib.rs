@@ -31,6 +31,8 @@
 pub mod allocations;
 pub mod arena;
 pub mod catalog;
+/// Cases every data port passes, called as its actor calls it.
+pub mod data_port;
 pub mod edca;
 /// GTK installation, replacement and selection RX boundaries.
 pub mod group_keys;
