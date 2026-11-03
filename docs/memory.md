@@ -32,10 +32,10 @@ facts at build time; the host checks read the same facts.
 - The image linker selects strict code by analysis and places its input
   sections in SRAM through `strict-text.x`: [execution in the
   architecture](architecture.md#execution) and [image checks](../tools/image/checks/README.md).
-- `.hot.text` places code in SRAM for performance:
-  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs), and
-  the functions of an image's profile-generated hot-code list through
-  `hot-text.x` ([image linker](../tools/image/linker/README.md#hot-code)).
+- `.hot.text` places code in SRAM for performance, from semantic
+  `.hot.text.*` input sections written in code:
+  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/ieee80211/dma.rs) for
+  the RX path and [the PHY engine](../chips/esp32s31/hal/src/phy.rs).
 - The staged platform uses `.trap`, `.rwtext` and
   `.flash.critical.text` conventions collected by the
   [runtime linker script](../chips/family/staged-layout/linker/runtime/sections.x).

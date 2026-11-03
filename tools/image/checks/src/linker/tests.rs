@@ -357,7 +357,6 @@ fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
                 diagnostic: false,
                 task_stack_proven: false,
                 harts: Vec::new(),
-                hot_code: None,
             })
             .unwrap(),
         )

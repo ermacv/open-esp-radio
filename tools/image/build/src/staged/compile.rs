@@ -47,7 +47,6 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
                 != Some(oer_tools_image_checks::interrupts::Required::Product),
             task_stack_proven,
             harts: harts.to_vec(),
-            hot_code: crate::hot_code::declared(root, &spec.application.package)?,
         };
         let specification = strict::configure(&mut runtime, &analysis, output, strict)?;
         crate::cargo::ensure_fetched(root)?;
@@ -105,12 +104,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         )?;
         {
             use oer_tools_image_checks::linker::strict::{FRAGMENT, PLACEMENT, SPEC_FILE};
-            for file in [
-                FRAGMENT,
-                oer_tools_image_checks::linker::hot::FRAGMENT,
-                PLACEMENT,
-                SPEC_FILE,
-            ] {
+            for file in [FRAGMENT, PLACEMENT, SPEC_FILE] {
                 if !output.join(file).is_file() {
                     return Err(format!("the runtime linker did not produce {file}").into());
                 }
