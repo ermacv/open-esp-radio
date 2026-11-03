@@ -1757,6 +1757,54 @@ fn an_agreement_aggregates_consecutive_owed_mpdus_within_its_limits() {
 }
 
 #[test]
+fn an_mpdu_keeps_its_bank_place_from_owed_to_member_and_back() {
+    let mut events = Kept::default();
+    let mut data = StaData::<Data, Caps, 8>::new(
+        [1, 2],
+        core::array::from_fn::<_, 8, _>(|_| Buffer::new(std::vec![0; 1600])),
+        core::num::NonZeroU8::new(2).unwrap(),
+    );
+    let mut replay = epoch();
+    let mut link = qos_link(&(), &mut replay);
+    for _ in 0..4 {
+        data.input(
+            DataInput {
+                msdu: msdu(0),
+                link: &mut link,
+            },
+            &mut events,
+        )
+        .unwrap();
+    }
+    let owed = |data: &StaData<'static, Data<'static>, Caps, 8>| {
+        data.owed.iter().copied().collect::<std::vec::Vec<_>>()
+    };
+    let places = owed(&data);
+    assert_eq!(places.len(), 4);
+    // Three become members where they waited; the fourth stays owed.
+    let sent = aggregate(data.poll_attempt(|_| window(0, 3, u32::MAX), &mut events));
+    assert_eq!(owed(&data), places[3..]);
+    assert!(places.iter().all(|place| data.mpdus.get(*place).is_some()));
+    // The BlockAck misses the second: it is owed again at the same place,
+    // ahead of the newer fourth; the others leave the bank.
+    data.aggregate_returned(
+        DataAggregateReturn::TxDone {
+            context: sent.context,
+            ticket: sent.ticket,
+            completion: block_ack(0, 0b101),
+        },
+        oer_portable_time::Instant::from_micros(1_000),
+        Some(RETRY),
+        &mut events,
+    );
+    assert_eq!(owed(&data), [places[1], places[3]]);
+    assert!(data.mpdus.get(places[0]).is_none());
+    assert!(data.mpdus.get(places[2]).is_none());
+    assert_eq!(data.mpdus.get(places[1]).unwrap().context.attempts, 1);
+    assert_eq!(tokens_lost(&events), 0);
+}
+
+#[test]
 fn every_return_gives_the_members_places_back() {
     let mut events = Kept::default();
     let mut data = StaData::<Data, Caps, 8>::new(

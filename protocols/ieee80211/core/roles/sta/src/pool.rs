@@ -82,6 +82,75 @@ impl<X, const N: usize> Pool<X, N> {
     }
 }
 
+/// At most `N` items, each at the place, a `u8`, it was stored at until it
+/// is taken: queues and contexts name an item by its place, so an item
+/// moves once in and once out, never between them.
+pub(crate) struct Slab<X, const N: usize> {
+    items: [Option<X>; N],
+}
+
+impl<X, const N: usize> Slab<X, N> {
+    /// Every place a `u8` names.
+    const PLACES: () = {
+        if N > u8::MAX as usize + 1 {
+            panic!("a place is a u8: a slab holds at most 256 items");
+        }
+    };
+
+    pub(crate) const fn new() -> Self {
+        let () = Self::PLACES;
+        Self {
+            items: [const { None }; N],
+        }
+    }
+
+    /// Initialize an empty slab in place.
+    #[cfg(feature = "placement")]
+    pub(crate) fn init_in_place(place: &mut core::mem::MaybeUninit<Self>) -> &mut Self {
+        let () = Self::PLACES;
+        oer_portable_memory::init_in_place!(place, Self {
+            items => |items| oer_portable_memory::init_array(items, |_| None),
+        })
+    }
+
+    /// Store `item` at a vacant place, or give it back without one.
+    pub(crate) fn store(&mut self, item: X) -> Result<u8, X> {
+        let Some((place, vacant)) = self
+            .items
+            .iter_mut()
+            .enumerate()
+            .find(|(_, vacant)| vacant.is_none())
+        else {
+            return Err(item);
+        };
+        let Ok(place) = u8::try_from(place) else {
+            return Err(item);
+        };
+        *vacant = Some(item);
+        Ok(place)
+    }
+
+    /// The item at `place`.
+    pub(crate) fn get(&self, place: u8) -> Option<&X> {
+        self.items.get(usize::from(place))?.as_ref()
+    }
+
+    /// The item at `place`, to change in place.
+    pub(crate) fn get_mut(&mut self, place: u8) -> Option<&mut X> {
+        self.items.get_mut(usize::from(place))?.as_mut()
+    }
+
+    /// The item at `place`, vacating it.
+    pub(crate) fn take(&mut self, place: u8) -> Option<X> {
+        self.items.get_mut(usize::from(place))?.take()
+    }
+
+    /// The places an item holds.
+    pub(crate) fn occupied(&self) -> usize {
+        self.items.iter().flatten().count()
+    }
+}
+
 /// A first-in, first-out queue of at most `N` items. A machine sizes it by
 /// a const parameter checked at build against the tokens its items hold;
 /// an item beyond `N` comes back to the caller.
@@ -184,6 +253,7 @@ impl<X, const N: usize> Fifo<X, N> {
     }
 
     /// The first item `matches` takes.
+    #[cfg(test)]
     pub(crate) fn first(&self, matches: impl Fn(&X) -> bool) -> Option<&X> {
         self.iter().find(|item| matches(item))
     }
@@ -297,6 +367,31 @@ mod tests {
         assert!(queue.iter().next().is_none());
         assert!(Fifo::<u8, 0>::new().push(1).is_err());
         assert_eq!(Fifo::<u8, 0>::new().pop(), None);
+    }
+}
+
+#[cfg(test)]
+mod slab_tests {
+    use super::Slab;
+
+    #[test]
+    fn an_item_keeps_its_place_until_taken_and_a_full_slab_gives_it_back() {
+        struct Owned(u8);
+        let mut slab = Slab::<Owned, 2>::new();
+        let first = slab.store(Owned(1)).ok().unwrap();
+        let second = slab.store(Owned(2)).ok().unwrap();
+        assert_ne!(first, second);
+        assert_eq!(slab.store(Owned(3)).err().unwrap().0, 3);
+        assert_eq!(slab.occupied(), 2);
+        slab.get_mut(second).unwrap().0 = 4;
+        assert_eq!(slab.get(second).unwrap().0, 4);
+        assert_eq!(slab.take(first).unwrap().0, 1);
+        assert!(slab.get(first).is_none());
+        assert!(slab.take(first).is_none());
+        assert!(slab.get(7).is_none());
+        // The vacated place takes the next item.
+        assert_eq!(slab.store(Owned(5)).ok(), Some(first));
+        assert_eq!(slab.occupied(), 2);
     }
 }
 
