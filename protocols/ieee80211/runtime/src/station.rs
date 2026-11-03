@@ -1253,6 +1253,10 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     /// Each access category's last data aggregate, by its ticket's index,
     /// while the port may hold it open for more members.
     open: [Option<u8>; 4],
+    /// Each TID's aggregate window: its rate and limits, computed once and
+    /// kept until the next terminal or received frame, which may change
+    /// the rate selection, the agreement or the link.
+    windows: [Option<data::AggregateWindow>; 8],
     /// The network drain before the port retired, when it failed.
     network: Option<NetworkDrainFailure>,
     /// A retune whose disable/enable failed remains owned until retirement.
@@ -1356,6 +1360,7 @@ impl<
                     admissions: Admissions::default(),
                     tx_contexts: TxContextStorage::empty(),
                     open: [None; 4],
+                    windows: [None; 8],
                     network: None,
                     retune: None,
                     group: None,
@@ -1412,7 +1417,7 @@ impl<
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), open: [None; 4], network: None, retune: None, group: None, pairwise: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), open: [None; 4], windows: [None; 8], network: None, retune: None, group: None, pairwise: None },
                 }),
             })
         })
@@ -2583,7 +2588,8 @@ impl<
                 let Some(mut member) = self.data.extend_aggregate(
                     context,
                     || {
-                        asked = aggregate_window::<B, P, S, C, GROUPS>(
+                        asked = cached_window::<B, P, S, C, GROUPS>(
+                            &mut self.pending.windows,
                             &self.station,
                             &self.rates,
                             phase,
@@ -2712,17 +2718,20 @@ impl<
         // station frame, submitted at once, waits for at most that
         // depth and the one on the air; the limit is the service's, for
         // every data source it runs.
+        // The open aggregates grow once a pass: one the loop below opens
+        // takes every owed MPDU it holds at once.
+        B::span(ServiceSpan::Extend, false);
+        self.extend_open(phase);
+        B::span(ServiceSpan::Extend, true);
         'data: loop {
-            B::span(ServiceSpan::Extend, false);
-            self.extend_open(phase);
-            B::span(ServiceSpan::Extend, true);
             // Without an owed MPDU and a free ticket Data has no
             // attempt: the turn asks for neither window nor link.
             let Some(window_tid) = self.data.attempt_tid() else {
                 break 'data;
             };
             // The window of the TID the next attempt takes.
-            let window = aggregate_window::<B, P, S, C, GROUPS>(
+            let window = cached_window::<B, P, S, C, GROUPS>(
+                &mut self.pending.windows,
                 &self.station,
                 &self.rates,
                 phase,
@@ -3154,6 +3163,7 @@ impl<
     {
         match event {
             LowerMacEvent::Received { frame, meta } => {
+                self.pending.windows = [None; 8];
                 B::span(ServiceSpan::Received, false);
                 let received = self.received(now, frame, meta, phase, io);
                 B::span(ServiceSpan::Received, true);
@@ -3161,6 +3171,7 @@ impl<
             }
             LowerMacEvent::Tbtt(_) => Ok((None, Taken::Input)),
             LowerMacEvent::Terminal(terminal) => {
+                self.pending.windows = [None; 8];
                 B::span(ServiceSpan::Terminal, false);
                 let accepted = self.terminal(arbiter, now, terminal);
                 B::span(ServiceSpan::Terminal, true);
@@ -3982,6 +3993,48 @@ struct AggregateBanks<'s, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, 
 /// at the aggregate rate, while the aggregate rate selection has a rate the
 /// port aggregates at. The data machine asks only when an MPDU of `tid` is
 /// owed.
+/// The window of `tid`'s next aggregate: its rate and limits as `windows`
+/// keeps them, else computed and kept there; its head and size from the
+/// agreement as it stands now.
+fn cached_window<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
+    windows: &mut [Option<data::AggregateWindow>; 8],
+    station: &PortStation<'id, B, C, GROUPS>,
+    rates: &S,
+    phase: &mut P,
+    tid: data::WmmUserPriority,
+) -> Option<data::AggregateWindow>
+where
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
+    C: StaCallbacks,
+{
+    let agreement = station.tx_block_ack(tid)?;
+    kept_window(
+        windows.get_mut(usize::from(tid.value()))?,
+        &agreement,
+        || aggregate_window::<B, P, S, C, GROUPS>(station, rates, phase, tid),
+    )
+}
+
+/// The window `kept` holds, at `agreement`'s head and size as they stand
+/// now, else the one `compute` gives, kept from then on.
+fn kept_window(
+    kept: &mut Option<data::AggregateWindow>,
+    agreement: &oer_protocols_ieee80211_core_upper_mac::block_ack::OperationalTxBlockAck,
+    compute: impl FnOnce() -> Option<data::AggregateWindow>,
+) -> Option<data::AggregateWindow> {
+    if let Some(window) = *kept {
+        return Some(data::AggregateWindow {
+            start: agreement.starting_sequence,
+            size: agreement.window,
+            ..window
+        });
+    }
+    *kept = compute();
+    *kept
+}
+
 fn aggregate_window<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
     station: &PortStation<'id, B, C, GROUPS>,
     rates: &S,
