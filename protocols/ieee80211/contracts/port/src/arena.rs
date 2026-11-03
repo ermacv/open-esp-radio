@@ -39,7 +39,7 @@
 use crate::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
 use crate::{
     Air, AmpduRate, BlockAckReport, Ieee80211Capabilities, MpduProtection, MpduStartSpacing,
-    PhaseRate, PhyRate, Protection, SupportedPower,
+    PhaseRate, PhyRate, Protection, RetryPlan, SupportedPower,
 };
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -258,10 +258,13 @@ impl Arena {
 
 /// How an arena goes on the air, at a rate the phase checked.
 pub enum ArenaFormat<'p, 'id, K> {
-    /// One MPDU that solicits an ACK: the frame at position 0, under the
-    /// port's ordinary single-MPDU retry plan. The arena's other frames stay
-    /// unsent in it, and its completion reports every frame it holds.
-    Single(PhaseRate<'p, 'id, K>),
+    /// One MPDU that solicits an ACK: the frame at position 0, sent by the
+    /// retry plan as the backend sends any single MPDU (`RetryPlan`): it
+    /// keeps the frame's sequence number, sets the Retry bit of each
+    /// retransmission and ends at the first ACK or when the plan runs out.
+    /// The arena's other frames stay unsent in it, and its completion
+    /// reports every frame it holds and the plan's transmissions.
+    Single(RetryPlan<PhaseRate<'p, 'id, K>>),
     /// An A-MPDU that solicits a BlockAck.
     Aggregate {
         /// A rate the backend aggregates at.
@@ -281,7 +284,7 @@ impl<K> Copy for ArenaFormat<'_, '_, K> {}
 impl<K> core::fmt::Debug for ArenaFormat<'_, '_, K> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Single(rate) => f.debug_tuple("Single").field(rate).finish(),
+            Self::Single(plan) => f.debug_tuple("Single").field(&plan.first().rate).finish(),
             Self::Aggregate { rate, spacing } => f
                 .debug_struct("Aggregate")
                 .field("rate", rate.rate())
@@ -292,10 +295,10 @@ impl<K> core::fmt::Debug for ArenaFormat<'_, '_, K> {
 }
 
 impl<K> ArenaFormat<'_, '_, K> {
-    /// The rate the PPDU goes at.
+    /// The rate the PPDU goes at first.
     pub const fn rate(&self) -> PhyRate {
         match self {
-            Self::Single(rate) => rate.get(),
+            Self::Single(plan) => plan.first().rate.get(),
             Self::Aggregate { rate, .. } => rate.rate().get(),
         }
     }

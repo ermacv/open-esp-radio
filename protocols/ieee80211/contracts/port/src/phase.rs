@@ -1747,6 +1747,19 @@ pub struct RetryPlan<R> {
     rest: [Option<RetryStage<R>>; RETRY_STAGES - 1],
 }
 
+impl<R: Copy> Clone for RetryStage<R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<R: Copy> Copy for RetryStage<R> {}
+impl<R: Copy> Clone for RetryPlan<R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<R: Copy> Copy for RetryPlan<R> {}
+
 impl<R> RetryPlan<R> {
     /// The plan of `first` alone.
     pub fn new(first: RetryStage<R>) -> Self {

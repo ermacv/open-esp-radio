@@ -1109,6 +1109,13 @@ where
         backoff
     }
     #[inline(never)]
+    /// A transmission of `role`'s `category` drew no response or collided:
+    /// the queue's contention window grows as after an MPDU's failure.
+    pub(crate) fn record_retry_failure(&mut self, role: VifRole, category: WmmAccessCategory) {
+        self.tx
+            .record_retry_failure(role, LegacyTxQueue::from_access_category(category));
+    }
+
     pub(crate) fn reset_contention(&mut self, role: VifRole, category: WmmAccessCategory) {
         self.tx
             .reset_terminal_exchange(role, LegacyTxQueue::from_access_category(category));

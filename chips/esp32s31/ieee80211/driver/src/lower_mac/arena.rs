@@ -16,7 +16,8 @@
 //! Protected bit the encryption contradicts, an A-MPDU past its rate's octet
 //! limit), admits the interface's pairwise key for an encrypted arena, draws
 //! its backoff and programs an HT or HE A-MPDU of every frame, or position 0
-//! alone as a single MPDU at a legacy, HT or HE rate. The key right stays
+//! alone as a single MPDU at a legacy, HT or HE rate, sent again by its
+//! retry plan (`SingleRetry`) until an ACK or the plan's end. The key right stays
 //! with the arena while any frame it encrypted is on the air or retained;
 //! only a release or withdrawal of every frame returns it.
 //!
@@ -25,7 +26,7 @@
 //! ([`HtAmpduTxCompletion::valid_block_ack`]) answers an A-MPDU, a
 //! completion without one is a missing response, a CTS timeout a protection
 //! failure, a collision detach a collision and a hardware timeout an
-//! aborted publication. The publication watchdog is the only deadline.
+//! aborted publication. Each publication's watchdog is the only deadline.
 
 use super::{ArenaValues, ContentionDraw};
 use super::{
@@ -49,8 +50,8 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     IntakeRefused, PublishError, PublishRefused, Settlement, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    Air, BlockAckSnr, Ieee80211Capabilities, MpduProtection, PhyRate, SnrSample, TxPower, TxStatus,
-    VifRole,
+    Air, BlockAckSnr, Ieee80211Capabilities, MpduProtection, PhyRate, Protection, RetryPlan,
+    SnrSample, TxPower, TxStatus, VifRole,
 };
 use oer_protocols_radio_port::PoolPath;
 
@@ -101,11 +102,102 @@ struct OnAir<'core, Path: PoolPath> {
     published: u8,
     /// Whether the PPDU is a single MPDU.
     single: bool,
+    /// A single MPDU's retry plan and its progress.
+    retry: Option<SingleRetry>,
     rate: PhyRate,
     role: VifRole,
     /// The publication watchdog, or the end of the abort settle.
     deadline: Instant,
     settling: bool,
+}
+
+/// A published single MPDU's retry plan, run as the core runs an MPDU's
+/// (`port::driver` `collect`): each completion without an ACK, a
+/// collision or a protection failure takes one try of the current stage,
+/// and the frame goes again at the stage's rate, with its Retry bit, until
+/// an ACK or the plan's end.
+#[derive(Clone, Copy)]
+struct SingleRetry {
+    plan: RetryPlan<PhyRate>,
+    /// The publication's values, for each retransmission.
+    values: ArenaValues,
+    stage: usize,
+    stage_tries: u8,
+    /// Transmissions that reached the air, and the rate of the last.
+    transmissions: u16,
+    air_rate: Option<PhyRate>,
+}
+
+/// What a single MPDU's completion leaves of its plan.
+enum Retried {
+    /// Send it again at this stage's rate and protection.
+    Again {
+        rate: PhyRate,
+        protection: Protection,
+    },
+    /// The plan ended: the arena's end.
+    End(AttemptEnd<BlockAckAnswer, Infallible>),
+}
+
+impl SingleRetry {
+    /// The air of every transmission that went out.
+    fn air(&self) -> Option<Air> {
+        Some(Air {
+            transmissions: NonZeroU16::new(self.transmissions)?,
+            rate: self.air_rate?,
+        })
+    }
+
+    /// Account `end`, a completion of a publication at `rate`.
+    fn observe(
+        &mut self,
+        end: AttemptEnd<BlockAckAnswer, Infallible>,
+        rate: PhyRate,
+    ) -> Result<Retried, ArenaFault> {
+        let sent = matches!(
+            end,
+            AttemptEnd::Acked { .. } | AttemptEnd::Answered { .. } | AttemptEnd::NoResponse(_)
+        );
+        if sent {
+            self.transmissions = self.transmissions.checked_add(1).ok_or(ArenaFault::State)?;
+            self.air_rate = Some(rate);
+        }
+        match end {
+            AttemptEnd::Acked { response, .. } => {
+                let air = self.air().ok_or(ArenaFault::State)?;
+                return Ok(Retried::End(AttemptEnd::Acked { air, response }));
+            }
+            // A hardware timeout is final, as an MPDU's is.
+            AttemptEnd::Aborted | AttemptEnd::Answered { .. } | AttemptEnd::AirDenied { .. } => {
+                return Ok(Retried::End(end));
+            }
+            AttemptEnd::NoResponse(_)
+            | AttemptEnd::ProtectionFailure(_)
+            | AttemptEnd::Collision(_) => {}
+        }
+        self.stage_tries = self.stage_tries.checked_add(1).ok_or(ArenaFault::State)?;
+        let current = self
+            .plan
+            .stages()
+            .nth(self.stage)
+            .ok_or(ArenaFault::State)?;
+        if self.stage_tries >= current.transmissions.get() {
+            self.stage = self.stage.saturating_add(1);
+            self.stage_tries = 0;
+        }
+        if let Some(next) = self.plan.stages().nth(self.stage) {
+            return Ok(Retried::Again {
+                rate: next.rate,
+                protection: next.protection,
+            });
+        }
+        let air = self.air();
+        Ok(Retried::End(match end {
+            AttemptEnd::NoResponse(_) => AttemptEnd::NoResponse(air.ok_or(ArenaFault::State)?),
+            AttemptEnd::ProtectionFailure(_) => AttemptEnd::ProtectionFailure(air),
+            _ => AttemptEnd::Collision(air),
+        }))
+    }
 }
 
 enum Phase<'core, Path: PoolPath> {
@@ -679,9 +771,11 @@ where
                 reason: PublishRefused::Busy,
             });
         };
-        let (published, spacing) = match publication.format {
-            ArenaFormat::Single(_) => (chain.len.min(1), None),
-            ArenaFormat::Aggregate { spacing, .. } => (chain.len, Some(spacing.get())),
+        let (published, spacing, plan) = match publication.format {
+            ArenaFormat::Single(plan) => {
+                (chain.len.min(1), None, Some(plan.map(|rate| rate.get())))
+            }
+            ArenaFormat::Aggregate { spacing, .. } => (chain.len, Some(spacing.get()), None),
         };
         let key_held = matches!(chain.admission, Some(TxAdmission::Protected(_)));
         let budget = match spacing {
@@ -818,6 +912,14 @@ where
             deadline: now.saturating_add(timeout),
             settling: false,
             single: spacing.is_none(),
+            retry: plan.map(|plan| SingleRetry {
+                plan,
+                values,
+                stage: 0,
+                stage_tries: 0,
+                transmissions: 0,
+                air_rate: None,
+            }),
         });
         match result {
             Ok(()) => Ok(()),
@@ -863,6 +965,33 @@ where
             Ok(Some(end)) => end,
             Ok(None) => return Ok(None),
             Err(fault) => return Err(self.arenas.quarantine(fault)),
+        };
+        let end = match on_air
+            .retry
+            .as_mut()
+            .map(|retry| retry.observe(end, on_air.rate))
+        {
+            None => end,
+            Some(Ok(Retried::End(end))) => end,
+            Some(Ok(Retried::Again { rate, protection })) => {
+                let sent = republish_single(
+                    chain,
+                    &mut *self.core,
+                    &mut *self.hardware,
+                    &mut *self.observations,
+                    rate,
+                    protection,
+                    now,
+                );
+                return match sent {
+                    Ok(()) => Ok(None),
+                    Err(fault) => Err(self.arenas.quarantine(fault)),
+                };
+            }
+            Some(Err(fault)) => return Err(self.arenas.quarantine(fault)),
+        };
+        let Phase::OnAir(on_air) = &mut chain.phase else {
+            return Err(self.arenas.quarantine(ArenaFault::State));
         };
         let published = on_air.published;
         let Phase::OnAir(on_air) =
@@ -955,6 +1084,94 @@ where
     fn deadline(&self) -> Option<Instant> {
         self.arenas.deadline()
     }
+}
+
+/// Send the published single MPDU of `chain` again at `rate` under
+/// `protection`, as the core sends an MPDU again: every frame stays, position
+/// 0 gains its Retry bit, the queue's contention window grows and a new
+/// backoff is drawn; the arena stays on the air with a new watchdog.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the parts one retransmission borrows"
+)]
+fn republish_single<
+    'core,
+    'slot,
+    P,
+    E,
+    T,
+    C,
+    H,
+    O,
+    L,
+    Path,
+    const N: usize,
+    const TICKETS: usize,
+    const SLOTS: usize,
+>(
+    chain: &mut Chain<'core, 'slot, L, Path, SLOTS>,
+    core: &mut LowerMacCore<'core, 'slot, P, E, T, C, N, Path, TICKETS>,
+    hardware: &mut H,
+    observations: &mut O,
+    rate: PhyRate,
+    protection: Protection,
+    now: Instant,
+) -> Result<(), ArenaFault>
+where
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_portable_time::Timer,
+    C: RadioCoexPriorities,
+    H: HtAmpduHardware,
+    O: EventSink<ContentionDraw>,
+    L: PlacedBacking,
+    Path: PoolPath,
+{
+    let Phase::OnAir(on_air) = &mut chain.phase else {
+        return Err(ArenaFault::State);
+    };
+    let first = on_air.retry.as_ref().ok_or(ArenaFault::State)?.values;
+    let (role, category) = (on_air.role, on_air.queue.category());
+    let cookie = chain.cookie;
+    let keep = FrameMask::first(chain.len).ok_or(ArenaFault::State)?;
+    // Every frame stays: no memory leaves the arena here.
+    let mut left = false;
+    chain
+        .owner
+        .retain_frames(cookie, keep.bits(), 1, |memory| {
+            left = true;
+            let _quarantined = core::mem::ManuallyDrop::new(memory);
+        })?;
+    if left {
+        return Err(ArenaFault::State);
+    }
+    core.record_retry_failure(role, category);
+    let tx_rate = TxPhyRate::try_from(rate).map_err(|_| ArenaFault::State)?;
+    let values = ArenaValues {
+        rate: tx_rate,
+        protection,
+        backoff_slots: core.draw_backoff(role, category, observations),
+        ..first
+    };
+    let (length, mic) = chain.owner.frame_size(0).ok_or(ArenaFault::State)?;
+    let individual = chain.owner.first_receiver_individual();
+    let admission = chain.admission.as_ref().ok_or(ArenaFault::State)?;
+    let config = core
+        .arena_single(values, admission, length, mic, individual)
+        .map_err(|_| ArenaFault::State)?;
+    chain
+        .owner
+        .prepare_format(cookie, |_| Some(0), matches!(tx_rate, TxPhyRate::He(_)))?;
+    chain.owner.submit_single(
+        hardware,
+        cookie,
+        LegacyTxQueue::from_access_category(category),
+        config,
+    )?;
+    on_air.rate = rate;
+    on_air.deadline = now.saturating_add(core.publication_timeout());
+    on_air.settling = false;
+    Ok(())
 }
 
 /// Return the key right of `chain`, which holds no frame any more: its

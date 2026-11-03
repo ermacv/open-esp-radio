@@ -183,7 +183,11 @@ impl Work for Answers {
                 .unwrap();
             arena
                 .publish(
-                    publication(first, ArenaFormat::Single(single), MpduProtection::Open),
+                    publication(
+                        first,
+                        ArenaFormat::Single(once(single)),
+                        MpduProtection::Open,
+                    ),
                     air.monotonic_now(),
                 )
                 .unwrap();
@@ -201,7 +205,11 @@ impl Work for Answers {
                 .unwrap();
             arena
                 .publish(
-                    publication(first, ArenaFormat::Single(single), MpduProtection::Open),
+                    publication(
+                        first,
+                        ArenaFormat::Single(once(single)),
+                        MpduProtection::Open,
+                    ),
                     air.monotonic_now(),
                 )
                 .unwrap();
@@ -215,7 +223,11 @@ impl Work for Answers {
             .retain(done, FrameMask::first(1).unwrap(), drop)
             .unwrap();
         let refused = arena.publish(
-            publication(first, ArenaFormat::Single(single), MpduProtection::Open),
+            publication(
+                first,
+                ArenaFormat::Single(once(single)),
+                MpduProtection::Open,
+            ),
             air.monotonic_now(),
         );
         assert!(matches!(refused, Err(PublishError::Fault(ModelFault))));
@@ -313,7 +325,7 @@ impl Work for KeyCustody {
                 .unwrap();
             arenas
         };
-        let format = ArenaFormat::Single(single);
+        let format = ArenaFormat::Single(once(single));
         let first = {
             let mut station = phase.station();
             let mut arena = station.data_arena();
@@ -411,7 +423,7 @@ impl Work for Barriers {
     ) {
         let air = phase.held.air.clone();
         let single = phase.rate(PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
-        let format = ArenaFormat::Single(single);
+        let format = ArenaFormat::Single(once(single));
         let [first, second] = {
             let mut station = phase.station();
             let mut arena = station.data_arena();
@@ -520,7 +532,11 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for DrainAborts {
                 .unwrap();
             arena
                 .publish(
-                    publication(first, ArenaFormat::Single(single), MpduProtection::Open),
+                    publication(
+                        first,
+                        ArenaFormat::Single(once(single)),
+                        MpduProtection::Open,
+                    ),
                     air.monotonic_now(),
                 )
                 .unwrap();
@@ -545,4 +561,15 @@ fn a_disable_aborts_the_arena_on_the_air_and_returns_its_completion() {
     let (backend, _) = backend();
     let _port_end = block_on(run_model(backend, DrainAborts(aborted.clone())));
     assert!(aborted.get());
+}
+
+/// A single MPDU's plan of one transmission at `rate`.
+fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
+        oer_protocols_ieee80211_contracts_port::RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
+        },
+    )
 }

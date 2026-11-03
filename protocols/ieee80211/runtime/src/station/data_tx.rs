@@ -257,8 +257,8 @@ impl<
         Ok(owed)
     }
 
-    /// Publish the next arena while the station's link is up, at one rate
-    /// plan's first rate; a refusal returns the arena to the plane, which
+    /// Publish the next arena while the station's link is up: a single MPDU
+    /// by its rate plan, an A-MPDU at the plan's first rate; a refusal returns the arena to the plane, which
     /// publishes it again at the next pass.
     fn publish<'p, P>(&mut self, now: Instant, phase: &mut P) -> Result<(), StepFailure<'id, B>>
     where
@@ -276,13 +276,12 @@ impl<
         }
         let rates = &self.rates;
         let publication = plane.publication(|plan| {
-            let rate = rates
-                .plan(plan.frame_rates(), |rate| phase.rate(rate))
-                .map(|plan| plan.into_first().rate)?;
+            let rates = rates.plan(plan.frame_rates(), |rate| phase.rate(rate))?;
             Some(match plan.kind {
-                PpduKind::Single => ArenaFormat::Single(rate),
+                // A single MPDU goes by the whole plan, as any data MPDU.
+                PpduKind::Single => ArenaFormat::Single(rates),
                 PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
-                    rate: phase.station().ampdu_rate(rate).ok()?,
+                    rate: phase.station().ampdu_rate(rates.into_first().rate).ok()?,
                     spacing,
                 },
             })

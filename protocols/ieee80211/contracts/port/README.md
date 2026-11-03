@@ -108,7 +108,8 @@ back; its operations are synchronous and never wait:
   `PhaseTypes::DataMemory`, the network's own frame memory, and whose
   evidence and fault are the phase types'). The caller writes each frame
   once as an arena takes it and publishes one arena at a time as an A-MPDU
-  at an `AmpduRate` or as the single MPDU of its position 0; the backend
+  at an `AmpduRate` or as the single MPDU of its position 0 under a
+  `RetryPlan`, which the backend carries out as for any single MPDU; the backend
   serves the hardware and returns the end as `TxCompleted::Arena`. A
   backend publishes nothing while its gate is closed, a configuration is
   pending or it stops: it refuses the publication as busy.

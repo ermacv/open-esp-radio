@@ -302,7 +302,7 @@ impl<'a, 'core, 'p, 'id: 'p> Fixture<'p, 'id> for S31Fixture<'a, 'core, 'p, 'id>
         )
     }
     fn single(&self, arena: Arena) -> ArenaPublication<'p, 'id, Caps> {
-        publication(arena, ArenaFormat::Single(self.single))
+        publication(arena, ArenaFormat::Single(once(self.single)))
     }
     fn aggregate(&self, arena: Arena) -> ArenaPublication<'p, 'id, Caps> {
         publication(arena, aggregate_format(self.aggregate))
@@ -597,7 +597,7 @@ fn an_aggregate_past_its_rate_limit_is_refused_and_a_single_carries_position_0()
                     panic!("the port holds the rate's octet limit");
                 };
                 port.publish(
-                    publication(refused.arena, ArenaFormat::Single(single)),
+                    publication(refused.arena, ArenaFormat::Single(once(single))),
                     Instant::from_micros(2),
                 )
                 .unwrap_or_else(|_| panic!("a single MPDU of position 0"));
@@ -722,4 +722,15 @@ fn a_completion_without_effect_never_postpones_the_expired_watchdog() {
         }
     }
     with_rates(Case);
+}
+
+/// A single MPDU's plan of one transmission at `rate`.
+fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
+        oer_protocols_ieee80211_contracts_port::RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
+        },
+    )
 }

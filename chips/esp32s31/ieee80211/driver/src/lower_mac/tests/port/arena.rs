@@ -26,6 +26,9 @@ enum Scenario {
     Disable,
     /// One frame stays in an arena when the port stops.
     LeftBehind,
+    /// A single MPDU under a plan of three transmissions: no ACK answers
+    /// its first, one its second.
+    SingleRetries,
 }
 
 /// What a scenario saw.
@@ -33,6 +36,10 @@ enum Scenario {
 struct Seen {
     /// The arena terminal's end, by name.
     end: Option<&'static str>,
+    /// The transmissions the arena's end reports.
+    transmissions: Option<u16>,
+    /// Whether each released memory carries the Retry bit, in order.
+    retried: Vec<bool>,
     /// The tags of the memories that came back, in order.
     returned: Vec<u8>,
     /// Publications when the ordinary MPDU was submitted and when the
@@ -59,6 +66,14 @@ fn write_tagged(tag: u8, region: &mut [u8]) -> Option<u16> {
     frame[..26].copy_from_slice(&crate::lower_mac::tests::data_frame(BSSID));
     frame[22..24].copy_from_slice(&(u16::from(tag) << 4).to_le_bytes());
     Some(30)
+}
+
+/// Whether the MPDU in `memory` carries the Retry bit.
+fn retry_of(memory: &mut TxBacking<512>) -> bool {
+    use oer_portable_memory::StableDmaBacking as _;
+    let bytes = memory.stable_dma_region().into_mut_slice();
+    oer_protocols_ieee80211_wire::frame::FrameControl::new(u16::from_le_bytes([bytes[8], bytes[9]]))
+        .is_some_and(|control| control.retry())
 }
 
 fn tag_of(memory: &mut TxBacking<512>) -> u8 {
@@ -158,7 +173,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ArenaBody {
                     panic!("the gate closes")
                 };
                 let refused = phase.station().data_arena().publish(
-                    publication(first, ArenaFormat::Single(single)),
+                    publication(first, ArenaFormat::Single(once(single))),
                     self.timer.now(),
                 );
                 let Err(PublishError::Refused {
@@ -189,7 +204,12 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ArenaBody {
                         rate: aggregate,
                         spacing: MpduStartSpacing::new(0).expect("spacing"),
                     },
-                    _ => ArenaFormat::Single(single),
+                    Scenario::SingleRetries => ArenaFormat::Single(RetryPlan::new(RetryStage {
+                        rate: single,
+                        transmissions: core::num::NonZeroU8::new(3).expect("plan"),
+                        protection: Protection::None,
+                    })),
+                    _ => ArenaFormat::Single(once(single)),
                 };
                 match self.scenario {
                     Scenario::SingleWaits => self.observed.borrow_mut().hold_completion = true,
@@ -230,6 +250,8 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ArenaBody {
                                 let mut seen = seen.borrow_mut();
                                 seen.order.push("arena");
                                 seen.publications.push(self.observed.borrow().publications);
+                                seen.transmissions =
+                                    done.end().air().map(|air| air.transmissions.get());
                                 seen.end = Some(match done.end() {
                                     AttemptEnd::Answered { .. } => "answered",
                                     AttemptEnd::Acked { .. } => "acked",
@@ -249,12 +271,17 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for ArenaBody {
                     }
                     let done = ended.expect("the arena ended");
                     let mut returned = Vec::new();
+                    let mut retried = Vec::new();
                     let _first = phase
                         .station()
                         .data_arena()
-                        .release(done, |mut memory| returned.push(tag_of(&mut memory)))
+                        .release(done, |mut memory| {
+                            returned.push(tag_of(&mut memory));
+                            retried.push(retry_of(&mut memory));
+                        })
                         .unwrap_or_else(|_| panic!("released"));
                     seen.borrow_mut().returned = returned;
+                    seen.borrow_mut().retried = retried;
                 }
             }
         }
@@ -355,6 +382,27 @@ fn a_single_waits_while_an_arena_holds_its_access_category() {
 }
 
 #[test]
+fn a_single_arena_runs_its_retry_plan_until_an_ack() {
+    // AckTimeout, then success: the frame goes again with its Retry bit.
+    let (seen, observed, reinstalled) =
+        exercise(Scenario::SingleRetries, std::vec![(5, 0), (0, 0)]);
+    assert_eq!(seen.end, Some("acked"));
+    assert_eq!(
+        seen.transmissions,
+        Some(2),
+        "both transmissions reached the air"
+    );
+    assert_eq!(observed.borrow().publications, 2, "the plan sent it again");
+    assert_eq!(seen.returned, [10]);
+    assert_eq!(
+        seen.retried,
+        [true],
+        "the retransmission carried the Retry bit"
+    );
+    assert!(reinstalled);
+}
+
+#[test]
 fn disable_finishes_a_published_arena_and_hands_its_end_to_the_sink() {
     let (seen, observed, reinstalled) = exercise(Scenario::Disable, std::vec![(0, 0)]);
     assert_eq!(observed.borrow().publications, 1);
@@ -370,4 +418,15 @@ fn a_frame_left_in_an_arena_keeps_the_chains_from_a_new_installation() {
     let (_, observed, reinstalled) = exercise(Scenario::LeftBehind, Vec::new());
     assert_eq!(observed.borrow().publications, 0);
     assert!(!reinstalled);
+}
+
+/// A single MPDU's plan of one transmission at `rate`.
+fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
+        oer_protocols_ieee80211_contracts_port::RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
+        },
+    )
 }

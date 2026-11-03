@@ -255,7 +255,7 @@ impl<'p, 'id: 'p> World<'p, 'id> {
             .publication(|plan| {
                 planned = Some(plan);
                 Some(match plan.kind {
-                    PpduKind::Single => ArenaFormat::Single(rates.single),
+                    PpduKind::Single => ArenaFormat::Single(once(rates.single)),
                     PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
                         rate: rates.aggregate,
                         spacing,
@@ -818,4 +818,15 @@ fn a_single_lesson_reaches_the_selection_through_its_ack_evidence() {
     ))
     .teach(now, &mut rates, ack);
     assert_eq!(rates.0, [Some(20), None]);
+}
+
+/// A single MPDU's plan of one transmission at `rate`.
+fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
+        oer_protocols_ieee80211_contracts_port::RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
+        },
+    )
 }

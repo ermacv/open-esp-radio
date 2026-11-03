@@ -71,7 +71,7 @@ impl<'p, 'id: 'p> Fixture<'p, 'id> for ArenaFixture<'p, 'id> {
         tag_of(memory.as_slice())
     }
     fn single(&self, arena: Arena) -> ArenaPublication<'p, 'id, ModelCaps> {
-        self.publication(arena, ArenaFormat::Single(self.single))
+        self.publication(arena, ArenaFormat::Single(once(self.single)))
     }
     fn aggregate(&self, arena: Arena) -> ArenaPublication<'p, 'id, ModelCaps> {
         self.publication(
@@ -419,4 +419,15 @@ fn an_aggregate_past_the_length_limit_is_refused_and_a_single_carries_position_0
         }
     }
     with_rates(Case);
+}
+
+/// A single MPDU's plan of one transmission at `rate`.
+fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
+    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
+        oer_protocols_ieee80211_contracts_port::RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
+        },
+    )
 }
