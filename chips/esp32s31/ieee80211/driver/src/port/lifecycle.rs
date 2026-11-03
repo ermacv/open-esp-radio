@@ -439,7 +439,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     use crate::lower_mac::TxEdge;
                     // Diagnostic: notified = device-held facts, busy = MAC
                     // signal, events = power signal, idle = idle turn.
-                    if detail & 1 != 0 {
+                    if detail & (8 | 16 | 32) != 0 {
                         state.note(TxEdge::GateNotified);
                     }
                     if detail & 2 != 0 {
