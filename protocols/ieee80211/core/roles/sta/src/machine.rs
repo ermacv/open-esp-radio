@@ -707,6 +707,15 @@ impl<Path: PoolPath> StaTxContext<'_, Path> {
             FrameRates::Control
         }
     }
+    /// The TID whose next Sequence Number this frame names: an ADDBA
+    /// Request, for which the link's holder held the TID's data
+    /// ([`LinkAction::Sequence`]).
+    pub const fn names_sequence(&self) -> Option<WmmUserPriority> {
+        match self.purpose {
+            TxPurpose::Connected(Sending::AddbaRequest { tid }) => WmmUserPriority::new(tid),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1585,13 +1594,10 @@ enum KeyCell<T: StaTokens> {
     /// The installed key's transmit half is with the link's holder; the
     /// station keeps its association owner.
     Lent(T::Association),
+    /// The station asked the link's holder for the lent transmit half
+    /// ([`LinkAction::ReturnKey`]) to remove the key.
+    Recalled(T::Association),
     Removing,
-    /// The link returned a key the station did not lend, or none for the
-    /// one it lent: every owner stays in custody.
-    Mismatched {
-        _association: Option<T::Association>,
-        _key: Option<T::LinkKey>,
-    },
     /// Backend contract violation: every returned owner remains in custody.
     UnreturnedBank {
         _association: T::Association,
@@ -1619,7 +1625,7 @@ struct VacantPairwise<T: StaTokens> {
 
 struct Keys<T: StaTokens> {
     pairwise: KeyCell<T>,
-    /// A transmit half the link returned for no lent key.
+    /// A transmit half the link's holder returned for no lent key.
     stray: Option<T::LinkKey>,
     spare_pairwise: heapless::Vec<T::PairwiseSlot, KEY_BANK_CAPACITY>,
     spare_group: Pool<T::GroupSlot>,
@@ -1782,7 +1788,16 @@ impl<T: StaTokens> Keys<T> {
     /// Whether the station's pairwise key is installed, with the station or
     /// lent to its link.
     const fn keyed(&self) -> bool {
-        matches!(self.pairwise, KeyCell::Installed(_) | KeyCell::Lent(_))
+        matches!(
+            self.pairwise,
+            KeyCell::Installed(_) | KeyCell::Lent(_) | KeyCell::Recalled(_)
+        )
+    }
+
+    /// Whether the installed key's transmit half is with the link's holder,
+    /// which numbers the station's protected frames under it.
+    const fn lent(&self) -> bool {
+        matches!(self.pairwise, KeyCell::Lent(_))
     }
 
     /// Lend the installed pairwise key's transmit half to the link.
@@ -1800,21 +1815,29 @@ impl<T: StaTokens> Keys<T> {
         }
     }
 
-    /// The link returned `key`, the transmit half it was lent, or none.
-    fn returned(&mut self, key: Option<T::LinkKey>) {
-        self.pairwise = match (
-            core::mem::replace(&mut self.pairwise, KeyCell::Removing),
-            key,
-        ) {
-            (KeyCell::Lent(association), Some(key)) => {
+    /// Ask the link's holder for the lent transmit half: whether the key
+    /// was lent and is now recalled.
+    fn recall(&mut self) -> bool {
+        match core::mem::replace(&mut self.pairwise, KeyCell::Removing) {
+            KeyCell::Lent(association) => {
+                self.pairwise = KeyCell::Recalled(association);
+                true
+            }
+            cell => {
+                self.pairwise = cell;
+                false
+            }
+        }
+    }
+
+    /// The link's holder returned `key`, the transmit half it was lent,
+    /// asked for or not.
+    fn returned(&mut self, key: T::LinkKey) {
+        self.pairwise = match core::mem::replace(&mut self.pairwise, KeyCell::Removing) {
+            KeyCell::Lent(association) | KeyCell::Recalled(association) => {
                 KeyCell::Installed(T::reunite(association, key))
             }
-            (KeyCell::Lent(association), None) => KeyCell::Mismatched {
-                _association: Some(association),
-                _key: None,
-            },
-            (cell, None) => cell,
-            (cell, Some(key)) => {
+            cell => {
                 // The cell's owners stay with it; the stray key is kept.
                 self.stray = Some(key);
                 cell
@@ -1995,6 +2018,7 @@ impl<T: StaTokens, K> State<T, K> {
                         qos: new.qos,
                         peer: new.peer,
                         qos_sequences: new.qos_sequences,
+                        sequence: TidSequence::Unasked,
                         confirmation: new.confirmation,
                         report: new
                             .confirmation
@@ -2225,6 +2249,19 @@ enum HandshakeStep {
     AwaitInstalled(RsnStaRetryInstall, CcmpRxReplayEpoch, EapolProtection),
 }
 
+/// The next Sequence Number of a TID the station's ADDBA Request names,
+/// while the link's holder numbers the TID ([`LinkAction::Sequence`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TidSequence {
+    /// No ADDBA Request waits for a number.
+    Unasked,
+    /// The station asked the holder for the TID's next number.
+    Asked(WmmUserPriority),
+    /// The holder told it: the TID's space holds it, and the holder takes
+    /// no data of the TID until the request goes.
+    Fresh(WmmUserPriority),
+}
+
 /// The connected station.
 struct Connected<T: StaTokens, K> {
     confirmation: Option<RsnStaResponseDeadline>,
@@ -2241,6 +2278,9 @@ struct Connected<T: StaTokens, K> {
     /// ([`Station::tx_traffic`]), advanced by the station's own frames of
     /// the TID, so its ADDBA Request names the next number of the TID.
     qos_sequences: [SequenceCounter; 8],
+    /// The TID whose next Sequence Number the station asked the link's
+    /// holder for its ADDBA Request.
+    sequence: TidSequence,
     /// The upstream fact the arbiter has yet to hear.
     report: Option<UpstreamFact<K>>,
     /// The access point's beacons announced another EDCA set, already in
@@ -2893,6 +2933,13 @@ enum Owed<'id, T: StaTokens, K> {
     Transmit(StaTransmit<'id, T, K>),
     /// Under the pairwise key of the connected link.
     TransmitProtected(StaTransmit<'id, T, K>),
+    /// Ask the link's holder for the TID's next Sequence Number.
+    LinkSequence(WmmUserPriority),
+    /// Tell the link's holder the link carries data again: an ADDBA Request
+    /// whose number the holder told does not go.
+    LinkRelease,
+    /// Ask the link's holder for the pairwise key it kept.
+    ReturnKey,
     Associated(Peer<T::RxMeta>),
     Notify(StaNotice),
 }
@@ -3403,13 +3450,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     }
 
     /// Take the link its holder gave back: the station numbers its own
-    /// frames again from where the link left them, holds its pairwise key
-    /// whole again and, still connected, its replay check.
-    pub fn link_returned(&mut self, link: LinkReturn<T::LinkKey>) {
-        let LinkReturn { numbers, rx } = link;
-        let (station, tids, key) = numbers.into_parts();
+    /// frames again from where the link left them and, still connected,
+    /// holds its replay check again. The holder keeps the pairwise key's
+    /// transmit half until the station asks for it
+    /// ([`LinkAction::ReturnKey`], [`Self::key_returned`]).
+    pub fn link_returned(&mut self, link: LinkReturn) {
+        let LinkReturn { station, tids, rx } = link;
         self.sequence = station;
-        self.keys.returned(key);
         let replay = rx.into_replay();
         if let State::Connected(connected) = &mut self.state
             && let Some(connected) = connected.as_mut()
@@ -3420,8 +3467,34 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             if let Some(rsn) = connected.rsn.as_mut() {
                 rsn.replay = replay;
             }
+            connected.sequence = TidSequence::Unasked;
         }
         self.link = LinkCustody::Station;
+    }
+
+    /// Take the pairwise key's transmit half its link's holder kept: the
+    /// station holds its key whole again and may remove it. A holder that
+    /// returns a key the station did not lend breaks its contract: the
+    /// station keeps it and owes [`StaKeyContractViolation::LinkKeyMismatch`].
+    pub fn key_returned(&mut self, key: T::LinkKey) {
+        self.keys.returned(key);
+    }
+
+    /// The link's holder tells the next Sequence Number of `tid` the
+    /// station asked for ([`LinkAction::Sequence`]): the station's ADDBA
+    /// Request of `tid` names it. An answer the station no longer waits for
+    /// changes nothing.
+    pub fn tx_sequence(&mut self, tid: WmmUserPriority, next: SequenceNumber) {
+        let State::Connected(connected) = &mut self.state else {
+            return;
+        };
+        let Some(connected) = connected.as_mut() else {
+            return;
+        };
+        if connected.sequence == TidSequence::Asked(tid) {
+            *tid.select_mut(&mut connected.qos_sequences) = SequenceCounter::new(next);
+            connected.sequence = TidSequence::Fresh(tid);
+        }
     }
 
     /// Take an EAPOL frame its link admitted (`payload`, its EAPOL packet,
@@ -3661,7 +3734,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 StaKeyContractViolation::IncompleteBank,
             ));
         }
-        if matches!(self.keys.pairwise, KeyCell::Mismatched { .. }) || self.keys.stray.is_some() {
+        if self.keys.stray.is_some() {
             return Some(StaAction::ContractViolation(
                 StaKeyContractViolation::LinkKeyMismatch,
             ));
@@ -3799,17 +3872,24 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             // the station numbered goes under its own installed key. Owed
             // only while that key is there; without it the frame does not
             // go and its tokens come back.
+            // A frame the station numbered after its link came back goes
+            // under the key the link's holder kept.
             Owed::TransmitProtected(transmit) => match (transmit.number, &self.keys.pairwise) {
-                (FrameNumber::Link { .. }, _) => StaAction::Transmit(transmit),
+                (FrameNumber::Link { .. }, _) | (FrameNumber::Keyed, KeyCell::Lent(_)) => {
+                    StaAction::Transmit(transmit)
+                }
                 (FrameNumber::Open, KeyCell::Installed(key)) => {
                     StaAction::TransmitProtected { transmit, key }
                 }
-                (FrameNumber::Open, _) => {
+                (FrameNumber::Open | FrameNumber::Keyed, _) => {
                     self.tickets.put(transmit.ticket, events);
                     self.buffers.put(transmit.buffer, events);
                     return None;
                 }
             },
+            Owed::LinkSequence(tid) => StaAction::Link(LinkAction::Sequence(tid)),
+            Owed::LinkRelease => StaAction::Link(LinkAction::Release),
+            Owed::ReturnKey => StaAction::Link(LinkAction::ReturnKey),
             Owed::Notify(notice) => StaAction::Notify(notice),
             Owed::Associated(peer) => StaAction::Associated(peer),
         })
@@ -5628,12 +5708,10 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         Change::Reclaiming(Reclaim::Keys),
                         ActionProgress::Action(removal),
                     )
-                } else if self.keys.group_slots.is_full()
-                    && let Some(key) = self.keys.take_pairwise_key()
-                {
+                } else if let Some(owed) = self.pairwise_removal() {
                     (
                         Change::Reclaiming(Reclaim::Keys),
-                        ActionProgress::Action(Owed::RemovePairwise(key)),
+                        ActionProgress::Action(owed),
                     )
                 } else if self.keys.clear() {
                     (
@@ -5655,6 +5733,19 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         }
     }
 
+    /// The pairwise key's removal once every group key is gone: the
+    /// installed key goes, and a key the link's holder kept is asked back
+    /// first, once the link came back.
+    fn pairwise_removal(&mut self) -> Option<Owed<'id, T, K>> {
+        if !self.keys.group_slots.is_full() {
+            return None;
+        }
+        if let Some(key) = self.keys.take_pairwise_key() {
+            return Some(Owed::RemovePairwise(key));
+        }
+        (!self.link.lent() && self.keys.recall()).then_some(Owed::ReturnKey)
+    }
+
     /// The action the leave owes.
     fn owe_leave(
         &mut self,
@@ -5669,10 +5760,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             LeaveStep::RemoveKeys(deauthentication) => {
                 if let Some(removal) = self.group_removal(false) {
                     Some(removal)
-                } else if self.keys.group_slots.is_full()
-                    && let Some(key) = self.keys.take_pairwise_key()
-                {
-                    Some(Owed::RemovePairwise(key))
+                } else if let Some(owed) = self.pairwise_removal() {
+                    Some(owed)
                 } else if self.keys.clear() {
                     // Every key is back: the next step owes the action.
                     leave.step = match deauthentication {
@@ -5689,7 +5778,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 reason_code,
                 protected,
             }) => {
-                if protected && !matches!(self.keys.pairwise, KeyCell::Installed(_)) {
+                // A protected Deauthentication goes under the station's
+                // key, installed or kept by the link's holder, once the link
+                // came back.
+                if protected
+                    && (self.link.lent()
+                        || !matches!(self.keys.pairwise, KeyCell::Installed(_) | KeyCell::Lent(_)))
+                {
                     return (Change::Keep, ActionProgress::Wait);
                 }
                 match self.encode_management(
@@ -6098,14 +6193,26 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        let tx = tx_agreements(&mut self.config.tx_block_ack, connected)?;
-        if !tx.may_owe(now) {
-            return None;
-        }
         let can_send = !connected.sending
             && data_link_up(connected, self.absence.is_some(), &(*self.keys))
             && !self.tickets.is_empty()
             && !self.buffers.is_empty();
+        // An ADDBA Request whose number the link's holder told goes first;
+        // one that waits for it owes nothing else of the agreements.
+        let fresh = match connected.sequence {
+            TidSequence::Unasked => None,
+            TidSequence::Asked(_) => return None,
+            TidSequence::Fresh(_) if !can_send => return None,
+            TidSequence::Fresh(tid) => {
+                connected.sequence = TidSequence::Unasked;
+                Some(tid)
+            }
+        };
+        let lent = self.link.lent();
+        let tx = tx_agreements(&mut self.config.tx_block_ack, connected)?;
+        if fresh.is_none() && !tx.may_owe(now) {
+            return None;
+        }
         enum Body {
             Delba(
                 u8,
@@ -6116,7 +6223,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 [u8; oer_protocols_ieee80211_wire::block_ack::frame::ADDBA_ACTION_BODY_LEN],
             ),
         }
-        let body = match tx.poll(now, can_send)? {
+        let owed = match fresh {
+            Some(tid) => TxBlockAckOwed::Negotiate { tid: tid.value() },
+            None => tx.poll(now, can_send)?,
+        };
+        let body = match owed {
             TxBlockAckOwed::Request { tid, start } => {
                 return self.owe_block_ack_request(connected, tid, start, events);
             }
@@ -6131,13 +6242,22 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 Body::Delba(tid, delba)
             }
             TxBlockAckOwed::Negotiate { tid } => {
+                // While the link's holder numbers the TID, it tells the
+                // TID's next number first and holds the TID's data until
+                // the request goes.
+                if lent && fresh.is_none() {
+                    let priority = WmmUserPriority::new(tid)?;
+                    connected.sequence = TidSequence::Asked(priority);
+                    return Some(Ok(Owed::LinkSequence(priority)));
+                }
                 let starting_sequence = connected.qos_sequences.get(usize::from(tid))?.peek();
                 match tx.begin(tid, starting_sequence, now) {
                     Ok(request) => Body::Addba(tid, request.body),
                     Err(_) => {
                         // Its attempt is spent; the next waits the interval.
                         tx.request_failed(tid, now);
-                        return None;
+                        // The holder takes the TID's data again.
+                        return fresh.map(|_| Ok(Owed::LinkRelease));
                     }
                 }
             }
@@ -6176,7 +6296,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 {
                     tx.request_failed(tid, now);
                 }
-                None
+                // The holder takes the TID's data again.
+                fresh.map(|_| Ok(Owed::LinkRelease))
             }
             Err(Unsent::Encode) => Some(Err(StaDisconnectReason::Encode)),
             Err(Unsent::NoConnection) => Some(Err(StaDisconnectReason::TransmitRefused(
@@ -7163,7 +7284,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 },
             )
         } else {
-            (self.sequence.take(), FrameNumber::Open)
+            (self.sequence.take(), self.own_number(protected))
+        }
+    }
+
+    /// Who numbers a frame the station numbered itself: a protected one
+    /// takes its packet number from the link's holder while the holder
+    /// keeps the pairwise key after the link came back.
+    const fn own_number(&self, protected: bool) -> FrameNumber {
+        if protected && self.keys.lent() {
+            FrameNumber::Keyed
+        } else {
+            FrameNumber::Open
         }
     }
 
@@ -7198,7 +7330,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         protected: true,
                     }
                 } else {
-                    FrameNumber::Open
+                    self.own_number(true)
                 },
             ),
             None => self.station_number(true),

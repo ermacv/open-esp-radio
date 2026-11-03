@@ -131,43 +131,58 @@ fn free<M>(freed: &mut heapless::Deque<M, HELD>, memory: M) {
     }
 }
 
+/// What the caller owes the station after one change of its link.
+pub(super) enum LinkFollow {
+    /// Nothing.
+    Nothing,
+    /// Hand the held link back ([`return_link`]).
+    Return,
+    /// Tell the station the TID's next Sequence Number.
+    Sequence(
+        oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority,
+        oer_protocols_ieee80211_core_roles_sta::link::SequenceNumber,
+    ),
+}
+
 /// Take one change the station made to its link: keep the link it hands
 /// over, hold or release its data, tell the plane (or the link's data state
-/// it has not taken yet) a transmit agreement, or stop the link's data.
-/// Whether the station asked for its link back: the caller hands the held
-/// link to the station ([`return_link`]) once the action no longer borrows
-/// it. A second handover while the service holds a link is a contract
-/// violation; the service keeps the link it holds and quarantines the new
-/// one.
+/// it has not taken yet) a transmit agreement, stop the link's data, or
+/// read a TID's next Sequence Number. What the caller owes the station:
+/// the caller hands the held link to the station ([`return_link`]) once the
+/// action no longer borrows it. A second handover while the service holds a
+/// link is a contract violation; the service keeps the link it holds and
+/// quarantines the new one. The service gives the pairwise key back with
+/// its link, so a request for the key finds none: a contract violation.
 pub(super) fn link_action<'p, 'id: 'p, B, P>(
     link: &mut Option<PortLink<'id, B>>,
     data: &mut DataTx<B::TxMemory>,
     phase: &mut P,
     events: &mut impl EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>,
     action: PortLinkAction<'id, B>,
-) -> Result<bool, ServiceFault<B>>
+) -> Result<LinkFollow, ServiceFault<B>>
 where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
 {
+    let mismatch = || {
+        ServiceFault::Contract(BackendContractViolation::StationKeyBank(
+            contract::KeyContractViolation::LinkKeyMismatch,
+        ))
+    };
     match action {
         LinkAction::HandOver(handover) => {
             if link.is_some() {
                 let _quarantined = core::mem::ManuallyDrop::new(handover);
-                return Err(ServiceFault::Contract(
-                    BackendContractViolation::StationKeyBank(
-                        contract::KeyContractViolation::LinkKeyMismatch,
-                    ),
-                ));
+                return Err(mismatch());
             }
             *link = Some(handover);
-            Ok(false)
+            Ok(LinkFollow::Nothing)
         }
         LinkAction::Hold | LinkAction::Release => {
             if let Some(link) = link.as_mut() {
                 link.hold(matches!(action, LinkAction::Hold));
             }
-            Ok(false)
+            Ok(LinkFollow::Nothing)
         }
         LinkAction::Agreement { tid, window } => {
             if !link
@@ -177,16 +192,22 @@ where
             {
                 plane.agreement(tid, window);
             }
-            Ok(false)
+            Ok(LinkFollow::Nothing)
         }
         LinkAction::Return => {
             stop::<B, P>(data, phase, events)?;
-            Ok(true)
+            Ok(LinkFollow::Return)
         }
+        LinkAction::Sequence(tid) => match link.as_ref() {
+            Some(link) => Ok(LinkFollow::Sequence(tid, link.numbers().next(tid))),
+            None => Ok(LinkFollow::Nothing),
+        },
+        LinkAction::ReturnKey => Err(mismatch()),
     }
 }
 
-/// Give the station the link the service holds back.
+/// Give the station the link the service holds back, its pairwise key
+/// with it.
 pub(super) fn return_link<
     'id,
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
@@ -197,7 +218,11 @@ pub(super) fn return_link<
     station: &mut PortStation<'id, B, C, GROUPS>,
 ) {
     if let Some(link) = link.take() {
-        station.link_returned(link.into_return());
+        let (link, key) = link.into_return();
+        station.link_returned(link);
+        if let Some(key) = key {
+            station.key_returned(key);
+        }
     }
 }
 
@@ -242,14 +267,18 @@ impl<
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
         while let Some(action) = self.station.poll_link() {
-            if link_action::<B, P>(
+            match link_action::<B, P>(
                 &mut self.link,
                 &mut self.data,
                 phase,
                 &mut self.events,
                 action,
             )? {
-                return_link::<B, C, GROUPS>(&mut self.link, &mut self.station);
+                LinkFollow::Nothing => {}
+                LinkFollow::Return => {
+                    return_link::<B, C, GROUPS>(&mut self.link, &mut self.station);
+                }
+                LinkFollow::Sequence(tid, next) => self.station.tx_sequence(tid, next),
             }
         }
         Ok(())

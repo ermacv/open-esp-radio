@@ -238,8 +238,6 @@ pub type ActorLinkKey<'id, D> = InstalledCcmpTxKey<
 >;
 /// The station's link on the port of `D`, while the actor holds it.
 pub type ActorLink<'id, D> = LinkHandover<'id, ActorEpochPath<'id, D>, ActorLinkKey<'id, D>>;
-/// The link as the actor gives it back.
-pub type ActorLinkReturn<'id, D> = LinkReturn<ActorLinkKey<'id, D>>;
 
 /// The radio's state as the actor drives it.
 #[derive(Clone, Copy)]
@@ -296,6 +294,8 @@ struct Owed<'id, D: DatapathPort<'id>> {
     retuned: Option<Result<(), RetuneFailed>>,
     stopped: Option<StopOutcome>,
     link_returned: bool,
+    sequence: Option<(WmmUserPriority, SequenceNumber)>,
+    pairwise: Option<ActorLinkKey<'id, D>>,
     gate: Option<GateOpen<'id, ActorGatePath<'id, D>>>,
 }
 
@@ -310,6 +310,8 @@ impl<'id, D: DatapathPort<'id>> Owed<'id, D> {
             retuned: None,
             stopped: None,
             link_returned: false,
+            sequence: None,
+            pairwise: None,
             gate: None,
         }
     }
@@ -354,6 +356,12 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     events: O,
     receive: RxBlockAckView<'id, D::Types>,
     link: Option<ActorLink<'id, D>>,
+    /// The link's pairwise key, kept after the link came back until the
+    /// lifecycle asks for it: the one owner of its packet numbers.
+    pairwise: Option<ActorLinkKey<'id, D>>,
+    /// The TID whose data waits for the station's ADDBA Request, which
+    /// names the TID's next Sequence Number.
+    sequence_hold: Option<WmmUserPriority>,
     data: DataTx<D::TxMemory>,
     radio: Radio<D::Caps>,
     held: Option<HeldCommand<'id, D>>,
@@ -391,7 +399,8 @@ struct Retained<'id, D: DatapathPort<'id>> {
     link: Option<ActorLink<'id, D>>,
     returned: Option<Returned<'id, D>>,
     completed: Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, D::Port>>,
-    link_return: Option<ActorLinkReturn<'id, D>>,
+    link_return: Option<LinkReturn>,
+    pairwise: Option<ActorLinkKey<'id, D>>,
     group: Option<GroupPending<'id, ActorEpochPath<'id, D>>>,
 }
 
@@ -418,6 +427,8 @@ where
             events,
             receive,
             link: None,
+            pairwise: None,
+            sequence_hold: None,
             data: DataTx {
                 plane: None,
                 deferred: None,
@@ -447,6 +458,7 @@ where
                 returned: None,
                 completed: None,
                 link_return: None,
+                pairwise: None,
                 group: None,
             },
             end: None,

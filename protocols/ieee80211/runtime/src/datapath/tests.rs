@@ -169,7 +169,7 @@ struct Bench<'b, 's> {
     from_actor: WakingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
     returns: WakingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
     link: WakingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
-    link_return: WakingSpscReceiver<'b, ActorLinkReturn<'s, P<'s>>, 1>,
+    link_return: WakingSpscReceiver<'b, LinkReturn, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
     returned: SlotReceiver<'b, Option<ModelNetworkMemory>, TX_DEPTH>,
     receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
@@ -435,7 +435,7 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
         let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
         let mut group_queue =
             WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
-        let mut link_return_queue = WakingSpscQueue::<ActorLinkReturn<'_, P<'_>>, 1>::new();
+        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue =
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
         let mut returned_queue = WakingSlotQueue::<Option<ModelNetworkMemory>, TX_DEPTH>::new();
@@ -717,6 +717,7 @@ fn station_frame_under<'s>(
         } else {
             FrameNumber::Open
         },
+        names: None,
     }
 }
 
@@ -986,6 +987,86 @@ fn a_link_comes_back_through_its_mailbox() {
         bench.send(ToActor::Disconnect);
         assert!(matches!(bench.next(), Some(FromActor::LinkReturned)));
         assert!(bench.link_return.try_receive().is_some());
+    });
+}
+
+#[test]
+fn a_protected_station_frame_after_the_links_return_draws_the_kept_keys_next_packet_number() {
+    bench(|bench| {
+        bench.start();
+        let key = install_key(bench);
+        bench.connect(link(true, Some(key)));
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        bench.advance(1);
+        bench.settle();
+        let data = bench.data_sent();
+        let last = data.last().unwrap().packet_number.unwrap();
+        bench.send(ToActor::Disconnect);
+        while !matches!(bench.next().unwrap(), FromActor::LinkReturned) {}
+        assert!(bench.link_return.try_receive().is_some());
+        // The station numbered it; the kept key numbers its packet.
+        let mut transmit = station_frame_under(bench, 0, true);
+        transmit.number = FrameNumber::Keyed;
+        bench.send(ToActor::StationTx(transmit));
+        bench.advance(1);
+        bench.settle();
+        let sent = bench.data_sent();
+        assert_eq!(sent.len(), data.len() + 1, "{sent:?}");
+        assert_eq!(sent.last().unwrap().packet_number, Some(last + 1));
+        // The key goes back only when asked.
+        while let Some(message) = bench.next() {
+            assert!(!matches!(message, FromActor::PairwiseReturned(_)));
+        }
+        bench.send(ToActor::ReturnPairwise);
+        assert!(matches!(bench.next(), Some(FromActor::PairwiseReturned(_))));
+    });
+}
+
+#[test]
+fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
+    let tid = WmmUserPriority::new(5).unwrap();
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        // Traffic flows on the TID.
+        for round in 0..3_u8 {
+            bench.send_msdu(msdu(5, &[round; 8]));
+            bench.settle();
+            bench.advance(1);
+            bench.settle();
+        }
+        let before = bench.data_sent().len();
+        bench.send(ToActor::Sequence(tid));
+        let next = loop {
+            match bench.next() {
+                Some(FromActor::TxSequence { tid: told, next }) => {
+                    assert_eq!(told, tid);
+                    break next;
+                }
+                Some(_) => {}
+                None => panic!("the actor tells the TID's next number"),
+            }
+        };
+        // The TID's data waits for the request that names the number.
+        bench.send_msdu(msdu(5, &[9; 8]));
+        bench.settle();
+        bench.advance(1);
+        bench.settle();
+        assert_eq!(bench.data_sent().len(), before, "the TID's data waits");
+        let mut request = station_frame_under(bench, 0, false);
+        request.names = Some(tid);
+        bench.send(ToActor::StationTx(request));
+        bench.advance(1);
+        bench.settle();
+        bench.advance(1);
+        bench.settle();
+        let first = bench.data_sent()[before..]
+            .iter()
+            .find(|frame| frame.plaintext[24] & 0x0f == 5)
+            .map(sequence)
+            .expect("the TID's data went");
+        assert_eq!(first, next.get());
     });
 }
 

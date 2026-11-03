@@ -35,7 +35,12 @@ where
             plan,
             access_category,
             number,
+            names,
         } = transmit;
+        // The request that names the held TID's number ends the hold.
+        if names.is_some() && names == self.sequence_hold {
+            self.sequence_hold = None;
+        }
         let erase = <Ty<'id, D> as TxBufferPool<'id, D::Small>>::erase;
         if !self.radio.running() {
             // The radio stops: the frame does not go.
@@ -50,6 +55,9 @@ where
         }
         let protected = match number {
             FrameNumber::Open => false,
+            // The station numbered it after the link came back; the key the
+            // actor kept numbers its packet.
+            FrameNumber::Keyed => true,
             FrameNumber::Link { protected, .. } => {
                 let numbered = match self.link.as_mut() {
                     Some(link) => {
@@ -73,7 +81,11 @@ where
         };
         let admitted = {
             let Self {
-                port, rates, link, ..
+                port,
+                rates,
+                link,
+                pairwise,
+                ..
             } = &*self;
             let rated = frame.rated(plan, rates, |rate| port.rate(rate).map(|rate| rate.phase()));
             // The packet number follows the rate: a frame without one draws
@@ -81,7 +93,11 @@ where
             let protection = match (rated.is_some(), protected) {
                 (false, _) => Err(TxRefusal::NoRate),
                 (true, false) => Ok(TxProtection::Open),
-                (true, true) => match link.as_ref().and_then(|link| link.numbers().key()) {
+                (true, true) => match link
+                    .as_ref()
+                    .and_then(|link| link.numbers().key())
+                    .or(pairwise.as_ref())
+                {
                     Some(key) => key
                         .number()
                         .map(TxProtection::Ccmp)

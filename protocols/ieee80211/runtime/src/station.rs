@@ -2520,6 +2520,7 @@ impl<
             Follow::ReturnLink => {
                 data_tx::return_link::<B, C, GROUPS>(&mut self.link, &mut self.station)
             }
+            Follow::Sequence(tid, next) => self.station.tx_sequence(tid, next),
             // The rates start from what the association made known.
             Follow::Associated(peer) => {
                 self.rates
@@ -3431,6 +3432,11 @@ enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: 
     Notice(StaNotice),
     /// The station asked for its link back.
     ReturnLink,
+    /// Tell the station the TID's next Sequence Number.
+    Sequence(
+        oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority,
+        oer_protocols_ieee80211_core_roles_sta::link::SequenceNumber,
+    ),
     /// A submission's ticket's place held another context or lies beyond
     /// the storage: the context stays with the service's fault, the ticket
     /// with the port.
@@ -3533,6 +3539,8 @@ where
 {
     let numbered = match transmit.number {
         FrameNumber::Open => Ok(None),
+        // The service gives the key back with the link: it keeps none.
+        FrameNumber::Keyed => Err(TxRefusal::LinkChanged),
         FrameNumber::Link { protected, .. } => match link {
             Some(link) => link
                 .numbers_mut()
@@ -3690,10 +3698,10 @@ where
     let input = match action {
         StaAction::Link(action) => {
             return Ok(
-                if data_tx::link_action::<B, P>(link, data, phase, events, action)? {
-                    Follow::ReturnLink
-                } else {
-                    Follow::Nothing
+                match data_tx::link_action::<B, P>(link, data, phase, events, action)? {
+                    data_tx::LinkFollow::Nothing => Follow::Nothing,
+                    data_tx::LinkFollow::Return => Follow::ReturnLink,
+                    data_tx::LinkFollow::Sequence(tid, next) => Follow::Sequence(tid, next),
                 },
             );
         }

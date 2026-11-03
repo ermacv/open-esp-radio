@@ -468,6 +468,10 @@ struct World<'id, const G: usize = 2> {
     rssi: i8,
     /// The station's link while the world holds it.
     link: Option<TestLink<'id>>,
+    /// The pairwise key the link's holder kept after the link came back.
+    kept_key: Option<oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey<Key>>,
+    /// The holder keeps the key when the station asks for it.
+    keep_key: bool,
     /// What the station told the link's holder, in order.
     link_actions: Vec<LinkSeen>,
     /// The packet numbers the link drew for the station's protected frames.
@@ -489,6 +493,8 @@ enum LinkSeen {
     Release,
     Agreement(u8, Option<crate::data::plane::TxWindow>),
     Return,
+    Sequence(u8),
+    ReturnKey,
 }
 
 /// A station with the test's pools and no profile yet.
@@ -642,6 +648,8 @@ impl<'id> World<'id> {
             associated: None,
             rssi: i8::MIN,
             link: None,
+            kept_key: None,
+            keep_key: false,
             link_actions: Vec::new(),
             packet_numbers: Vec::new(),
         }
@@ -762,6 +770,10 @@ impl<'id, const G: usize> World<'id, G> {
                                 LinkSeen::Agreement(tid.value(), *window)
                             }
                             crate::link::LinkAction::Return => LinkSeen::Return,
+                            crate::link::LinkAction::Sequence(tid) => {
+                                LinkSeen::Sequence(tid.value())
+                            }
+                            crate::link::LinkAction::ReturnKey => LinkSeen::ReturnKey,
                         };
                         self.link_actions.push(seen);
                         self.link_action(action);
@@ -1016,7 +1028,24 @@ impl<'id, const G: usize> World<'id, G> {
             }
             crate::link::LinkAction::Return => {
                 let link = self.link.take().expect("the station lent its link");
-                self.station.link_returned(link.into_return());
+                let (link, key) = link.into_return();
+                assert!(self.kept_key.is_none(), "one kept key at a time");
+                self.kept_key = key;
+                self.station.link_returned(link);
+            }
+            crate::link::LinkAction::Sequence(tid) => {
+                let next = self
+                    .link
+                    .as_ref()
+                    .expect("the station asks the link's holder")
+                    .numbers()
+                    .next(tid);
+                self.station.tx_sequence(tid, next);
+            }
+            crate::link::LinkAction::ReturnKey if self.keep_key => {}
+            crate::link::LinkAction::ReturnKey => {
+                let key = self.kept_key.take().expect("the holder kept the key");
+                self.station.key_returned(key);
             }
         }
     }
@@ -1049,7 +1078,12 @@ impl<'id, const G: usize> World<'id, G> {
     /// station finishes.
     fn return_link(&mut self) {
         if let Some(link) = self.link.take() {
-            self.station.link_returned(link.into_return());
+            let (link, key) = link.into_return();
+            self.station.link_returned(link);
+            self.kept_key = key;
+        }
+        if let Some(key) = self.kept_key.take() {
+            self.station.key_returned(key);
         }
     }
 
@@ -1144,8 +1178,18 @@ impl<'id, const G: usize> World<'id, G> {
                 crate::link::FrameNumber::Link {
                     protected: true,
                     ..
-                }
+                } | crate::link::FrameNumber::Keyed
             );
+        // The holder keys a frame the station numbered after the link came
+        // back under the key it kept.
+        if transmit.number == crate::link::FrameNumber::Keyed {
+            let numbered = self
+                .kept_key
+                .as_ref()
+                .and_then(|key| key.number())
+                .expect("the holder kept the key");
+            self.packet_numbers.push(numbered.packet_number.value());
+        }
         if let crate::link::FrameNumber::Link { protected, .. } = transmit.number {
             let link = self
                 .link
@@ -5203,7 +5247,7 @@ fn received_data_is_admitted_by_the_link_without_the_station() {
         assert_eq!(delivered, 2);
         // Without its link the station delivers no data.
         let link = world.link.take().unwrap();
-        world.station.link_returned(link.into_return());
+        world.station.link_returned(link.into_return().0);
         assert_eq!(
             world.deliver_with(at(43), &frame, meta(), |_| delivered += 1),
             Err(oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::NotConnected.into())

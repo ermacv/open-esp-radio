@@ -38,12 +38,17 @@ where
         >,
     O: ActorEvents,
 {
-    /// Whether the actor takes the network's next MSDU: the radio runs,
-    /// the link carries data, the plane holds it and no MSDU waits.
+    /// Whether the actor takes the network's next MSDU: the link carries
+    /// data and no MSDU waits.
     pub(super) fn accepts(&self) -> bool {
+        self.carries() && self.data.deferred.is_none()
+    }
+
+    /// Whether the link carries data: the radio runs, the link carries
+    /// data and the plane holds it.
+    fn carries(&self) -> bool {
         self.radio.running()
             && self.link.as_ref().is_some_and(LinkHandover::carries)
-            && self.data.deferred.is_none()
             && self
                 .data
                 .plane
@@ -88,7 +93,9 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         self.connect_plane()?;
-        if !self.accepts() {
+        // The waiting MSDU is offered again at every turn the link carries
+        // data.
+        if !self.carries() {
             return Ok(());
         }
         let now = self.now;
@@ -105,6 +112,7 @@ where
                         freed,
                     },
                 owed,
+                sequence_hold,
                 ..
             } = self;
             let (Some(plane), Some(link)) = (plane.as_mut(), link.as_mut()) else {
@@ -130,6 +138,12 @@ where
                         _ => break,
                     },
                 };
+                // The held TID's data waits, in the network's order, for the
+                // request that names its next number.
+                if sequence_hold.is_some() && plane.tid(msdu.priority) == *sequence_hold {
+                    *deferred = Some(msdu);
+                    break;
+                }
                 taken = taken.saturating_add(1);
                 match plane.intake(&mut arena, msdu, link.numbers_mut(), now) {
                     Intake::Taken(tid) => *tid.select_mut(&mut tids) = true,

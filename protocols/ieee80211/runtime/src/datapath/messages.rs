@@ -27,6 +27,9 @@ pub struct StationTx<'id, D: DatapathPort<'id>> {
     pub access_category: WmmAccessCategory,
     /// Who numbers it: the station, or the link as the actor submits it.
     pub number: FrameNumber,
+    /// The TID whose next Sequence Number it names: an ADDBA Request, which
+    /// ends the hold of the TID's data ([`ToActor::Sequence`]).
+    pub names: Option<WmmUserPriority>,
 }
 
 /// The pending token of one group key change: it goes to the actor with the
@@ -78,6 +81,13 @@ pub enum ToActor<'id, D: DatapathPort<'id>> {
         /// Its window; `None` once it ended.
         window: Option<TxWindow>,
     },
+    /// Tell the next Sequence Number of `tid` ([`FromActor::TxSequence`])
+    /// and take no more data of `tid` until a station frame names it
+    /// ([`StationTx::names`]) or the next [`Self::Release`].
+    Sequence(WmmUserPriority),
+    /// Give back the pairwise key kept after the link came back
+    /// ([`FromActor::PairwiseReturned`]).
+    ReturnPairwise,
     /// The station's RSN failed on an EAPOL frame of the link.
     EapolFaulted,
     /// Take the next parcel: a large message beside the queue.
@@ -178,8 +188,19 @@ pub enum FromActor<'id, D: DatapathPort<'id>> {
         /// How many, saturating.
         count: u16,
     },
-    /// The link is back in the return mailbox.
+    /// The link is back in the return mailbox. The actor keeps its pairwise
+    /// key until [`ToActor::ReturnPairwise`].
     LinkReturned,
+    /// The next Sequence Number of `tid` the lifecycle asked for; the TID's
+    /// data waits until a station frame names it.
+    TxSequence {
+        /// Its TID.
+        tid: WmmUserPriority,
+        /// The TID's next Sequence Number.
+        next: SequenceNumber,
+    },
+    /// The pairwise key the actor kept after the link came back.
+    PairwiseReturned(ActorLinkKey<'id, D>),
     /// The gate is open.
     GateOpened(GateOpen<'id, ActorGatePath<'id, D>>),
     /// The start's end.
@@ -283,6 +304,10 @@ pub enum ActorViolation {
     RetireRunning,
     /// The link's return found the mailbox full.
     LinkReturn,
+    /// A link came back with a pairwise key while the actor kept another,
+    /// the lifecycle asked for a key the actor does not keep, or retired the
+    /// actor while it kept one.
+    PairwiseCustody,
     /// A group mutation's receive cut drained more units than the actor
     /// stages; the unit stays with the actor.
     CutOverflow,
@@ -342,7 +367,7 @@ pub struct LifecycleEnds<
     /// The link the station hands over.
     pub link: WakingSpscReceiver<'c, ActorLink<'id, D>, 1>,
     /// The link the actor gives back.
-    pub link_return: WakingSpscSender<'c, ActorLinkReturn<'id, D>, 1>,
+    pub link_return: WakingSpscSender<'c, LinkReturn, 1>,
 }
 
 /// The actor's ends to the network stack.
@@ -376,10 +401,10 @@ pub const fn returns_depth(terminals: usize) -> usize {
 
 /// The message queue's least depth from the actor: the frame lane, one
 /// announcement per return, the lifecycle's answers (start, retune, stop,
-/// link, gate, reply) and two coalesced facts.
+/// link, gate, reply, sequence, pairwise key) and two coalesced facts.
 pub const fn from_actor_depth(returns: usize) -> usize {
     LIFECYCLE_FRAMES
         .saturating_add(returns)
-        .saturating_add(6)
+        .saturating_add(8)
         .saturating_add(2)
 }

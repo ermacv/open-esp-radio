@@ -124,9 +124,14 @@ fn the_returned_link_numbers_the_stations_frames_on_and_its_key_comes_back() {
         let sent = world.frames.len();
         world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
-        // The station asked for its link back before its Deauthentication.
-        assert_eq!(world.link_actions.last(), Some(&LinkSeen::Return));
+        // The station asked for its link back before its Deauthentication,
+        // and for the key the holder kept only after it.
+        assert_eq!(
+            world.link_actions[world.link_actions.len() - 2..],
+            [LinkSeen::Return, LinkSeen::ReturnKey]
+        );
         assert!(world.link.is_none());
+        assert!(world.kept_key.is_none());
         assert!(!world.station.link.lent());
         let deauthentication = world.frames[sent..]
             .iter()

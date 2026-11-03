@@ -449,6 +449,8 @@ where
                     | ToActor::Hold
                     | ToActor::Release
                     | ToActor::Agreement { .. }
+                    | ToActor::Sequence(_)
+                    | ToActor::ReturnPairwise
             );
             let waits = self.radio.changing()
                 && matches!(
@@ -514,7 +516,22 @@ where
                 if let Some(link) = self.link.as_mut() {
                     link.hold(matches!(message, ToActor::Hold));
                 }
+                if matches!(message, ToActor::Release) {
+                    self.sequence_hold = None;
+                }
             }
+            ToActor::Sequence(tid) => {
+                // The number stays exact: the TID takes no data until the
+                // request that names it.
+                if let Some(link) = self.link.as_ref() {
+                    self.owed.sequence = Some((tid, link.numbers().next(tid)));
+                    self.sequence_hold = Some(tid);
+                }
+            }
+            ToActor::ReturnPairwise => match self.pairwise.take() {
+                Some(key) => self.owed.pairwise = Some(key),
+                None => return Err(ActorFault::Contract(ActorViolation::PairwiseCustody)),
+            },
             ToActor::Agreement { tid, window } => {
                 if !self
                     .link
@@ -605,6 +622,10 @@ where
                     // first.
                     return Err(ActorFault::Contract(ActorViolation::RetireRunning));
                 }
+                if self.pairwise.is_some() {
+                    // The key goes back before the actor ends.
+                    return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
+                }
                 self.end = Some(ActorEnd::Retired);
             }
         }
@@ -683,7 +704,19 @@ where
         let Some(link) = self.link.take() else {
             return Err(ActorFault::Contract(ActorViolation::LinkMailbox));
         };
-        if let Err(refused) = lifecycle.link_return.try_send(link.into_return()) {
+        self.sequence_hold = None;
+        // The actor keeps the pairwise key, the one owner of its packet
+        // numbers, until the lifecycle asks for it.
+        let (link, key) = link.into_return();
+        if let Some(key) = key {
+            if self.pairwise.is_some() {
+                self.retained.pairwise = Some(key);
+                self.retained.link_return = Some(link);
+                return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
+            }
+            self.pairwise = Some(key);
+        }
+        if let Err(refused) = lifecycle.link_return.try_send(link) {
             self.retained.link_return = Some(refused.0);
             return Err(ActorFault::Contract(ActorViolation::LinkReturn));
         }
@@ -850,6 +883,19 @@ where
         }
         if self.owed.link_returned && from.try_send(FromActor::LinkReturned).is_ok() {
             self.owed.link_returned = false;
+        }
+        if let Some((tid, next)) = self.owed.sequence
+            && from.try_send(FromActor::TxSequence { tid, next }).is_ok()
+        {
+            self.owed.sequence = None;
+        }
+        if let Some(key) = self.owed.pairwise.take()
+            && let Err(refused) = from.try_send(FromActor::PairwiseReturned(key))
+        {
+            self.owed.pairwise = match refused.0 {
+                FromActor::PairwiseReturned(key) => Some(key),
+                _ => None,
+            };
         }
         if let Some(gate) = self.owed.gate.take()
             && let Err(refused) = from.try_send(FromActor::GateOpened(gate))

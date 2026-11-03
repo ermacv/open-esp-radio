@@ -19,6 +19,18 @@
 //! [`Station::link_returned`]) with everything the station needs to number
 //! its frames again.
 //!
+//! The pairwise key's transmit half has one owner of its packet numbers:
+//! the holder keeps it after the link came back, and numbers the station's
+//! protected frames under it ([`FrameNumber::Keyed`]) until the station asks
+//! for it back before its removal ([`LinkAction::ReturnKey`],
+//! [`Station::key_returned`]).
+//!
+//! Before its ADDBA Request names a TID's starting Sequence Number, the
+//! station asks the holder for the TID's next number
+//! ([`LinkAction::Sequence`], [`Station::tx_sequence`]); the holder takes no
+//! more data of that TID until the request comes or the link is released
+//! again, so the number the request names is the next data MPDU's.
+//!
 //! A group key's replay lane is switched only by that key's installation
 //! terminal: the holder applies the terminal to its replay epoch
 //! ([`LinkHandover::group_terminal`]) before it hands the terminal to the
@@ -27,6 +39,8 @@
 //! [`Station::eapol`]: crate::machine::Station::eapol
 //! [`Station::receive`]: crate::machine::Station::receive
 //! [`Station::link_returned`]: crate::machine::Station::link_returned
+//! [`Station::key_returned`]: crate::machine::Station::key_returned
+//! [`Station::tx_sequence`]: crate::machine::Station::tx_sequence
 
 use oer_protocols_ieee80211_contracts_port::{
     Ieee80211Capabilities, LayoutError, RxMetadata, TxBufferClass, TxBufferMemory,
@@ -79,6 +93,10 @@ pub enum FrameNumber {
         /// It goes under the link's pairwise key.
         protected: bool,
     },
+    /// The station numbered it after the link came back, and it goes under
+    /// the link's pairwise key, which the holder still keeps: the holder
+    /// draws its CCMP packet number as it submits it.
+    Keyed,
 }
 
 /// A pairwise key whose transmit packet numbers the link draws from.
@@ -193,6 +211,7 @@ impl<P> TxNumbers<P> {
         plan: crate::machine::StaRatePlan,
     ) -> Result<(), TxRefusal> {
         let FrameNumber::Link { space, .. } = number else {
+            // The station numbered it.
             return Ok(());
         };
         let sequence = self.space(space).ok_or(TxRefusal::LinkChanged)?.take();
@@ -585,20 +604,28 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
     }
 
     /// Give the link back to the station: what it needs to number its
-    /// frames again.
-    pub fn into_return(self) -> LinkReturn<P> {
-        LinkReturn {
-            numbers: self.numbers,
-            rx: self.rx,
-        }
+    /// frames again. The holder keeps the pairwise key, the one owner of its
+    /// packet numbers, until the station asks for it
+    /// ([`LinkAction::ReturnKey`]).
+    pub fn into_return(self) -> (LinkReturn, Option<P>) {
+        let (station, tids, key) = self.numbers.into_parts();
+        (
+            LinkReturn {
+                station,
+                tids,
+                rx: self.rx,
+            },
+            key,
+        )
     }
 }
 
 /// The link as its holder gives it back
 /// ([`Station::link_returned`](crate::machine::Station::link_returned)): its
-/// numbers, which go on in the station, and its receive admission.
-pub struct LinkReturn<P> {
-    pub(crate) numbers: TxNumbers<P>,
+/// sequence spaces, which go on in the station, and its receive admission.
+pub struct LinkReturn {
+    pub(crate) station: SequenceCounter,
+    pub(crate) tids: Option<[SequenceCounter; 8]>,
     pub(crate) rx: RxLink,
 }
 
@@ -638,6 +665,15 @@ pub enum LinkAction<'id, Path: PoolPath, P> {
     },
     /// Give the link back ([`LinkHandover::into_return`]).
     Return,
+    /// Tell the next Sequence Number of `tid`
+    /// ([`Station::tx_sequence`](crate::machine::Station::tx_sequence)) and
+    /// take no more data of `tid` until the station's ADDBA Request of it
+    /// comes or the next [`Self::Release`].
+    Sequence(WmmUserPriority),
+    /// Give the pairwise key kept after the link came back
+    /// ([`Station::key_returned`](crate::machine::Station::key_returned)):
+    /// the station removes it next.
+    ReturnKey,
 }
 
 #[cfg(test)]

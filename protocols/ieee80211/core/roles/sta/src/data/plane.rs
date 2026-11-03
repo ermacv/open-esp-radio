@@ -496,6 +496,18 @@ impl DataPlane {
         self.link.is_some()
     }
 
+    /// The TID an MSDU of user priority `priority` goes in on the plane's
+    /// link: its admitted user priority on a QoS link, UP0 otherwise;
+    /// `None` without a link or an admitted access category.
+    pub fn tid(&self, priority: WmmUserPriority) -> Option<WmmUserPriority> {
+        let link = self.link.as_ref()?;
+        if link.header.peer_qos() {
+            link.admission.admitted_user_priority(priority)
+        } else {
+            Some(WmmUserPriority::UP0)
+        }
+    }
+
     /// The operational window of `tid`.
     pub fn window(&self, tid: WmmUserPriority) -> Option<TxWindow> {
         *tid.select(&self.link.as_ref()?.windows)

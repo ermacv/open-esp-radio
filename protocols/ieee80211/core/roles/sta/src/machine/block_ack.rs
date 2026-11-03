@@ -217,12 +217,16 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         }
         if protected {
             match (transmit.number, &self.keys.pairwise) {
-                // The handed-over link numbers and keys its own frames.
-                (crate::link::FrameNumber::Link { .. }, _) => Ok(StaAction::Transmit(transmit)),
+                // The handed-over link numbers and keys its own frames; the
+                // key its holder kept after the link came back keys them.
+                (crate::link::FrameNumber::Link { .. }, _)
+                | (crate::link::FrameNumber::Keyed, KeyCell::Lent(_)) => {
+                    Ok(StaAction::Transmit(transmit))
+                }
                 (crate::link::FrameNumber::Open, KeyCell::Installed(key)) => {
                     Ok(StaAction::TransmitProtected { transmit, key })
                 }
-                (crate::link::FrameNumber::Open, _) => {
+                (crate::link::FrameNumber::Open | crate::link::FrameNumber::Keyed, _) => {
                     self.tickets.put(transmit.ticket, events);
                     self.buffers.put(transmit.buffer, events);
                     Err((reply, BlockAckReplyRefusal::LinkChanged))
