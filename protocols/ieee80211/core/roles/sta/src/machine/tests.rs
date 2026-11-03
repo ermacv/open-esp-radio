@@ -31,6 +31,7 @@ type TestConfigurationPath<'id> =
 
 mod block_ack;
 mod key_unwrap;
+mod link;
 mod profile;
 mod repeated_message3;
 mod restart;

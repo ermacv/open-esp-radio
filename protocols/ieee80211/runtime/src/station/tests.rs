@@ -2688,6 +2688,63 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
     );
 }
 
+/// The Sequence Number of a QoS Data frame.
+fn qos_sequence(frame: &AirFrame) -> u16 {
+    u16::from_le_bytes([frame.plaintext[22], frame.plaintext[23]]) >> 4
+}
+
+/// The station's link numbers the station's own frames with the data: data,
+/// the group handshake's EAPOL and data again, all on TID 5, take
+/// consecutive Sequence Numbers of that TID and rising packet numbers of
+/// the one pairwise key.
+#[test]
+fn the_links_station_frames_and_data_of_one_tid_number_on_without_a_gap() {
+    run(
+        StaSecurity::Personal {
+            password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
+                .unwrap(),
+            pmk: Pmk::from_bytes(PMK),
+        },
+        |world| {
+            Box::pin(async move {
+                // Voice is closed, so the station's EAPOL goes as Video, in
+                // TID 5, as data of priority 5 does.
+                let mut wmm = WMM;
+                wmm[22] |= 0x10;
+                let mut beacon = beacon(true);
+                beacon.extend_from_slice(&wmm);
+                let mut seen = 0;
+                world.associate_with(&mut seen, beacon, true).await;
+                let ptk = world.handshake(&mut seen).await;
+                assert!(world.try_send_msdu_at([2, 0, 0, 0, 0, 9], 5));
+                let first = world.sent(&mut seen, QOS_DATA).await;
+                assert!(!carries_eapol(&first));
+                world
+                    .air
+                    .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
+                let response = world.sent(&mut seen, QOS_DATA).await;
+                assert!(carries_eapol(&response));
+                assert!(world.try_send_msdu_at([2, 0, 0, 0, 0, 9], 5));
+                let second = world.sent(&mut seen, QOS_DATA).await;
+                assert!(!carries_eapol(&second));
+                for frame in [&first, &response, &second] {
+                    assert_eq!(frame.plaintext[24] & 0x0f, 5, "TID 5");
+                    assert!(matches!(frame.key, Some((_, true))), "{frame:?}");
+                }
+                assert_eq!(qos_sequence(&response), qos_sequence(&first) + 1);
+                assert_eq!(qos_sequence(&second), qos_sequence(&response) + 1);
+                let numbers =
+                    [&first, &response, &second].map(|frame| frame.packet_number.unwrap());
+                assert!(
+                    numbers.windows(2).all(|pair| pair[0] < pair[1]),
+                    "{numbers:?}"
+                );
+                world.command(ControlCommand::Stop).await;
+            })
+        },
+    );
+}
+
 #[test]
 fn interleaved_station_and_data_terminals_keep_their_owner_and_the_networks_order() {
     run(
