@@ -186,6 +186,37 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
+    /// Publish queue `index`'s held-open aggregate at once when it would go
+    /// next: nothing of its category queued and no command waiting, with a
+    /// free chain.
+    fn publish_open(
+        &mut self,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        device: &mut D,
+        index: usize,
+    ) -> Result<(), Fault> {
+        if self.pending_command.is_some()
+            || !held.commands.empty()
+            || !held.want_enabled.get()
+            || self.closed
+            || self.closing.is_some()
+            || self.running.get(index).is_none_or(Option::is_some)
+            || self.queues.get(index).is_none_or(|queue| !queue.is_empty())
+            || !self.chain_free()
+            || core_views::configuring::<Id, D, B>(self.core.view())
+        {
+            return Ok(());
+        }
+        #[cfg(oer_debug_control)]
+        if held.publication_hold.get() & (1 << index) != 0 {
+            return Ok(());
+        }
+        match self.take_open(index) {
+            Some(pending) => self.publish_aggregate(held, device, index, pending),
+            None => Ok(()),
+        }
+    }
+
     /// The open aggregate of queue `index`, which is no longer open.
     pub(in crate::port) fn take_open(
         &mut self,
@@ -558,7 +589,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 return Err(Fault::Capacity);
             }
             let outcome = outcome(end, pending.execution.rate)?;
-            self.finish_aggregate(held, pending, outcome, true);
+            // As the archive's completion: the queue's held-open aggregate
+            // goes on air before the ended one's terminal is built, its
+            // backoff drawn from the reset contention window.
+            core_views::reset_contention::<Id, D, B>(
+                self.core.view(),
+                pending.role(),
+                pending.category,
+            );
+            self.publish_open(held, device, index)?;
+            self.finish_aggregate(held, pending, outcome, false);
         }
         Ok(settled)
     }
