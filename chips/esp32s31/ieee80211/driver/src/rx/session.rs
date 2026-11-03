@@ -169,7 +169,7 @@ where
         mac | power
     }
     pub fn events_pending(&self) -> bool {
-        self.irq.mac_pending().unwrap_or(true) || self.power.timers_pending().unwrap_or(true)
+        self.irq.mac_pending().unwrap_or(true) || self.power.tbtt_pending().unwrap_or(true)
     }
 
     /// The receive facts alone, for the task that takes received units: it

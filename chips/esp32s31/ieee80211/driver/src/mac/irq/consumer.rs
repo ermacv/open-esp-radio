@@ -366,19 +366,15 @@ impl<E: SignalExecutor> IrqConsumer<'_, E> {
         Ok(self.storage.receive.has_pending()? || self.storage.signal.has_pending()?)
     }
 
-    /// Whether a TX completion, a TX timeout or a BSS color collision
-    /// waits, without taking it: the MAC facts that bring the driver work.
-    /// Other bits a receive interrupt raises wait for its next turn.
+    /// Whether a TX completion or a TX timeout waits, without taking it:
+    /// the MAC facts the driver acts on. Other bits a receive interrupt
+    /// raises wait for its next turn.
     ///
     /// # Errors
     ///
     /// The caller runs outside the signal's executor.
     pub fn mac_pending(&self) -> Result<bool, ForeignContext> {
-        Ok(self.storage.signal.peek()?
-            & (super::EVENT_TX_COMPLETE
-                | super::EVENT_TX_TIMEOUT
-                | super::EVENT_BSS_COLOR_COLLISION)
-            != 0)
+        Ok(self.storage.signal.peek()? & (super::EVENT_TX_COMPLETE | super::EVENT_TX_TIMEOUT) != 0)
     }
 
     /// # Errors
@@ -557,14 +553,14 @@ impl<E: SignalExecutor> PowerIrqConsumer<'_, E> {
         self.storage.signal.has_pending()
     }
 
-    /// Whether a TSF timer or the station's TBTT waits, without taking it:
-    /// the power facts that bring the driver work.
+    /// Whether the station's TBTT waits, without taking it: the power
+    /// fact the driver acts on.
     ///
     /// # Errors
     ///
     /// The caller runs outside the signal's executor.
-    pub fn timers_pending(&self) -> Result<bool, ForeignContext> {
-        Ok(self.storage.signal.peek()? & !PowerIrqStorage::<E>::UNHANDLED != 0)
+    pub fn tbtt_pending(&self) -> Result<bool, ForeignContext> {
+        Ok(self.storage.signal.peek()? & PowerIrqStorage::<E>::TBTT != 0)
     }
 
     /// # Errors
