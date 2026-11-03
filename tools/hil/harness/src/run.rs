@@ -2,6 +2,7 @@
 
 use std::{io::Write, time::Duration};
 
+use oer_protocols_hil_protocol::base::GetBootStatus;
 use oer_tools_hil_link::{Boot, Link, LinkError};
 
 use crate::dut::{Device, Dut};
@@ -177,6 +178,7 @@ pub(crate) fn cases(
                     );
                     break;
                 }
+                print_previous_boot(link, &next, out);
                 boot = next;
                 unconfirmed = None;
             }
@@ -241,6 +243,24 @@ fn print_notes(link: &Link) {
     if notes.lost > 0 {
         eprintln!("device: {} diagnostic lines lost", notes.lost);
     }
+}
+
+/// Print to `out` how the boot before `next` ended: its reset reason and
+/// the record it kept for the next boot.
+fn print_previous_boot(link: &Link, next: &Boot, out: &mut dyn Write) {
+    let line = match link.call(next, GetBootStatus, HELLO_TIMEOUT) {
+        Ok(evidence) => format!(
+            "boot {:016x}: the previous boot ended with reset {:?} (raw {}), post-mortem {:?}, platform panic {:?}",
+            next.boot_id,
+            evidence.reset_reason,
+            evidence.raw_reset_reason,
+            evidence.post_mortem,
+            evidence.platform_panic
+        ),
+        Err(error) => format!("boot {:016x}: no boot status: {error}", next.boot_id),
+    };
+    let _ = writeln!(out, "{line}");
+    let _ = out.flush();
 }
 
 /// Print one outcome as a line of `out`.
