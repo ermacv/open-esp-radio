@@ -1127,8 +1127,8 @@ pub use oer_chips_esp32s31_radio_system::observation::{TickRan, TrackingBranches
 /// Diagnostic: an aggregate's edge in the driver, for the image's observer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DriverTxEdge {
-    /// Its publication; otherwise its end seen.
-    pub published: bool,
+    /// 0 its end seen, 1 its publication, 2 an end with nothing next.
+    pub edge: u8,
 }
 
 impl Event for DriverTxEdge {
@@ -1136,16 +1136,12 @@ impl Event for DriverTxEdge {
     const CHANNEL: Channel = SERVICE;
 
     fn encode(&self) -> [u32; 2] {
-        [u32::from(self.published), 0]
+        [u32::from(self.edge), 0]
     }
 
-    fn decode([published, _]: [u32; 2]) -> Option<Self> {
+    fn decode([edge, _]: [u32; 2]) -> Option<Self> {
         Some(Self {
-            published: match published {
-                0 => false,
-                1 => true,
-                _ => return None,
-            },
+            edge: u8::try_from(edge).ok()?,
         })
     }
 }
@@ -1167,8 +1163,13 @@ impl<O: oer_portable_trace::Observer>
     for DriverEdges<O>
 {
     fn event(&mut self, edge: oer_chips_esp32s31_ieee80211_driver::port::TxEdge) {
+        use oer_chips_esp32s31_ieee80211_driver::port::TxEdge;
         self.0.event(DriverTxEdge {
-            published: edge == oer_chips_esp32s31_ieee80211_driver::port::TxEdge::Published,
+            edge: match edge {
+                TxEdge::Ended => 0,
+                TxEdge::Published => 1,
+                TxEdge::EndedBare => 2,
+            },
         });
     }
 }

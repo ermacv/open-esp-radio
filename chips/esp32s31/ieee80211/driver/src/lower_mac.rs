@@ -155,6 +155,8 @@ pub struct ContentionDraw {
 pub enum TxEdge {
     Ended,
     Published,
+    /// An end found its queue with no aggregate held open or queued.
+    EndedBare,
 }
 
 /// A receiver of the publication observations the S31 driver reports; it

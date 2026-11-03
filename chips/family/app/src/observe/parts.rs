@@ -52,6 +52,7 @@ pub enum LibraryPart {
     Open,
     TxGap,
     TxAir,
+    TxBare,
 }
 
 impl LibraryPart {
@@ -81,6 +82,7 @@ impl LibraryPart {
         LibraryPart::Open,
         LibraryPart::TxGap,
         LibraryPart::TxAir,
+        LibraryPart::TxBare,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -110,12 +112,13 @@ impl LibraryPart {
             LibraryPart::Open => "open",
             LibraryPart::TxGap => "tx-gap",
             LibraryPart::TxAir => "tx-air",
+            LibraryPart::TxBare => "tx-bare",
         }
     }
 }
 
 /// The library's parts.
-pub const LIBRARY_PARTS: usize = 25;
+pub const LIBRARY_PARTS: usize = 26;
 /// The parts an image names, after the library's.
 pub const IMAGE_PARTS: usize = 4;
 /// Every part: the library's, then the image's.
