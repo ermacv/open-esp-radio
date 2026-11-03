@@ -3741,3 +3741,48 @@ fn an_attempts_pass_reruns_the_step_only_after_a_refused_attempt() {
         "a refusal is never forgotten"
     );
 }
+
+#[test]
+fn an_aggregate_window_is_computed_once_and_follows_its_agreements_head() {
+    use oer_protocols_ieee80211_core_upper_mac::block_ack::OperationalTxBlockAck;
+    use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+    let agreement = |start: u16| OperationalTxBlockAck {
+        tid: 0,
+        window: 64,
+        timeout_tu: 0,
+        starting_sequence: SequenceNumber::from_low_bits(start),
+        amsdu: false,
+    };
+    let computed = data::AggregateWindow {
+        start: SequenceNumber::from_low_bits(1),
+        size: 32,
+        subframes: 32,
+        max_length: 65_535,
+        rate: None,
+    };
+    let computes = Cell::new(0);
+    let compute = || {
+        computes.set(computes.get() + 1);
+        Some(computed)
+    };
+    let mut kept = None;
+    assert_eq!(
+        super::kept_window(&mut kept, &agreement(1), compute),
+        Some(computed)
+    );
+    // A kept window takes the agreement's head and size as they stand.
+    let moved = super::kept_window(&mut kept, &agreement(40), compute);
+    assert_eq!(computes.get(), 1);
+    assert_eq!(
+        moved,
+        Some(data::AggregateWindow {
+            start: SequenceNumber::from_low_bits(40),
+            size: 64,
+            ..computed
+        })
+    );
+    // A cleared window is computed again.
+    kept = None;
+    super::kept_window(&mut kept, &agreement(41), compute);
+    assert_eq!(computes.get(), 2);
+}
