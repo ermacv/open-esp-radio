@@ -303,7 +303,11 @@ impl oer_portable_trace::Observer for Observer {
             let (ended, begun) = match edge.edge {
                 0 => (LibraryPart::TxAir, LibraryPart::TxGap),
                 1 => (LibraryPart::TxGap, LibraryPart::TxAir),
-                _ => (LibraryPart::TxBare, LibraryPart::TxBare),
+                2 => (LibraryPart::TxBare, LibraryPart::TxBare),
+                3 => (LibraryPart::GateNotified, LibraryPart::GateNotified),
+                4 => (LibraryPart::GateBusy, LibraryPart::GateBusy),
+                5 => (LibraryPart::GateEvents, LibraryPart::GateEvents),
+                _ => (LibraryPart::GateIdle, LibraryPart::GateIdle),
             };
             let at = now_us();
             let epoch = EPOCH.load(Ordering::Relaxed);

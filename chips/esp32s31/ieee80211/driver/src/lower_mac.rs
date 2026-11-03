@@ -157,6 +157,11 @@ pub enum TxEdge {
     Published,
     /// An end found its queue with no aggregate held open or queued.
     EndedBare,
+    /// Why a wake took the driver's whole turn, or only its idle turn.
+    GateNotified,
+    GateBusy,
+    GateEvents,
+    GateIdle,
 }
 
 /// A receiver of the publication observations the S31 driver reports; it

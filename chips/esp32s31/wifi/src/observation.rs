@@ -1169,6 +1169,10 @@ impl<O: oer_portable_trace::Observer>
                 TxEdge::Ended => 0,
                 TxEdge::Published => 1,
                 TxEdge::EndedBare => 2,
+                TxEdge::GateNotified => 3,
+                TxEdge::GateBusy => 4,
+                TxEdge::GateEvents => 5,
+                TxEdge::GateIdle => 6,
             },
         });
     }
