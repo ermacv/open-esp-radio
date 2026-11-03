@@ -162,8 +162,10 @@ impl RadioCoexPriorities for Coex {
 }
 pub(crate) type Front<W> =
     radio::SlotFrontend<'static, <W as Binding>::Id, Backend<<W as Binding>::Id, W>>;
+/// What tells the station that its installation's driver has work due.
+pub(crate) type Probe<W> = oer_chips_esp32s31_ieee80211_driver::port::DriverProbe<Device<W>, TX>;
 pub(crate) type ReadySlot<W> =
-    oer_portable_memory::RequestSlot<(), Result<Front<W>, InitializationError>>;
+    oer_portable_memory::RequestSlot<(), Result<(Front<W>, Probe<W>), InitializationError>>;
 type Stopped<W> =
     oer_chips_esp32s31_ieee80211_driver::port::StoppedPort<<W as Binding>::Id, Device<W>, TX, ()>;
 /// The ordinary join of a station that ended for uninstall.
@@ -194,6 +196,7 @@ pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
     let backend = Backend::new(parts)
         .ok()
         .unwrap_or_else(|| W::fail(InitializationError::Backend));
+    let probe = backend.probe();
     let (frontend, registration) =
         match oer_chips_esp32s31_ieee80211_driver::port::Registration::guard_result(
             slot.register(backend),
@@ -205,7 +208,7 @@ pub(crate) async fn drive<W: Binding>(driver: Driver<W>) {
                 return;
             }
         };
-    response.answer(Ok(frontend));
+    response.answer(Ok((frontend, probe)));
     let Ok(completion) = registration.run().await else {
         // A fail-stop issues no Joined; the station reports it.
         return;

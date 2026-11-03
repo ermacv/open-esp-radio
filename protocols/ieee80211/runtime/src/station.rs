@@ -754,6 +754,7 @@ pub struct Outgoing<M> {
 /// let io = ServiceIo {
 ///     commands: commands.dyn_receiver(), transmit, returned, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_protocols_ieee80211_runtime::station::NoNetwork, stop: oer_protocols_ieee80211_runtime::station::StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
+///     driver: &(),
 /// };
 /// ```
 ///
@@ -782,6 +783,7 @@ pub struct Outgoing<M> {
 /// let io = ServiceIo {
 ///     commands, transmit, returned, receive, receive_copied, output: &mut output, control,
 ///     network: &oer_protocols_ieee80211_runtime::station::NoNetwork, stop: oer_protocols_ieee80211_runtime::station::StopPolicy { drain: oer_portable_time::Duration::from_secs(1) },
+///     driver: &(),
 /// };
 /// assert!(application.try_command(ControlCommand::Stop).is_ok());
 /// assert!(matches!(io.commands.try_receive(), Some(ServiceCommand::Stop)));
@@ -797,6 +799,7 @@ pub struct ServiceIo<
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
     N: Notifies = SameHart,
+    D: DriverTurn = (),
 > {
     /// The application's exclusive command receiver. Readiness does not
     /// remove a command; a simultaneous port fault leaves it in this queue.
@@ -821,6 +824,24 @@ pub struct ServiceIo<
     pub network: &'c S,
     /// The drain deadline of a stop no request timed.
     pub stop: StopPolicy,
+    /// The port's driver, which shares the service's task.
+    pub driver: &'c D,
+}
+
+/// The port driver beside the service on its executor: when it has work
+/// due, such as a transmit completion, the service tops up its open
+/// aggregates and yields at its next step, so the driver publishes them
+/// within one step of the station's work.
+pub trait DriverTurn {
+    /// Whether the driver has work due; asking may clear what it read.
+    fn due(&self) -> bool;
+}
+
+/// No driver to yield to.
+impl DriverTurn for () {
+    fn due(&self) -> bool {
+        false
+    }
 }
 
 /// How the service ended.
@@ -1448,6 +1469,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         timer: &impl Timer,
     ) -> oer_portable_memory::Placed<'out, ServiceCompleted<'p, 'id, B, C, S, GROUPS, O>> {
@@ -1543,6 +1565,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         timer: &impl Timer,
     ) -> ServiceCompleted<'p, 'id, B, C, S, GROUPS, O> {
@@ -1643,6 +1666,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         timer: &impl Timer,
         custody: &mut TerminalCustody<'id, B>,
@@ -1817,6 +1841,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         timer: &impl Timer,
     ) -> Result<
@@ -1962,6 +1987,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         timer: &impl Timer,
     ) -> Served<'id, B>
@@ -1984,6 +2010,22 @@ impl<
         loop {
             // One clock read serves the turn's step and pending receives.
             let turn = timer.now();
+            // The driver's due work comes first. Before a completion
+            // publishes the open aggregates, they take what the network
+            // queued: the next PPDU leaves as full as it can.
+            if io.driver.due() {
+                if self.data.accepts() && self.station.link().is_some() {
+                    B::span(ServiceSpan::Transmit, false);
+                    let _taken = self.send(turn, io);
+                    B::span(ServiceSpan::Transmit, true);
+                    data_taken = true;
+                }
+                B::span(ServiceSpan::Extend, false);
+                self.extend_open(phase);
+                B::span(ServiceSpan::Extend, true);
+                batch = 0;
+                yield_now().await;
+            }
             // A direct input changed nothing a step or a pending receive
             // takes: both run again at the deadline, after any other input,
             // or after `MAX_WAITING_EVENT_STEPS` inputs.
@@ -2333,6 +2375,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> Taken {
         // The TIDs of the MSDUs taken, each once.
@@ -2440,6 +2483,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> Next<'id, B>
     where
@@ -2705,6 +2749,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> Result<Attempted, StepFailure<'id, B>>
     where
@@ -2895,6 +2940,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> Result<(), ContractFault<'id, B>> {
         match follow {
@@ -2971,6 +3017,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) {
         while let Some(notice) = arbiter.poll_notice(now) {
@@ -3044,6 +3091,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> Result<Taken, Served<'id, B>>
     where
@@ -3099,6 +3147,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> Result<bool, StepFailure<'id, B>>
     where
@@ -3155,6 +3204,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> EventServed<'id, B>
     where
@@ -3202,6 +3252,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> EventServed<'id, B>
     where
@@ -3263,6 +3314,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> bool
     where
@@ -3300,6 +3352,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
     ) -> (Option<<B::Types<'id> as PhaseTypes<'id>>::RxBuffer>, Taken)
     where
@@ -3407,6 +3460,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         frame: &[u8],
         plan: &MsduPlan,
@@ -3444,6 +3498,7 @@ impl<
             RX_DEPTH,
             COMMAND_DEPTH,
             impl Notifies,
+            impl DriverTurn,
         >,
         lent: B::LentRx,
         plan: MsduPlan,
@@ -4528,6 +4583,7 @@ fn station_action<
         RX_DEPTH,
         COMMAND_DEPTH,
         impl Notifies,
+        impl DriverTurn,
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,

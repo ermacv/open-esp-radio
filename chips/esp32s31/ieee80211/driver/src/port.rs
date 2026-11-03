@@ -542,6 +542,28 @@ pub struct PortParts<D: Device<B>, const B: usize, O: Observations> {
     pub observations: O,
 }
 
+/// Whether the driver has a turn due, for a station task that polls the
+/// driver itself: a front or body call asked for one, or transmit or TBTT
+/// facts wait. Its deadlines and every other wake reach that task's own
+/// poll of the driver.
+pub struct DriverProbe<D: Device<B>, const B: usize> {
+    storage: &'static PortStorage<D, B>,
+}
+impl<D: Device<B>, const B: usize> Clone for DriverProbe<D, B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<D: Device<B>, const B: usize> Copy for DriverProbe<D, B> {}
+impl<D: Device<B>, const B: usize> DriverProbe<D, B> {
+    /// Whether the driver has a turn due; taking it clears the ask.
+    pub fn due(&self) -> bool {
+        self.storage
+            .device()
+            .map_or(true, |device| device.events_pending())
+    }
+}
+
 pub struct Esp32s31Backend<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     storage: &'static PortStorage<D, B>,
     state: BackendState<D, B, O>,
@@ -577,6 +599,13 @@ enum BackendState<D: Device<B>, const B: usize, O: Observations> {
     Running,
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Esp32s31Backend<Id, D, B, O> {
+    /// What tells whether this installation's driver has a turn due.
+    pub fn probe(&self) -> DriverProbe<D, B> {
+        DriverProbe {
+            storage: self.storage,
+        }
+    }
+
     /// The aggregates this port sends: up to [`TX_AMPDU_SUBFRAMES`]
     /// subframes, through [`AmpduPhase`] of either interface.
     pub const AMPDU: Option<AmpduCapabilities> =

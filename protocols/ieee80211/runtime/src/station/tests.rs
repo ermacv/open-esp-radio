@@ -1254,6 +1254,7 @@ where
                 stop: StopPolicy {
                     drain: Duration::from_secs(1),
                 },
+                driver: &(),
             };
             let script = self.script;
             let script = async move {

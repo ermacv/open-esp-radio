@@ -385,6 +385,16 @@ pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities
 pub struct Body<W: Binding> {
     runner: ServiceRunner<W>,
     profile: Profile<W>,
+    driver: DriverYield<W>,
+}
+
+/// The driver beside the station on its executor, as the service sees it:
+/// the station yields to it when its probe says it has work due.
+pub(crate) struct DriverYield<W: Binding>(radio::Probe<W>);
+impl<W: Binding> DriverTurn for DriverYield<W> {
+    fn due(&self) -> bool {
+        self.0.due()
+    }
 }
 
 type Service<'id, W> = Runner<
@@ -415,6 +425,7 @@ type Io<'c, W> = ServiceIo<
     { crate::RX_DEPTH },
     2,
     Ch<W>,
+    DriverYield<W>,
 >;
 /// The channels' notify types of `W`'s station.
 type Ch<W> = <<W as Binding>::Notifies as crate::Notifies>::Channels;
@@ -545,7 +556,11 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
         W::Id: 'id,
         'id: 'p,
     {
-        let Body { runner, profile } = self;
+        let Body {
+            runner,
+            profile,
+            driver,
+        } = self;
         let ServiceRunner {
             config,
             connection,
@@ -582,6 +597,7 @@ impl<W: Binding> rp::PortBody<W::Id, Backend<W::Id, W>> for Body<W> {
             output: &mut output,
             network: network_stop,
             stop,
+            driver: &driver,
         };
         let done = running
             .future(|| running_future::<W>(service, completed.uninit(), owner, &mut io))
@@ -619,7 +635,16 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
         .unwrap_or_else(|error| W::fail(InitializationError::Request(error)));
     runner.frontend = poster;
     let exit = match front {
-        Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
+        Ok((front, probe)) => match rp::run_port(
+            front,
+            Body {
+                runner,
+                profile,
+                driver: DriverYield(probe),
+            },
+        )
+        .await
+        {
             rp::PortEnd::Uninstalled {
                 joined,
                 output,

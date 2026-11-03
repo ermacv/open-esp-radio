@@ -534,8 +534,10 @@ pub struct StationRunner<W: Binding> {
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
-    pub(crate) frontend:
-        oer_portable_memory::Poster<(), Result<radio::Front<W>, InitializationError>>,
+    pub(crate) frontend: oer_portable_memory::Poster<
+        (),
+        Result<(radio::Front<W>, radio::Probe<W>), InitializationError>,
+    >,
     pub(crate) config: Config,
     pub(crate) connection: ServiceConnection<'static, W::Notifies, crate::TxMemory>,
     pub(crate) storage: &'static mut service::ServiceStorage<W>,
