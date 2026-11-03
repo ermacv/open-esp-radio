@@ -498,6 +498,19 @@ fn millis(ms: u32) -> u64 {
     u64::from(ms).saturating_mul(1000)
 }
 
+/// Where a UDP payload starts within a 4-octet word of the station's
+/// word-aligned transmit buffer: after the Ethernet payload's offset 42
+/// (the longest data MPDU header), the IPv4 header's 20 octets and the UDP
+/// header's 8, at 70.
+const PAYLOAD_LANE: usize = 2;
+const SOURCE_LEN: usize = MAX_PAYLOAD as usize + PAYLOAD_LANE;
+
+/// The datagrams' source, word-aligned: its octets from [`PAYLOAD_LANE`] lie
+/// in the same lanes of their words as the payload the socket copies them
+/// to, so the copy moves whole words.
+#[repr(C, align(4))]
+struct Source([u8; SOURCE_LEN]);
+
 /// Send `transmit`'s datagrams from `begin` until `end`: paced to its rate,
 /// or as fast as the socket takes them.
 async fn send(
@@ -509,9 +522,13 @@ async fn send(
     sent: &mut Sent,
 ) {
     let peer = SocketAddr::from((Ipv4Addr::from(transmit.peer), transmit.peer_port));
-    let mut buffer = [0; MAX_PAYLOAD as usize];
+    let mut source = Source([0; SOURCE_LEN]);
     // The start's payload was validated against the buffer.
-    let Some(datagram) = buffer.get_mut(..usize::from(transmit.payload)) else {
+    let Some(datagram) = source
+        .0
+        .get_mut(PAYLOAD_LANE..)
+        .and_then(|lane| lane.get_mut(..usize::from(transmit.payload)))
+    else {
         return;
     };
     match Schedule::new(begin, end, transmit.payload, transmit.rate_bps) {
@@ -520,18 +537,52 @@ async fn send(
                 let now = now_us();
                 match write(datagram, run, sent.datagrams, now) {
                     Some(datagram) => match socket.try_send_to(datagram, peer) {
-                        Ok(()) => taken(sent, datagram.len(), now),
+                        Ok(()) => {
+                            taken(sent, datagram.len(), now);
+                            true
+                        }
                         Err(TryError::WouldBlock) => {
                             sent.refused = sent.refused.saturating_add(1);
+                            false
                         }
-                        Err(TryError::Other(_)) => sent.failed = sent.failed.saturating_add(1),
+                        // The datagram is lost; its time passes.
+                        Err(TryError::Other(_)) => {
+                            sent.failed = sent.failed.saturating_add(1);
+                            true
+                        }
                     },
-                    None => sent.failed = sent.failed.saturating_add(1),
+                    None => {
+                        sent.failed = sent.failed.saturating_add(1);
+                        true
+                    }
                 }
             });
             match next {
                 Next::Yield => yield_now().await,
                 Next::Wait(at) => wait_until(at).await,
+                // The socket had no room: the due datagram waits for it,
+                // as an application's send does.
+                Next::Blocked => {
+                    let Some(datagram) = write(datagram, run, sent.datagrams, now_us()) else {
+                        sent.failed = sent.failed.saturating_add(1);
+                        sent.missed = schedule.missed();
+                        return;
+                    };
+                    match select(socket.send_to(datagram, peer), wait_until(end)).await {
+                        Either::First(result) => {
+                            let now = now_us();
+                            match result {
+                                Ok(()) => taken(sent, datagram.len(), now),
+                                Err(_) => sent.failed = sent.failed.saturating_add(1),
+                            }
+                            schedule.taken(now);
+                        }
+                        Either::Second(()) => {
+                            sent.missed = schedule.missed();
+                            return;
+                        }
+                    }
+                }
                 Next::Done => {
                     sent.missed = schedule.missed();
                     return;

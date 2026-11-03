@@ -199,12 +199,14 @@ pub struct Sent {
     /// Datagrams the socket took, and their UDP payload bytes.
     pub datagrams: u64,
     pub bytes: u64,
-    /// Sends the socket refused for want of room; the datagram was dropped.
+    /// Paced sends the socket had no room for at once; the datagram then
+    /// waited for room.
     pub refused: u64,
     /// Sends that failed otherwise.
     pub failed: u64,
     /// Paced datagrams the window held that were never sent: the image
-    /// reached their time only after the window ended.
+    /// reached their time only after the window ended, or waited for room
+    /// past them.
     pub missed: u64,
     pub first_us: Option<u64>,
     pub last_us: Option<u64>,
