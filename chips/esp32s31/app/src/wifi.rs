@@ -101,6 +101,8 @@ oer_chips_family_executor::tasks! {
 
 /// The station's start: what its runner needs from the boot.
 pub(crate) struct StationStart {
+    /// The MAC driver the runner's task polls beside it.
+    driver: Driver,
     pub(crate) runner: wifi::StationRunner<binding::Binding>,
     config: wifi::Config,
     address: [u8; 6],
@@ -269,15 +271,50 @@ async fn radio_actor(actor: &'static mut Actor) {
 /// The MAC driver, polled on the station's executor.
 pub(crate) type Driver = wifi::Driver<binding::Binding>;
 
-/// The MAC driver's task, on the station's executor.
-pub(crate) async fn drive(driver: Driver) {
-    observed!(Driver, driver.run()).await;
+/// The Wi-Fi data path's task, as the archive's connected data path: one
+/// task polls the MAC driver and the station's runner, each wake both; the
+/// driver's turn checks first whether the wake brought it anything.
+pub(crate) async fn serve_station(start: StationStart) {
+    let (driver, start) = start.split();
+    embassy_futures::join::join(observed!(Driver, driver.run()), station(start)).await;
 }
 
-/// The station runner's task: an ordinary stop ends it, every other exit
-/// records and resets.
-pub(crate) async fn serve_station(start: StationStart) {
-    let StationStart {
+impl StationStart {
+    fn split(self) -> (Driver, StationParts) {
+        let Self {
+            driver,
+            runner,
+            config,
+            address,
+            nonces,
+            aes,
+        } = self;
+        (
+            driver,
+            StationParts {
+                runner,
+                config,
+                address,
+                nonces,
+                aes,
+            },
+        )
+    }
+}
+
+/// The station's start without its driver.
+struct StationParts {
+    runner: wifi::StationRunner<binding::Binding>,
+    config: wifi::Config,
+    address: [u8; 6],
+    nonces: &'static mut wifi::NonceSource,
+    aes: oer_chips_esp32s31_compose::crypto::AesEngine,
+}
+
+/// The station runner: an ordinary stop ends it, every other exit records
+/// and resets.
+async fn station(start: StationParts) {
+    let StationParts {
         runner,
         config,
         address,
@@ -691,8 +728,8 @@ impl Station {
             return Err(Error::AlreadyStarted);
         }
         boot.urgent = Some(urgent);
-        boot.pending.driver = Some(runners.driver);
         boot.pending.station = Some(StationStart {
+            driver: runners.driver,
             runner: runners.station,
             config: config.chip,
             address,

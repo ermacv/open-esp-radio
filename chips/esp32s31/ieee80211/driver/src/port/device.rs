@@ -458,6 +458,14 @@ where
         }
         Poll::Pending
     }
+    fn events_pending(&self) -> bool {
+        self.tx_pending != 0
+            || self.tbtt_pending
+            || self
+                .session
+                .as_ref()
+                .map_or(true, |session| session.events_pending())
+    }
     fn receive_due(&mut self) -> bool {
         !self.cut
             && !self.pausing

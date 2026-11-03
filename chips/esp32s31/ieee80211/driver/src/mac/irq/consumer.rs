@@ -366,6 +366,16 @@ impl<E: SignalExecutor> IrqConsumer<'_, E> {
         Ok(self.storage.receive.has_pending()? || self.storage.signal.has_pending()?)
     }
 
+    /// Whether facts but the receive ones (TX completion and timeout,
+    /// color, masking) wait, without taking them.
+    ///
+    /// # Errors
+    ///
+    /// The caller runs outside the signal's executor.
+    pub fn mac_pending(&self) -> Result<bool, ForeignContext> {
+        self.storage.signal.has_pending()
+    }
+
     /// # Errors
     ///
     /// The caller runs outside the signal's executor; the facts stay.

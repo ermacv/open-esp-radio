@@ -267,3 +267,17 @@ fn notification_takes_one_registration_and_releases_it_after_the_callback() {
     assert_eq!(observer.calls.load(Ordering::Relaxed), 2);
     assert_eq!(Arc::strong_count(&observer), 2);
 }
+
+#[test]
+fn a_notification_is_taken_once_even_without_a_registered_waker() {
+    let waker = PriorityWaker::new();
+    assert!(!waker.take_notified());
+    waker.wake();
+    assert!(waker.take_notified());
+    assert!(!waker.take_notified());
+    let (wakes, task) = task();
+    waker.register(&task);
+    waker.wake();
+    assert_eq!(count(&wakes), 1);
+    assert!(waker.take_notified());
+}

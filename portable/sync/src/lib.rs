@@ -63,6 +63,9 @@ impl Slot {
 pub struct PriorityWaker {
     slots: [Slot; 2],
     active: AtomicBool,
+    /// A notification since the consumer last took one
+    /// ([`Self::take_notified`]).
+    notified: AtomicBool,
 }
 impl PriorityWaker {
     /// Create an empty notification cell.
@@ -70,6 +73,7 @@ impl PriorityWaker {
         Self {
             slots: [const { Slot::new() }; 2],
             active: AtomicBool::new(false),
+            notified: AtomicBool::new(false),
         }
     }
     fn slot(&self, index: bool) -> &Slot {
@@ -108,7 +112,14 @@ impl PriorityWaker {
     }
     /// Notify the current consumer after publishing its input.
     pub fn wake(&self) {
+        self.notified.store(true, Ordering::Release);
         self.begin_wake().fire();
+    }
+    /// Whether a notification came since the last call: a consumer polled
+    /// for other reasons as well skips its work when none came and its
+    /// other inputs are idle.
+    pub fn take_notified(&self) -> bool {
+        self.notified.swap(false, Ordering::AcqRel)
     }
 }
 struct Waking<'a>(&'a Slot);

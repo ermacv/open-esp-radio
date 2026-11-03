@@ -323,6 +323,32 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let (transmitter, descriptors) = transmitter.zip(descriptors)?;
         Some((transmitter, descriptors, observations?))
     }
+    /// Whether the driver is between steady states (starting, stopping,
+    /// configuring, closing, a command in hand): its every wake then takes
+    /// a whole turn.
+    pub(super) fn busy(&self, held: &Held<'_, 'id, Id, D, B, O>) -> bool {
+        !held.enabled.get()
+            || !held.want_enabled.get()
+            || self.transition.is_some()
+            || self.configuring.is_some()
+            || self.closing.is_some()
+            || self.pending_command.is_some()
+            || !held.commands.empty()
+    }
+    /// The turn of a wake that brought the driver nothing: the network's
+    /// returned units go back to the ring, and the body hears of ring work.
+    pub(super) fn idle_turn(
+        &mut self,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        device: &mut D,
+    ) -> Result<(), Fault> {
+        settle_lent(&held.storage.shared.network, held.rx_out, device)?;
+        if device.receive_due() {
+            held.receive_due.set(true);
+            held.storage.shared.wake_body();
+        }
+        Ok(())
+    }
     pub(super) fn deadline(&mut self, held: &Held<'_, 'id, Id, D, B, O>) -> Result<Instant, Fault> {
         // The clock sample waits for a start in flight; its own bound wakes
         // the driver meanwhile.
@@ -828,8 +854,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // interrupt's poll counts them.
         let network = &held.storage.shared.network;
         let short = network.held() >= D::LENT_RX / 2 && network.want_units(cx);
+        // A notification, not the bare waker: the driver's turn checks it
+        // before its work.
         if again || served_tx || short {
-            cx.waker().wake_by_ref();
+            held.storage.shared.driver.wake();
         }
         // A configuration barrier waits for its role's published aggregates
         // as the core waits for its MPDUs.

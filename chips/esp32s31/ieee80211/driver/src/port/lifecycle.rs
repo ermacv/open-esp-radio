@@ -367,6 +367,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             };
             let timer = self.timer.clone();
             let mut delay = core::pin::pin!(timer.wait_until(deadline));
+            // A new deadline's first poll takes a whole turn.
+            let mut force = true;
             let done = poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
                 if storage.shared.poisoned.is_requested() {
@@ -420,6 +422,31 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                             return Poll::Pending;
                         }
                     }
+                }
+                // The task polls the driver beside the station: a wake that
+                // brought the driver no notification, fact or deadline, in a
+                // steady state, takes only the idle turn.
+                let due = core::mem::take(&mut force)
+                    || storage.shared.driver.take_notified()
+                    || driver().map_or(true, |state| state.busy(held))
+                    || storage
+                        .device()
+                        .map_or(true, |device| device.events_pending());
+                if !due {
+                    let idle = storage
+                        .device()
+                        .and_then(|mut device| driver()?.idle_turn(held, &mut **device));
+                    if let Err(cause) = idle {
+                        storage.poison(cause);
+                        retire.request_failure(
+                            oer_protocols_radio_port::LifecycleError::StopUnconfirmed,
+                        );
+                        return Poll::Pending;
+                    }
+                    if delay.as_mut().poll(cx).is_ready() {
+                        return Poll::Ready(false);
+                    }
+                    return Poll::Pending;
                 }
                 // The deadline reads the device itself, after this borrow.
                 let next = storage
