@@ -885,9 +885,11 @@ The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
 ## Firmware and platform code below the boundary
 
 `oer-chips-family-executor::port_slot` binds a nominal port identity to one
-static allocation. `declare_port_slot!` irreversibly claims its private
-`StaticCell` before constructing `SlotClaim<StaticId<Declaration>>` at one
-unsafe site. The claim has only invariant `PhantomData`; its private safe
+static allocation. `declare_port_slot!` and `declare_installations!` each
+irreversibly claim their private `StaticCell` before constructing
+`SlotClaim<StaticId<Declaration>>` at one unsafe site; the second turns the
+claim at once into the identity's `Installations`, the minting authority of
+its successive installations. The claim has only invariant `PhantomData`; its private safe
 constructor remains inside the portable contract. The declaration must
 never issue a second authority for the same type, including after software
 reset or quarantine, because owned queue permissions rely on that identity

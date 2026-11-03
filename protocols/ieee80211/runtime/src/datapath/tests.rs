@@ -1236,7 +1236,7 @@ fn a_reinstall_in_place_runs_on_the_placed_port_and_a_refusal_leaves_the_actor()
         assert_eq!(
             actor.reinstall_in_place(|_| {
                 seen += 1;
-                Err("refused")
+                Err::<(), _>("refused")
             }),
             Err("refused")
         );

@@ -1286,6 +1286,13 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
         )
     }
 
+    /// End this installation's bank and keep only the station's
+    /// configuration and callbacks, for a station on another installation's
+    /// owners; every owner of this installation drops with the bank.
+    pub fn into_config(self) -> StaConfig<K, C> {
+        self.config
+    }
+
     /// Drain original accepted requests before the one lifecycle notice.
     pub fn poll_output(&mut self) -> Option<StaFinalOutput<'id, T::ConfigurationPath>> {
         self.commands

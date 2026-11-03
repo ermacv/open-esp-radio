@@ -637,6 +637,45 @@ pub enum ReleaseCause {
     /// read, and nothing is reused.
     Deadline,
 }
+/// Why the station's lifecycle, or the datapath actor under it, ended
+/// with a cause the image records before it resets. A restart of the
+/// station never ends here: it reinstalls the port and builds the service
+/// again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleFailure {
+    /// The radio did not start on its first channel.
+    StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused),
+    /// A stop proved nothing by its deadline: what was still out.
+    StopUnconfirmed(oer_protocols_ieee80211_runtime::datapath::StopObserved),
+    /// A retune's stop proved nothing.
+    RetuneUnconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
+    /// The data port broke its contract: its named fault.
+    Port(BackendFault),
+    /// The datapath actor broke its own contract.
+    Actor(oer_protocols_ieee80211_runtime::datapath::ActorViolation),
+    /// The actor returned an owner the lifecycle did not send.
+    Contract(oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation),
+    /// The port did not reinstall after the station's restart.
+    Reinstall(ReinstallCause),
+    /// The datapath task's news came out of its order.
+    Mailbox,
+}
+/// Why the port did not reinstall after the station's restart.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReinstallCause {
+    /// The stopped port still ran, faulted or held work.
+    NotRetired,
+    /// The TSF epoch repeated.
+    SameEpoch,
+    /// The port's channel named no Wi-Fi channel.
+    ChannelUnset,
+    /// The installation receipt was refused.
+    Receipt,
+    /// The retired driver kept its transmitter or a descriptor.
+    Resources,
+    /// The TSF epochs are used up.
+    Epochs,
+}
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;
 mod path;

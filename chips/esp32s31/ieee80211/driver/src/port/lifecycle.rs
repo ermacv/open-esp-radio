@@ -34,6 +34,60 @@ pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Obse
     pub gate: GateOpen<'p, Part<Id, 1>>,
     pub arbiter_authority: ArbiterAuthority<'p, Part<Id, 1>>,
 }
+/// The tokens of one installation a station's lifecycle takes: all but the
+/// receive Block Ack slots, whose agreements the datapath actor keeps, and
+/// the access point's, which a station-only composition leaves unused.
+pub struct StationTokens<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
+    pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
+    pub buffers: [Buffer<'p, Id, D, B, O>; TX_BUFFERS],
+    pub connection_epoch: Slot<'p, ConnectionEpochKind, Part<Id, 4>>,
+    pub station_association: core_mac::association::VacantStationAssociation<'p, CorePath<Id>>,
+    pub station_commands: InterfacePermissions<'p, Station, Part<Id, 8>>,
+    pub station_group_permission: keys::StaPermission<'p, Id>,
+    pub gate: GateOpen<'p, Part<Id, 1>>,
+    pub arbiter_authority: ArbiterAuthority<'p, Part<Id, 1>>,
+}
+/// An installation's receive Block Ack slots.
+pub type BlockAckSlots<'p, Id> = [association::BlockAckSlot<'p, BlockAcks, 8, Part<Id, 7>>; 8];
+impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    Resources<'p, Id, D, B, O>
+{
+    /// Split the installation's tokens for a station-only composition: the
+    /// receive Block Ack slots and the lifecycle's tokens. The access
+    /// point's tokens drop unused.
+    pub fn into_station(self) -> (BlockAckSlots<'p, Id>, StationTokens<'p, Id, D, B, O>) {
+        let Self {
+            tickets,
+            terminal_access,
+            buffers,
+            connection_epoch,
+            station_association,
+            access_point_association: _,
+            station_commands,
+            access_point_commands: _,
+            block_acks,
+            station_group_permission,
+            access_point_group_permission: _,
+            gate,
+            arbiter_authority,
+        } = self;
+        (
+            block_acks,
+            StationTokens {
+                tickets,
+                terminal_access,
+                buffers,
+                connection_epoch,
+                station_association,
+                station_commands,
+                station_group_permission,
+                gate,
+                arbiter_authority,
+            },
+        )
+    }
+}
 pub struct Queues<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: Option<Resources<'static, Id, D, B, O>>,
     held: HeldBacking<'static, Id, D, B, O>,

@@ -255,3 +255,24 @@ fn a_named_driver_fault_keeps_its_queue_and_operation_across_the_boundary() {
     assert_eq!(path.names(), &["QueueFull"]);
     assert_eq!(path.words(), &[3]);
 }
+
+#[test]
+fn a_lifecycle_failure_names_its_cause_and_keeps_its_observations() {
+    use oer_portable_diagnostics::DiagPath;
+    let reinstall = DiagPath::of(&LifecycleFailure::Reinstall(ReinstallCause::Epochs));
+    assert_eq!(reinstall.names(), ["Reinstall", "Epochs"]);
+    let stop = DiagPath::of(&LifecycleFailure::StopUnconfirmed(
+        oer_protocols_ieee80211_runtime::datapath::StopObserved {
+            port: None,
+            deadline: true,
+            arena_on_air: false,
+            frames_out: 2,
+        },
+    ));
+    assert_eq!(stop.names(), ["StopUnconfirmed"]);
+    assert_eq!(stop.words(), [1, 0, 2]);
+    let actor = DiagPath::of(&LifecycleFailure::Actor(
+        oer_protocols_ieee80211_runtime::datapath::ActorViolation::PairwiseCustody,
+    ));
+    assert_eq!(actor.names(), ["Actor", "PairwiseCustody"]);
+}

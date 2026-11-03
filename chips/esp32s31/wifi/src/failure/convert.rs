@@ -33,7 +33,7 @@ where
     }
 }
 
-pub(super) fn backend_fault(
+pub(crate) fn backend_fault(
     value: oer_chips_esp32s31_ieee80211_driver::port::Fault,
 ) -> BackendFault {
     use oer_chips_esp32s31_ieee80211_driver::port::Fault as Source;
@@ -826,4 +826,40 @@ pub(crate) fn still_active(
     error: oer_chips_esp32s31_hal::owner::maintenance::Error,
 ) -> ReleaseCause {
     ReleaseCause::StillActive(maintenance_error(error))
+}
+
+/// The terminal cause of a lifecycle's end; `None` for an ordinary stop
+/// and a restart, which the facade serves itself.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn lifecycle(
+    end: oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd<
+        oer_chips_esp32s31_ieee80211_driver::port::Fault,
+    >,
+) -> Option<LifecycleFailure> {
+    use oer_protocols_ieee80211_runtime::datapath::ActorFault;
+    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd as End;
+    Some(match end {
+        End::Stopped | End::Restart(_) => return None,
+        End::StartRefused(refused) => LifecycleFailure::StartRefused(refused),
+        End::StopUnconfirmed(observed) => LifecycleFailure::StopUnconfirmed(observed),
+        End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),
+        End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),
+        End::Faulted(ActorFault::Contract(violation)) => LifecycleFailure::Actor(violation),
+        End::Contract(violation) => LifecycleFailure::Contract(violation),
+    })
+}
+
+/// Why the port did not reinstall.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn reinstall(
+    refused: oer_chips_esp32s31_ieee80211_driver::port::ReinstallRefused,
+) -> ReinstallCause {
+    use oer_chips_esp32s31_ieee80211_driver::port::ReinstallRefused as Source;
+    match refused {
+        Source::NotRetired => ReinstallCause::NotRetired,
+        Source::SameEpoch => ReinstallCause::SameEpoch,
+        Source::ChannelUnset => ReinstallCause::ChannelUnset,
+        Source::Receipt => ReinstallCause::Receipt,
+        Source::Resources => ReinstallCause::Resources,
+    }
 }

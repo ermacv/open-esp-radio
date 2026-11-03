@@ -855,3 +855,18 @@ fn a_running_port_refuses_its_reinstall_and_keeps_running() {
         fixture.stop();
     });
 }
+
+#[test]
+fn only_a_stopped_port_releases_its_device() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        assert!(fixture.port.release().is_none());
+        fixture.stop();
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        // The fixture's transmit buffers go home before the retire checks.
+        drop(buffers);
+        assert!(port.release().is_some());
+    });
+}

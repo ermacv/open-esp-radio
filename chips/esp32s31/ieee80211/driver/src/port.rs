@@ -53,7 +53,7 @@ mod keys;
 mod lent;
 pub use lent::{LentNotifies, LentReceive, NetworkPeers, SameHart};
 mod lifecycle;
-pub use lifecycle::{InstallationPools, Resources};
+pub use lifecycle::{BlockAckSlots, InstallationPools, Resources, StationTokens};
 mod registration;
 pub use registration::{Registration, RegistrationError};
 mod phase;

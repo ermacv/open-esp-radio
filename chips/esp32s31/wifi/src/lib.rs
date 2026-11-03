@@ -9,7 +9,6 @@
     clippy::unimplemented,
     clippy::indexing_slicing
 )]
-#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 //! ESP32-S31 station composition. Installation owners stay in its runners.
 mod credentials;
 pub mod failure;
@@ -56,23 +55,25 @@ impl Notifies for SameHart {
 }
 
 /// The network end on another hart: `N` raises the network task's executor
-/// signal, `S` the station task's and `D` the radio driver's. No waker
-/// crosses harts; each signal wakes the one task that polls its ends.
-pub struct AcrossHarts<N, S, D>(core::marker::PhantomData<Three<N, S, D>>);
-/// The three notify types, named without owning a value of any.
-type Three<N, S, D> = fn() -> (N, S, D);
+/// signal, `A` the datapath actor's. The actor polls every station end of
+/// the network's channels, the network's stop answer and the lent units'
+/// returns; the station's lifecycle shares the actor's executor and talks
+/// to it in same-executor queues. No waker crosses harts; each signal wakes
+/// the one task that polls its ends.
+pub struct AcrossHarts<N, A>(core::marker::PhantomData<Two<N, A>>);
+/// The two notify types, named without owning a value of either.
+type Two<N, A> = fn() -> (N, A);
 
-impl<N, S, D> Notifies for AcrossHarts<N, S, D>
+impl<N, A> Notifies for AcrossHarts<N, A>
 where
     N: oer_portable_memory::QueueNotify + Copy + 'static,
-    S: oer_portable_memory::QueueNotify + Copy + 'static,
-    D: oer_portable_memory::QueueNotify + Copy + 'static,
+    A: oer_portable_memory::QueueNotify + Copy + 'static,
 {
-    type Channels = runtime::AcrossHarts<N, S>;
+    type Channels = runtime::AcrossHarts<N, A>;
     #[cfg(not(target_arch = "riscv32"))]
     type LentRx = Unlent;
     #[cfg(target_arch = "riscv32")]
-    type Lent = oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers<D, S>;
+    type Lent = oer_chips_esp32s31_ieee80211_driver::port::NetworkPeers<A, A>;
 }
 
 /// The channels' notify types of `N`.
@@ -513,16 +514,15 @@ impl<M> Channels<SameHart, M> {
         }
     }
 }
-impl<NW, SW, D, M> Channels<AcrossHarts<NW, SW, D>, M>
+impl<NW, SW, M> Channels<AcrossHarts<NW, SW>, M>
 where
     NW: oer_portable_memory::QueueNotify + Copy + 'static,
     SW: oer_portable_memory::QueueNotify + Copy + 'static,
-    D: oer_portable_memory::QueueNotify + Copy + 'static,
 {
     /// Channels whose network end ([`Network`], [`NetworkStopper`]) runs
     /// on another hart than the station: `network` raises the network
-    /// task's executor signal, `station` the station task's. Each wakes
-    /// the one task that polls that end.
+    /// task's executor signal, `station` the datapath actor's, which polls
+    /// every station end. Each wakes the one task that polls that end.
     pub const fn across_harts(network: NW, station: SW) -> Self {
         Self {
             network_stop: NetworkStopState::with(network, station),
@@ -573,14 +573,16 @@ impl<N: Notifies, M> Channels<N, M> {
             },
             Connection {
                 service: ServiceConnection {
-                    network_stop: &self.network_stop,
                     start: StartGuard(&self.start),
                     commands,
+                    runner,
+                },
+                actor: ActorConnection {
+                    network_stop: &self.network_stop,
                     transmit,
                     returned,
                     receive,
                     receive_copied,
-                    runner,
                 },
                 stop: StopGuard(&self.stop),
             },
@@ -595,14 +597,21 @@ impl<M> Default for Channels<SameHart, M> {
 /// The runner's ends of the channels and its duty to publish the exit.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 pub struct Connection<'a, N: Notifies, M> {
-    service: ServiceConnection<'a, N, M>,
+    service: ServiceConnection<'a, N>,
+    actor: ActorConnection<'a, N, M>,
     stop: StopGuard<'a, Exit>,
 }
+/// The station lifecycle's ends: its start, commands and control.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-struct ServiceConnection<'a, N: Notifies, M> {
-    network_stop: &'a NetworkStopState<N>,
+struct ServiceConnection<'a, N: Notifies> {
     start: StartGuard<'a>,
     commands: oer_portable_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
+    runner: runtime::RunnerControl<'a, Ch<N>>,
+}
+/// The datapath actor's ends of the network's channels.
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+struct ActorConnection<'a, N: Notifies, M> {
+    network_stop: &'a NetworkStopState<N>,
     transmit: oer_portable_memory::SlotReceiver<
         'a,
         Option<runtime::Outgoing<M>>,
@@ -619,7 +628,6 @@ struct ServiceConnection<'a, N: Notifies, M> {
         Net<N>,
         Station<N>,
     >,
-    runner: runtime::RunnerControl<'a, Ch<N>>,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -665,9 +673,9 @@ pub fn rx_counters() -> Option<WifiRxReport> {
 // The facade's own API, not aliases of backend or runtime modules.
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
-    Bell, Binding, Config, Driver, DriverExecutor, Event, Events, InitializationError,
+    Bell, Binding, Config, Datapath, DriverExecutor, Event, Events, InitializationError,
     InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
-    Storage, UnavailableCause, station,
+    Storage, station,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
@@ -680,21 +688,21 @@ macro_rules! bind_station {
    notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
- // task's signal, `station` the station task's, `driver` the driver's, each
- // a notify of the type it names.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,station:$st:ty=$station:expr,driver:$dt:ty=$driver:expr $(,)?} $(,)?})=>{
+ // task's signal, `actor` the datapath actor's, each a notify of the type
+ // it names.
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,across_harts:{network:$nt:ty=$network:expr,actor:$at:ty=$actor:expr $(,)?} $(,)?})=>{
   $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail}
-   notifies: $crate::AcrossHarts<$nt,$st,$dt>, storage: $crate::Storage::across_harts($network,$station,$driver));
+   notifies: $crate::AcrossHarts<$nt,$at>, storage: $crate::Storage::across_harts($network,$actor));
  };
  (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
-   oer_chips_family_executor::declare_port_slot!(pub slot:$crate::radio::Backend<Id,super::Binding>);
+   oer_chips_family_executor::declare_installations!(pub slot);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
     type Notifies=$notifies;type TxSupply=$tx_supply;
-    fn take_slot()->Option<&'static mut $crate::radio::Slot<Self>>{slot::take_static()}
+    fn take_installations()->Option<$crate::radio::Installations<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
    }
    pub fn storage()->&'static mut $crate::Storage<Binding>{
@@ -821,15 +829,11 @@ mod tests {
         let crate::Connection {
             service:
                 crate::ServiceConnection {
-                    network_stop: _,
                     start,
                     commands,
-                    transmit: _,
-                    returned: _,
-                    receive: _,
-                    receive_copied: _,
                     runner,
                 },
+            actor: _,
             stop,
         } = connection;
         assert!(matches!(

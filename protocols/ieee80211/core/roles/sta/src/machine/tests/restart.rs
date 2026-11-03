@@ -135,3 +135,15 @@ fn a_missing_place_is_retained_by_the_arbiter_and_cannot_form_a_restart_bank() {
         assert!(matches!(deferred, DeferredEapol::Empty));
     });
 }
+
+#[test]
+fn a_retired_bank_gives_back_its_configuration_and_callbacks_for_the_next_installation() {
+    installed(|mint| {
+        let (mut world, _) = wpa2_connected::<2>(mint);
+        let nonce_calls = world.station.config.callbacks.nonce_calls;
+        world.return_link();
+        let (bank, _places) = world.station.finish(StaDisconnectReason::Requested);
+        let config = bank.into_config();
+        assert_eq!(config.callbacks.nonce_calls, nonce_calls);
+    });
+}

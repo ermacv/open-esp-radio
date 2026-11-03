@@ -160,5 +160,35 @@ macro_rules! declare_port_slot {
     };
 }
 
+/// Declare one nominal static slot identity with an irreversible
+/// `take_static()` that claims the minting authority of its successive
+/// installations ([`contract::Installations`]). The first take returns the
+/// authority; every later take returns `None`.
+#[macro_export]
+macro_rules! declare_installations {
+    ($visibility:vis $name:ident) => {
+        $visibility mod $name {
+            /// The declaration's nominal identity tag.
+            pub enum Declaration {}
+            /// The identity every installation of this declaration shares.
+            pub type Id = $crate::port_slot::contract::StaticId<Declaration>;
+
+            static TAKEN: $crate::port_slot::StaticCell<()> = $crate::port_slot::StaticCell::new();
+
+            /// Take this declaration's minting authority once, with no
+            /// reset operation.
+            #[inline(never)]
+            pub fn take_static<P: $crate::port_slot::contract::PoolSet>(
+            ) -> Option<$crate::port_slot::contract::Installations<Id, P>> {
+                TAKEN.try_init(())?;
+                // SAFETY: StaticCell claimed this declaration's one take
+                // exactly once; no other claim with its type is issued.
+                let claim = unsafe { $crate::port_slot::static_claim::<Declaration>() };
+                Some($crate::port_slot::contract::Installations::claim(claim))
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests;

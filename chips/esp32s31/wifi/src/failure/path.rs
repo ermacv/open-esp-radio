@@ -382,3 +382,104 @@ impl DiagnosticPath for AggregateTxError {
         }
     }
 }
+
+impl DiagnosticPath for LifecycleFailure {
+    fn push_path(&self, path: &mut DiagPath) {
+        match self {
+            Self::StartRefused(refused) => {
+                path.name("StartRefused");
+                path.name(match refused {
+                    oer_protocols_ieee80211_contracts_port::StartRefused::Running => "Running",
+                    oer_protocols_ieee80211_contracts_port::StartRefused::Retune => "Retune",
+                    oer_protocols_ieee80211_contracts_port::StartRefused::Deadline => "Deadline",
+                    oer_protocols_ieee80211_contracts_port::StartRefused::Device => "Device",
+                });
+            }
+            Self::StopUnconfirmed(observed) => {
+                path.name("StopUnconfirmed");
+                path.word(u32::from(observed.deadline));
+                path.word(u32::from(observed.arena_on_air));
+                path.word(u32::from(observed.frames_out));
+                if let Some(port) = &observed.port {
+                    stop_unconfirmed(port, path);
+                }
+            }
+            Self::RetuneUnconfirmed(unconfirmed) => {
+                path.name("RetuneUnconfirmed");
+                stop_unconfirmed(unconfirmed, path);
+            }
+            Self::Port(fault) => {
+                path.name("Port");
+                fault.push_path(path);
+            }
+            Self::Actor(violation) => {
+                path.name("Actor");
+                path.name(actor_violation(*violation));
+            }
+            Self::Contract(violation) => {
+                path.name("Contract");
+                path.name(lifecycle_violation(*violation));
+                if let oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation::Returned(_) =
+                    violation
+                {
+                    path.truncated();
+                }
+            }
+            Self::Reinstall(cause) => {
+                path.name("Reinstall");
+                path.name(match cause {
+                    ReinstallCause::NotRetired => "NotRetired",
+                    ReinstallCause::SameEpoch => "SameEpoch",
+                    ReinstallCause::ChannelUnset => "ChannelUnset",
+                    ReinstallCause::Receipt => "Receipt",
+                    ReinstallCause::Resources => "Resources",
+                    ReinstallCause::Epochs => "Epochs",
+                });
+            }
+            Self::Mailbox => path.name("Mailbox"),
+        }
+    }
+}
+
+/// A port's unconfirmed stop: its cause, then what it still held.
+fn stop_unconfirmed(
+    unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
+    path: &mut DiagPath,
+) {
+    path.truncated();
+    let observations = unconfirmed.observations;
+    path.word(u32::from(observations.arena_on_air));
+    path.word(u32::from(observations.published));
+    path.word(u32::from(observations.queued));
+    path.word(u32::from(observations.configuring));
+}
+
+fn actor_violation(
+    violation: oer_protocols_ieee80211_runtime::datapath::ActorViolation,
+) -> &'static str {
+    use oer_protocols_ieee80211_runtime::datapath::ActorViolation as V;
+    match violation {
+        V::OutboxFull => "OutboxFull",
+        V::ArenaClaim => "ArenaClaim",
+        V::ArenaCompletion => "ArenaCompletion",
+        V::LinkMailbox => "LinkMailbox",
+        V::ParcelMissing => "ParcelMissing",
+        V::RetireRunning => "RetireRunning",
+        V::LinkReturn => "LinkReturn",
+        V::PairwiseCustody => "PairwiseCustody",
+        V::CutOverflow => "CutOverflow",
+        V::ReorderOverflow => "ReorderOverflow",
+    }
+}
+
+fn lifecycle_violation(
+    violation: oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation,
+) -> &'static str {
+    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation as V;
+    match violation {
+        V::Returned(_) => "Returned",
+        V::Missing => "Missing",
+        V::QueueFull => "QueueFull",
+        V::RetuneWithoutRequest => "RetuneWithoutRequest",
+    }
+}

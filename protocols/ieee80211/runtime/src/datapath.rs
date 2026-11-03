@@ -413,14 +413,18 @@ where
         >,
     O: ActorEvents,
 {
+    /// The actor holds more received units than the lifecycle's lane:
+    /// checked at monomorphization by every constructor.
+    const HOLDS_THE_LANE: () = {
+        if D::RX_HELD as usize <= LIFECYCLE_FRAMES {
+            panic!("the actor holds more received units than the lifecycle's lane");
+        }
+    };
+
     /// The actor of a fresh installation's `port`, its frames at the rates
     /// `rates` selects, its receive agreements in `receive`'s storage.
     pub fn new(port: D::Port, rates: S, receive: RxBlockAckView<'id, D::Types>, events: O) -> Self {
-        const {
-            if D::RX_HELD as usize <= LIFECYCLE_FRAMES {
-                panic!("the actor holds more received units than the lifecycle's lane");
-            }
-        };
+        let () = Self::HOLDS_THE_LANE;
         Self {
             port,
             rates,
@@ -475,11 +479,7 @@ where
         receive: RxBlockAckView<'id, D::Types>,
         events: O,
     ) -> oer_portable_memory::Placed<'s, Self> {
-        const {
-            if D::RX_HELD as usize <= LIFECYCLE_FRAMES {
-                panic!("the actor holds more received units than the lifecycle's lane");
-            }
-        };
+        let () = Self::HOLDS_THE_LANE;
         oer_portable_memory::Placed::init(storage, |place| {
             oer_portable_memory::init_in_place!(place, Self {
                 port: port,
@@ -535,6 +535,12 @@ where
         &self.port
     }
 
+    /// The port, for its owner once the run retired it: the actor no
+    /// longer calls it.
+    pub fn port_mut(&mut self) -> &mut D::Port {
+        &mut self.port
+    }
+
     /// The rate selection.
     pub const fn rates(&self) -> &S {
         &self.rates
@@ -581,13 +587,13 @@ where
     /// # Errors
     ///
     /// `reinstall`'s refusal; the actor stays as it was.
-    pub fn reinstall_in_place<E>(
+    pub fn reinstall_in_place<R, E>(
         &mut self,
-        reinstall: impl FnOnce(&mut D::Port) -> Result<(), E>,
-    ) -> Result<(), E> {
-        reinstall(&mut self.port)?;
+        reinstall: impl FnOnce(&mut D::Port) -> Result<R, E>,
+    ) -> Result<R, E> {
+        let installed = reinstall(&mut self.port)?;
         self.reinstalled();
-        Ok(())
+        Ok(installed)
     }
 
     /// The state a new installation starts from: it lends new arenas, so

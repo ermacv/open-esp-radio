@@ -641,22 +641,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         reusable
     }
 
-    /// End the stopped port's installations after the retire checks,
-    /// returning its device.
-    ///
-    /// # Errors
-    ///
-    /// The port, unchanged, while it runs, faulted or holds work.
-    #[expect(
-        clippy::result_large_err,
-        reason = "a refused port comes back by value to its owner"
-    )]
-    pub fn release(mut self) -> Result<&'static mut D, Self> {
+    /// End the stopped port's installations after the retire checks: its
+    /// device, for the owner's release. The port then holds no installation
+    /// a later call could run.
+    pub fn release(&mut self) -> Option<&mut D> {
         if !self.retirable() {
-            return Err(self);
+            return None;
         }
         let _reusable = self.retire_driver();
-        Ok(self.device)
+        Some(&mut *self.device)
     }
 
     fn check(&self) -> Result<(), Fault> {
