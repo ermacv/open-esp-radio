@@ -327,11 +327,25 @@ pub enum ServiceSpan {
     Transmit,
     /// A received buffer's return to the port.
     Recycle,
+    /// One pass of the data machine's owed attempts.
+    Attempt,
+    /// The open aggregates' growth by owed MPDUs.
+    Extend,
+    /// One MPDU's join to an open aggregate, its port call included.
+    Subframe,
+    /// The port's part of one MPDU's join to an open aggregate.
+    PortExtend,
+    /// The window and rate of the next aggregate.
+    Window,
+    /// A new aggregate's build and submission.
+    Submit,
+    /// An open aggregate's port builder.
+    Open,
 }
 
 impl ServiceSpan {
     /// Every span, each at the position of its number.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 16] = [
         Self::Step,
         Self::Pending,
         Self::Sources,
@@ -341,6 +355,13 @@ impl ServiceSpan {
         Self::Terminal,
         Self::Transmit,
         Self::Recycle,
+        Self::Attempt,
+        Self::Extend,
+        Self::Subframe,
+        Self::PortExtend,
+        Self::Window,
+        Self::Submit,
+        Self::Open,
     ];
 
     /// The span numbered `number`.
@@ -1973,7 +1994,9 @@ impl<
                     && (!self.data.attempts_wait() || self.pending.open.iter().any(Option::is_some))
                 {
                     B::span(ServiceSpan::Step, false);
+                    B::span(ServiceSpan::Attempt, false);
                     let attempted = self.attempt_data(turn, phase, io);
+                    B::span(ServiceSpan::Attempt, true);
                     B::span(ServiceSpan::Step, true);
                     match attempted {
                         Ok(Attempted::Nothing | Attempted::Submitted) => Next::Wait,
@@ -2513,7 +2536,10 @@ impl<
             }
             // Attempts that only went change nothing the step's other
             // parts take; a refused one runs them again.
-            match self.attempt_data(now, phase, io) {
+            B::span(ServiceSpan::Attempt, false);
+            let attempted = self.attempt_data(now, phase, io);
+            B::span(ServiceSpan::Attempt, true);
+            match attempted {
                 Ok(attempted) => progress |= attempted == Attempted::Followed,
                 Err(fault) => return Next::Failed(fault),
             }
@@ -2580,12 +2606,16 @@ impl<
                         break 'open false;
                     }
                 };
+                B::span(ServiceSpan::Open, false);
                 let mut station = phase.station();
                 let Some(mut aggregate) = station.open_ampdu(index) else {
+                    B::span(ServiceSpan::Open, true);
                     self.data.unbuilt(context, member, &mut self.events);
                     break 'open false;
                 };
+                B::span(ServiceSpan::Open, true);
                 loop {
+                    B::span(ServiceSpan::Subframe, false);
                     let Some(mpdu) = self.data.aggregate_mpdu(context, member) else {
                         self.data.unbuilt(context, member, &mut self.events);
                         break 'open false;
@@ -2604,20 +2634,28 @@ impl<
                     let refused = match source {
                         Err((mpdu, _)) => mpdu,
                         Ok(source) => {
-                            match <B::Types<'id> as TxBufferPool<'id, B::Large>>::extend_aggregate(
-                                &mut aggregate,
-                                source,
-                            ) {
+                            B::span(ServiceSpan::PortExtend, false);
+                            let extended =
+                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::extend_aggregate(
+                                    &mut aggregate,
+                                    source,
+                                );
+                            B::span(ServiceSpan::PortExtend, true);
+                            match extended {
                                 Ok(()) => match self.data.extend_aggregate(
                                     context,
                                     || Some(window),
                                     &mut self.events,
                                 ) {
                                     Some(next) => {
+                                        B::span(ServiceSpan::Subframe, true);
                                         member = next;
                                         continue;
                                     }
-                                    None => break 'open true,
+                                    None => {
+                                        B::span(ServiceSpan::Subframe, true);
+                                        break 'open true;
+                                    }
                                 },
                                 Err(refused) => member_back::<B>(refused.subframe),
                             }
@@ -2675,7 +2713,9 @@ impl<
         // depth and the one on the air; the limit is the service's, for
         // every data source it runs.
         'data: loop {
+            B::span(ServiceSpan::Extend, false);
             self.extend_open(phase);
+            B::span(ServiceSpan::Extend, true);
             // Without an owed MPDU and a free ticket Data has no
             // attempt: the turn asks for neither window nor link.
             let Some(window_tid) = self.data.attempt_tid() else {
@@ -2713,7 +2753,8 @@ impl<
                             .context
                             .access_category()
                             .select_mut(&mut self.pending.open) = Some(aggregate.ticket.index());
-                        break 'submitted submit_aggregate::<B, P, S, O, GROUPS>(
+                        B::span(ServiceSpan::Submit, false);
+                        let submitted = submit_aggregate::<B, P, S, O, GROUPS>(
                             now,
                             phase,
                             &link,
@@ -2726,6 +2767,8 @@ impl<
                             spacing,
                             aggregate,
                         );
+                        B::span(ServiceSpan::Submit, true);
+                        break 'submitted submitted;
                     }
                 };
                 let data::DataTransmitParts {
@@ -3940,6 +3983,24 @@ struct AggregateBanks<'s, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, 
 /// port aggregates at. The data machine asks only when an MPDU of `tid` is
 /// owed.
 fn aggregate_window<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
+    station: &PortStation<'id, B, C, GROUPS>,
+    rates: &S,
+    phase: &mut P,
+    tid: data::WmmUserPriority,
+) -> Option<data::AggregateWindow>
+where
+    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
+    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
+    C: StaCallbacks,
+{
+    B::span(ServiceSpan::Window, false);
+    let window = aggregate_window_of::<B, P, S, C, GROUPS>(station, rates, phase, tid);
+    B::span(ServiceSpan::Window, true);
+    window
+}
+
+fn aggregate_window_of<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
     station: &PortStation<'id, B, C, GROUPS>,
     rates: &S,
     phase: &mut P,

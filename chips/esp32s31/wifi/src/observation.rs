@@ -1062,7 +1062,7 @@ mod tests {
             round_trip(ServiceSpan { span, end: true });
         }
         assert_eq!(ServiceSpan::decode([0, 2]), None);
-        assert_eq!(ServiceSpan::decode([9, 0]), None);
+        assert_eq!(ServiceSpan::decode([16, 0]), None);
         assert_eq!(StationBeacon::decode([7, 1]), None);
         assert_eq!(TxRateSelected::decode([1, 0]), None);
         round_trip(StationTxMemory {
