@@ -17,13 +17,13 @@ use oer_protocols_ieee80211_wire::{
 use oer_protocols_radio_port::SlotIdentity;
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 
-pub const N: usize = 96;
+pub const N: usize = 64;
 pub const B: usize = crate::FRAME_CAPACITY;
 pub const S: usize = B;
 /// The receive units outside the ring at once: the station's 16 (its
 /// events and reorder window), the admission's critical reserve and the
-/// network's lent units. The other 64 of the 96 stay armed with the
-/// hardware, two Block Ack windows of margin, as in the archive.
+/// network's lent units. The other 32 of the 64 stay armed with the
+/// hardware, a Block Ack window of margin.
 pub const Q: usize = 32;
 const _: () = {
     if crate::RX_DEPTH < 2 * oer_chips_esp32s31_ieee80211_driver::port::RX_HELD {
