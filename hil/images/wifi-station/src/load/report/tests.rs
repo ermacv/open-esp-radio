@@ -109,11 +109,12 @@ fn pages_of_parts_start_at_their_number_and_hold_at_most_one_answer() {
     }
     let windows = parts(&start, &start);
     assert_eq!(windows.len(), PARTS);
-    assert_eq!(page(&windows, 0).parts.len(), MAX_PARTS);
-    assert_eq!(
-        page(&windows, MAX_PARTS as u8).parts.len(),
-        PARTS - MAX_PARTS
-    );
+    let mut from = 0;
+    while from < PARTS {
+        let expected = MAX_PARTS.min(PARTS - from);
+        assert_eq!(page(&windows, from as u8).parts.len(), expected);
+        from += expected;
+    }
     assert!(page(&windows, PARTS as u8).parts.is_empty());
 }
 
