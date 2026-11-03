@@ -513,10 +513,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             match served {
                 Ok(AmpduServed::Pending) => continue,
                 Ok(AmpduServed::Ended) => {
+                    let bare = self.open.get(index).is_some_and(Option::is_none)
+                        && self
+                            .queues
+                            .get(index)
+                            .is_some_and(heapless::Deque::is_empty);
                     if let Some(observations) = self.observations.as_mut() {
                         oer_portable_events::report(observations, || {
                             crate::lower_mac::TxEdge::Ended
                         });
+                        if bare {
+                            oer_portable_events::report(observations, || {
+                                crate::lower_mac::TxEdge::EndedBare
+                            });
+                        }
                     }
                 }
                 Err(error) => {

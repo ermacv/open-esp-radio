@@ -300,17 +300,24 @@ impl oer_portable_trace::Observer for Observer {
             counter.observe(now_us(), span.end, EPOCH.load(Ordering::Relaxed));
         }
         if let Some(edge) = Self::decoded::<E, station::DriverTxEdge>(event) {
-            let (ended, begun) = if edge.published {
-                (LibraryPart::TxGap, LibraryPart::TxAir)
-            } else {
-                (LibraryPart::TxAir, LibraryPart::TxGap)
+            let (ended, begun) = match edge.edge {
+                0 => (LibraryPart::TxAir, LibraryPart::TxGap),
+                1 => (LibraryPart::TxGap, LibraryPart::TxAir),
+                _ => (LibraryPart::TxBare, LibraryPart::TxBare),
             };
             let at = now_us();
             let epoch = EPOCH.load(Ordering::Relaxed);
+            if let Some(counter) = PART_COUNTERS.get(begun as usize) {
+                if ended == begun {
+                    counter.observe(at, false, epoch);
+                }
+            }
             if let Some(counter) = PART_COUNTERS.get(ended as usize) {
                 counter.observe(at, true, epoch);
             }
-            if let Some(counter) = PART_COUNTERS.get(begun as usize) {
+            if ended != begun
+                && let Some(counter) = PART_COUNTERS.get(begun as usize)
+            {
                 counter.observe(at, false, epoch);
             }
         }
