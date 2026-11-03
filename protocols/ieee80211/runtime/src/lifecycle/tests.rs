@@ -6,7 +6,6 @@
 
 use super::*;
 use core::cell::{Cell, RefCell};
-use core::convert::Infallible;
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::task::Waker;
@@ -23,7 +22,7 @@ use oer_protocols_ieee80211_contracts_port::{LowerMacBackend, ReturnedMpdu};
 use oer_protocols_ieee80211_core_arbiter::ArbiterPolicy;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::machine::{
-    GroupCapacity, StaConfig, StaSecurity, StationResources,
+    GroupCapacity, StaSecurity, StationResources,
 };
 use oer_protocols_ieee80211_core_security_rsn::{Pmk, PtkContext, frames::RsnTxFrame};
 use oer_protocols_ieee80211_testing_model::{
@@ -42,8 +41,8 @@ use crate::station::contract::{
 use crate::station::tests::{
     ANONCE, ASSOCIATION_REQUEST, AUTHENTICATION, BSSID, Callbacks, DATA, DEAUTHENTICATION, LOCAL,
     PMK, PROBE_REQUEST, SNONCE, SSID, ServiceContexts, TestConfig, association_response,
-    authentication_response, beacon, channel6, config, decrypted, eapol_frame, group_message1,
-    kind, message3, meta, network_frame, protected_data,
+    authentication_response, beacon, channel6, config, decrypted, eapol_frame, kind, message3,
+    meta, network_frame, protected_data, protected_group_message1,
 };
 use crate::station::{
     Control, ControlCommand, NetworkStop, NetworkStopLost, Outgoing, RX_COPIED_DEPTH, Received,
@@ -178,6 +177,7 @@ fn run_tasks(tasks: &mut [Task<'_>], clock: &VirtualClock, air: &ModelAir) {
 struct Heard {
     notices: RefCell<Vec<StaNotice>>,
     tx_refused: Cell<usize>,
+    refusals: RefCell<Vec<crate::station::contract::TransmitRefusal>>,
     completed: Cell<usize>,
 }
 
@@ -298,9 +298,14 @@ impl World<'_> {
     }
 
     async fn associate(&self, seen: &mut usize, protected: bool) {
+        self.associate_with(seen, beacon(protected), protected)
+            .await;
+    }
+
+    async fn associate_with(&self, seen: &mut usize, beacon: Vec<u8>, protected: bool) {
         self.station_command(StaCommand::Connect).await;
         self.sent(seen, PROBE_REQUEST).await;
-        self.air.receive(&beacon(protected), meta());
+        self.air.receive(&beacon, meta());
         let authentication = self.sent(seen, AUTHENTICATION).await;
         let response = authentication_response(&authentication.plaintext).unwrap();
         self.air.receive(&response, meta());
@@ -309,18 +314,7 @@ impl World<'_> {
     }
 
     async fn handshake(&self, seen: &mut usize) -> oer_protocols_ieee80211_core_security_rsn::Ptk {
-        let message1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
-        self.air.receive(&eapol_frame(message1.as_bytes()), meta());
-        self.sent(seen, DATA).await;
-        let ptk = Pmk::from_bytes(PMK).derive_ptk(
-            Akm::Psk,
-            PtkContext {
-                authenticator_address: BSSID,
-                supplicant_address: LOCAL,
-                authenticator_nonce: ANONCE,
-                supplicant_nonce: SNONCE,
-            },
-        );
+        let ptk = self.start_handshake(seen).await;
         self.air.receive(&message3(&ptk), meta());
         let message4 = self.sent(seen, DATA).await;
         assert_eq!(message4.key, None, "Message 4 goes unprotected");
@@ -332,7 +326,32 @@ impl World<'_> {
         ptk
     }
 
+    /// Message 1 and the station's Message 2: the derived key.
+    async fn start_handshake(
+        &self,
+        seen: &mut usize,
+    ) -> oer_protocols_ieee80211_core_security_rsn::Ptk {
+        let message1 = RsnTxFrame::<512>::message1(Akm::Psk, LOCAL, 1, ANONCE).unwrap();
+        self.air.receive(&eapol_frame(message1.as_bytes()), meta());
+        self.sent(seen, DATA).await;
+        Pmk::from_bytes(PMK).derive_ptk(
+            Akm::Psk,
+            PtkContext {
+                authenticator_address: BSSID,
+                supplicant_address: LOCAL,
+                authenticator_nonce: ANONCE,
+                supplicant_nonce: SNONCE,
+            },
+        )
+    }
+
     fn send_msdu(&self, destination: [u8; 6]) -> bool {
+        self.send_msdu_at(destination, 0)
+    }
+
+    /// The network stack sends an MSDU of user `priority`, if its queue
+    /// has room.
+    fn send_msdu_at(&self, destination: [u8; 6], priority: u8) -> bool {
         while let Ok(Some(_memory)) = self.returned.borrow_mut().try_receive_with(Option::take) {}
         let packet = network_frame(
             oer_protocols_ieee80211_wire::data::MsduParts {
@@ -341,7 +360,7 @@ impl World<'_> {
                 ether_type: 0x0800,
                 payload: &[0xab; 100],
             },
-            WmmUserPriority::new(0).unwrap(),
+            WmmUserPriority::new(priority).unwrap(),
         );
         self.stack
             .borrow_mut()
@@ -563,8 +582,9 @@ fn pair(
                 crate::station::ServiceOutput::Notice(notice) => {
                     heard.notices.borrow_mut().push(notice)
                 }
-                crate::station::ServiceOutput::TxRefused { .. } => {
-                    heard.tx_refused.set(heard.tx_refused.get() + 1)
+                crate::station::ServiceOutput::TxRefused { reason } => {
+                    heard.tx_refused.set(heard.tx_refused.get() + 1);
+                    heard.refusals.borrow_mut().push(reason);
                 }
                 crate::station::ServiceOutput::CommandCompleted(_) => {
                     heard.completed.set(heard.completed.get() + 1)
@@ -639,6 +659,10 @@ fn pair(
                 // The next installation under the same actor, and the
                 // service built again on its resources.
                 let mut minted = None;
+                #[expect(
+                    clippy::result_large_err,
+                    reason = "the model's refusal returns its port"
+                )]
                 let reinstalled = actor_now.reinstall(|port| {
                     port.reinstall(&mut installations)
                         .map(|install| {
@@ -810,6 +834,392 @@ fn a_wpa2_station_handshakes_through_the_actor_and_its_pairwise_key_comes_back_a
                     .is_none()
             );
             assert_eq!(air.pending_rx(), 0);
+        },
+    );
+}
+
+/// `config` with a second channel the scan visits.
+fn two_channels(mut config: TestConfig) -> TestConfig {
+    let channel1 = SupportedChannel::new(
+        oer_protocols_radio_regulatory::TEST_DOMAIN
+            .permit(
+                oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(
+                    oer_protocols_ieee80211_contracts_port::Channel::ghz2_4(
+                        1,
+                        oer_protocols_ieee80211_contracts_port::ChannelWidth::Mhz20,
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    config.0.channels.push(channel1).unwrap();
+    config
+}
+
+#[test]
+fn a_station_whose_radio_cannot_move_restarts_on_the_next_installation_without_a_reset() {
+    pair(
+        || two_channels(open()),
+        std::vec![
+            script(|world| {
+                Box::pin(async move {
+                    let mut seen = 0;
+                    world.station_command(StaCommand::Connect).await;
+                    world.sent(&mut seen, PROBE_REQUEST).await;
+                    // The scan's move to the next channel and the return
+                    // home are refused: the arbiter fails the station.
+                    world.air.refuse_enables(2);
+                })
+            }),
+            script(|world| {
+                Box::pin(async move {
+                    // The next installation's service joins on the same
+                    // air and carries data.
+                    let mut seen = world.air.sent().len();
+                    world.associate(&mut seen, false).await;
+                    world
+                        .notice(StaNotice::Connected {
+                            bssid: BSSID,
+                            channel: 6,
+                        })
+                        .await;
+                    assert!(world.send_msdu([0x02, 0, 0, 0, 0, 0x07]));
+                    world.sent(&mut seen, DATA).await;
+                    world.stop().await;
+                })
+            }),
+        ],
+        |ends, air| {
+            assert_eq!(ends.len(), 2);
+            let first = ends[0].lifecycle.as_ref().unwrap();
+            assert!(
+                matches!(
+                    first.end,
+                    LifecycleEnd::Restart(StationFailure::RetuneRefused(_))
+                ),
+                "{:?}",
+                first.end
+            );
+            assert!(!first.end.is_terminal(), "a failed station is no reset");
+            assert_eq!(ends[0].actor, Some(ActorEnd::Reinstall));
+            assert!(first.retired.rejected.is_none());
+            assert!(stopped(&ends[1..]));
+            assert_eq!(air.pending_rx(), 0);
+        },
+    );
+}
+
+#[test]
+fn steady_transmission_does_not_wake_the_lifecycle_per_ppdu() {
+    pair(
+        open,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate(&mut seen, false).await;
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                    })
+                    .await;
+                world.settle().await;
+                let wakes = world.lifecycle_wakes();
+                let before = world
+                    .air
+                    .sent()
+                    .iter()
+                    .filter(|frame| kind(frame) == DATA)
+                    .count();
+                for _ in 0..20 {
+                    assert!(world.send_msdu([0x02, 0, 0, 0, 0, 0x07]));
+                    world.settle().await;
+                    world.clock.advance(Duration::from_micros(500)).unwrap();
+                    world.air.clock_advanced();
+                    world.settle().await;
+                }
+                let data = world
+                    .air
+                    .sent()
+                    .iter()
+                    .filter(|frame| kind(frame) == DATA)
+                    .count();
+                assert_eq!(data - before, 20, "every MSDU went");
+                let woken = world.lifecycle_wakes() - wakes;
+                // The first MSDU tells the TID's traffic once; the later
+                // ones within the refresh span tell nothing.
+                assert!(woken <= 2, "{woken} lifecycle wakes for 20 PPDUs");
+                world.stop().await;
+            })
+        })],
+        |ends, _| assert!(stopped(ends)),
+    );
+}
+
+#[test]
+fn message4_waits_for_the_group_installations_terminal_through_the_actor() {
+    pair(
+        wpa2,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate(&mut seen, true).await;
+                let ptk = world.start_handshake(&mut seen).await;
+                let before = world.air.sent().len();
+                world.air.hold_group_commands(true);
+                world.air.receive(&message3(&ptk), meta());
+                world.settle().await;
+                assert_eq!(world.air.group_writes(), 0);
+                assert_eq!(world.air.sent().len(), before, "no M4 before the terminal");
+                assert!(world.heard.notices.borrow().is_empty());
+                world.air.hold_group_commands(false);
+                let message4 = world.sent(&mut seen, DATA).await;
+                assert_eq!(message4.key, None);
+                assert_eq!(world.air.group_writes(), 1);
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                    })
+                    .await;
+                world.stop().await;
+            })
+        })],
+        |ends, _| assert!(stopped(ends)),
+    );
+}
+
+#[test]
+fn a_group_rekey_installs_by_its_terminal_and_answers_under_the_links_key() {
+    pair(
+        wpa2,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate(&mut seen, true).await;
+                let ptk = world.handshake(&mut seen).await;
+                assert_eq!(world.air.group_writes(), 1);
+                world
+                    .air
+                    .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
+                let response = world.sent(&mut seen, DATA).await;
+                assert!(matches!(response.key, Some((_, true))), "{response:?}");
+                assert!(response.packet_number.is_some());
+                assert_eq!(world.air.group_writes(), 2);
+                world.stop().await;
+            })
+        })],
+        |ends, _| {
+            assert!(stopped(ends));
+            assert!(
+                ends[0]
+                    .lifecycle
+                    .as_ref()
+                    .unwrap()
+                    .retired
+                    .rejected
+                    .is_none()
+            );
+        },
+    );
+}
+
+#[test]
+fn the_actor_numbers_the_stations_frames_and_the_data_of_one_tid_without_a_gap() {
+    use crate::station::tests::{QOS_DATA, WMM, carries_eapol, qos_sequence};
+    pair(
+        wpa2,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                // Voice is closed, so the station's EAPOL goes as Video, in
+                // TID 5, as data of priority 5 does.
+                let mut wmm = WMM;
+                wmm[22] |= 0x10;
+                let mut beacon = beacon(true);
+                beacon.extend_from_slice(&wmm);
+                let mut seen = 0;
+                world.associate_with(&mut seen, beacon, true).await;
+                let ptk = world.handshake(&mut seen).await;
+                assert!(world.send_msdu_at([2, 0, 0, 0, 0, 9], 5));
+                let first = world.sent(&mut seen, QOS_DATA).await;
+                assert!(!carries_eapol(&first));
+                world
+                    .air
+                    .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
+                let response = world.sent(&mut seen, QOS_DATA).await;
+                assert!(carries_eapol(&response));
+                assert!(world.send_msdu_at([2, 0, 0, 0, 0, 9], 5));
+                let second = world.sent(&mut seen, QOS_DATA).await;
+                assert!(!carries_eapol(&second));
+                for frame in [&first, &response, &second] {
+                    assert_eq!(frame.plaintext[24] & 0x0f, 5, "TID 5");
+                    assert!(matches!(frame.key, Some((_, true))), "{frame:?}");
+                }
+                assert_eq!(qos_sequence(&response), qos_sequence(&first) + 1);
+                assert_eq!(qos_sequence(&second), qos_sequence(&response) + 1);
+                let numbers =
+                    [&first, &response, &second].map(|frame| frame.packet_number.unwrap());
+                assert!(
+                    numbers.windows(2).all(|pair| pair[0] < pair[1]),
+                    "{numbers:?}"
+                );
+                world.stop().await;
+            })
+        })],
+        |ends, _| assert!(stopped(ends)),
+    );
+}
+
+#[test]
+fn a_receive_agreement_answers_through_the_station_and_reorders_in_the_actor() {
+    use crate::station::tests::block_ack::{addba, data, ht_beacon, ht_config, response};
+    use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction;
+    pair(
+        ht_config,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate_with(&mut seen, ht_beacon(), false).await;
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                    })
+                    .await;
+                world.air.receive(&addba(7, 0, 4094, 0), meta());
+                let ack = world.sent(&mut seen, 0xd0).await;
+                assert!(matches!(
+                    response(&ack),
+                    BlockAckAction::AddbaResponse {
+                        dialog_token: 7,
+                        status: 0,
+                        tid: 0,
+                        ..
+                    }
+                ));
+                assert_eq!(world.air.receive_agreements().len(), 1);
+                world.air.receive(&data(4095, 0, 2), meta());
+                world.settle().await;
+                assert_eq!(world.delivered(), 0, "the hole holds the later frame");
+                world.air.receive(&data(4094, 0, 1), meta());
+                world.settle().await;
+                assert_eq!(world.delivered(), 2);
+                world.stop().await;
+            })
+        })],
+        |ends, air| {
+            assert!(stopped(ends));
+            assert_eq!(air.pending_rx(), 0);
+        },
+    );
+}
+
+#[test]
+fn a_transmit_agreement_names_the_exact_next_number_and_ends_idle() {
+    use crate::station::tests::block_ack::{
+        addba_response, ht_beacon, ht_config, response, tx_block_ack_config,
+    };
+    use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction;
+    pair(
+        || tx_block_ack_config(ht_config()),
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate_with(&mut seen, ht_beacon(), false).await;
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                    })
+                    .await;
+                assert!(world.send_msdu(BSSID));
+                let request = world.sent(&mut seen, 0xd0).await;
+                let BlockAckAction::AddbaRequest {
+                    dialog_token,
+                    tid: 0,
+                    starting_sequence,
+                    ..
+                } = response(&request)
+                else {
+                    panic!("an ADDBA Request of TID 0: {:?}", response(&request));
+                };
+                // The MSDU that started it took Sequence Number 0.
+                assert_eq!(starting_sequence.get(), 1);
+                world
+                    .air
+                    .receive(&addba_response(dialog_token, 0, 32), meta());
+                // The next MSDU takes the number the request named.
+                assert!(world.send_msdu(BSSID));
+                let next = world.sent(&mut seen, crate::station::tests::QOS_DATA).await;
+                assert_eq!(crate::station::tests::qos_sequence(&next), 1);
+                // No more data: the idle agreement ends with a DELBA.
+                let delba = world.sent(&mut seen, 0xd0).await;
+                assert!(
+                    matches!(response(&delba), BlockAckAction::Delba { tid: 0, .. }),
+                    "{:?}",
+                    response(&delba)
+                );
+                world.stop().await;
+            })
+        })],
+        |ends, _| assert!(stopped(ends)),
+    );
+}
+
+#[test]
+fn a_station_frame_the_port_refuses_comes_back_withdrawn_and_the_station_goes_on() {
+    pair(
+        open,
+        std::vec![script(|world| {
+            Box::pin(async move {
+                let mut seen = 0;
+                world.associate(&mut seen, false).await;
+                world
+                    .notice(StaNotice::Connected {
+                        bssid: BSSID,
+                        channel: 6,
+                    })
+                    .await;
+                world.settle().await;
+                // The port closes its admission: the Deauthentication ends
+                // withdrawn at its submission, and the station hears it as
+                // any withdrawn frame's end.
+                world.air.fail_after_terminals();
+                let before = world.air.sent().len();
+                world.station_command(StaCommand::Disconnect).await;
+                world
+                    .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
+                    .await;
+                assert_eq!(world.air.sent().len(), before, "nothing went on the air");
+                // Its retry, numbered on the link the station gave back
+                // meanwhile, is refused before the port as before.
+                assert!(
+                    world
+                        .heard
+                        .refusals
+                        .borrow()
+                        .iter()
+                        .all(|reason| *reason
+                            == crate::station::contract::TransmitRefusal::LinkChanged),
+                    "{:?}",
+                    world.heard.refusals.borrow()
+                );
+                world.stop().await;
+            })
+        })],
+        |ends, _| {
+            let completed = ends[0].lifecycle.as_ref().unwrap();
+            assert!(completed.retired.rejected.is_none());
+            assert!(
+                !matches!(
+                    completed.end,
+                    LifecycleEnd::Contract(_) | LifecycleEnd::Faulted(_)
+                ),
+                "{:?}",
+                completed.end
+            );
         },
     );
 }

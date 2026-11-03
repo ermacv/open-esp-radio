@@ -47,7 +47,7 @@ use oer_portable_memory::WakingSpscQueue;
 use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 
-mod block_ack;
+pub(crate) mod block_ack;
 mod contracts;
 use oer_protocols_ieee80211_testing_model::{
     AirFrame, MODEL_RX_EVENTS, ModelAck, ModelAir, ModelAnyBuffer, ModelBackend,
@@ -529,7 +529,7 @@ pub(crate) fn group_message1(
     eapol_frame(message.as_bytes())
 }
 
-fn protected_group_message1(
+pub(crate) fn protected_group_message1(
     ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
     replay: u64,
     key_id: u8,
@@ -2594,16 +2594,16 @@ fn beside_an_access_point_msdus_survive_an_absence() {
     });
 }
 
-const QOS_DATA: u16 = 0x0088;
+pub(crate) const QOS_DATA: u16 = 0x0088;
 
 /// A WMM Parameter element: the network is a QoS BSS.
-const WMM: [u8; 26] = [
+pub(crate) const WMM: [u8; 26] = [
     0xdd, 24, 0x00, 0x50, 0xf2, 0x02, 0x01, 0x01, 0x00, 0x00, 0x03, 0xa4, 0x00, 0x00, 0x27, 0xa4,
     0x00, 0x00, 0x42, 0x43, 0x5e, 0x00, 0x62, 0x32, 0x2f, 0x00,
 ];
 
 /// Whether `frame` is a protected QoS Data frame carrying EAPOL.
-fn carries_eapol(frame: &AirFrame) -> bool {
+pub(crate) fn carries_eapol(frame: &AirFrame) -> bool {
     kind(frame) == QOS_DATA && frame.plaintext.get(40..42) == Some(&[0x88, 0x8e][..])
 }
 
@@ -2691,7 +2691,7 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
 }
 
 /// The Sequence Number of a QoS Data frame.
-fn qos_sequence(frame: &AirFrame) -> u16 {
+pub(crate) fn qos_sequence(frame: &AirFrame) -> u16 {
     u16::from_le_bytes([frame.plaintext[22], frame.plaintext[23]]) >> 4
 }
 

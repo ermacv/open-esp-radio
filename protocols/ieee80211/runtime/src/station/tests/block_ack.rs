@@ -23,14 +23,14 @@ static HT_ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 
-fn ht_config() -> TestConfig {
+pub(crate) fn ht_config() -> TestConfig {
     let (mut configuration, security) = config(StaSecurity::Open);
     configuration.phy = PhyMode::Ht20;
     configuration.association = &HT_ASSOCIATION;
     (configuration, security)
 }
 
-fn ht_beacon() -> Vec<u8> {
+pub(crate) fn ht_beacon() -> Vec<u8> {
     let mut frame = beacon(false);
     frame.extend_from_slice(&HT);
     frame.extend_from_slice(&HT_ASSOCIATION.wmm);
@@ -40,7 +40,7 @@ fn ht_beacon() -> Vec<u8> {
     frame
 }
 
-fn management(body: &[u8]) -> Vec<u8> {
+pub(crate) fn management(body: &[u8]) -> Vec<u8> {
     let mut frame = std::vec![0; 24];
     frame[0] = 0xd0;
     frame[4..10].copy_from_slice(&LOCAL);
@@ -50,7 +50,7 @@ fn management(body: &[u8]) -> Vec<u8> {
     frame
 }
 
-fn addba(dialog: u8, tid: u8, start: u16, timeout: u16) -> Vec<u8> {
+pub(crate) fn addba(dialog: u8, tid: u8, start: u16, timeout: u16) -> Vec<u8> {
     management(
         &encode_addba_request(
             dialog,
@@ -64,7 +64,7 @@ fn addba(dialog: u8, tid: u8, start: u16, timeout: u16) -> Vec<u8> {
     )
 }
 
-fn delba(tid: u8, initiator: bool) -> Vec<u8> {
+pub(crate) fn delba(tid: u8, initiator: bool) -> Vec<u8> {
     let [a, b] = DelbaParameters::from_bytes([0; 2])
         .with_tid(tid)
         .unwrap()
@@ -73,7 +73,7 @@ fn delba(tid: u8, initiator: bool) -> Vec<u8> {
     management(&[3, 2, a, b, 37, 0])
 }
 
-fn data(sequence: u16, tid: u8, marker: u8) -> Vec<u8> {
+pub(crate) fn data(sequence: u16, tid: u8, marker: u8) -> Vec<u8> {
     let mut frame = std::vec![0; 26];
     frame[..2].copy_from_slice(&0x0288u16.to_le_bytes());
     frame[4..10].copy_from_slice(&LOCAL);
@@ -90,7 +90,7 @@ fn data(sequence: u16, tid: u8, marker: u8) -> Vec<u8> {
     frame
 }
 
-fn response(frame: &AirFrame) -> BlockAckAction {
+pub(crate) fn response(frame: &AirFrame) -> BlockAckAction {
     parse_block_ack_action(&frame.plaintext[24..]).unwrap()
 }
 
@@ -494,7 +494,7 @@ fn response_pressure_defers_management_without_overtaking_older_requests() {
 
 /// An HT station with a transmit originator whose agreements end after one
 /// idle second.
-fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig {
+pub(crate) fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig {
     configuration.tx_block_ack = Some(
         oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
             oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAckPolicy {
@@ -516,7 +516,7 @@ fn tx_block_ack_config((mut configuration, security): TestConfig) -> TestConfig 
     (configuration, security)
 }
 
-fn addba_response(dialog_token: u8, tid: u8, window: u16) -> Vec<u8> {
+pub(crate) fn addba_response(dialog_token: u8, tid: u8, window: u16) -> Vec<u8> {
     management(
         &oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
             dialog_token,
