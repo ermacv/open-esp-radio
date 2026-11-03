@@ -2007,25 +2007,35 @@ impl<
         let mut skipped = 0_u8;
         // An MSDU taken since the data machine's attempts last passed.
         let mut data_taken = false;
+        // The driver's due work comes first, as the archive's data path
+        // serves a TX completion within one unit of other work: before a
+        // completion publishes the open aggregates they take what the
+        // network queued, so the next PPDU leaves as full as it can, and
+        // the service yields; the task polls the driver first.
+        macro_rules! driver_first {
+            ($now:expr) => {
+                if io.driver.due() {
+                    if self.data.accepts() && self.station.link().is_some() {
+                        B::span(ServiceSpan::Transmit, false);
+                        let _taken = self.send($now, io);
+                        B::span(ServiceSpan::Transmit, true);
+                        data_taken = true;
+                    }
+                    B::span(ServiceSpan::Extend, false);
+                    self.extend_open(phase);
+                    B::span(ServiceSpan::Extend, true);
+                    batch = 0;
+                    yield_now().await;
+                }
+            };
+        }
         loop {
             // One clock read serves the turn's step and pending receives.
             let turn = timer.now();
             // The driver's due work comes first. Before a completion
             // publishes the open aggregates, they take what the network
             // queued: the next PPDU leaves as full as it can.
-            if io.driver.due() {
-                if self.data.accepts() && self.station.link().is_some() {
-                    B::span(ServiceSpan::Transmit, false);
-                    let _taken = self.send(turn, io);
-                    B::span(ServiceSpan::Transmit, true);
-                    data_taken = true;
-                }
-                B::span(ServiceSpan::Extend, false);
-                self.extend_open(phase);
-                B::span(ServiceSpan::Extend, true);
-                batch = 0;
-                yield_now().await;
-            }
+            driver_first!(turn);
             // A direct input changed nothing a step or a pending receive
             // takes: both run again at the deadline, after any other input,
             // or after `MAX_WAITING_EVENT_STEPS` inputs.
@@ -2065,6 +2075,7 @@ impl<
                 B::span(ServiceSpan::Step, true);
                 stepped
             };
+            driver_first!(turn);
             match stepped {
                 Next::Wait => {}
                 Next::Retune(pending) => return Served::Retune(pending),
@@ -2108,6 +2119,7 @@ impl<
                     Ok(taken) => settled = self.settled(arbiter, settled, taken),
                     Err(served) => return served,
                 }
+                driver_first!(turn);
                 event_steps = if took_event {
                     event_steps.saturating_add(1) % MAX_WAITING_EVENT_STEPS
                 } else {
@@ -2290,6 +2302,7 @@ impl<
                     }
                 }
             }
+            driver_first!(now);
             let transmit = if transmit && self.data.accepts() && self.station.link().is_some() {
                 B::span(ServiceSpan::Transmit, false);
                 let taken = self.send(now, io);
