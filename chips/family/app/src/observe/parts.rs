@@ -50,13 +50,6 @@ pub enum LibraryPart {
     Window,
     Submit,
     Open,
-    TxGap,
-    TxAir,
-    TxBare,
-    GateNotified,
-    GateBusy,
-    GateEvents,
-    GateIdle,
 }
 
 impl LibraryPart {
@@ -84,13 +77,6 @@ impl LibraryPart {
         LibraryPart::Window,
         LibraryPart::Submit,
         LibraryPart::Open,
-        LibraryPart::TxGap,
-        LibraryPart::TxAir,
-        LibraryPart::TxBare,
-        LibraryPart::GateNotified,
-        LibraryPart::GateBusy,
-        LibraryPart::GateEvents,
-        LibraryPart::GateIdle,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -118,19 +104,12 @@ impl LibraryPart {
             LibraryPart::Window => "window",
             LibraryPart::Submit => "submit",
             LibraryPart::Open => "open",
-            LibraryPart::TxGap => "tx-gap",
-            LibraryPart::TxAir => "tx-air",
-            LibraryPart::TxBare => "tx-bare",
-            LibraryPart::GateNotified => "gate-notified",
-            LibraryPart::GateBusy => "gate-busy",
-            LibraryPart::GateEvents => "gate-events",
-            LibraryPart::GateIdle => "gate-idle",
         }
     }
 }
 
 /// The library's parts.
-pub const LIBRARY_PARTS: usize = 30;
+pub const LIBRARY_PARTS: usize = 23;
 /// The parts an image names, after the library's.
 pub const IMAGE_PARTS: usize = 4;
 /// Every part: the library's, then the image's.

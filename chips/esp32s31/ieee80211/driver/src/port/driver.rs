@@ -323,12 +323,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let (transmitter, descriptors) = transmitter.zip(descriptors)?;
         Some((transmitter, descriptors, observations?))
     }
-    /// Report `edge` to the driver's observations.
-    pub(super) fn note(&mut self, edge: crate::lower_mac::TxEdge) {
-        if let Some(observations) = self.observations.as_mut() {
-            oer_portable_events::report(observations, || edge);
-        }
-    }
     /// Whether the driver is between steady states (starting, stopping,
     /// configuring, closing, a command in hand): its every wake then takes
     /// a whole turn.

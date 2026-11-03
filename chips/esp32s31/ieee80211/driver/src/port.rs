@@ -65,7 +65,7 @@ pub use buffer::*;
 pub use keys::{GroupKey, KeyIdentity, PairwiseKey, PortKeys};
 mod loan;
 mod owned;
-pub use crate::lower_mac::{ContentionDraw, Observations, TxEdge};
+pub use crate::lower_mac::{ContentionDraw, Observations};
 pub use phase::{Esp32s31Interface, Esp32s31Phase, Esp32s31Setup};
 pub use settings::SettingFault;
 

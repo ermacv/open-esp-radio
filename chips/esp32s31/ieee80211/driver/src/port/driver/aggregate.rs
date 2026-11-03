@@ -376,14 +376,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         };
         match core.publish_ampdu(device.hardware()?, buffer, plan) {
-            Ok(published) => {
-                if let Some(observations) = self.observations.as_mut() {
-                    oer_portable_events::report(observations, || {
-                        crate::lower_mac::TxEdge::Published
-                    });
-                }
-                self.keep_running(index, Running::Aggregate { pending, published })
-            }
+            Ok(published) => self.keep_running(index, Running::Aggregate { pending, published }),
             Err(crate::lower_mac::ampdu::AmpduStartError::Expired(expired)) => {
                 // Aged at the publication edge: nothing reached the hardware.
                 let msdus = expired.expired_msdus();
@@ -512,23 +505,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             });
             match served {
                 Ok(AmpduServed::Pending) => continue,
-                Ok(AmpduServed::Ended) => {
-                    let bare = self.open.get(index).is_some_and(Option::is_none)
-                        && self
-                            .queues
-                            .get(index)
-                            .is_some_and(heapless::Deque::is_empty);
-                    if let Some(observations) = self.observations.as_mut() {
-                        oer_portable_events::report(observations, || {
-                            crate::lower_mac::TxEdge::Ended
-                        });
-                        if bare {
-                            oer_portable_events::report(observations, || {
-                                crate::lower_mac::TxEdge::EndedBare
-                            });
-                        }
-                    }
-                }
+                Ok(AmpduServed::Ended) => {}
                 Err(error) => {
                     // The failed publication leaves its queue's place
                     // retained, never dropped.

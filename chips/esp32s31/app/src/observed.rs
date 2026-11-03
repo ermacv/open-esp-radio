@@ -299,32 +299,6 @@ impl oer_portable_trace::Observer for Observer {
         {
             counter.observe(now_us(), span.end, EPOCH.load(Ordering::Relaxed));
         }
-        if let Some(edge) = Self::decoded::<E, station::DriverTxEdge>(event) {
-            let (ended, begun) = match edge.edge {
-                0 => (LibraryPart::TxAir, LibraryPart::TxGap),
-                1 => (LibraryPart::TxGap, LibraryPart::TxAir),
-                2 => (LibraryPart::TxBare, LibraryPart::TxBare),
-                3 => (LibraryPart::GateNotified, LibraryPart::GateNotified),
-                4 => (LibraryPart::GateBusy, LibraryPart::GateBusy),
-                5 => (LibraryPart::GateEvents, LibraryPart::GateEvents),
-                _ => (LibraryPart::GateIdle, LibraryPart::GateIdle),
-            };
-            let at = now_us();
-            let epoch = EPOCH.load(Ordering::Relaxed);
-            if let Some(counter) = PART_COUNTERS.get(begun as usize) {
-                if ended == begun {
-                    counter.observe(at, false, epoch);
-                }
-            }
-            if let Some(counter) = PART_COUNTERS.get(ended as usize) {
-                counter.observe(at, true, epoch);
-            }
-            if ended != begun
-                && let Some(counter) = PART_COUNTERS.get(begun as usize)
-            {
-                counter.observe(at, false, epoch);
-            }
-        }
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }

@@ -427,25 +427,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 // The task polls the driver beside the station: a wake that
                 // brought the driver no notification, fact or deadline, in a
                 // steady state, takes only the idle turn.
-                let forced = core::mem::take(&mut force);
-                let notified = storage.shared.driver.take_notified();
-                let busy = driver().map_or(true, |state| state.busy(held));
-                let events = storage
-                    .device()
-                    .map_or(true, |device| device.events_pending());
-                let due = forced || notified || busy || events;
-                if let Ok(mut state) = driver() {
-                    use crate::lower_mac::TxEdge;
-                    state.note(if notified || forced {
-                        TxEdge::GateNotified
-                    } else if busy {
-                        TxEdge::GateBusy
-                    } else if events {
-                        TxEdge::GateEvents
-                    } else {
-                        TxEdge::GateIdle
-                    });
-                }
+                let due = core::mem::take(&mut force)
+                    || storage.shared.driver.take_notified()
+                    || driver().map_or(true, |state| state.busy(held))
+                    || storage
+                        .device()
+                        .map_or(true, |device| device.events_pending());
                 if !due {
                     let idle = storage
                         .device()

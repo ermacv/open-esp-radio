@@ -150,24 +150,10 @@ pub struct ContentionDraw {
     pub backoff_slots: u16,
 }
 
-/// An aggregate's edge in the driver: its end seen, or its publication.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TxEdge {
-    Ended,
-    Published,
-    /// An end found its queue with no aggregate held open or queued.
-    EndedBare,
-    /// Why a wake took the driver's whole turn, or only its idle turn.
-    GateNotified,
-    GateBusy,
-    GateEvents,
-    GateIdle,
-}
-
 /// A receiver of the publication observations the S31 driver reports; it
 /// lives in the driver's static queues from preparation to retirement.
-pub trait Observations: EventSink<ContentionDraw> + EventSink<TxEdge> + 'static {}
-impl<O: EventSink<ContentionDraw> + EventSink<TxEdge> + 'static> Observations for O {}
+pub trait Observations: EventSink<ContentionDraw> + 'static {}
+impl<O: EventSink<ContentionDraw> + 'static> Observations for O {}
 
 use crate::mac::tsf_relation::TsfTimingError;
 use oer_chips_esp32s31_hal::types::{MacPti, StaTbttSchedule};
