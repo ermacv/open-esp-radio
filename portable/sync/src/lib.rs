@@ -115,6 +115,11 @@ impl PriorityWaker {
         self.notified.store(true, Ordering::Release);
         self.begin_wake().fire();
     }
+    /// Wake the current consumer without a notification: its input is one
+    /// the consumer checks on every poll, notified or not.
+    pub fn nudge(&self) {
+        self.begin_wake().fire();
+    }
     /// Whether a notification came since the last call: a consumer polled
     /// for other reasons as well skips its work when none came and its
     /// other inputs are idle.

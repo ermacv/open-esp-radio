@@ -346,6 +346,8 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 .try_borrow_mut()
                 .map_err(|_| Fault::HardwareUnavailable)
         };
+        // The first turn, and the turn after the deadline passed, are whole.
+        let mut whole = true;
         loop {
             poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
@@ -367,8 +369,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
             };
             let timer = self.timer.clone();
             let mut delay = core::pin::pin!(timer.wait_until(deadline));
-            // A new deadline's first poll takes a whole turn.
-            let mut force = true;
+            let mut force = core::mem::replace(&mut whole, false);
             let done = poll_fn(|cx| {
                 storage.shared.driver.register(cx.waker());
                 if storage.shared.poisoned.is_requested() {
@@ -443,7 +444,15 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                         );
                         return Poll::Pending;
                     }
+                    // A ring continuation the body armed moves the deadline.
+                    let moved = storage.device().map_or(true, |device| {
+                        device.next_deadline().is_some_and(|at| at < deadline)
+                    });
+                    if moved {
+                        return Poll::Ready(false);
+                    }
                     if delay.as_mut().poll(cx).is_ready() {
+                        whole = true;
                         return Poll::Ready(false);
                     }
                     return Poll::Pending;
@@ -471,6 +480,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                     cx.waker().wake_by_ref();
                 }
                 if delay.as_mut().poll(cx).is_ready() {
+                    whole = true;
                     return Poll::Ready(false);
                 }
                 Poll::Pending

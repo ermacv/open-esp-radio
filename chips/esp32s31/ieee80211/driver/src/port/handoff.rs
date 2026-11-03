@@ -484,7 +484,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
                 // whose deadline covers it: the driver, asleep on its
                 // earlier deadline, takes the new one at its next turn.
                 if !due && device.next_deadline().is_some() {
-                    self.storage.driver.wake();
+                    self.storage.driver.nudge();
                 }
                 return Ok(None);
             };
