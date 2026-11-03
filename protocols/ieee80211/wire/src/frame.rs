@@ -555,6 +555,16 @@ impl MacHeader {
         self.address1 = address1;
         self
     }
+    /// The same header with Address 3 `address3`.
+    pub const fn with_address3(mut self, address3: [u8; 6]) -> Self {
+        self.address3 = address3;
+        self
+    }
+    /// The same header with the Sequence Control field `sequence_control`.
+    pub const fn with_sequence_control(mut self, sequence_control: u16) -> Self {
+        self.sequence_control = sequence_control;
+        self
+    }
     /// The same QoS data header with `qos`; `None` for a header without a
     /// QoS Control field.
     pub const fn with_qos(mut self, qos: QosControl) -> Option<Self> {

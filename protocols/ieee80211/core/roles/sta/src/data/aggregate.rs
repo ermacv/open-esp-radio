@@ -27,8 +27,8 @@ use oer_protocols_ieee80211_contracts_port::{AggregateEnd, AggregateOutcome};
 pub const MAX_AGGREGATE: usize =
     oer_protocols_ieee80211_contracts_port::backend_aggregate::AMPDU_SUBFRAME_MASK_BITS;
 
-/// Where a TID may aggregate now: its agreement's window and the port's
-/// subframe limit.
+/// Where a TID may aggregate now: its agreement's window and what one
+/// aggregate takes at its rate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AggregateWindow {
     /// The agreement's window head: the oldest sequence number it has not
@@ -36,16 +36,82 @@ pub struct AggregateWindow {
     pub start: SequenceNumber,
     /// The agreement's window, at most 64.
     pub size: u16,
+    /// The most subframes and octets one aggregate takes.
+    pub limit: PpduLimit,
+}
+
+/// The most one aggregate takes: subframes, and octets with delimiters and
+/// padding. The octet bound holds the length limits and the rate's PPDU
+/// time limit at once, computed when the rate or the agreement changes, so
+/// a member's admission is one addition and one comparison.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PpduLimit {
+    subframes: usize,
+    octets: u32,
+}
+
+impl PpduLimit {
+    /// At most `subframes` subframes (and [`MAX_AGGREGATE`]) and
+    /// `max_length` octets (the recipient's Maximum A-MPDU Length and the
+    /// port's at the aggregate's rate, the lower), within `rate`'s PPDU time
+    /// limit ([`PhyRate::max_txtime_micros`](oer_protocols_ieee80211_contracts_port::PhyRate::max_txtime_micros));
+    /// `None` checks no time. The time bound counts the whole aggregate at
+    /// the rate (IEEE Std 802.11-2020 19.4.3, through
+    /// `PhyRate::max_ppdu_duration_micros`), which grows with the octets:
+    /// the bound is the longest aggregate within it.
+    pub fn new(
+        subframes: usize,
+        max_length: u32,
+        rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
+    ) -> Self {
+        let timed = rate.and_then(|rate| rate.max_txtime_micros().map(|limit| (rate, limit)));
+        let octets = match timed {
+            None => max_length,
+            Some((rate, limit)) => longest_within(max_length, |octets| {
+                rate.max_ppdu_duration_micros(octets)
+                    .is_some_and(|duration| duration <= limit)
+            }),
+        };
+        Self {
+            subframes: subframes.min(MAX_AGGREGATE),
+            octets,
+        }
+    }
+
     /// The most subframes one aggregate takes, at most [`MAX_AGGREGATE`].
-    pub subframes: usize,
-    /// The longest aggregate in octets, delimiters and padding included:
-    /// the recipient's Maximum A-MPDU Length and the port's at the
-    /// aggregate's rate, the lower.
-    pub max_length: u32,
-    /// The aggregate's rate, whose PPDU time limit
-    /// ([`PhyRate::max_txtime_micros`](oer_protocols_ieee80211_contracts_port::PhyRate::max_txtime_micros))
-    /// the aggregate keeps within; `None` checks no time.
-    pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
+    pub const fn subframes(&self) -> usize {
+        self.subframes
+    }
+
+    /// The longest aggregate in octets, delimiters and padding included.
+    pub const fn octets(&self) -> u32 {
+        self.octets
+    }
+
+    /// Whether an aggregate of `octets`, a positive count, stays within the
+    /// limit.
+    const fn fits(&self, octets: u32) -> bool {
+        octets <= self.octets
+    }
+}
+
+/// The largest count up to `max` that `fits`, which holds up to a count and
+/// fails above it; zero when it holds for none above zero.
+fn longest_within(max: u32, fits: impl Fn(u32) -> bool) -> u32 {
+    if fits(max) {
+        return max;
+    }
+    // `low` fits or is zero; `high` does not fit.
+    let (mut low, mut high) = (0_u32, max);
+    while high.saturating_sub(low) > 1 {
+        let middle = low.saturating_add(high.saturating_sub(low) / 2);
+        if fits(middle) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    low
 }
 
 /// The octets one member takes in an aggregate: its delimiter, its MPDU
@@ -85,20 +151,6 @@ impl AggregateWindow {
         use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace;
         let distance = self.start.forward_distance(sequence);
         distance >= self.size && distance < SequenceNumber::HALF_SPACE
-    }
-
-    /// Whether an aggregate of `octets` stays within the window's length
-    /// and its rate's PPDU time limit. The time bound counts the whole
-    /// aggregate at the rate (IEEE Std 802.11-2020 19.4.3, through
-    /// `PhyRate::max_ppdu_duration_micros`).
-    fn fits(&self, octets: u32) -> bool {
-        octets <= self.max_length
-            && self.rate.is_none_or(|rate| {
-                rate.max_txtime_micros().is_none_or(|limit| {
-                    rate.max_ppdu_duration_micros(octets)
-                        .is_some_and(|duration| duration <= limit)
-                })
-            })
     }
 }
 
@@ -353,7 +405,7 @@ impl<
         // The members: the queue's first MPDUs whose sequence numbers follow
         // one another inside the window, at most the limit. They keep their
         // places in the bank.
-        let limit = window.subframes.min(MAX_AGGREGATE);
+        let limit = window.limit.subframes();
         let mut previous: Option<SequenceNumber> = None;
         let mut length = 0_u32;
         let count = self
@@ -370,7 +422,7 @@ impl<
                 previous = Some(sequence);
                 let fits = subframe_octets(owed.frame.frame().len().get(), owed.protection)
                     .and_then(|octets| length.checked_add(octets))
-                    .filter(|total| window.fits(*total))
+                    .filter(|total| window.limit.fits(*total))
                     .inspect(|total| length = *total)
                     .is_some();
                 follows && window.holds(sequence) && fits
@@ -452,8 +504,8 @@ impl<
         let index = context.places.len();
         let octets = subframe_octets(length, protection)
             .and_then(|member| context.octets.checked_add(member))
-            .filter(|total| window.fits(*total))?;
-        if index >= window.subframes.min(MAX_AGGREGATE) || !window.holds(sequence) {
+            .filter(|total| window.limit.fits(*total))?;
+        if index >= window.limit.subframes() || !window.holds(sequence) {
             return None;
         }
         let place = self.take_owed(context.tid)?;
@@ -744,5 +796,105 @@ impl<
             Ok(place) => self.owe_again(place, events),
             Err(held) => self.overflowed(held.memory, events),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_protocols_ieee80211_contracts_port::PhyRate;
+    use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, LegacyRate, PpduBandwidth};
+
+    /// The admission the octet bound replaces: the length, then the rate's
+    /// time limit over the whole aggregate at the rate.
+    fn fits_in_time(max_length: u32, rate: Option<PhyRate>, octets: u32) -> bool {
+        octets <= max_length
+            && rate.is_none_or(|rate| {
+                rate.max_txtime_micros().is_none_or(|limit| {
+                    rate.max_ppdu_duration_micros(octets)
+                        .is_some_and(|duration| duration <= limit)
+                })
+            })
+    }
+
+    fn ht_rates() -> impl Iterator<Item = PhyRate> {
+        (0..=31).flat_map(|mcs| {
+            [PpduBandwidth::Mhz20, PpduBandwidth::Mhz40]
+                .into_iter()
+                .flat_map(move |bandwidth| {
+                    [false, true].map(move |short_gi| {
+                        PhyRate::Ht(
+                            HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap(),
+                        )
+                    })
+                })
+        })
+    }
+
+    #[test]
+    fn the_octet_bound_admits_every_ht_aggregate_the_time_limit_admits_and_no_other() {
+        for rate in ht_rates() {
+            let limit = PpduLimit::new(MAX_AGGREGATE, 65_535, Some(rate));
+            for octets in 1..=70_000 {
+                assert_eq!(
+                    limit.fits(octets),
+                    fits_in_time(65_535, Some(rate), octets),
+                    "{rate:?} at {octets} octets"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_octet_bound_keeps_every_length_limit_at_its_boundaries() {
+        let rates = ht_rates()
+            .map(Some)
+            .chain([
+                Some(PhyRate::Legacy(LegacyRate::Dsss1M)),
+                Some(PhyRate::Legacy(LegacyRate::Ofdm6M)),
+                Some(PhyRate::Legacy(LegacyRate::Ofdm54M)),
+                None,
+            ])
+            .collect::<std::vec::Vec<_>>();
+        for max_length in [
+            1,
+            4_095,
+            8_191,
+            16_383,
+            32_767,
+            65_535,
+            262_143,
+            1_048_575,
+            u32::MAX,
+        ] {
+            for &rate in &rates {
+                let limit = PpduLimit::new(MAX_AGGREGATE, max_length, rate);
+                let bound = limit.octets();
+                for octets in [
+                    1,
+                    bound.saturating_sub(1),
+                    bound,
+                    bound.saturating_add(1),
+                    max_length,
+                    max_length.saturating_add(1),
+                    u32::MAX,
+                ] {
+                    assert_eq!(
+                        limit.fits(octets),
+                        fits_in_time(max_length, rate, octets),
+                        "{rate:?} within {max_length} at {octets} octets"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_subframe_bound_is_at_most_the_ports_mask_width() {
+        assert_eq!(PpduLimit::new(3, 65_535, None).subframes(), 3);
+        assert_eq!(
+            PpduLimit::new(MAX_AGGREGATE + 1, 65_535, None).subframes(),
+            MAX_AGGREGATE
+        );
     }
 }

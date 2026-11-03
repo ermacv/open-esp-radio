@@ -67,8 +67,8 @@ pub use association::{
     parse_association_response,
 };
 pub use data::{
-    StaDataFrame, StaOpenDataFrame, StaProtectedAmsduFrame, StaProtectedDataFrame,
-    sta_protected_amsdu_frame_length,
+    StaDataFrame, StaDataHeaderFields, StaDataHeaderTemplate, StaOpenDataFrame,
+    StaProtectedAmsduFrame, StaProtectedDataFrame, sta_protected_amsdu_frame_length,
 };
 pub use management::{
     OpenAuthenticationRequest, OpenAuthenticationResponse, SAE_AUTHENTICATION_ALGORITHM,

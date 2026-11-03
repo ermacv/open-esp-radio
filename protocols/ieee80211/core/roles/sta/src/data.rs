@@ -9,8 +9,12 @@
 //! lives, and the header is written in front of the payload: QoS Data by
 //! its user priority on a QoS BSS, Data in the station's sequence space
 //! otherwise, with the Protected bit and the CCMP header's room on a
-//! protected link (the port's backend writes the CCMP header). Once the
-//! MPDU ends, the memory goes back to the network ([`StaData::take_freed`]).
+//! protected link (the port's backend writes the CCMP header). The machine
+//! keeps the link's header template ([`StaDataHeaderTemplate`]), built from
+//! the link's addresses, QoS and protection when they change, and fills in
+//! only each MPDU's destination, sequence number, TID and EtherType. Once
+//! the MPDU ends, the memory goes back to the network
+//! ([`StaData::take_freed`]).
 //! It holds its own tickets and buffer places, apart from the station's, so
 //! data never takes the station's EAPOL, Null or Deauthentication tokens.
 //!
@@ -34,7 +38,10 @@ use oer_protocols_ieee80211_wire::address::IndividualAddress;
 pub use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 /// The TID of a data attempt ([`StaData::attempt_tid`]).
 pub use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
-use oer_protocols_ieee80211_wire::{sequence::SequenceNumber, station::StaProtectedDataFrame};
+use oer_protocols_ieee80211_wire::{
+    sequence::SequenceNumber,
+    station::{StaDataHeaderFields, StaDataHeaderTemplate},
+};
 
 use crate::epoch::LinkEpoch;
 use crate::machine::{LinkMode, LinkProtection, LinkView, StaTokens};
@@ -257,6 +264,14 @@ impl<K> DataProtection<K> {
         match self {
             Self::Open => DataProtection::Open,
             Self::Ccmp(_) => DataProtection::Ccmp(()),
+        }
+    }
+
+    /// The wire's name of this protection.
+    const fn wire(&self) -> oer_protocols_ieee80211_wire::security::LinkProtection {
+        match self {
+            Self::Open => oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+            Self::Ccmp(_) => oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp,
         }
     }
 }
@@ -544,6 +559,8 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     waits: bool,
     /// The network's memory ended MPDUs held, until the network takes it.
     freed: Fifo<D::Memory, CAP>,
+    /// The header template of the link the last MSDU went on.
+    header: Option<StaDataHeaderTemplate>,
 }
 
 /// Terminal data bank. Queued work has returned its frame credits; it has no
@@ -602,6 +619,7 @@ impl<
             link: None,
             waits: false,
             freed,
+            header: None,
         }
     }
 }
@@ -622,7 +640,7 @@ impl<
         events: &mut impl EventSink<StaEvent>,
     ) -> oer_portable_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
         machine.leave(events);
-        let (tickets, buffers, mpdus, owed, admission, next_order, link, waits, freed) = oer_portable_memory::unpack_placed!(
+        let (tickets, buffers, mpdus, owed, admission, next_order, link, waits, freed, header) = oer_portable_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
@@ -633,10 +651,11 @@ impl<
                 next_order,
                 link,
                 waits,
-                freed
+                freed,
+                header
             }
         );
-        drop((link, waits));
+        drop((link, waits, header));
         oer_portable_memory::Placed::init(destination, |place| {
             oer_portable_memory::init_in_place!(place, RetiredData {
                 tickets: tickets.read(),
@@ -664,6 +683,7 @@ impl<
             link: _,
             waits: _,
             freed,
+            header: _,
         } = self;
         RetiredData {
             tickets,
@@ -699,6 +719,7 @@ impl<
             link: None,
             waits: false,
             freed: Fifo::new(),
+            header: None,
         }
     }
 
@@ -725,6 +746,7 @@ impl<
             link: None,
             waits: false,
             freed => |place| Fifo::init_in_place(place),
+            header: None,
         })
     }
 
@@ -947,10 +969,28 @@ impl<
         let Some(payload) = length.checked_sub(ETHERNET_HEADER_LEN) else {
             return Err(self.refuse(buffer, DataRefusal::ShortFrame, events));
         };
+        // The link's template, built again only when its addresses, QoS or
+        // protection changed; a BSSID that takes no data refuses the MSDU.
+        let header = match self.header {
+            Some(header) if header.serves(link.address, link.bssid, qos, protection.wire()) => {
+                header
+            }
+            _ => {
+                self.header =
+                    StaDataHeaderTemplate::new(link.address, link.bssid, qos, protection.wire());
+                let Some(header) = self.header else {
+                    return Err(self.refuse(buffer, DataRefusal::TooLong, events));
+                };
+                header
+            }
+        };
         let fits = MSDU_PAYLOAD_OFFSET
             .checked_add(payload)
             .is_some_and(|end| end <= bytes.len())
-            && mpdu_len(qos, protection, payload).is_some_and(|length| length <= bytes.len());
+            && header
+                .prefix_len()
+                .checked_add(payload)
+                .is_some_and(|length| length <= bytes.len());
         if !fits {
             return Err(self.refuse(buffer, DataRefusal::TooLong, events));
         }
@@ -958,12 +998,10 @@ impl<
             LinkMode::Qos(counters) => slot.select_mut(counters).take(),
             LinkMode::NonQos(counter) => counter.take(),
         };
-        let frame = encode_in_place::<_, K, D::Class>(
-            link,
-            qos,
+        let frame = write_in_place::<K, D::Class>(
+            &header,
             InPlace { priority, payload },
             sequence_number,
-            protection,
             bytes,
         );
         let Some(frame) = frame else {
@@ -1169,30 +1207,7 @@ pub(crate) fn integrity(
     }
 }
 
-/// The length of the MPDU of a payload of `payload` octets: its header,
-/// the CCMP header's room on a protected link, the LLC/SNAP header and the
-/// payload.
-const fn mpdu_len(qos: bool, protection: DataProtection<()>, payload: usize) -> Option<usize> {
-    use oer_protocols_ieee80211_wire::{
-        ccmp::CCMP_HEADER_LEN,
-        data::{
-            IEEE80211_LEGACY_DATA_HEADER_LEN, IEEE80211_QOS_DATA_HEADER_LEN, LLC_SNAP_HEADER_LEN,
-        },
-    };
-    let prefix = match (qos, protection) {
-        (false, DataProtection::Open) => IEEE80211_LEGACY_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN,
-        (true, DataProtection::Open) => IEEE80211_QOS_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN,
-        (false, DataProtection::Ccmp(())) => {
-            IEEE80211_LEGACY_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN
-        }
-        (true, DataProtection::Ccmp(())) => {
-            IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN
-        }
-    };
-    payload.checked_add(prefix)
-}
-
-/// What the in-place encoding knows of the MSDU: the frame's user priority
+/// What the in-place header write knows of the MSDU: the frame's user priority
 /// and its payload's length at [`MSDU_PAYLOAD_OFFSET`].
 struct InPlace {
     priority: WmmUserPriority,
@@ -1200,63 +1215,38 @@ struct InPlace {
 }
 
 /// The MPDU of the MSDU whose Ethernet frame sits at
-/// [`MSDU_ETHERNET_OFFSET`] of `output`, on `link`: its header is written in
-/// front of the payload. A header shorter than the longest moves the payload
-/// down to it, so the MPDU starts at the buffer's first octet.
-fn encode_in_place<
-    T: StaTokens,
+/// [`MSDU_ETHERNET_OFFSET`] of `output`: `header` writes its prefix in front
+/// of the payload. A prefix shorter than the longest moves the payload down
+/// to it, so the MPDU starts at the buffer's first octet.
+fn write_in_place<
     K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
     C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
 >(
-    link: &LinkView<'_, '_, T>,
-    qos: bool,
+    header: &StaDataHeaderTemplate,
     msdu: InPlace,
     sequence_number: SequenceNumber,
-    protection: DataProtection<()>,
     output: &mut [u8],
 ) -> Option<oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
     let ethernet = output.get(MSDU_ETHERNET_OFFSET..MSDU_PAYLOAD_OFFSET)?;
     let (destination, rest) = ethernet.split_first_chunk::<6>()?;
-    let destination = *destination;
-    let ether_type = u16::from_be_bytes(*rest.last_chunk::<2>()?);
-    let prefix = mpdu_len(qos, protection, 0)?;
+    let fields = StaDataHeaderFields {
+        destination: *destination,
+        sequence_number,
+        priority: msdu.priority,
+        ether_type: u16::from_be_bytes(*rest.last_chunk::<2>()?),
+    };
+    let prefix = header.prefix_len();
     let end = MSDU_PAYLOAD_OFFSET.checked_add(msdu.payload)?;
     if prefix < MSDU_PAYLOAD_OFFSET {
         move_down(output, prefix, end)?;
     }
-    let header = output.get_mut(..prefix)?;
-    let written = if protection == DataProtection::Open {
-        oer_protocols_ieee80211_wire::station::StaOpenDataFrame {
-            source: link.address,
-            bssid: link.bssid,
-            destination,
-            sequence_number,
-            priority: msdu.priority,
-            peer_qos: qos,
-            ether_type,
-            payload: &[],
-        }
-        .encode(header)
-        .ok()?
-    } else {
-        StaProtectedDataFrame {
-            source: link.address,
-            bssid: link.bssid,
-            destination,
-            sequence_number,
-            user_priority: msdu.priority.value(),
-            peer_qos: qos,
-            ccmp_header: [0; 8],
-            ether_type,
-            payload: &[],
-        }
-        .encode(header)
-        .ok()?
-    };
-    if written != prefix {
-        return None;
-    }
-    sized(output.get(..prefix.checked_add(msdu.payload)?)?)
+    let header = header.write(fields, output).ok()?;
+    let header = HeaderSpec::from_mac_header(header, IndividualAddress::new)?;
+    oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
+        AckHeader::new(header)?,
+        MpduLength::new(prefix.checked_add(msdu.payload)?)?,
+    )?)
+    .ok()
 }
 
 /// Move the payload at `MSDU_PAYLOAD_OFFSET..end` down to start at `to`,
@@ -1278,27 +1268,10 @@ fn move_down(output: &mut [u8], to: usize, end: usize) -> Option<()> {
     Some(())
 }
 
-fn sized<
-    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
-    C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
->(
-    frame: &[u8],
-) -> Option<oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>> {
-    let header = HeaderSpec::from_mac_header(
-        oer_protocols_ieee80211_wire::frame::MacHeader::decode(frame)?,
-        IndividualAddress::new,
-    )?;
-    oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
-        AckHeader::new(header)?,
-        MpduLength::new(frame.len())?,
-    )?)
-    .ok()
-}
-
 mod aggregate;
 pub use aggregate::{
     AggregateRetry, AggregateWindow, BlockAckMarks, DataAggregate, DataAggregateContext,
-    DataAggregateInfo, DataAggregateReturn, DataAttempt, MAX_AGGREGATE,
+    DataAggregateInfo, DataAggregateReturn, DataAttempt, MAX_AGGREGATE, PpduLimit,
 };
 mod ethernet;
 pub use ethernet::{

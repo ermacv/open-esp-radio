@@ -846,6 +846,94 @@ fn an_open_mpdu_moves_its_payload_down_to_its_shorter_header() {
 }
 
 #[test]
+fn every_link_mode_writes_the_mpdu_and_header_of_the_full_encode() {
+    use oer_protocols_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
+    use oer_protocols_ieee80211_wire::station::{StaOpenDataFrame, StaProtectedDataFrame};
+    let source = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let payload: Vec<u8> = (0..=255).collect();
+    for (qos, ccmp) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut events = Kept::default();
+        let mut data = machine();
+        let mut replay = epoch();
+        let mut counter = SequenceCounter::new(SequenceNumber::new(4_095).unwrap());
+        let mut counters = [SequenceCounter::new(SequenceNumber::new(4_095).unwrap()); 8];
+        let mut link = LinkView {
+            epoch: LinkEpoch::for_test(1),
+            address: source,
+            bssid,
+            association_id: 1,
+            mode: if qos {
+                LinkMode::Qos(&mut counters)
+            } else {
+                LinkMode::NonQos(&mut counter)
+            },
+            admission: AcAdmission::OPEN,
+            protection: if ccmp {
+                LinkProtection::Ccmp {
+                    key: &(),
+                    replay: &mut replay,
+                }
+            } else {
+                LinkProtection::<Station<'static>>::Open
+            },
+        };
+        // The second MSDU goes through the template the first built.
+        for (priority, length) in [(5, 256), (0, 1)] {
+            data.input(
+                DataInput {
+                    msdu: msdu_of(priority, 1600, &payload[..length]),
+                    link: &mut link,
+                },
+                &mut events,
+            )
+            .unwrap();
+            let sent = transmit(&mut data);
+            let mut expected = std::vec![0; 1600];
+            let sequence_number = sent.context.sequence;
+            let encoded = if ccmp {
+                StaProtectedDataFrame {
+                    source,
+                    bssid,
+                    destination: PEER,
+                    sequence_number,
+                    user_priority: priority,
+                    peer_qos: qos,
+                    ccmp_header: [0; 8],
+                    ether_type: 0x0800,
+                    payload: &payload[..length],
+                }
+                .encode(&mut expected)
+            } else {
+                StaOpenDataFrame {
+                    source,
+                    bssid,
+                    destination: PEER,
+                    sequence_number,
+                    priority: WmmUserPriority::new(priority).unwrap(),
+                    peer_qos: qos,
+                    ether_type: 0x0800,
+                    payload: &payload[..length],
+                }
+                .encode(&mut expected)
+            }
+            .unwrap();
+            let frame = sent.context.frame().frame();
+            assert_eq!(frame.len().get(), encoded, "qos {qos}, ccmp {ccmp}");
+            assert_eq!(&memory(&sent.buffer)[..encoded], &expected[..encoded]);
+            let header = HeaderSpec::from_mac_header(
+                oer_protocols_ieee80211_wire::frame::MacHeader::decode(&expected).unwrap(),
+                IndividualAddress::new,
+            )
+            .and_then(AckHeader::new)
+            .unwrap();
+            assert_eq!(*frame.header(), header);
+        }
+        assert_eq!(tokens_lost(&events), 0);
+    }
+}
+
+#[test]
 fn msdus_wait_while_the_tokens_are_out() {
     let mut events = Kept::default();
     let mut data = machine();
@@ -1607,9 +1695,7 @@ fn window(start: u16, subframes: usize, max_length: u32) -> Option<AggregateWind
     Some(AggregateWindow {
         start: SequenceNumber::new(start).unwrap(),
         size: 32,
-        subframes,
-        max_length,
-        rate: None,
+        limit: PpduLimit::new(subframes, max_length, None),
     })
 }
 
@@ -1892,14 +1978,18 @@ fn an_ht_aggregate_keeps_within_the_ppdu_time_limit_of_its_rate() {
     }
     let at = |mcs, bandwidth| {
         Some(AggregateWindow {
-            rate: Some(PhyRate::Ht(
-                oer_protocols_ieee80211_wire::phy::HtRate::new(
-                    oer_protocols_ieee80211_wire::phy::HtMcs::new(mcs).unwrap(),
-                    bandwidth,
-                    false,
-                )
-                .unwrap(),
-            )),
+            limit: PpduLimit::new(
+                32,
+                65_535,
+                Some(PhyRate::Ht(
+                    oer_protocols_ieee80211_wire::phy::HtRate::new(
+                        oer_protocols_ieee80211_wire::phy::HtMcs::new(mcs).unwrap(),
+                        bandwidth,
+                        false,
+                    )
+                    .unwrap(),
+                )),
+            ),
             ..window(0, 32, 65_535).unwrap()
         })
     };

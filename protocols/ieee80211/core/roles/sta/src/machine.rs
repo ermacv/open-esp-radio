@@ -3598,9 +3598,11 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         Some(crate::data::AggregateWindow {
             start: agreement.starting_sequence,
             size: agreement.window,
-            subframes: subframes.min(crate::data::MAX_AGGREGATE),
-            max_length: max_length.min(recipient_length),
-            rate: Some(rate),
+            limit: crate::data::PpduLimit::new(
+                subframes,
+                max_length.min(recipient_length),
+                Some(rate),
+            ),
         })
     }
 

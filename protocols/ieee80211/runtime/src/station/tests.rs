@@ -3756,9 +3756,7 @@ fn an_aggregate_window_is_computed_once_and_follows_its_agreements_head() {
     let computed = data::AggregateWindow {
         start: SequenceNumber::from_low_bits(1),
         size: 32,
-        subframes: 32,
-        max_length: 65_535,
-        rate: None,
+        limit: data::PpduLimit::new(32, 65_535, None),
     };
     let computes = Cell::new(0);
     let compute = || {
