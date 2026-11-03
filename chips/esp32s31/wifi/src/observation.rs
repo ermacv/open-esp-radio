@@ -1123,3 +1123,52 @@ mod tests {
 /// gives [`crate::RadioResources::start`] receives them.
 #[cfg(target_arch = "riscv32")]
 pub use oer_chips_esp32s31_radio_system::observation::{TickRan, TrackingBranches, TrackingTick};
+
+/// Diagnostic: an aggregate's edge in the driver, for the image's observer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DriverTxEdge {
+    /// Its publication; otherwise its end seen.
+    pub published: bool,
+}
+
+impl Event for DriverTxEdge {
+    const KIND: Kind = Kind::new(Domain::Ieee80211, 61);
+    const CHANNEL: Channel = SERVICE;
+
+    fn encode(&self) -> [u32; 2] {
+        [u32::from(self.published), 0]
+    }
+
+    fn decode([published, _]: [u32; 2]) -> Option<Self> {
+        Some(Self {
+            published: match published {
+                0 => false,
+                1 => true,
+                _ => return None,
+            },
+        })
+    }
+}
+
+/// Diagnostic: the driver's observations, its aggregate edges to `O`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DriverEdges<O>(pub O);
+
+impl<O> oer_portable_events::EventSink<oer_chips_esp32s31_ieee80211_driver::port::ContentionDraw>
+    for DriverEdges<O>
+{
+    const ENABLED: bool = false;
+
+    fn event(&mut self, _: oer_chips_esp32s31_ieee80211_driver::port::ContentionDraw) {}
+}
+
+impl<O: oer_portable_trace::Observer>
+    oer_portable_events::EventSink<oer_chips_esp32s31_ieee80211_driver::port::TxEdge>
+    for DriverEdges<O>
+{
+    fn event(&mut self, edge: oer_chips_esp32s31_ieee80211_driver::port::TxEdge) {
+        self.0.event(DriverTxEdge {
+            published: edge == oer_chips_esp32s31_ieee80211_driver::port::TxEdge::Published,
+        });
+    }
+}

@@ -299,6 +299,21 @@ impl oer_portable_trace::Observer for Observer {
         {
             counter.observe(now_us(), span.end, EPOCH.load(Ordering::Relaxed));
         }
+        if let Some(edge) = Self::decoded::<E, station::DriverTxEdge>(event) {
+            let (ended, begun) = if edge.published {
+                (LibraryPart::TxGap, LibraryPart::TxAir)
+            } else {
+                (LibraryPart::TxAir, LibraryPart::TxGap)
+            };
+            let at = now_us();
+            let epoch = EPOCH.load(Ordering::Relaxed);
+            if let Some(counter) = PART_COUNTERS.get(ended as usize) {
+                counter.observe(at, true, epoch);
+            }
+            if let Some(counter) = PART_COUNTERS.get(begun as usize) {
+                counter.observe(at, false, epoch);
+            }
+        }
         if let Some(decision) = Self::decoded::<E, station::StationRx>(event) {
             receive_decision(decision);
         }
