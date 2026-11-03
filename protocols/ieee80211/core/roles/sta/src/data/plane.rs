@@ -24,16 +24,20 @@
 //! memory untouched.
 //!
 //! [`DataPlane::publication`] puts one arena on the air at a time, at the
-//! rate one plan gives it: an arena whose frames went and missed the
-//! BlockAck first, then the standby; one frame goes as a single MPDU, more
-//! as an A-MPDU under the TID's agreement. [`DataPlane::completed`] reads
-//! the arena's end once: the BlockAck's bitmap against the arena's sequence
-//! numbers, one pass over its frames. A frame the end acknowledged is
+//! rate one plan gives it: an arena holding frames that wait from an
+//! earlier publication first, then the standby. More frames than one go as
+//! an A-MPDU under the TID's agreement; one frame, or the frames of a TID
+//! without agreement (one whose agreement ended), go as single MPDUs, the
+//! arena's position 0 each time. [`DataPlane::completed`] reads the arena's
+//! end once. An A-MPDU's BlockAck bitmap is decoded against the arena's
+//! sequence numbers in one pass over its frames: a frame it acknowledged is
 //! delivered; a missing one is dropped once its MSDU's lifetime or the
 //! policy's attempts on the air ran out, and retried otherwise in the same
 //! arena with the same sequence and packet numbers: the arena keeps the
-//! missing frames and goes again before the standby. A frame dropped under
-//! an agreement moves the TID's window, and the recipient's is owed a
+//! missing frames and goes again before the standby. A single MPDU had the
+//! port's retry plan: delivered when acknowledged, dropped otherwise, and
+//! the arena keeps the frames it did not send. A frame dropped under an
+//! agreement moves the TID's window, and the recipient's is owed a
 //! BlockAckReq ([`Settled::bar`]). The end also teaches the rate selection
 //! ([`RateLesson`]).
 //!
@@ -639,36 +643,14 @@ impl DataPlane {
     }
 
     /// `tid`'s transmit agreement became operational with `window`, or
-    /// ended (`None`). An ended agreement's unpublished A-MPDU of more than
-    /// one frame cannot go as one MPDU: its frames go back to the network
-    /// through `returned`, counted.
-    ///
-    /// # Errors
-    ///
-    /// A backend fault.
-    pub fn agreement<'p, 'id: 'p, A: TxArena<'p, 'id>>(
-        &mut self,
-        arena: &mut A,
-        tid: WmmUserPriority,
-        window: Option<TxWindow>,
-        mut returned: impl FnMut(A::Memory),
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<(), A::Fault> {
+    /// ended (`None`). An arena of more than one frame of a TID without
+    /// agreement goes as single MPDUs, one position at a time.
+    pub fn agreement(&mut self, tid: WmmUserPriority, window: Option<TxWindow>) {
         let Some(link) = self.link.as_mut() else {
-            return Ok(());
+            return;
         };
         *tid.select_mut(&mut link.windows) = window;
         self.limit(tid);
-        if window.is_some() {
-            return Ok(());
-        }
-        for id in [ArenaId::First, ArenaId::Second] {
-            let book = self.book(id);
-            if book.right.is_some() && book.tid == tid && book.count() > 1 {
-                self.withdraw(arena, id, &mut returned, events)?;
-            }
-        }
-        Ok(())
     }
 
     /// The arena the next frame goes to: the one filled, else an empty one
@@ -820,10 +802,11 @@ impl DataPlane {
     }
 
     /// Plan the next publication, at the rate `rate` gives the plan: the
-    /// arena whose frames missed their BlockAck first, then the standby;
-    /// one frame alone, more as an A-MPDU under the TID's agreement. `None`
-    /// while an arena is on the air, none holds a frame, or `rate` gives no
-    /// format of the plan's kind.
+    /// arena whose frames wait from an earlier publication first, then the
+    /// standby; more frames than one as an A-MPDU under the TID's
+    /// agreement, else a single MPDU of position 0. `None` while an arena is
+    /// on the air, none holds a frame, or `rate` gives no format of the
+    /// plan's kind.
     pub fn publication<'p, 'id, K: Ieee80211Capabilities>(
         &mut self,
         rate: impl FnOnce(PpduPlan) -> Option<ArenaFormat<'p, 'id, K>>,
@@ -832,12 +815,13 @@ impl DataPlane {
         let id = self.publishable()?;
         let book = self.book(id);
         let frames = book.count();
-        let kind = match (frames, link.ht) {
-            (1, _) => PpduKind::Single,
-            (_, Some(ht)) if self.aggregates(book.tid) => PpduKind::Aggregate {
+        // More frames than one of a TID without agreement go as single
+        // MPDUs, position 0 each time.
+        let kind = match link.ht {
+            Some(ht) if frames > 1 && self.aggregates(book.tid) => PpduKind::Aggregate {
                 spacing: ht.spacing,
             },
-            _ => return None,
+            _ => PpduKind::Single,
         };
         let encryption = match link.header.protection() {
             LinkProtection::Open => MpduProtection::Open,
@@ -882,8 +866,10 @@ impl DataPlane {
     }
 
     /// Settle the completed arena `done` at `now`: acknowledged frames are
-    /// delivered, missing ones retried in the same arena while their MSDU's
-    /// lifetime and the policy's attempts last, dropped after; every memory
+    /// delivered; an A-MPDU's missing ones are retried in the same arena
+    /// while their MSDU's lifetime and the policy's attempts last, dropped
+    /// after; a single MPDU's unacknowledged frame is dropped and the frames
+    /// it did not send stay for the next publication; every memory
     /// that leaves the arena goes back to the network through `returned`,
     /// in position order. An arena of an ended link releases every frame.
     ///
@@ -928,66 +914,14 @@ impl DataPlane {
             });
         };
         let end = done.end();
-        let aired = end.air().is_some();
-        let attempts = book.attempts.saturating_add(u8::from(aired));
-        let mut decision = Decision::default();
-        let positions = FrameMask::first(book.count()).unwrap_or(FrameMask::EMPTY);
-        for (position, original) in positions.iter().zip(Originals(book.pending)) {
-            let sequence = book
-                .first
-                .wrapping_add(u16::try_from(original).unwrap_or(u16::MAX));
-            let acknowledged = match end {
-                AttemptEnd::Acked { .. } => true,
-                AttemptEnd::Answered { report, .. } => {
-                    oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
-                        *report, sequence,
-                    )
-                }
-                _ => false,
-            };
-            let bit = 1_u64.checked_shl(original).unwrap_or(0);
-            if acknowledged {
-                decision.delivered = decision.delivered.saturating_add(1);
-                continue;
+        let (decision, attempts) = match kind {
+            PpduKind::Single => (Self::single_end(book, end, events), book.attempts),
+            PpduKind::Aggregate { .. } => {
+                let attempts = book.attempts.saturating_add(u8::from(end.air().is_some()));
+                let decision = Self::aggregate_end(book, link.retry, attempts, end, now, events);
+                (decision, attempts)
             }
-            let admitted = usize::try_from(original)
-                .ok()
-                .and_then(|original| book.admitted.get(original))
-                .copied()
-                .unwrap_or(Instant::EPOCH);
-            let loss = if matches!(end, AttemptEnd::Aborted) {
-                Some(DataLoss::Indeterminate)
-            } else if now
-                .checked_duration_since(admitted)
-                .is_some_and(|age| age >= link.retry.lifetime)
-            {
-                Some(DataLoss::Expired)
-            } else if attempts >= link.retry.attempts {
-                Some(DataLoss::RetryLimit)
-            } else {
-                None
-            };
-            match loss {
-                Some(loss) => {
-                    report(events, || StaEvent::DataLost(loss));
-                    decision.dropped = decision.dropped.saturating_add(1);
-                }
-                None => {
-                    decision.retry.insert(position);
-                    decision.pending |= bit;
-                }
-            }
-        }
-        // An A-MPDU whose agreement ended keeps no more than one frame to
-        // retry: more cannot go as one MPDU.
-        if decision.retry.count() > 1 && !self.aggregates(tid) {
-            for _ in decision.retry {
-                report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
-            }
-            decision.dropped = decision.dropped.saturating_add(decision.retry.count());
-            decision.retry = FrameMask::EMPTY;
-            decision.pending = 0;
-        }
+        };
         let lesson = lesson(end, kind, done.frames(), decision.delivered);
         let rate = end.air().map(|air| air.rate);
         let frames = done.frames();
@@ -1034,6 +968,108 @@ impl DataPlane {
             dropped: decision.dropped,
             retried,
         })
+    }
+
+    /// A single MPDU's end: position 0 is delivered when acknowledged and
+    /// dropped otherwise, once the port's retry plan ran out; the frames
+    /// the publication did not send stay for the next.
+    fn single_end<R, D>(
+        book: &ArenaBook,
+        end: &AttemptEnd<R, D>,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> Decision {
+        let mut decision = Decision::default();
+        let acknowledged = match end {
+            AttemptEnd::Acked { .. } => true,
+            AttemptEnd::Answered { report, .. } => {
+                book.oldest(book.epoch, book.tid).is_some_and(|sequence| {
+                    oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
+                        *report, sequence,
+                    )
+                })
+            }
+            _ => false,
+        };
+        if acknowledged {
+            decision.delivered = 1;
+        } else {
+            let loss = match end {
+                AttemptEnd::Aborted => DataLoss::Indeterminate,
+                AttemptEnd::Collision(_) => DataLoss::ContentionLimited,
+                _ => DataLoss::RetryLimit,
+            };
+            report(events, || StaEvent::DataLost(loss));
+            decision.dropped = 1;
+        }
+        // The positions after 0, compacted by the retention.
+        decision.pending = book.pending & book.pending.wrapping_sub(1);
+        let count = book.count();
+        decision.retry = FrameMask::first(count)
+            .zip(FrameMask::first(1))
+            .map_or(FrameMask::EMPTY, |(all, head)| all.difference(head));
+        decision
+    }
+
+    /// An A-MPDU's end after `attempts` publications that may have reached
+    /// a receiver: each frame the BlockAck acknowledges is delivered, a
+    /// missing one dropped once its MSDU's lifetime or the attempts ran out,
+    /// kept otherwise. One pass over the frames.
+    fn aggregate_end<R, D>(
+        book: &ArenaBook,
+        retry: AggregateRetry,
+        attempts: u8,
+        end: &AttemptEnd<R, D>,
+        now: Instant,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> Decision {
+        let mut decision = Decision::default();
+        let positions = FrameMask::first(book.count()).unwrap_or(FrameMask::EMPTY);
+        for (position, original) in positions.iter().zip(Originals(book.pending)) {
+            let sequence = book
+                .first
+                .wrapping_add(u16::try_from(original).unwrap_or(u16::MAX));
+            let acknowledged = match end {
+                AttemptEnd::Acked { .. } => true,
+                AttemptEnd::Answered { report, .. } => {
+                    oer_protocols_ieee80211_core_upper_mac::block_ack::acknowledges(
+                        *report, sequence,
+                    )
+                }
+                _ => false,
+            };
+            if acknowledged {
+                decision.delivered = decision.delivered.saturating_add(1);
+                continue;
+            }
+            let admitted = usize::try_from(original)
+                .ok()
+                .and_then(|original| book.admitted.get(original))
+                .copied()
+                .unwrap_or(Instant::EPOCH);
+            let loss = if matches!(end, AttemptEnd::Aborted) {
+                Some(DataLoss::Indeterminate)
+            } else if now
+                .checked_duration_since(admitted)
+                .is_some_and(|age| age >= retry.lifetime)
+            {
+                Some(DataLoss::Expired)
+            } else if attempts >= retry.attempts {
+                Some(DataLoss::RetryLimit)
+            } else {
+                None
+            };
+            match loss {
+                Some(loss) => {
+                    report(events, || StaEvent::DataLost(loss));
+                    decision.dropped = decision.dropped.saturating_add(1);
+                }
+                None => {
+                    decision.retry.insert(position);
+                    decision.pending |= 1_u64.checked_shl(original).unwrap_or(0);
+                }
+            }
+        }
+        decision
     }
 
     /// Move `tid`'s window to the oldest sequence number the arenas still

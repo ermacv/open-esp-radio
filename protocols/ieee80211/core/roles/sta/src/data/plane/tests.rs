@@ -220,16 +220,7 @@ impl<'p, 'id: 'p> World<'p, 'id> {
 
     fn agree(&mut self, tid: WmmUserPriority, size: u16) {
         let head = self.plane.link.as_ref().unwrap().sequences.peek(tid);
-        let returned = &mut self.returned;
-        self.plane
-            .agreement(
-                &mut self.arena,
-                tid,
-                Some(TxWindow { head, size }),
-                |memory| returned.push(memory),
-                &mut (),
-            )
-            .unwrap();
+        self.plane.agreement(tid, Some(TxWindow { head, size }));
     }
 
     fn take(&mut self, tag: u8, tid: WmmUserPriority) -> Intake<ModelNetworkMemory> {
@@ -312,6 +303,8 @@ cases! {
     a_protected_link_numbers_each_frame_and_refuses_without_key_or_link => key_and_link,
     handover_and_stop_keep_the_sequence_numbers => round_trip,
     a_tid_without_agreement_goes_one_mpdu_at_a_time => single,
+    a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
+    an_ended_agreement_drains_its_arenas_as_single_mpdus_without_drops => agreement_end,
 }
 
 fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -581,4 +574,95 @@ fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     ));
     assert_eq!(world.returned_sequences(), [0]);
     assert_eq!(world.plane.window(BE), None);
+    // An unanswered single MPDU had the port's retry plan: it is dropped,
+    // not published again.
+    world.taken(1, BE);
+    world.publish();
+    world.arena.answer(ModelArenaAnswer::NoResponse);
+    let settled = world.settle();
+    assert_eq!(
+        (settled.delivered, settled.dropped, settled.retried),
+        (0, 1, 0)
+    );
+    assert!(matches!(
+        settled.lesson,
+        Some(RateLesson::Single(TxOutcome::Ended(SingleEnd::AckTimeout(
+            _
+        ))))
+    ));
+    assert_eq!(world.returned_sequences(), [1]);
+    assert_eq!(world.plane.publishable(), None);
+}
+
+fn lone_frame<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    world.agree(BE, 64);
+    world.taken(0, BE);
+    let (plan, _) = world.publish();
+    assert_eq!(plan.kind, PpduKind::Single);
+    world.arena.answer(ModelArenaAnswer::NoResponse);
+    let settled = world.settle();
+    assert_eq!((settled.dropped, settled.retried), (1, 0));
+    assert_eq!(
+        settled.bar.map(|(tid, head)| (tid, head.get())),
+        Some((BE, 1))
+    );
+}
+
+fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    world.agree(BE, 64);
+    for tag in 0..3 {
+        world.taken(tag, BE);
+    }
+    let (aggregate, _) = world.publish();
+    world.taken(3, BE);
+    world.taken(4, BE);
+    world.plane.agreement(BE, None);
+    world.block_ack(mask(&[0]));
+    let settled = world.settle();
+    assert_eq!(
+        (settled.delivered, settled.dropped, settled.retried),
+        (1, 0, 2)
+    );
+    assert_eq!(settled.bar, None);
+    assert_eq!(world.returned_sequences(), [0]);
+    // The missing frames go one MPDU at a time from the same arena, with
+    // the Retry bit of their A-MPDU.
+    let (plan, frames) = world.publish();
+    assert_eq!(
+        (plan.arena, plan.kind, plan.frames),
+        (aggregate.arena, PpduKind::Single, 2)
+    );
+    assert_eq!(frames.len(), 1);
+    assert_eq!(sequence(&frames[0]), 1);
+    assert!(retried(&frames[0]));
+    world.arena.answer(ModelArenaAnswer::Ack);
+    let settled = world.settle();
+    assert_eq!((settled.delivered, settled.retried), (1, 1));
+    assert_eq!(world.returned_sequences(), [1]);
+    let (_, frames) = world.publish();
+    assert_eq!(sequence(&frames[0]), 2);
+    world.arena.answer(ModelArenaAnswer::NoResponse);
+    let settled = world.settle();
+    assert_eq!(
+        (settled.dropped, settled.retried, settled.bar),
+        (1, 0, None)
+    );
+    assert_eq!(world.returned_sequences(), [2]);
+    // The standby filled under the agreement drains the same way; a frame
+    // that has not gone carries no Retry bit.
+    for expected in [3, 4] {
+        let (plan, frames) = world.publish();
+        assert_eq!(
+            (plan.arena, plan.kind),
+            (aggregate.arena.other(), PpduKind::Single)
+        );
+        assert_eq!(sequence(&frames[0]), expected);
+        assert!(!retried(&frames[0]));
+        world.arena.answer(ModelArenaAnswer::Ack);
+        assert_eq!(world.settle().delivered, 1);
+        assert_eq!(world.returned_sequences(), [expected]);
+    }
+    assert_eq!(world.plane.publishable(), None);
 }

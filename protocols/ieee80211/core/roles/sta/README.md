@@ -223,15 +223,18 @@ Module map:
   and the arena's slots; a TID without agreement takes one frame. An MSDU
   the standby cannot take waits in the network's queue (`Intake::Wait`).
   `DataPlane::publication` puts one arena on the air at a time, one rate
-  plan each: an arena holding frames to retry first, then the standby, one
-  frame as a single MPDU, more as an A-MPDU. `DataPlane::completed` decodes
-  the BlockAck in one pass over the arena's frames: acknowledged frames are
-  delivered, missing ones retried in the same arena with the same numbers
-  until their MSDU's lifetime or the policy's attempts run out, then
-  dropped; a drop under an agreement moves its window and owes a
-  BlockAckReq (`Settled::bar`), and the end's `RateLesson` teaches the rate
-  selection. An agreement that ends returns the frames of an unpublished
-  A-MPDU of more than one frame;
+  plan each: an arena holding frames from an earlier publication first,
+  then the standby; more frames than one as an A-MPDU under the TID's
+  agreement, else a single MPDU of the arena's position 0, so the frames
+  of a TID whose agreement ended drain one MPDU at a time.
+  `DataPlane::completed` decodes an A-MPDU's BlockAck in one pass over the
+  arena's frames: acknowledged frames are delivered, missing ones retried
+  in the same arena with the same numbers until their MSDU's lifetime or
+  the policy's attempts run out, then dropped. A single MPDU had the port's
+  retry plan and is never republished: it is delivered or dropped, and the
+  arena keeps the frames it did not send. A drop under an agreement moves
+  its window and owes a BlockAckReq (`Settled::bar`), and the end's
+  `RateLesson` teaches the rate selection;
 - `port`: the station's and data machine's tokens on a lower-MAC port
   (`PortStaTokens`, `PortDataTokens`) and the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
