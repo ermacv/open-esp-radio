@@ -616,6 +616,69 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.withdraw(held);
         Ok(())
     }
+    /// Publish each idle queue's head: an MPDU, or an aggregate once a
+    /// chain is free; aged heads end first.
+    fn publish_heads(
+        &mut self,
+        held: &Held<'_, 'id, Id, D, B, O>,
+        device: &mut D,
+        now: Instant,
+        stopping: bool,
+    ) -> Result<(), Fault> {
+        for index in 0..4 {
+            if self.running[index].is_some() {
+                continue;
+            }
+            // Expiry continues behind a gate or a command barrier.
+            while self.queues[index]
+                .front()
+                .is_some_and(|p| Self::expired(held, p, now))
+            {
+                match self.queues[index].pop_front() {
+                    Some(Queued::Single(pending)) => {
+                        self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
+                    }
+                    Some(Queued::Aggregate(pending)) => {
+                        if let Err(pending) = self.expire_aggregate(held, pending, now) {
+                            // Its oldest admission aged and no subframe did:
+                            // the record lost its admission.
+                            drop(pending);
+                            return Err(Fault::Capacity);
+                        }
+                    }
+                    None => break,
+                }
+            }
+            if stopping
+                || self.closed
+                || self.closing.is_some()
+                || core_views::configuring::<Id, D, B>(self.core.view())
+                || self.queues[index].front().is_some_and(|p| self.blocked(p))
+            {
+                continue;
+            }
+            #[cfg(oer_debug_control)]
+            if held.publication_hold.get() & (1 << index) != 0 {
+                continue;
+            }
+            // An aggregate waits at the head until a chain is free.
+            if matches!(
+                self.queues.get(index).and_then(|queue| queue.front()),
+                Some(Queued::Aggregate(_))
+            ) && !self.chain_free()
+            {
+                continue;
+            }
+            match self.queues[index].pop_front() {
+                Some(Queued::Single(pending)) => self.publish(held, device, index, pending)?,
+                Some(Queued::Aggregate(pending)) => {
+                    self.publish_aggregate(held, device, index, pending)?
+                }
+                None => {}
+            }
+        }
+        Ok(())
+    }
     /// Offer one TX edge to the core's MPDUs and to the published
     /// aggregates. Their timeout aborts force CCA one at a time: when one
     /// side's settle ends, the other side's latched timeouts are offered
@@ -818,6 +881,17 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     break;
                 }
             }
+        }
+        // A completion's queue publishes its next head at once, before
+        // the rest of the turn.
+        if served_tx
+            && !self.closed
+            && self.closing.is_none()
+            && self.pending_command.is_none()
+            && held.commands.empty()
+        {
+            self.take_idle_open(held, stopping)?;
+            self.publish_heads(held, device, now, stopping)?;
         }
         if device.receive_due() {
             held.receive_due.set(true);
@@ -1048,58 +1122,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             self.closed = true;
             held.terminal(owned::OwnedTerminal::GateClosed(gate));
         }
-        for index in 0..4 {
-            if self.running[index].is_some() {
-                continue;
-            }
-            // Expiry continues behind a gate or a command barrier.
-            while self.queues[index]
-                .front()
-                .is_some_and(|p| Self::expired(held, p, now))
-            {
-                match self.queues[index].pop_front() {
-                    Some(Queued::Single(pending)) => {
-                        self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
-                    }
-                    Some(Queued::Aggregate(pending)) => {
-                        if let Err(pending) = self.expire_aggregate(held, pending, now) {
-                            // Its oldest admission aged and no subframe did:
-                            // the record lost its admission.
-                            drop(pending);
-                            return Err(Fault::Capacity);
-                        }
-                    }
-                    None => break,
-                }
-            }
-            if stopping
-                || self.closed
-                || self.closing.is_some()
-                || core_views::configuring::<Id, D, B>(self.core.view())
-                || self.queues[index].front().is_some_and(|p| self.blocked(p))
-            {
-                continue;
-            }
-            #[cfg(oer_debug_control)]
-            if held.publication_hold.get() & (1 << index) != 0 {
-                continue;
-            }
-            // An aggregate waits at the head until a chain is free.
-            if matches!(
-                self.queues.get(index).and_then(|queue| queue.front()),
-                Some(Queued::Aggregate(_))
-            ) && !self.chain_free()
-            {
-                continue;
-            }
-            match self.queues[index].pop_front() {
-                Some(Queued::Single(pending)) => self.publish(held, device, index, pending)?,
-                Some(Queued::Aggregate(pending)) => {
-                    self.publish_aggregate(held, device, index, pending)?
-                }
-                None => {}
-            }
-        }
+        self.publish_heads(held, device, now, stopping)?;
         if stopping
             && !self.aggregate_running(None)
             && self.open.iter().all(Option::is_none)
