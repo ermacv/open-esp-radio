@@ -2,7 +2,10 @@ use std::{thread, time::Duration};
 
 use oer_protocols_hil_protocol::{
     Endpoint, Key, Message, WireKind,
-    base::{GetImageKeys, Hello, ImageKeyPage, RejectReason, Rejected, digest, sorted_keys},
+    base::{
+        BootEvidence, GetBootStatus, GetImageKeys, Hello, ImageKeyPage, RejectReason, Rejected,
+        ResetReason, digest, sorted_keys,
+    },
 };
 use oer_tools_hil_link::test_support::{Device, HELLO};
 use serde::{Deserialize, Serialize};
@@ -71,6 +74,16 @@ fn serve(mut device: Device) {
                     keys,
                 },
             );
+        } else if let Some(GetBootStatus) = request.decode() {
+            device.send(
+                request.request_id,
+                BootEvidence {
+                    reset_reason: ResetReason::Software,
+                    raw_reset_reason: 12,
+                    post_mortem: None,
+                    platform_panic: None,
+                },
+            );
         } else if let Some(Ask(value)) = request.decode() {
             match value {
                 0 => device.send(request.request_id, Rejected(RejectReason::Busy)),
@@ -133,6 +146,28 @@ fn cases_pass_fail_and_a_reboot_fails_its_case_but_not_the_next() {
         ],
         "{outcomes:?}"
     );
+    server.join().unwrap();
+}
+
+#[test]
+fn a_reboot_prints_how_the_previous_boot_ended() {
+    let (device, link) = Device::new(10);
+    let server = thread::spawn(move || serve(device));
+    let cases = [Case {
+        name: "reboots",
+        run: |cx| ask(2)(cx),
+    }];
+    let selected = cases.iter().collect::<Vec<_>>();
+    let board = crate::fakes::FakeBoard::new(Vec::new());
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let mut out = Vec::new();
+    run::cases(&mut dut, &SCENARIO, &selected, &mut out);
+    let out = String::from_utf8(out).unwrap();
+    assert!(
+        out.contains("boot 000000000000000b: the previous boot ended with reset Software (raw 12), post-mortem None"),
+        "{out}"
+    );
+    drop(dut);
     server.join().unwrap();
 }
 
