@@ -708,6 +708,7 @@ fn alarm_at<T: Timer>(timer: &T, at: Option<Instant>) -> Option<impl Future<Outp
 #[cfg(test)]
 mod tests;
 
-/// The largest message from the actor: owners larger than a frame's travel
-/// in the return queue.
-pub const FROM_ACTOR_BYTES: usize = 96;
+/// The largest message from the actor: a received frame with its metadata
+/// (the S31 receive buffer and its metadata take up to 128 bytes); owners
+/// larger than a frame's travel in the return queue.
+pub const FROM_ACTOR_BYTES: usize = 128;
