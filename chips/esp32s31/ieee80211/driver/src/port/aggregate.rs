@@ -389,11 +389,24 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> IntoI
 }
 
 /// What the driver needs of an admitted aggregate beside its subframes.
-#[derive(Clone, Copy, Debug)]
 pub struct AggregateExecution {
     pub(super) rate: PhyRate,
     pub(super) tid: Tid,
     pub(super) txop_limit_units_32_us: u16,
+    /// What its builder admitted by, which an extension continues.
+    pub(super) admitting: Admitting,
+}
+
+/// What an aggregate admits a subframe by, beside its subframes: its
+/// recipient, the BlockAck window its first subframe roots and the length
+/// budget left.
+pub(super) struct Admitting {
+    pub(super) receiver: IndividualAddress,
+    pub(super) first: SequenceNumber,
+    /// The BlockAck bits of its subframes.
+    pub(super) bits: u64,
+    /// `None` at a rate no aggregate takes.
+    pub(super) budget: Option<AmpduBudget>,
 }
 
 /// One aggregate being built: its fixed recipient, TID, rate and key, and
@@ -478,45 +491,70 @@ impl<'k, 'p, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observation
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations, R, K, S: AggregateState>
     Aggregate<'_, '_, '_, Id, D, B, O, R, K, S>
 {
-    /// Whether the subframe of `len` MPDU octets at `sequence` fits: a free
-    /// place, the BlockAck window rooted at the first subframe's sequence
-    /// number (its modulo-4096 distance, IEEE Std 802.11-2020, 10.24.7)
-    /// without a repeated one, and the length budget, which it then takes.
+    /// Whether the subframe of `len` MPDU octets at `sequence` fits, which
+    /// then takes its budget ([`admit`]).
     fn admit(
         &mut self,
         len: usize,
         sequence: Option<SequenceNumber>,
         loaned: bool,
     ) -> Result<(SequenceNumber, u64), PreparationError> {
-        if self.subframes.len() >= TX_AMPDU_SUBFRAMES {
-            return Err(PreparationError::AggregateFull);
-        }
-        if !loaned {
-            return Err(PreparationError::MissingBodyLoan);
-        }
         let sequence = sequence.ok_or(PreparationError::BlockAckWindow)?;
         let first = S::retain_head(&self.first, sequence);
-        let distance =
-            SequenceNumber::from_low_bits(sequence.get().wrapping_sub(first.get())).get();
-        let bit = 1_u64
-            .checked_shl(u32::from(distance))
-            .filter(|bit| self.bits & bit == 0)
-            .ok_or(PreparationError::BlockAckWindow)?;
-        // The hardware adds the MIC of a protected subframe and every FCS.
-        let mic = match self.subframes.key() {
-            Some(_) => crate::ordinary_tx::TX_CCMP_MIC_SIZE,
-            None => 0,
-        };
-        let psdu = len
-            .checked_add(mic + crate::ordinary_tx::TX_FCS_SIZE)
-            .ok_or(PreparationError::AggregateFull)?;
-        self.budget
-            .as_mut()
-            .ok_or(PreparationError::AggregateFull)?
-            .push(psdu)
-            .map_err(|_| PreparationError::AggregateFull)?;
+        let bit = admit(
+            self.subframes.len(),
+            self.subframes.key().is_some(),
+            &mut self.budget,
+            (first, self.bits),
+            len,
+            sequence,
+            loaned,
+        )?;
         Ok((sequence, bit))
     }
+}
+
+/// Whether the subframe of `len` MPDU octets at `sequence` fits an
+/// aggregate of `count` subframes (protected when `protected`) whose
+/// BlockAck window `first` roots and whose subframes hold `bits`: a free
+/// place, the window (the modulo-4096 distance, IEEE Std 802.11-2020,
+/// 10.24.7) without a repeated sequence number, and the length budget,
+/// which it then takes. Its BlockAck bit.
+fn admit(
+    count: usize,
+    protected: bool,
+    budget: &mut Option<AmpduBudget>,
+    (first, bits): (SequenceNumber, u64),
+    len: usize,
+    sequence: SequenceNumber,
+    loaned: bool,
+) -> Result<u64, PreparationError> {
+    if count >= TX_AMPDU_SUBFRAMES {
+        return Err(PreparationError::AggregateFull);
+    }
+    if !loaned {
+        return Err(PreparationError::MissingBodyLoan);
+    }
+    let distance = SequenceNumber::from_low_bits(sequence.get().wrapping_sub(first.get())).get();
+    let bit = 1_u64
+        .checked_shl(u32::from(distance))
+        .filter(|bit| bits & bit == 0)
+        .ok_or(PreparationError::BlockAckWindow)?;
+    // The hardware adds the MIC of a protected subframe and every FCS.
+    let mic = if protected {
+        crate::ordinary_tx::TX_CCMP_MIC_SIZE
+    } else {
+        0
+    };
+    let psdu = len
+        .checked_add(mic + crate::ordinary_tx::TX_FCS_SIZE)
+        .ok_or(PreparationError::AggregateFull)?;
+    budget
+        .as_mut()
+        .ok_or(PreparationError::AggregateFull)?
+        .push(psdu)
+        .map_err(|_| PreparationError::AggregateFull)?;
+    Ok(bit)
 }
 
 /// The sequence number of the MPDU of `len` octets in `dma`.
@@ -552,36 +590,104 @@ where
     'id: 'k + 'p,
 {
     let (mut aggregate, source) = operation.into_parts();
-    let (place, record, (sequence, bit)) = match source {
+    let fixed = Fixed {
+        key: aggregate.subframes.key(),
+        role: R::ROLE,
+        receiver: aggregate.receiver,
+        tid: aggregate.tid,
+    };
+    match take(source, fixed, |len, sequence, loaned| {
+        aggregate.admit(len, sequence, loaned)
+    }) {
+        Ok(Taken {
+            place,
+            record,
+            sequence,
+            bit,
+        }) => {
+            // `admit` checked for a free place.
+            aggregate.subframes.push(place, record);
+            Ok(nonempty(aggregate, sequence, bit))
+        }
+        Err((reason, subframe)) => Err(AggregateRefused {
+            reason,
+            aggregate,
+            subframe,
+        }),
+    }
+}
+
+/// What every subframe of an aggregate shares.
+#[derive(Clone, Copy)]
+struct Fixed {
+    key: Option<RawKeyIdentity>,
+    role: VifRole,
+    receiver: IndividualAddress,
+    tid: Tid,
+}
+
+/// A subframe an aggregate admitted: its place and record, its sequence
+/// number and BlockAck bit.
+struct Taken<'id, Id: SlotIdentity, const B: usize, Body> {
+    place: Slot<'id, Buffers, Part<Id, 3>>,
+    record: SubframeRecord<B, Body>,
+    sequence: SequenceNumber,
+    bit: u64,
+}
+
+type Source<'id, Id, D, const B: usize, O, K> =
+    PoolSubframe<'id, Types<Id, D, B, O>, buffer::BufferClass<B>, K>;
+type Checked<'id, Id, D, const B: usize, O, K> = CheckedSubframe<
+    buffer::Buffer<'id, Id, D, B, O>,
+    buffer::Sent<'id, Id, D, B, O>,
+    ClassSubframe<buffer::BufferClass<B>, K>,
+    <D as Device<B>>::Body,
+>;
+/// A subframe's sequence number and BlockAck bit, or why it does not fit.
+type Admitted = Result<(SequenceNumber, u64), PreparationError>;
+type TakeResult<'id, Id, D, const B: usize, O, K> = Result<
+    Taken<'id, Id, B, <D as Device<B>>::Body>,
+    (PreparationError, Source<'id, Id, D, B, O, K>),
+>;
+
+/// Take a checked subframe's record if `admit` admits it, as a subframe of
+/// an aggregate of `fixed`: a retransmission must name its key, role,
+/// recipient and TID. A refusal returns the subframe unchanged.
+#[allow(clippy::result_large_err, reason = "a refusal returns every owner")]
+fn take<'id, Id, D, const B: usize, O, K>(
+    source: Checked<'id, Id, D, B, O, K>,
+    fixed: Fixed,
+    admit: impl FnOnce(usize, Option<SequenceNumber>, bool) -> Admitted,
+) -> TakeResult<'id, Id, D, B, O, K>
+where
+    Id: SlotIdentity + 'id,
+    D: Device<B>,
+    O: Observations,
+    K: Ieee80211Capabilities,
+{
+    match source {
         CheckedSubframe::Sent(mut sent) => {
             let mpdu = &mut sent.mpdu;
-            let reason = if mpdu.key != aggregate.subframes.key()
-                || mpdu.key.as_ref().is_some_and(|key| !key.active())
-            {
-                Some(PreparationError::RetransmissionKey)
-            } else if mpdu.role != R::ROLE
-                || mpdu.layout.recipient() != Some((aggregate.receiver, aggregate.tid))
-            {
-                Some(PreparationError::RetransmissionKind)
-            } else {
-                None
-            };
+            let reason =
+                if mpdu.key != fixed.key || mpdu.key.as_ref().is_some_and(|key| !key.active()) {
+                    Some(PreparationError::RetransmissionKey)
+                } else if mpdu.role != fixed.role
+                    || mpdu.layout.recipient() != Some((fixed.receiver, fixed.tid))
+                {
+                    Some(PreparationError::RetransmissionKind)
+                } else {
+                    None
+                };
             let len = mpdu.layout.mpdu_len();
             let sequence = sequence(&mut mpdu.buffer.dma, len);
             let loaned = mpdu.buffer.loan.is_some();
             let admitted = match reason {
                 Some(reason) => Err(reason),
-                None => aggregate.admit(len, sequence, loaned),
+                None => admit(len, sequence, loaned),
             };
-            let admitted = match admitted {
+            let (sequence, bit) = match admitted {
                 Ok(admitted) => admitted,
-                Err(reason) => {
-                    return Err(AggregateRefused {
-                        reason,
-                        aggregate,
-                        subframe: SubframeSource::Sent(sent),
-                    });
-                }
+                Err(reason) => return Err((reason, SubframeSource::Sent(sent))),
             };
             let Mpdu {
                 buffer,
@@ -591,15 +697,19 @@ where
                 published,
                 ..
             } = sent.mpdu;
-            let record = SubframeRecord {
-                dma: buffer.dma,
-                admission: buffer.admission,
-                layout,
-                body,
-                pn,
-                published,
-            };
-            (buffer.place, record, admitted)
+            Ok(Taken {
+                place: buffer.place,
+                record: SubframeRecord {
+                    dma: buffer.dma,
+                    admission: buffer.admission,
+                    layout,
+                    body,
+                    pn,
+                    published,
+                },
+                sequence,
+                bit,
+            })
         }
         CheckedSubframe::Fresh(fresh) => {
             let (
@@ -614,35 +724,35 @@ where
             let len = layout.mpdu_len();
             let sequence = sequence(&mut buffer.dma, len);
             let loaned = buffer.loan.is_some();
-            let admitted = match aggregate.admit(len, sequence, loaned) {
+            let (sequence, bit) = match admit(len, sequence, loaned) {
                 Ok(admitted) => admitted,
                 Err(reason) => {
-                    return Err(AggregateRefused {
+                    return Err((
                         reason,
-                        aggregate,
-                        subframe: SubframeSource::Fresh {
+                        SubframeSource::Fresh {
                             numbering,
                             buffer,
                             frame,
                             body,
                         },
-                    });
+                    ));
                 }
             };
-            let record = SubframeRecord {
-                dma: buffer.dma,
-                admission: buffer.admission,
-                layout,
-                body,
-                pn: numbering.packet_number(),
-                published: false,
-            };
-            (buffer.place, record, admitted)
+            Ok(Taken {
+                place: buffer.place,
+                record: SubframeRecord {
+                    dma: buffer.dma,
+                    admission: buffer.admission,
+                    layout,
+                    body,
+                    pn: numbering.packet_number(),
+                    published: false,
+                },
+                sequence,
+                bit,
+            })
         }
-    };
-    // `admit` checked for a free place.
-    aggregate.subframes.push(place, record);
-    Ok(nonempty(aggregate, sequence, bit))
+    }
 }
 
 /// The builder after it accepted the subframe at `sequence` holding `bit`.
@@ -714,6 +824,12 @@ where
                 rate: self.rate.rate().get(),
                 tid: self.tid,
                 txop_limit_units_32_us: self.txop_limit_units_32_us,
+                admitting: Admitting {
+                    receiver: self.receiver,
+                    first: S::into_head(self.first),
+                    bits: self.bits,
+                    budget: self.budget,
+                },
             },
             payload: self.subframes.into_owned(&loan),
         }
@@ -735,5 +851,100 @@ where
     }
     fn into_parts(self) -> Self::Cancelled {
         self.subframes
+    }
+}
+
+/// A submitted aggregate the port holds open, lent for more subframes
+/// ([`AmpduPhase::open_ampdu`]): the last submission of its access
+/// category, which the driver takes once the commands before it are in and
+/// nothing of its category is published or queued. The lender keeps the driver's
+/// state borrowed, within one synchronous step of the station's task.
+pub struct OpenAggregate<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) driver: core::cell::RefMut<'a, driver::Driver<'static, Id, D, B, O>>,
+    pub(super) queue: usize,
+    pub(super) loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
+    /// The admission of its new subframes: the clock read once per loan.
+    pub(super) now: Instant,
+}
+
+/// Append a subframe to the open aggregate under its builder's rules
+/// ([`TxBufferPool::extend_aggregate`]).
+#[allow(clippy::result_large_err, reason = "a refusal returns the subframe")]
+pub(super) fn extend<'id, Id, D, const B: usize, O, K>(
+    open: &mut OpenAggregate<'_, 'id, Id, D, B, O>,
+    subframe: Source<'id, Id, D, B, O, K>,
+) -> Result<(), ExtendRefused<Source<'id, Id, D, B, O, K>>>
+where
+    Id: SlotIdentity + 'id,
+    D: Device<B>,
+    O: Observations,
+    K: Ieee80211Capabilities,
+{
+    let OpenAggregate {
+        driver,
+        queue,
+        loan,
+        now,
+    } = open;
+    let Some(pending) = driver.open_mut(*queue) else {
+        return Err(ExtendRefused {
+            reason: ExtendError::Closed,
+            subframe,
+        });
+    };
+    let tid = pending.execution.tid;
+    let admitting = &mut pending.execution.admitting;
+    let subframes = pending.operation.execute();
+    let fixed = Fixed {
+        key: subframes.key(),
+        role: subframes.role(),
+        receiver: admitting.receiver,
+        tid,
+    };
+    let protection = match fixed.key {
+        Some(_) => MpduProtection::Ccmp,
+        None => MpduProtection::Open,
+    };
+    let checked = match CheckedSubframe::new(subframe, protection, fixed.receiver, tid) {
+        Ok(checked) => checked,
+        Err(LayoutRefused { reason, operation }) => {
+            return Err(ExtendRefused {
+                reason: ExtendError::Layout(reason),
+                subframe: operation,
+            });
+        }
+    };
+    let count = subframes.len();
+    let taken = take(checked, fixed, |len, sequence, loaned| {
+        let sequence = sequence.ok_or(PreparationError::BlockAckWindow)?;
+        let bit = admit(
+            count,
+            fixed.key.is_some(),
+            &mut admitting.budget,
+            (admitting.first, admitting.bits),
+            len,
+            sequence,
+            loaned,
+        )?;
+        Ok((sequence, bit))
+    });
+    match taken {
+        Ok(Taken {
+            place,
+            mut record,
+            bit,
+            ..
+        }) => {
+            admitting.bits |= bit;
+            let at = *record.admission.get_or_insert(*now);
+            pending.oldest = Some(pending.oldest.map_or(at, |oldest| oldest.min(at)));
+            // `admit` checked for a free place.
+            subframes.push(loan.reclaim_slot(place), record);
+            Ok(())
+        }
+        Err((reason, subframe)) => Err(ExtendRefused {
+            reason: ExtendError::Preparation(reason),
+            subframe,
+        }),
     }
 }

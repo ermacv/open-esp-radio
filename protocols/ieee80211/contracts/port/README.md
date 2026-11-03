@@ -120,6 +120,13 @@ back; its operations are synchronous and never wait:
   A successful push returns `NonEmptyAggregate`; only this state can be
   submitted. `AggregateFull` remains a push refusal, and an empty aggregate
   has no submit operation.
+  A backend may hold a submitted aggregate open while it is unpublished and
+  its access category's last submission: `AmpduPhase::open_ampdu` lends it
+  by its ticket's index, and `TxBufferPool::extend_aggregate` appends a
+  subframe under the same rules (layout through `CheckedSubframe::new`),
+  which then comes back with the aggregate's terminal. A refusal
+  (`ExtendError`) returns the subframe unchanged; `Closed` may come at any
+  time. A later submission of the category, and any other command, closes it.
   `PhaseAggregate::into_parts` cancels either state without a ticket or TX
   terminal. Cancellation iterates complete MPDUs and does not manufacture an
   admitted aggregate from an empty builder. Sent subframes retain their

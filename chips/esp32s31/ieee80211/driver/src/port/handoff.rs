@@ -363,7 +363,56 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> FrontHeld<
         }
         serial
     }
+    /// Send `command` to the driver after the open aggregates it follows:
+    /// a submission after its category's, any other after every one.
     pub(super) fn command(&self, command: Cmd<'static, Id, D, B, O>) {
+        let category = match &command {
+            driver::Command::Submit(pending) => Some(pending.category),
+            driver::Command::SubmitAggregate(pending) => Some(pending.category),
+            _ => None,
+        };
+        self.close(category);
+        self.send(command);
+    }
+    /// Send the open aggregate of `category`, or of every category, to the
+    /// driver: it is no longer open.
+    pub(super) fn close(
+        &self,
+        category: Option<oer_protocols_ieee80211_wire::qos::WmmAccessCategory>,
+    ) {
+        // Only the driver's own turn borrows its state, which a front call
+        // never meets.
+        let Ok(mut driver) = self.driver.try_borrow_mut() else {
+            self.storage.poison(Fault::HardwareUnavailable);
+            return;
+        };
+        for queue in 0..4 {
+            if category.is_none_or(|category| driver::queue(category) == queue)
+                && let Some(pending) = driver.take_open(queue)
+            {
+                self.send(driver::Command::SubmitAggregate(pending));
+            }
+        }
+    }
+    /// Hold `pending` open as its category's last submission; the driver
+    /// takes it at its next turn when it would go next.
+    pub(super) fn hold_open(&self, pending: driver::PendingAggregate<'static, Id, D, B, O>) {
+        let held = match self.driver.try_borrow_mut() {
+            Ok(mut driver) => driver.hold_open(pending),
+            Err(_) => Err(pending),
+        };
+        match held {
+            Ok(false) => {}
+            Ok(true) => self.storage.driver.wake(),
+            Err(pending) => {
+                // A held driver state, or an aggregate already open: it goes
+                // closed, and the installation poisons.
+                self.storage.poison(Fault::HardwareUnavailable);
+                self.send(driver::Command::SubmitAggregate(pending));
+            }
+        }
+    }
+    fn send(&self, command: Cmd<'static, Id, D, B, O>) {
         if let Err(error) = self.commands.try_send(command) {
             // The first failed command already poisoned the installation; a
             // later one stays quarantined with it.

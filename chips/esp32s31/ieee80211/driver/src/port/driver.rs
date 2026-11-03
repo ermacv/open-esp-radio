@@ -181,6 +181,10 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     free: [Option<FreeQueue<'id, CorePath<Id>>>; 4],
     queues: [heapless::Deque<Queued<'id, Id, D, B, O>, TX_TICKETS>; 4],
     running: [Option<Running<'id, Id, D, B, O>>; 4],
+    /// Each queue's open aggregate: its category's last submission, which
+    /// the station extends until the driver takes it into the queue, when
+    /// it would go next.
+    open: [Option<PendingAggregate<'id, Id, D, B, O>>; 4],
     /// Each queue's ordinary descriptor, while no MPDU of it is published.
     descriptors: [Option<Pin<&'static mut TxSlot<B>>>; TX_DESCRIPTORS],
     /// The aggregate chains no aggregate holds.
@@ -243,7 +247,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
     /// A retired driver holds no admitted work for a new installation.
     pub(super) fn retired(&self) -> bool {
-        self.queues.iter().all(|q| q.is_empty()) && self.running.iter().all(Option::is_none)
+        self.queues.iter().all(|q| q.is_empty())
+            && self.running.iter().all(Option::is_none)
+            && self.open.iter().all(Option::is_none)
     }
     pub(super) const fn vacant() -> Self {
         Self {
@@ -252,6 +258,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             free: [const { None }; 4],
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
+            open: [const { None }; 4],
             descriptors: [const { None }; TX_DESCRIPTORS],
             chains: [const { None }; AMPDU_CHAINS],
             pending_command: None,
@@ -292,6 +299,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             queue.clear();
         }
         for owner in &mut self.running {
+            drop(owner.take());
+        }
+        for owner in &mut self.open {
             drop(owner.take());
         }
         let descriptors = self.take_descriptors();
@@ -1021,6 +1031,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             }
         }
+        self.take_idle_open(held, stopping)?;
         self.withdraw(held);
         // A gate closes after the published aggregates end, as after the
         // MPDUs the core holds.
@@ -1091,6 +1102,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         if stopping
             && !self.aggregate_running(None)
+            && self.open.iter().all(Option::is_none)
             && self.pending_command.is_none()
             && held.commands.empty()
             && !core_views::configuring::<Id, D, B>(self.core.view())
@@ -1552,7 +1564,7 @@ pub(super) fn settle_lent<D: Device<B>, const B: usize>(
     }
     Ok(())
 }
-fn queue(category: WmmAccessCategory) -> usize {
+pub(super) fn queue(category: WmmAccessCategory) -> usize {
     usize::from(LegacyTxQueue::from_access_category(category).hardware_index())
 }
 fn vif(role: VifRole) -> usize {

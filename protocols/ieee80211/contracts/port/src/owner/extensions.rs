@@ -506,12 +506,45 @@ pub trait AmpduPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id> {
 
     /// Submit a nonempty aggregate. All preparation refusals happen at push;
     /// only poisoning can refuse this operation, with the usual fail-stop.
+    ///
+    /// The backend may keep the aggregate open until it publishes it:
+    /// [`Self::open_ampdu`] then lends it for more subframes.
     fn submit_ampdu<'k>(
         &mut self,
         attempt: InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
     ) -> Result<(), Poisoned<<Self::Types as PhaseTypes<'id>>::Fault>>
     where
         'id: 'k;
+
+    /// The submitted aggregate whose ticket has index `ticket`
+    /// (`Slot::index`), while the backend holds it open: unpublished, and
+    /// still the last submission of its access category. `None` once it is
+    /// closed; a backend may close it at any time. Subframes join it
+    /// through [`TxBufferPool::extend_aggregate`].
+    fn open_ampdu(
+        &mut self,
+        ticket: u8,
+    ) -> Option<<Self::Types as PhaseTypes<'id>>::OpenAggregate<'_>>;
+}
+
+/// Why [`TxBufferPool::extend_aggregate`] refused a subframe.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExtendError {
+    /// The aggregate is no longer open.
+    Closed,
+    /// The aggregate's builder rules refuse the subframe.
+    Preparation(PreparationError),
+    /// The fresh subframe does not lay out for the aggregate's protection,
+    /// recipient and TID.
+    Layout(crate::LayoutError),
+}
+
+/// A refused extension: why, and the unchanged subframe.
+pub struct ExtendRefused<M> {
+    /// Why the aggregate did not take it.
+    pub reason: ExtendError,
+    /// The subframe, as it was given.
+    pub subframe: M,
 }
 
 /// The TBTT schedule of an interface: the wake plan the backend carries

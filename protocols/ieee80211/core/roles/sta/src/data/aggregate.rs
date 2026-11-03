@@ -48,73 +48,6 @@ pub struct AggregateWindow {
     pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
 }
 
-/// Why an attempt pass made no attempt, kept while only MSDUs come: an
-/// MSDU that leaves it standing changes no attempt, so the service skips
-/// the next pass.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum AttemptWait {
-    /// No ticket is free: nothing goes before a terminal returns one.
-    NoTicket,
-    /// The next aggregate of `tid` could still grow and waits while an
-    /// attempt of its category is out.
-    Growing {
-        tid: WmmUserPriority,
-        window: AggregateWindow,
-        /// Its members so far, below `limit`.
-        count: usize,
-        limit: usize,
-        /// Their octets.
-        length: u32,
-        /// The sequence number of its last member.
-        last: SequenceNumber,
-    },
-}
-
-impl AttemptWait {
-    /// The wait after one more owed MPDU, or `None` once an attempt pass
-    /// would make an attempt: the aggregate it joins is full, or it does
-    /// not join it.
-    pub(crate) fn after_input(
-        self,
-        tid: WmmUserPriority,
-        sequence: SequenceNumber,
-        mpdu: usize,
-        protection: DataProtection<()>,
-    ) -> Option<Self> {
-        match self {
-            Self::NoTicket => Some(self),
-            Self::Growing {
-                tid: growing,
-                window,
-                count,
-                limit,
-                length,
-                last,
-            } => {
-                // An MPDU of another TID queues behind the growing one.
-                if tid != growing {
-                    return Some(self);
-                }
-                let follows = oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(
-                    last, sequence,
-                ) == 1;
-                let length = subframe_octets(mpdu, protection)
-                    .and_then(|octets| length.checked_add(octets))
-                    .filter(|total| window.fits(*total))?;
-                let count = count.checked_add(1).filter(|count| *count < limit)?;
-                (follows && window.holds(sequence)).then_some(Self::Growing {
-                    tid,
-                    window,
-                    count,
-                    limit,
-                    length,
-                    last: sequence,
-                })
-            }
-        }
-    }
-}
-
 /// The octets one member takes in an aggregate: its delimiter, its MPDU
 /// with the CCMP MIC the port appends to a protected one and the FCS,
 /// padded to a four-octet boundary.
@@ -362,6 +295,8 @@ pub struct DataAggregateContext<
     protection: DataProtection<()>,
     /// Each member's place in the data machine's [`MemberBank`], in order.
     places: heapless::Vec<u8, MAX_AGGREGATE>,
+    /// The members' octets in the aggregate ([`subframe_octets`]).
+    octets: u32,
     members: PhantomData<fn() -> Member<K, C>>,
 }
 
@@ -372,6 +307,7 @@ pub struct DataAggregateInfo<K, C, A> {
     access_category: WmmAccessCategory,
     protection: DataProtection<()>,
     places: heapless::Vec<u8, MAX_AGGREGATE>,
+    octets: u32,
     members: PhantomData<fn() -> Member<K, C>>,
 }
 
@@ -390,6 +326,7 @@ where
             access_category: self.access_category,
             protection: self.protection,
             places: self.places,
+            octets: self.octets,
             members: PhantomData,
         })
     }
@@ -405,6 +342,7 @@ where
             access_category: data.access_category,
             protection: data.protection,
             places: data.places,
+            octets: data.octets,
             members: PhantomData,
         }
     }
@@ -524,9 +462,9 @@ impl<
         window: impl FnOnce(WmmUserPriority) -> Option<AggregateWindow>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<DataAttempt<'id, D, K>> {
-        self.waits = None;
+        self.waits = false;
         if self.tickets.is_empty() {
-            self.waits = Some(AttemptWait::NoTicket);
+            self.waits = true;
             return None;
         }
         let tid = self.next_tid()?;
@@ -539,7 +477,6 @@ impl<
             return self.poll_action().map(DataAttempt::Single);
         };
         let category = front.context.access_category;
-        let outstanding = self.admission.outstanding(category);
         let ticket = self.tickets.take()?;
         let Some(permit) = self.admission.take(category) else {
             self.tickets.put(ticket, &mut ());
@@ -585,32 +522,9 @@ impl<
             self.tickets.put(ticket, &mut ());
             return self.poll_action().map(DataAttempt::Single);
         }
-        // An aggregate that could still grow waits while another attempt of
-        // its category is out: the MSDUs arriving meanwhile join it when
-        // that attempt's terminal frees the category, instead of each going
-        // in an aggregate of its own. A full one, held by a limit, goes now.
-        let grows = count < limit
-            && self
-                .owed
-                .iter()
-                .filter(|owed| owed.context.tid == tid)
-                .nth(count)
-                .is_none();
-        if grows && outstanding {
-            self.admission.put(category, permit);
-            self.tickets.put(ticket, &mut ());
-            self.waits = previous.map(|last| AttemptWait::Growing {
-                tid,
-                window,
-                count,
-                limit,
-                length,
-                last,
-            });
-            return None;
-        }
         let mut places = heapless::Vec::new();
         let mut shared = None;
+        let mut octets = 0_u32;
         for _ in 0..count {
             let Some(OwedMpdu { context, buffer }) =
                 self.owed.remove_first(|owed| owed.context.tid == tid)
@@ -618,6 +532,9 @@ impl<
                 break;
             };
             shared.get_or_insert((context.link, context.protection));
+            // Every member fit the window's length above.
+            octets = subframe_octets(context.frame.frame().len().get(), context.protection)
+                .map_or(octets, |member| octets.saturating_add(member));
             let member = Member {
                 frame: context.frame,
                 order: context.order,
@@ -655,10 +572,78 @@ impl<
                 access_category: category,
                 protection,
                 places,
+                octets,
                 members: PhantomData,
             },
             ticket,
         }))
+    }
+
+    /// The next owed MPDU of `context`'s TID joins it, with no ticket, when
+    /// its sequence number follows the last member's inside the window and
+    /// the aggregate takes it (the window's subframes and length): its
+    /// index, whose memory waits in the bank for the port
+    /// ([`Self::aggregate_mpdu`]). A refusal there gives it back to its
+    /// queue through [`Self::unbuilt`]. `window` is asked only when such an
+    /// MPDU is owed.
+    pub fn extend_aggregate(
+        &mut self,
+        context: &mut DataAggregateContext<'id, K, D::Class, AcPermit, D::EpochPath>,
+        window: impl FnOnce() -> Option<AggregateWindow>,
+        events: &mut impl EventSink<StaEvent>,
+    ) -> Option<usize> {
+        let last = self.members.get(*context.places.last()?)?.sequence;
+        let next = &self
+            .owed
+            .first(|owed| owed.context.tid == context.tid)?
+            .context;
+        let sequence = next.sequence;
+        if next.link != context.link
+            || next.protection != context.protection
+            || oer_protocols_ieee80211_core_upper_mac::sequence::forward_distance(last, sequence)
+                != 1
+        {
+            return None;
+        }
+        let window = window()?;
+        let index = context.places.len();
+        let octets = subframe_octets(next.frame.frame().len().get(), next.protection)
+            .and_then(|member| context.octets.checked_add(member))
+            .filter(|total| window.fits(*total))?;
+        if index >= window.subframes.min(MAX_AGGREGATE) || !window.holds(sequence) {
+            return None;
+        }
+        let OwedMpdu {
+            context: owed,
+            buffer,
+        } = self
+            .owed
+            .remove_first(|owed| owed.context.tid == context.tid)?;
+        let member = Member {
+            frame: owed.frame,
+            order: owed.order,
+            admitted: owed.admitted,
+            sequence: owed.sequence,
+            attempts: owed.attempts,
+        };
+        let lost = match self.members.store(member, buffer) {
+            Err((_member, buffer)) => buffer,
+            Ok(place) => match context.places.push(place) {
+                Ok(()) => {
+                    context.octets = octets;
+                    return Some(index);
+                }
+                Err(_) => {
+                    let _member = self.members.take(place);
+                    self.members.take_memory(place)?
+                }
+            },
+        };
+        // The bank has a place for every buffer and the places' capacity
+        // is the limit above: neither refuses.
+        report(events, || StaEvent::DataLost(DataLoss::Overflow));
+        self.retire(lost, events);
+        None
     }
 
     /// Take the memory of the member at `index` of `context` from the bank,
@@ -735,7 +720,7 @@ impl<
         retry: Option<AggregateRetry>,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<BlockAckMarks> {
-        self.waits = None;
+        self.waits = false;
         // Without a policy a missing member is not retried.
         let retry = retry.unwrap_or(AggregateRetry {
             lifetime: oer_portable_time::Duration::ZERO,
@@ -757,6 +742,7 @@ impl<
             access_category,
             protection,
             mut places,
+            octets: _,
             members: _,
         } = context;
         self.admission.put(access_category, admission);
@@ -767,6 +753,7 @@ impl<
             access_category,
             protection,
             places: heapless::Vec::new(),
+            octets: 0,
             members: PhantomData,
         };
         let current = Some(link) == self.link;

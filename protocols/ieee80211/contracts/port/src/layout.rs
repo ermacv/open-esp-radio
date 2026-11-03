@@ -483,6 +483,67 @@ impl<A, B, N, F, O> CheckedAggregate<A, B, N, F, O> {
         (self.aggregate, self.source)
     }
 }
+impl<B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities, O: crate::TxBody>
+    CheckedSubframe<B, N, ClassSubframe<C, K>, O>
+{
+    /// Lay out a fresh subframe for an aggregate of `protection`, `receiver`
+    /// and `tid`: its header is written in its buffer. A Sent MPDU keeps the
+    /// layout it went out with. A refusal returns the source unchanged.
+    pub fn new(
+        source: crate::SubframeSource<B, N, ClassSubframe<C, K>, O>,
+        protection: MpduProtection,
+        receiver: IndividualAddress,
+        tid: Tid,
+    ) -> SubframeLayoutResult<B, N, ClassSubframe<C, K>, O> {
+        let (numbering, mut buffer, frame, body) = match source {
+            crate::SubframeSource::Sent(mpdu) => return Ok(Self::Sent(mpdu)),
+            crate::SubframeSource::Fresh {
+                numbering,
+                buffer,
+                frame,
+                body,
+            } => (numbering, buffer, frame, body),
+        };
+        let checked = if numbering.matches(protection) {
+            let body_bytes = body.as_ref().map(crate::TxBody::bytes);
+            MpduLayout::subframe(
+                &frame,
+                body_bytes.map_or(0, <[u8]>::len),
+                protection,
+                receiver,
+                tid,
+            )
+            .and_then(|layout| {
+                let bytes = buffer
+                    .bytes_mut()
+                    .map_err(|_| LayoutError::BufferUnavailable)?;
+                layout.initialize_subframe(bytes, &frame, body_bytes, receiver, tid)
+            })
+        } else {
+            Err(LayoutError::NumberingProtectionMismatch)
+        };
+        match checked {
+            Ok(layout) => Ok(Self::Fresh(LaidOut {
+                source: FreshSubframe {
+                    numbering,
+                    buffer,
+                    frame,
+                    body,
+                },
+                layout,
+            })),
+            Err(reason) => Err(LayoutRefused {
+                reason,
+                operation: crate::SubframeSource::Fresh {
+                    numbering,
+                    buffer,
+                    frame,
+                    body,
+                },
+            }),
+        }
+    }
+}
 impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities, O: crate::TxBody>
     CheckedAggregate<A, B, N, ClassSubframe<C, K>, O>
 {
@@ -494,76 +555,18 @@ impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities,
     where
         A: crate::PhaseAggregate<'id>,
     {
-        let source = match source {
-            crate::SubframeSource::Sent(mpdu) => CheckedSubframe::Sent(mpdu),
-            crate::SubframeSource::Fresh {
-                numbering,
-                mut buffer,
-                frame,
-                body,
-            } => {
-                if !numbering.matches(aggregate.protection()) {
-                    return Err(LayoutRefused {
-                        reason: LayoutError::NumberingProtectionMismatch,
-                        operation: (
-                            aggregate,
-                            crate::SubframeSource::Fresh {
-                                numbering,
-                                buffer,
-                                frame,
-                                body,
-                            },
-                        ),
-                    });
-                }
-                let body_bytes = body.as_ref().map(crate::TxBody::bytes);
-                let checked = MpduLayout::subframe(
-                    &frame,
-                    body_bytes.map_or(0, <[u8]>::len),
-                    aggregate.protection(),
-                    aggregate.receiver(),
-                    aggregate.tid(),
-                )
-                .and_then(|layout| {
-                    let bytes = buffer
-                        .bytes_mut()
-                        .map_err(|_| LayoutError::BufferUnavailable)?;
-                    layout.initialize_subframe(
-                        bytes,
-                        &frame,
-                        body_bytes,
-                        aggregate.receiver(),
-                        aggregate.tid(),
-                    )
-                });
-                match checked {
-                    Ok(layout) => CheckedSubframe::Fresh(LaidOut {
-                        source: FreshSubframe {
-                            numbering,
-                            buffer,
-                            frame,
-                            body,
-                        },
-                        layout,
-                    }),
-                    Err(reason) => {
-                        return Err(LayoutRefused {
-                            reason,
-                            operation: (
-                                aggregate,
-                                crate::SubframeSource::Fresh {
-                                    numbering,
-                                    buffer,
-                                    frame,
-                                    body,
-                                },
-                            ),
-                        });
-                    }
-                }
-            }
-        };
-        Ok(Self { aggregate, source })
+        match CheckedSubframe::new(
+            source,
+            aggregate.protection(),
+            aggregate.receiver(),
+            aggregate.tid(),
+        ) {
+            Ok(source) => Ok(Self { aggregate, source }),
+            Err(LayoutRefused { reason, operation }) => Err(LayoutRefused {
+                reason,
+                operation: (aggregate, operation),
+            }),
+        }
     }
 }
 
@@ -572,6 +575,9 @@ pub type SourceLayoutResult<B, N, F, O, Key, Plan> = Result<
     CheckedTxSource<B, N, F, O, Key, Plan>,
     LayoutRefused<crate::TxSource<B, N, F, O, Key, Plan>>,
 >;
+/// Result of laying out one subframe for an aggregate.
+pub type SubframeLayoutResult<B, N, F, O> =
+    Result<CheckedSubframe<B, N, F, O>, LayoutRefused<crate::SubframeSource<B, N, F, O>>>;
 /// Result of checking a builder and its subframe together.
 pub type AggregateLayoutResult<A, B, N, F, O> =
     Result<CheckedAggregate<A, B, N, F, O>, LayoutRefused<(A, crate::SubframeSource<B, N, F, O>)>>;

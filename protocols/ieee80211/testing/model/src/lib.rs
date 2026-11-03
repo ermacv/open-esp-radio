@@ -1090,6 +1090,10 @@ impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
         K: Ieee80211Capabilities,
         S: AggregateState,
         'id: 'k;
+    type OpenAggregate<'a>
+        = ModelOpenAggregate<'a, 'id, B>
+    where
+        Self: 'a;
     type TxBody = ModelBodyOf<B>;
     type TicketKind = ModelTickets;
     type AckEvidence = ModelAck;
@@ -1233,6 +1237,18 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
         'id: 'k + 'p,
     {
         push_model(operation)
+    }
+
+    fn extend_aggregate<K: Ieee80211Capabilities>(
+        open: &mut ModelOpenAggregate<'_, 'id, B>,
+        subframe: oer_protocols_ieee80211_contracts_port::PoolSubframe<'id, Self, C, K>,
+    ) -> Result<
+        (),
+        oer_protocols_ieee80211_contracts_port::ExtendRefused<
+            oer_protocols_ieee80211_contracts_port::PoolSubframe<'id, Self, C, K>,
+        >,
+    > {
+        extend_model(open, subframe)
     }
 
     fn erase(buffer: Self::Buffer) -> ModelAnyBuffer<'id, B> {
@@ -2646,7 +2662,7 @@ impl<'id, B: ModelComposition> IntoIterator for ModelSubframes<'id, B> {
 }
 /// Execution lends subframe storage without exposing replaceable owners.
 pub struct ModelSubframesExecution<'a, 'id, B: ModelComposition> {
-    subframes: &'a mut [Subframe<'id, B>],
+    subframes: &'a mut Vec<Subframe<'id, B>>,
 }
 impl<'id, B: ModelComposition> ExecutionPayload for ModelSubframes<'id, B> {
     type Execution<'a>
@@ -2690,6 +2706,8 @@ type ModelInFlight<'id, B, M> = InFlight<
 struct PreparedAggregate<'id, B: ModelComposition> {
     operation: ModelInFlight<'id, B, ModelSubframes<'id, B>>,
     role: VifRole,
+    receiver: IndividualAddress,
+    tid: Tid,
     start_sequence: SequenceNumber,
     queue: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
     rate: PhyRate,
@@ -2742,10 +2760,68 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     /// owner ends the phase. Unlike poison, this is an ordinary terminal.
     draining: Cell<bool>,
     returned: Cell<bool>,
+    /// Each access category's open aggregate: its last submission, which
+    /// the station extends until the driver takes it, once nothing of its
+    /// category is on the air or waiting.
+    open: core::cell::RefCell<[Option<PreparedAggregate<'id, B>>; 4]>,
 }
 
 impl<'id, B: ModelComposition> ModelHeld<'id, B> {
+    /// Send `command` after the open aggregates it follows: a submission
+    /// after its category's, any other after every one.
     fn command(&self, command: Command<'id, B>) {
+        let queue = match &command {
+            Command::Submit(prepared) => Some(prepared.queue),
+            Command::SubmitAmpdu(prepared) => Some(prepared.queue),
+            _ => None,
+        };
+        self.close(queue);
+        self.send(command);
+    }
+
+    /// Send the open aggregate of `queue`, or of every queue, to the driver.
+    fn close(&self, queue: Option<oer_protocols_ieee80211_wire::qos::WmmAccessCategory>) {
+        let closed: Vec<_> = match self.open.try_borrow_mut() {
+            Ok(mut open) => open
+                .iter_mut()
+                .filter(|open| {
+                    open.as_ref()
+                        .is_some_and(|open| queue.is_none_or(|queue| open.queue == queue))
+                })
+                .filter_map(Option::take)
+                .collect(),
+            Err(_) => {
+                self.poison();
+                return;
+            }
+        };
+        for prepared in closed {
+            self.send(Command::SubmitAmpdu(prepared));
+        }
+    }
+
+    /// Hold `prepared` open as its category's last submission.
+    fn hold_open(&self, prepared: PreparedAggregate<'id, B>) {
+        self.close(Some(prepared.queue));
+        self.returned.set(false);
+        let refused = match self.open.try_borrow_mut() {
+            Ok(mut open) => match open.get_mut(prepared.queue as usize) {
+                Some(place) if place.is_none() => {
+                    *place = Some(prepared);
+                    None
+                }
+                _ => Some(prepared),
+            },
+            Err(_) => Some(prepared),
+        };
+        if let Some(prepared) = refused {
+            self.send(Command::SubmitAmpdu(prepared));
+            self.poison();
+        }
+        self.air.wake_driver();
+    }
+
+    fn send(&self, command: Command<'id, B>) {
         self.returned.set(false);
         if self.commands.push(command).is_err() {
             self.poison();
@@ -2913,6 +2989,12 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
             }
             let command = held.commands.pop();
             let Some(command) = command else {
+                // Every command before an open aggregate is in: the driver
+                // takes each that would go next.
+                self.publish(held);
+                if self.take_idle_open(held) {
+                    continue;
+                }
                 break;
             };
             held.air
@@ -3248,6 +3330,30 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         } else {
             held.post(terminal);
         }
+    }
+
+    /// Send each open aggregate whose category has nothing on the air or
+    /// waiting, or every one while draining, as its submission. Whether one
+    /// went.
+    fn take_idle_open(&mut self, held: &ModelHeld<'id, B>) -> bool {
+        let draining = held.draining.get();
+        let taken: Vec<_> = match held.open.try_borrow_mut() {
+            Ok(mut open) => open
+                .iter_mut()
+                .zip(&self.queues)
+                .filter(|(_, queue)| draining || (queue.air.is_none() && queue.waiting.is_empty()))
+                .filter_map(|(open, _)| open.take())
+                .collect(),
+            Err(_) => {
+                held.poison();
+                return false;
+            }
+        };
+        let any = !taken.is_empty();
+        for prepared in taken {
+            held.send(Command::SubmitAmpdu(prepared));
+        }
+        any
     }
 
     /// Keep each published head until its result; barriers stop the next
@@ -4700,23 +4806,33 @@ pub struct ModelAggregate<
     key_borrow: PhantomData<&'k ()>,
     caps: TypeProof<(R, K, B, S)>,
 }
-impl<R, K, B: ModelComposition, S: AggregateState> ModelAggregate<'_, '_, '_, R, K, B, S> {
-    fn acknowledgement_bit(&self, sequence: SequenceNumber) -> Option<u64> {
-        let first = S::retain_head(&self.first, sequence);
-        // The modulo-4096 distance (IEEE Std 802.11-2020, 10.24.7).
-        let distance =
-            SequenceNumber::from_low_bits(sequence.get().wrapping_sub(first.get())).get();
-        let bit = 1_u64.checked_shl(u32::from(distance))?;
-        (!self
-            .subframes
-            .iter()
-            .any(|subframe| subframe.acknowledgement_bit == bit))
-        .then_some(bit)
-    }
+/// The BlockAck bit of `sequence` in an aggregate whose window `first`
+/// roots, unless a subframe holds it.
+fn acknowledgement_bit<B: ModelComposition>(
+    first: SequenceNumber,
+    sequence: SequenceNumber,
+    subframes: &[Subframe<'_, B>],
+) -> Option<u64> {
+    // The modulo-4096 distance (IEEE Std 802.11-2020, 10.24.7).
+    let distance = SequenceNumber::from_low_bits(sequence.get().wrapping_sub(first.get())).get();
+    let bit = 1_u64.checked_shl(u32::from(distance))?;
+    (!subframes
+        .iter()
+        .any(|subframe| subframe.acknowledgement_bit == bit))
+    .then_some(bit)
+}
+
+/// An aggregate the model holds open ([`AmpduPhase::open_ampdu`]).
+pub struct ModelOpenAggregate<'a, 'id, B: ModelComposition> {
+    open: core::cell::RefMut<'a, [Option<PreparedAggregate<'static, B>>; 4]>,
+    queue: usize,
+    loan: BodyLoan<'id, B::Identity, B>,
+    at: Instant,
 }
 /// Metadata lowered before aggregate admission; subframes stay in the sealed owner.
 pub struct ModelAggregateExecution {
     first: SequenceNumber,
+    receiver: IndividualAddress,
     tid: Tid,
     rate: PhyRate,
     key: Option<PreparedKey>,
@@ -4750,6 +4866,7 @@ impl<'id, R, K, B: ModelComposition + 'id, S: AggregateState> PhaseAggregate<'id
             payload: ModelSubframes(self.subframes).into_owned(&self.loan),
             execution: ModelAggregateExecution {
                 first: S::into_head(self.first),
+                receiver: self.receiver,
                 tid: self.tid,
                 rate: self.rate.rate().get(),
                 key: self.key,
@@ -4794,6 +4911,155 @@ type ModelAggregatePush<'k, 'p, 'id, R, K, B, S, C> = Result<
     AggregateRefused<ModelAggregate<'k, 'p, 'id, R, K, B, S>, ModelSubframe<'id, B, C, K>>,
 >;
 
+type ModelCheckedSubframe<'id, B, C, K> = CheckedSubframe<
+    ModelBuffer<'id, B, C>,
+    ModelSent<'id, B, C>,
+    ClassSubframe<C, K>,
+    ModelBodyOf<B>,
+>;
+/// A member's MPDU and BlockAck bit, or the refusal with its subframe.
+type ModelMember<'id, B, C, K> =
+    Result<(ModelMpdu<'id, B>, u64), (PreparationError, ModelSubframe<'id, B, C, K>)>;
+
+/// A checked subframe as a member of an aggregate of `fixed` (role,
+/// recipient and TID) holding `subframes` under `key`, whose BlockAck
+/// window `first` roots: its MPDU and BlockAck bit, or the refusal with the
+/// subframe unchanged.
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(clippy::result_large_err, reason = "a refusal returns the subframe")
+)]
+fn model_subframe<'id, B: ModelComposition, C: ModelClass, K: Ieee80211Capabilities>(
+    source: ModelCheckedSubframe<'id, B, C, K>,
+    subframes: &[Subframe<'_, B>],
+    key: Option<&RawKeyIdentity>,
+    (role, receiver, tid): (VifRole, IndividualAddress, Tid),
+    first: impl Fn(SequenceNumber) -> SequenceNumber,
+) -> ModelMember<'id, B, C, K> {
+    let refused = if subframes.len() >= MODEL_AMPDU_SUBFRAMES {
+        Some(PreparationError::AggregateFull)
+    } else if let CheckedSubframe::Sent(mpdu) = &source {
+        if mpdu.key.as_ref() != key || mpdu.key.as_ref().is_some_and(|key| !key.0.active.get()) {
+            Some(PreparationError::RetransmissionKey)
+        } else if mpdu.role != role || mpdu.layout.recipient() != Some((receiver, tid)) {
+            Some(PreparationError::RetransmissionKind)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(reason) = refused {
+        return Err((reason, source.into_source()));
+    }
+    match source {
+        CheckedSubframe::Fresh(fresh) => {
+            let (
+                FreshSubframe {
+                    numbering,
+                    buffer,
+                    frame,
+                    body,
+                },
+                layout,
+            ) = fresh.into_parts();
+            let sequence = buffer.memory.sequence();
+            let Some(bit) = acknowledgement_bit(first(sequence), sequence, subframes) else {
+                return Err((
+                    PreparationError::BlockAckWindow,
+                    SubframeSource::Fresh {
+                        numbering,
+                        buffer,
+                        frame,
+                        body,
+                    },
+                ));
+            };
+            Ok((
+                ModelMpdu {
+                    buffer: C::erase(buffer),
+                    layout,
+                    response: ResponsePolicy::Ack,
+                    body,
+                    published: None,
+                    packet_number: numbering.packet_number(),
+                },
+                bit,
+            ))
+        }
+        CheckedSubframe::Sent(mpdu) => {
+            let sequence = mpdu.buffer.memory.sequence();
+            let Some(bit) = acknowledgement_bit(first(sequence), sequence, subframes) else {
+                return Err((PreparationError::BlockAckWindow, SubframeSource::Sent(mpdu)));
+            };
+            let layout = mpdu.layout;
+            let response = mpdu.response;
+            Ok((
+                ModelMpdu::from_sent(C::erase_sent(mpdu), layout, response),
+                bit,
+            ))
+        }
+    }
+}
+
+/// Append a subframe to the model's open aggregate under its builder's
+/// rules ([`TxBufferPool::extend_aggregate`]).
+#[cfg_attr(
+    target_pointer_width = "64",
+    expect(clippy::result_large_err, reason = "a refusal returns the subframe")
+)]
+fn extend_model<'id, B: ModelComposition, C: ModelClass, K: Ieee80211Capabilities>(
+    open: &mut ModelOpenAggregate<'_, 'id, B>,
+    subframe: ModelSubframe<'id, B, C, K>,
+) -> Result<(), oer_protocols_ieee80211_contracts_port::ExtendRefused<ModelSubframe<'id, B, C, K>>>
+{
+    use oer_protocols_ieee80211_contracts_port::{ExtendError, ExtendRefused, LayoutRefused};
+    let ModelOpenAggregate {
+        open,
+        queue,
+        loan,
+        at,
+    } = open;
+    let Some(prepared) = open.get_mut(*queue).and_then(Option::as_mut) else {
+        return Err(ExtendRefused {
+            reason: ExtendError::Closed,
+            subframe,
+        });
+    };
+    let protection = match prepared.key {
+        Some(_) => oer_protocols_ieee80211_contracts_port::MpduProtection::Ccmp,
+        None => oer_protocols_ieee80211_contracts_port::MpduProtection::Open,
+    };
+    let checked = match CheckedSubframe::new(subframe, protection, prepared.receiver, prepared.tid)
+    {
+        Ok(checked) => checked,
+        Err(LayoutRefused { reason, operation }) => {
+            return Err(ExtendRefused {
+                reason: ExtendError::Layout(reason),
+                subframe: operation,
+            });
+        }
+    };
+    let first = prepared.start_sequence;
+    let fixed = (prepared.role, prepared.receiver, prepared.tid);
+    let key = prepared.key.as_ref().map(|key| &key.identity);
+    let subframes = prepared.operation.execute().subframes;
+    match model_subframe(checked, subframes, key, fixed, |_| first) {
+        Ok((mut mpdu, acknowledgement_bit)) => {
+            mpdu.admit(*at);
+            subframes.push(Subframe {
+                mpdu: oer_protocols_ieee80211_contracts_port::BodyPayload::into_owned(mpdu, loan),
+                acknowledgement_bit,
+            });
+            Ok(())
+        }
+        Err((reason, subframe)) => Err(ExtendRefused {
+            reason: ExtendError::Preparation(reason),
+            subframe,
+        }),
+    }
+}
+
 #[cfg_attr(
     target_pointer_width = "64",
     expect(
@@ -4814,79 +5080,21 @@ fn push_model<
     operation: ModelCheckedAggregate<'k, 'p, 'id, R, K, B, S, C>,
 ) -> ModelAggregatePush<'k, 'p, 'id, R, K, B, S, C> {
     let (mut aggregate, source) = operation.into_parts();
-    let refused = if aggregate.subframes.len() >= MODEL_AMPDU_SUBFRAMES {
-        Some(PreparationError::AggregateFull)
-    } else if let CheckedSubframe::Sent(mpdu) = &source {
-        if mpdu.key.as_ref() != aggregate.key.as_ref().map(|key| &key.identity)
-            || mpdu.key.as_ref().is_some_and(|key| !key.0.active.get())
-        {
-            Some(PreparationError::RetransmissionKey)
-        } else if mpdu.role != R::ROLE
-            || mpdu.layout.recipient() != Some((aggregate.receiver, aggregate.tid))
-        {
-            Some(PreparationError::RetransmissionKind)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    if let Some(reason) = refused {
-        return Err(AggregateRefused {
-            reason,
-            aggregate,
-            subframe: source.into_source(),
-        });
-    }
-    let (mpdu, acknowledgement_bit) = match source {
-        CheckedSubframe::Fresh(fresh) => {
-            let (
-                FreshSubframe {
-                    numbering,
-                    buffer,
-                    frame,
-                    body,
-                },
-                layout,
-            ) = fresh.into_parts();
-            let Some(bit) = aggregate.acknowledgement_bit(buffer.memory.sequence()) else {
-                return Err(AggregateRefused {
-                    reason: PreparationError::BlockAckWindow,
-                    aggregate,
-                    subframe: SubframeSource::Fresh {
-                        numbering,
-                        buffer,
-                        frame,
-                        body,
-                    },
-                });
-            };
-            (
-                ModelMpdu {
-                    buffer: C::erase(buffer),
-                    layout,
-                    response: ResponsePolicy::Ack,
-                    body,
-                    published: None,
-                    packet_number: numbering.packet_number(),
-                },
-                bit,
-            )
-        }
-        CheckedSubframe::Sent(mpdu) => {
-            let Some(bit) = aggregate.acknowledgement_bit(mpdu.buffer.memory.sequence()) else {
-                return Err(AggregateRefused {
-                    reason: PreparationError::BlockAckWindow,
-                    aggregate,
-                    subframe: SubframeSource::Sent(mpdu),
-                });
-            };
-            let layout = mpdu.layout;
-            let response = mpdu.response;
-            (
-                ModelMpdu::from_sent(C::erase_sent(mpdu), layout, response),
-                bit,
-            )
+    let member = model_subframe(
+        source,
+        &aggregate.subframes,
+        aggregate.key.as_ref().map(|key| &key.identity),
+        (R::ROLE, aggregate.receiver, aggregate.tid),
+        |sequence| S::retain_head(&aggregate.first, sequence),
+    );
+    let (mpdu, acknowledgement_bit) = match member {
+        Ok(member) => member,
+        Err((reason, subframe)) => {
+            return Err(AggregateRefused {
+                reason,
+                aggregate,
+                subframe,
+            });
         }
     };
     let first = S::retain_head(&aggregate.first, mpdu.buffer.sequence());
@@ -4973,6 +5181,7 @@ where
         }
         let ModelAggregateExecution {
             first,
+            receiver,
             tid,
             rate,
             key,
@@ -4981,19 +5190,35 @@ where
             Some(priority) => priority.access_category(),
             None => oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
         };
-        self.held.command(Command::SubmitAmpdu(PreparedAggregate {
+        self.held.hold_open(PreparedAggregate {
             operation: attempt.operation,
             role: R::ROLE,
+            receiver,
+            tid,
             start_sequence: first,
             queue,
             rate,
             key,
-        }));
+        });
         if self.held.air.admission_closed() {
             Err(Poisoned { cause: ModelFault })
         } else {
             Ok(())
         }
+    }
+
+    fn open_ampdu(&mut self, ticket: u8) -> Option<ModelOpenAggregate<'_, 'id, B>> {
+        let open = self.held.open.try_borrow_mut().ok()?;
+        let queue = open.iter().position(|open| {
+            open.as_ref()
+                .is_some_and(|open| open.operation.ticket().index() == ticket)
+        })?;
+        Some(ModelOpenAggregate {
+            open,
+            queue,
+            loan: self.loan,
+            at: self.held.air.monotonic_now(),
+        })
     }
 }
 
