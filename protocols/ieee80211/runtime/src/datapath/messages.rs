@@ -85,9 +85,14 @@ pub enum ToActor<'id, D: DatapathPort<'id>> {
     /// and take no more data of `tid` until a station frame names it
     /// ([`StationTx::names`]) or the next [`Self::Release`].
     Sequence(WmmUserPriority),
-    /// Give back the pairwise key kept after the link came back
-    /// ([`FromActor::PairwiseReturned`]).
+    /// Give back the pairwise key kept after the link came back, or lent
+    /// before the link ([`FromActor::PairwiseReturned`]).
     ReturnPairwise,
+    /// Keep the station's installed pairwise key before the link exists:
+    /// a protected frame the station numbered itself
+    /// ([`FrameNumber::Keyed`]) draws its packet number from it, until
+    /// [`Self::ReturnPairwise`].
+    LendPairwise(ActorLinkKey<'id, D>),
     /// The station's RSN failed on an EAPOL frame of the link.
     EapolFaulted,
     /// Take the next parcel: a large message beside the queue.
@@ -121,8 +126,12 @@ pub enum ToActor<'id, D: DatapathPort<'id>> {
         /// When the stop proves nothing more.
         deadline: Instant,
     },
-    /// End the actor's run: the radio is stopped.
+    /// End the actor's run: the radio is stopped and the installation
+    /// retires.
     Retire,
+    /// End the actor's run for the next installation: the radio is stopped,
+    /// and its owner reinstalls the port under the same actor.
+    Reinstall,
 }
 
 /// A message too large for the lifecycle's queue: it waits in the parcel
@@ -305,8 +314,8 @@ pub enum ActorViolation {
     /// The link's return found the mailbox full.
     LinkReturn,
     /// A link came back with a pairwise key while the actor kept another,
-    /// the lifecycle asked for a key the actor does not keep, or retired the
-    /// actor while it kept one.
+    /// the lifecycle lent one while the actor kept another, asked for a key
+    /// the actor does not keep, or retired the actor while it kept one.
     PairwiseCustody,
     /// A group mutation's receive cut drained more units than the actor
     /// stages; the unit stays with the actor.
@@ -320,6 +329,9 @@ pub enum ActorViolation {
 pub enum ActorEnd<F> {
     /// The lifecycle retired the stopped radio.
     Retired,
+    /// The lifecycle stopped the radio for the next installation
+    /// ([`Actor::reinstall`]).
+    Reinstall,
     /// A broken contract ended it.
     Faulted(ActorFault<F>),
 }

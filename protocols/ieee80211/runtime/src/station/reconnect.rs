@@ -161,7 +161,7 @@ impl Policy {
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct DeadlineOverflow;
+pub(crate) struct DeadlineOverflow;
 
 #[cfg(test)]
 mod tests;

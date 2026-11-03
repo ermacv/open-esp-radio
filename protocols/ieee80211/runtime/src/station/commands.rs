@@ -36,7 +36,7 @@ pub struct CommandTerminal {
     pub outcome: CommandOutcome,
 }
 
-pub(super) struct CommandCredits<'id, P: PoolPath> {
+pub(crate) struct CommandCredits<'id, P: PoolPath> {
     connect: Option<StaCommandCredit<'id, P, machine::ConnectCommand>>,
     scan: Option<StaCommandCredit<'id, P, machine::ScanCommand>>,
     disconnect: Option<StaCommandCredit<'id, P, machine::DisconnectCommand>>,

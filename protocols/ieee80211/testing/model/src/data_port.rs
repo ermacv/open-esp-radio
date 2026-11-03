@@ -1349,10 +1349,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if self.radio != Radio::Stopped {
             return Poll::Ready(Err(StartRefused::Running));
         }
-        if self.fault.is_some()
-            || self.air.admission_closed()
-            || self.air.refuse_enable.replace(false)
-        {
+        if self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal() {
             return Poll::Ready(Err(StartRefused::Device));
         }
         self.channel = channel.channel();

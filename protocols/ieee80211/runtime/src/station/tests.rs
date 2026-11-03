@@ -55,19 +55,19 @@ use oer_protocols_ieee80211_testing_model::{
     ModelSetup, ModelSmall, ModelTypes,
 };
 
-const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
-const ACCESS_POINT_ADDRESS: [u8; 6] = [0x02, 0, 0, 0, 0, 0x99];
-const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
-const SSID: &[u8] = b"open-net";
-const SNONCE: [u8; 32] = [3; 32];
-const ANONCE: [u8; 32] = [4; 32];
-const PMK: [u8; 32] = [7; 32];
+pub(crate) const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
+pub(crate) const ACCESS_POINT_ADDRESS: [u8; 6] = [0x02, 0, 0, 0, 0, 0x99];
+pub(crate) const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
+pub(crate) const SSID: &[u8] = b"open-net";
+pub(crate) const SNONCE: [u8; 32] = [3; 32];
+pub(crate) const ANONCE: [u8; 32] = [4; 32];
+pub(crate) const PMK: [u8; 32] = [7; 32];
 /// CCMP-128 with PSK.
-const RSN: [u8; 22] = [
+pub(crate) const RSN: [u8; 22] = [
     0x30, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0, 0,
 ];
 
-struct ServiceContexts;
+pub(crate) struct ServiceContexts;
 
 impl oer_protocols_ieee80211_testing_model::ModelContext for ServiceContexts {
     type Body = core::convert::Infallible;
@@ -218,7 +218,7 @@ impl<T> TerminalStorage<T> for TestTerminalStorage<T> {
     }
 }
 
-static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
+pub(crate) static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     ht20: [0; 28],
     ht40: [0; 28],
     he20_ht: [0; 28],
@@ -227,7 +227,9 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
     wmm: [0; 9],
 };
 
-struct Callbacks(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128);
+pub(crate) struct Callbacks(
+    pub(crate) oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+);
 impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
     type AesEngine = oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
@@ -245,11 +247,11 @@ impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks
 }
 
 /// The network's memory the station's data MSDUs come in.
-type NetworkMemory = oer_protocols_ieee80211_testing_model::ModelNetworkMemory;
+pub(crate) type NetworkMemory = oer_protocols_ieee80211_testing_model::ModelNetworkMemory;
 
 /// A network frame of user `priority`, written into fresh network memory
 /// where the data machine reads it.
-fn network_frame(
+pub(crate) fn network_frame(
     parts: oer_protocols_ieee80211_wire::data::MsduParts<'_>,
     priority: WmmUserPriority,
 ) -> Outgoing<NetworkMemory> {
@@ -267,7 +269,7 @@ fn network_frame(
     }
 }
 
-fn channel6() -> Channel {
+pub(crate) fn channel6() -> Channel {
     Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap()
 }
 
@@ -401,9 +403,9 @@ impl CaseSink for () {
     fn of(_: Observed) -> Self {}
 }
 
-type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
+pub(crate) type TestConfig = (StaConfig<ModelCaps24, Callbacks>, StaSecurity);
 
-fn config(security: StaSecurity) -> TestConfig {
+pub(crate) fn config(security: StaSecurity) -> TestConfig {
     let channels = heapless::Vec::from_slice(&[SupportedChannel::new(
         oer_protocols_radio_regulatory::TEST_DOMAIN
             .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel6()))
@@ -435,7 +437,7 @@ fn config(security: StaSecurity) -> TestConfig {
 }
 
 /// A beacon of the network on channel 6, protected or not.
-fn beacon(protected: bool) -> Vec<u8> {
+pub(crate) fn beacon(protected: bool) -> Vec<u8> {
     let mut frame = std::vec![0_u8; 55];
     frame[0..2].copy_from_slice(&0x0080_u16.to_le_bytes());
     frame[4..10].copy_from_slice(&[0xff; 6]);
@@ -458,7 +460,7 @@ fn beacon(protected: bool) -> Vec<u8> {
     frame
 }
 
-fn authentication_response(request: &[u8]) -> Option<[u8; 30]> {
+pub(crate) fn authentication_response(request: &[u8]) -> Option<[u8; 30]> {
     let (request, _) = request.split_first_chunk::<30>()?;
     if u16::from_le_bytes([request[0], request[1]]) & !0x0800 != 0x00b0
         || request[4..10] != BSSID
@@ -477,7 +479,7 @@ fn authentication_response(request: &[u8]) -> Option<[u8; 30]> {
     Some(frame)
 }
 
-fn association_response(protected: bool) -> [u8; 30] {
+pub(crate) fn association_response(protected: bool) -> [u8; 30] {
     let mut frame = [0_u8; 30];
     frame[0..2].copy_from_slice(&0x0010_u16.to_le_bytes());
     frame[4..10].copy_from_slice(&LOCAL);
@@ -490,7 +492,7 @@ fn association_response(protected: bool) -> [u8; 30] {
 }
 
 /// An EAPOL frame from the access point, in a data frame from the DS.
-fn eapol_frame(eapol: &[u8]) -> Vec<u8> {
+pub(crate) fn eapol_frame(eapol: &[u8]) -> Vec<u8> {
     let mut frame = std::vec![0_u8; 24];
     frame[0..2].copy_from_slice(&0x0208_u16.to_le_bytes());
     frame[4..10].copy_from_slice(&LOCAL);
@@ -502,7 +504,7 @@ fn eapol_frame(eapol: &[u8]) -> Vec<u8> {
 }
 
 /// Group Message 1 of key `key_id` with replay counter `replay`.
-fn group_message1(
+pub(crate) fn group_message1(
     ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
     replay: u64,
     key_id: u8,
@@ -545,20 +547,20 @@ fn protected_group_message1(
 
 /// What the port reported of a frame the access point sent: its signal
 /// over the noise floor, 55 dB.
-fn meta() -> ModelRxMeta {
+pub(crate) fn meta() -> ModelRxMeta {
     ModelRxMeta::new(channel6(), -40, -95)
 }
 
 /// The Frame Control subtype bits of a frame.
-fn kind(frame: &AirFrame) -> u16 {
+pub(crate) fn kind(frame: &AirFrame) -> u16 {
     u16::from_le_bytes([frame.plaintext[0], frame.plaintext[1]]) & 0x00fc
 }
 
-const PROBE_REQUEST: u16 = 0x0040;
-const AUTHENTICATION: u16 = 0x00b0;
-const ASSOCIATION_REQUEST: u16 = 0x0000;
-const DEAUTHENTICATION: u16 = 0x00c0;
-const DATA: u16 = 0x0008;
+pub(crate) const PROBE_REQUEST: u16 = 0x0040;
+pub(crate) const AUTHENTICATION: u16 = 0x00b0;
+pub(crate) const ASSOCIATION_REQUEST: u16 = 0x0000;
+pub(crate) const DEAUTHENTICATION: u16 = 0x00c0;
+pub(crate) const DATA: u16 = 0x0008;
 
 /// Let the port's other futures run once.
 async fn yield_now() {
@@ -1727,7 +1729,7 @@ where
     }))
 }
 
-fn dsss1() -> PhyRate {
+pub(crate) fn dsss1() -> PhyRate {
     PhyRate::Legacy(LegacyRate::Dsss1M)
 }
 
@@ -2062,7 +2064,7 @@ fn a_one_slot_station_completes_group_replacement_through_the_service_event_stre
     );
 }
 
-fn message3(ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk) -> Vec<u8> {
+pub(crate) fn message3(ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk) -> Vec<u8> {
     let mut plain = Vec::new();
     plain.extend_from_slice(&RSN);
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
@@ -2188,7 +2190,7 @@ fn a_data_frame_without_a_rate_waits_in_its_arena_and_goes_with_the_next_plan() 
 /// A protected data MPDU from the DS to the station, as the hardware
 /// hands it up once it decrypted and verified it: the CCMP header of
 /// `packet_number` stays, the MIC is gone.
-fn protected_data(packet_number: u8, source: [u8; 6], payload: &[u8]) -> Vec<u8> {
+pub(crate) fn protected_data(packet_number: u8, source: [u8; 6], payload: &[u8]) -> Vec<u8> {
     let mut frame = std::vec![0_u8; 24];
     frame[0..2].copy_from_slice(&0x4208_u16.to_le_bytes());
     frame[4..10].copy_from_slice(&LOCAL);
@@ -2201,7 +2203,7 @@ fn protected_data(packet_number: u8, source: [u8; 6], payload: &[u8]) -> Vec<u8>
     frame
 }
 
-fn decrypted() -> ModelRxMeta {
+pub(crate) fn decrypted() -> ModelRxMeta {
     meta().with_crypto(
         oer_protocols_ieee80211_contracts_port::RxEvidence::HardwareObserved(
             oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,

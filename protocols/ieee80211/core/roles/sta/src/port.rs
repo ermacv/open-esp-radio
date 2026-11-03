@@ -97,6 +97,22 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
         }
     }
 
+    /// The pending key of the installation the port's command issuer
+    /// minted as `installation`
+    /// ([`PortCommands::install_pairwise`](oer_protocols_ieee80211_contracts_port::PortCommands::install_pairwise)),
+    /// numbering its MPDUs by `step`. The key exists only once the
+    /// installation's terminal returns it.
+    pub const fn issued(
+        association: K::Association,
+        installation: K::Identity,
+        step: CcmpPacketNumberStep,
+    ) -> PendingStationPairwiseKey<'id, K> {
+        PendingStationPairwiseKey {
+            key: PendingCcmpTxKey::issued(installation, step),
+            association,
+        }
+    }
+
     /// Number one protected MPDU: the port key and the key's next CCMP
     /// packet number, or `None` once its packet numbers are exhausted. A
     /// retransmission keeps the number of its first transmission.

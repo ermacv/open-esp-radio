@@ -3480,6 +3480,16 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         self.keys.returned(key);
     }
 
+    /// Lend the installed pairwise key's transmit half to the link's holder
+    /// before the station hands its link over: the holder draws the packet
+    /// number of a protected frame the station numbered itself
+    /// ([`FrameNumber::Keyed`]) and gives the key back
+    /// ([`Self::key_returned`]). `None` unless the key is installed with the
+    /// station.
+    pub fn lend_key(&mut self) -> Option<T::LinkKey> {
+        self.keys.lend()
+    }
+
     /// The link's holder tells the next Sequence Number of `tid` the
     /// station asked for ([`LinkAction::Sequence`]): the station's ADDBA
     /// Request of `tid` names it. An answer the station no longer waits for

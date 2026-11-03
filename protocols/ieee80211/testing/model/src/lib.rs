@@ -1770,7 +1770,7 @@ pub struct ModelAir {
     absent_peer: Cell<bool>,
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
-    refuse_enable: Cell<bool>,
+    refuse_enable: Cell<u8>,
     group_failure: Cell<Option<GroupFaultStage>>,
     group_rollback: Cell<Option<oer_protocols_ieee80211_testing_conformance::group_keys::Rollback>>,
     group_held: Cell<bool>,
@@ -2229,7 +2229,19 @@ impl ModelAir {
     }
     /// Refuse the next enable.
     pub fn refuse_enable(&self) {
-        self.refuse_enable.set(true);
+        self.refuse_enables(1);
+    }
+
+    /// Refuse the next `count` enables.
+    pub fn refuse_enables(&self, count: u8) {
+        self.refuse_enable.set(count);
+    }
+
+    /// Whether this enable is refused: one of the refusals asked for.
+    pub(crate) fn take_enable_refusal(&self) -> bool {
+        let left = self.refuse_enable.get();
+        self.refuse_enable.set(left.saturating_sub(1));
+        left > 0
     }
 
     /// Poison the backend.

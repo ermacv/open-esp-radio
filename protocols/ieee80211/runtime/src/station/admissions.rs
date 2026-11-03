@@ -36,7 +36,7 @@ impl ControlTerminal {
 }
 
 #[derive(Default)]
-pub(super) struct Admissions {
+pub(crate) struct Admissions {
     transmit: [u64; 4],
     control: u8,
     arena: bool,
@@ -54,7 +54,7 @@ impl Admissions {
         (word, 1_u64.rotate_left(u32::from(index)))
     }
 
-    pub(super) fn insert(&mut self, operation: PendingTerminal) {
+    pub(crate) fn insert(&mut self, operation: PendingTerminal) {
         match operation {
             PendingTerminal::Transmit(index) => {
                 let (word, mask) = self.place(index);
@@ -65,7 +65,7 @@ impl Admissions {
         }
     }
 
-    pub(super) fn remove(&mut self, operation: PendingTerminal) -> bool {
+    pub(crate) fn remove(&mut self, operation: PendingTerminal) -> bool {
         match operation {
             PendingTerminal::Transmit(index) => {
                 let (word, mask) = self.place(index);
@@ -83,7 +83,7 @@ impl Admissions {
         }
     }
 
-    pub(super) fn first(&self) -> Option<PendingTerminal> {
+    pub(crate) fn first(&self) -> Option<PendingTerminal> {
         for (offset, word) in [0_u8, 64, 128, 192].into_iter().zip(&self.transmit) {
             if *word != 0 {
                 return Some(PendingTerminal::Transmit(

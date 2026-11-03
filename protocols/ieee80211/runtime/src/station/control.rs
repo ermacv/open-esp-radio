@@ -133,7 +133,7 @@ impl<N: Notifies> State<N> {
             output,
         }
     }
-    pub(super) fn epoch(&self, epoch: u64) {
+    pub(crate) fn epoch(&self, epoch: u64) {
         let mut status = self.status.get();
         status.link.epoch = epoch;
         self.set_status(status);
@@ -228,21 +228,21 @@ pub struct Control<'c, K, const DEPTH: usize, N: Notifies = SameHart> {
 
 /// The Runner's affine side of the control connection.
 pub struct RunnerControl<'c, N: Notifies = SameHart> {
-    pub(super) state: &'c State<N>,
+    pub(crate) state: &'c State<N>,
     endpoint: Option<ConnectedTaskEndpoint<'c, ()>>,
 }
 
 impl<'c, N: Notifies> RunnerControl<'c, N> {
     /// The deadline the stop request named, once one did.
-    pub(super) fn stop_deadline(&self) -> Option<oer_portable_time::Instant> {
+    pub(crate) fn stop_deadline(&self) -> Option<oer_portable_time::Instant> {
         self.state.stop_deadline.get()
     }
     /// The profile published with the Connect just received, if its
     /// producer named one; a policy reconnect has none.
-    pub(super) fn take_profile(&self) -> Option<StaProfile> {
+    pub(crate) fn take_profile(&self) -> Option<StaProfile> {
         self.state.profile.take()
     }
-    pub(super) async fn wait_for_stop(&self) {
+    pub(crate) async fn wait_for_stop(&self) {
         match &self.endpoint {
             Some(endpoint) => endpoint.wait_for_stop().await,
             None => core::future::pending().await,
@@ -260,22 +260,22 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
             .wanted(self.linked())
             .is_none_or(|command| self.state.operations.is_free(command))
     }
-    pub(super) fn policy_deadline(&self) -> Option<oer_portable_time::Instant> {
+    pub(crate) fn policy_deadline(&self) -> Option<oer_portable_time::Instant> {
         if !self.policy_admissible() {
             return None;
         }
         self.state.policy.get().deadline()
     }
-    pub(super) fn policy_ready(&self, now: oer_portable_time::Instant) -> bool {
+    pub(crate) fn policy_ready(&self, now: oer_portable_time::Instant) -> bool {
         self.policy_admissible() && self.state.policy.get().ready(now, self.linked())
     }
-    pub(super) fn policy_register(&self, cx: &Context<'_>) {
+    pub(crate) fn policy_register(&self, cx: &Context<'_>) {
         self.state.policy_waker.register(cx.waker());
         self.state.operations.register_released(cx);
     }
     /// The policy's next command; a station request takes its kind's
     /// permission, the one admission it shares with operations.
-    pub(super) fn policy_command<K>(
+    pub(crate) fn policy_command<K>(
         &self,
         now: oer_portable_time::Instant,
     ) -> Result<Option<ServiceCommand<K>>, super::reconnect::DeadlineOverflow> {
@@ -297,7 +297,7 @@ impl<'c, N: Notifies> RunnerControl<'c, N> {
         self.state.policy.set(policy);
         result
     }
-    pub(super) fn complete(&mut self) {
+    pub(crate) fn complete(&mut self) {
         let mut status = self.state.status.get();
         status.stopped = true;
         status.link.state = LinkState::Down;

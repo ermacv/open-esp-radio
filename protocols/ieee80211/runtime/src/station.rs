@@ -103,8 +103,8 @@ pub use network::{
 pub use network_link::NetworkLink;
 pub use notifies::{AcrossHarts, Notifies, SameHart};
 mod data_tx;
-mod reconnect;
-use commands::CommandCredits;
+pub(crate) mod reconnect;
+pub(crate) use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
@@ -484,7 +484,7 @@ fn retain_after_event_end<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
     result.map_break(B::port_terminal)
 }
 
-mod admissions;
+pub(crate) mod admissions;
 mod rx_block_ack;
 use admissions::Admissions;
 pub use admissions::{ControlTerminal, PendingTerminal};
@@ -493,7 +493,7 @@ use rx_block_ack::PhaseBlockAcks;
 pub use rx_block_ack::{PortRxBlockAck, RxBlockAckStorage, RxBlockAckView};
 
 mod custody;
-mod tx_contexts;
+pub(crate) mod tx_contexts;
 use custody::{ContractFault, StepFailure};
 pub use custody::{
     QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
@@ -3923,7 +3923,7 @@ enum Served<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 /// Preserve the first contract violation even when the disable also fails.
 #[inline(never)]

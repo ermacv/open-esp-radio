@@ -451,6 +451,7 @@ where
                     | ToActor::Agreement { .. }
                     | ToActor::Sequence(_)
                     | ToActor::ReturnPairwise
+                    | ToActor::LendPairwise(_)
             );
             let waits = self.radio.changing()
                 && matches!(
@@ -532,6 +533,13 @@ where
                 Some(key) => self.owed.pairwise = Some(key),
                 None => return Err(ActorFault::Contract(ActorViolation::PairwiseCustody)),
             },
+            ToActor::LendPairwise(key) => {
+                if self.pairwise.is_some() || self.link.is_some() {
+                    self.retained.pairwise = Some(key);
+                    return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
+                }
+                self.pairwise = Some(key);
+            }
             ToActor::Agreement { tid, window } => {
                 if !self
                     .link
@@ -616,7 +624,7 @@ where
                 self.again = true;
             }
             ToActor::Stop { deadline } => self.stop(deadline, network)?,
-            ToActor::Retire => {
+            ToActor::Retire | ToActor::Reinstall => {
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
                     // first.
@@ -626,7 +634,11 @@ where
                     // The key goes back before the actor ends.
                     return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
                 }
-                self.end = Some(ActorEnd::Retired);
+                self.end = Some(if matches!(message, ToActor::Reinstall) {
+                    ActorEnd::Reinstall
+                } else {
+                    ActorEnd::Retired
+                });
             }
         }
         Ok(())

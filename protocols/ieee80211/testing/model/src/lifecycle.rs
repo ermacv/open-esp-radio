@@ -467,7 +467,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> PortBackend<Id
     {
         if frontend.air.admission_closed() {
             Err(Poisoned { cause: ModelFault })
-        } else if frontend.air.refuse_enable.replace(false) {
+        } else if frontend.air.take_enable_refusal() {
             Ok(Err(()))
         } else {
             Ok(Ok(()))
