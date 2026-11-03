@@ -272,6 +272,10 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     stop_served: bool,
     /// The core disabled for the stop.
     core_disabled: bool,
+    /// The caller's waker from its last [`DataPort::poll_facts`]: a held
+    /// receive cut registers the caller's own task with the receive session,
+    /// so the image keeps one waker vtable.
+    waker: Option<core::task::Waker>,
     /// The first contract fault: every later call answers with it.
     fault: Option<Fault>,
     /// A command the fault kept with the quarantine.
@@ -496,6 +500,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             reopen: false,
             stop_served: false,
             core_disabled: false,
+            waker: None,
             fault: prepared.err(),
             retained: None,
         };
@@ -1070,10 +1075,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             return Ok(CommandProgress::Held(command));
         }
         let room = RX_HELD.saturating_sub(self.rx_out.get());
-        let waker = core::task::Waker::noop();
-        let cut = self
-            .device
-            .poll_rx_cut(room, &mut Context::from_waker(waker));
+        // Before the caller's first poll of the facts there is no task to
+        // register: the cut runs again at the device's drain poll.
+        let cut = match self.waker.as_ref() {
+            Some(waker) => self
+                .device
+                .poll_rx_cut(room, &mut Context::from_waker(waker)),
+            None => Poll::Pending,
+        };
         match cut {
             Poll::Ready(Ok(Some(unit))) => {
                 // A unit captured before the mutation precedes its terminal.
@@ -1421,6 +1430,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     fn poll_facts(&mut self, cx: &mut Context<'_>) -> Facts {
+        if !self
+            .waker
+            .as_ref()
+            .is_some_and(|waker| waker.will_wake(cx.waker()))
+        {
+            self.waker = Some(cx.waker().clone());
+        }
         let mut facts = Facts::default();
         if self.check().is_err() {
             // The next service answers with the fault.
