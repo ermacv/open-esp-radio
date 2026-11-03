@@ -203,7 +203,7 @@ impl<W: Binding, Id: SlotIdentity> StationPort for StationComposition<W, Id> {
         oer_portable_trace::observe!(observer, crate::observation::ServiceSpan { span, end });
     }
     fn tx_buffer<'id>(
-        buffer: port::AnyBuffer<'id, Id, Device<W>, TX, ()>,
+        buffer: port::AnyBuffer<'id, Id, Device<W>, TX, crate::radio::Edges<W>>,
     ) -> StationTxBuffer<'id, Self>
     where
         Self: 'id,
