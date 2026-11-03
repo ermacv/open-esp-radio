@@ -537,10 +537,6 @@ impl oer_portable_events::EventSink<crate::lower_mac::ContentionDraw> for Draws 
         self.0.borrow_mut().push(draw);
     }
 }
-impl oer_portable_events::EventSink<crate::lower_mac::TxEdge> for Draws {
-    const ENABLED: bool = false;
-    fn event(&mut self, _: crate::lower_mac::TxEdge) {}
-}
 type Backend<Id> = Esp32s31Backend<Id, TestDevice, 512, Draws>;
 type Caps = Esp32s31Caps<512>;
 type Family<Id> = Types<Id, TestDevice, 512, Draws>;
