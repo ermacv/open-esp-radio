@@ -1,6 +1,9 @@
 //! The device's diagnostic lines (`OER-DIAG:01…`) between its frames, as the
 //! text the host prints for them. A line that is lost, garbled or unknown
 //! becomes an `OER-DIAG-ERROR` text with the raw line, never dropped.
+//! Plain console text between frames (the ROM's boot lines, a previous
+//! boot's retained fault report) comes back as `text: …`: a whole line of
+//! at least [`MIN_TEXT`] printable ASCII bytes, started after a line end.
 
 use oer_portable_diagnostics::MAX_PAYLOAD;
 use oer_portable_diagnostics::render::{Gap, Next, Stream};
@@ -8,6 +11,11 @@ use oer_portable_diagnostics::render::{Gap, Next, Stream};
 const MARKER: &[u8] = b"OER-DIAG:";
 /// The longest diagnostic line kept while it is incomplete.
 const MAX_LINE: usize = 2 * (MAX_PAYLOAD + 64);
+/// The shortest plain text line kept; shorter printable runs between
+/// binary frame bytes are not text.
+const MIN_TEXT: usize = 12;
+/// The longest plain text line kept.
+const MAX_TEXT: usize = 256;
 
 /// Diagnostic lines of one serial stream.
 pub(crate) struct Notes {
@@ -16,6 +24,10 @@ pub(crate) struct Notes {
     line: Vec<u8>,
     /// How far into the marker the last bytes matched.
     matched: usize,
+    /// The plain text line being read.
+    text: Vec<u8>,
+    /// Whether `text` started after a line end and holds only printable bytes.
+    text_whole: bool,
 }
 
 impl Notes {
@@ -24,6 +36,8 @@ impl Notes {
             stream: Stream::unanchored(),
             line: Vec::new(),
             matched: 0,
+            text: Vec::new(),
+            text_whole: true,
         }
     }
 
@@ -34,11 +48,13 @@ impl Notes {
                 if matches!(byte, b'\r' | b'\n' | 0) || self.line.len() >= MAX_LINE {
                     let line = std::mem::take(&mut self.line);
                     out.extend(self.render(&line));
+                    self.text_whole = matches!(byte, b'\r' | b'\n');
                 } else {
                     self.line.push(byte);
                 }
                 continue;
             }
+            self.text(byte, out);
             self.matched = match MARKER.get(self.matched) {
                 Some(&expected) if expected == byte => self.matched.saturating_add(1),
                 _ if MARKER.first() == Some(&byte) => 1,
@@ -47,6 +63,28 @@ impl Notes {
             if self.matched == MARKER.len() {
                 self.line.extend_from_slice(MARKER);
                 self.matched = 0;
+                self.text.clear();
+                self.text_whole = false;
+            }
+        }
+    }
+
+    /// Follows plain text: a whole printable line ends in `out`.
+    fn text(&mut self, byte: u8, out: &mut Vec<String>) {
+        match byte {
+            b'\r' | b'\n' => {
+                if self.text_whole && self.text.len() >= MIN_TEXT {
+                    out.push(format!("text: {}", String::from_utf8_lossy(&self.text)));
+                }
+                self.text.clear();
+                self.text_whole = true;
+            }
+            b' '..=b'~' | b'\t' if self.text_whole && self.text.len() < MAX_TEXT => {
+                self.text.push(byte);
+            }
+            _ => {
+                self.text.clear();
+                self.text_whole = false;
             }
         }
     }
@@ -126,6 +164,27 @@ mod tests {
             "{out:?}"
         );
         assert!(!out[2].starts_with("OER-DIAG-ERROR"), "{out:?}");
+    }
+
+    #[test]
+    fn whole_plain_text_lines_between_frames_come_back_as_text() {
+        let mut stream = vec![0x00, 0x13, b'O', b'R', b'H', b'L', 0x05];
+        // Printable bytes inside a frame end at a binary byte: not text.
+        stream.extend(b"abcdefghijklmnop");
+        stream.push(0x00);
+        stream.extend(b"\nprevious boot failure: wifi-failed\r\n");
+        stream.extend(b"short\n");
+        stream.extend(line(0, &oer_portable_diagnostics::Note::placement_pass()));
+        stream.extend(b"\nrst:0x3 (SW_SYS_RESET),boot:0x7f\n");
+        let mut notes = Notes::new();
+        let mut out = Vec::new();
+        for chunk in stream.chunks(5) {
+            notes.feed(chunk, &mut out);
+        }
+        assert_eq!(out.len(), 3, "{out:?}");
+        assert_eq!(out[0], "text: previous boot failure: wifi-failed");
+        assert!(!out[1].starts_with("OER-DIAG-ERROR"), "{out:?}");
+        assert_eq!(out[2], "text: rst:0x3 (SW_SYS_RESET),boot:0x7f");
     }
 
     #[test]
