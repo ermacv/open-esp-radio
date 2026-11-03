@@ -498,6 +498,19 @@ fn millis(ms: u32) -> u64 {
     u64::from(ms).saturating_mul(1000)
 }
 
+/// Where a UDP payload starts within a 4-octet word of the station's
+/// word-aligned transmit buffer: after the Ethernet payload's offset 42
+/// (the longest data MPDU header), the IPv4 header's 20 octets and the UDP
+/// header's 8, at 70.
+const PAYLOAD_LANE: usize = 2;
+const SOURCE_LEN: usize = MAX_PAYLOAD as usize + PAYLOAD_LANE;
+
+/// The datagrams' source, word-aligned: its octets from [`PAYLOAD_LANE`] lie
+/// in the same lanes of their words as the payload the socket copies them
+/// to, so the copy moves whole words.
+#[repr(C, align(4))]
+struct Source([u8; SOURCE_LEN]);
+
 /// Send `transmit`'s datagrams from `begin` until `end`: paced to its rate,
 /// or as fast as the socket takes them.
 async fn send(
@@ -509,9 +522,13 @@ async fn send(
     sent: &mut Sent,
 ) {
     let peer = SocketAddr::from((Ipv4Addr::from(transmit.peer), transmit.peer_port));
-    let mut buffer = [0; MAX_PAYLOAD as usize];
+    let mut source = Source([0; SOURCE_LEN]);
     // The start's payload was validated against the buffer.
-    let Some(datagram) = buffer.get_mut(..usize::from(transmit.payload)) else {
+    let Some(datagram) = source
+        .0
+        .get_mut(PAYLOAD_LANE..)
+        .and_then(|lane| lane.get_mut(..usize::from(transmit.payload)))
+    else {
         return;
     };
     match Schedule::new(begin, end, transmit.payload, transmit.rate_bps) {

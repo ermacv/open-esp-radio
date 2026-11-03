@@ -31,30 +31,59 @@ pub(crate) struct Schedule {
     rate_bps: u32,
     /// Datagrams the schedule handed to the sender, taken or refused.
     attempts: u64,
+    /// One payload time, `payload` bits over the rate: whole microseconds
+    /// and the rest, in units of 1 / `rate_bps` µs.
+    step_us: u64,
+    step_rest: u64,
+    /// The next datagram's time after `begin_us`, whole microseconds and
+    /// the rest, below `rate_bps`; `None` past `u64`.
+    after_us: Option<u64>,
+    after_rest: u64,
 }
 
 impl Schedule {
     /// The schedule of `payload`-byte datagrams at `rate_bps` from `begin_us`
     /// until `end_us`; `None` at the rate 0, which sends unpaced.
     pub(crate) fn new(begin_us: u64, end_us: u64, payload: u16, rate_bps: u32) -> Option<Self> {
-        (rate_bps != 0).then_some(Self {
+        // At most 65 535 × 8 000 000 bit·µs/s: within a u64.
+        let bits = u64::from(payload).saturating_mul(8_000_000);
+        let rate = u64::from(rate_bps);
+        Some(Self {
             begin_us,
             end_us,
             payload,
             rate_bps,
             attempts: 0,
+            step_us: bits.checked_div(rate)?,
+            step_rest: bits.checked_rem(rate)?,
+            after_us: Some(0),
+            after_rest: 0,
         })
     }
 
-    /// When the next datagram is due, before the window ends.
+    /// When the next datagram is due, before the window ends: datagram `n`
+    /// at `begin_us` plus `n` payload times, rounded down.
     fn due(&self) -> Option<u64> {
-        let bits = u128::from(self.attempts)
-            .checked_mul(u128::from(self.payload))?
-            .checked_mul(8_000_000)?;
-        let after = u64::try_from(bits.checked_div(u128::from(self.rate_bps))?).ok()?;
         self.begin_us
-            .checked_add(after)
+            .checked_add(self.after_us?)
             .filter(|due| *due < self.end_us)
+    }
+
+    /// The next datagram's time: one payload time later, its rest carried
+    /// into a whole microsecond once it reaches the rate.
+    fn advance(&mut self) {
+        let rate = u64::from(self.rate_bps);
+        let rest = self.after_rest.saturating_add(self.step_rest);
+        let (carry, rest) = if rest >= rate {
+            (1, rest.saturating_sub(rate))
+        } else {
+            (0, rest)
+        };
+        self.after_rest = rest;
+        self.after_us = self
+            .after_us
+            .and_then(|after| after.checked_add(self.step_us))
+            .and_then(|after| after.checked_add(carry));
     }
 
     /// Datagrams the window holds that were never handed to the sender:
@@ -92,6 +121,7 @@ impl Schedule {
             send();
             sent += 1;
             self.attempts = self.attempts.saturating_add(1);
+            self.advance();
         }
     }
 }
@@ -138,6 +168,17 @@ mod tests {
         }
         assert_eq!(batch(&mut schedule, 10_000), (5, Next::Wait(11_000)));
         assert_eq!(schedule.attempts, 59);
+    }
+
+    #[test]
+    fn each_datagram_is_due_at_its_exact_payload_time_rounded_down() {
+        // 1472 bytes at 100 Mbit/s: 117.76 µs each, whose rests carry.
+        let mut schedule = Schedule::new(7, u64::MAX, 1472, 100_000_000).unwrap();
+        for attempt in 0..100_000_u64 {
+            let exact = attempt * 1472 * 8_000_000 / 100_000_000;
+            assert_eq!(schedule.due(), Some(7 + exact));
+            schedule.advance();
+        }
     }
 
     #[test]
