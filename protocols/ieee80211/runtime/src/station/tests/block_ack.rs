@@ -583,50 +583,52 @@ fn sequence_and_retry(frame: &AirFrame) -> (u16, bool) {
     (control >> 4, frame.plaintext[1] & 0x08 != 0)
 }
 
+/// Connected under an operational transmit agreement of TID 0, whose
+/// negotiation's MSDU took sequence number 0.
+async fn agreed(world: &Application<'_, '_, '_>, seen: &mut usize) {
+    connected(world, seen).await;
+    world.send_msdu(BSSID);
+    let BlockAckAction::AddbaRequest { dialog_token, .. } = response(&world.sent(seen, 0xd0).await)
+    else {
+        panic!("an ADDBA Request");
+    };
+    world
+        .air
+        .receive(&addba_response(dialog_token, 0, 32), meta());
+    assert!(world.delivered().await.is_empty());
+}
+
 #[test]
-fn msdus_queued_while_an_aggregate_is_out_join_the_open_one_and_a_missing_member_retries() {
+fn msdus_queued_while_an_arena_is_out_fill_the_standby_and_a_missing_frame_retries_in_its_arena() {
     run_with(tx_block_ack_config(ht_config()), |world| {
         Box::pin(async move {
             let mut seen = 0;
-            connected(world, &mut seen).await;
-            world.send_msdu(BSSID);
-            let BlockAckAction::AddbaRequest { dialog_token, .. } =
-                response(&world.sent(&mut seen, 0xd0).await)
-            else {
-                panic!("an ADDBA Request");
-            };
+            agreed(world, &mut seen).await;
+            // Sequence number 1 goes alone and stays on the air; 2, 3 and 4
+            // fill the standby meanwhile.
             world
                 .air
-                .receive(&addba_response(dialog_token, 0, 32), meta());
-            assert!(world.delivered().await.is_empty());
-            // Sequence number 1 goes at once; 2 opens the next aggregate,
-            // which 3 and 4 join while 1 is out.
-            world.air.hold(WmmAccessCategory::BestEffort, true);
+                .hold_completion(WmmAccessCategory::BestEffort, true);
             for _ in 0..4 {
                 assert!(world.try_send_msdu(BSSID));
                 assert!(world.delivered().await.is_empty());
             }
-            world
-                .air
-                .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
-                    0b1,
-                ));
-            // The aggregate of 2, 3 and 4 misses 3.
+            // The A-MPDU of 2, 3 and 4 misses 3.
             world
                 .air
                 .answer(oer_protocols_ieee80211_testing_model::AirAnswer::BlockAck(
                     0b101,
                 ));
-            world.air.hold(WmmAccessCategory::BestEffort, false);
+            world
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, false);
             let retried = loop {
                 let frame = world.sent(&mut seen, 0x88).await;
                 if sequence_and_retry(&frame).1 {
                     break frame;
                 }
             };
-            // Bit 1 of the second answer is the second subframe of the
-            // second publication: 2, 3 and 4 went as one aggregate, and only
-            // 3 again.
+            // Only 3 goes again, from the same arena, with its Retry bit.
             assert_eq!(sequence_and_retry(&retried), (3, true));
             assert!(
                 world
@@ -642,22 +644,20 @@ fn msdus_queued_while_an_aggregate_is_out_join_the_open_one_and_a_missing_member
 }
 
 #[test]
-fn a_member_missed_by_every_attempt_is_dropped_and_a_bar_moves_the_window() {
+fn a_frame_missed_by_every_attempt_is_dropped_and_a_bar_moves_the_window() {
     run_with(tx_block_ack_config(ht_config()), |world| {
         Box::pin(async move {
             let mut seen = 0;
-            connected(world, &mut seen).await;
-            world.send_msdu(BSSID);
-            let BlockAckAction::AddbaRequest { dialog_token, .. } =
-                response(&world.sent(&mut seen, 0xd0).await)
-            else {
-                panic!("an ADDBA Request");
-            };
+            agreed(world, &mut seen).await;
+            // 1 stays on the air while 2 and 3 fill the standby.
             world
                 .air
-                .receive(&addba_response(dialog_token, 0, 32), meta());
-            assert!(world.delivered().await.is_empty());
-            // The policy allows four aggregates on the air.
+                .hold_completion(WmmAccessCategory::BestEffort, true);
+            for _ in 0..3 {
+                assert!(world.try_send_msdu(BSSID));
+                assert!(world.delivered().await.is_empty());
+            }
+            // The policy allows four A-MPDUs on the air.
             for _ in 0..4 {
                 world
                     .air
@@ -665,16 +665,19 @@ fn a_member_missed_by_every_attempt_is_dropped_and_a_bar_moves_the_window() {
                         0,
                     ));
             }
-            world.send_msdu(BSSID);
+            world
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, false);
             let bar = world.sent(&mut seen, 0x84).await;
-            // Compressed BlockAckReq: its starting sequence after the dropped 1.
+            // Compressed BlockAckReq: its starting sequence after the
+            // dropped 2 and 3.
             let control = u16::from_le_bytes([bar.plaintext[18], bar.plaintext[19]]);
-            assert_eq!(control >> 4, 2);
+            assert_eq!(control >> 4, 4);
             let tries = world
                 .air
                 .sent()
                 .iter()
-                .filter(|frame| kind(frame) == 0x88 && sequence_and_retry(frame).0 == 1)
+                .filter(|frame| kind(frame) == 0x88 && sequence_and_retry(frame).0 == 2)
                 .count();
             assert_eq!(tries, 4);
             world.command(ControlCommand::Stop).await;

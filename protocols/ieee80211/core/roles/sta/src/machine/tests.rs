@@ -2560,30 +2560,6 @@ fn the_handshakes_eapol_goes_unprotected_and_group_message_2_under_the_pairwise_
     });
 }
 
-impl<'id> crate::data::StaDataTokens for Tokens<'id> {
-    type EpochPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
-    type Class = Buffer;
-    type Ticket = Ticket;
-    type Buffer = Buffer;
-    type Sent = Buffer;
-    type AckEvidence = ();
-    type AirDenied = ();
-    fn renew(mpdu: Self::Sent) -> Buffer {
-        mpdu
-    }
-    type Memory = [u8; 512];
-    fn install(buffer: &mut Buffer, memory: Self::Memory) -> Result<(), Self::Memory> {
-        *buffer = Buffer(memory, memory.len());
-        Ok(())
-    }
-    fn uninstall(buffer: &mut Buffer) -> Option<Self::Memory> {
-        (buffer.1 != 0).then(|| {
-            buffer.1 = 0;
-            buffer.0
-        })
-    }
-}
-
 /// The TID and sequence number of a QoS Data frame.
 fn tid_and_sequence(frame: &[u8]) -> (u8, u16) {
     (
@@ -2595,67 +2571,75 @@ fn tid_and_sequence(frame: &[u8]) -> (u8, u16) {
 #[test]
 fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() {
     installed(|mint| {
-        use crate::data::{DataInput, Msdu, StaData};
+        use crate::data::plane::{DataLink, DataPlane, Intake, LinkNumbers, OutboundMsdu};
+        use oer_protocols_ieee80211_contracts_port::arena::TxArena;
+        use oer_protocols_ieee80211_testing_model::{
+            MODEL_MAX_MPDU, ModelArena, ModelNetworkMemory,
+        };
         use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
         // A QoS BSS: the beacon advertises WMM.
         let mut beacon = wpa2_beacon().to_vec();
         beacon.extend_from_slice(&[0xdd, 7, 0x00, 0x50, 0xf2, 0x02, 0x00, 0x01, 0x00]);
         let (mut world, ptk) = wpa2_connected_by::<2>(mint, &beacon);
-        let mut data = StaData::<Tokens, Caps>::new(
-            [Ticket(10)],
-            [Buffer([0; 512], 512)],
-            core::num::NonZeroU8::MIN,
-        );
-        fn send<'id>(
-            data: &mut StaData<'id, Tokens<'id>, Caps>,
-            world: &mut World<'id>,
+        let mut arena = ModelArena::<Caps>::new();
+        let mut plane = DataPlane::new(TxArena::arenas(&mut arena).unwrap())
+            .ok()
+            .unwrap();
+        // The frames' protection plays no part in their numbering.
+        let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
+            oer_protocols_ieee80211_wire::address::OwnAddress::new(
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            ),
+            oer_protocols_ieee80211_wire::address::Bssid::new(
+                oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+            )
+            .unwrap(),
+            true,
+            oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+        )
+        .unwrap();
+        plane
+            .handover(DataLink {
+                header,
+                admission: AcAdmission::default(),
+                retry: None,
+                ht: None,
+                windows: [None; 8],
+            })
+            .ok()
+            .unwrap();
+        fn send(
+            plane: &mut DataPlane,
+            arena: &mut ModelArena<Caps>,
+            world: &mut World<'_>,
             priority: u8,
         ) -> (u8, u16) {
-            let mut link = world.station.link().expect("the link is up");
-            let mut memory = [0xab; 512];
+            let link = world.station.link().expect("the link is up");
+            let numbers = LinkNumbers {
+                sequences: link.mode,
+                packet_numbers: None,
+            };
+            let mut memory: ModelNetworkMemory = std::boxed::Box::new([0xab; MODEL_MAX_MPDU]);
             memory[crate::data::MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&BSSID);
             memory[crate::data::MSDU_ETHERNET_OFFSET + 12..][..2]
                 .copy_from_slice(&0x0800u16.to_be_bytes());
-            let msdu = Msdu {
+            let msdu = OutboundMsdu {
                 memory,
                 length: 14 + 20,
                 priority: WmmUserPriority::new(priority).unwrap(),
-                admitted: Instant::from_micros(0),
             };
-            data.input(
-                DataInput {
-                    msdu,
-                    link: &mut link,
-                },
-                &mut world.losses,
-            )
-            .unwrap();
-            let Some(transmit) = data.poll_action() else {
-                panic!("an MPDU is owed");
-            };
-            let crate::data::DataTransmitParts {
-                context,
-                ticket,
-                buffer,
-            } = transmit.into_parts();
-            let frame = match &buffer {
-                ReturnedMpdu::Fresh(buffer) | ReturnedMpdu::Sent(buffer) => &buffer.0,
-            };
-            let sent = tid_and_sequence(frame);
-            data.returned(
-                crate::data::DataReturn::TxDone {
-                    context,
-                    ticket,
-                    buffer,
-                    completion: ended(End::Delivered),
-                },
-                &mut world.losses,
-            );
-            sent
+            let taken = plane.intake(arena, msdu, numbers, Instant::from_micros(0));
+            assert!(matches!(taken, Intake::Taken(_)));
+            // The MPDU went into the memory; withdrawn, it shows its header.
+            let mut written = None;
+            plane
+                .withdraw_unpublished(arena, |memory| written = Some(memory), &mut ())
+                .unwrap();
+            tid_and_sequence(&written.expect("the arena held the MPDU")[..])
         }
-        assert_eq!(send(&mut data, &mut world, 7), (7, 0));
-        assert_eq!(send(&mut data, &mut world, 0), (0, 0));
+        assert_eq!(send(&mut plane, &mut arena, &mut world, 7), (7, 0));
+        assert_eq!(send(&mut plane, &mut arena, &mut world, 0), (0, 0));
         // A rekey: Group Message 2 is QoS Data on TID 7, numbered in its space.
         let before = world.frames.len();
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
@@ -2665,8 +2649,8 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             .expect("Group Message 2 went as QoS Data");
         assert_eq!(tid_and_sequence(group_message2), (7, 1));
         // TID 7 goes on after the EAPOL's number; TID 0 never lost one.
-        assert_eq!(send(&mut data, &mut world, 7), (7, 2));
-        assert_eq!(send(&mut data, &mut world, 0), (0, 1));
+        assert_eq!(send(&mut plane, &mut arena, &mut world, 7), (7, 2));
+        assert_eq!(send(&mut plane, &mut arena, &mut world, 0), (0, 1));
     });
 }
 

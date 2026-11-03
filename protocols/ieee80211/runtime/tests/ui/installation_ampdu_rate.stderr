@@ -1,21 +1,35 @@
 error: lifetime may not live long enough
-  --> tests/ui/installation_ampdu_rate.rs:56:32
+  --> tests/ui/installation_ampdu_rate.rs:70:39
    |
-51 |     async fn run<'p, 'id>(
-   |                  -- lifetime `'p` defined here
-52 |         self,
-   |         ---- has type `Target<'_, '_, '1, OuterId>`
+53 |       async fn run<'p, 'id>(
+   |                    -- lifetime `'p` defined here
+54 |           self,
+   |           ---- has type `Target<'_, '_, '1, OuterId>`
 ...
-56 |         let mut target = match owner.enable().await { // ui-error: lifetime may not live long enough
-   |                                ^^^^^^^^^^^^^^ argument requires that `'1` must outlive `'p`
+70 |               let publication = |arena| ArenaPublication { // ui-error: lifetime may not live long enough
+   |  _______________________________________^
+71 | |                 arena,
+72 | |                 format: ArenaFormat::Aggregate {
+73 | |                     rate,
+...  |
+79 | |                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+80 | |             };
+   | |_____________^ method was supposed to return data with lifetime `'p` but it is returning data with lifetime `'1`
 
 error: lifetime may not live long enough
-  --> tests/ui/installation_ampdu_rate.rs:61:30
+  --> tests/ui/installation_ampdu_rate.rs:70:39
    |
-51 |     async fn run<'p, 'id>(
-   |                      --- lifetime `'id` defined here
-52 |         self,
-   |         ---- has type `Target<'_, '_, '1, OuterId>`
+53 |       async fn run<'p, 'id>(
+   |                        --- lifetime `'id` defined here
+54 |           self,
+   |           ---- has type `Target<'_, '_, '1, OuterId>`
 ...
-61 |             let mut source = self.source.phase(); // ui-error: lifetime may not live long enough
-   |                              ^^^^^^^^^^^^^^^^^^^ argument requires that `'id` must outlive `'1`
+70 |               let publication = |arena| ArenaPublication { // ui-error: lifetime may not live long enough
+   |  _______________________________________^
+71 | |                 arena,
+72 | |                 format: ArenaFormat::Aggregate {
+73 | |                     rate,
+...  |
+79 | |                 power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+80 | |             };
+   | |_____________^ method was supposed to return data with lifetime `'1` but it is returning data with lifetime `'id`

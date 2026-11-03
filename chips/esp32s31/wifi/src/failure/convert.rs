@@ -45,8 +45,7 @@ pub(super) fn backend_fault(
         Source::Clock => BackendFault::Clock,
         Source::Retune(v0) => BackendFault::Retune(retune_error(v0)),
         Source::Abandoned => BackendFault::Abandoned,
-        Source::Aggregate(v0) => BackendFault::Aggregate(aggregate_tx_error(v0)),
-        Source::AggregatePlan(v0) => BackendFault::AggregatePlan(aggregate_refusal(v0)),
+        Source::Arena(v0) => BackendFault::Arena(arena_fault(v0)),
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
         Source::Setting(v0) => BackendFault::Setting(setting_fault(v0)),
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
@@ -64,12 +63,6 @@ pub(super) fn aggregate_tx_error(
         Source::Completion(v0) => AggregateTxError::Completion(completion_fault(v0)),
         Source::FrameIndexOutOfRange { index, count } => {
             AggregateTxError::FrameIndexOutOfRange { index, count }
-        }
-        Source::InvalidRetryMask { mask, count } => {
-            AggregateTxError::InvalidRetryMask { mask, count }
-        }
-        Source::RetainedFrameTooShort { index, length } => {
-            AggregateTxError::RetainedFrameTooShort { index, length }
         }
         Source::BackingUnavailable { index } => AggregateTxError::BackingUnavailable { index },
         Source::SlotCountOverflow { count } => AggregateTxError::SlotCountOverflow { count },
@@ -163,19 +156,15 @@ pub(super) fn chain_storage_error(
     }
 }
 
-pub(super) fn aggregate_refusal(
-    value: oer_chips_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal,
-) -> AggregateRefusal {
-    use oer_chips_esp32s31_ieee80211_driver::lower_mac::AmpduRefusal as Source;
+pub(super) fn arena_fault(
+    value: oer_chips_esp32s31_ieee80211_driver::lower_mac::arena::ArenaFault,
+) -> ArenaFault {
+    use oer_chips_esp32s31_ieee80211_driver::lower_mac::arena::ArenaFault as Source;
     match value {
-        Source::Empty => AggregateRefusal::Empty,
-        Source::TooManySubframes => AggregateRefusal::TooManySubframes,
-        Source::StartSpacing => AggregateRefusal::StartSpacing,
-        Source::ShortSubframe => AggregateRefusal::ShortSubframe,
-        Source::GroupRecipient => AggregateRefusal::GroupRecipient,
-        Source::Length => AggregateRefusal::Length,
-        Source::LegacyRate => AggregateRefusal::LegacyRate,
-        Source::KeyUseMismatch => AggregateRefusal::KeyUseMismatch,
+        Source::Chain(v0) => ArenaFault::Chain(aggregate_tx_error(v0)),
+        Source::Core(v0) => ArenaFault::Core(lower_mac_fault(v0)),
+        Source::State => ArenaFault::State,
+        Source::Watchdog => ArenaFault::Watchdog,
     }
 }
 

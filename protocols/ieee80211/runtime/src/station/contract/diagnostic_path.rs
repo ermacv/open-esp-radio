@@ -26,11 +26,10 @@ macro_rules! unit_paths {
 unit_paths! {
     PeerDisconnectKind { Disassociation, Deauthentication }
     PreparationError {
-        RetransmissionKey, RetransmissionKind, AggregateFull, BlockAckWindow, MissingBodyLoan,
+        RetransmissionKey, RetransmissionKind, MissingBodyLoan,
     }
     LayoutError {
-        NumberingProtectionMismatch, StorageTooShort, CcmpHeaderTooShort, BodyOverlap,
-        BufferUnavailable,
+        StorageTooShort, CcmpHeaderTooShort, BodyOverlap, BufferUnavailable,
     }
     LeaveReason { Stopped, Unservable, PortFailed }
     EapolParseError { Truncated, LengthMismatch, NotKeyPacket, NotRsnKeyDescriptor }

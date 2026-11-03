@@ -3,19 +3,13 @@ use super::*;
 use embassy_futures::yield_now;
 use oer_protocols_ieee80211_contracts_port::PhaseTypes;
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateAttempt, AggregateEnd, Air, AmpduPhase, BlockAckReport, CheckedAggregate,
-    ClassSubframe, GroupAddress, IndeterminateCause, MpduStartSpacing, NoAckHeader, QosControl,
-    SingleEnd, SingleResponse, SubframeSource, Tid, TxMpdu, TxOutcome, WithdrawCause,
+    Air, BlockAckReport, GroupAddress, IndeterminateCause, NoAckHeader, QosControl, SingleEnd,
+    SingleResponse, Tid, TxMpdu, TxOutcome, WithdrawCause,
 };
-use oer_protocols_ieee80211_testing_model::{
-    AirAnswer, ModelAggregateOutcome, ModelCaps, ModelPhase, ModelSingleOutcome,
-};
-use oer_protocols_ieee80211_wire::{
-    phy::{HtMcs, HtRate, PpduBandwidth},
-    sequence::SequenceNumber,
-};
+use oer_protocols_ieee80211_testing_model::{AirAnswer, ModelCaps, ModelPhase, ModelSingleOutcome};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
-/// What a terminal reported, for single MPDUs and aggregates alike.
+/// What a single MPDU's terminal reported.
 #[derive(Debug, Eq, PartialEq)]
 enum Seen {
     /// Delivered; `report` is the BlockAck's window, and `solicited` whether
@@ -52,24 +46,6 @@ impl Seen {
             TxOutcome::Expired { msdus } => Self::Expired(msdus),
         }
     }
-
-    fn aggregate(outcome: ModelAggregateOutcome) -> Self {
-        match outcome {
-            TxOutcome::Ended(AggregateEnd::Delivered { air, report, .. }) => Self::Delivered {
-                air,
-                report: Some(report),
-                solicited: true,
-            },
-            TxOutcome::Ended(AggregateEnd::AckTimeout(air)) => Self::AckTimeout(air),
-            TxOutcome::Ended(AggregateEnd::ContentionLimit(air)) => Self::ContentionLimit(air),
-            TxOutcome::Ended(AggregateEnd::CtsTimeout(_) | AggregateEnd::AirDenied { .. }) => {
-                Self::Other
-            }
-            TxOutcome::Withdrawn(cause) => Self::Withdrawn(cause),
-            TxOutcome::Indeterminate(cause) => Self::Indeterminate(cause),
-            TxOutcome::Expired { msdus } => Self::Expired(msdus),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -78,7 +54,6 @@ enum Frame {
     NoAck,
     Group,
     Bar,
-    Aggregate,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -183,7 +158,6 @@ fn frame<'p, 'id: 'p, Id: SlotIdentity + 'id>(
                 protection: Protection::None,
             }),
         },
-        Frame::Aggregate => unreachable!(),
     }
 }
 
@@ -202,24 +176,11 @@ impl Case {
             LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(
                 terminal,
             ))) => {
-                assert!(!matches!(self.frame, Frame::Aggregate));
                 let terminal = terminal.into_parts(terminal_access);
                 (
                     terminal.ticket,
                     terminal.payload,
                     Seen::single(terminal.outcome),
-                )
-            }
-            LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(
-                terminal,
-            ))) => {
-                assert!(matches!(self.frame, Frame::Aggregate));
-                let terminal = terminal.into_parts(terminal_access);
-                assert_eq!(terminal.payload.len(), 1);
-                (
-                    terminal.ticket,
-                    terminal.payload.into_iter().next().unwrap(),
-                    Seen::aggregate(terminal.outcome),
                 )
             }
             LowerMacEvent::Terminal(LowerMacTerminal::GateClosed(_)) => return false,
@@ -229,12 +190,7 @@ impl Case {
         let (buffer, body) = payload.into_parts();
         assert!(matches!(buffer, ModelAnyBuffer::SmallSent(_)));
         assert!(body.is_none());
-        let rate = match self.frame {
-            Frame::Aggregate => PhyRate::Ht(
-                HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
-            ),
-            _ => PhyRate::Legacy(LegacyRate::Ofdm6M),
-        };
+        let rate = PhyRate::Legacy(LegacyRate::Ofdm6M);
         let air = Air {
             transmissions: core::num::NonZeroU16::MIN,
             rate,
@@ -294,83 +250,33 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id>> for Case {
         let mut seen = 0;
         {
             let mut phase = owner.phase();
-            if matches!(self.frame, Frame::Aggregate) {
-                let rate = phase
-                    .rate(PhyRate::Ht(
-                        HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
-                    ))
-                    .unwrap();
-                let mut station = phase.station();
-                let rate = station.ampdu_rate(rate).ok().unwrap();
-                let aggregate = station.aggregate(
-                    IndividualAddress::new(PEER).unwrap(),
-                    Tid::new(0).unwrap(),
-                    rate,
-                    TxProtection::Open,
-                );
-                let source = SubframeSource::Fresh {
-                    numbering: oer_protocols_ieee80211_contracts_port::TxNumbering::Open,
-                    buffer,
-                    frame: ClassSubframe::new(
-                        SizedFrame::new(
-                            AckHeader::new(header()).unwrap(),
-                            MpduLength::new(40).unwrap(),
-                        )
-                        .unwrap(),
-                    )
-                    .ok()
-                    .unwrap(),
-                    body: None,
-                };
-                let checked = CheckedAggregate::new(aggregate, source).ok().unwrap();
-                let aggregate =
-                    <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::push_aggregate(
-                        checked,
-                    )
-                    .ok()
-                    .unwrap();
-                station
-                    .submit_ampdu(
-                        (AggregateAttempt {
-                            context: (),
-                            ticket,
-                            aggregate,
-                            protection: Protection::None,
-                            power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                            min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
-                        })
-                        .admit(),
-                    )
-                    .unwrap();
-            } else {
-                let source = TxSource::Fresh {
-                    buffer,
-                    frame: ClassFrame::new(frame(&phase, self.frame)).ok().unwrap(),
-                    body: None,
-                    protection: TxProtection::Open,
-                };
-                let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
-                    Station,
-                    _,
-                >(source.check().ok().unwrap())
-                .ok()
+            let source = TxSource::Fresh {
+                buffer,
+                frame: ClassFrame::new(frame(&phase, self.frame)).ok().unwrap(),
+                body: None,
+                protection: TxProtection::Open,
+            };
+            let source = <ModelTypes<ModelBackend<Id>> as TxBufferPool<ModelSmall>>::prepare::<
+                Station,
+                _,
+            >(source.check().ok().unwrap())
+            .ok()
+            .unwrap();
+            phase
+                .station()
+                .submit(
+                    (Attempt {
+                        context: (),
+                        ticket,
+                        source,
+                        access_category: WmmAccessCategory::BestEffort,
+                        protection: Protection::None,
+                        power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+                        coex_operation: TxOperation::Data,
+                    })
+                    .admit(),
+                )
                 .unwrap();
-                phase
-                    .station()
-                    .submit(
-                        (Attempt {
-                            context: (),
-                            ticket,
-                            source,
-                            access_category: WmmAccessCategory::BestEffort,
-                            protection: Protection::None,
-                            power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                            coex_operation: TxOperation::Data,
-                        })
-                        .admit(),
-                    )
-                    .unwrap();
-            }
             if matches!(self.expected, Expected::Rejected) {
                 assert!(phase.next_event().await.is_err());
                 assert!(self.air.sent().is_empty());
@@ -426,23 +332,13 @@ fn exercise(frame: Frame, answer: Option<AirAnswer>, expected: Expected, barrier
 #[test]
 fn checked_frames_determine_the_solicited_response_across_barriers() {
     for barrier in [Barrier::None, Barrier::Gate, Barrier::Disable] {
-        for kind in [
-            Frame::Individual,
-            Frame::NoAck,
-            Frame::Group,
-            Frame::Bar,
-            Frame::Aggregate,
-        ] {
+        for kind in [Frame::Individual, Frame::NoAck, Frame::Group, Frame::Bar] {
             let success = match kind {
                 Frame::Individual => Expected::Delivered(None),
                 Frame::NoAck | Frame::Group => Expected::Unacknowledged,
-                Frame::Bar | Frame::Aggregate => Expected::Delivered(Some(BlockAckReport {
+                Frame::Bar => Expected::Delivered(Some(BlockAckReport {
                     start_sequence: SequenceNumber::new(7).unwrap(),
-                    bitmap: if matches!(kind, Frame::Bar) {
-                        u64::MAX
-                    } else {
-                        1
-                    },
+                    bitmap: u64::MAX,
                 })),
             };
             exercise(kind, None, success, barrier);
@@ -469,22 +365,16 @@ fn checked_frames_determine_the_solicited_response_across_barriers() {
                 barrier,
             );
         }
-        for kind in [Frame::Bar, Frame::Aggregate] {
-            for bitmap in [0, 1, 1 << 63] {
-                exercise(
-                    kind,
-                    Some(AirAnswer::BlockAck(bitmap)),
-                    Expected::Delivered(Some(BlockAckReport {
-                        start_sequence: SequenceNumber::new(7).unwrap(),
-                        bitmap: if matches!(kind, Frame::Bar) {
-                            bitmap
-                        } else {
-                            bitmap & 1
-                        },
-                    })),
-                    barrier,
-                );
-            }
+        for bitmap in [0, 1, 1 << 63] {
+            exercise(
+                Frame::Bar,
+                Some(AirAnswer::BlockAck(bitmap)),
+                Expected::Delivered(Some(BlockAckReport {
+                    start_sequence: SequenceNumber::new(7).unwrap(),
+                    bitmap,
+                })),
+                barrier,
+            );
         }
     }
 }
@@ -498,7 +388,6 @@ fn unsolicited_responses_poison_before_publication() {
         (Frame::Group, AirAnswer::Ack),
         (Frame::Group, AirAnswer::BlockAck(1)),
         (Frame::Bar, AirAnswer::Ack),
-        (Frame::Aggregate, AirAnswer::Ack),
     ] {
         exercise(kind, Some(answer), Expected::Rejected, Barrier::None);
     }

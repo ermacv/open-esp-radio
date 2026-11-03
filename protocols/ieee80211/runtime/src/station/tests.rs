@@ -44,14 +44,15 @@ use {
 use super::contract::{AccessPointCommand, AccessPointFact};
 use super::*;
 use oer_portable_memory::WakingSpscQueue;
+use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 
 mod block_ack;
 mod contracts;
 use oer_protocols_ieee80211_testing_model::{
-    AirFrame, MODEL_RX_EVENTS, MODEL_TX_QUEUE_DEPTH, ModelAck, ModelAir, ModelAnyBuffer,
-    ModelBackend, ModelBlockAckEvidence, ModelCaps24, ModelLarge, ModelLentRx, ModelPhase,
-    ModelResources, ModelRxMeta, ModelSetup, ModelSmall, ModelTypes,
+    AirFrame, MODEL_RX_EVENTS, ModelAck, ModelAir, ModelAnyBuffer, ModelBackend,
+    ModelBlockAckEvidence, ModelCaps24, ModelLentRx, ModelPhase, ModelResources, ModelRxMeta,
+    ModelSetup, ModelSmall, ModelTypes,
 };
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
@@ -113,7 +114,6 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     type TerminalStorage<T> = TestTerminalStorage<T>;
     type TxContextStorage<T> = [Option<T>; oer_protocols_ieee80211_testing_model::MODEL_TICKETS];
     type Small = ModelSmall;
-    type Large = ModelLarge;
     type TxMemory = oer_protocols_ieee80211_testing_model::ModelNetworkMemory;
 
     fn span(span: ServiceSpan, end: bool) {
@@ -166,16 +166,27 @@ impl<Id: SlotIdentity> StationPort for ServicePort<Id> {
     {
         event
     }
-    fn tx_buffer<'p>(buffer: ModelAnyBuffer<'p, Self::Backend>) -> StationTxBuffer<'p, Self>
+    fn tx_buffer<'p>(
+        buffer: ModelAnyBuffer<'p, Self::Backend>,
+    ) -> Result<StationTxBuffer<'p, Self>, ModelAnyBuffer<'p, Self::Backend>>
     where
         Self: 'p,
         Id: 'p,
     {
         match buffer {
-            ModelAnyBuffer::Small(buffer) => StationTxBuffer::Small(ReturnedMpdu::Fresh(buffer)),
-            ModelAnyBuffer::SmallSent(buffer) => StationTxBuffer::Small(ReturnedMpdu::Sent(buffer)),
-            ModelAnyBuffer::Large(buffer) => StationTxBuffer::Large(ReturnedMpdu::Fresh(buffer)),
-            ModelAnyBuffer::LargeSent(buffer) => StationTxBuffer::Large(ReturnedMpdu::Sent(buffer)),
+            ModelAnyBuffer::Small(buffer) => Ok(ReturnedMpdu::Fresh(buffer)),
+            ModelAnyBuffer::SmallSent(buffer) => Ok(ReturnedMpdu::Sent(buffer)),
+            buffer @ (ModelAnyBuffer::Large(_) | ModelAnyBuffer::LargeSent(_)) => Err(buffer),
+        }
+    }
+    fn arena_ack<'p>(response: ModelBlockAckEvidence) -> Option<ModelAck>
+    where
+        Self: 'p,
+        Id: 'p,
+    {
+        match response {
+            ModelBlockAckEvidence::Measured(snr_db) => Some(ModelAck { snr_db }),
+            ModelBlockAckEvidence::Unmeasured => None,
         }
     }
 }
@@ -242,9 +253,9 @@ fn network_frame(
     parts: oer_protocols_ieee80211_wire::data::MsduParts<'_>,
     priority: WmmUserPriority,
 ) -> Outgoing<NetworkMemory> {
-    use oer_protocols_ieee80211_contracts_port::TxBufferClass as _;
     use oer_protocols_ieee80211_core_roles_sta::data::{MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET};
-    let mut memory: NetworkMemory = Box::new([0; ModelLarge::CAPACITY]);
+    let mut memory: NetworkMemory =
+        Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]);
     memory[MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&parts.destination);
     memory[MSDU_ETHERNET_OFFSET + 6..][..6].copy_from_slice(&parts.source);
     memory[MSDU_ETHERNET_OFFSET + 12..][..2].copy_from_slice(&parts.ether_type.to_be_bytes());
@@ -776,7 +787,6 @@ enum ObservedOutput {
         _reason: super::contract::MsduRefusal,
     },
     TxRefused {
-        operation: TxOperation,
         reason: TxRefusal,
     },
     Notice(StaNotice),
@@ -860,9 +870,7 @@ impl Application<'_, '_, '_> {
             ServiceOutput::MsduRefused { reason } => {
                 ObservedOutput::MsduRefused { _reason: reason }
             }
-            ServiceOutput::TxRefused { operation, reason } => {
-                ObservedOutput::TxRefused { operation, reason }
-            }
+            ServiceOutput::TxRefused { reason } => ObservedOutput::TxRefused { reason },
             ServiceOutput::Notice(notice) => ObservedOutput::Notice(notice),
             ServiceOutput::AccessPoint(command) => ObservedOutput::AccessPoint(command),
             ServiceOutput::CommandRefused(refused) => {
@@ -1124,7 +1132,6 @@ where
                 terminal_access,
                 tickets,
                 small,
-                large,
                 station_association,
                 station_pairwise,
                 station_group,
@@ -1134,10 +1141,10 @@ where
                 ..
             } = resources;
             let mut tickets = tickets.into_iter();
+            // The station's frames take four tickets and the small buffers;
+            // data goes through the station phase's arenas.
             let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
-            let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
             let small: [_; 4] = small.try_into().ok().unwrap();
-            let large: [_; 4] = large.try_into().ok().unwrap();
 
             let channel = SupportedChannel::new(
                 oer_protocols_radio_regulatory::TEST_DOMAIN
@@ -1178,7 +1185,6 @@ where
             let (station, credits) = Station::new(config, resources, GroupCapacity::new());
             let mut service = Runner::<ServicePort<LocalId<'scope>>, _, _, GROUPS, O>::new(
                 (station, credits),
-                StaData::new(data_tickets, large, MODEL_TX_QUEUE_DEPTH),
                 arbiter,
                 RecordingRates {
                     inner: EspressifRateSelection::<ModelCaps24>::new(),
@@ -1377,10 +1383,7 @@ where
                     );
                     assert!(service._pending.admissions.first().is_none());
                     assert_eq!(held_contexts, 0, "every terminal took its context back");
-                    assert_eq!(
-                        service.data.available(WmmAccessCategory::BestEffort),
-                        u32::from(MODEL_TX_QUEUE_DEPTH.get())
-                    );
+                    assert_eq!(service._data.held().1, 0, "the arenas hold no frame");
                     assert_eq!(world.air.disable_calls(), 1);
                 }
                 Some(ExpectedStreamEnd::FalseDrained) => {
@@ -1391,13 +1394,9 @@ where
                     else {
                         panic!("an unreturned TX ticket contradicts Drained")
                     };
-                    assert!(matches!(missing, PendingTerminal::Transmit(_)));
+                    // The data arena on the air owes its completion.
+                    assert_eq!(*missing, PendingTerminal::Arena);
                     assert_eq!(service._pending.admissions.first(), Some(*missing));
-                    // The unreturned ticket's context stays with the service.
-                    let PendingTerminal::Transmit(index) = *missing else {
-                        unreachable!()
-                    };
-                    assert!(service._pending.tx_contexts[usize::from(index)].is_some());
                     assert_eq!(world.air.disable_calls(), 0);
                 }
                 Some(ExpectedStreamEnd::Quarantined) => {
@@ -1408,13 +1407,12 @@ where
                             ..
                         }
                     ));
-                    let Some(PendingTerminal::Transmit(index)) =
-                        service._pending.admissions.first()
-                    else {
-                        panic!("the held transmission stays admitted")
-                    };
-                    assert!(service._pending.tx_contexts[usize::from(index)].is_some());
-                    assert!(held_contexts >= 1);
+                    assert_eq!(
+                        service._pending.admissions.first(),
+                        Some(PendingTerminal::Arena),
+                        "the arena on the air stays admitted"
+                    );
+                    assert_eq!(service._data.held().1, 1, "its frame stays in the arena");
                     assert_eq!(world.air.disable_calls(), 0);
                 }
                 // A poisoned port may keep a ticket: its context stays here.
@@ -1478,13 +1476,12 @@ where
                     "all key owners return before teardown"
                 );
                 assert!(service._pending.group.is_none());
-                for category in WmmAccessCategory::ALL {
-                    assert_eq!(
-                        service.data.available(category),
-                        u32::from(MODEL_TX_QUEUE_DEPTH.get()),
-                        "disable returns every attempt"
-                    );
-                }
+                let (waiting, frames, _) = service._data.held();
+                assert_eq!(
+                    (waiting, frames),
+                    (0, 0),
+                    "the arenas hold no frame and no MSDU waits after the stop"
+                );
             }
             if self.refuse_initial_enable {
                 assert!(matches!(
@@ -1634,7 +1631,6 @@ where
             ],
             clock.clone(),
         );
-        let backend = backend.with_network_memory();
         let mut transmit =
             oer_portable_memory::WakingSlotQueue::<Option<Outgoing<NetworkMemory>>, 2>::new();
         let mut back = oer_portable_memory::WakingSlotQueue::<Option<NetworkMemory>, 2>::new();
@@ -1823,14 +1819,16 @@ fn event_end_checks_outstanding_tx_and_quarantines_without_disable() {
                             .hold_completion(WmmAccessCategory::BestEffort, false);
                     }
                     ExpectedStreamEnd::SubmissionFailed => {
+                        // The station's Deauthentication is the submission
+                        // the port refuses.
                         world.fail_submission.set(true);
-                        world.send_msdu([2, 0, 0, 0, 0, 8]);
+                        world.station_command(StaCommand::Disconnect).await;
                         for _ in 0..20 {
                             yield_now().await;
                         }
                         assert!(
                             !world.fail_submission.get(),
-                            "the second attempt reached admission"
+                            "the station's frame reached admission"
                         );
                         world
                             .air
@@ -2114,7 +2112,6 @@ fn refusing_m4_releases_handshake_resources_without_connecting_and_service_can_r
                 assert!(world.outputs.borrow().iter().any(|output| matches!(
                     output,
                     ObservedOutput::TxRefused {
-                        operation: TxOperation::Station,
                         reason: TxRefusal::NoRate
                     }
                 )));
@@ -2141,7 +2138,7 @@ fn refusing_m4_releases_handshake_resources_without_connecting_and_service_can_r
 }
 
 #[test]
-fn a_data_preparation_refusal_releases_admission_and_the_next_msdu_can_go() {
+fn a_data_frame_without_a_rate_waits_in_its_arena_and_goes_with_the_next_plan() {
     run(
         StaSecurity::Personal {
             password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
@@ -2157,35 +2154,32 @@ fn a_data_preparation_refusal_releases_admission_and_the_next_msdu_can_go() {
                 for _ in 0..8 {
                     yield_now().await;
                 }
-                let statistics_before = world.completions.borrow().len();
                 world.refuse_rate.set(true);
                 world.send_msdu(ACCESS_POINT_ADDRESS);
                 for _ in 0..50 {
                     yield_now().await;
                 }
-                assert!(world.outputs.borrow().iter().any(|output| matches!(
-                    output,
-                    ObservedOutput::TxRefused {
-                        operation: TxOperation::Data,
-                        reason: TxRefusal::NoRate
-                    }
-                )));
+                // No rate: the frame stays in the arena, refused to no one.
+                assert!(
+                    !world
+                        .outputs
+                        .borrow()
+                        .iter()
+                        .any(|output| matches!(output, ObservedOutput::TxRefused { .. }))
+                );
                 assert_eq!(world.air.sent().len(), sent_before);
-                assert_eq!(world.completions.borrow().len(), statistics_before);
-                // The refused MSDU's memory is the network's again: the
-                // service reports it in the queue back to the network.
                 assert!(
                     world
                         .observed
                         .tx_memory()
                         .iter()
-                        .any(|held| held.returning == 1 && held.owed == 0 && held.members == 0)
+                        .any(|held| held.members == 1 && held.returning == 0)
                 );
-                world.take_back_memory();
-                assert_eq!(world.memory_back.get(), 1);
+                // The next pass plans a rate: the same frame goes, numbered.
                 world.send_msdu(ACCESS_POINT_ADDRESS);
                 let frame = world.sent(&mut seen, DATA).await;
                 assert!(frame.packet_number.is_some());
+                assert_eq!(frame.ticket, None, "data goes through an arena");
             })
         },
     );
@@ -2313,7 +2307,7 @@ const NULL: u16 = 0x0048;
 /// the Null before a background scan's absence and the Deauthentication
 /// still reach the air.
 #[test]
-fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
+fn data_in_both_arenas_leaves_eapol_null_and_deauthentication_their_tokens() {
     // A second channel, so the background scan leaves the home channel
     // and announces its absence with a Null.
     let mut config = config(StaSecurity::Personal {
@@ -2342,10 +2336,12 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
             let mut seen = 0;
             world.associate(&mut seen, true).await;
             let ptk = world.handshake(&mut seen).await;
-            world.air.hold(WmmAccessCategory::BestEffort, true);
-            // The data machine takes four MSDUs, its four tickets and
-            // buffers; two more wait in the stack's queue, which then
-            // refuses.
+            world
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, true);
+            // Data holds its arena on the air, the standby's frame and the
+            // MSDU that waits for it; two more wait in the stack's queue,
+            // which then refuses.
             let mut sent = 0;
             while world.try_send_msdu([0x02, 0, 0, 0, 0, 0x07]) {
                 sent += 1;
@@ -2353,17 +2349,25 @@ fn data_takes_all_its_tokens_and_eapol_null_and_deauthentication_still_go() {
                     yield_now().await;
                 }
             }
-            assert_eq!(sent, 4 + 2);
-            assert!(
+            assert_eq!(sent, 3 + 2);
+            assert_eq!(
                 world.air.sent()[seen..]
                     .iter()
-                    .all(|frame| kind(frame) != DATA)
+                    .filter(|frame| kind(frame) == DATA)
+                    .count(),
+                1,
+                "only the held arena went"
             );
 
             world
                 .air
                 .receive(&protected_group_message1(&ptk, 3, 2), decrypted());
-            let group_message2 = world.sent(&mut seen, DATA).await;
+            let group_message2 = loop {
+                let frame = world.sent(&mut seen, DATA).await;
+                if frame.plaintext.get(38..40) == Some(&[0x88, 0x8e][..]) {
+                    break frame;
+                }
+            };
             // Protected after the handshake: the EtherType follows the
             // CCMP header's room.
             assert_ne!(group_message2.plaintext[1] & 0x40, 0);
@@ -2436,9 +2440,12 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
                     channel: 6,
                 })
                 .await;
-            // The link's four MPDUs wait at the port.
-            world.air.hold(WmmAccessCategory::BestEffort, true);
-            for _ in 0..4 {
+            // The link's arena stays on the air; the standby holds the
+            // next MPDU and one MSDU waits for it.
+            world
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, true);
+            for _ in 0..3 {
                 world.send_msdu(OLD);
                 for _ in 0..20 {
                     yield_now().await;
@@ -2455,8 +2462,8 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
             world
                 .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
                 .await;
-            // Reconnected: every data token is back, so the machine takes
-            // four MSDUs again and two more wait in the stack's queue.
+            // Reconnected: both arenas are free again, so the plane takes
+            // three MSDUs again and two more wait in the stack's queue.
             world.associate(&mut seen, false).await;
             let mut sent = 0;
             while world.try_send_msdu(NEW) {
@@ -2465,10 +2472,12 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
                     yield_now().await;
                 }
             }
-            assert_eq!(sent, 4 + 2);
-            // The queue opens: only the new link's frames go.
-            world.air.hold(WmmAccessCategory::BestEffort, false);
-            for _ in 0..6 {
+            assert_eq!(sent, 3 + 2);
+            // The arena's answer comes: only the new link's frames go.
+            world
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, false);
+            for _ in 0..5 {
                 world.sent(&mut seen, DATA).await;
             }
             for _ in 0..5 {
@@ -2478,8 +2487,15 @@ fn a_disconnection_during_an_absence_leaves_no_old_frame_to_go_after_the_reconne
                 world.clock.advance_to_next_deadline();
             }
             let air = world.air.sent();
-            assert!(!air.iter().any(to(OLD)), "no frame of the old link went");
-            assert_eq!(air.iter().filter(|frame| to(NEW)(frame)).count(), 6);
+            let left = air
+                .iter()
+                .position(|frame| kind(frame) == DEAUTHENTICATION)
+                .unwrap();
+            assert!(
+                !air[left..].iter().any(to(OLD)),
+                "no frame of the old link went after it left"
+            );
+            assert_eq!(air.iter().filter(|frame| to(NEW)(frame)).count(), 5);
         })
     });
 }
@@ -2673,7 +2689,7 @@ fn a_frame_marked_for_voice_under_a_closed_voice_category_goes_as_video_in_tid_f
 }
 
 #[test]
-fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
+fn interleaved_station_and_data_terminals_keep_their_owner_and_the_networks_order() {
     run(
         StaSecurity::Personal {
             password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
@@ -2688,12 +2704,10 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
                 world.associate_with(&mut seen, beacon, true).await;
                 let ptk = world.handshake(&mut seen).await;
                 let baseline = world.completions.borrow().len();
-                for category in WmmAccessCategory::ALL {
-                    world.air.hold(category, true);
-                }
-                // Two TIDs share Voice, while Video and BE can complete first.
-                // Distinct destinations let the script observe the original
-                // order; the service never reads them to route a terminal.
+                // The first data arena stays on the air while the others
+                // wait: the standby takes the next TID's frame and the one
+                // after waits for it, in the network's order.
+                world.air.hold_completion(WmmAccessCategory::Voice, true);
                 for (index, priority) in [6, 0, 7, 4].into_iter().enumerate() {
                     assert!(world.try_send_msdu_at([2, 0, 0, 0, 0, index as u8], priority));
                     for _ in 0..20 {
@@ -2706,37 +2720,32 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
                 for _ in 0..20 {
                     yield_now().await;
                 }
-                assert_eq!(world.completions.borrow().len(), baseline);
-
-                for (category, destination) in [
-                    (WmmAccessCategory::Video, 3),
-                    (WmmAccessCategory::BestEffort, 1),
-                ] {
-                    world.air.hold(category, false);
+                world.air.hold_completion(WmmAccessCategory::Voice, false);
+                let mut data = Vec::new();
+                let mut eapol = 0;
+                while data.len() < 4 || eapol == 0 {
                     let frame = world.sent(&mut seen, QOS_DATA).await;
-                    assert_eq!(frame.plaintext[21], destination);
-                    assert!(!carries_eapol(&frame));
+                    if carries_eapol(&frame) {
+                        eapol += 1;
+                    } else {
+                        data.push((frame.plaintext[21], frame.plaintext[24] & 0x0f));
+                    }
                 }
-                world.air.hold(WmmAccessCategory::Voice, false);
-                for (destination, tid) in [(0, 6), (2, 7)] {
-                    let frame = world.sent(&mut seen, QOS_DATA).await;
-                    assert_eq!(frame.plaintext[21], destination);
-                    assert_eq!(frame.plaintext[24] & 0x0f, tid);
-                    assert!(!carries_eapol(&frame));
+                assert_eq!(data, [(0, 6), (1, 0), (2, 7), (3, 4)]);
+                for _ in 0..20 {
+                    yield_now().await;
                 }
-                assert!(carries_eapol(&world.sent(&mut seen, QOS_DATA).await));
+                let completions = world.completions.borrow()[baseline..].to_vec();
                 assert_eq!(
-                    &world.completions.borrow()[baseline..],
-                    &[
-                        FrameRates::Data,
-                        FrameRates::Data,
-                        FrameRates::Data,
-                        FrameRates::Data,
-                        FrameRates::Control,
-                    ]
+                    completions
+                        .iter()
+                        .filter(|rates| **rates == FrameRates::Data)
+                        .count(),
+                    4
                 );
+                assert!(completions.contains(&FrameRates::Control));
 
-                // All four data owners and the station owner are reusable.
+                // Both arenas and the station's owner are reusable.
                 for priority in [0, 4, 6, 7] {
                     assert!(world.try_send_msdu_at([2, 0, 0, 0, 1, priority], priority));
                     let frame = world.sent(&mut seen, QOS_DATA).await;
@@ -2750,12 +2759,11 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_voice_order() {
 }
 
 /// The station's frames share the Voice queue with data of priority 6–7
-/// and get no queue of their own; the service keeps at most the backend's
-/// queue depth of data attempts at the port, so once a held Voice queue is
-/// released EAPOL and Deauthentication go after at most depth + 1 data
-/// attempts.
+/// and get no queue of their own; data holds at most its two arenas, so
+/// once a held Voice arena is released EAPOL and Deauthentication go after
+/// at most that arena and the standby's frame.
 #[test]
-fn eapol_and_deauthentication_wait_for_at_most_the_queue_depth_and_one_data_attempt() {
+fn eapol_and_deauthentication_wait_for_at_most_the_two_arenas() {
     run(
         StaSecurity::Personal {
             password: oer_protocols_ieee80211_core_security_rsn::sae::SaePassword::new(b"password")
@@ -2764,17 +2772,18 @@ fn eapol_and_deauthentication_wait_for_at_most_the_queue_depth_and_one_data_atte
         },
         |world| {
             Box::pin(async move {
-                let bound = usize::from(MODEL_TX_QUEUE_DEPTH.get()) + 1;
+                let bound = 2;
                 let destination = [0x02, 0, 0, 0, 0, 0x07];
                 let mut beacon = beacon(true);
                 beacon.extend_from_slice(&WMM);
                 let mut seen = 0;
                 world.associate_with(&mut seen, beacon, true).await;
                 let ptk = world.handshake(&mut seen).await;
-                // Voice held, data of priority 6 fills it to the limit:
-                // the data machine's tickets, then the stack's queue.
+                // Voice's arena held on the air, data of priority 6 fills
+                // the standby, the one MSDU that waits for it, then the
+                // stack's queue.
                 let fill = async || {
-                    world.air.hold(WmmAccessCategory::Voice, true);
+                    world.air.hold_completion(WmmAccessCategory::Voice, true);
                     let mut sent = 0;
                     while world.try_send_msdu_at(destination, 6) {
                         sent += 1;
@@ -2782,8 +2791,15 @@ fn eapol_and_deauthentication_wait_for_at_most_the_queue_depth_and_one_data_atte
                             yield_now().await;
                         }
                     }
-                    assert_eq!(sent, 4 + 2);
+                    assert_eq!(sent, 3 + 2);
                 };
+                let data_after = |from: usize| {
+                    world.air.sent()[from..]
+                        .iter()
+                        .filter(|frame| kind(frame) == QOS_DATA && !carries_eapol(frame))
+                        .count()
+                };
+                let released = world.air.sent().len();
                 fill().await;
                 world
                     .air
@@ -2791,32 +2807,31 @@ fn eapol_and_deauthentication_wait_for_at_most_the_queue_depth_and_one_data_atte
                 for _ in 0..20 {
                     yield_now().await;
                 }
-                let released = world.air.sent().len();
-                world.air.hold(WmmAccessCategory::Voice, false);
+                world.air.hold_completion(WmmAccessCategory::Voice, false);
                 while !world.air.sent()[released..].iter().any(carries_eapol) {
                     world.sent(&mut seen, QOS_DATA).await;
                 }
                 let before = data_before(&world.air.sent(), released, carries_eapol);
-                assert!(before <= bound, "EAPOL after {before} data attempts");
+                assert!(before <= bound, "EAPOL after {before} data frames");
 
                 // The same for the Deauthentication, the queue full again.
-                for _ in 0..6 {
+                while data_after(released) < 5 {
                     world.sent(&mut seen, QOS_DATA).await;
                 }
+                let released = world.air.sent().len();
                 fill().await;
                 world.station_command(StaCommand::Disconnect).await;
                 for _ in 0..20 {
                     yield_now().await;
                 }
-                let released = world.air.sent().len();
-                world.air.hold(WmmAccessCategory::Voice, false);
+                world.air.hold_completion(WmmAccessCategory::Voice, false);
                 world.sent(&mut seen, DEAUTHENTICATION).await;
                 let before = data_before(&world.air.sent(), released, |frame| {
                     kind(frame) == DEAUTHENTICATION
                 });
                 assert!(
                     before <= bound,
-                    "Deauthentication after {before} data attempts"
+                    "Deauthentication after {before} data frames"
                 );
             })
         },
@@ -3729,58 +3744,50 @@ fn a_turn_is_direct_only_when_it_took_an_input_and_each_it_took_was_direct() {
 }
 
 #[test]
-fn an_attempts_pass_reruns_the_step_only_after_a_refused_attempt() {
-    use super::Attempted::{Followed, Nothing, Submitted};
-    assert_eq!(Nothing.after(false), Submitted);
-    assert_eq!(Nothing.after(true), Followed);
-    assert_eq!(Submitted.after(false), Submitted);
-    assert_eq!(Submitted.after(true), Followed);
-    assert_eq!(
-        Followed.after(false),
-        Followed,
-        "a refusal is never forgotten"
-    );
-}
-
-#[test]
-fn an_aggregate_window_is_computed_once_and_follows_its_agreements_head() {
-    use oer_protocols_ieee80211_core_upper_mac::block_ack::OperationalTxBlockAck;
-    use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-    let agreement = |start: u16| OperationalTxBlockAck {
-        tid: 0,
-        window: 64,
-        timeout_tu: 0,
-        starting_sequence: SequenceNumber::from_low_bits(start),
-        amsdu: false,
-    };
-    let computed = data::AggregateWindow {
-        start: SequenceNumber::from_low_bits(1),
-        size: 32,
-        limit: data::PpduLimit::new(32, 65_535, None),
-    };
-    let computes = Cell::new(0);
-    let compute = || {
-        computes.set(computes.get() + 1);
-        Some(computed)
-    };
-    let mut kept = None;
-    assert_eq!(
-        super::kept_window(&mut kept, &agreement(1), compute),
-        Some(computed)
-    );
-    // A kept window takes the agreement's head and size as they stand.
-    let moved = super::kept_window(&mut kept, &agreement(40), compute);
-    assert_eq!(computes.get(), 1);
-    assert_eq!(
-        moved,
-        Some(data::AggregateWindow {
-            start: SequenceNumber::from_low_bits(40),
-            size: 64,
-            ..computed
+fn a_stop_settles_the_arena_on_the_air_and_gives_its_link_frames_back() {
+    run(StaSecurity::Open, |world| {
+        Box::pin(async move {
+            let mut seen = 0;
+            world.associate(&mut seen, false).await;
+            world
+                .notice(StaNotice::Connected {
+                    bssid: BSSID,
+                    channel: 6,
+                })
+                .await;
+            // One arena on the air, one MPDU in the standby, one MSDU
+            // waiting for it.
+            world
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, true);
+            for _ in 0..3 {
+                assert!(world.try_send_msdu([2, 0, 0, 0, 0, 7]));
+                for _ in 0..20 {
+                    yield_now().await;
+                }
+            }
+            assert!(
+                world
+                    .observed
+                    .tx_memory()
+                    .iter()
+                    .any(|held| held.members == 2 && held.owed == 1)
+            );
+            world.command(ControlCommand::Stop).await;
+            // The held arena ends at the model's publication bound; the stop
+            // waits for it before the port disables.
+            for _ in 0..5 {
+                for _ in 0..20 {
+                    yield_now().await;
+                }
+                world.clock.advance_to_next_deadline();
+            }
+            world.take_back_memory();
+            assert_eq!(
+                world.memory_back.get(),
+                2,
+                "the network's queue took two back"
+            );
         })
-    );
-    // A cleared window is computed again.
-    kept = None;
-    super::kept_window(&mut kept, &agreement(41), compute);
-    assert_eq!(computes.get(), 2);
+    });
 }

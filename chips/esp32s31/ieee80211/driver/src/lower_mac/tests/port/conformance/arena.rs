@@ -49,17 +49,25 @@ type Arenas<'core> = Esp32s31TxArena<
     { core_fixture::SUBFRAMES },
 >;
 
-/// A body over the port phase's rates for a single MPDU (OFDM 24 Mb/s) and
-/// an A-MPDU (HT20 MCS 0, whose vendor ceiling is 6 490 octets).
+/// A body over the port phase's rates for a single MPDU (OFDM 24 Mb/s), an
+/// A-MPDU (HT20 MCS 0, whose vendor ceiling is 6 490 octets) and an HE SU
+/// A-MPDU (HE20 MCS 7).
 trait WithRates {
     fn run<'p, 'id: 'p>(
         self,
         single: PhaseRate<'p, 'id, Caps>,
         aggregate: AmpduRate<'p, 'id, Caps>,
     );
+    fn run_he<'p, 'id: 'p>(self, he: AmpduRate<'p, 'id, Caps>)
+    where
+        Self: Sized,
+    {
+        let _ = he;
+    }
 }
 
-struct RatesBody<W>(W);
+/// The body and whether it runs at the HE rate.
+struct RatesBody<W>(W, bool);
 
 impl<Id: radio::SlotIdentity, W: WithRates> PortBody<Id, Backend<Id>> for RatesBody<W> {
     type Output = ();
@@ -95,7 +103,29 @@ impl<Id: radio::SlotIdentity, W: WithRates> PortBody<Id, Backend<Id>> for RatesB
                 .station()
                 .ampdu_rate(ht)
                 .unwrap_or_else(|_| panic!("an aggregate rate"));
-            self.0.run(single, aggregate);
+            if self.1 {
+                let he = phase
+                    .rate(PhyRate::He(
+                        oer_protocols_ieee80211_wire::phy::HeRate::new(
+                            oer_protocols_ieee80211_wire::phy::HeMcs::new(7).expect("MCS"),
+                            oer_protocols_ieee80211_wire::phy::SpatialStreams::new(1)
+                                .expect("streams"),
+                            oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
+                            oer_protocols_ieee80211_wire::phy::HeGiLtf::Ltf2xGi800Ns,
+                            oer_protocols_ieee80211_wire::phy::FecCoding::Ldpc,
+                            false,
+                        )
+                        .expect("HE rate"),
+                    ))
+                    .expect("an HE rate");
+                let he = phase
+                    .station()
+                    .ampdu_rate(he)
+                    .unwrap_or_else(|_| panic!("an HE aggregate rate"));
+                self.0.run_he(he);
+            } else {
+                self.0.run(single, aggregate);
+            }
         }
         let Ok(owner) = owner
             .disable(None, &mut |_| core::ops::ControlFlow::Continue(()))
@@ -109,7 +139,14 @@ impl<Id: radio::SlotIdentity, W: WithRates> PortBody<Id, Backend<Id>> for RatesB
 
 fn with_rates(run: impl WithRates) {
     let (parts, _, _) = installed(Vec::new());
-    let Report::Uninstalled { .. } = block_on(run_body(parts, RatesBody(run))) else {
+    let Report::Uninstalled { .. } = block_on(run_body(parts, RatesBody(run, false))) else {
+        panic!("clean uninstall")
+    };
+}
+
+fn with_he_rate(run: impl WithRates) {
+    let (parts, _, _) = installed(Vec::new());
+    let Report::Uninstalled { .. } = block_on(run_body(parts, RatesBody(run, true))) else {
         panic!("clean uninstall")
     };
 }
@@ -589,6 +626,98 @@ fn an_aggregate_past_its_rate_limit_is_refused_and_a_single_carries_position_0()
                 port.withdraw(&first, drop)
                     .unwrap_or_else(|_| panic!("empty"));
                 assert!(arenas.into_parts().is_ok(), "both tickets are back");
+            });
+        }
+    }
+    with_rates(Case);
+}
+
+#[test]
+fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
+    struct Case;
+    impl WithRates for Case {
+        fn run<'p, 'id: 'p>(self, _: PhaseRate<'p, 'id, Caps>, _: AmpduRate<'p, 'id, Caps>) {}
+        fn run_he<'p, 'id: 'p>(self, rate: AmpduRate<'p, 'id, Caps>) {
+            core_fixture::installed(|pools| {
+                let mut hardware = core_fixture::Hardware::default();
+                let mut core = core_fixture::enabled(&mut hardware, pools);
+                core.inner.set_checked_he_bss_color(
+                    oer_protocols_ieee80211_contracts_port::BssColor::new(0x2a).expect("color"),
+                );
+                let mut arenas = arenas(&mut core);
+                let mut events = core_fixture::Events::default();
+                let source = core_fixture::backings();
+                let mut port = port(&mut arenas, &mut core, &mut hardware, &mut events, None);
+                let [first, _] = port.arenas().expect("the arenas");
+                for tag in [40, 41, 42] {
+                    port.intake(&first, source.backing().expect("memory"), |region| {
+                        write_tagged(tag, region)
+                    })
+                    .unwrap_or_else(|_| panic!("intake"));
+                }
+                port.publish(
+                    publication(first, aggregate_format(rate)),
+                    Instant::from_micros(1),
+                )
+                .unwrap_or_else(|_| panic!("published"));
+                assert_eq!(port.hardware.he.len(), 1, "one HE SU program");
+                assert!(port.hardware.ht.is_empty());
+                port.hardware.block_ack_completion[core_fixture::BE] =
+                    Some(core_fixture::block_ack_completion(0, 40, 0b111, true));
+                let done = port
+                    .service(
+                        WifiTxWake::Interrupt {
+                            events: crate::mac::irq::EVENT_TX_COMPLETE,
+                        },
+                        Instant::from_micros(2),
+                    )
+                    .ok()
+                    .flatten()
+                    .expect("the BlockAck ends it");
+                assert!(matches!(done.end(), AttemptEnd::Answered { .. }));
+                let first = port
+                    .release(done, drop)
+                    .unwrap_or_else(|_| panic!("released"));
+                port.withdraw(&first, drop)
+                    .unwrap_or_else(|_| panic!("empty"));
+            });
+        }
+    }
+    with_he_rate(Case);
+}
+
+#[test]
+fn a_completion_without_effect_never_postpones_the_expired_watchdog() {
+    struct Case;
+    impl WithRates for Case {
+        fn run<'p, 'id: 'p>(self, _: PhaseRate<'p, 'id, Caps>, rate: AmpduRate<'p, 'id, Caps>) {
+            core_fixture::installed(|pools| {
+                let mut hardware = core_fixture::Hardware::default();
+                let mut core = core_fixture::enabled(&mut hardware, pools);
+                let mut arenas = arenas(&mut core);
+                let mut events = core_fixture::Events::default();
+                let source = core_fixture::backings();
+                let mut port = port(&mut arenas, &mut core, &mut hardware, &mut events, None);
+                let [first, _] = port.arenas().expect("the arenas");
+                for tag in [50, 51] {
+                    port.intake(&first, source.backing().expect("memory"), |region| {
+                        write_tagged(tag, region)
+                    })
+                    .unwrap_or_else(|_| panic!("intake"));
+                }
+                port.publish(
+                    publication(first, aggregate_format(rate)),
+                    Instant::from_micros(1),
+                )
+                .unwrap_or_else(|_| panic!("published"));
+                let deadline = port.deadline().expect("the watchdog");
+                // A diagnostic-only completion: it ends nothing.
+                port.hardware.block_ack_completion[core_fixture::BE] =
+                    Some(core_fixture::block_ack_completion(1, 0, 0, false));
+                assert!(
+                    port.service(WifiTxWake::Deadline, deadline).is_err(),
+                    "the expired watchdog without a timeout edge quarantines"
+                );
             });
         }
     }

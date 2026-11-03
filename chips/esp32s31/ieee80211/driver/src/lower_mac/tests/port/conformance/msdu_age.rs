@@ -1,19 +1,8 @@
 //! The shared admission-age suite against the S31 backend: an MSDU admitted
 //! with a sub-TU lifetime expires before its publication or between retries,
 //! and an acknowledgement of a hardware-owned publication wins over its age.
-//! Re-formation and BA-window delivery also need the Block Ack originator
-//! above the port, whose BAR moves the window; this port fixture runs no
-//! originator, so those cases are not exercised here. The port's own
-//! aggregate expiry by subframe position is `port::aggregate`'s case.
 use super::*;
 use oer_protocols_ieee80211_testing_conformance::msdu_age::{Case, End, Trace, verify};
-
-/// The cases the ordinary S31 port serves.
-const CASES: [Case; 3] = [
-    Case::BeforePublication,
-    Case::BetweenRetries,
-    Case::HardwareOwned,
-];
 
 /// Statuses and retry budget of the case's one MPDU.
 fn plan(case: Case) -> (Vec<(u8, u8)>, u8) {
@@ -62,7 +51,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for AgeBody {
                 .set_edca(SupportedEdca::new(table).expect("a sub-TU lifetime"));
             let [buffer, ..] = resources.buffers;
             let [ticket, ..] = resources.tickets;
-            let owners = [ticket.index(), buffer.index(), buffer.index()];
+            let owners = [ticket.index(), buffer.index()];
             let admitted = coordinate(Some(self.timer.now()));
             self.observed.borrow_mut().hold_completion = self.case != Case::BeforePublication;
             submit_mpdu_budget(&mut phase, buffer, ticket, None, None, self.budget);
@@ -98,12 +87,11 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for AgeBody {
                 ends: std::vec![end],
                 publications: self.observed.borrow().publications,
                 expired_msdus: 0,
-                admitted: [admitted; 2],
-                returned: [coordinate(at); 2],
+                admitted,
+                returned: coordinate(at),
                 owners,
-                returned_owners: [returned.ticket.index(), index, index],
+                returned_owners: [returned.ticket.index(), index],
                 backend_bars: 0,
-                core_bar: None,
             });
         }
         let Ok(owner) = owner
@@ -150,7 +138,7 @@ fn exercise(case: Case) -> Trace<Vec<End>> {
 
 #[test]
 fn the_s31_backend_passes_the_shared_single_mpdu_admission_age_cases() {
-    for case in CASES {
+    for case in Case::ALL {
         assert_eq!(
             verify(case, exercise(case)).map_err(|why| (case, why)),
             Ok(())

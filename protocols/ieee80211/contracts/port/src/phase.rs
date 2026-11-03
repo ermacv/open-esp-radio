@@ -444,15 +444,18 @@ pub enum LowerMacTerminal<'id, P: PhaseTypes<'id>> {
     },
 }
 
-/// An accepted attempt's terminal, retaining its closed operation owner.
-/// The higher layer consumes `Completed::into_parts` to recover context,
-/// ticket and the complete MPDU or aggregate. Queues cannot exchange their
-/// components before that terminal boundary.
+/// A transmission's end. A single MPDU's terminal retains its closed
+/// operation owner: the higher layer consumes `Completed::into_parts` to
+/// recover context, ticket and the complete MPDU, and queues cannot
+/// exchange their components before that terminal boundary. A data arena's
+/// end carries its arena right, which only its settlement through the
+/// station's [`StationPhase::data_arena`] returns.
 pub enum TxCompleted<'id, P: PhaseTypes<'id>> {
     /// Exactly one submitted MPDU, including its original body owner.
     Single(SingleCompleted<'id, P>),
-    /// Every submitted subframe, in order, each owning its memory and body.
-    Aggregate(AggregateCompleted<'id, P>),
+    /// A published data arena ended; its frames stay in the arena until it
+    /// is settled.
+    Arena(PhaseArenaCompleted<'id, P>),
 }
 
 /// A backend's single terminal, with its original accepted owner.
@@ -462,12 +465,10 @@ pub type SingleCompleted<'id, P> = crate::Completed<
     <P as PhaseTypes<'id>>::TxMpdu,
     PhaseSingleOutcome<'id, P>,
 >;
-/// A backend's aggregate terminal, with every complete submitted subframe.
-pub type AggregateCompleted<'id, P> = crate::Completed<
-    <P as PhaseTypes<'id>>::Context,
-    Slot<'id, <P as PhaseTypes<'id>>::TicketKind, <P as PhaseTypes<'id>>::TicketPath>,
-    <P as PhaseTypes<'id>>::TxAggregate,
-    PhaseAggregateOutcome<'id, P>,
+/// A data arena's end in the phase types `P`.
+pub type PhaseArenaCompleted<'id, P> = crate::arena::ArenaCompleted<
+    <P as PhaseTypes<'id>>::BlockAckEvidence,
+    <P as PhaseTypes<'id>>::AirDenied,
 >;
 /// A receive Block Ack slot of the phase types `P`.
 pub type PhaseBlockAckSlot<'id, P> =
@@ -478,11 +479,6 @@ pub type PhaseBlockAckSlot<'id, P> =
 /// The outcome of a single MPDU in the phase types `P`.
 pub type PhaseSingleOutcome<'id, P> =
     crate::SingleOutcome<<P as PhaseTypes<'id>>::AckEvidence, <P as PhaseTypes<'id>>::AirDenied>;
-/// The outcome of an aggregate in the phase types `P`.
-pub type PhaseAggregateOutcome<'id, P> = crate::AggregateOutcome<
-    <P as PhaseTypes<'id>>::BlockAckEvidence,
-    <P as PhaseTypes<'id>>::AirDenied,
->;
 
 /// The keys of one role and their slots, which a phase's types name: they
 /// depend on the install alone, so a caller holds them across the phase's
@@ -762,18 +758,6 @@ pub trait PhaseTypes<'id>: Sized {
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities>: PreparedTx<'id, Types = Self>;
     /// Opaque installed-key identity, retained by prepared and sent MPDUs.
     type KeyIdentity;
-    /// Aggregate storage with a compile-time empty/nonempty state.
-    type Aggregate<'k, 'p, R, K, S>: crate::PhaseAggregate<'id, Types = Self, State = S>
-    where
-        R: RoleKeys<'id, Self>,
-        K: Ieee80211Capabilities,
-        S: crate::AggregateState,
-        'id: 'k;
-    /// A submitted aggregate the backend lends while it holds it open
-    /// ([`AmpduPhase::open_ampdu`](crate::AmpduPhase::open_ampdu)).
-    type OpenAggregate<'a>
-    where
-        Self: 'a;
     /// An external MPDU body. A `Sent` MPDU retains its body internally
     /// for a retry; renewing that MPDU returns the body with its memory.
     type TxBody: crate::TxBody;
@@ -783,8 +767,9 @@ pub trait PhaseTypes<'id>: Sized {
     /// ACK, or the BlockAck to a BlockAckReq): a policy that needs the
     /// response's SNR requires [`AckSnr`](crate::AckSnr) of it.
     type AckEvidence: Copy + core::fmt::Debug + Eq;
-    /// What the backend observed of an aggregate's BlockAck: a policy that
-    /// needs its SNR requires [`BlockAckSnr`](crate::BlockAckSnr) of it.
+    /// What the backend observed of a data arena's ACK or BlockAck: a
+    /// policy that needs its SNR requires [`BlockAckSnr`](crate::BlockAckSnr)
+    /// of it.
     type BlockAckEvidence: Copy + core::fmt::Debug + Eq;
     /// The backend's evidence that coexistence denied an attempt the air;
     /// [`core::convert::Infallible`] for a backend that cannot tell a
@@ -795,9 +780,11 @@ pub trait PhaseTypes<'id>: Sized {
     /// One closed MPDU, with its fresh body or its complete Sent owner.
     type TxMpdu: crate::TxMpdu<Buffer = Self::AnyTxBuffer, Body = Self::TxBody>
         + crate::ExecutionPayload;
-    /// The complete submitted aggregate. Its subframes retain their bodies;
-    /// no independently indexed body collection exists.
-    type TxAggregate: IntoIterator<Item = Self::TxMpdu> + crate::ExecutionPayload;
+    /// Memory a network fills with one data frame in place, which a data
+    /// arena's slot holds from its intake until it returns
+    /// ([`StationPhase::data_arena`]). It names no installation: it outlives
+    /// one and crosses execution contexts.
+    type DataMemory: Send + 'static;
     /// The memory of one received MPDU, which goes back through
     /// [`LowerMacPhase::recycle`].
     type RxBuffer: crate::RxBuffer;
@@ -1189,34 +1176,6 @@ pub struct NumberedKey<Key> {
     pub packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber,
 }
 
-/// Caller-owned numbering of an aggregate member; its encryption key comes
-/// from the builder. Checked placement refuses a mismatched protection class.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TxNumbering {
-    /// This subframe is unprotected.
-    Open,
-    /// The core allocated this PN under the builder's installed key.
-    Ccmp(oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber),
-}
-impl TxNumbering {
-    /// The supplied PN, absent for an open MPDU.
-    pub const fn packet_number(
-        self,
-    ) -> Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber> {
-        match self {
-            Self::Open => None,
-            Self::Ccmp(pn) => Some(pn),
-        }
-    }
-    pub(crate) const fn matches(self, protection: crate::MpduProtection) -> bool {
-        matches!(
-            (self, protection),
-            (Self::Open, crate::MpduProtection::Open)
-                | (Self::Ccmp(_), crate::MpduProtection::Ccmp)
-        )
-    }
-}
-
 /// The MPDU supplied to a submission. Fresh memory travels with its
 /// `ClassFrame` and body; a `Sent` MPDU already owns that description and
 /// body, and receives only the new attempt's phase-bound rate plan.
@@ -1271,11 +1230,6 @@ pub enum PreparationError {
     RetransmissionKey,
     /// The new rate plan requires a different response kind.
     RetransmissionKind,
-    /// The aggregate cannot take another subframe.
-    AggregateFull,
-    /// A subframe lies outside the compressed BA window starting at the
-    /// aggregate's first sequence number. Neither source has been published.
-    BlockAckWindow,
 }
 
 /// What one interface of a running phase does: its own frames, keys and
@@ -1435,8 +1389,51 @@ pub trait InterfacePhase<'p, 'id: 'p> {
     ) -> PhaseBlockAckSlot<'id, Self::Types>;
 }
 
+/// The station's data arenas, as [`StationPhase::data_arena`] lends them:
+/// their memory, evidence and fault are the phase types'.
+pub trait StationDataArena<'p, 'id: 'p, K: Ieee80211Capabilities, P: PhaseTypes<'id>>:
+    crate::arena::TxArena<
+        'p,
+        'id,
+        Caps = K,
+        Memory = P::DataMemory,
+        Response = P::BlockAckEvidence,
+        Denial = P::AirDenied,
+        Fault = P::Fault,
+    >
+{
+}
+
+impl<'p, 'id: 'p, K: Ieee80211Capabilities, P: PhaseTypes<'id>, A> StationDataArena<'p, 'id, K, P>
+    for A
+where
+    A: crate::arena::TxArena<
+            'p,
+            'id,
+            Caps = K,
+            Memory = P::DataMemory,
+            Response = P::BlockAckEvidence,
+            Denial = P::AirDenied,
+            Fault = P::Fault,
+        >,
+{
+}
+
 /// The station interface of a running phase.
 pub trait StationPhase<'p, 'id: 'p>: InterfacePhase<'p, 'id, Role = Station> {
+    /// The station's two data arenas, lent for one synchronous step.
+    type DataArena<'a>: StationDataArena<'p, 'id, Self::Caps, Self::Types>
+    where
+        Self: 'a;
+
+    /// Lend the station's data arenas ([`crate::arena`]): the station fills
+    /// and publishes them, and settles each completion the phase's stream
+    /// returns ([`TxCompleted::Arena`]). The backend serves the published
+    /// arena's hardware itself; it publishes nothing while the gate is
+    /// closed, a configuration is pending or the phase stops, and refuses
+    /// a publication as busy meanwhile.
+    fn data_arena(&mut self) -> Self::DataArena<'_>;
+
     /// Consume an installed GTK and enqueue its replacement in command order.
     /// Its unique interface permission reserves one terminal place at this
     /// call. No removal or competing mutation is possible while the operation
@@ -1519,39 +1516,13 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PhaseTypes<'id> {
     type Buffer: TxBufferMemory;
 
     /// Prepare a source while its buffer class is concrete. The resulting
-    /// closed value retains phase, install and role until `submit` or an
-    /// aggregate consumes it. A refusal returns the original typed source.
+    /// closed value retains phase, install and role until `submit`
+    /// consumes it. A refusal returns the original typed source.
     fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
         source: CheckedPoolSource<'k, 'p, 'id, Self, C, K, R>,
     ) -> PoolPreparation<'k, 'p, 'id, Self, C, K, R>
     where
         'id: 'k;
-
-    /// Prepare and append through this builder's receiver, TID and protection.
-    /// Fresh sources have no protection field. Refusal returns both the entire
-    /// builder and unchanged class-specific source before admission,
-    /// retaining its caller-supplied PN.
-    fn push_aggregate<'k, 'p, R, K, S>(
-        operation: crate::CheckedPoolAggregate<'k, 'p, 'id, Self, C, R, K, S>,
-    ) -> crate::AggregatePushResult<'k, 'p, 'id, Self, C, R, K, S>
-    where
-        R: RoleKeys<'id, Self>,
-        K: Ieee80211Capabilities,
-        S: crate::AggregateState,
-        'id: 'k + 'p;
-
-    /// Append `subframe` to an open aggregate, after its other subframes,
-    /// under the rules its builder applied: the subframe count, the
-    /// BlockAck window rooted at its first sequence number, no repeated
-    /// sequence number, a retransmission's key, role, recipient and TID,
-    /// and its length budget; a fresh one is laid out for its protection,
-    /// recipient and TID. It comes back with the aggregate's terminal at
-    /// the next index, as a pushed one does. A refusal returns it unchanged.
-    #[allow(clippy::result_large_err, reason = "a refusal returns the subframe")]
-    fn extend_aggregate<K: Ieee80211Capabilities>(
-        open: &mut Self::OpenAggregate<'_>,
-        subframe: crate::PoolSubframe<'id, Self, C, K>,
-    ) -> Result<(), crate::ExtendRefused<crate::PoolSubframe<'id, Self, C, K>>>;
 
     /// The buffer, as any class's.
     fn erase(buffer: Self::Buffer) -> Self::AnyTxBuffer;
@@ -1585,25 +1556,6 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PhaseTypes<'id> {
     /// forgotten, and the next protected attempt in it is numbered anew.
     /// The original external body is returned explicitly beside the memory.
     fn renew(buffer: Self::Sent) -> (Self::Buffer, Option<Self::TxBody>);
-
-    /// Memory a network fills with one frame in place, which a buffer of
-    /// the class holds only for that frame's MPDU. It names no installation:
-    /// it outlives one and crosses execution contexts.
-    type NetworkMemory: Send + 'static;
-
-    /// Lend `memory` to a buffer that holds none.
-    ///
-    /// # Errors
-    ///
-    /// The memory, unchanged, when the buffer already holds memory.
-    fn install(
-        buffer: &mut Self::Buffer,
-        memory: Self::NetworkMemory,
-    ) -> Result<(), Self::NetworkMemory>;
-
-    /// Take back the network's memory a buffer holds; `None`, and no change,
-    /// when it holds none or holds its own.
-    fn uninstall(buffer: &mut Self::Buffer) -> Option<Self::NetworkMemory>;
 }
 
 /// A returned MPDU retains whether it has ever been published, independently

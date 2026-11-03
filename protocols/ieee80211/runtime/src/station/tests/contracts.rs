@@ -30,7 +30,6 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
             terminal_access,
             tickets,
             small,
-            large,
             station_association,
             access_point_association,
             station_pairwise,
@@ -49,7 +48,6 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         );
         let mut tickets = tickets.into_iter();
         let station_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
-        let data_tickets: [_; 4] = core::array::from_fn(|_| tickets.next().unwrap());
         let (config, _) = config(StaSecurity::Open);
         let observed: Observed = &*Box::leak(Box::new(Observations::default()));
         let (station, credits) = Station::new(
@@ -76,11 +74,6 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         );
         let mut service = Runner::<ServicePort<Id>, _, _, 1, Observed>::new(
             (station, credits),
-            StaData::new(
-                data_tickets,
-                <[_; 4]>::try_from(large).ok().unwrap(),
-                MODEL_TX_QUEUE_DEPTH,
-            ),
             arbiter,
             EspressifRateSelection::<ModelCaps24>::new(),
             terminal_access,
@@ -336,7 +329,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps24, ServiceContext
         #[allow(dead_code)]
         struct Unobserved<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, C: StaCallbacks, S> {
             station: PortStation<'id, B, C, 1>,
-            data: PortData<'id, B>,
+            data: DataTx<B::TxMemory>,
             rates: S,
             terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
                 'id,
@@ -376,7 +369,6 @@ fn unsolicited_tsf_and_access_point_terminals_retain_their_real_permissions() {
             ],
             std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
-        let backend = backend.with_network_memory();
         assert!(matches!(
             oer_protocols_radio_port::LocalExecution
                 .scope(
@@ -409,7 +401,6 @@ fn disable_quarantines_the_first_rejected_owner_and_every_later_terminal() {
                 ],
                 std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
             );
-            let backend = backend.with_network_memory();
             assert!(matches!(
                 oer_protocols_radio_port::LocalExecution
                     .scope(
@@ -448,7 +439,6 @@ fn full_custody_returns_the_next_terminal_to_poisoned_port_teardown() {
             ],
             std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
         );
-        let backend = backend.with_network_memory();
         assert!(matches!(
             oer_protocols_radio_port::LocalExecution.scope(oer_protocols_radio_port::conformance::registration::guarded((&mut slot).register(backend).ok().expect("fresh local slot")), async |frontend| run_port(
                 frontend,

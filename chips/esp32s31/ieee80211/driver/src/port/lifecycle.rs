@@ -40,7 +40,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
 }
 pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
-    storage: &'static PortSharedStorage<B, D::Lent, D::Body>,
+    storage: &'static PortSharedStorage<B, D::Lent>,
     commands: oer_portable_memory::AffineSpscSender<
         's,
         driver::Command<'static, Id, D, B, O>,
@@ -108,6 +108,11 @@ impl<'p, Id: SlotIdentity + 'p, D: Device<B> + 'p, const B: usize, O: Observatio
                         }
                         None => held.storage.poison(Fault::Capacity),
                     }
+                }
+                owned::OwnedEvent::ArenaCompleted(done) => {
+                    return Poll::Ready(Ok(Some(LowerMacTerminal::TxCompleted(
+                        TxCompleted::Arena(done),
+                    ))));
                 }
                 owned::OwnedEvent::Received { frame, .. } => {
                     held.recycle(frame);
@@ -181,7 +186,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
         backing.addresses = None;
         if !matches!(self.state, BackendState::Initial(Some(_)))
             || !self.storage.shared.returned.none_out()
-            || !self.storage.shared.subframes_vacant()
             || self.storage.shared.network.held() != 0
             || !backing.driver.get_mut().retired()
             || !backing.held.drained()
@@ -229,14 +233,16 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> SlotOwner<
                 admission: None,
             }
         });
-        backing.driver.get_mut().prepare(
+        if let Err(fault) = backing.driver.get_mut().prepare(
             core,
             core_tickets,
             queues,
             initial.descriptors,
             initial.observations,
             self.timer.now(),
-        );
+        ) {
+            self.storage.poison(fault);
+        }
         backing
             .held
             .prepare(self.storage, issuer, self.channel, self.timer.clone());

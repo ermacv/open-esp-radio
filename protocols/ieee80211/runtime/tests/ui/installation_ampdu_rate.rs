@@ -1,7 +1,9 @@
 #![no_std]
 extern crate alloc;
+use oer_protocols_ieee80211_contracts_port::arena::{ArenaFormat, ArenaPublication, TxArena};
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduPhase, Channel, ChannelWidth, LowerMacPhase, PhaseAggregate, PhyRate, Tid, TxProtection,
+    AmpduPhase, Channel, ChannelWidth, LowerMacPhase, MpduProtection, MpduStartSpacing, PhyRate,
+    Protection, StationPhase, SupportedPower, TxPower,
 };
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
@@ -53,30 +55,45 @@ impl<Id: SlotIdentity, OuterId: SlotIdentity> PortBody<Id, ModelBackend<Id>> for
         owner: Owner<'p, 'id, Id, ModelBackend<Id>, Disabled>,
         _resources: ModelResources<'id, ModelBackend<Id>>,
     ) -> Ended<Id, ModelBackend<Id>, ()> where ModelBackend<Id>: 'id, Id: 'id, 'id: 'p {
-        let mut target = match owner.enable().await { // ui-error: lifetime may not live long enough
+        let mut target = match owner.enable().await {
             Ok(owner) => owner,
             Err(_) => panic!("target enable failed"),
         };
         {
-            let mut source = self.source.phase(); // ui-error: lifetime may not live long enough
+            let mut source = self.source.phase();
             let mut destination = target.phase();
             let raw = PhyRate::Ht(
                 HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
             );
             let rate = source.rate(raw).unwrap();
             let rate = source.station().ampdu_rate(rate).ok().unwrap();
-            let peer = IndividualAddress::new([2, 0, 0, 0, 0, 9]).unwrap();
+            let publication = |arena| ArenaPublication { // ui-error: lifetime may not live long enough
+                arena,
+                format: ArenaFormat::Aggregate {
+                    rate,
+                    spacing: MpduStartSpacing::new(0).unwrap(),
+                },
+                access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
+                protection: Protection::None,
+                encryption: MpduProtection::Open,
+                power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+            };
+            let now = oer_portable_time::Instant::EPOCH;
             #[cfg(ui_reject)]
-            let parts = destination
-                .station()
-                .aggregate(peer, Tid::new(0).unwrap(), rate, TxProtection::Open)
-                .into_parts();
+            {
+                let mut station = destination.station();
+                let mut arena = station.data_arena();
+                let [first, _] = arena.arenas().unwrap();
+                drop(arena.publish(publication(first), now));
+            }
             #[cfg(not(ui_reject))]
-            let parts = source
-                .station()
-                .aggregate(peer, Tid::new(0).unwrap(), rate, TxProtection::Open)
-                .into_parts();
-            drop(parts);
+            {
+                let _ = &mut destination;
+                let mut station = source.station();
+                let mut arena = station.data_arena();
+                let [first, _] = arena.arenas().unwrap();
+                drop(arena.publish(publication(first), now));
+            }
         }
         // Exchanging the rates would force the two independent installation
         // lifetimes to be equal. The returned owner exposes both directions.

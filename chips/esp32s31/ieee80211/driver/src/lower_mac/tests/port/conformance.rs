@@ -1,7 +1,6 @@
 //! The shared lower-MAC conformance suites, run against the S31 backend over
-//! the host device model. The model supplies what real air would: ACK,
-//! BlockAck and timeout statuses, collisions and a held hardware
-//! completion. Air denial has no S31 device model and stays excluded by
+//! the host device model. The model supplies what real air would: ACK and
+//! timeout statuses, collisions and a held hardware completion. Air denial has no S31 device model and stays excluded by
 //! name.
 use super::*;
 use oer_protocols_ieee80211_testing_conformance::{Environment, MpduState, outcomes};
@@ -20,24 +19,20 @@ struct Outcomes;
 /// What the device model answers the case's one publication with: a
 /// completion status, or the hardware's TX-timeout edge.
 fn answer(case: outcomes::Case) -> Option<((u8, u8), bool)> {
-    use outcomes::{Case, Form};
+    use outcomes::Case;
     Some(match case {
-        Case::Ack | Case::BlockAck => ((0, 0), false),
-        Case::NoResponse(Form::Single | Form::Aggregate) => ((5, 0), false),
+        Case::Ack => ((0, 0), false),
+        Case::NoResponse => ((5, 0), false),
         // An RTS error with a collision detail.
-        Case::Collision(Form::Single | Form::Aggregate) => ((1, 1), false),
-        Case::HardwareTimeout(Form::Single | Form::Aggregate) => ((0, 0), true),
-        _ => return None,
+        Case::Collision => ((1, 1), false),
+        Case::HardwareTimeout => ((0, 0), true),
+        Case::AirDenied => return None,
     })
 }
 
-/// The sequence number of a case's one-member aggregate.
-const AGGREGATE_SEQUENCE: u16 = 100;
-
-type OutcomeTrace = outcomes::Trace<Ack, BlockAckAnswer, Infallible>;
+type OutcomeTrace = outcomes::Trace<Ack, Infallible>;
 
 struct OutcomeBody {
-    case: outcomes::Case,
     hold: bool,
     timer: TestTimer,
     observed: Rc<RefCell<Observed>>,
@@ -86,38 +81,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
                 ticket: ticket.index(),
                 buffer: buffer.index(),
             };
-            let aggregate = self.case.form() == outcomes::Form::Aggregate;
-            let ht = PhyRate::Ht(
-                oer_protocols_ieee80211_wire::phy::HtRate::new(
-                    oer_protocols_ieee80211_wire::phy::HtMcs::new(7).expect("MCS"),
-                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                    false,
-                )
-                .expect("HT rate"),
-            );
-            if aggregate {
-                let rate = phase.rate(ht).expect("a supported rate");
-                let mut station = phase.station();
-                let rate = station.ampdu_rate(rate).ok().expect("an aggregate rate");
-                let builder = station.aggregate(
-                    IndividualAddress::new(BSSID).expect("receiver"),
-                    Tid::new(0).expect("TID"),
-                    rate,
-                    TxProtection::Open,
-                );
-                let one = super::aggregate::push(
-                    builder,
-                    SubframeSource::Fresh {
-                        numbering: TxNumbering::Open,
-                        buffer,
-                        frame: super::aggregate::subframe(AGGREGATE_SEQUENCE, 64),
-                        body: None,
-                    },
-                );
-                super::aggregate::submit(&mut station, one, ticket);
-            } else {
-                submit_mpdu(&mut phase, buffer, ticket, None, None);
-            }
+            submit_mpdu(&mut phase, buffer, ticket, None, None);
             let mut event = pin!(phase.next_event());
             let event = core::future::poll_fn(|cx| {
                 let ready = event.as_mut().poll(cx);
@@ -135,24 +99,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
                 )))) => {
                     let returned = completed.into_parts(&mut resources.terminal_access);
                     let (buffer, _) = returned.payload.into_parts();
-                    (
-                        returned.ticket.index(),
-                        buffer,
-                        outcomes::Outcome::Single(returned.outcome),
-                    )
-                }
-                Ok(Ok(LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(
-                    TxCompleted::Aggregate(completed),
-                )))) => {
-                    let returned = completed.into_parts(&mut resources.terminal_access);
-                    let mut subframes = returned.payload.into_iter();
-                    let (buffer, _) = subframes.next().expect("its one subframe").into_parts();
-                    assert!(subframes.next().is_none(), "one subframe returns");
-                    (
-                        returned.ticket.index(),
-                        buffer,
-                        outcomes::Outcome::Aggregate(returned.outcome),
-                    )
+                    (returned.ticket.index(), buffer, returned.outcome)
                 }
                 _ => panic!("TX terminal"),
             };
@@ -160,12 +107,6 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
                 panic!("a published MPDU returns Sent")
             };
             let returned_buffer = sent.index();
-            let (mut renewed, _) = <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent);
-            let sequence =
-                oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_sequence_control({
-                    let bytes = renewed.bytes_mut().expect("returned memory");
-                    u16::from_le_bytes([bytes[22], bytes[23]])
-                });
             *self.seen.borrow_mut() = Some(outcomes::Trace {
                 admitted,
                 returned: outcomes::Identity {
@@ -173,12 +114,7 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
                     buffer: returned_buffer,
                 },
                 state: MpduState::Sent,
-                rate: if aggregate {
-                    ht
-                } else {
-                    PhyRate::Legacy(LegacyRate::Ofdm6M)
-                },
-                sequence,
+                rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
                 publications: 0,
                 outcome,
             });
@@ -195,23 +131,13 @@ impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for OutcomeBody {
 
 impl outcomes::Harness for Outcomes {
     type Ack = Ack;
-    type BlockAck = BlockAckAnswer;
     type AirDenied = Infallible;
     async fn exercise(&mut self, case: outcomes::Case) -> OutcomeTrace {
         let (status, hold) = answer(case).expect("a case this fixture models");
         let (parts, observed, timer) = installed(std::vec![status]);
         observed.borrow_mut().timeout_edge = hold;
-        if case.form() == outcomes::Form::Aggregate {
-            // The recipient acknowledges the one subframe, or nothing.
-            observed.borrow_mut().block_ack = Some(if case == outcomes::Case::BlockAck {
-                (AGGREGATE_SEQUENCE, 1, true)
-            } else {
-                (0, 0, false)
-            });
-        }
         let seen = Rc::new(RefCell::new(None));
         let body = OutcomeBody {
-            case,
             hold,
             timer,
             observed: observed.clone(),
@@ -227,38 +153,16 @@ impl outcomes::Harness for Outcomes {
 }
 
 #[test]
-fn the_s31_backend_passes_the_shared_aggregate_outcome_suite() {
-    use outcomes::{Case, Form};
-    // Every one-member aggregate case the device model supplies; air
-    // denial stays excluded by name.
-    let mut passed = 0;
-    for case in [
-        Case::BlockAck,
-        Case::NoResponse(Form::Aggregate),
-        Case::Collision(Form::Aggregate),
-        Case::HardwareTimeout(Form::Aggregate),
-    ] {
-        let trace = block_on(outcomes::Harness::exercise(&mut Outcomes, case));
-        assert_eq!(
-            outcomes::verify(case, trace).map_err(|why| (case, why)),
-            Ok(())
-        );
-        passed += 1;
-    }
-    assert_eq!(passed, 4);
-}
-
-#[test]
 fn the_s31_backend_passes_the_shared_single_mpdu_outcome_suite() {
-    use outcomes::{Case, Form};
+    use outcomes::Case;
     // Every single-MPDU case the device model supplies, through the shared
     // verifier; the report counts them.
     let mut passed = 0;
     for case in [
         Case::Ack,
-        Case::NoResponse(Form::Single),
-        Case::Collision(Form::Single),
-        Case::HardwareTimeout(Form::Single),
+        Case::NoResponse,
+        Case::Collision,
+        Case::HardwareTimeout,
     ] {
         let trace = block_on(outcomes::Harness::exercise(&mut Outcomes, case));
         assert_eq!(
@@ -280,7 +184,6 @@ fn an_executor_deadline_without_a_hardware_timeout_edge_keeps_the_dma_owner() {
     observed.borrow_mut().hold_completion = true;
     let seen = Rc::new(RefCell::new(None));
     let body = OutcomeBody {
-        case: outcomes::Case::Ack,
         hold: true,
         timer,
         observed: observed.clone(),
@@ -302,7 +205,6 @@ fn a_device_without_its_registers_fail_stops_without_publishing() {
     observed.borrow_mut().hardware_unavailable = true;
     let seen = Rc::new(RefCell::new(None));
     let body = OutcomeBody {
-        case: outcomes::Case::Ack,
         hold: false,
         timer,
         observed: observed.clone(),

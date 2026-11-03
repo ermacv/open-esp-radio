@@ -3,6 +3,7 @@
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 use super::*;
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use oer_chips_esp32s31_hal::memory::dma_static::{Placed, PlacedTxLease, PlacedTxPool};
 
@@ -20,17 +21,15 @@ fn host_pool<
 }
 mod length_budget;
 use crate::mac::tx::{
-    HeAmpduTxConfig, HeEdcaTxopLimit, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
+    HeAmpduTxConfig, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
 };
 use oer_chips_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
     MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxQueueDetached,
 };
-use oer_chips_family_ieee80211_policy::backend::EspressifAmpduRetryState as AmpduRetryState;
 use oer_portable_memory::{
     HardwareOwnedTxDma, PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma,
 };
-use oer_protocols_ieee80211_contracts_port::backend_aggregate::AmpduRetryDecision;
 
 struct CompletionHardware {
     completion: Option<MacHtAmpduCompletionObservation>,
@@ -269,29 +268,76 @@ fn frame_layout(
     .unwrap()
 }
 
-fn ht_frame_request(
-    dma_offset: usize,
-    mpdu_length: usize,
-    hardware_mic_length: u8,
-    empty_delimiters: u8,
-    rate: HtRate,
-) -> HtAmpduFrameRequest {
-    HtAmpduFrameRequest::new(
-        frame_layout(dma_offset, mpdu_length, hardware_mic_length),
-        empty_delimiters,
-        rate,
+/// Take `backing`, whose MPDU of `length` octets is encoded behind the
+/// metadata prefix, as the batch's next frame, as an arena's intake does:
+/// its Frame Control becomes a Data frame's whose Protected bit asks for a
+/// hardware MIC of `mic` octets; the frame's other octets stay.
+fn commit<B: oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking, const SLOTS: usize>(
+    owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
+    cookie: TxCookie,
+    backing: B,
+    length: usize,
+    mic: u8,
+) -> Result<(), HtAmpduTxError> {
+    owner
+        .intake(cookie, backing, |frame| {
+            let [control, flags, ..] = frame else {
+                return None;
+            };
+            *control = 0x08;
+            *flags = if mic == 0 {
+                *flags & !0x40
+            } else {
+                *flags | 0x40
+            };
+            u16::try_from(length).ok()
+        })
+        .map_err(|(_, refused)| match refused {
+            AmpduIntakeRefused::Length => HtAmpduTxError::FrameTooLong,
+            AmpduIntakeRefused::Full => HtAmpduTxError::AggregateFull,
+            AmpduIntakeRefused::Declined => HtAmpduTxError::Stale,
+            AmpduIntakeRefused::Fault(error) => error,
+        })
+}
+
+/// The reserved batch's length as an HT publication prepares it.
+fn prepared<B: oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking, const SLOTS: usize>(
+    owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
+    cookie: TxCookie,
+) -> Result<HtAmpduLength, HtAmpduTxError> {
+    owner.prepare_format(cookie, |_| Some(0), false)
+}
+
+/// The batch's length as an HE publication at `rate` and the recipient's
+/// `density` prepares it: each frame's empty delimiters from its PSDU.
+fn prepared_he<B: oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking, const SLOTS: usize>(
+    owner: &mut RetainedDmaAmpduTx<'_, B, SLOTS>,
+    cookie: TxCookie,
+    rate: HeRate,
+    density: HtAmpduDensity,
+) -> Result<HtAmpduLength, HtAmpduTxError> {
+    owner.prepare_format(
+        cookie,
+        |psdu| rate.ampdu_empty_delimiters(psdu, density),
+        false,
     )
 }
 
-fn he_frame_request(
-    mpdu_length: usize,
-    rate: HeRate,
-    density: HtAmpduDensity,
-) -> HeAmpduFrameRequest {
-    HeAmpduFrameRequest::new(
-        frame_layout(0, mpdu_length, 8),
-        HeAmpduPolicy::new(rate, density, HeEdcaTxopLimit::DEFAULT),
-    )
+/// Record an MPDU encoded in `external` as the storage's next frame.
+fn commit_referenced<const SLOTS: usize>(
+    storage: core::pin::Pin<&mut HtAmpduTxStorage<SLOTS>>,
+    cookie: TxCookie,
+    external: &mut [u8],
+    layout: AmpduFrameLayout,
+    empty_delimiters: u8,
+) -> Result<(), HtAmpduTxError> {
+    let frame = storage.as_ref().get_ref().prepare_referenced_frame(
+        cookie,
+        external,
+        layout,
+        empty_delimiters,
+    )?;
+    storage.record_referenced_frame(cookie, frame)
 }
 
 /// An HT rate whose vendor A-MPDU byte table adds no ceiling, so only the
@@ -361,7 +407,7 @@ fn complete_and_detach<
     cookie: TxCookie,
     rate: HtRate,
 ) {
-    let aggregate = owner.prepared_aggregate(cookie).unwrap();
+    let aggregate = prepared(owner, cookie).unwrap();
     let mut hardware = DetachingCompletionHardware::successful();
     owner
         .submit(
@@ -410,23 +456,7 @@ fn retained_dma_owner_cancels_reserved_storage_before_releasing_backing() {
     {
         let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
         let cookie = owner.begin().unwrap();
-        owner
-            .commit_ht(
-                cookie,
-                backing,
-                ht_frame_request(
-                    0,
-                    32,
-                    8,
-                    0,
-                    HtRate::new(
-                        crate::mac::tx::HtMcs::Mcs0,
-                        crate::mac::tx::HtGuardInterval::Long800Ns,
-                        crate::mac::tx::HtChannelWidth::Mhz20,
-                    ),
-                ),
-            )
-            .unwrap();
+        commit(&mut owner, cookie, backing, 32, 8).unwrap();
         assert_eq!(owner.held_backing_count(), 1);
     }
 
@@ -452,22 +482,9 @@ fn rejected_referenced_commit_rolls_back_the_lower_lease() {
         let mut retention = RetainedAmpduDmaStorage::new();
         let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
         let cookie = owner.begin().unwrap();
+        // Longer than the lease's region past its prefix and trailer.
         assert_eq!(
-            owner.commit_ht(
-                cookie,
-                backing,
-                ht_frame_request(
-                    256,
-                    32,
-                    8,
-                    0,
-                    HtRate::new(
-                        crate::mac::tx::HtMcs::Mcs0,
-                        crate::mac::tx::HtGuardInterval::Long800Ns,
-                        crate::mac::tx::HtChannelWidth::Mhz20,
-                    ),
-                ),
-            ),
+            commit(&mut owner, cookie, backing, 256, 8),
             Err(HtAmpduTxError::FrameTooLong)
         );
         assert_eq!(owner.held_backing_count(), 0);
@@ -502,10 +519,8 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
             crate::mac::tx::HtGuardInterval::Long800Ns,
             crate::mac::tx::HtChannelWidth::Mhz20,
         );
-        owner
-            .commit_ht(cookie, backing, ht_frame_request(0, 32, 8, 0, rate))
-            .unwrap();
-        let aggregate = owner.prepared_aggregate(cookie).unwrap();
+        commit(&mut owner, cookie, backing, 32, 8).unwrap();
+        let aggregate = prepared(&mut owner, cookie).unwrap();
         owner
             .submit(
                 &mut CompletionHardware {
@@ -545,14 +560,15 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
             crate::mac::tx::HtGuardInterval::Long800Ns,
             crate::mac::tx::HtChannelWidth::Mhz20,
         );
-        owner
-            .commit_ht(
-                cookie,
-                pool.claim_radio(index).expect("ready placed slot"),
-                ht_frame_request(0, 32, 8, 0, rate),
-            )
-            .unwrap();
-        let aggregate = owner.prepared_aggregate(cookie).unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            pool.claim_radio(index).expect("ready placed slot"),
+            32,
+            8,
+        )
+        .unwrap();
+        let aggregate = prepared(&mut owner, cookie).unwrap();
         let mut hardware = DetachingCompletionHardware::successful();
         hardware.detach_failed = detach_failed;
         owner
@@ -615,55 +631,41 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
                 bytes[TX_AMPDU_METADATA_SIZE + 1] = 0x41;
             },
         );
-        owner
-            .commit_ht(
-                cookie,
-                pool.claim_radio(index).expect("ready placed slot"),
-                ht_frame_request(0, 32, 8, 0, rate),
-            )
-            .unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            pool.claim_radio(index).expect("ready placed slot"),
+            32,
+            8,
+        )
+        .unwrap();
     }
 
-    let aggregate = owner.prepared_aggregate(cookie).unwrap();
+    let aggregate = prepared(&mut owner, cookie).unwrap();
     let config = HtAmpduTxConfig::new(rate, aggregate.bytes, aggregate.subframes).unwrap();
-    let mut retry = AmpduRetryState::<4>::new(
-        SequenceNumber::new(0).unwrap(),
-        4,
-        oer_portable_time::Duration::from_micros(
-            oer_chips_family_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
-        ),
-        true,
-    )
-    .unwrap();
+    // The BlockAck acknowledges frames 0 and 2: the caller keeps 1 and 3,
+    // which went, so they go again with their Retry bit.
     let mut hardware = DetachingCompletionHardware::with_bitmap(0b0101);
     owner
         .submit(&mut hardware, cookie, LegacyTxQueue::BestEffort, config)
         .unwrap();
-    let observed = owner
-        .observe_retry_completion(
-            &mut hardware,
-            cookie,
-            &mut retry,
-            mono(0),
-            true,
-            admitted_at_zero,
-        )
-        .unwrap()
-        .unwrap();
-    assert_eq!(observed.first_sequence, SequenceNumber::new(0).unwrap());
-    assert_eq!(observed.subframes, 4);
-    assert_eq!(
-        observed.decision,
-        AmpduRetryDecision::RetainAggregate { retry_mask: 0b1010 }
+    assert!(
+        owner
+            .acknowledge_completion(&mut hardware)
+            .unwrap()
+            .is_some()
     );
-
-    let retained = owner
-        .retain_for_ampdu_retry(
-            cookie,
-            observed.decision.retry_mask(),
-            AmpduRepublication::Retransmission,
-        )
+    owner.detach_completed(&mut hardware, cookie).unwrap();
+    let mut returned = 0;
+    owner
+        .retain_frames(cookie, 0b1010, 0b1010, |backing| {
+            returned += 1;
+            drop(backing);
+        })
         .unwrap();
+    assert_eq!(returned, 2, "the acknowledged frames return at once");
+    assert_eq!(pool.claimed_slots(), 2);
+    let retained = prepared(&mut owner, cookie).unwrap();
     assert_eq!(retained.subframes, 2);
     let retry_config = HtAmpduTxConfig::new(rate, retained.bytes, retained.subframes).unwrap();
     let mut hardware = DetachingCompletionHardware::successful();
@@ -675,35 +677,25 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
             retry_config,
         )
         .unwrap();
-    let observed = owner
-        .observe_retry_completion(
-            &mut hardware,
-            cookie,
-            &mut retry,
-            mono(0),
-            true,
-            admitted_at_zero,
-        )
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        observed.decision,
-        AmpduRetryDecision::Finish { retry_mask: 0 }
+    assert!(
+        owner
+            .acknowledge_completion(&mut hardware)
+            .unwrap()
+            .is_some()
     );
-
-    let (first, _) = owner.completed_frame(cookie, 0).unwrap();
-    assert_eq!(first[0], 1);
+    owner.detach_completed(&mut hardware, cookie).unwrap();
+    let first = owner.observed_frame(0).unwrap();
+    assert_eq!(first[2], 1);
     assert_eq!(first[1], 0x49);
-    let (second, _) = owner.completed_frame(cookie, 1).unwrap();
-    assert_eq!(second[0], 3);
+    let second = owner.observed_frame(1).unwrap();
+    assert_eq!(second[2], 3);
     assert_eq!(second[1], 0x49);
 
-    // A following partial BlockAck is expressed in the compacted logical
-    // index space. Retaining logical slot one must therefore keep original
-    // backing three, not physical backing one.
-    let retry = owner
-        .retain_for_ampdu_retry(cookie, 0b10, AmpduRepublication::Retransmission)
-        .unwrap();
+    // A following partial BlockAck is expressed in the compacted position
+    // space. Keeping position one must therefore keep original backing
+    // three, not physical backing one.
+    owner.retain_frames(cookie, 0b10, 0b10, drop).unwrap();
+    let retry = prepared(&mut owner, cookie).unwrap();
     assert_eq!(retry.subframes, 1);
     let retry_config = HtAmpduTxConfig::new(rate, retry.bytes, retry.subframes).unwrap();
     let mut hardware = DetachingCompletionHardware::successful();
@@ -723,8 +715,8 @@ fn retained_dma_owner_preserves_backing_identity_through_selective_retry() {
     );
     owner.detach_completed(&mut hardware, cookie).unwrap();
 
-    let (last, _) = owner.completed_frame(cookie, 0).unwrap();
-    assert_eq!(last[0], 3);
+    let last = owner.observed_frame(0).unwrap();
+    assert_eq!(last[2], 3);
     assert_eq!(last[1], 0x49);
     let work = owner.work();
     assert_eq!(work.publications, 3);
@@ -752,25 +744,26 @@ fn owned_dma_pool_builds_two_mpdu_length_without_publishing_hardware() {
     let mut retention = RetainedAmpduDmaStorage::new();
     let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
     let cookie = owner.begin().unwrap();
-    let rate = unlimited_ht_rate();
 
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 0, 100, |bytes| bytes.fill(0xa5)),
-            ht_frame_request(0, 100, 8, 0, rate),
-        )
-        .unwrap();
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 1, 101, |bytes| bytes.fill(0x5a)),
-            ht_frame_request(0, 101, 8, 0, rate),
-        )
-        .unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 100, |bytes| bytes.fill(0xa5)),
+        100,
+        8,
+    )
+    .unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 1, 101, |bytes| bytes.fill(0x5a)),
+        101,
+        8,
+    )
+    .unwrap();
 
     assert_eq!(
-        owner.prepared_aggregate(cookie).unwrap(),
+        prepared(&mut owner, cookie).unwrap(),
         HtAmpduLength {
             // First PSDU: delimiter 4 + length 112. Final PSDU:
             // delimiter 4 + length 113, with its three padding bytes
@@ -792,13 +785,17 @@ fn referenced_commit_uses_the_retained_allocation_without_copying_payload() {
     external[TX_AMPDU_METADATA_SIZE..TX_AMPDU_METADATA_SIZE + 100].fill(0x5a);
     let mut storage = core::pin::pin!(storage);
     let cookie = storage.as_mut().begin().unwrap();
-    storage
-        .as_mut()
-        .commit_referenced_frame(cookie, &mut external, frame_layout(0, 100, 8), 0)
-        .unwrap();
+    commit_referenced(
+        storage.as_mut(),
+        cookie,
+        &mut external,
+        frame_layout(0, 100, 8),
+        0,
+    )
+    .unwrap();
 
     assert_eq!(
-        storage.prepared_aggregate(cookie).unwrap(),
+        storage.calculate_aggregate().unwrap(),
         HtAmpduLength {
             bytes: 116,
             subframes: 1,
@@ -836,27 +833,25 @@ fn referenced_he_commit_uses_external_capacity_with_descriptor_only_storage() {
     );
     let mut storage = core::pin::pin!(storage);
     let cookie = storage.as_mut().begin().unwrap();
+    // frame + MIC + FCS is 28 octets; the rate and the recipient's
+    // density give it one empty delimiter.
+    let delimiters = rate
+        .ampdu_empty_delimiters(16 + 8 + TX_FCS_SIZE, HtAmpduDensity::SixteenMicroseconds)
+        .unwrap();
     for external in [&mut first, &mut second] {
-        storage
-            .as_mut()
-            .commit_referenced_he_frame(
-                cookie,
-                external,
-                HeAmpduFrameRequest::new(
-                    frame_layout(0, 16, 8),
-                    HeAmpduPolicy::new(
-                        rate,
-                        HtAmpduDensity::SixteenMicroseconds,
-                        HeEdcaTxopLimit::DEFAULT,
-                    ),
-                ),
-            )
-            .unwrap();
+        commit_referenced(
+            storage.as_mut(),
+            cookie,
+            external,
+            frame_layout(0, 16, 8),
+            delimiters,
+        )
+        .unwrap();
     }
 
     assert_eq!(storage.empty_delimiters[..2], [1, 1]);
     assert_eq!(
-        storage.prepared_aggregate(cookie).unwrap(),
+        storage.calculate_aggregate().unwrap(),
         HtAmpduLength {
             bytes: 68,
             subframes: 2,
@@ -870,86 +865,23 @@ fn referenced_he_commit_uses_external_capacity_with_descriptor_only_storage() {
 }
 
 #[test]
-fn referenced_ht_commit_stops_at_the_vendor_rate_byte_ceiling() {
-    let storage = HtAmpduTxStorage::<8>::new();
-    let mut external = [[0xa5_u8; 1_600]; 8];
-    let mcs0_sgi = HtRate::new(
-        crate::mac::tx::HtMcs::Mcs0,
-        crate::mac::tx::HtGuardInterval::Short400Ns,
-        crate::mac::tx::HtChannelWidth::Mhz40,
-    );
-    let mut storage = core::pin::pin!(storage);
-    storage
-        .as_mut()
-        .configure_max_aggregate_bytes(u16::MAX)
-        .unwrap();
-    let cookie = storage.as_mut().begin().unwrap();
-
-    for frame in external.iter_mut().take(6) {
-        storage
-            .as_mut()
-            .commit_referenced_ht_frame(cookie, frame, ht_frame_request(0, 1_500, 8, 0, mcs0_sgi))
-            .unwrap();
-    }
-    assert_eq!(
-        storage.prepared_aggregate(cookie).unwrap(),
-        HtAmpduLength {
-            bytes: 9_096,
-            subframes: 6,
-        }
-    );
-    assert!(
-        !storage
-            .can_commit_referenced_ht_frame(cookie, 1_500, 8, 0, mcs0_sgi, external[6].len())
-            .unwrap()
-    );
-    assert_eq!(
-        storage.as_mut().commit_referenced_ht_frame(
-            cookie,
-            &mut external[6],
-            ht_frame_request(0, 1_500, 8, 0, mcs0_sgi),
-        ),
-        Err(HtAmpduTxError::AggregateFull)
-    );
-    assert_eq!(storage.frame_count(), 6);
-    storage.as_mut().cancel(cookie).unwrap();
-
-    // The complete oracle table uses zero for SGI MCS7. That means this
-    // particular leaf adds no ceiling: the peer/static limit still
-    // permits a seventh MPDU.
-    let mcs7_sgi = HtRate::new(
-        crate::mac::tx::HtMcs::Mcs7,
-        crate::mac::tx::HtGuardInterval::Short400Ns,
-        crate::mac::tx::HtChannelWidth::Mhz40,
-    );
-    let cookie = storage.as_mut().begin().unwrap();
-    for frame in external.iter_mut().take(7) {
-        storage
-            .as_mut()
-            .commit_referenced_ht_frame(cookie, frame, ht_frame_request(0, 1_500, 8, 0, mcs7_sgi))
-            .unwrap();
-    }
-    assert_eq!(storage.frame_count(), 7);
-    storage.as_mut().cancel(cookie).unwrap();
-}
-
-#[test]
 fn owned_dma_pool_preserves_one_subframe_he_ampdu_length() {
     let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
     let pool = frame_pool::<256, 1>();
     let mut retention = RetainedAmpduDmaStorage::new();
     let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
     let cookie = owner.begin().unwrap();
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 0, 100, |bytes| bytes.fill(0xa5)),
-            ht_frame_request(0, 100, 8, 0, unlimited_ht_rate()),
-        )
-        .unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 100, |bytes| bytes.fill(0xa5)),
+        100,
+        8,
+    )
+    .unwrap();
 
     assert_eq!(
-        owner.prepared_aggregate(cookie).unwrap(),
+        prepared(&mut owner, cookie).unwrap(),
         HtAmpduLength {
             // One delimiter plus MPDU, hardware MIC and FCS. The 112-byte
             // PSDU is already aligned, so the tail rule removes nothing.
@@ -961,7 +893,7 @@ fn owned_dma_pool_preserves_one_subframe_he_ampdu_length() {
 }
 
 #[test]
-fn owned_he_commit_derives_empty_delimiters_from_rate_and_peer_density() {
+fn an_he_format_derives_empty_delimiters_from_rate_and_peer_density() {
     let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
     let pool = frame_pool::<256, 2>();
     let mut retention = RetainedAmpduDmaStorage::new();
@@ -973,27 +905,34 @@ fn owned_he_commit_derives_empty_delimiters_from_rate_and_peer_density() {
     );
 
     for (slot, payload) in [(0, 0xa5), (1, 0x5a)] {
-        owner
-            .commit_he(
-                cookie,
-                frame(&pool, slot, 16, |bytes| bytes.fill(payload)),
-                he_frame_request(16, rate, HtAmpduDensity::SixteenMicroseconds),
-            )
-            .unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            frame(&pool, slot, 16, |bytes| bytes.fill(payload)),
+            16,
+            8,
+        )
+        .unwrap();
     }
 
     // frame + MIC + FCS is 28 bytes. At DCM MCS3/GI800 and 16 us the
     // blob minimum is 35 bytes, so ppCalDeliNum requests one empty
     // delimiter. The trailing delimiter of the final MPDU is omitted
     // from aggregate length exactly as ppEmptyDelimiterLength requires.
-    assert_eq!(owner.empty_delimiters[..2], [1, 1]);
     assert_eq!(
-        owner.prepared_aggregate(cookie).unwrap(),
+        prepared_he(
+            &mut owner,
+            cookie,
+            rate,
+            HtAmpduDensity::SixteenMicroseconds
+        )
+        .unwrap(),
         HtAmpduLength {
             bytes: 68,
             subframes: 2,
         }
     );
+    assert_eq!(owner.empty_delimiters[..2], [1, 1]);
     owner.cancel(cookie, drop).unwrap();
     let first = released_slot(&pool, 0, TX_AMPDU_METADATA_SIZE);
     assert_eq!(first[4], 1);
@@ -1010,14 +949,15 @@ fn he_trigger_preparation_fails_closed_without_original_msdu_length() {
         crate::mac::tx::HeMcs::Mcs0,
         crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf800Ns,
     );
-    owner
-        .commit_he(
-            cookie,
-            frame(&pool, 0, 64, |bytes| bytes.fill(0x5a)),
-            he_frame_request(64, rate, HtAmpduDensity::NoRestriction),
-        )
-        .unwrap();
-    let aggregate = owner.prepared_aggregate(cookie).unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 64, |bytes| bytes.fill(0x5a)),
+        64,
+        8,
+    )
+    .unwrap();
+    let aggregate = prepared_he(&mut owner, cookie, rate, HtAmpduDensity::NoRestriction).unwrap();
     let trigger = crate::mac::tx::HeTriggerBasedTxConfig::new(
         MacHeTbTidLimit::Three,
         MacHeTid::new(0).unwrap(),
@@ -1109,28 +1049,28 @@ fn incremental_pool_length_matches_blob_accumulator_for_full_window() {
     let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
     owner.configure_max_aggregate_bytes(u16::MAX).unwrap();
     let cookie = owner.begin().unwrap();
-    let rate = unlimited_ht_rate();
     let mut oracle = HtAmpduLengthAccumulator::new(32, u16::MAX).unwrap();
 
+    // Each PSDU's empty delimiters follow from its length, as an HE
+    // publication's do.
+    let delimiters = |psdu: u16| Some(u8::try_from(psdu % 3).unwrap());
     for index in 0..32_u8 {
         let frame_length = 100 + usize::from(index % 7);
-        let empty_delimiters = index % 3;
-        owner
-            .commit_ht(
-                cookie,
-                frame(&pool, index, frame_length, |bytes| bytes.fill(index)),
-                ht_frame_request(0, frame_length, 8, empty_delimiters, rate),
-            )
-            .unwrap();
+        let psdu = (frame_length + 8 + usize::from(TX_FCS_SIZE)) as u16;
+        commit(
+            &mut owner,
+            cookie,
+            frame(&pool, index, frame_length, |bytes| bytes.fill(index)),
+            frame_length,
+            8,
+        )
+        .unwrap();
         oracle
-            .push(
-                (frame_length + 8 + usize::from(TX_FCS_SIZE)) as u32,
-                empty_delimiters,
-            )
+            .push(u32::from(psdu), delimiters(psdu).unwrap())
             .unwrap();
         if index != 0 {
             assert_eq!(
-                owner.prepared_aggregate(cookie).unwrap(),
+                owner.prepare_format(cookie, delimiters, false).unwrap(),
                 oracle.finish().unwrap()
             );
         }
@@ -1146,14 +1086,15 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
     let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
     let cookie = owner.begin().unwrap();
     let rate = unlimited_ht_rate();
-    owner
-        .commit_ht(
-            cookie,
-            frame(&pool, 0, 32, |bytes| bytes.fill(0x5a)),
-            ht_frame_request(0, 32, 8, 0, rate),
-        )
-        .unwrap();
-    let aggregate = owner.prepared_aggregate(cookie).unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 32, |bytes| bytes.fill(0x5a)),
+        32,
+        8,
+    )
+    .unwrap();
+    let aggregate = prepared(&mut owner, cookie).unwrap();
     let mut hardware = DetachingCompletionHardware::successful();
     owner
         .submit(
@@ -1173,15 +1114,22 @@ fn completed_pool_retains_mpdu_until_explicit_release() {
             .is_some()
     );
     assert_eq!(owner.state(), TxDmaState::Completed);
-    assert_eq!(owner.completed_frame(cookie, 0), Err(HtAmpduTxError::Stale));
+    assert_eq!(pool.claimed_slots(), 1);
+    // A retention needs the detach as well.
+    assert_eq!(
+        owner.retain_frames(cookie, 0b1, 0b1, drop),
+        Err(HtAmpduTxError::Stale)
+    );
     owner.detach_completed(&mut hardware, cookie).unwrap();
-    let (frame, mic_length) = owner.completed_frame(cookie, 0).unwrap();
-    assert_eq!(frame, &[0x5a; 32]);
-    assert_eq!(mic_length, 8);
+    let frame = owner.observed_frame(0).unwrap();
+    assert_eq!(frame.len(), 32);
+    assert_eq!(&frame[2..], &[0x5a; 30]);
+    assert_eq!(owner.frame_size(0), Some((32, 8)));
+    assert_eq!(pool.claimed_slots(), 1, "the detached frame stays retained");
 
     owner.release_completed(cookie, drop).unwrap();
     assert_eq!(owner.state(), TxDmaState::Free);
-    assert_eq!(owner.completed_frame(cookie, 0), Err(HtAmpduTxError::Stale));
+    assert_eq!(pool.claimed_slots(), 0);
 }
 
 #[test]
@@ -1193,32 +1141,32 @@ fn detached_pool_compacts_only_missing_frames_for_ampdu_retry() {
     let cookie = owner.begin().unwrap();
     let rate = unlimited_ht_rate();
     for index in 0..4_u8 {
-        owner
-            .commit_ht(
-                cookie,
-                frame(&pool, index, 32, |bytes| {
-                    bytes.fill(index);
-                    bytes[1] = 0x41;
-                }),
-                ht_frame_request(0, 32, 8, 0, rate),
-            )
-            .unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            frame(&pool, index, 32, |bytes| {
+                bytes.fill(index);
+                bytes[1] = 0x41;
+            }),
+            32,
+            8,
+        )
+        .unwrap();
     }
     let committed = owner.buffer_addresses;
     complete_and_detach(&mut owner, cookie, rate);
 
-    let aggregate = owner
-        .retain_for_ampdu_retry(cookie, 0b1010, AmpduRepublication::Retransmission)
-        .unwrap();
-    assert_eq!(aggregate.subframes, 2);
+    owner.retain_frames(cookie, 0b1010, 0b1010, drop).unwrap();
+    assert_eq!(prepared(&mut owner, cookie).unwrap().subframes, 2);
     assert_eq!(owner.frame_count(), 2);
+    assert_eq!(pool.claimed_slots(), 2, "the acknowledged frames returned");
     assert_eq!(owner.state(), TxDmaState::Reserved);
     assert_eq!(owner.buffer_addresses[0], committed[1]);
     assert_eq!(owner.buffer_addresses[1], committed[3]);
     owner.cancel(cookie, drop).unwrap();
     for slot in [1, 3] {
-        let bytes = released_slot(&pool, slot, TX_AMPDU_METADATA_SIZE + 2);
-        assert_eq!(bytes[TX_AMPDU_METADATA_SIZE], slot);
+        let bytes = released_slot(&pool, slot, TX_AMPDU_METADATA_SIZE + 3);
+        assert_eq!(bytes[TX_AMPDU_METADATA_SIZE + 2], slot);
         assert_eq!(bytes[TX_AMPDU_METADATA_SIZE + 1], 0x49);
     }
 }
@@ -1232,32 +1180,31 @@ fn protection_failure_republishes_every_frame_without_the_retry_bit() {
     let cookie = owner.begin().unwrap();
     let rate = unlimited_ht_rate();
     for index in 0..3_u8 {
-        owner
-            .commit_ht(
-                cookie,
-                frame(&pool, index, 32, |bytes| {
-                    bytes.fill(index);
-                    bytes[1] = 0x41;
-                }),
-                ht_frame_request(0, 32, 8, 0, rate),
-            )
-            .unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            frame(&pool, index, 32, |bytes| {
+                bytes.fill(index);
+                bytes[1] = 0x41;
+            }),
+            32,
+            8,
+        )
+        .unwrap();
     }
-    let original = owner.prepared_aggregate(cookie).unwrap();
+    let original = prepared(&mut owner, cookie).unwrap();
     let committed = owner.buffer_addresses;
     complete_and_detach(&mut owner, cookie, rate);
 
+    // A mask past the batch changes nothing.
     assert_eq!(
-        owner.retain_for_ampdu_retry(cookie, 0b011, AmpduRepublication::AfterProtectionFailure),
-        Err(HtAmpduTxError::InvalidRetryMask {
-            mask: 0b011,
-            count: 3
-        })
+        owner.retain_frames(cookie, 0b1011, 0, drop),
+        Err(HtAmpduTxError::FrameIndexOutOfRange { index: 3, count: 3 })
     );
-    let aggregate = owner
-        .retain_for_ampdu_retry(cookie, 0b111, AmpduRepublication::AfterProtectionFailure)
-        .unwrap();
-    assert_eq!(aggregate, original);
+    assert_eq!(owner.state(), TxDmaState::Completed);
+    // No frame went on the air: every frame stays, none gains its Retry bit.
+    owner.retain_frames(cookie, 0b111, 0, drop).unwrap();
+    assert_eq!(prepared(&mut owner, cookie).unwrap(), original);
     assert_eq!(owner.state(), TxDmaState::Reserved);
     assert_eq!(owner.buffer_addresses[..3], committed[..3]);
     owner.cancel(cookie, drop).unwrap();
@@ -1279,14 +1226,15 @@ fn detached_he_pool_retains_one_missing_mpdu_at_the_original_rate() {
         crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf1600Ns,
     );
     let density = HtAmpduDensity::EightMicroseconds;
-    owner
-        .commit_he(
-            cookie,
-            frame(&pool, 0, 32, |bytes| bytes.fill(0x5a)),
-            he_frame_request(32, initial, density),
-        )
-        .unwrap();
-    let aggregate = owner.prepared_aggregate(cookie).unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        frame(&pool, 0, 32, |bytes| bytes.fill(0x5a)),
+        32,
+        8,
+    )
+    .unwrap();
+    let aggregate = prepared_he(&mut owner, cookie, initial, density).unwrap();
     let mut hardware = DetachingCompletionHardware::successful();
     owner
         .submit_he(
@@ -1305,10 +1253,8 @@ fn detached_he_pool_retains_one_missing_mpdu_at_the_original_rate() {
     );
     owner.detach_completed(&mut hardware, cookie).unwrap();
 
-    let retained = owner
-        .retain_for_ampdu_retry(cookie, 0b1, AmpduRepublication::Retransmission)
-        .unwrap();
-    assert_eq!(retained.subframes, 1);
+    owner.retain_frames(cookie, 0b1, 0b1, drop).unwrap();
+    assert_eq!(owner.frame_count(), 1);
     assert_eq!(
         owner.prepared_empty_delimiters(cookie, 0).unwrap(),
         initial
@@ -1326,35 +1272,21 @@ fn full_window_and_byte_ceiling_are_independent() {
     let pool = frame_pool::<1700, 32>();
     let mut retention = RetainedAmpduDmaStorage::new();
     let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
-    let rate = unlimited_ht_rate();
     owner.configure_max_aggregate_bytes(0x7fff).unwrap();
     let cookie = owner.begin().unwrap();
     for slot in 0..20 {
-        assert!(
-            owner
-                .can_commit_referenced_ht_frame(cookie, 1600, 8, 0, rate, 1700)
-                .unwrap()
-        );
-        owner
-            .commit_ht(
-                cookie,
-                frame(&pool, slot, 1600, |_| {}),
-                ht_frame_request(0, 1600, 8, 0, rate),
-            )
-            .unwrap();
+        commit(
+            &mut owner,
+            cookie,
+            frame(&pool, slot, 1600, |_| {}),
+            1600,
+            8,
+        )
+        .unwrap();
     }
     assert_eq!(owner.frame_count(), 20);
-    assert!(
-        !owner
-            .can_commit_referenced_ht_frame(cookie, 1600, 8, 0, rate, 1700)
-            .unwrap()
-    );
     assert_eq!(
-        owner.commit_ht(
-            cookie,
-            frame(&pool, 20, 1600, |_| {}),
-            ht_frame_request(0, 1600, 8, 0, rate),
-        ),
+        commit(&mut owner, cookie, frame(&pool, 20, 1600, |_| {}), 1600, 8),
         Err(HtAmpduTxError::AggregateFull)
     );
     assert_eq!(owner.frame_count(), 20);
@@ -1363,88 +1295,9 @@ fn full_window_and_byte_ceiling_are_independent() {
     owner.configure_max_aggregate_bytes(0x1fff).unwrap();
     let cookie = owner.begin().unwrap();
     for slot in 0..32 {
-        assert!(
-            owner
-                .can_commit_referenced_ht_frame(cookie, 100, 8, 0, rate, 1700)
-                .unwrap()
-        );
-        owner
-            .commit_ht(
-                cookie,
-                frame(&pool, slot, 100, |_| {}),
-                ht_frame_request(0, 100, 8, 0, rate),
-            )
-            .unwrap();
+        commit(&mut owner, cookie, frame(&pool, slot, 100, |_| {}), 100, 8).unwrap();
     }
     assert_eq!(owner.frame_count(), 32);
-    assert!(
-        !owner
-            .can_commit_referenced_ht_frame(cookie, 100, 8, 0, rate, 1700)
-            .unwrap()
-    );
-    owner.cancel(cookie, drop).unwrap();
-}
-
-#[test]
-fn he_rate_duration_gate_prevents_an_oversized_dma_publication() {
-    let mut storage = core::pin::pin!(HtAmpduTxStorage::<32>::new());
-    let pool = frame_pool::<1_600, 32>();
-    let mut retention = RetainedAmpduDmaStorage::new();
-    let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
-    owner.configure_max_aggregate_bytes(u16::MAX).unwrap();
-    let density = HtAmpduDensity::NoRestriction;
-    let gi_1600 = HeRate::ldpc(
-        crate::mac::tx::HeMcs::Mcs9,
-        crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf1600Ns,
-    );
-    let policy = |rate| HeAmpduPolicy::new(rate, density, HeEdcaTxopLimit::DEFAULT);
-    let frame_size = AmpduFrameSize::new(1_500, 8);
-    let cookie = owner.begin().unwrap();
-    for slot in 0..31 {
-        assert!(
-            owner
-                .can_commit_referenced_he_frame(cookie, frame_size, policy(gi_1600), 1_600)
-                .unwrap()
-        );
-        owner
-            .commit_he(
-                cookie,
-                frame(&pool, slot, 1_500, |_| {}),
-                he_frame_request(1_500, gi_1600, density),
-            )
-            .unwrap();
-    }
-    assert_eq!(owner.prepared_aggregate(cookie).unwrap().bytes, 46_996);
-    assert!(
-        !owner
-            .can_commit_referenced_he_frame(cookie, frame_size, policy(gi_1600), 1_600)
-            .unwrap()
-    );
-    assert_eq!(
-        owner.commit_he(
-            cookie,
-            frame(&pool, 31, 1_500, |_| {}),
-            he_frame_request(1_500, gi_1600, density),
-        ),
-        Err(HtAmpduTxError::AggregateFull)
-    );
-    owner.cancel(cookie, drop).unwrap();
-
-    let gi_800 = HeRate::ldpc(
-        crate::mac::tx::HeMcs::Mcs9,
-        crate::mac::rx::HeGuardIntervalAndLtf::TwoLtf800Ns,
-    );
-    let cookie = owner.begin().unwrap();
-    for slot in 0..32 {
-        owner
-            .commit_he(
-                cookie,
-                frame(&pool, slot, 1_500, |_| {}),
-                he_frame_request(1_500, gi_800, density),
-            )
-            .unwrap();
-    }
-    assert_eq!(owner.prepared_aggregate(cookie).unwrap().bytes, 48_512);
     owner.cancel(cookie, drop).unwrap();
 }
 
@@ -1641,15 +1494,6 @@ fn block_ack_bitmap_accepts_only_bounded_sequences_left_of_an_advanced_ssn() {
 mod work;
 
 mod exchange_budget;
-
-fn mono(micros: u64) -> oer_portable_time::Instant {
-    oer_portable_time::Instant::from_micros(micros)
-}
-
-/// Every MPDU's MSDU admitted at zero.
-fn admitted_at_zero(_: u8) -> Option<oer_portable_time::Instant> {
-    Some(oer_portable_time::Instant::from_micros(0))
-}
 
 #[test]
 fn no_effect_keeps_the_aggregate_and_its_trigger_reservation_published() {

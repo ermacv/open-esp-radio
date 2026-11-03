@@ -122,11 +122,10 @@
 //! individually addressed frame without acknowledgement is published at legacy
 //! rates only, the one program with a response field; hardware has not
 //! confirmed its on-air behaviour. A published attempt cannot be withdrawn: the
-//! S31 abort path needs the queue's hardware timeout edge. An aggregate is
-//! planned ([`LowerMacCore::plan_ampdu`]), published once
-//! ([`LowerMacCore::publish_ampdu`]) and serviced
-//! ([`LowerMacCore::service_ampdu`]) by its caller, which holds it beside the
-//! core's MPDUs; its timeout abort takes its turn among theirs. Access-point
+//! S31 abort path needs the queue's hardware timeout edge. The data arenas
+//! ([`arena`]) publish A-MPDUs and single MPDUs through the core's two
+//! retained chains beside the core's MPDUs; an arena's timeout abort takes
+//! its turn among theirs. Access-point
 //! TBTT schedules are not implemented yet.
 
 use oer_protocols_ieee80211_wire::address::AddressFlags;
@@ -183,7 +182,6 @@ use crate::mac::{
 };
 use crate::ordinary_tx::MacTxPlan;
 use crate::station_tsf::{StationTsf, StationTsfHardware};
-use oer_chips_esp32s31_hal::memory::dma_static::PlacedBacking;
 use oer_chips_esp32s31_hal::types::MacInterface;
 use oer_protocols_ieee80211_contracts_port::{
     BandSet, BeaconTimingCapabilities, BlockAckReport, Channel, ConnectionFrame, LinkMetric,
@@ -207,7 +205,7 @@ mod resources;
 pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
 mod lifecycle;
 pub use lifecycle::{
-    AggregateView, ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused,
+    ArenaCore, ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused,
     ConfiguringView, CoreGate, CoreOwner, CoreRetained, CoreView, DisabledView, DisablingView,
     EnabledView, FailedGateView, GateClosure, LifecycleStart, OpenGate, RetuningView, VacantView,
 };
@@ -220,9 +218,8 @@ pub use keys::{
 use keys::{KeyUseCount, TransmitKeyToken};
 
 pub use ampdu::{
-    AmpduFormat, AmpduOutcome, AmpduPlan, AmpduProgress, AmpduPublication, AmpduServed,
-    ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH, ESP32S31_HE_AMPDU_MAX_LENGTH,
-    Esp32s31AmpduBuffer, Esp32s31AmpduOwner, PublishedAmpdu, esp32s31_ampdu_capabilities,
+    AmpduFormat, AmpduPublication, ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH,
+    ESP32S31_HE_AMPDU_MAX_LENGTH, Esp32s31AmpduOwner, esp32s31_ampdu_capabilities,
     esp32s31_ampdu_length,
 };
 
@@ -534,13 +531,6 @@ pub trait LowerMacSink<
         slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
         end: PublicationEnd,
         rate: PhyRate,
-    );
-    /// A detached aggregate ended, returning its queue and admission credit.
-    fn ampdu_completed(
-        &mut self,
-        queue: FreeQueue<'core, Path>,
-        ticket: TxTicket<'core, Path>,
-        end: PublicationEnd,
     );
     /// The last admitted use returned and the programmed key was cleared.
     fn key_removed(&mut self, removed: KeyRemoved<'core, Path>);
@@ -1402,249 +1392,6 @@ where
         }
     }
 
-    /// Plan one aggregate while retaining its queue and encryption admission.
-    /// A refusal returns both owners and leaves the subframes in the buffer.
-    pub fn plan_ampdu<L: PlacedBacking, const SLOTS: usize>(
-        &self,
-        queue: FreeQueue<'core, Path>,
-        admission: TxAdmission<'core, Path>,
-        mut values: AmpduValues,
-        buffer: &mut Esp32s31AmpduBuffer<'slot, L, SLOTS>,
-    ) -> Result<AmpduPlan<'core, Path>, AmpduPlanningRefused<'core, Path>> {
-        values.access_category = queue.category();
-        match self.ampdu_settings(values, &admission, buffer) {
-            Ok(settings) => Ok(AmpduPlan {
-                queue,
-                admission,
-                settings,
-            }),
-            Err(reason) => Err(AmpduPlanningRefused {
-                queue,
-                admission,
-                reason,
-            }),
-        }
-    }
-
-    /// Publish a detached aggregate's terminal and return its owner. A
-    /// quarantined aggregate has no such projection or key-release operation.
-    #[allow(
-        clippy::result_large_err,
-        reason = "a poisoned core retains the full aggregate and key right"
-    )]
-    pub fn complete_ampdu<
-        H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
-        B,
-        const SLOTS: usize,
-    >(
-        &mut self,
-        hardware: &mut H,
-        completed: ampdu::CompletedAmpdu<'core, 'slot, B, SLOTS, Path>,
-        sink: &mut K,
-    ) -> Result<
-        (
-            ampdu::Esp32s31AmpduOwner<'slot, B, SLOTS>,
-            [oer_portable_time::Instant; SLOTS],
-        ),
-        ampdu::AmpduFault<'core, 'slot, B, SLOTS, Path>,
-    > {
-        if self.fault.is_some() {
-            return Err(ampdu::AmpduFault::retain_completed(completed));
-        }
-        let ampdu::CompletedAmpdu {
-            outcome,
-            owner,
-            queue,
-            admission,
-            admitted_at,
-        } = completed;
-        match admission {
-            TxAdmission::Open(ticket) => sink.ampdu_completed(queue, ticket, outcome.end()),
-            TxAdmission::Protected(key) => {
-                let (index, ticket) = self.release_key(key);
-                sink.ampdu_completed(queue, ticket, outcome.end());
-                self.finish_key_removal(hardware, index, sink);
-            }
-        }
-        Ok((owner, admitted_at))
-    }
-
-    /// Return an unpublished expired aggregate's queue and ticket exactly
-    /// once. Its buffer, live members and admission samples remain together.
-    #[allow(
-        clippy::result_large_err,
-        reason = "a poisoned core retains every unpublished owner"
-    )]
-    pub fn complete_expired_ampdu<
-        H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
-        L,
-        const SLOTS: usize,
-    >(
-        &mut self,
-        hardware: &mut H,
-        expired: ampdu::ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>,
-        sink: &mut K,
-    ) -> Result<
-        Esp32s31AmpduBuffer<'slot, L, SLOTS>,
-        ampdu::ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>,
-    > {
-        if self.fault.is_some() {
-            return Err(expired);
-        }
-        let (buffer, plan, msdus) = expired.into_parts();
-        self.expired_msdus = self.expired_msdus.saturating_add(msdus.count_ones());
-        match plan.admission {
-            TxAdmission::Open(ticket) => {
-                sink.ampdu_completed(plan.queue, ticket, PublicationEnd::Expired { msdus })
-            }
-            TxAdmission::Protected(key) => {
-                let (index, ticket) = self.release_key(key);
-                sink.ampdu_completed(plan.queue, ticket, PublicationEnd::Expired { msdus });
-                self.finish_key_removal(hardware, index, sink);
-            }
-        }
-        Ok(buffer)
-    }
-
-    /// Consume one interrupt or deadline edge of a published aggregate, as
-    /// [`Self::service`] does for the MPDUs: its timeout abort begins only
-    /// while no other abort, an MPDU's or another aggregate's, forces CCA,
-    /// and the core counts its own settle among them. The subframes'
-    /// buffers go to `returned` in subframe order once the hardware left
-    /// the chain. The publication is served where it lies
-    /// ([`ampdu::service`]).
-    ///
-    /// # Errors
-    ///
-    /// The step failed; [`PublishedAmpdu::into_progress`] retains the
-    /// publication in quarantine.
-    pub fn service_ampdu<H: HtAmpduHardware, L: PlacedBacking, const SLOTS: usize>(
-        &mut self,
-        hardware: &mut H,
-        published: &mut PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
-        wake: WifiTxWake,
-        returned: impl FnMut(L),
-    ) -> Result<AmpduServed, crate::mac::tx::ampdu::HtAmpduTxError> {
-        // A queue index below eight names one bit.
-        let bit = 1_u8
-            .checked_shl(published.queue_index() as u32)
-            .unwrap_or(0);
-        self.ampdu_settling &= !bit;
-        let may_begin_timeout_abort = !self.abort_settling();
-        let served = ampdu::service(
-            hardware,
-            published,
-            wake,
-            may_begin_timeout_abort,
-            self.now(),
-            returned,
-        );
-        if served == Ok(AmpduServed::Pending) && published.abort_settling() {
-            self.ampdu_settling |= bit;
-        }
-        served
-    }
-
-    /// Publish a planned aggregate once ([`ampdu::publish`]) at the core's
-    /// clock, under its configured publication timeout.
-    ///
-    /// # Errors
-    ///
-    /// Age returns every unpublished owner; a hardware fault quarantines
-    /// them.
-    #[allow(
-        clippy::result_large_err,
-        reason = "retain the complete DMA and key owners without allocation"
-    )]
-    pub fn publish_ampdu<H: HtAmpduHardware, L: PlacedBacking, const SLOTS: usize>(
-        &self,
-        hardware: &mut H,
-        buffer: Esp32s31AmpduBuffer<'slot, L, SLOTS>,
-        plan: AmpduPlan<'core, Path>,
-    ) -> Result<
-        PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
-        ampdu::AmpduStartError<'core, 'slot, L, SLOTS, Path>,
-    > {
-        ampdu::publish(
-            hardware,
-            buffer,
-            plan,
-            self.now(),
-            self.config.publication_timeout,
-        )
-    }
-
-    /// Plan an aggregate whose values a caller's types guarantee
-    /// ([`AmpduValues`]): a pure function of the core's state, the
-    /// aggregate's subframes and its values, which [`ampdu::publish`]
-    /// carries out. Every check the aggregate owner would make at commit is
-    /// made here first, so a refused aggregate keeps its subframes.
-    ///
-    /// # Errors
-    ///
-    /// Why the aggregate cannot go as one publication.
-    fn ampdu_settings<L: PlacedBacking, const SLOTS: usize>(
-        &self,
-        values: AmpduValues,
-        admission: &TxAdmission<'core, Path>,
-        buffer: &mut Esp32s31AmpduBuffer<'slot, L, SLOTS>,
-    ) -> Result<ampdu::AmpduSettings, AmpduRefusal> {
-        let AmpduValues {
-            role,
-            access_category,
-            rate,
-            protection,
-            power_ceiling_dbm,
-            backoff_slots,
-            min_mpdu_start_spacing,
-            txop_limit_units_32_us,
-        } = values;
-        if !buffer.matches_admission(role, admission) {
-            return Err(AmpduRefusal::KeyUseMismatch);
-        }
-        let common = self.plan_common(
-            access_category,
-            role,
-            rate,
-            protection,
-            admission,
-            power_ceiling_dbm,
-            backoff_slots,
-        );
-        let capabilities = esp32s31_ampdu_capabilities(SLOTS);
-        let count = buffer.subframes();
-        if count == 0 {
-            return Err(AmpduRefusal::Empty);
-        }
-        if count > usize::from(capabilities.max_subframes) {
-            return Err(AmpduRefusal::TooManySubframes);
-        }
-        if min_mpdu_start_spacing > 7 {
-            return Err(AmpduRefusal::StartSpacing);
-        }
-        if buffer.lengths().any(|len| len < MIN_FRAME_LENGTH) {
-            return Err(AmpduRefusal::ShortSubframe);
-        }
-        // One recipient answers the aggregate with its BlockAck.
-        if buffer.first_mpdu().is_none_or(|first| first[4] & 1 != 0) {
-            return Err(AmpduRefusal::GroupRecipient);
-        }
-
-        let density = HtAmpduDensity::from_ampdu_parameters((min_mpdu_start_spacing & 0x07) << 2);
-        let mic_and_fcs = common.hardware_mic_length + TX_FCS_SIZE;
-        // HT: the rate's ceiling and the declared maximum; the access
-        // category's TXOP limit is the caller's to keep. HE: the program
-        // carries the caller's advertised TXOP limit as well.
-        let mut budget =
-            ampdu::AmpduBudget::new(common.rate, txop_limit_units_32_us, density, SLOTS)?;
-        for psdu in buffer.lengths().map(|len| len + mic_and_fcs) {
-            budget.push(psdu)?;
-        }
-        self.ampdu_program(common, min_mpdu_start_spacing, budget.he_policy())
-    }
-
     /// The program of an aggregate of `common`'s values whose length a
     /// budget checked, with the HE policy that budget follows.
     fn ampdu_program(
@@ -1691,18 +1438,12 @@ where
             (_, None) => return Err(AmpduRefusal::LegacyRate),
         };
         Ok(ampdu::AmpduSettings {
-            lifetime: self
-                .tx
-                .policy()
-                .access_policy(common.role, queue)
-                .msdu_lifetime(),
             queue,
             format,
             role: AmpduTxRoleAdapter {
                 interface: mac_interface(common.role),
                 hardware_key_selector: common.hardware_key_selector,
             },
-            hardware_mic_length: common.hardware_mic_length as u8,
             publication,
         })
     }
@@ -2921,29 +2662,8 @@ impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
     }
 }
 
-/// The values of an aggregate a caller's types guarantee: `role`
-/// configured, `key` installed for it, the power and backoff within the
-/// capabilities ([`LowerMacCore::plan_ampdu`]).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AmpduValues {
-    pub role: VifRole,
-    pub access_category: WmmAccessCategory,
-    pub rate: TxPhyRate,
-    pub protection: Protection,
-    pub power_ceiling_dbm: Option<i8>,
-    /// The backoff selected for this publication, in slots.
-    pub backoff_slots: u16,
-    /// The recipient's Minimum MPDU Start Spacing encoding, 0 to 7.
-    pub min_mpdu_start_spacing: u8,
-    /// The access category's advertised TXOP limit, in 32 µs units, that an
-    /// HE aggregate's program carries: the value its subframes were
-    /// admitted under.
-    pub txop_limit_units_32_us: u16,
-}
-
-/// The values of one arena publication a caller's types guarantee, as
-/// [`AmpduValues`] are an aggregate's: `role` configured, the power and
-/// backoff within the capabilities.
+/// The values of one arena publication a caller's types guarantee:
+/// `role` configured, the power and backoff within the capabilities.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ArenaValues {
     pub role: VifRole,
@@ -2955,45 +2675,14 @@ pub struct ArenaValues {
     pub backoff_slots: u16,
 }
 
-/// A refused aggregate plan returns its admission without publishing.
-#[must_use = "retain both admission owners and handle the reason"]
-pub struct AmpduPlanningRefused<
-    'core,
-    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
-> {
-    pub queue: FreeQueue<'core, Path>,
-    pub admission: TxAdmission<'core, Path>,
-    pub reason: AmpduRefusal,
-}
-
-impl<Path: PoolPath> core::fmt::Debug for AmpduPlanningRefused<'_, Path> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("AmpduPlanningRefused")
-            .field("reason", &self.reason)
-            .finish_non_exhaustive()
-    }
-}
-
 /// Why an aggregate cannot go as one publication.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AmpduRefusal {
-    /// No subframe.
-    Empty,
-    /// More subframes than the aggregate owner holds.
-    TooManySubframes,
-    /// A start spacing encoding above 7.
-    StartSpacing,
-    /// A subframe shorter than its header through Address 1.
-    ShortSubframe,
-    /// The first subframe is group addressed: no one recipient answers.
-    GroupRecipient,
     /// Longer than the rate's ceiling, the declared maximum or the HE TXOP
     /// limit allows, with every subframe's MIC, FCS and delimiters.
     Length,
     /// A non-HT rate: aggregates go in HT or HE PPDUs.
     LegacyRate,
-    /// A subframe or interface does not match the owned encryption admission.
-    KeyUseMismatch,
 }
 
 /// An MPDU submission planned.

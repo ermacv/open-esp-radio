@@ -1,9 +1,8 @@
 //! The station's transmit contexts while their tickets are in the port.
 //!
-//! A submission hands the port its ticket, its MPDU or aggregate and a unit
-//! context: the operation's own context (its link epoch, admission permit,
-//! frame and order) stays here, at its ticket's place, and the completion's
-//! ticket finds it. The port never carries, copies or returns it, so every
+//! A submission hands the port its ticket, its MPDU and a unit context: the
+//! station operation's own context (its link epoch and purpose) stays here,
+//! at its ticket's place, and the completion's ticket finds it. The port never carries, copies or returns it, so every
 //! completion it queues is that much smaller.
 //!
 //! A ticket is affine and its index is its place in the backend's ticket

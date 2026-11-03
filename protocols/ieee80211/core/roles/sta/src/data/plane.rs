@@ -2,13 +2,17 @@
 //! ([`TxArena`]).
 //!
 //! The plane holds what one link's data needs ([`DataLink`], handed over at
-//! connect and returned at stop): the header template, the sequence
-//! counters, the pairwise key's packet numbers, the access categories the
-//! link admits, each TID's operational transmit Block Ack window, the retry
-//! policy and the access point's HT limits. It also holds the right to each
-//! arena and a book beside it: what the plane knows of the frames the arena
-//! holds (their TID, first sequence number, subframe octets, each MSDU's
-//! admission and the attempts on the air).
+//! connect and returned at stop): the header template, the access
+//! categories the link admits, each TID's operational transmit Block Ack
+//! window, the retry policy and the access point's HT limits. It also holds
+//! the right to each arena and a book beside it: what the plane knows of the
+//! frames the arena holds (their TID, first sequence number, subframe
+//! octets, each MSDU's admission and the attempts on the air).
+//!
+//! The sequence spaces and the pairwise key's packet numbers stay the
+//! station's, which numbers its own frames (EAPOL, Block Ack negotiation) in
+//! the same spaces: each intake borrows them from the station's link
+//! ([`LinkNumbers`]).
 //!
 //! An MSDU becomes an MPDU once, written into the network's memory as the
 //! arena takes it ([`DataPlane::intake`]): its sequence number and packet
@@ -48,6 +52,7 @@ use super::{
     PpduLimit, WmmAccessCategory, WmmUserPriority, aggregate, move_down,
 };
 use crate::events::{AggregateSettled, DataLoss, StaEvent};
+use crate::machine::LinkMode;
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::arena::{
@@ -60,14 +65,14 @@ use oer_protocols_ieee80211_contracts_port::{
     TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
-    ccmp::CcmpPacketNumberStep,
+    ccmp::CcmpTxPacketNumber,
     qos::AcAdmission,
     rate_control::BlockAckTally,
     rate_selection::{FrameRates, RateSelection},
     sequence::{SequenceCounter, SequenceSpace},
 };
 use oer_protocols_ieee80211_wire::{
-    ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId, CcmpPacketNumber},
+    ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId},
     data::LLC_SNAP_HEADER_LEN,
     security::LinkProtection,
     sequence::SequenceNumber,
@@ -93,80 +98,29 @@ pub struct OutboundMsdu<M> {
     pub priority: WmmUserPriority,
 }
 
-/// The transmit packet numbers of the link's pairwise key: the last one
-/// handed out and the step to the next. One owner holds them at a time; the
-/// plane holds them while the link is handed over and returns them, advanced
-/// past every number it drew, at stop.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PacketNumbers {
-    key_id: CcmpKeyId,
-    last: CcmpPacketNumber,
-    step: CcmpPacketNumberStep,
+/// The numbers one intake draws from the station's link: its sequence
+/// spaces and, on a protected link, the pairwise key's packet numbers.
+pub struct LinkNumbers<'a> {
+    /// The link's sequence spaces: per TID on a QoS link, the station's one
+    /// space otherwise.
+    pub sequences: LinkMode<'a>,
+    /// The pairwise key's packet numbers; `None` while the link holds no
+    /// key.
+    pub packet_numbers: Option<&'a CcmpTxPacketNumber>,
 }
 
-impl PacketNumbers {
-    /// The numbers of the key `key_id` after `last` was handed out: the next
-    /// MPDU carries `last + step`.
-    pub const fn new(
-        key_id: CcmpKeyId,
-        last: CcmpPacketNumber,
-        step: CcmpPacketNumberStep,
-    ) -> Self {
-        Self { key_id, last, step }
-    }
-
-    /// The key's identifier in the CCMP header.
-    pub const fn key_id(&self) -> CcmpKeyId {
-        self.key_id
-    }
-
-    /// The last packet number handed out.
-    pub const fn last(&self) -> CcmpPacketNumber {
-        self.last
-    }
-
-    /// The step from one packet number to the next.
-    pub const fn step(&self) -> CcmpPacketNumberStep {
-        self.step
-    }
-
-    /// The next packet number, or `None` once the key's 48-bit space is
-    /// used up: the key must be replaced, and no number repeats.
-    fn allocate(&mut self) -> Option<CcmpPacketNumber> {
-        let next = oer_protocols_ieee80211_core_upper_mac::packet_number::advance(
-            self.last,
-            u64::from(self.step.get()),
-        )
-        .ok()?;
-        self.last = next;
-        Some(next)
-    }
-}
-
-/// The sequence spaces the link's data takes its numbers from.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LinkSequences {
-    /// A QoS BSS: one space per TID.
-    Qos([SequenceCounter; 8]),
-    /// A non-QoS BSS: the station's one space.
-    NonQos(SequenceCounter),
-}
-
-impl LinkSequences {
+impl LinkNumbers<'_> {
     /// The counter of `tid`'s space.
     fn counter(&mut self, tid: WmmUserPriority) -> &mut SequenceCounter {
-        match self {
-            Self::Qos(counters) => tid.select_mut(counters),
-            Self::NonQos(counter) => counter,
+        match &mut self.sequences {
+            LinkMode::Qos(counters) => tid.select_mut(counters),
+            LinkMode::NonQos(counter) => counter,
         }
     }
 
-    /// The next sequence number of `tid`'s space.
-    fn peek(&self, tid: WmmUserPriority) -> SequenceNumber {
-        match self {
-            Self::Qos(counters) => tid.select(counters).peek(),
-            Self::NonQos(counter) => counter.peek(),
-        }
+    /// Whether the spaces are a QoS link's.
+    const fn qos(&self) -> bool {
+        matches!(self.sequences, LinkMode::Qos(_))
     }
 }
 
@@ -204,24 +158,49 @@ impl TxWindow {
 }
 
 /// One link's data state, handed to the plane at connect and returned at
-/// stop with every number it advanced.
+/// stop.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DataLink {
     /// The prefix of every data MPDU of the association.
     pub header: StaDataHeaderTemplate,
-    /// The data's sequence spaces: per TID on a QoS link.
-    pub sequences: LinkSequences,
-    /// The pairwise key's packet numbers on a protected link; `None` while
-    /// it holds no key, and data waits.
-    pub key: Option<PacketNumbers>,
     /// The access categories the link's EDCA parameters close.
     pub admission: AcAdmission,
-    /// How long a missing frame is retried.
-    pub retry: AggregateRetry,
+    /// How long a frame a BlockAck missed is retried; `None` for a link
+    /// without transmit agreements, whose frames never aggregate.
+    pub retry: Option<AggregateRetry>,
     /// The access point's A-MPDU limits; `None` for a non-HT access point.
     pub ht: Option<HtLimits>,
     /// Each TID's operational transmit Block Ack window.
     pub windows: [Option<TxWindow>; 8],
+}
+
+impl DataLink {
+    /// The data state of the station's `link`, without operational
+    /// transmit agreements: frames a BlockAck missed are retried by `retry`,
+    /// and `ht` are the access point's A-MPDU limits. `None` for a BSSID a
+    /// station sends no data to.
+    pub fn for_link<T: crate::machine::StaTokens>(
+        link: &crate::machine::LinkView<'_, '_, T>,
+        retry: Option<AggregateRetry>,
+        ht: Option<HtLimits>,
+    ) -> Option<Self> {
+        let header = StaDataHeaderTemplate::new(
+            link.address,
+            link.bssid,
+            matches!(link.mode, LinkMode::Qos(_)),
+            match link.protection {
+                crate::machine::LinkProtection::Open => LinkProtection::Open,
+                crate::machine::LinkProtection::Ccmp { .. } => LinkProtection::Ccmp,
+            },
+        )?;
+        Some(Self {
+            header,
+            admission: link.admission,
+            retry,
+            ht,
+            windows: [None; 8],
+        })
+    }
 }
 
 /// Why the plane did not take a link.
@@ -229,10 +208,6 @@ pub struct DataLink {
 pub enum HandoverRefused {
     /// The plane holds a link already.
     Connected,
-    /// The sequence spaces do not match the template's QoS.
-    Sequences,
-    /// An open link came with packet numbers.
-    Key,
 }
 
 /// The port's A-MPDU limits at the rate the aggregate rate selection
@@ -242,7 +217,7 @@ pub struct AggregateRate {
     /// The aggregate rate.
     pub rate: PhyRate,
     /// The most subframes the port aggregates.
-    pub max_subframes: u8,
+    pub max_subframes: u16,
     /// The port's longest A-MPDU at the rate, in octets.
     pub max_length: u32,
 }
@@ -254,6 +229,8 @@ pub enum IntakeRefusal {
     NoLink,
     /// The protected link holds no key.
     NoKey,
+    /// The link's sequence spaces are not those its template's QoS names.
+    Numbering,
     /// Admission control closes the MSDU's access category and every lower
     /// one.
     NoAdmittedAccessCategory,
@@ -338,18 +315,68 @@ pub enum RateLesson<R, D> {
     },
 }
 
-impl<R, D> RateLesson<R, D> {
+impl<R: Copy, D: Copy> RateLesson<R, D> {
     /// Teach `rates` at `now`, on its rules for a current link's terminal:
     /// only an outcome with a rate sample, or an A-MPDU that went on the
-    /// air, teaches it.
-    pub fn teach<M: RxMetadata, S: RateSelection<M, R, R>>(&self, now: Instant, rates: &mut S) {
+    /// air, teaches it. A single MPDU's response evidence reaches the
+    /// selection as its ACK evidence through `ack`; one `ack` cannot read
+    /// teaches nothing.
+    pub fn teach<M: RxMetadata, A, S: RateSelection<M, A, R>>(
+        &self,
+        now: Instant,
+        rates: &mut S,
+        ack: impl Fn(R) -> Option<A>,
+    ) {
         match self {
-            Self::Single(outcome) => rates.learn(now, FrameRates::Data, true, outcome),
+            Self::Single(outcome) => {
+                if let Some(outcome) = single_with(*outcome, ack) {
+                    rates.learn(now, FrameRates::Data, true, &outcome);
+                }
+            }
             Self::Aggregate { tally, outcome } => {
                 rates.learn_aggregate(now, true, *tally, outcome);
             }
         }
     }
+}
+
+/// `outcome` with its response evidence read through `ack`; `None` when
+/// `ack` cannot read it.
+fn single_with<R, A, D>(
+    outcome: SingleOutcome<R, D>,
+    ack: impl Fn(R) -> Option<A>,
+) -> Option<SingleOutcome<A, D>> {
+    Some(match outcome {
+        TxOutcome::Ended(SingleEnd::Delivered { air, response }) => {
+            let response = match response {
+                SingleResponse::Unsolicited => SingleResponse::Unsolicited,
+                SingleResponse::Ack(response) => SingleResponse::Ack(ack(response)?),
+                SingleResponse::BlockAck {
+                    report,
+                    ack: response,
+                } => SingleResponse::BlockAck {
+                    report,
+                    ack: ack(response)?,
+                },
+            };
+            TxOutcome::Ended(SingleEnd::Delivered { air, response })
+        }
+        TxOutcome::Ended(SingleEnd::AckTimeout(air)) => {
+            TxOutcome::Ended(SingleEnd::AckTimeout(air))
+        }
+        TxOutcome::Ended(SingleEnd::CtsTimeout(air)) => {
+            TxOutcome::Ended(SingleEnd::CtsTimeout(air))
+        }
+        TxOutcome::Ended(SingleEnd::ContentionLimit(air)) => {
+            TxOutcome::Ended(SingleEnd::ContentionLimit(air))
+        }
+        TxOutcome::Ended(SingleEnd::AirDenied { denial, air }) => {
+            TxOutcome::Ended(SingleEnd::AirDenied { denial, air })
+        }
+        TxOutcome::Expired { msdus } => TxOutcome::Expired { msdus },
+        TxOutcome::Withdrawn(cause) => TxOutcome::Withdrawn(cause),
+        TxOutcome::Indeterminate(cause) => TxOutcome::Indeterminate(cause),
+    })
 }
 
 /// What one arena's end settled.
@@ -477,6 +504,8 @@ pub struct DataPlane {
     /// Each TID's A-MPDU bound: with its window, the access point's HT
     /// limits and the aggregate rate.
     limits: [Option<PpduLimit>; 8],
+    /// Each TID's sequence number after the last MPDU the link's data drew.
+    next: [Option<SequenceNumber>; 8],
     first: ArenaBook,
     second: ArenaBook,
 }
@@ -498,6 +527,7 @@ impl DataPlane {
             epoch: 0,
             rate: None,
             limits: [None; 8],
+            next: [None; 8],
             first: ArenaBook::new(first),
             second: ArenaBook::new(second),
         })
@@ -532,8 +562,7 @@ impl DataPlane {
     ///
     /// # Errors
     ///
-    /// The link, unchanged, when the plane holds one, its sequence spaces
-    /// do not match its template's QoS, or an open link names a key.
+    /// The link, unchanged, when the plane holds one.
     #[expect(
         clippy::result_large_err,
         reason = "a refused link comes back by value; the plane has no allocator"
@@ -542,15 +571,10 @@ impl DataPlane {
         if self.link.is_some() {
             return Err((link, HandoverRefused::Connected));
         }
-        if link.header.peer_qos() != matches!(link.sequences, LinkSequences::Qos(_)) {
-            return Err((link, HandoverRefused::Sequences));
-        }
-        if link.header.protection() == LinkProtection::Open && link.key.is_some() {
-            return Err((link, HandoverRefused::Key));
-        }
         self.epoch = self.epoch.wrapping_add(1);
         self.rate = None;
         self.limits = [None; 8];
+        self.next = [None; 8];
         self.link = Some(link);
         Ok(())
     }
@@ -573,7 +597,42 @@ impl DataPlane {
         }
         self.rate = None;
         self.limits = [None; 8];
+        self.next = [None; 8];
         Ok(self.link.take())
+    }
+
+    /// Return every frame the arenas hold unpublished, keeping the link:
+    /// the frames written under the link's key before a new one replaces it
+    /// carry that key's packet numbers.
+    ///
+    /// # Errors
+    ///
+    /// A backend fault.
+    pub fn withdraw_unpublished<'p, 'id: 'p, A: TxArena<'p, 'id>>(
+        &mut self,
+        arena: &mut A,
+        mut returned: impl FnMut(A::Memory),
+        events: &mut impl EventSink<StaEvent>,
+    ) -> Result<(), A::Fault> {
+        for id in [ArenaId::First, ArenaId::Second] {
+            self.withdraw(arena, id, &mut returned, events)?;
+        }
+        Ok(())
+    }
+
+    /// Whether an arena is on the air: its completion is owed.
+    pub fn on_air(&self) -> bool {
+        self.first.right.is_none() || self.second.right.is_none()
+    }
+
+    /// The frames the arenas hold: published, retained or taken.
+    pub fn frames(&self) -> u8 {
+        self.first.count().saturating_add(self.second.count())
+    }
+
+    /// Whether an arena holds a frame: published, retained or taken.
+    pub fn holds_frames(&self) -> bool {
+        self.first.pending != 0 || self.second.pending != 0
     }
 
     /// Return every frame the unpublished arena `id` holds.
@@ -599,14 +658,6 @@ impl DataPlane {
         Ok(())
     }
 
-    /// Replace the link's key: the packet numbers of the new one, or `None`
-    /// while the link holds none. Returns the previous numbers. Frames the
-    /// arenas hold keep the numbers they were written with.
-    pub fn set_key(&mut self, key: Option<PacketNumbers>) -> Option<PacketNumbers> {
-        let link = self.link.as_mut()?;
-        core::mem::replace(&mut link.key, key)
-    }
-
     /// The port's A-MPDU limits at the aggregate rate changed: every TID's
     /// bound is computed again, once.
     pub fn aggregate_rate(&mut self, rate: Option<AggregateRate>) {
@@ -625,7 +676,7 @@ impl DataPlane {
             let window = (*tid.select(&link.windows))?;
             let ht = link.ht?;
             let rate = self.rate?;
-            let subframes = window.size.min(u16::from(rate.max_subframes));
+            let subframes = window.size.min(rate.max_subframes);
             Some(PpduLimit::new(
                 usize::from(subframes),
                 rate.max_length.min(ht.max_length),
@@ -664,14 +715,15 @@ impl DataPlane {
 
     /// Take `msdu`, admitted at `now`, into the standby arena as one MPDU:
     /// its header is written in front of its payload from the link's
-    /// template, with the next sequence number of its TID and, on a
-    /// protected link, the CCMP header of the key's next packet number.
-    /// Neither is drawn for an MSDU that waits or is refused before the
-    /// arena took it.
+    /// template, with the next sequence number of its TID in `numbers` and,
+    /// on a protected link, the CCMP header of the key's next packet number.
+    /// No sequence number is drawn for an MSDU that waits or is refused, and
+    /// no packet number before the arena's writer runs.
     pub fn intake<'p, 'id: 'p, A: TxArena<'p, 'id>>(
         &mut self,
         arena: &mut A,
         msdu: OutboundMsdu<A::Memory>,
+        mut numbers: LinkNumbers<'_>,
         now: Instant,
     ) -> Intake<A::Memory> {
         let refused = |msdu: OutboundMsdu<A::Memory>, reason| Intake::Refused {
@@ -696,7 +748,10 @@ impl DataPlane {
             LinkProtection::Open => DataProtection::Open,
             LinkProtection::Ccmp => DataProtection::Ccmp(()),
         };
-        if protection == DataProtection::Ccmp(()) && link.key.is_none() {
+        if header.peer_qos() != numbers.qos() {
+            return refused(msdu, IntakeRefusal::Numbering);
+        }
+        if protection == DataProtection::Ccmp(()) && numbers.packet_numbers.is_none() {
             return refused(msdu, IntakeRefusal::NoKey);
         }
         let Some(payload) = msdu.length.checked_sub(ETHERNET_HEADER_LEN) else {
@@ -709,7 +764,7 @@ impl DataPlane {
         else {
             return refused(msdu, IntakeRefusal::TooLong);
         };
-        let sequence = link.sequences.peek(tid);
+        let sequence = numbers.counter(tid).peek();
         let window = *tid.select(&link.windows);
         let Some(id) = self.standby() else {
             return Intake::Wait(msdu);
@@ -737,14 +792,11 @@ impl DataPlane {
         }
         let epoch = self.epoch;
         let Self {
-            link: Some(link),
             first,
             second,
+            next,
             ..
-        } = self
-        else {
-            return refused(msdu, IntakeRefusal::NoLink);
-        };
+        } = self;
         let book = match id {
             ArenaId::First => first,
             ArenaId::Second => second,
@@ -752,9 +804,9 @@ impl DataPlane {
         let Some(right) = book.right.as_ref() else {
             return Intake::Wait(msdu);
         };
-        let saved = (link.sequences, link.key);
-        let counter = link.sequences.counter(tid);
-        let numbers = link.key.as_mut();
+        let packet_numbers = numbers.packet_numbers;
+        let counter = numbers.counter(tid);
+        let saved = *counter;
         let mut written = None;
         let taken = arena.intake(right, msdu.memory, |region| {
             let result = write_mpdu(
@@ -765,7 +817,7 @@ impl DataPlane {
                     payload,
                 },
                 counter,
-                numbers,
+                packet_numbers,
             );
             let length = result.ok();
             written = Some(result);
@@ -787,11 +839,13 @@ impl DataPlane {
                 book.pending |= 1_u64.checked_shl(u32::from(position)).unwrap_or(0);
                 book.taken = position.saturating_add(1);
                 book.octets = book.octets.saturating_add(octets);
+                *tid.select_mut(next) = Some(sequence.wrapping_add(1));
                 Intake::Taken(tid)
             }
             Err((memory, refusal)) => {
-                // A frame the arena did not keep took no number.
-                (link.sequences, link.key) = saved;
+                // A frame the arena did not keep took no sequence number; a
+                // packet number its writer drew leaves a gap, never a repeat.
+                *counter = saved;
                 let reason = match (refusal, written) {
                     (IntakeRefused::Declined, Some(Err(reason))) => reason,
                     (refusal, _) => IntakeRefusal::Arena(refusal),
@@ -1016,7 +1070,7 @@ impl DataPlane {
     /// kept otherwise. One pass over the frames.
     fn aggregate_end<R, D>(
         book: &ArenaBook,
-        retry: AggregateRetry,
+        retry: Option<AggregateRetry>,
         attempts: u8,
         end: &AttemptEnd<R, D>,
         now: Instant,
@@ -1048,12 +1102,12 @@ impl DataPlane {
                 .unwrap_or(Instant::EPOCH);
             let loss = if matches!(end, AttemptEnd::Aborted) {
                 Some(DataLoss::Indeterminate)
-            } else if now
-                .checked_duration_since(admitted)
-                .is_some_and(|age| age >= retry.lifetime)
-            {
+            } else if retry.is_some_and(|retry| {
+                now.checked_duration_since(admitted)
+                    .is_some_and(|age| age >= retry.lifetime)
+            }) {
                 Some(DataLoss::Expired)
-            } else if attempts >= retry.attempts {
+            } else if retry.is_none_or(|retry| attempts >= retry.attempts) {
                 Some(DataLoss::RetryLimit)
             } else {
                 None
@@ -1073,16 +1127,16 @@ impl DataPlane {
     }
 
     /// Move `tid`'s window to the oldest sequence number the arenas still
-    /// hold of it, else to its next one; never back. Its head, when `tid`
-    /// has a window.
+    /// hold of it, else to the one after the last its data drew; never
+    /// back. Its head, when `tid` has a window and its data drew a number.
     fn advance(&mut self, tid: WmmUserPriority) -> Option<SequenceNumber> {
         let epoch = self.epoch;
         let oldest = [
             self.first.oldest(epoch, tid),
             self.second.oldest(epoch, tid),
         ];
+        let next = (*tid.select(&self.next))?;
         let link = self.link.as_mut()?;
-        let next = link.sequences.peek(tid);
         let head =
             oldest.into_iter().flatten().fold(
                 next,
@@ -1216,14 +1270,14 @@ struct Fields {
 /// [`MSDU_ETHERNET_OFFSET`] of `region`, from the region's first octet:
 /// `header`'s prefix in front of the payload, which a shorter prefix moves
 /// down to it, with the next number of `sequence` and, on a protected link,
-/// the CCMP header of the next of `numbers`. Its length, without FCS and
+/// the CCMP header of the next packet number of `numbers`. Its length, without FCS and
 /// MIC. Nothing is written or drawn for an MPDU that does not fit.
 fn write_mpdu(
     region: &mut [u8],
     header: &StaDataHeaderTemplate,
     msdu: Fields,
     sequence: &mut SequenceCounter,
-    numbers: Option<&mut PacketNumbers>,
+    numbers: Option<&CcmpTxPacketNumber>,
 ) -> Result<u16, IntakeRefusal> {
     let ethernet = region
         .get(MSDU_ETHERNET_OFFSET..MSDU_PAYLOAD_OFFSET)
@@ -1248,8 +1302,8 @@ fn write_mpdu(
         (LinkProtection::Ccmp, Some(numbers)) => {
             let packet_number = numbers
                 .allocate()
-                .ok_or(IntakeRefusal::PacketNumberExhausted)?;
-            Some(CcmpHeader::new(packet_number, numbers.key_id()).encode())
+                .map_err(|_| IntakeRefusal::PacketNumberExhausted)?;
+            Some(CcmpHeader::new(packet_number, CcmpKeyId::PAIRWISE).encode())
         }
     };
     let fields = StaDataHeaderFields {

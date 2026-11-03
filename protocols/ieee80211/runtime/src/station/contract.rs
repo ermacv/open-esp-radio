@@ -118,8 +118,6 @@ pub enum TransmitRefusal {
 pub enum PreparationError {
     RetransmissionKey,
     RetransmissionKind,
-    AggregateFull,
-    BlockAckWindow,
     /// The backend source lacks its body resource loan.
     MissingBodyLoan,
 }
@@ -127,7 +125,6 @@ pub enum PreparationError {
 /// Why a frame's portable placement failed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LayoutError {
-    NumberingProtectionMismatch,
     StorageTooShort,
     CcmpHeaderTooShort,
     BodyOverlap,
@@ -248,14 +245,22 @@ pub enum Notice {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MsduRefusal {
-    NoTokens,
+    /// The station holds no link for data.
+    NoLink,
+    /// The protected link holds no key.
+    NoKey,
+    /// The MPDU does not fit its memory's frame region.
     TooLong,
     /// Admission control leaves the MSDU no access category.
     NoAdmittedAccessCategory,
-    /// The station's buffer memory was not its own; the MSDU is refused.
-    BufferUnavailable,
-    /// The network's frame no longer parses as an Ethernet frame.
+    /// The network's frame is shorter than an Ethernet header.
     InvalidFrame,
+    /// The link's sequence spaces are not those of its data's template.
+    Numbering,
+    /// The pairwise key's packet numbers are used up.
+    PacketNumberExhausted,
+    /// The port's data arena refused the frame.
+    Arena(oer_protocols_ieee80211_contracts_port::IntakeRefused),
 }
 fn disconnect(reason: StaDisconnectReason) -> DisconnectReason {
     use DisconnectReason as W;
@@ -294,13 +299,8 @@ fn transmit(refusal: TxRefusal) -> TransmitRefusal {
             CorePreparationError::MissingBodyLoan => PreparationError::MissingBodyLoan,
             CorePreparationError::RetransmissionKey => PreparationError::RetransmissionKey,
             CorePreparationError::RetransmissionKind => PreparationError::RetransmissionKind,
-            CorePreparationError::AggregateFull => PreparationError::AggregateFull,
-            CorePreparationError::BlockAckWindow => PreparationError::BlockAckWindow,
         }),
         TxRefusal::Layout(error) => TransmitRefusal::Layout(match error {
-            CoreLayoutError::NumberingProtectionMismatch => {
-                LayoutError::NumberingProtectionMismatch
-            }
             CoreLayoutError::StorageTooShort => LayoutError::StorageTooShort,
             CoreLayoutError::CcmpHeaderTooShort => LayoutError::CcmpHeaderTooShort,
             CoreLayoutError::BodyOverlap => LayoutError::BodyOverlap,
@@ -482,20 +482,18 @@ impl From<core_station::StaNotice> for Notice {
         }
     }
 }
-impl From<oer_protocols_ieee80211_core_roles_sta::data::DataRefusal> for MsduRefusal {
-    fn from(value: oer_protocols_ieee80211_core_roles_sta::data::DataRefusal) -> Self {
+impl From<oer_protocols_ieee80211_core_roles_sta::data::plane::IntakeRefusal> for MsduRefusal {
+    fn from(value: oer_protocols_ieee80211_core_roles_sta::data::plane::IntakeRefusal) -> Self {
+        use oer_protocols_ieee80211_core_roles_sta::data::plane::IntakeRefusal as R;
         match value {
-            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::NoTokens => Self::NoTokens,
-            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::TooLong => Self::TooLong,
-            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::NoAdmittedAccessCategory => {
-                Self::NoAdmittedAccessCategory
-            }
-            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::BufferUnavailable => {
-                Self::BufferUnavailable
-            }
-            oer_protocols_ieee80211_core_roles_sta::data::DataRefusal::ShortFrame => {
-                Self::InvalidFrame
-            }
+            R::NoLink => Self::NoLink,
+            R::NoKey => Self::NoKey,
+            R::NoAdmittedAccessCategory => Self::NoAdmittedAccessCategory,
+            R::ShortFrame => Self::InvalidFrame,
+            R::TooLong => Self::TooLong,
+            R::Numbering => Self::Numbering,
+            R::PacketNumberExhausted => Self::PacketNumberExhausted,
+            R::Arena(refused) => Self::Arena(refused),
         }
     }
 }

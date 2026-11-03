@@ -16,9 +16,6 @@ pub struct ModelBackend<
     channel: Channel,
     addresses: [IndividualAddress; 2],
     driver_state: Driver<'static, Self>,
-    /// Whether a network lends each large place its memory
-    /// ([`Self::with_network_memory`]).
-    network_memory: bool,
     identity: CompositionIdentity<Id, C, X>,
 }
 
@@ -27,7 +24,6 @@ pub struct ModelVacant<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelConte
     air: Rc<ModelAir>,
     channel: Channel,
     addresses: [IndividualAddress; 2],
-    network_memory: bool,
     identity: CompositionIdentity<Id, C, X>,
 }
 
@@ -53,18 +49,8 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> ModelBackend<I
             channel,
             addresses,
             driver_state: Driver::new(),
-            network_memory: false,
             identity: PhantomData,
         }
-    }
-
-    /// The same hardware whose large places hold no memory of their own: a
-    /// network lends each its memory for one MSDU, as a port whose pool the
-    /// network fills ([`TxBufferPool::install`](oer_protocols_ieee80211_contracts_port::TxBufferPool::install)).
-    #[must_use]
-    pub fn with_network_memory(mut self) -> Self {
-        self.network_memory = true;
-        self
     }
 
     /// Resume stopped hardware on P2; the slot requires its unique Joined first.
@@ -74,7 +60,6 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> ModelBackend<I
             channel: vacant.channel,
             addresses: vacant.addresses,
             driver_state: Driver::new(),
-            network_memory: vacant.network_memory,
             identity: PhantomData,
         }
     }
@@ -177,7 +162,6 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             [station_group_permission],
             ([access_point_group_permission], station_commands, access_point_commands),
         ) = mint.into_pools();
-        let network_memory = self.network_memory;
         let (station_association, station_bank) = station_vacant.into_parts();
         let (station_pairwise, station_group) = station_bank.into_parts();
         let (access_point_association, access_point_bank) = access_point_vacant.into_parts();
@@ -202,7 +186,9 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             gate_issuer,
             draining: Cell::new(false),
             returned: Cell::new(true),
-            open: core::cell::RefCell::new([const { None }; 4]),
+            arenas: core::cell::RefCell::new(arena::StationArenas::new()),
+            gate_closed: Cell::new(false),
+            configuring_station: Cell::new(false),
         };
         let resources = ModelResources {
             station_association,
@@ -227,11 +213,7 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
                 .map(|slot| ModelBuffer {
                     slot,
                     loan: None,
-                    memory: if network_memory {
-                        ModelMemory::Vacant
-                    } else {
-                        ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY]))
-                    },
+                    memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
                     admitted_at: None,
                     admitted: None,
                 })
@@ -353,7 +335,6 @@ impl<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> SlotOwner<Id>
             air: self.air.clone(),
             channel: self.channel,
             addresses: self.addresses,
-            network_memory: self.network_memory,
             identity: PhantomData,
         }
     }

@@ -8,8 +8,6 @@ use super::{
 /// An optional operation required by a case, independently of its air stimulus.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Extension {
-    /// Aggregate admission through `AmpduPhase`.
-    Ampdu,
     /// Data transmission on the two arenas of `TxArena`.
     TxArena,
 }
@@ -17,7 +15,7 @@ pub enum Extension {
 /// One case from the shared suites.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Case {
-    /// Single and aggregate air outcomes.
+    /// Single-MPDU air outcomes.
     Outcome(outcomes::Case),
     /// Admission and returned-owner lifetime.
     Ownership(Scenario),
@@ -78,10 +76,6 @@ impl Case {
     /// Requirements follow the operation's form, never its display name.
     pub const fn extension(self) -> Option<Extension> {
         match self {
-            Self::Outcome(case) => match case.form() {
-                outcomes::Form::Aggregate => Some(Extension::Ampdu),
-                outcomes::Form::Single => None,
-            },
             Self::Arena(_) => Some(Extension::TxArena),
             _ => None,
         }
@@ -101,29 +95,11 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_aggregate_operations_keep_their_air_classification() {
-        let cases: alloc::vec::Vec<_> = Case::all()
-            .filter(|case| {
-                case.execution() == Execution::Hardware
-                    && case.extension() == Some(Extension::Ampdu)
-            })
-            .collect();
-        assert_eq!(
-            cases,
-            [
-                Case::Outcome(outcomes::Case::BlockAck),
-                Case::Outcome(outcomes::Case::NoResponse(outcomes::Form::Aggregate))
-            ]
-        );
-        assert!(
-            Case::all()
-                .filter(|case| matches!(case, Case::Arena(_)))
-                .all(|case| case.extension() == Some(Extension::TxArena))
-        );
-        for case in outcomes::Case::ALL {
+    fn only_arena_cases_need_the_arena_extension() {
+        for case in Case::all() {
             assert_eq!(
-                Case::Outcome(case).extension().is_some(),
-                case.form() == outcomes::Form::Aggregate
+                case.extension() == Some(Extension::TxArena),
+                matches!(case, Case::Arena(_))
             );
         }
     }

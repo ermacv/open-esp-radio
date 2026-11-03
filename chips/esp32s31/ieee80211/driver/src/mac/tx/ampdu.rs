@@ -9,7 +9,6 @@
 
 use crate::mac::tx_work::MacTxWork;
 use oer_chips_esp32s31_hal::types::MacTxQueueIndex;
-use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use core::{marker::PhantomPinned, pin::Pin};
 
@@ -47,14 +46,9 @@ pub use model::{
 pub(crate) use model::{TX_BUFFER_END_BIT, TX_DESCRIPTOR_HE_BIT};
 pub use oer_chips_esp32s31_hal::ieee80211::dma::tx_ampdu_storage::RetainedAmpduDmaStorage;
 pub use owner::{AmpduIntakeRefused, HtAmpduTxResources, RetainedDmaAmpduTx, SingleTxConfig};
-pub use request::{
-    AmpduFrameLayout, AmpduFrameSize, HeAmpduFrameRequest, HeAmpduPolicy, HtAmpduFrameRequest,
-};
+pub use request::{AmpduFrameLayout, AmpduFrameSize, HeAmpduPolicy};
 
 use crate::mac::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxDmaState};
-use oer_protocols_ieee80211_contracts_port::backend_aggregate::{
-    AmpduRetryDecision, AmpduRetryError,
-};
 pub const TX_AMPDU_METADATA_SIZE: usize = 8;
 const TX_FCS_SIZE: u16 = 4;
 const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
@@ -71,14 +65,6 @@ pub enum HtAmpduTxError {
     FrameIndexOutOfRange {
         index: u8,
         count: u8,
-    },
-    InvalidRetryMask {
-        mask: u32,
-        count: u8,
-    },
-    RetainedFrameTooShort {
-        index: u8,
-        length: u16,
     },
     /// Stored descriptor metadata did not resolve to any currently retained
     /// stable backing or to the storage's own fixed DMA buffer.
@@ -125,17 +111,6 @@ pub enum HtAmpduTxFormat {
     HeAmpdu,
 }
 
-/// Why a detached aggregate is published again.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AmpduRepublication {
-    /// BlockAck reported the selected MPDUs missing. They were on air, so
-    /// each retained MPDU gains the IEEE 802.11 Retry bit.
-    Retransmission,
-    /// The RTS/CTS exchange failed before the data PPDU. Every MPDU is
-    /// retained unchanged: none was transmitted.
-    AfterProtectionFailure,
-}
-
 /// Completion of a PPDU that solicited a BlockAck: an A-MPDU or a
 /// BlockAckReq.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,34 +118,6 @@ pub struct HtAmpduTxCompletion {
     pub tx: TxCompletion,
     pub block_ack: HtBlockAckObservation,
     pub block_ack_received: bool,
-}
-
-/// One completion observed after synchronizing the hardware, descriptor and
-/// retry owners in that order.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RetainedAmpduRetryCompletion {
-    pub completion: HtAmpduTxCompletion,
-    pub first_sequence: SequenceNumber,
-    pub subframes: u8,
-    pub decision: AmpduRetryDecision,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RetainedAmpduRetryCompletionError {
-    Hardware(HtAmpduTxError),
-    Retry(AmpduRetryError),
-}
-
-impl From<HtAmpduTxError> for RetainedAmpduRetryCompletionError {
-    fn from(error: HtAmpduTxError) -> Self {
-        Self::Hardware(error)
-    }
-}
-
-impl From<AmpduRetryError> for RetainedAmpduRetryCompletionError {
-    fn from(error: AmpduRetryError) -> Self {
-        Self::Retry(error)
-    }
 }
 
 impl HtAmpduTxCompletion {
@@ -326,22 +273,6 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         Ok(())
     }
 
-    /// Calculate the exact A-MPDU byte count for the committed software-owned
-    /// prefix, before any DMA address is published.
-    pub fn prepared_aggregate(&self, cookie: TxCookie) -> Result<HtAmpduLength, HtAmpduTxError> {
-        if self.state != TxDmaState::Reserved || self.active != cookie {
-            return Err(HtAmpduTxError::Stale);
-        }
-        // Both HT and HE can retain a one-subframe A-MPDU. Complete
-        // `libpp[pp.o]::ppAssembleAMPDU` starts from the supplied
-        // chain head and iterates until its next pointer is null; it has no
-        // minimum-two branch.
-        if self.count == 0 {
-            return Err(HtAmpduTxError::TooFewFrames);
-        }
-        self.calculate_aggregate()
-    }
-
     /// Read the committed metadata-byte-four value while software still owns
     /// the aggregate.
     ///
@@ -399,16 +330,3 @@ impl<const SLOTS: usize> Default for HtAmpduTxStorage<SLOTS> {
 
 #[cfg(test)]
 mod tests;
-
-impl From<HtAmpduTxCompletion>
-    for oer_protocols_ieee80211_contracts_port::backend_aggregate::BackendAmpduCompletion
-{
-    fn from(completion: HtAmpduTxCompletion) -> Self {
-        Self {
-            status: completion.tx.tx_status(),
-            trigger_flow_end: completion.tx.completes_vendor_trigger_flow(),
-            block_ack_received: completion.block_ack_received,
-            block_ack: completion.valid_block_ack().map(|ack| ack.report()),
-        }
-    }
-}

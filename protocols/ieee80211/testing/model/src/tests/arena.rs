@@ -10,7 +10,7 @@ use oer_protocols_ieee80211_testing_conformance::{
     Environment,
     arena::{self as suite, Answer, Fixture, Published, check},
 };
-use oer_protocols_ieee80211_wire::frame::FrameControlFields;
+use oer_protocols_ieee80211_wire::frame::{FrameControlFields, sequence_control};
 
 /// A QoS data MPDU of 30 octets whose sequence number is its tag.
 fn write_tagged(tag: u8, region: &mut [u8]) -> Option<u16> {

@@ -3,8 +3,7 @@
 use core::pin::Pin;
 
 use super::{
-    AmpduFrameLayout, HeAmpduFrameRequest, HtAmpduFrameRequest, HtAmpduTxError, HtAmpduTxStorage,
-    TX_AMPDU_METADATA_SIZE, TX_FCS_SIZE,
+    AmpduFrameLayout, HtAmpduTxError, HtAmpduTxStorage, TX_AMPDU_METADATA_SIZE, TX_FCS_SIZE,
 };
 use crate::mac::tx::{TxCookie, TxDmaState};
 
@@ -34,40 +33,23 @@ impl ReferencedFrame {
 }
 
 impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
-    /// Commit an MPDU already encoded in a separately pinned allocation.
+    /// Check an MPDU already encoded in a separately pinned allocation and
+    /// write its private metadata prefix and zeroed trailer into
+    /// `dma_storage`; nothing is counted until
+    /// [`Self::record_referenced_frame`] takes the result.
     ///
     /// `dma_storage` begins with the private eight-byte S31 metadata prefix;
     /// the encoded 802.11 frame must already occupy
     /// `dma_storage[8..8 + frame_length]`. This is the descriptor half of the
-    /// vendor cache-TX/type-nine ESF path and performs no payload copy.
-    ///
-    /// The private entry is reachable only through [`super::RetainedDmaAmpduTx`],
-    /// which retains exclusive ownership of the same stable allocation until
-    /// this batch has completed, detached and released or cancelled.
+    /// vendor cache-TX/type-nine ESF path and performs no payload copy. The
+    /// private entry is reachable only through
+    /// [`super::RetainedDmaAmpduTx::intake`], which retains exclusive
+    /// ownership of the same stable allocation until its batch has
+    /// completed, detached and released or cancelled.
     ///
     /// SOURCE: complete `libnet80211[ieee80211_output.o]::ieee80211_alloc_tx_buf` cache-TX/type-nine branch retains the netstack
     /// buffer through `s_netstack_ref`; complete `libpp[pp.o]::ppAssembleAMPDU` links the existing ESF descriptors without copying
     /// their payloads.
-    pub(super) fn commit_referenced_frame(
-        self: Pin<&mut Self>,
-        cookie: TxCookie,
-        dma_storage: &mut [u8],
-        layout: AmpduFrameLayout,
-        empty_delimiters: u8,
-    ) -> Result<(), HtAmpduTxError> {
-        let frame = self.as_ref().get_ref().prepare_referenced_frame(
-            cookie,
-            dma_storage,
-            layout,
-            empty_delimiters,
-        )?;
-        self.record_referenced_frame(cookie, frame)
-    }
-
-    /// Check an MPDU encoded in a separately pinned allocation, as
-    /// [`Self::commit_referenced_frame`] does, and write its private
-    /// metadata prefix and zeroed trailer into `dma_storage`; nothing is
-    /// counted until [`Self::record_referenced_frame`] takes the result.
     pub(super) fn prepare_referenced_frame(
         &self,
         cookie: TxCookie,
@@ -187,76 +169,5 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         *storage.prepared_length = frame.prepared_length;
         *storage.count = count;
         Ok(())
-    }
-
-    /// Commit one referenced HT MPDU under the exact rate-dependent ceiling.
-    ///
-    /// The retained owner upholds the same stable-allocation invariant as
-    /// [`Self::commit_referenced_frame`].
-    pub(super) fn commit_referenced_ht_frame(
-        mut self: Pin<&mut Self>,
-        cookie: TxCookie,
-        dma_storage: &mut [u8],
-        request: HtAmpduFrameRequest,
-    ) -> Result<(), HtAmpduTxError> {
-        let layout = request.layout();
-        if !self.as_ref().can_commit_referenced_ht_frame(
-            cookie,
-            layout.mpdu_length(),
-            layout.hardware_mic_length(),
-            request.empty_delimiters(),
-            request.rate(),
-            dma_storage.len(),
-        )? {
-            return Err(HtAmpduTxError::AggregateFull);
-        }
-        self.as_mut().commit_referenced_frame(
-            cookie,
-            dma_storage,
-            layout,
-            request.empty_delimiters(),
-        )
-    }
-
-    /// Commit one referenced HE MPDU under the complete rate/TXOP policy.
-    ///
-    /// SOURCE: complete `libpp[pp_he.o]::ppCalDeliNum,
-    /// libpp[pp_he.o]::ppCalTxHEAMPDULength,libpp[pp_he.o]::ppCheckTxHEAMPDUlength` supplies delimiter and
-    /// duration accounting. Complete
-    /// `libnet80211[ieee80211_output.o]::ieee80211_alloc_tx_buf`
-    /// and `libpp[pp.o]::ppAssembleAMPDU` retain and link the
-    /// cache-TX allocation instead of copying it into aggregate storage.
-    ///
-    /// The retained owner keeps `dma_storage` at its current address until the
-    /// batch is detached and released or cancelled.
-    pub(super) fn commit_referenced_he_frame(
-        mut self: Pin<&mut Self>,
-        cookie: TxCookie,
-        dma_storage: &mut [u8],
-        request: HeAmpduFrameRequest,
-    ) -> Result<(), HtAmpduTxError> {
-        let layout = request.layout();
-        if !self.as_ref().can_commit_referenced_he_frame(
-            cookie,
-            layout.frame_size(),
-            request.policy(),
-            dma_storage.len(),
-        )? {
-            return Err(HtAmpduTxError::AggregateFull);
-        }
-        let psdu_length = layout
-            .mpdu_length()
-            .checked_add(usize::from(layout.hardware_mic_length()))
-            .and_then(|length| length.checked_add(usize::from(TX_FCS_SIZE)))
-            .and_then(|length| u16::try_from(length).ok())
-            .filter(|length| *length != 0 && *length <= 0x3fff)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let policy = request.policy();
-        let empty_delimiters = policy
-            .rate()
-            .ampdu_empty_delimiters(psdu_length, policy.density())
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        self.as_mut()
-            .commit_referenced_frame(cookie, dma_storage, layout, empty_delimiters)
     }
 }

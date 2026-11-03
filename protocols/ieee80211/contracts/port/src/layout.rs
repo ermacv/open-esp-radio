@@ -1,14 +1,12 @@
 //! Checked placement of a MAC header, optional CCMP header and external body.
 
 use crate::owner::{FrameHeader, ResponseHeader};
-use crate::{ClassSubframe, Ieee80211Capabilities, Tid, TxBufferClass, TxFrame};
+use crate::{Ieee80211Capabilities, Tid, TxBufferClass, TxFrame};
 use oer_protocols_ieee80211_wire::{address::IndividualAddress, block_ack::BLOCK_ACK_REQUEST_LEN};
 
 /// Portable refusals before the backend receives a prepared source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LayoutError {
-    /// A fresh aggregate member's numbering disagrees with its builder's protection.
-    NumberingProtectionMismatch,
     /// The supplied allocation cannot hold the described frame or header.
     StorageTooShort,
     /// No room after the MAC header for a complete CCMP header.
@@ -120,23 +118,6 @@ impl MpduLayout {
             protection,
             kind,
             recipient,
-        )
-    }
-    /// Check a fresh subframe using the builder's protection and recipient.
-    pub fn subframe<C: TxBufferClass, K: Ieee80211Capabilities>(
-        frame: &ClassSubframe<C, K>,
-        body_len: usize,
-        protection: MpduProtection,
-        receiver: IndividualAddress,
-        tid: Tid,
-    ) -> Result<Self, LayoutError> {
-        Self::checked(
-            frame.frame().len().get(),
-            frame.frame().header().header_len(),
-            body_len,
-            protection,
-            MpduKind::Individual,
-            Some((receiver, tid)),
         )
     }
     fn checked(
@@ -409,165 +390,6 @@ impl MpduLayout {
         }
         Ok(self)
     }
-    fn initialize_subframe<C: TxBufferClass, K: Ieee80211Capabilities>(
-        self,
-        bytes: &mut [u8],
-        frame: &ClassSubframe<C, K>,
-        body: Option<&[u8]>,
-        receiver: IndividualAddress,
-        tid: Tid,
-    ) -> Result<Self, LayoutError> {
-        let (prefix, body_memory) = self.memory(bytes)?;
-        frame
-            .header(receiver, tid, self.protection)
-            .encode(prefix)?;
-        // The retained body view has exactly the tail length proved above.
-        if let Some(body) = body {
-            for (destination, source) in body_memory.iter_mut().zip(body) {
-                *destination = *source;
-            }
-        }
-        Ok(self)
-    }
-}
-
-/// Fresh aggregate owners have no independent protection.
-pub struct FreshSubframe<B, F, O> {
-    /// Caller-owned PN, or the explicit unprotected class.
-    pub numbering: crate::TxNumbering,
-    /// Fresh memory.
-    pub buffer: B,
-    /// The subframe's checked description.
-    pub frame: F,
-    /// Its external body.
-    pub body: Option<O>,
-}
-/// Checked fresh placement, or the original Sent MPDU.
-pub enum CheckedSubframe<B, N, F, O> {
-    /// Protection, recipient and TID were taken from the owned builder.
-    Fresh(LaidOut<FreshSubframe<B, F, O>>),
-    /// The original published MPDU.
-    Sent(N),
-}
-impl<B, N, F, O> CheckedSubframe<B, N, F, O> {
-    /// Recover every subframe owner.
-    pub fn into_source(self) -> crate::SubframeSource<B, N, F, O> {
-        match self {
-            Self::Fresh(fresh) => {
-                let FreshSubframe {
-                    numbering,
-                    buffer,
-                    frame,
-                    body,
-                } = fresh.into_source();
-                crate::SubframeSource::Fresh {
-                    numbering,
-                    buffer,
-                    frame,
-                    body,
-                }
-            }
-            Self::Sent(mpdu) => crate::SubframeSource::Sent(mpdu),
-        }
-    }
-}
-/// A builder and a subframe checked together. The private fields prevent
-/// moving a fresh layout proof to a differently protected builder.
-pub struct CheckedAggregate<A, B, N, F, O> {
-    aggregate: A,
-    source: CheckedSubframe<B, N, F, O>,
-}
-impl<A, B, N, F, O> CheckedAggregate<A, B, N, F, O> {
-    /// Transfer the builder and its checked subframe to its backend.
-    pub fn into_parts(self) -> (A, CheckedSubframe<B, N, F, O>) {
-        (self.aggregate, self.source)
-    }
-}
-impl<B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities, O: crate::TxBody>
-    CheckedSubframe<B, N, ClassSubframe<C, K>, O>
-{
-    /// Lay out a fresh subframe for an aggregate of `protection`, `receiver`
-    /// and `tid`: its header is written in its buffer. A Sent MPDU keeps the
-    /// layout it went out with. A refusal returns the source unchanged.
-    pub fn new(
-        source: crate::SubframeSource<B, N, ClassSubframe<C, K>, O>,
-        protection: MpduProtection,
-        receiver: IndividualAddress,
-        tid: Tid,
-    ) -> SubframeLayoutResult<B, N, ClassSubframe<C, K>, O> {
-        let (numbering, mut buffer, frame, body) = match source {
-            crate::SubframeSource::Sent(mpdu) => return Ok(Self::Sent(mpdu)),
-            crate::SubframeSource::Fresh {
-                numbering,
-                buffer,
-                frame,
-                body,
-            } => (numbering, buffer, frame, body),
-        };
-        let checked = if numbering.matches(protection) {
-            let body_bytes = body.as_ref().map(crate::TxBody::bytes);
-            MpduLayout::subframe(
-                &frame,
-                body_bytes.map_or(0, <[u8]>::len),
-                protection,
-                receiver,
-                tid,
-            )
-            .and_then(|layout| {
-                let bytes = buffer
-                    .bytes_mut()
-                    .map_err(|_| LayoutError::BufferUnavailable)?;
-                layout.initialize_subframe(bytes, &frame, body_bytes, receiver, tid)
-            })
-        } else {
-            Err(LayoutError::NumberingProtectionMismatch)
-        };
-        match checked {
-            Ok(layout) => Ok(Self::Fresh(LaidOut {
-                source: FreshSubframe {
-                    numbering,
-                    buffer,
-                    frame,
-                    body,
-                },
-                layout,
-            })),
-            Err(reason) => Err(LayoutRefused {
-                reason,
-                operation: crate::SubframeSource::Fresh {
-                    numbering,
-                    buffer,
-                    frame,
-                    body,
-                },
-            }),
-        }
-    }
-}
-impl<A, B: crate::TxBufferMemory, N, C: TxBufferClass, K: Ieee80211Capabilities, O: crate::TxBody>
-    CheckedAggregate<A, B, N, ClassSubframe<C, K>, O>
-{
-    /// Establish a fresh layout using exactly this builder's protection.
-    pub fn new<'id>(
-        aggregate: A,
-        source: crate::SubframeSource<B, N, ClassSubframe<C, K>, O>,
-    ) -> AggregateLayoutResult<A, B, N, ClassSubframe<C, K>, O>
-    where
-        A: crate::PhaseAggregate<'id>,
-    {
-        match CheckedSubframe::new(
-            source,
-            aggregate.protection(),
-            aggregate.receiver(),
-            aggregate.tid(),
-        ) {
-            Ok(source) => Ok(Self { aggregate, source }),
-            Err(LayoutRefused { reason, operation }) => Err(LayoutRefused {
-                reason,
-                operation: (aggregate, operation),
-            }),
-        }
-    }
 }
 
 /// Result of checking an owned single source.
@@ -575,9 +397,3 @@ pub type SourceLayoutResult<B, N, F, O, Key, Plan> = Result<
     CheckedTxSource<B, N, F, O, Key, Plan>,
     LayoutRefused<crate::TxSource<B, N, F, O, Key, Plan>>,
 >;
-/// Result of laying out one subframe for an aggregate.
-pub type SubframeLayoutResult<B, N, F, O> =
-    Result<CheckedSubframe<B, N, F, O>, LayoutRefused<crate::SubframeSource<B, N, F, O>>>;
-/// Result of checking a builder and its subframe together.
-pub type AggregateLayoutResult<A, B, N, F, O> =
-    Result<CheckedAggregate<A, B, N, F, O>, LayoutRefused<(A, crate::SubframeSource<B, N, F, O>)>>;

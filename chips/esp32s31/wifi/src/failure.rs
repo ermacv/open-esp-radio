@@ -53,15 +53,25 @@ pub enum BackendFault {
     Clock,
     Retune(RetuneError),
     Abandoned,
-    /// An aggregate's descriptor chain refused or quarantined it.
-    Aggregate(AggregateTxError),
-    /// Planning refused an aggregate its builder accepted.
-    AggregatePlan(AggregateRefusal),
+    /// The data arenas quarantined themselves.
+    Arena(ArenaFault),
     TuneNotRecorded,
     Setting(SettingFault),
     HardwareUnavailable,
 }
-/// Why an aggregate's descriptor chain refused or quarantined it.
+/// Why the data arenas quarantined themselves.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArenaFault {
+    /// A descriptor chain refused a lifecycle or range edge.
+    Chain(AggregateTxError),
+    /// The lower MAC core is poisoned.
+    Core(LowerMacFault),
+    /// An operation disagreed with an arena's phase.
+    State,
+    /// The publication watchdog expired and no timeout abort could begin.
+    Watchdog,
+}
+/// Why an A-MPDU descriptor chain refused or quarantined an edge.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AggregateTxError {
     NotFree(TxDmaState),
@@ -69,8 +79,6 @@ pub enum AggregateTxError {
     Stale,
     Completion(CompletionFault),
     FrameIndexOutOfRange { index: u8, count: u8 },
-    InvalidRetryMask { mask: u32, count: u8 },
-    RetainedFrameTooShort { index: u8, length: u16 },
     BackingUnavailable { index: u8 },
     SlotCountOverflow { count: usize },
     InvalidStorageGeometry { slots: usize },
@@ -132,18 +140,6 @@ pub enum ChainStorageError {
     State,
     /// The chain's owner no longer held its arenas.
     Retired,
-}
-/// Why an aggregate cannot go as one publication.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AggregateRefusal {
-    Empty,
-    TooManySubframes,
-    StartSpacing,
-    ShortSubframe,
-    GroupRecipient,
-    Length,
-    LegacyRate,
-    KeyUseMismatch,
 }
 /// Why a P1 setting of the port could not be published or read back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

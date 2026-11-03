@@ -173,11 +173,11 @@ impl<'view, C> CoreView<'view, C> {
         })
     }
 
-    /// The published aggregates' service, in every phase that holds a
-    /// core: an aggregate published before a gate closed, a configuration
-    /// barrier or a disable runs to its terminal as an MPDU does.
+    /// The core the data arenas publish and serve through, in every phase
+    /// that holds one: an arena published before a gate closed, a
+    /// configuration barrier or a disable runs to its end as an MPDU does.
     #[inline]
-    pub fn aggregates(self) -> Option<AggregateView<'view, C>> {
+    pub fn arena_core(self) -> Option<ArenaCore<'view, C>> {
         let owner = match self {
             Self::Vacant(_) => return None,
             Self::Disabled(view) => view.owner,
@@ -200,21 +200,21 @@ impl<'view, C> CoreView<'view, C> {
             Self::ConfigureClosed(view) => view.core.owner,
             Self::Failed(view) => view.owner,
         };
-        Some(AggregateView {
+        Some(ArenaCore {
             core: &mut owner.core,
         })
     }
 }
 
-/// The service of aggregates already published: no admission, no lifecycle
-/// transition.
+/// The core lent to one step of the data arenas
+/// ([`ArenaPort::new`](crate::lower_mac::arena::ArenaPort::new)): no
+/// admission of its own, no lifecycle transition.
 #[must_use]
-pub struct AggregateView<'view, C> {
-    core: &'view mut C,
+pub struct ArenaCore<'view, C> {
+    pub(in crate::lower_mac) core: &'view mut C,
 }
 
 impl<
-    'view,
     'core,
     'slot,
     P: WifiTxPowerProfile,
@@ -224,75 +224,9 @@ impl<
     const BUFFER_SIZE: usize,
     Path: PoolPath,
     const TICKETS: usize,
-> AggregateView<'view, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+> ArenaCore<'_, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
 {
-    /// [`LowerMacCore::service_ampdu`].
-    ///
-    /// # Errors
-    ///
-    /// The step failed; [`PublishedAmpdu::into_progress`] retains the
-    /// publication in quarantine.
-    #[inline]
-    pub fn service<H: HtAmpduHardware, L: PlacedBacking, const SLOTS: usize>(
-        &mut self,
-        hardware: &mut H,
-        published: &mut PublishedAmpdu<'core, 'slot, L, SLOTS, Path>,
-        wake: WifiTxWake,
-        returned: impl FnMut(L),
-    ) -> Result<AmpduServed, crate::mac::tx::ampdu::HtAmpduTxError> {
-        self.core.service_ampdu(hardware, published, wake, returned)
-    }
-
-    /// [`LowerMacCore::complete_ampdu`].
-    #[allow(
-        clippy::result_large_err,
-        reason = "a poisoned core retains the full aggregate and key right"
-    )]
-    #[inline]
-    pub fn complete<
-        H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
-        L,
-        const SLOTS: usize,
-    >(
-        &mut self,
-        hardware: &mut H,
-        completed: ampdu::CompletedAmpdu<'core, 'slot, L, SLOTS, Path>,
-        sink: &mut K,
-    ) -> Result<
-        (
-            ampdu::Esp32s31AmpduOwner<'slot, L, SLOTS>,
-            [oer_portable_time::Instant; SLOTS],
-        ),
-        ampdu::AmpduFault<'core, 'slot, L, SLOTS, Path>,
-    > {
-        self.core.complete_ampdu(hardware, completed, sink)
-    }
-
-    /// [`LowerMacCore::complete_expired_ampdu`].
-    #[allow(
-        clippy::result_large_err,
-        reason = "a poisoned core retains every unpublished owner"
-    )]
-    #[inline]
-    pub fn complete_expired<
-        H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
-        L,
-        const SLOTS: usize,
-    >(
-        &mut self,
-        hardware: &mut H,
-        expired: ampdu::ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>,
-        sink: &mut K,
-    ) -> Result<
-        Esp32s31AmpduBuffer<'slot, L, SLOTS>,
-        ampdu::ExpiredAmpdu<'core, 'slot, L, SLOTS, Path>,
-    > {
-        self.core.complete_expired_ampdu(hardware, expired, sink)
-    }
-
-    /// Whether an abort, an MPDU's or an aggregate's, forces CCA now.
+    /// Whether an abort, an MPDU's or an arena's, forces CCA now.
     #[inline]
     pub fn abort_settling(&self) -> bool {
         self.core.abort_settling()

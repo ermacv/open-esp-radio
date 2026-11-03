@@ -1,72 +1,44 @@
-//! One-publication single/A-MPDU outcomes and actual returned-owner identity.
+//! One-publication single-MPDU outcomes and actual returned-owner identity.
 //! ACK uses a reachable peer; NoResponse uses an absent peer. Collisions,
 //! arbitration denial and lost hardware completions require model injection.
 
 use super::{Environment, Execution, ModelOnlyReason, MpduState, Report};
 use core::num::NonZeroU16;
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, AggregateOutcome, IndeterminateCause, PhyRate, SingleEnd, SingleOutcome,
-    SingleResponse, TxOutcome,
+    IndeterminateCause, PhyRate, SingleEnd, SingleOutcome, SingleResponse, TxOutcome,
 };
-use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
-/// Form of the admitted operation and its terminal.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Form {
-    /// One MPDU requesting an immediate ACK.
-    Single,
-    /// One-member aggregate requesting a BlockAck.
-    Aggregate,
-}
-
-/// Requested observation for one publication, without a retry plan extension.
+/// Requested observation for one publication of an individual MPDU,
+/// without a retry plan extension.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Case {
-    /// An individual MPDU receives an ACK from a real peer.
+    /// The MPDU receives an ACK from a real peer.
     Ack,
-    /// The one-member aggregate receives a BlockAck for its MPDU.
-    BlockAck,
     /// The absent receiver sends no response.
-    NoResponse(Form),
+    NoResponse,
     /// The model injects a collision/contention-limit completion.
-    Collision(Form),
+    Collision,
     /// The model injects arbitration denial before air transmission.
-    AirDenied(Form),
+    AirDenied,
     /// The model injects a lost hardware completion.
-    HardwareTimeout(Form),
+    HardwareTimeout,
 }
 impl Case {
-    /// Every supported form/outcome pair.
-    pub const ALL: [Self; 10] = [
+    /// Every supported outcome.
+    pub const ALL: [Self; 5] = [
         Self::Ack,
-        Self::BlockAck,
-        Self::NoResponse(Form::Single),
-        Self::NoResponse(Form::Aggregate),
-        Self::Collision(Form::Single),
-        Self::Collision(Form::Aggregate),
-        Self::AirDenied(Form::Single),
-        Self::AirDenied(Form::Aggregate),
-        Self::HardwareTimeout(Form::Single),
-        Self::HardwareTimeout(Form::Aggregate),
+        Self::NoResponse,
+        Self::Collision,
+        Self::AirDenied,
+        Self::HardwareTimeout,
     ];
-    /// The form the fixture must submit and receive back.
-    pub const fn form(self) -> Form {
-        match self {
-            Self::Ack => Form::Single,
-            Self::BlockAck => Form::Aggregate,
-            Self::NoResponse(form)
-            | Self::Collision(form)
-            | Self::AirDenied(form)
-            | Self::HardwareTimeout(form) => form,
-        }
-    }
     /// Whether real air can supply this completion deterministically.
     pub const fn execution(self) -> Execution {
         match self {
-            Self::Collision(_) => Execution::ModelOnly(ModelOnlyReason::Collision),
-            Self::AirDenied(_) => Execution::ModelOnly(ModelOnlyReason::AirDenied),
-            Self::HardwareTimeout(_) => Execution::ModelOnly(ModelOnlyReason::HardwareTimeout),
-            _ => Execution::Hardware,
+            Self::Collision => Execution::ModelOnly(ModelOnlyReason::Collision),
+            Self::AirDenied => Execution::ModelOnly(ModelOnlyReason::AirDenied),
+            Self::HardwareTimeout => Execution::ModelOnly(ModelOnlyReason::HardwareTimeout),
+            Self::Ack | Self::NoResponse => Execution::Hardware,
         }
     }
 }
@@ -79,15 +51,8 @@ pub struct Identity {
     /// Buffer slot, within the fixture's single small-buffer pool.
     pub buffer: u8,
 }
-/// Actual form-specific terminal, retaining the backend's own evidence types.
-pub enum Outcome<A, B, D> {
-    /// Terminal for the submitted individual MPDU.
-    Single(SingleOutcome<A, D>),
-    /// Terminal for the submitted one-member aggregate.
-    Aggregate(AggregateOutcome<B, D>),
-}
 /// Actual observations of a single-publication case.
-pub struct Trace<A, B, D> {
+pub struct Trace<A, D> {
     /// Resource identities captured before submission.
     pub admitted: Identity,
     /// Identities read from the returned owners, before renewal.
@@ -96,26 +61,23 @@ pub struct Trace<A, B, D> {
     pub state: MpduState,
     /// Rate actually selected for the admitted publication.
     pub rate: PhyRate,
-    /// Sequence number encoded in the admitted MPDU.
-    pub sequence: SequenceNumber,
     /// Publications captured by the fixture, excluding denied air access.
     pub publications: usize,
-    /// Actual terminal delivered by the port.
-    pub outcome: Outcome<A, B, D>,
+    /// Actual terminal delivered by the port, with the backend's own
+    /// evidence types.
+    pub outcome: SingleOutcome<A, D>,
 }
 /// Backend-specific admission, real air/fault stimulus, and owner observation.
 pub trait Harness {
     /// Evidence carried by an ACK terminal.
     type Ack;
-    /// Evidence carried by a BlockAck terminal.
-    type BlockAck;
     /// Evidence carried by an air-denied terminal.
     type AirDenied;
     /// Submit one admitted operation, observe its real terminal and returned owners.
     fn exercise(
         &mut self,
         case: Case,
-    ) -> impl core::future::Future<Output = Trace<Self::Ack, Self::BlockAck, Self::AirDenied>>;
+    ) -> impl core::future::Future<Output = Trace<Self::Ack, Self::AirDenied>>;
 }
 /// A single-publication contract violation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -124,7 +86,7 @@ pub enum Violation {
     Owners,
     /// The returned payload was not the encoded Sent MPDU.
     State,
-    /// Terminal form or outcome differs from the requested observation.
+    /// The outcome differs from the requested observation.
     Outcome,
     /// Publication count differs from the admitted one-publication case.
     Publication,
@@ -145,14 +107,14 @@ pub async fn check(
     Ok(report)
 }
 /// Check an actual terminal's shape, owner identity, rate and publication count.
-pub fn verify<A, B, D>(case: Case, trace: Trace<A, B, D>) -> Result<(), Violation> {
+pub fn verify<A, D>(case: Case, trace: Trace<A, D>) -> Result<(), Violation> {
     if trace.admitted != trace.returned {
         return Err(Violation::Owners);
     }
     if trace.state != MpduState::Sent {
         return Err(Violation::State);
     }
-    if trace.publications != usize::from(!matches!(case, Case::AirDenied(_))) {
+    if trace.publications != usize::from(!matches!(case, Case::AirDenied)) {
         return Err(Violation::Publication);
     }
     let correct_air = |air: oer_protocols_ieee80211_contracts_port::Air| {
@@ -161,47 +123,17 @@ pub fn verify<A, B, D>(case: Case, trace: Trace<A, B, D>) -> Result<(), Violatio
     let correct = match (case, trace.outcome) {
         (
             Case::Ack,
-            Outcome::Single(TxOutcome::Ended(SingleEnd::Delivered {
+            TxOutcome::Ended(SingleEnd::Delivered {
                 air,
                 response: SingleResponse::Ack(_),
-            })),
-        ) => correct_air(air),
-        (
-            Case::BlockAck,
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered { air, report, .. })),
-        ) => correct_air(air) && report.start_sequence == trace.sequence && report.bitmap == 1,
-        (
-            Case::NoResponse(Form::Single),
-            Outcome::Single(TxOutcome::Ended(SingleEnd::AckTimeout(air))),
-        ) => correct_air(air),
-        (
-            Case::NoResponse(Form::Aggregate),
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::AckTimeout(air))),
-        ) => correct_air(air),
-        (
-            Case::Collision(Form::Single),
-            Outcome::Single(TxOutcome::Ended(SingleEnd::ContentionLimit(None))),
-        ) => true,
-        (
-            Case::Collision(Form::Aggregate),
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::ContentionLimit(None))),
-        ) => true,
-        (
-            Case::AirDenied(Form::Single),
-            Outcome::Single(TxOutcome::Ended(SingleEnd::AirDenied { air: None, .. })),
-        ) => true,
-        (
-            Case::AirDenied(Form::Aggregate),
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::AirDenied { air: None, .. })),
-        ) => true,
-        (
-            Case::HardwareTimeout(Form::Single),
-            Outcome::Single(TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)),
-        ) => true,
-        (
-            Case::HardwareTimeout(Form::Aggregate),
-            Outcome::Aggregate(TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)),
-        ) => true,
+            }),
+        )
+        | (Case::NoResponse, TxOutcome::Ended(SingleEnd::AckTimeout(air))) => correct_air(air),
+        (Case::Collision, TxOutcome::Ended(SingleEnd::ContentionLimit(None)))
+        | (Case::AirDenied, TxOutcome::Ended(SingleEnd::AirDenied { air: None, .. }))
+        | (Case::HardwareTimeout, TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)) => {
+            true
+        }
         _ => false,
     };
     if correct {

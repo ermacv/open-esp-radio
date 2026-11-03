@@ -3540,20 +3540,22 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         }
     }
 
-    /// A data terminal settled `marks` of a TID's sequence numbers: the
-    /// TID's transmit agreement moves its window over them and asks the
-    /// access point to move its own when it passed a dropped one.
-    pub fn tx_block_ack_settled(&mut self, marks: crate::data::BlockAckMarks) {
-        let address = self.config.address.get();
+    /// The data plane dropped a frame of `tid` under its transmit agreement
+    /// and moved its window to `head`: the access point is owed a
+    /// BlockAckReq moving its own window there.
+    pub fn tx_block_ack_request(
+        &mut self,
+        tid: WmmUserPriority,
+        head: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
+    ) {
         let State::Connected(connected) = &mut self.state else {
             return;
         };
         let Some(connected) = connected.as_mut() else {
             return;
         };
-        let bssid = connected.bssid.get();
         if let Some(tx) = tx_agreements(&mut self.config.tx_block_ack, connected) {
-            tx.settle(marks, bssid, address);
+            tx.request(tid.value(), head);
         }
     }
 
@@ -3580,30 +3582,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             .tx_block_ack
             .as_ref()
             .map(StaTxBlockAck::retry_members)
-    }
-
-    /// Where `tid` may aggregate now at `rate`: its operational transmit
-    /// agreement's window, at most `subframes`, the lower of the access
-    /// point's Maximum A-MPDU Length and `max_length`, and the rate's PPDU
-    /// time limit.
-    pub fn tx_aggregate_window(
-        &self,
-        tid: WmmUserPriority,
-        subframes: usize,
-        max_length: u32,
-        rate: oer_protocols_ieee80211_contracts_port::PhyRate,
-    ) -> Option<crate::data::AggregateWindow> {
-        let (_, recipient_length) = self.tx_aggregate_limits()?;
-        let agreement = self.tx_block_ack(tid)?;
-        Some(crate::data::AggregateWindow {
-            start: agreement.starting_sequence,
-            size: agreement.window,
-            limit: crate::data::PpduLimit::new(
-                subframes,
-                max_length.min(recipient_length),
-                Some(rate),
-            ),
-        })
     }
 
     /// The operational transmit agreement of `tid` with the access point.

@@ -57,11 +57,11 @@ use oer_protocols_radio_port::PoolPath;
 /// What the S31 observed of an arena's ACK or BlockAck: its SNR, when the
 /// completion carried a sample.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ArenaResponse {
+pub struct BlockAckAnswer {
     pub snr_db: Option<i8>,
 }
 
-impl BlockAckSnr for ArenaResponse {
+impl BlockAckSnr for BlockAckAnswer {
     fn snr_sample(&self) -> SnrSample {
         match self.snr_db {
             Some(snr_db) => SnrSample::Measured(snr_db),
@@ -159,7 +159,8 @@ pub type ArenaParts<'core, 'slot, L, Path, const SLOTS: usize> = (
 impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     Esp32s31TxArena<'core, 'slot, L, Path, SLOTS>
 {
-    const CAPACITY: u8 = {
+    /// The slots of each arena.
+    pub const CAPACITY: u8 = {
         if SLOTS < 2 || SLOTS > ARENA_FRAMES as usize {
             panic!("an arena chain holds 2 to ARENA_FRAMES frames");
         }
@@ -279,11 +280,20 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
             .is_some_and(|chain| matches!(chain.admission, Some(TxAdmission::Protected(_))))
     }
 
+    /// Whether an arena holds a key right: a frame it encrypted is on the
+    /// air, awaits settlement or is retained. A key's removal waits for it.
+    pub fn holds_key_right(&self) -> bool {
+        self.chains
+            .iter()
+            .any(|chain| matches!(chain.admission, Some(TxAdmission::Protected(_))))
+    }
+
     fn quarantine(&mut self, fault: ArenaFault) -> ArenaFault {
         *self.fault.get_or_insert(fault)
     }
 
-    fn on_air(&self) -> Option<ArenaId> {
+    /// The arena on the air: published and not yet completed.
+    pub fn on_air(&self) -> Option<ArenaId> {
         [ArenaId::First, ArenaId::Second].into_iter().find(|id| {
             self.chains
                 .get(id.index())
@@ -291,7 +301,39 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
         })
     }
 
-    fn push(
+    /// Whether the arena on the air waits for its timeout abort to settle.
+    pub fn settling(&self) -> bool {
+        self.chains
+            .iter()
+            .any(|chain| matches!(&chain.phase, Phase::OnAir(on_air) if on_air.settling))
+    }
+
+    /// The published arena's hardware deadline: its watchdog, or the end of
+    /// its abort settle.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.chains.iter().find_map(|chain| match &chain.phase {
+            Phase::OnAir(on_air) => Some(on_air.deadline),
+            Phase::Idle | Phase::Completed { .. } => None,
+        })
+    }
+
+    /// The frames `arena` holds.
+    pub fn len(&self, arena: ArenaId) -> u8 {
+        self.chains.get(arena.index()).map_or(0, |chain| chain.len)
+    }
+
+    /// Claim the two idle arenas: `true` exactly once.
+    pub fn claim(&mut self) -> bool {
+        !core::mem::replace(&mut self.claimed, true)
+    }
+
+    /// Add a frame at the next position of `arena`, as [`TxArena::push`]
+    /// does: the arenas alone take it.
+    ///
+    /// # Errors
+    ///
+    /// The memory and why the frame was refused.
+    pub fn push(
         &mut self,
         arena: ArenaId,
         memory: L,
@@ -361,7 +403,8 @@ pub struct ArenaPort<
     const SLOTS: usize,
 > {
     pub arenas: &'a mut Esp32s31TxArena<'core, 'slot, L, Path, SLOTS>,
-    pub core: &'a mut LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+    pub(in crate::lower_mac) core:
+        &'a mut LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
     pub hardware: &'a mut H,
     /// The free EDCA queues by hardware index; a publication holds its
     /// category's until its completion.
@@ -376,15 +419,65 @@ pub struct ArenaPort<
     pub caps: PhantomData<fn() -> K>,
 }
 
+impl<
+    'a,
+    'core,
+    'slot,
+    P,
+    E,
+    T,
+    C: RadioCoexPriorities,
+    H,
+    S,
+    O,
+    L,
+    K,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+    const SLOTS: usize,
+> ArenaPort<'a, 'core, 'slot, P, E, T, C, H, S, O, L, K, BUFFER_SIZE, Path, TICKETS, SLOTS>
+{
+    /// One step's view of `arenas` over the core a phase lends them
+    /// ([`CoreView::arena_core`](super::CoreView::arena_core)), for the
+    /// interface `role` and its installed `pairwise` key.
+    #[allow(clippy::too_many_arguments, reason = "every part the arenas borrow")]
+    pub fn new(
+        arenas: &'a mut Esp32s31TxArena<'core, 'slot, L, Path, SLOTS>,
+        core: super::ArenaCore<
+            'a,
+            LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
+        >,
+        hardware: &'a mut H,
+        queues: &'a mut [Option<FreeQueue<'core, Path>>; LOWER_MAC_TX_QUEUES],
+        role: VifRole,
+        pairwise: Option<&'a KeyHandle<'core, Path>>,
+        sink: &'a mut S,
+        observations: &'a mut O,
+    ) -> Self {
+        Self {
+            arenas,
+            core: core.core,
+            hardware,
+            queues,
+            role,
+            pairwise,
+            sink,
+            observations,
+            caps: PhantomData,
+        }
+    }
+}
+
 /// The end of a published chain's one hardware edge.
-type Step = Result<Option<AttemptEnd<ArenaResponse, Infallible>>, ArenaFault>;
+type Step = Result<Option<AttemptEnd<BlockAckAnswer, Infallible>>, ArenaFault>;
 
 /// An A-MPDU completion's end at `rate`.
 fn aggregate_end(
     completion: HtAmpduTxCompletion,
     air: Air,
-) -> AttemptEnd<ArenaResponse, Infallible> {
-    let response = ArenaResponse {
+) -> AttemptEnd<BlockAckAnswer, Infallible> {
+    let response = BlockAckAnswer {
         snr_db: completion.tx.ack_snr_sample(),
     };
     if let Some(block_ack) = completion.valid_block_ack() {
@@ -398,11 +491,11 @@ fn aggregate_end(
 }
 
 /// A single MPDU's completion end.
-fn single_end(completion: TxCompletion, air: Air) -> AttemptEnd<ArenaResponse, Infallible> {
+fn single_end(completion: TxCompletion, air: Air) -> AttemptEnd<BlockAckAnswer, Infallible> {
     match completion.tx_status() {
         TxStatus::Success => AttemptEnd::Acked {
             air,
-            response: ArenaResponse {
+            response: BlockAckAnswer {
                 snr_db: completion.ack_snr_sample(),
             },
         },
@@ -411,7 +504,7 @@ fn single_end(completion: TxCompletion, air: Air) -> AttemptEnd<ArenaResponse, I
 }
 
 /// The end of a completion without its solicited response.
-fn lost_end(status: TxStatus, air: Air) -> AttemptEnd<ArenaResponse, Infallible> {
+fn lost_end(status: TxStatus, air: Air) -> AttemptEnd<BlockAckAnswer, Infallible> {
     match status {
         TxStatus::Success | TxStatus::AckTimeout => AttemptEnd::NoResponse(air),
         // The protection exchange drew no CTS: no frame went out.
@@ -517,12 +610,12 @@ where
     type Caps = K;
     type Memory = L;
     type Events = WifiTxWake;
-    type Response = ArenaResponse;
+    type Response = BlockAckAnswer;
     type Denial = Infallible;
     type Fault = ArenaFault;
 
     fn claim_arenas(&mut self) -> bool {
-        !core::mem::replace(&mut self.arenas.claimed, true)
+        self.arenas.claim()
     }
 
     fn capacity(&self) -> u8 {
@@ -539,10 +632,7 @@ where
     }
 
     fn len(&self, arena: ArenaId) -> u8 {
-        self.arenas
-            .chains
-            .get(arena.index())
-            .map_or(0, |chain| chain.len)
+        self.arenas.len(arena)
     }
 
     fn on_air(&self) -> Option<ArenaId> {
@@ -740,7 +830,7 @@ where
         &mut self,
         wake: WifiTxWake,
         now: Instant,
-    ) -> Result<Option<Completion<ArenaResponse, Infallible>>, ArenaFault> {
+    ) -> Result<Option<Completion<BlockAckAnswer, Infallible>>, ArenaFault> {
         if let Some(fault) = self.arenas.fault {
             return Err(fault);
         }
@@ -863,13 +953,7 @@ where
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.arenas
-            .chains
-            .iter()
-            .find_map(|chain| match &chain.phase {
-                Phase::OnAir(on_air) => Some(on_air.deadline),
-                Phase::Idle | Phase::Completed { .. } => None,
-            })
+        self.arenas.deadline()
     }
 }
 

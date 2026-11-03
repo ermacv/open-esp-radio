@@ -113,7 +113,7 @@ impl Report {
     }
 }
 
-/// Single and aggregate attempt outcomes shared by backend fixtures.
+/// Single-MPDU attempt outcomes shared by backend fixtures.
 pub mod outcomes;
 
 /// Result supplied to a publication already held when its barrier arrives.

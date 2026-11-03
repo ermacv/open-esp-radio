@@ -1,8 +1,8 @@
-error[E0599]: the method `push_backing` exists for mutable reference `&mut RetainedAmpduDma<'_, PinnedDmaTxRadioLease<'static, 64, 0, 0>, 2, 0>`, but its trait bounds were not satisfied
+error[E0599]: the method `push_written` exists for mutable reference `&mut RetainedAmpduDma<'_, PinnedDmaTxRadioLease<'static, 64, 0, 0>, 2, 0>`, but its trait bounds were not satisfied
   --> tests/ui/ampdu_takes_only_placed_backings.rs:21:19
    |
-21 |       let _ = owner.push_backing(lease); // ui-error: E0599
-   |                     ^^^^^^^^^^^^
+21 |       let _ = owner.push_written(lease, &mut (), |(), _| Err::<(WrittenBuffer, ()), ()>(()), |(), ()| Ok(())); // ui-error: E0599
+   |                     ^^^^^^^^^^^^ method cannot be called due to unsatisfied trait bounds
    |
   ::: $WORKSPACE/portable/memory/src/pinned_tx.rs
    |

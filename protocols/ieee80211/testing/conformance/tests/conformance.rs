@@ -9,13 +9,13 @@ use core::{
     task::{Context, Poll, Waker},
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, Air, IndeterminateCause, PhyRate, SingleEnd, SingleResponse, TxOutcome,
+    Air, IndeterminateCause, PhyRate, SingleEnd, SingleResponse, TxOutcome,
 };
 use oer_protocols_ieee80211_testing_conformance::{
     self as conformance, Environment, MpduState,
-    outcomes::{self, Case, Form, Identity, Outcome, Trace},
+    outcomes::{self, Case, Identity, Trace},
 };
-use oer_protocols_ieee80211_wire::{phy::LegacyRate, sequence::SequenceNumber};
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 #[test]
 fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
@@ -24,16 +24,15 @@ fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
         ends: &[End::Expired(1)][..],
         publications: 0,
         expired_msdus: 1,
-        admitted: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
-        returned: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
-        owners: [1, 2, 2],
-        returned_owners: [1, 2, 2],
+        admitted: oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99),
+        returned: oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99),
+        owners: [1, 2],
+        returned_owners: [1, 2],
         backend_bars: 0,
-        core_bar: None,
     };
     assert_eq!(msdu_age::verify(Case::BeforePublication, good()), Ok(()));
     let mut trace = good();
-    trace.returned[0] = oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(100);
+    trace.returned = oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(100);
     assert_eq!(
         msdu_age::verify(Case::BeforePublication, trace),
         Err(Violation::Age)
@@ -51,54 +50,12 @@ fn age_verification_rejects_reset_age_lost_owners_and_backend_bars() {
         Err(Violation::Publication)
     );
     let trace = Trace {
-        ends: &[End::Delivered, End::Expired(1), End::Expired(1)][..],
-        publications: 1,
-        expired_msdus: 2,
+        ends: &[End::Delivered][..],
         ..good()
     };
     assert_eq!(
-        msdu_age::verify(Case::Reformation, trace),
-        Err(Violation::Bar)
-    );
-}
-
-#[test]
-fn delivery_before_expiry_requires_the_bar_to_follow_the_new_head() {
-    use conformance::msdu_age::{self, Case, CoreBar, End, Trace, Violation};
-    let trace = |bar_start: u16| Trace {
-        ends: [End::Delivered, End::Expired(1)],
-        publications: 1,
-        expired_msdus: 1,
-        admitted: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
-        returned: [oer_protocols_ieee80211_contracts_port::Ieee80211Instant::from_micros(99); 2],
-        owners: [1, 2, 3],
-        returned_owners: [1, 2, 3],
-        backend_bars: 0,
-        core_bar: Some(CoreBar {
-            head: SequenceNumber::new(7).unwrap(),
-            tid: 0,
-            addresses: [[2, 0, 0, 0, 0, 2], [2, 0, 0, 0, 0, 1]],
-            frame: oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-                [2, 0, 0, 0, 0, 2],
-                [2, 0, 0, 0, 0, 1],
-                0,
-                SequenceNumber::new(bar_start).unwrap(),
-            ),
-        }),
-    };
-    assert_eq!(
-        msdu_age::verify(Case::DeliveryBeforeExpiry, trace(8)),
-        Ok(())
-    );
-    assert_eq!(
-        msdu_age::verify(Case::DeliveryBeforeExpiry, trace(7)),
-        Err(Violation::Bar)
-    );
-    let mut missing = trace(8);
-    missing.core_bar = None;
-    assert_eq!(
-        msdu_age::verify(Case::DeliveryBeforeExpiry, missing),
-        Err(Violation::Bar)
+        msdu_age::verify(Case::BeforePublication, trace),
+        Err(Violation::Terminal)
     );
 }
 
@@ -112,52 +69,23 @@ fn ready<T>(future: impl Future<Output = T>) -> T {
         Poll::Pending => panic!("the array fixture completes without I/O"),
     }
 }
-fn trace(case: Case) -> Trace<(), (), ()> {
+fn trace(case: Case) -> Trace<(), ()> {
     let air = Air {
         rate: PhyRate::Legacy(LegacyRate::Ofdm6M),
         transmissions: NonZeroU16::MIN,
     };
     let outcome = match case {
-        Case::Ack => Outcome::Single(TxOutcome::Ended(SingleEnd::Delivered {
+        Case::Ack => TxOutcome::Ended(SingleEnd::Delivered {
             air,
             response: SingleResponse::Ack(()),
-        })),
-        Case::BlockAck => Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
-            air,
-            report: oer_protocols_ieee80211_contracts_port::BlockAckReport::new(
-                SequenceNumber::ZERO,
-                1,
-            ),
-            ack: (),
-        })),
-        Case::NoResponse(Form::Single) => {
-            Outcome::Single(TxOutcome::Ended(SingleEnd::AckTimeout(air)))
-        }
-        Case::NoResponse(Form::Aggregate) => {
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::AckTimeout(air)))
-        }
-        Case::Collision(Form::Single) => {
-            Outcome::Single(TxOutcome::Ended(SingleEnd::ContentionLimit(None)))
-        }
-        Case::Collision(Form::Aggregate) => {
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::ContentionLimit(None)))
-        }
-        Case::AirDenied(Form::Single) => Outcome::Single(TxOutcome::Ended(SingleEnd::AirDenied {
+        }),
+        Case::NoResponse => TxOutcome::Ended(SingleEnd::AckTimeout(air)),
+        Case::Collision => TxOutcome::Ended(SingleEnd::ContentionLimit(None)),
+        Case::AirDenied => TxOutcome::Ended(SingleEnd::AirDenied {
             air: None,
             denial: (),
-        })),
-        Case::AirDenied(Form::Aggregate) => {
-            Outcome::Aggregate(TxOutcome::Ended(AggregateEnd::AirDenied {
-                air: None,
-                denial: (),
-            }))
-        }
-        Case::HardwareTimeout(Form::Single) => Outcome::Single(TxOutcome::Indeterminate(
-            IndeterminateCause::HardwareTimeout,
-        )),
-        Case::HardwareTimeout(Form::Aggregate) => Outcome::Aggregate(TxOutcome::Indeterminate(
-            IndeterminateCause::HardwareTimeout,
-        )),
+        }),
+        Case::HardwareTimeout => TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
     };
     Trace {
         admitted: Identity {
@@ -170,8 +98,7 @@ fn trace(case: Case) -> Trace<(), (), ()> {
         },
         state: MpduState::Sent,
         rate: air.rate,
-        sequence: SequenceNumber::ZERO,
-        publications: usize::from(!matches!(case, Case::AirDenied(_))),
+        publications: usize::from(!matches!(case, Case::AirDenied)),
         outcome,
     }
 }
@@ -181,9 +108,8 @@ struct ArrayFixture {
 }
 impl outcomes::Harness for ArrayFixture {
     type Ack = ();
-    type BlockAck = ();
     type AirDenied = ();
-    async fn exercise(&mut self, case: Case) -> Trace<(), (), ()> {
+    async fn exercise(&mut self, case: Case) -> Trace<(), ()> {
         self.calls
             .push(case)
             .expect("each declared case is exercised once");
@@ -195,15 +121,7 @@ fn hardware_selection_reports_and_excludes_unproducible_outcomes() {
     let mut fixture = ArrayFixture::default();
     let report = ready(outcomes::check(&mut fixture, Environment::Hardware))
         .expect("the selected hardware observations satisfy the shared verifier");
-    assert_eq!(
-        fixture.calls.as_slice(),
-        [
-            Case::Ack,
-            Case::BlockAck,
-            Case::NoResponse(Form::Single),
-            Case::NoResponse(Form::Aggregate)
-        ]
-    );
+    assert_eq!(fixture.calls.as_slice(), [Case::Ack, Case::NoResponse]);
     assert_eq!(usize::from(report.passed), fixture.calls.len());
     assert_eq!(
         usize::from(report.model_only),
@@ -215,16 +133,14 @@ fn model_selection_exercises_injected_faults_instead_of_silently_excluding_them(
     let mut fixture = ArrayFixture::default();
     let report = ready(outcomes::check(&mut fixture, Environment::Model))
         .expect("the selected model observations satisfy the shared verifier");
-    for form in [Form::Single, Form::Aggregate] {
-        assert!(fixture.calls.contains(&Case::Collision(form)));
-        assert!(fixture.calls.contains(&Case::AirDenied(form)));
-        assert!(fixture.calls.contains(&Case::HardwareTimeout(form)));
-    }
+    assert!(fixture.calls.contains(&Case::Collision));
+    assert!(fixture.calls.contains(&Case::AirDenied));
+    assert!(fixture.calls.contains(&Case::HardwareTimeout));
     assert_eq!(usize::from(report.passed), fixture.calls.len());
     assert_eq!(report.model_only, 0);
 }
 #[test]
-fn outcome_verification_rejects_wrong_owners_state_form_and_extra_publications() {
+fn outcome_verification_rejects_wrong_owners_state_outcome_and_extra_publications() {
     let mut wrong = trace(Case::Ack);
     wrong.returned.buffer = 4;
     assert_eq!(
@@ -238,7 +154,7 @@ fn outcome_verification_rejects_wrong_owners_state_form_and_extra_publications()
         Err(outcomes::Violation::State)
     );
     assert_eq!(
-        outcomes::verify(Case::BlockAck, trace(Case::Ack)),
+        outcomes::verify(Case::NoResponse, trace(Case::Ack)),
         Err(outcomes::Violation::Outcome)
     );
     let mut wrong = trace(Case::Ack);

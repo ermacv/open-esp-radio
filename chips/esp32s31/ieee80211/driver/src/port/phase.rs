@@ -323,15 +323,6 @@ where
         agreement.slot
     }
 }
-/// The access category of an aggregate's TID: the user priority's
-/// (IEEE Std 802.11-2020, Table 10-1); best effort for a TID beyond them.
-fn aggregate_category(tid: Tid) -> oer_protocols_ieee80211_wire::qos::WmmAccessCategory {
-    oer_protocols_ieee80211_wire::qos::WmmUserPriority::new(tid.get()).map_or(
-        oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
-        |priority| priority.access_category(),
-    )
-}
-
 impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, R>
     AmpduPhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, R>
 where
@@ -340,88 +331,6 @@ where
 {
     fn ampdu_capabilities(&self) -> AmpduCapabilities {
         esp32s31_ampdu_capabilities(TX_AMPDU_SUBFRAMES)
-    }
-    fn aggregate<'k>(
-        &mut self,
-        receiver: IndividualAddress,
-        tid: Tid,
-        rate: AmpduRate<'p, 'id, Self::Caps>,
-        protection: InterfaceProtection<'k, 'p, 'id, Self>,
-    ) -> InterfaceAggregate<'k, 'p, 'id, Self, EmptyAggregate>
-    where
-        'id: 'k,
-    {
-        let key = match &protection {
-            TxProtection::Open => None,
-            TxProtection::Ccmp(key) => Some(R::tx_identity(key).owned),
-        };
-        // The builder checks its subframes under the TXOP limit the body last
-        // published for this role; the driver plans under the same value.
-        let vif = if R::ROLE == VifRole::Station { 0 } else { 1 };
-        let txop_limit_units_32_us = match self.held.edca.get(vif) {
-            Some(table) => {
-                table
-                    .access_category(aggregate_category(tid))
-                    .wmm
-                    .txop_limit_units_32_us
-            }
-            // The body alone publishes the table and is not publishing it now.
-            None => {
-                self.held.storage.poison(Fault::Capacity);
-                0
-            }
-        };
-        aggregate::Aggregate::new(aggregate::AggregateSetup {
-            shared: self.held.storage,
-            loan: self.loan,
-            receiver,
-            tid,
-            rate,
-            key,
-            role: R::ROLE,
-            txop_limit_units_32_us,
-        })
-    }
-    fn submit_ampdu<'k>(
-        &mut self,
-        attempt: InterfaceAggregateSubmission<'k, 'p, 'id, Self>,
-    ) -> Result<(), radio::Poisoned<Fault>>
-    where
-        'id: 'k,
-    {
-        let mut attempt = attempt.into_parts(&self.loan);
-        // Admission happens on this call, before the driver's queue is serviced;
-        // a returned subframe keeps its first admission.
-        let oldest = attempt.operation.execute().admit(self.held.timer.now());
-        // It stays open as its category's last submission, after the one
-        // before it.
-        let category = aggregate_category(attempt.execution.tid);
-        self.held.close(Some(category));
-        self.held.hold_open(driver::PendingAggregate {
-            category,
-            operation: attempt.operation,
-            execution: attempt.execution,
-            protection: attempt.protection,
-            power: attempt.power.get(),
-            min_mpdu_start_spacing: attempt.min_mpdu_start_spacing.get(),
-            oldest,
-        });
-        self.held.storage.check()
-    }
-
-    fn open_ampdu(
-        &mut self,
-        ticket: u8,
-    ) -> Option<super::aggregate::OpenAggregate<'_, 'id, Id, D, B, O>> {
-        // A borrowed driver state, which the front never meets, is closed.
-        let driver = self.held.driver.try_borrow_mut().ok()?;
-        let queue = driver.open_queue(ticket)?;
-        Some(super::aggregate::OpenAggregate {
-            driver,
-            queue,
-            loan: self.loan,
-            now: self.held.timer.now(),
-        })
     }
 }
 
@@ -451,6 +360,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
 impl<'p, 'v, 'id: 'p, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     StationPhase<'p, 'id> for Esp32s31Interface<'p, 'v, 'id, Id, D, B, O, Station>
 {
+    type DataArena<'a>
+        = StationArena<'a, 'p, 'id, Id, D, B, O>
+    where
+        Self: 'a;
+    fn data_arena(&mut self) -> StationArena<'_, 'p, 'id, Id, D, B, O> {
+        StationArena {
+            held: self.held,
+            phase: PhantomData,
+        }
+    }
     fn replace_group_key(
         &mut self,
         permission: keys::StaPermission<'id, Id>,

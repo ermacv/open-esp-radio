@@ -58,24 +58,25 @@
 //! stand-ins of a backend's lock-free single-producer single-consumer
 //! queues.
 //!
-//! Each interface sends A-MPDUs ([`AmpduPhase`]) of up to
-//! [`MODEL_AMPDU_SUBFRAMES`] subframes: under a key the new subframes are
-//! numbered at their first transmission and a retransmitted one keeps its
-//! number and gets the Retry bit; the air answers each aggregate with a
-//! Block Ack (every subframe by default). `ModelAir::answer` queues one
-//! `AirAnswer` per publication: ACK, BA bitmap, missing response, collision or
-//! hardware timeout. The checked frame determines whether it expects no
-//! response, an ACK or a Block Ack (including a single BAR). A mismatched
-//! response poisons before publication and
-//! quarantines the rejected operation until teardown. There is no separate
-//! BA queue whose injection could escape to a later aggregate.
-//! The builder rejects duplicate sequence numbers and subframes outside the
-//! 64-sequence BA window rooted at
-//! its first subframe, using sequence arithmetic modulo 4096. Refusal returns
-//! both the unchanged builder and the rejected subframe before publication.
+//! `ModelAir::answer` queues one `AirAnswer` per publication: ACK, BA
+//! bitmap, missing response, collision or hardware timeout. A single MPDU's
+//! checked frame determines whether it expects no response, an ACK or a
+//! Block Ack (a BAR's). A mismatched response poisons before publication
+//! and quarantines the rejected operation until teardown.
 //!
-//! Data frames also go out through [`ModelArena`], the model's two-arena
-//! `TxArena` over plain slot arrays with scripted answers ([`arena`]).
+//! The station's data goes out on its two data arenas
+//! ([`StationPhase::data_arena`], [`ModelDataArena`]) of up to
+//! [`MODEL_AMPDU_SUBFRAMES`] frames each, as single MPDUs or A-MPDUs
+//! ([`AmpduPhase`] names the rates). Each publication takes the next
+//! `AirAnswer` of the same FIFO: a BlockAck's bit n acknowledges arena
+//! position n, by the frames' sequence numbers, and no queued answer
+//! acknowledges every frame. The air records each sent frame without a
+//! ticket, sealed under the installed station pairwise key the arena holds
+//! until it empties; a removal waits for that use. The driver serves the
+//! published arena and returns its end as `TxCompleted::Arena`; a gate,
+//! configuration or drain barrier refuses publication and waits for the
+//! arena on the air, and a drain aborts it. [`ModelArena`] is the same
+//! `TxArena` as a standalone host arena with scripted answers ([`arena`]).
 //!
 //! Each concrete class pool uses the portable `MpduLayout` proof before
 //! writing headers or copying an external body. Its allocation is privately
@@ -115,9 +116,8 @@
 //! DMA/ISR/software facts are delivered before it.
 //! A prepared retry submitted after removal is withdrawn in its AC's order,
 //! without publication. Cancellation wakes the driver to finish the barrier.
-//! An aggregate preflights every MPDU and the entire fresh-PN range before
-//! changing any subframe. A publication refusal retains the complete operation;
-//! submission after poisoning likewise transfers its owners to teardown custody.
+//! A publication refusal retains the complete operation; submission after
+//! poisoning likewise transfers its owners to teardown custody.
 //!
 //! `ModelContext` selects owned contexts by slot Id before lending their
 //! public body views. A station context retains both its nominal `LinkEpoch`
@@ -154,7 +154,7 @@ use fixture::plain_context;
 pub mod arena;
 pub use arena::{
     MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, ModelArena, ModelArenaAnswer, ModelArenaFault,
-    ModelArenaPublication,
+    ModelArenaPublication, ModelArenas, ModelDataArena,
 };
 mod contention;
 mod loan;
@@ -192,7 +192,7 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, GroupKeyId};
-use oer_protocols_ieee80211_wire::frame::{sequence_control, set_retry_bit};
+use oer_protocols_ieee80211_wire::frame::set_retry_bit;
 use oer_protocols_radio_port::{
     BodyLoan, LoanedContext, ModelSlotOwner, SlotBodyOwner, SlotIdentity, SlotOwner, SlotRetire,
     SlotStopped, SlotWakes,
@@ -209,26 +209,22 @@ use oer_protocols_radio_port::{EventsLost, Mint, Poisoned, PortResult, Slot};
 
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointPhase, BandSet, BodyPayload, BssColor, BufferMemoryUnavailable,
-    Channel, CheckedAggregate, CheckedPoolSource, CheckedSubframe, CheckedTxSource,
-    ConfigurePermission, ConnectionEpochKind, ExecutionPayload, FreshSource, FreshSubframe,
-    GateClosed, GateIssuer, GateOpen, HardwareServices, Ieee80211Capabilities, Ieee80211Radio,
-    InFlight, IndeterminateCause, InterfaceCommandPool, InterfacePermissions, InterfacePhase,
-    KeyTypes, LinkMetric, LowerMacBackend, LowerMacCapabilities, LowerMacPhase, LowerMacSetup,
-    MpduKind, MpduLayout, PhaseTypes, PhyFormatSet, PreparationError, PreparationRefused,
-    PreparedTx, RateSupport, ReceiveFilter, RemovedKey, RetransmissionPlan, RoleKeys, RxBuffer,
-    RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, StationPhase, StationReceive,
-    SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter, TxBody, TxBufferClass,
-    TxBufferMemory, TxBufferPool, TxFrame, TxMpdu, TxOutcome, TxProtection, TxSource, VifRole,
-    WidthSet, WithdrawCause,
+    Channel, CheckedPoolSource, CheckedTxSource, ConfigurePermission, ConnectionEpochKind,
+    ExecutionPayload, FreshSource, GateClosed, GateIssuer, GateOpen, HardwareServices,
+    Ieee80211Capabilities, Ieee80211Radio, InFlight, IndeterminateCause, InterfaceCommandPool,
+    InterfacePermissions, InterfacePhase, KeyTypes, LinkMetric, LowerMacBackend,
+    LowerMacCapabilities, LowerMacPhase, LowerMacSetup, MpduKind, MpduLayout, PhaseTypes,
+    PhyFormatSet, PreparationError, PreparationRefused, PreparedTx, RateSupport, ReceiveFilter,
+    RemovedKey, RetransmissionPlan, RoleKeys, RxBuffer, RxEvidence, RxMeta, RxMetadata,
+    SignalMetadata, Station, StationPhase, StationReceive, SupportedBlockAck, SupportedChannel,
+    SupportedEdca, SupportedFilter, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxFrame,
+    TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckSnr, SingleEnd, SingleOutcome,
-    SingleResponse, SnrSample,
+    AckSnr, Air, BlockAckSnr, SingleEnd, SingleOutcome, SingleResponse, SnrSample,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateRefused, AggregateState, AmpduCapabilities, AmpduLengthTable, AmpduPhase, AmpduRate,
-    BlockAckReport, ClassSubframe, EmptyAggregate, InterfaceProtection, NonEmptyAggregate,
-    PhaseAggregate, SubframeSource, Tid,
+    AmpduCapabilities, AmpduLengthTable, AmpduPhase, BlockAckReport, Tid,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
@@ -449,20 +445,16 @@ pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
 enum ModelMemory {
     Small(Box<[u8; ModelSmall::CAPACITY]>),
     Large(Box<[u8; ModelLarge::CAPACITY]>),
-    /// A network's memory, lent for one MSDU ([`TxBufferPool::install`]).
-    Network(ModelNetworkMemory),
-    /// No memory: a large place waits for a network's.
-    Vacant,
 }
-/// The memory a network fills with one frame for the model's large class.
+/// The memory a network fills with one data frame, which a model data
+/// arena's slot holds ([`PhaseTypes::DataMemory`]).
 pub type ModelNetworkMemory = Box<[u8; ModelLarge::CAPACITY]>;
 impl core::ops::Deref for ModelMemory {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         match self {
             Self::Small(bytes) => bytes.as_slice(),
-            Self::Large(bytes) | Self::Network(bytes) => bytes.as_slice(),
-            Self::Vacant => &[],
+            Self::Large(bytes) => bytes.as_slice(),
         }
     }
 }
@@ -470,8 +462,7 @@ impl core::ops::DerefMut for ModelMemory {
     fn deref_mut(&mut self) -> &mut [u8] {
         match self {
             Self::Small(bytes) => bytes.as_mut_slice(),
-            Self::Large(bytes) | Self::Network(bytes) => bytes.as_mut_slice(),
-            Self::Vacant => &mut [],
+            Self::Large(bytes) => bytes.as_mut_slice(),
         }
     }
 }
@@ -481,11 +472,6 @@ impl AsRef<[u8]> for ModelMemory {
     }
 }
 impl ModelMemory {
-    fn sequence(&self) -> SequenceNumber {
-        let bytes: &[u8] = self;
-        // Both memory classes hold at least a MAC header.
-        sequence_control(bytes).map_or(SequenceNumber::ZERO, SequenceNumber::from_sequence_control)
-    }
     fn retry(&mut self) {
         let bytes: &mut [u8] = self;
         // Both memory classes hold at least a MAC header.
@@ -517,11 +503,7 @@ impl<B: ModelComposition, C: ModelClass> TxBufferMemory for ModelBuffer<'_, B, C
         Ok(())
     }
     fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
-        if matches!(self.memory, ModelMemory::Vacant) {
-            Err(BufferMemoryUnavailable)
-        } else {
-            Ok(&mut self.memory)
-        }
+        Ok(&mut self.memory)
     }
 }
 
@@ -589,14 +571,6 @@ impl<B: ModelComposition> core::fmt::Debug for ModelAnyBuffer<'_, B> {
 }
 
 impl<B: ModelComposition> ModelAnyBuffer<'_, B> {
-    fn sequence(&self) -> SequenceNumber {
-        match self {
-            Self::Small(buffer) => buffer.memory.sequence(),
-            Self::Large(buffer) => buffer.memory.sequence(),
-            Self::SmallSent(mpdu) => mpdu.buffer.memory.sequence(),
-            Self::LargeSent(mpdu) => mpdu.buffer.memory.sequence(),
-        }
-    }
     fn retry(&mut self) {
         match self {
             Self::Small(buffer) => buffer.memory.retry(),
@@ -906,9 +880,8 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
         };
         admitted.is_some_and(|at| now.saturating_duration_since(at) >= lifetime)
     }
-    /// Original admission projected by P2 when dequeuing, retained even when
-    /// an unpublished member is returned for aggregate re-formation. MSDU
-    /// age uses its separately retained monotonic instant.
+    /// Original admission projected by P2 when dequeuing. MSDU age uses its
+    /// separately retained monotonic instant.
     pub fn admitted_at(&self) -> Option<RadioInstant<Ieee80211Radio>> {
         match &self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admission(),
@@ -969,31 +942,12 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             .split_at_checked(self.layout.mpdu_len())
             .ok_or(ModelFault)?
             .0;
-        let mut wire: Vec<u8> = bytes.into();
-        if let Some(identity) = key {
-            let air = identity.0.air.upgrade().ok_or(ModelFault)?;
-            let installations = air.key_installations.take();
-            let result = (|| {
-                let material = installations
-                    .iter()
-                    .find(|entry| entry.identity.ptr_eq(&Rc::downgrade(&identity.0)))
-                    .ok_or(ModelFault)?;
-                wire.extend_from_slice(&[0; 8]);
-                air.associations
-                    .get()
-                    .get(identity.0.role)
-                    .seal(
-                        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
-                        &material.key,
-                        &mut wire,
-                    )
-                    .map_err(|_| ModelFault)
-            })();
-            air.key_installations.set(installations);
-            result?;
-        }
+        let wire = match key {
+            Some(identity) => seal(identity, bytes)?,
+            None => bytes.into(),
+        };
         Ok(AirFrame {
-            ticket,
+            ticket: Some(ticket),
             role,
             plaintext: bytes.into(),
             frame: wire,
@@ -1006,6 +960,33 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
                 .or_else(|| self.buffer.packet_number()),
         })
     }
+}
+
+/// `bytes` as the air carries them under the installed key `identity`:
+/// encrypted, with its MIC.
+fn seal(identity: &RawKeyIdentity, bytes: &[u8]) -> Result<Vec<u8>, ModelFault> {
+    let mut wire: Vec<u8> = bytes.into();
+    let air = identity.0.air.upgrade().ok_or(ModelFault)?;
+    let installations = air.key_installations.take();
+    let result = (|| {
+        let material = installations
+            .iter()
+            .find(|entry| entry.identity.ptr_eq(&Rc::downgrade(&identity.0)))
+            .ok_or(ModelFault)?;
+        wire.extend_from_slice(&[0; 8]);
+        air.associations
+            .get()
+            .get(identity.0.role)
+            .seal(
+                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &material.key,
+                &mut wire,
+            )
+            .map_err(|_| ModelFault)
+    })();
+    air.key_installations.set(installations);
+    result?;
+    Ok(wire)
 }
 
 /// Composition-selected owned contexts and their separate public body loans.
@@ -1091,17 +1072,6 @@ impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
     type Context = <B::Contexts as ModelContext>::Context<'id, B::Identity>;
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, B>;
     type KeyIdentity = KeyIdentity<'id, B::Identity>;
-    type Aggregate<'k, 'p, R, K, S>
-        = ModelAggregate<'k, 'p, 'id, R, K, B, S>
-    where
-        R: RoleKeys<'id, Self>,
-        K: Ieee80211Capabilities,
-        S: AggregateState,
-        'id: 'k;
-    type OpenAggregate<'a>
-        = ModelOpenAggregate<'a, 'id, B>
-    where
-        Self: 'a;
     type TxBody = ModelBodyOf<B>;
     type TicketKind = ModelTickets;
     type AckEvidence = ModelAck;
@@ -1109,7 +1079,7 @@ impl<'id, B: ModelComposition + 'id> PhaseTypes<'id> for ModelTypes<B> {
     type AirDenied = ModelAirDenied;
     type AnyTxBuffer = ModelAnyBuffer<'id, B>;
     type TxMpdu = ModelMpdu<'id, B>;
-    type TxAggregate = ModelSubframes<'id, B>;
+    type DataMemory = ModelNetworkMemory;
     type RxBuffer = ModelRxBuffer<'id, B::Identity>;
     type LentRx = ModelLentRx;
     type RxMeta = ModelRxMeta;
@@ -1226,39 +1196,6 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
         prepare_model(source)
     }
 
-    fn push_aggregate<'k, 'p, R, K, S>(
-        operation: oer_protocols_ieee80211_contracts_port::CheckedPoolAggregate<
-            'k,
-            'p,
-            'id,
-            Self,
-            C,
-            R,
-            K,
-            S,
-        >,
-    ) -> oer_protocols_ieee80211_contracts_port::AggregatePushResult<'k, 'p, 'id, Self, C, R, K, S>
-    where
-        R: RoleKeys<'id, Self>,
-        K: Ieee80211Capabilities,
-        S: AggregateState,
-        'id: 'k + 'p,
-    {
-        push_model(operation)
-    }
-
-    fn extend_aggregate<K: Ieee80211Capabilities>(
-        open: &mut ModelOpenAggregate<'_, 'id, B>,
-        subframe: oer_protocols_ieee80211_contracts_port::PoolSubframe<'id, Self, C, K>,
-    ) -> Result<
-        (),
-        oer_protocols_ieee80211_contracts_port::ExtendRefused<
-            oer_protocols_ieee80211_contracts_port::PoolSubframe<'id, Self, C, K>,
-        >,
-    > {
-        extend_model(open, subframe)
-    }
-
     fn erase(buffer: Self::Buffer) -> ModelAnyBuffer<'id, B> {
         C::erase(buffer)
     }
@@ -1279,28 +1216,6 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
     fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (mpdu.buffer, mpdu.body)
-    }
-
-    type NetworkMemory = ModelNetworkMemory;
-    fn install(
-        buffer: &mut Self::Buffer,
-        memory: ModelNetworkMemory,
-    ) -> Result<(), ModelNetworkMemory> {
-        if matches!(buffer.memory, ModelMemory::Vacant) {
-            buffer.memory = ModelMemory::Network(memory);
-            Ok(())
-        } else {
-            Err(memory)
-        }
-    }
-    fn uninstall(buffer: &mut Self::Buffer) -> Option<ModelNetworkMemory> {
-        match core::mem::replace(&mut buffer.memory, ModelMemory::Vacant) {
-            ModelMemory::Network(memory) => Some(memory),
-            other => {
-                buffer.memory = other;
-                None
-            }
-        }
     }
 }
 
@@ -1569,8 +1484,9 @@ pub struct ModelResources<'id, B: ModelComposition> {
 /// One transmission the air saw.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AirFrame {
-    /// Ticket of the operation that actually published this MPDU.
-    pub ticket: u8,
+    /// Ticket of the operation that actually published this MPDU; `None`
+    /// for a frame of the station's data arenas, which take no ticket.
+    pub ticket: Option<u8>,
     /// The interface that sent it.
     pub role: VifRole,
     /// The MPDU, header and body, without the FCS.
@@ -1592,16 +1508,18 @@ pub struct AirFrame {
 pub enum AirAnswer {
     /// An ACK, which the model measures at [`MODEL_ACK_SNR_DB`].
     Ack,
-    /// A measured BlockAck. Bit n acknowledges subframe n of this one
-    /// aggregate.
+    /// A measured BlockAck. Bit n acknowledges position n of this one data
+    /// arena's A-MPDU, or is a BAR's bitmap.
     BlockAck(u64),
-    /// An aggregate's BlockAck whose completion carries no SNR measurement,
+    /// An A-MPDU's BlockAck whose completion carries no SNR measurement,
     /// as an S31 BlockAck accepted with a failed hardware status does.
     BlockAckUnmeasured(u64),
     NoResponse,
     Collision,
     /// Coexistence denied the air before the PPDU went out.
     AirDenied,
+    /// The hardware timed out: a single MPDU's end is indeterminate, a
+    /// data arena's publication is aborted.
     HardwareTimeout,
 }
 
@@ -1621,7 +1539,7 @@ impl AckSnr for ModelAck {
     }
 }
 
-/// What the model observed of an aggregate's BlockAck.
+/// What the model observed of a data arena's ACK or BlockAck.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModelBlockAckEvidence {
     /// The BlockAck's SNR, in dB.
@@ -1645,8 +1563,9 @@ pub struct ModelAirDenied;
 
 /// A single MPDU's outcome in the model.
 pub type ModelSingleOutcome = SingleOutcome<ModelAck, ModelAirDenied>;
-/// An aggregate's outcome in the model.
-pub type ModelAggregateOutcome = AggregateOutcome<ModelBlockAckEvidence, ModelAirDenied>;
+/// A data arena's end in the model.
+pub type ModelArenaCompleted =
+    oer_protocols_ieee80211_contracts_port::ArenaCompleted<ModelBlockAckEvidence, ModelAirDenied>;
 
 /// One receive agreement applied by the model driver, after capability checking.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2214,8 +2133,8 @@ impl ModelAir {
         self.sent.snapshot()
     }
 
-    /// Supply exactly one result for the next publication. A Block Ack cannot
-    /// be left behind for a later aggregate when a Single is ahead of it.
+    /// Supply exactly one result for the next publication, a single MPDU's
+    /// or a data arena's, in publication order.
     pub fn answer(&self, answer: AirAnswer) {
         self.answers.push_back(answer);
     }
@@ -2383,6 +2302,17 @@ impl ModelAir {
         self.answers.pop_front().unwrap_or(default)
     }
 
+    /// The next answer to a data arena's publication: one MPDU (`single`)
+    /// soliciting an ACK, or an A-MPDU soliciting a BlockAck of every frame
+    /// unless an answer is queued.
+    fn arena_result(&self, single: bool) -> AirAnswer {
+        self.next_answer(if single {
+            AirAnswer::Ack
+        } else {
+            AirAnswer::BlockAck(u64::MAX)
+        })
+    }
+
     /// The next answer to a single MPDU of `response`, checked against it.
     fn single_result(&self, response: ResponsePolicy) -> Result<SingleAnswer, AnswerShapeMismatch> {
         let answer = self.next_answer(match response {
@@ -2419,25 +2349,6 @@ impl ModelAir {
             }
         }
     }
-
-    /// The next answer to an aggregate, checked against its BlockAck.
-    fn aggregate_result(&self) -> Result<AggregateAnswer, AnswerShapeMismatch> {
-        match self.next_answer(AirAnswer::BlockAck(u64::MAX)) {
-            AirAnswer::BlockAck(bitmap) => Ok(AggregateAnswer::BlockAck {
-                bitmap,
-                evidence: ModelBlockAckEvidence::Measured(MODEL_ACK_SNR_DB),
-            }),
-            AirAnswer::BlockAckUnmeasured(bitmap) => Ok(AggregateAnswer::BlockAck {
-                bitmap,
-                evidence: ModelBlockAckEvidence::Unmeasured,
-            }),
-            AirAnswer::NoResponse => Ok(AggregateAnswer::Unanswered),
-            AirAnswer::Collision => Ok(AggregateAnswer::Collision),
-            AirAnswer::AirDenied => Ok(AggregateAnswer::AirDenied),
-            AirAnswer::HardwareTimeout => Ok(AggregateAnswer::HardwareTimeout),
-            AirAnswer::Ack => Err(AnswerShapeMismatch),
-        }
-    }
 }
 
 /// A single MPDU's answer, checked against the response it solicited.
@@ -2449,20 +2360,6 @@ enum SingleAnswer {
     /// A BlockAckReq's BlockAck.
     BlockAck(BlockAckReport),
     /// The solicited response did not come.
-    Unanswered,
-    Collision,
-    AirDenied,
-    HardwareTimeout,
-}
-
-/// An aggregate's answer, checked against its BlockAck.
-#[derive(Clone, Copy, Debug)]
-enum AggregateAnswer {
-    /// Bit n acknowledges subframe n.
-    BlockAck {
-        bitmap: u64,
-        evidence: ModelBlockAckEvidence,
-    },
     Unanswered,
     Collision,
     AirDenied,
@@ -2498,7 +2395,6 @@ struct AnswerShapeMismatch;
 enum Command<'id, B: ModelComposition> {
     Configure(OwnedConfigured<'id, B>),
     Submit(Box<Prepared<'id, B>>),
-    SubmitAmpdu(PreparedAggregate<'id, B>),
     InstallKey {
         spp: oer_protocols_ieee80211_wire::security::Spp,
         key: RawKeyIdentity,
@@ -2606,121 +2502,14 @@ enum GroupChange<'id, B: ModelComposition> {
     },
 }
 
-/// The work of a queue: one MPDU, or one A-MPDU.
-enum Work<'id, B: ModelComposition> {
-    Single(Box<Prepared<'id, B>>),
-    Aggregate(PreparedAggregate<'id, B>),
-}
-
-impl<B: ModelComposition> Work<'_, B> {
-    fn role(&self) -> VifRole {
-        match self {
-            Self::Single(prepared) => prepared.role,
-            Self::Aggregate(prepared) => prepared.role,
-        }
-    }
-    fn key(&self) -> Option<&RawKeyIdentity> {
-        match self {
-            Self::Single(prepared) => prepared.key.as_ref(),
-            Self::Aggregate(prepared) => prepared.key.as_ref(),
-        }
-        .map(|key| &key.identity)
-    }
-}
-
-/// One subframe of an aggregate, in its buffer.
-struct Subframe<'id, B: ModelComposition> {
-    mpdu: ModelMpdu<'id, B>,
-    /// Checked at admission against the first subframe's BA window.
-    acknowledgement_bit: u64,
-}
-
-/// Complete aggregate storage; each subframe retains its own MPDU/body.
-pub struct ModelSubframes<'id, B: ModelComposition>(Vec<Subframe<'id, B>>);
-impl<B: ModelComposition> ModelSubframes<'_, B> {
-    /// Number of complete subframes returned by a terminal or cancellation.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-    /// An empty builder can be cancelled before it accepts any subframe.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-/// Owning iteration is available after terminal consumption or cancellation.
-pub struct ModelSubframeIter<'id, B: ModelComposition>(alloc::vec::IntoIter<Subframe<'id, B>>);
-impl<B: ModelComposition> ModelSubframeIter<'_, B> {
-    /// Whether cancellation or terminal iteration has any MPDUs left.
-    pub fn is_empty(&self) -> bool {
-        self.0.as_slice().is_empty()
-    }
-}
-impl<'id, B: ModelComposition> Iterator for ModelSubframeIter<'id, B> {
-    type Item = ModelMpdu<'id, B>;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|subframe| subframe.mpdu)
-    }
-}
-impl<'id, B: ModelComposition> IntoIterator for ModelSubframes<'id, B> {
-    type Item = ModelMpdu<'id, B>;
-    type IntoIter = ModelSubframeIter<'id, B>;
-    fn into_iter(self) -> Self::IntoIter {
-        ModelSubframeIter(self.0.into_iter())
-    }
-}
-/// Execution lends subframe storage without exposing replaceable owners.
-pub struct ModelSubframesExecution<'a, 'id, B: ModelComposition> {
-    subframes: &'a mut Vec<Subframe<'id, B>>,
-}
-impl<'id, B: ModelComposition> ExecutionPayload for ModelSubframes<'id, B> {
-    type Execution<'a>
-        = ModelSubframesExecution<'a, 'id, B>
-    where
-        Self: 'a;
-    fn execution(&mut self) -> Self::Execution<'_> {
-        ModelSubframesExecution {
-            subframes: &mut self.0,
-        }
-    }
-}
-impl<B: ModelComposition> ModelSubframesExecution<'_, '_, B> {
-    fn publish(
-        &mut self,
-        ticket: u8,
-        role: VifRole,
-        keys: &[RawKeyIdentity],
-        key: Option<&RawKeyIdentity>,
-        rate: PhyRate,
-    ) -> Result<Vec<AirFrame>, ModelFault> {
-        for subframe in &*self.subframes {
-            subframe.mpdu.preflight(key.is_some())?;
-        }
-        let mut frames = Vec::with_capacity(self.subframes.len());
-        for subframe in &mut *self.subframes {
-            subframe.mpdu.execution().publish(role, key)?;
-            frames.push(subframe.mpdu.on_air(ticket, role, keys, key, rate)?);
-        }
-        Ok(frames)
-    }
-}
+/// The work of a queue: one prepared MPDU.
+type Work<'id, B> = Box<Prepared<'id, B>>;
 
 type ModelInFlight<'id, B, M> = InFlight<
     ModelContextOf<B>,
     Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
     M,
 >;
-
-/// An A-MPDU attempt prepared for its queue.
-struct PreparedAggregate<'id, B: ModelComposition> {
-    operation: ModelInFlight<'id, B, ModelSubframes<'id, B>>,
-    role: VifRole,
-    receiver: IndividualAddress,
-    tid: Tid,
-    start_sequence: SequenceNumber,
-    queue: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
-    rate: PhyRate,
-    key: Option<PreparedKey>,
-}
 
 /// An attempt prepared for its queue.
 struct Prepared<'id, B: ModelComposition> {
@@ -2729,6 +2518,15 @@ struct Prepared<'id, B: ModelComposition> {
     queue: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
     plan: oer_protocols_ieee80211_contracts_port::RetryPlan<PhyRate>,
     key: Option<PreparedKey>,
+}
+
+impl<B: ModelComposition> Prepared<'_, B> {
+    const fn role(&self) -> VifRole {
+        self.role
+    }
+    fn key(&self) -> Option<&RawKeyIdentity> {
+        self.key.as_ref().map(|key| &key.identity)
+    }
 }
 
 /// The settings the handle writes and the driver takes before its next
@@ -2768,65 +2566,18 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     /// owner ends the phase. Unlike poison, this is an ordinary terminal.
     draining: Cell<bool>,
     returned: Cell<bool>,
-    /// Each access category's open aggregate: its last submission, which
-    /// the station extends until the driver takes it, once nothing of its
-    /// category is on the air or waiting.
-    open: core::cell::RefCell<[Option<PreparedAggregate<'id, B>>; 4]>,
+    /// The station's two data arenas, which the station's interface lends
+    /// for one step and the driver serves.
+    arenas: core::cell::RefCell<arena::StationArenas>,
+    /// Station data publications wait: the gate is closed or closing, or a
+    /// station configuration is pending.
+    gate_closed: Cell<bool>,
+    configuring_station: Cell<bool>,
 }
 
 impl<'id, B: ModelComposition> ModelHeld<'id, B> {
-    /// Send `command` after the open aggregates it follows: a submission
-    /// after its category's, any other after every one.
     fn command(&self, command: Command<'id, B>) {
-        let queue = match &command {
-            Command::Submit(prepared) => Some(prepared.queue),
-            Command::SubmitAmpdu(prepared) => Some(prepared.queue),
-            _ => None,
-        };
-        self.close(queue);
         self.send(command);
-    }
-
-    /// Send the open aggregate of `queue`, or of every queue, to the driver.
-    fn close(&self, queue: Option<oer_protocols_ieee80211_wire::qos::WmmAccessCategory>) {
-        let closed: Vec<_> = match self.open.try_borrow_mut() {
-            Ok(mut open) => open
-                .iter_mut()
-                .filter(|open| {
-                    open.as_ref()
-                        .is_some_and(|open| queue.is_none_or(|queue| open.queue == queue))
-                })
-                .filter_map(Option::take)
-                .collect(),
-            Err(_) => {
-                self.poison();
-                return;
-            }
-        };
-        for prepared in closed {
-            self.send(Command::SubmitAmpdu(prepared));
-        }
-    }
-
-    /// Hold `prepared` open as its category's last submission.
-    fn hold_open(&self, prepared: PreparedAggregate<'id, B>) {
-        self.close(Some(prepared.queue));
-        self.returned.set(false);
-        let refused = match self.open.try_borrow_mut() {
-            Ok(mut open) => match open.get_mut(prepared.queue as usize) {
-                Some(place) if place.is_none() => {
-                    *place = Some(prepared);
-                    None
-                }
-                _ => Some(prepared),
-            },
-            Err(_) => Some(prepared),
-        };
-        if let Some(prepared) = refused {
-            self.send(Command::SubmitAmpdu(prepared));
-            self.poison();
-        }
-        self.air.wake_driver();
     }
 
     fn send(&self, command: Command<'id, B>) {
@@ -2997,12 +2748,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
             }
             let command = held.commands.pop();
             let Some(command) = command else {
-                // Every command before an open aggregate is in: the driver
-                // takes each that would go next.
                 self.publish(held);
-                if self.take_idle_open(held) {
-                    continue;
-                }
                 break;
             };
             held.air
@@ -3015,12 +2761,16 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     // completes before queued owners are withdrawn; a retry of
                     // the old interface configuration cannot pass this barrier.
                     self.publish_before(held, |candidate| candidate == role);
-                    if self.queues.iter().any(|queue| {
-                        queue
-                            .air
-                            .as_ref()
-                            .is_some_and(|publication| publication.work.role() == role)
-                    }) {
+                    self.serve_arena(held);
+                    let arena_on_air = role == VifRole::Station && self.arena_on_air(held);
+                    if arena_on_air
+                        || self.queues.iter().any(|queue| {
+                            queue
+                                .air
+                                .as_ref()
+                                .is_some_and(|publication| publication.work.role() == role)
+                        })
+                    {
                         held.commands
                             .items
                             .push_front(Command::Configure(permission));
@@ -3029,6 +2779,9 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     held.air
                         .settings
                         .set(held.air.settings.get().saturating_add(1));
+                    if role == VifRole::Station {
+                        held.configuring_station.set(false);
+                    }
                     held.post(OwnedLowerMacEvent::Terminal(
                         OwnedLowerMacTerminal::Configured(permission),
                     ));
@@ -3041,7 +2794,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                         .project_admission(&held.air)
                         .is_err()
                     {
-                        let _fault = held.quarantined.push(Work::Single(prepared));
+                        let _fault = held.quarantined.push(prepared);
                         held.poison();
                         return;
                     }
@@ -3049,25 +2802,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     queue
                         .select_mut(&mut self.queues)
                         .waiting
-                        .push_back(Work::Single(prepared));
-                }
-                Command::SubmitAmpdu(mut aggregate) => {
-                    if aggregate
-                        .operation
-                        .execute()
-                        .subframes
-                        .iter_mut()
-                        .any(|subframe| subframe.mpdu.project_admission(&held.air).is_err())
-                    {
-                        let _fault = held.quarantined.push(Work::Aggregate(aggregate));
-                        held.poison();
-                        return;
-                    }
-                    let queue = aggregate.queue;
-                    queue
-                        .select_mut(&mut self.queues)
-                        .waiting
-                        .push_back(Work::Aggregate(aggregate));
+                        .push_back(prepared);
                 }
                 Command::InstallKey {
                     spp,
@@ -3123,10 +2858,12 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         }
         // A result released by the world makes progress without a command.
         self.publish(held);
+        self.serve_arena(held);
         let idle = self
             .queues
             .iter()
-            .all(|queue| queue.air.is_none() && queue.waiting.is_empty());
+            .all(|queue| queue.air.is_none() && queue.waiting.is_empty())
+            && !self.arena_on_air(held);
         if idle {
             self.gate = match core::mem::replace(&mut self.gate, DriverGate::Closed) {
                 DriverGate::Closing(gate) => {
@@ -3340,28 +3077,43 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         }
     }
 
-    /// Send each open aggregate whose category has nothing on the air or
-    /// waiting, or every one while draining, as its submission. Whether one
-    /// went.
-    fn take_idle_open(&mut self, held: &ModelHeld<'id, B>) -> bool {
-        let draining = held.draining.get();
-        let taken: Vec<_> = match held.open.try_borrow_mut() {
-            Ok(mut open) => open
-                .iter_mut()
-                .zip(&self.queues)
-                .filter(|(_, queue)| draining || (queue.air.is_none() && queue.waiting.is_empty()))
-                .filter_map(|(open, _)| open.take())
-                .collect(),
+    /// Serve the station's published data arena: its completion once its
+    /// answer is due, unless its access category's result is held; a drain
+    /// aborts it at once.
+    fn serve_arena(&mut self, held: &ModelHeld<'id, B>) {
+        let Ok(mut arenas) = held.arenas.try_borrow_mut() else {
+            held.poison();
+            return;
+        };
+        let results = held.air.held_results.get();
+        let served = arenas.serve::<B::Caps>(
+            held.air.monotonic_now(),
+            |category| *category.select(&results),
+            held.draining.get(),
+        );
+        drop(arenas);
+        match served {
+            Ok(Some((done, category))) => {
+                held.air.edca.reset(category);
+                held.post(OwnedLowerMacEvent::Terminal(
+                    OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Arena(done)),
+                ));
+            }
+            Ok(None) => {}
+            Err(_) => held.poison(),
+        }
+    }
+
+    /// Whether a station data arena is on the air; a borrowed arena state,
+    /// which the driver never meets, counts as one and poisons.
+    fn arena_on_air(&self, held: &ModelHeld<'id, B>) -> bool {
+        match held.arenas.try_borrow() {
+            Ok(arenas) => arenas.on_air().is_some(),
             Err(_) => {
                 held.poison();
-                return false;
+                true
             }
-        };
-        let any = !taken.is_empty();
-        for prepared in taken {
-            held.send(Command::SubmitAmpdu(prepared));
         }
-        any
     }
 
     /// Keep each published head until its result; barriers stop the next
@@ -3515,16 +3267,9 @@ struct SinglePlan<'id, B: ModelComposition> {
     last: Option<(NonZeroU16, PhyRate)>,
     rate: PhyRate,
 }
-enum Published<'id, B: ModelComposition> {
-    Single {
-        plan: SinglePlan<'id, B>,
-        answer: SingleAnswer,
-    },
-    Aggregate {
-        prepared: PreparedAggregate<'id, B>,
-        report: BlockAckReport,
-        answer: AggregateAnswer,
-    },
+struct Published<'id, B: ModelComposition> {
+    plan: SinglePlan<'id, B>,
+    answer: SingleAnswer,
 }
 /// Derive the terminal from the actual lifecycle barrier and key owner;
 /// callers cannot exchange three unrelated boolean arguments. Disable wins
@@ -3548,32 +3293,16 @@ fn withdrawal<'id, B: ModelComposition>(
 }
 impl<'id, B: ModelComposition> Published<'id, B> {
     fn role(&self) -> VifRole {
-        match self {
-            Self::Single { plan, .. } => plan.prepared.role,
-            Self::Aggregate { prepared, .. } => prepared.role,
-        }
+        self.plan.prepared.role
     }
     fn key(&self) -> Option<&RawKeyIdentity> {
-        match self {
-            Self::Single { plan, .. } => plan.prepared.key.as_ref(),
-            Self::Aggregate { prepared, .. } => prepared.key.as_ref(),
-        }
-        .map(|key| &key.identity)
+        self.plan.prepared.key()
     }
     /// The publication with its answer replaced by the hardware timeout.
     fn timed_out(self) -> Self {
-        match self {
-            Self::Single { plan, .. } => Self::Single {
-                plan,
-                answer: SingleAnswer::HardwareTimeout,
-            },
-            Self::Aggregate {
-                prepared, report, ..
-            } => Self::Aggregate {
-                prepared,
-                report,
-                answer: AggregateAnswer::HardwareTimeout,
-            },
+        Self {
+            plan: self.plan,
+            answer: SingleAnswer::HardwareTimeout,
         }
     }
     fn complete(
@@ -3582,35 +3311,23 @@ impl<'id, B: ModelComposition> Published<'id, B> {
         keys: &[RawKeyIdentity],
         cause: Option<WithdrawCause>,
     ) -> Option<Publication<'id, B>> {
-        match self {
-            Self::Single {
-                mut plan,
-                answer: result,
-            } => {
-                let (outcome, last) = single_outcome(result, plan.last, plan.rate, cause);
-                plan.last = last;
-                if matches!(
-                    outcome,
-                    TxOutcome::Ended(SingleEnd::AckTimeout(_) | SingleEnd::ContentionLimit(_))
-                ) && let Some(rate) = plan.remaining.pop_front()
-                {
-                    held.air.edca.failure(plan.prepared.queue);
-                    plan.rate = rate;
-                    return publish_single(held, keys, plan);
-                }
-                held.air.edca.reset(plan.prepared.queue);
-                terminal(held, *plan.prepared, outcome);
-            }
-            Self::Aggregate {
-                prepared,
-                report,
-                answer,
-            } => {
-                let outcome = aggregate_outcome(answer, prepared.rate, report, cause);
-                held.air.edca.reset(prepared.queue);
-                terminal_aggregate(held, prepared, outcome);
-            }
+        let Self {
+            mut plan,
+            answer: result,
+        } = self;
+        let (outcome, last) = single_outcome(result, plan.last, plan.rate, cause);
+        plan.last = last;
+        if matches!(
+            outcome,
+            TxOutcome::Ended(SingleEnd::AckTimeout(_) | SingleEnd::ContentionLimit(_))
+        ) && let Some(rate) = plan.remaining.pop_front()
+        {
+            held.air.edca.failure(plan.prepared.queue);
+            plan.rate = rate;
+            return publish_single(held, keys, plan);
         }
+        held.air.edca.reset(plan.prepared.queue);
+        terminal(held, *plan.prepared, outcome);
         None
     }
 }
@@ -3673,70 +3390,28 @@ fn single_outcome(
     }
 }
 
-/// An aggregate's outcome after `answer`, published once at `rate`.
-fn aggregate_outcome(
-    answer: AggregateAnswer,
-    rate: PhyRate,
-    report: BlockAckReport,
-    cause: Option<WithdrawCause>,
-) -> ModelAggregateOutcome {
-    let air = Air {
-        transmissions: NonZeroU16::MIN,
-        rate,
-    };
-    match (answer, cause) {
-        (AggregateAnswer::HardwareTimeout, _) => {
-            TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout)
-        }
-        (AggregateAnswer::BlockAck { evidence, .. }, _) => {
-            TxOutcome::Ended(AggregateEnd::Delivered {
-                air,
-                report,
-                ack: evidence,
-            })
-        }
-        (
-            AggregateAnswer::Unanswered | AggregateAnswer::Collision | AggregateAnswer::AirDenied,
-            Some(cause),
-        ) => TxOutcome::Withdrawn(cause),
-        (AggregateAnswer::Unanswered, None) => TxOutcome::Ended(AggregateEnd::AckTimeout(air)),
-        (AggregateAnswer::Collision, None) => TxOutcome::Ended(AggregateEnd::ContentionLimit(None)),
-        (AggregateAnswer::AirDenied, None) => TxOutcome::Ended(AggregateEnd::AirDenied {
-            denial: ModelAirDenied,
-            air: None,
-        }),
-    }
-}
-
 fn start_work<'id, B: ModelComposition>(
     held: &ModelHeld<'id, B>,
     keys: &[RawKeyIdentity],
-    work: Work<'id, B>,
+    prepared: Work<'id, B>,
 ) -> Option<Publication<'id, B>> {
-    match work {
-        Work::Single(prepared) => {
-            let rate = prepared.plan.first().rate;
-            let remaining = prepared
-                .plan
-                .stages()
-                .flat_map(|stage| {
-                    core::iter::repeat_n(stage.rate, usize::from(stage.transmissions.get()))
-                })
-                .skip(1)
-                .collect();
-            publish_single(
-                held,
-                keys,
-                SinglePlan {
-                    prepared,
-                    remaining,
-                    last: None,
-                    rate,
-                },
-            )
-        }
-        Work::Aggregate(prepared) => publish_aggregate(held, keys, prepared),
-    }
+    let rate = prepared.plan.first().rate;
+    let remaining = prepared
+        .plan
+        .stages()
+        .flat_map(|stage| core::iter::repeat_n(stage.rate, usize::from(stage.transmissions.get())))
+        .skip(1)
+        .collect();
+    publish_single(
+        held,
+        keys,
+        SinglePlan {
+            prepared,
+            remaining,
+            last: None,
+            rate,
+        },
+    )
 }
 fn publish_single<'id, B: ModelComposition>(
     held: &ModelHeld<'id, B>,
@@ -3761,7 +3436,7 @@ fn publish_single<'id, B: ModelComposition>(
     {
         Ok(answer) => answer,
         Err(AnswerShapeMismatch) => {
-            let _fault = held.quarantined.push(Work::Single(plan.prepared));
+            let _fault = held.quarantined.push(plan.prepared);
             held.poison();
             return None;
         }
@@ -3776,7 +3451,7 @@ fn publish_single<'id, B: ModelComposition>(
         )
         .is_err()
     {
-        let _fault = held.quarantined.push(Work::Single(plan.prepared));
+        let _fault = held.quarantined.push(plan.prepared);
         held.poison();
         return None;
     }
@@ -3792,7 +3467,7 @@ fn publish_single<'id, B: ModelComposition>(
     ) {
         Ok(frame) => frame,
         Err(_) => {
-            let _fault = held.quarantined.push(Work::Single(plan.prepared));
+            let _fault = held.quarantined.push(plan.prepared);
             held.poison();
             return None;
         }
@@ -3804,140 +3479,17 @@ fn publish_single<'id, B: ModelComposition>(
     }
     Some(Publication {
         started: held.air.monotonic_now().as_micros(),
-        work: Published::Single { plan, answer },
+        work: Published { plan, answer },
     })
 }
 
-/// Preserve the submission shape and every owner on withdrawal.
+/// Preserve every owner of `work` on withdrawal.
 fn withdrawn<'id, B: ModelComposition>(
     held: &ModelHeld<'id, B>,
     work: Work<'id, B>,
     cause: WithdrawCause,
 ) {
-    match work {
-        Work::Single(prepared) => {
-            terminal(held, *prepared, TxOutcome::Withdrawn(cause));
-        }
-        Work::Aggregate(aggregate) => {
-            terminal_aggregate(held, aggregate, TxOutcome::Withdrawn(cause))
-        }
-    }
-}
-
-fn terminal_aggregate<'id, B: ModelComposition>(
-    held: &ModelHeld<'id, B>,
-    aggregate: PreparedAggregate<'id, B>,
-    completion: ModelAggregateOutcome,
-) {
-    held.post(OwnedLowerMacEvent::Terminal(
-        OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::Aggregate(
-            aggregate.operation.complete(completion),
-        )),
-    ));
-}
-
-fn subframe_bit(index: usize) -> Result<u64, ModelFault> {
-    let shift = u32::try_from(index).map_err(|_| ModelFault)?;
-    1_u64.checked_shl(shift).ok_or(ModelFault)
-}
-
-fn publish_aggregate<'id, B: ModelComposition>(
-    held: &ModelHeld<'id, B>,
-    keys: &[RawKeyIdentity],
-    mut aggregate: PreparedAggregate<'id, B>,
-) -> Option<Publication<'id, B>> {
-    let now = held.air.monotonic_now();
-    let lifetime = held
-        .air
-        .edca(aggregate.role)
-        .access_category(aggregate.queue)
-        .msdu_lifetime;
-    let expired = aggregate.operation.payload().0.iter().enumerate().try_fold(
-        0_u64,
-        |mask, (index, subframe)| {
-            let bit = subframe_bit(index)?;
-            Ok(if subframe.mpdu.expired(now, lifetime) {
-                mask | bit
-            } else {
-                mask
-            })
-        },
-    );
-    let expired = match expired {
-        Ok(expired) => expired,
-        Err(ModelFault) => {
-            let _fault = held.quarantined.push(Work::Aggregate(aggregate));
-            held.poison();
-            return None;
-        }
-    };
-    if expired != 0 {
-        held.air.expired(expired);
-        held.air.edca.reset(aggregate.queue);
-        terminal_aggregate(held, aggregate, TxOutcome::Expired { msdus: expired });
-        return None;
-    }
-    let answer = match held.air.aggregate_result() {
-        Ok(answer) => answer,
-        Err(AnswerShapeMismatch) => {
-            let _fault = held.quarantined.push(Work::Aggregate(aggregate));
-            held.poison();
-            return None;
-        }
-    };
-    let acknowledged = match answer {
-        AggregateAnswer::BlockAck { bitmap, .. } => bitmap,
-        AggregateAnswer::Unanswered
-        | AggregateAnswer::Collision
-        | AggregateAnswer::AirDenied
-        | AggregateAnswer::HardwareTimeout => 0,
-    };
-    let ticket = aggregate.operation.ticket().index();
-    let frames = match aggregate.operation.execute().publish(
-        ticket,
-        aggregate.role,
-        keys,
-        aggregate.key.as_ref().map(|key| &key.identity),
-        aggregate.rate,
-    ) {
-        Ok(frames) => frames,
-        Err(_) => {
-            let _fault = held.quarantined.push(Work::Aggregate(aggregate));
-            held.poison();
-            return None;
-        }
-    };
-    let mut bitmap = 0_u64;
-    for (index, subframe) in aggregate.operation.payload().0.iter().enumerate() {
-        let bit = match subframe_bit(index) {
-            Ok(bit) => bit,
-            Err(ModelFault) => {
-                let _fault = held.quarantined.push(Work::Aggregate(aggregate));
-                held.poison();
-                return None;
-            }
-        };
-        if acknowledged & bit != 0 {
-            bitmap |= subframe.acknowledgement_bit;
-        }
-    }
-    held.air.edca.draw(aggregate.role, aggregate.queue);
-    if !matches!(answer, AggregateAnswer::AirDenied) {
-        held.air.sent.record_all(frames);
-    }
-    // NonEmptyAggregate carries the first sequence into PreparedAggregate below.
-    let report = BlockAckReport {
-        start_sequence: aggregate.start_sequence,
-        bitmap,
-    };
-    Some(Publication {
-        started: held.air.monotonic_now().as_micros(),
-        work: Published::Aggregate {
-            prepared: aggregate,
-            report,
-            answer,
-        },
-    })
+    terminal(held, *work, TxOutcome::Withdrawn(cause));
 }
 
 /// Post the terminal of `prepared`, with its tokens.
@@ -4211,6 +3763,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
     }
 
     fn close_gate(&mut self, gate: GateOpen<'id, ModelPool<<B as ModelComposition>::Identity, 0>>) {
+        self.held.gate_closed.set(true);
         self.held
             .command(Command::CloseGate(gate.into_owned(&self.frontend.loan)));
     }
@@ -4223,6 +3776,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> LowerMacP
             .held
             .gate_issuer
             .open(gate.into_owned(&self.frontend.loan));
+        self.held.gate_closed.set(false);
         self.held.command(Command::OpenGate);
         open.lend(&self.frontend.loan)
     }
@@ -4312,7 +3866,6 @@ fn retry_stages<K>(
 }
 
 type PhaseProof<'p, T> = PhantomData<fn(&'p ()) -> (&'p (), T)>;
-type TypeProof<T> = PhantomData<fn() -> T>;
 type ModelSource<'k, 'p, 'id, C, K, R, B> = TxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
@@ -4764,374 +4317,6 @@ pub const MODEL_AMPDU_SUBFRAMES: usize = 8;
 /// the HT-SIG HT Length field.
 pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = AmpduLengthTable::uniform(65_535);
 
-/// Builder retaining receiver, TID, role and one installed protection.
-/// Only `push_aggregate` can create the nonempty state accepted by submission.
-///
-/// Role, phase, nominal identity and body loan stay in the builder:
-///
-/// ```compile_fail,E0308
-/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
-/// use oer_protocols_ieee80211_contracts_port::{Station, AccessPoint};
-/// fn role<'k, 'phase, 'p, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'p, Station, K, B>) -> ModelAggregate<'k, 'phase, 'p, AccessPoint, K, B> { a }
-/// ```
-///
-/// ```compile_fail
-/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
-/// fn phase<'k, 'old, 'new, 'p, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'old, 'p, R, K, B>) -> ModelAggregate<'k, 'new, 'p, R, K, B> { a }
-/// ```
-///
-/// ```compile_fail
-/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
-/// fn body<'k, 'phase, 'old, 'new, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'old, R, K, B>) -> ModelAggregate<'k, 'phase, 'new, R, K, B> { a }
-/// ```
-///
-/// ```compile_fail,E0308
-/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelBackend};
-/// use oer_protocols_radio_port::SlotIdentity;
-/// fn identity<'k, 'phase, 'p, R, K, Old: SlotIdentity, New: SlotIdentity>(a: ModelAggregate<'k, 'phase, 'p, R, K, ModelBackend<Old>>) -> ModelAggregate<'k, 'phase, 'p, R, K, ModelBackend<New>> { a }
-/// ```
-///
-/// ```
-/// use oer_protocols_ieee80211_testing_model::{ModelAggregate, ModelComposition};
-/// fn same<'k, 'phase, 'p, R, K, B: ModelComposition>(a: ModelAggregate<'k, 'phase, 'p, R, K, B>) -> ModelAggregate<'k, 'phase, 'p, R, K, B> { a }
-/// ```
-pub struct ModelAggregate<
-    'k,
-    'p,
-    'id,
-    R,
-    K,
-    B: ModelComposition,
-    S: AggregateState = EmptyAggregate,
-> {
-    subframes: Vec<Subframe<'id, B>>,
-    loan: BodyLoan<'id, B::Identity, B>,
-    first: S::Head<SequenceNumber>,
-    receiver: IndividualAddress,
-    tid: Tid,
-    rate: AmpduRate<'p, 'id, K>,
-    key: Option<PreparedKey>,
-    key_borrow: PhantomData<&'k ()>,
-    caps: TypeProof<(R, K, B, S)>,
-}
-/// The BlockAck bit of `sequence` in an aggregate whose window `first`
-/// roots, unless a subframe holds it.
-fn acknowledgement_bit<B: ModelComposition>(
-    first: SequenceNumber,
-    sequence: SequenceNumber,
-    subframes: &[Subframe<'_, B>],
-) -> Option<u64> {
-    // The modulo-4096 distance (IEEE Std 802.11-2020, 10.24.7).
-    let distance = SequenceNumber::from_low_bits(sequence.get().wrapping_sub(first.get())).get();
-    let bit = 1_u64.checked_shl(u32::from(distance))?;
-    (!subframes
-        .iter()
-        .any(|subframe| subframe.acknowledgement_bit == bit))
-    .then_some(bit)
-}
-
-/// An aggregate the model holds open ([`AmpduPhase::open_ampdu`]).
-pub struct ModelOpenAggregate<'a, 'id, B: ModelComposition> {
-    open: core::cell::RefMut<'a, [Option<PreparedAggregate<'static, B>>; 4]>,
-    queue: usize,
-    loan: BodyLoan<'id, B::Identity, B>,
-    at: Instant,
-}
-/// Metadata lowered before aggregate admission; subframes stay in the sealed owner.
-pub struct ModelAggregateExecution {
-    first: SequenceNumber,
-    receiver: IndividualAddress,
-    tid: Tid,
-    rate: PhyRate,
-    key: Option<PreparedKey>,
-}
-impl<'id, R, K, B: ModelComposition + 'id, S: AggregateState> PhaseAggregate<'id>
-    for ModelAggregate<'_, '_, 'id, R, K, B, S>
-{
-    type Types = ModelTypes<B>;
-    type Backend = B;
-    type OwnedContext = ModelContextOf<B>;
-    type OwnedPayload = ModelSubframes<'static, B>;
-    type State = S;
-    type Execution = ModelAggregateExecution;
-    fn into_admission(
-        self,
-        context: <Self::Types as PhaseTypes<'id>>::Context,
-        ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
-        _: oer_protocols_ieee80211_contracts_port::Admission<Self>,
-    ) -> oer_protocols_ieee80211_contracts_port::AdmissionOwners<
-        Self::OwnedContext,
-        Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
-        Self::OwnedPayload,
-        Self::Execution,
-    >
-    where
-        S: oer_protocols_ieee80211_contracts_port::NonEmptyState,
-    {
-        oer_protocols_ieee80211_contracts_port::AdmissionOwners {
-            context: context.enclose().into_owned(&self.loan),
-            ticket: self.loan.reclaim_slot(ticket),
-            payload: ModelSubframes(self.subframes).into_owned(&self.loan),
-            execution: ModelAggregateExecution {
-                first: S::into_head(self.first),
-                receiver: self.receiver,
-                tid: self.tid,
-                rate: self.rate.rate().get(),
-                key: self.key,
-            },
-        }
-    }
-    type Cancelled = ModelSubframeIter<'id, B>;
-    fn receiver(&self) -> IndividualAddress {
-        self.receiver
-    }
-    fn tid(&self) -> Tid {
-        self.tid
-    }
-    fn protection(&self) -> oer_protocols_ieee80211_contracts_port::MpduProtection {
-        match &self.key {
-            None => oer_protocols_ieee80211_contracts_port::MpduProtection::Open,
-            Some(_) => oer_protocols_ieee80211_contracts_port::MpduProtection::Ccmp,
-        }
-    }
-    fn subframes(&self) -> usize {
-        self.subframes.len()
-    }
-    fn into_parts(self) -> Self::Cancelled {
-        ModelSubframeIter(self.subframes.into_iter())
-    }
-}
-type ModelSubframe<'id, B, C, K> = SubframeSource<
-    ModelBuffer<'id, B, C>,
-    ModelSent<'id, B, C>,
-    ClassSubframe<C, K>,
-    ModelBodyOf<B>,
->;
-type ModelCheckedAggregate<'k, 'p, 'id, R, K, B, S, C> = CheckedAggregate<
-    ModelAggregate<'k, 'p, 'id, R, K, B, S>,
-    ModelBuffer<'id, B, C>,
-    ModelSent<'id, B, C>,
-    ClassSubframe<C, K>,
-    ModelBodyOf<B>,
->;
-type ModelAggregatePush<'k, 'p, 'id, R, K, B, S, C> = Result<
-    ModelAggregate<'k, 'p, 'id, R, K, B, NonEmptyAggregate>,
-    AggregateRefused<ModelAggregate<'k, 'p, 'id, R, K, B, S>, ModelSubframe<'id, B, C, K>>,
->;
-
-type ModelCheckedSubframe<'id, B, C, K> = CheckedSubframe<
-    ModelBuffer<'id, B, C>,
-    ModelSent<'id, B, C>,
-    ClassSubframe<C, K>,
-    ModelBodyOf<B>,
->;
-/// A member's MPDU and BlockAck bit, or the refusal with its subframe.
-type ModelMember<'id, B, C, K> =
-    Result<(ModelMpdu<'id, B>, u64), (PreparationError, ModelSubframe<'id, B, C, K>)>;
-
-/// A checked subframe as a member of an aggregate of `fixed` (role,
-/// recipient and TID) holding `subframes` under `key`, whose BlockAck
-/// window `first` roots: its MPDU and BlockAck bit, or the refusal with the
-/// subframe unchanged.
-#[cfg_attr(
-    target_pointer_width = "64",
-    expect(clippy::result_large_err, reason = "a refusal returns the subframe")
-)]
-fn model_subframe<'id, B: ModelComposition, C: ModelClass, K: Ieee80211Capabilities>(
-    source: ModelCheckedSubframe<'id, B, C, K>,
-    subframes: &[Subframe<'_, B>],
-    key: Option<&RawKeyIdentity>,
-    (role, receiver, tid): (VifRole, IndividualAddress, Tid),
-    first: impl Fn(SequenceNumber) -> SequenceNumber,
-) -> ModelMember<'id, B, C, K> {
-    let refused = if subframes.len() >= MODEL_AMPDU_SUBFRAMES {
-        Some(PreparationError::AggregateFull)
-    } else if let CheckedSubframe::Sent(mpdu) = &source {
-        if mpdu.key.as_ref() != key || mpdu.key.as_ref().is_some_and(|key| !key.0.active.get()) {
-            Some(PreparationError::RetransmissionKey)
-        } else if mpdu.role != role || mpdu.layout.recipient() != Some((receiver, tid)) {
-            Some(PreparationError::RetransmissionKind)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    if let Some(reason) = refused {
-        return Err((reason, source.into_source()));
-    }
-    match source {
-        CheckedSubframe::Fresh(fresh) => {
-            let (
-                FreshSubframe {
-                    numbering,
-                    buffer,
-                    frame,
-                    body,
-                },
-                layout,
-            ) = fresh.into_parts();
-            let sequence = buffer.memory.sequence();
-            let Some(bit) = acknowledgement_bit(first(sequence), sequence, subframes) else {
-                return Err((
-                    PreparationError::BlockAckWindow,
-                    SubframeSource::Fresh {
-                        numbering,
-                        buffer,
-                        frame,
-                        body,
-                    },
-                ));
-            };
-            Ok((
-                ModelMpdu {
-                    buffer: C::erase(buffer),
-                    layout,
-                    response: ResponsePolicy::Ack,
-                    body,
-                    published: None,
-                    packet_number: numbering.packet_number(),
-                },
-                bit,
-            ))
-        }
-        CheckedSubframe::Sent(mpdu) => {
-            let sequence = mpdu.buffer.memory.sequence();
-            let Some(bit) = acknowledgement_bit(first(sequence), sequence, subframes) else {
-                return Err((PreparationError::BlockAckWindow, SubframeSource::Sent(mpdu)));
-            };
-            let layout = mpdu.layout;
-            let response = mpdu.response;
-            Ok((
-                ModelMpdu::from_sent(C::erase_sent(mpdu), layout, response),
-                bit,
-            ))
-        }
-    }
-}
-
-/// Append a subframe to the model's open aggregate under its builder's
-/// rules ([`TxBufferPool::extend_aggregate`]).
-#[cfg_attr(
-    target_pointer_width = "64",
-    expect(clippy::result_large_err, reason = "a refusal returns the subframe")
-)]
-fn extend_model<'id, B: ModelComposition, C: ModelClass, K: Ieee80211Capabilities>(
-    open: &mut ModelOpenAggregate<'_, 'id, B>,
-    subframe: ModelSubframe<'id, B, C, K>,
-) -> Result<(), oer_protocols_ieee80211_contracts_port::ExtendRefused<ModelSubframe<'id, B, C, K>>>
-{
-    use oer_protocols_ieee80211_contracts_port::{ExtendError, ExtendRefused, LayoutRefused};
-    let ModelOpenAggregate {
-        open,
-        queue,
-        loan,
-        at,
-    } = open;
-    let Some(prepared) = open.get_mut(*queue).and_then(Option::as_mut) else {
-        return Err(ExtendRefused {
-            reason: ExtendError::Closed,
-            subframe,
-        });
-    };
-    let protection = match prepared.key {
-        Some(_) => oer_protocols_ieee80211_contracts_port::MpduProtection::Ccmp,
-        None => oer_protocols_ieee80211_contracts_port::MpduProtection::Open,
-    };
-    let checked = match CheckedSubframe::new(subframe, protection, prepared.receiver, prepared.tid)
-    {
-        Ok(checked) => checked,
-        Err(LayoutRefused { reason, operation }) => {
-            return Err(ExtendRefused {
-                reason: ExtendError::Layout(reason),
-                subframe: operation,
-            });
-        }
-    };
-    let first = prepared.start_sequence;
-    let fixed = (prepared.role, prepared.receiver, prepared.tid);
-    let key = prepared.key.as_ref().map(|key| &key.identity);
-    let subframes = prepared.operation.execute().subframes;
-    match model_subframe(checked, subframes, key, fixed, |_| first) {
-        Ok((mut mpdu, acknowledgement_bit)) => {
-            mpdu.admit(*at);
-            subframes.push(Subframe {
-                mpdu: oer_protocols_ieee80211_contracts_port::BodyPayload::into_owned(mpdu, loan),
-                acknowledgement_bit,
-            });
-            Ok(())
-        }
-        Err((reason, subframe)) => Err(ExtendRefused {
-            reason: ExtendError::Preparation(reason),
-            subframe,
-        }),
-    }
-}
-
-#[cfg_attr(
-    target_pointer_width = "64",
-    expect(
-        clippy::result_large_err,
-        reason = "a refusal returns the whole operation by value"
-    )
-)]
-fn push_model<
-    'k,
-    'p,
-    'id,
-    R: oer_protocols_ieee80211_contracts_port::InterfaceRole,
-    K: Ieee80211Capabilities,
-    B: ModelComposition,
-    S: AggregateState,
-    C: ModelClass,
->(
-    operation: ModelCheckedAggregate<'k, 'p, 'id, R, K, B, S, C>,
-) -> ModelAggregatePush<'k, 'p, 'id, R, K, B, S, C> {
-    let (mut aggregate, source) = operation.into_parts();
-    let member = model_subframe(
-        source,
-        &aggregate.subframes,
-        aggregate.key.as_ref().map(|key| &key.identity),
-        (R::ROLE, aggregate.receiver, aggregate.tid),
-        |sequence| S::retain_head(&aggregate.first, sequence),
-    );
-    let (mpdu, acknowledgement_bit) = match member {
-        Ok(member) => member,
-        Err((reason, subframe)) => {
-            return Err(AggregateRefused {
-                reason,
-                aggregate,
-                subframe,
-            });
-        }
-    };
-    let first = S::retain_head(&aggregate.first, mpdu.buffer.sequence());
-    aggregate.subframes.push(Subframe {
-        mpdu,
-        acknowledgement_bit,
-    });
-    let ModelAggregate {
-        subframes,
-        loan,
-        receiver,
-        tid,
-        rate,
-        key,
-        ..
-    } = aggregate;
-    Ok(ModelAggregate {
-        first,
-        loan,
-        subframes,
-        receiver,
-        tid,
-        rate,
-        key,
-        key_borrow: PhantomData,
-        caps: PhantomData,
-    })
-}
-
 impl<'p, 'v, 'id: 'p, R, K: Ieee80211Capabilities, B: ModelComposition + 'id> AmpduPhase<'p, 'id>
     for ModelInterface<'p, 'v, 'id, R, K, B>
 where
@@ -5144,95 +4329,20 @@ where
             max_length: &MODEL_AMPDU_LENGTHS,
         }
     }
-    fn aggregate<'k>(
-        &mut self,
-        receiver: IndividualAddress,
-        tid: Tid,
-        rate: AmpduRate<'p, 'id, K>,
-        protection: InterfaceProtection<'k, 'p, 'id, Self>,
-    ) -> ModelAggregate<'k, 'p, 'id, R, K, B>
-    where
-        'id: 'k,
-    {
-        let key = match &protection {
-            TxProtection::Open => None,
-            TxProtection::Ccmp(key) => Some(R::tx_identity(key).into_owned(&self.loan)),
-        };
-        ModelAggregate {
-            subframes: Vec::new(),
-            loan: self.loan,
-            first: (),
-            receiver,
-            tid,
-            rate,
-            key: key.map(PreparedKey::new),
-            key_borrow: PhantomData,
-            caps: PhantomData,
-        }
-    }
-    fn submit_ampdu<'k>(
-        &mut self,
-        attempt: oer_protocols_ieee80211_contracts_port::InterfaceAggregateSubmission<
-            'k,
-            'p,
-            'id,
-            Self,
-        >,
-    ) -> Result<(), Poisoned<ModelFault>>
-    where
-        'id: 'k,
-    {
-        let mut attempt = attempt.into_parts(&self.loan);
-        let at = self.held.air.monotonic_now();
-        for subframe in attempt.operation.execute().subframes {
-            subframe.mpdu.admit(at);
-        }
-        let ModelAggregateExecution {
-            first,
-            receiver,
-            tid,
-            rate,
-            key,
-        } = attempt.execution;
-        let queue = match oer_protocols_ieee80211_wire::qos::WmmUserPriority::new(tid.get()) {
-            Some(priority) => priority.access_category(),
-            None => oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
-        };
-        self.held.hold_open(PreparedAggregate {
-            operation: attempt.operation,
-            role: R::ROLE,
-            receiver,
-            tid,
-            start_sequence: first,
-            queue,
-            rate,
-            key,
-        });
-        if self.held.air.admission_closed() {
-            Err(Poisoned { cause: ModelFault })
-        } else {
-            Ok(())
-        }
-    }
-
-    fn open_ampdu(&mut self, ticket: u8) -> Option<ModelOpenAggregate<'_, 'id, B>> {
-        let open = self.held.open.try_borrow_mut().ok()?;
-        let queue = open.iter().position(|open| {
-            open.as_ref()
-                .is_some_and(|open| open.operation.ticket().index() == ticket)
-        })?;
-        Some(ModelOpenAggregate {
-            open,
-            queue,
-            loan: self.loan,
-            at: self.held.air.monotonic_now(),
-        })
-    }
 }
 
 impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> StationPhase<'p, 'id>
     for ModelInterface<'p, 'v, 'id, Station, C, B>
 {
+    type DataArena<'a>
+        = ModelDataArena<'a, 'p, 'id, C, B>
+    where
+        Self: 'a;
+
+    fn data_arena(&mut self) -> ModelDataArena<'_, 'p, 'id, C, B> {
+        ModelDataArena::new(self.held)
+    }
+
     fn replace_group_key(
         &mut self,
         permission: StationGroupPermission<'id, B>,
@@ -5275,6 +4385,7 @@ impl<'p, 'v, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition + 'id> Stati
         >,
         _: StationReceive<C>,
     ) {
+        self.held.configuring_station.set(true);
         self.held
             .command(Command::Configure(OwnedConfigured::Station(
                 permission.into_owned(&self.loan),

@@ -70,32 +70,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
     }
 }
-impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    BodyPayload<'p, Id, Esp32s31Backend<Id, D, B, O>> for Subframes<'p, Id, D, B, O>
-{
-    type Owned = Subframes<'static, Id, D, B, O>;
-    fn into_owned(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Owned {
-        Subframes::into_owned(self, loan)
-    }
-}
-impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
-    OwnedPayload<Id, Esp32s31Backend<Id, D, B, O>> for Subframes<'static, Id, D, B, O>
-{
-    type Lent<'p>
-        = Subframes<'p, Id, D, B, O>
-    where
-        Self: 'p,
-        Id: 'p,
-        Esp32s31Backend<Id, D, B, O>: 'p;
-    fn lend<'p>(self, loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>) -> Self::Lent<'p>
-    where
-        Self: 'p,
-        Id: 'p,
-        Esp32s31Backend<Id, D, B, O>: 'p,
-    {
-        Subframes::lend(self, loan)
-    }
-}
 impl<'p, Id: SlotIdentity, R> PairwiseKey<'p, Id, R> {
     pub(super) fn into_owned(self) -> PairwiseKey<'static, Id, R> {
         PairwiseKey {

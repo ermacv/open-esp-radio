@@ -2,12 +2,16 @@ use super::*;
 use core::{future::Future, marker::PhantomData, task::Poll};
 use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduPhase, AmpduRate, Channel, ChannelWidth, LowerMacPhase, PhaseRate,
+    AmpduPhase, AmpduRate, Channel, ChannelWidth, LowerMacPhase, PhaseRate, RxMeta,
+};
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{
+    CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
 };
 use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAirDenied, ModelArena, ModelArenaAnswer, ModelBackend,
     ModelBlockAckEvidence, ModelCaps, ModelNetworkMemory, ModelResources,
 };
+use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, IndividualAddress, OwnAddress},
     data::IEEE80211_QOS_DATA_HEADER_LEN,
@@ -130,7 +134,7 @@ macro_rules! cases {
     )*};
 }
 
-fn link(protection: LinkProtection, key: Option<PacketNumbers>) -> DataLink {
+fn link(protection: LinkProtection) -> DataLink {
     DataLink {
         header: StaDataHeaderTemplate::new(
             OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
@@ -139,13 +143,11 @@ fn link(protection: LinkProtection, key: Option<PacketNumbers>) -> DataLink {
             protection,
         )
         .unwrap(),
-        sequences: LinkSequences::Qos([SequenceCounter::new(SequenceNumber::from_low_bits(0)); 8]),
-        key,
         admission: AcAdmission::default(),
-        retry: AggregateRetry {
+        retry: Some(AggregateRetry {
             lifetime: Duration::from_millis(100),
             attempts: 3,
-        },
+        }),
         ht: Some(HtLimits {
             spacing: MpduStartSpacing::new(0).unwrap(),
             max_length: 65_535,
@@ -154,13 +156,10 @@ fn link(protection: LinkProtection, key: Option<PacketNumbers>) -> DataLink {
     }
 }
 
-fn numbers() -> PacketNumbers {
-    PacketNumbers::new(
-        CcmpKeyId::PAIRWISE,
-        CcmpPacketNumber::ZERO,
-        CcmpPacketNumberStep::ONE,
-    )
-}
+/// Key material of a test key, which software alone owns.
+struct TestKey;
+
+impl SoftwareCcmpKey for TestKey {}
 
 /// An MSDU whose payload octets are all `tag`.
 fn msdu(tag: u8, priority: WmmUserPriority) -> OutboundMsdu<ModelNetworkMemory> {
@@ -187,6 +186,10 @@ fn retried(frame: &[u8]) -> bool {
 
 struct World<'p, 'id> {
     rates: Rates<'p, 'id>,
+    /// The station's QoS sequence spaces, which each intake borrows.
+    sequences: [SequenceCounter; 8],
+    /// The station's pairwise key and its packet numbers.
+    key: Option<InstalledCcmpTxKey<TestKey>>,
     arena: ModelArena<ModelCaps>,
     plane: DataPlane,
     returned: Vec<ModelNetworkMemory>,
@@ -207,6 +210,8 @@ impl<'p, 'id: 'p> World<'p, 'id> {
         }));
         Self {
             rates,
+            sequences: [SequenceCounter::new(SequenceNumber::from_low_bits(0)); 8],
+            key: None,
             arena,
             plane,
             returned: Vec::new(),
@@ -219,13 +224,22 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     }
 
     fn agree(&mut self, tid: WmmUserPriority, size: u16) {
-        let head = self.plane.link.as_ref().unwrap().sequences.peek(tid);
+        let head = tid.select(&self.sequences).peek();
         self.plane.agreement(tid, Some(TxWindow { head, size }));
     }
 
     fn take(&mut self, tag: u8, tid: WmmUserPriority) -> Intake<ModelNetworkMemory> {
+        self.intake(msdu(tag, tid))
+    }
+
+    /// Offer `msdu` with the station's numbers.
+    fn intake(&mut self, msdu: OutboundMsdu<ModelNetworkMemory>) -> Intake<ModelNetworkMemory> {
         let now = self.now();
-        self.plane.intake(&mut self.arena, msdu(tag, tid), now)
+        let numbers = LinkNumbers {
+            sequences: LinkMode::Qos(&mut self.sequences),
+            packet_numbers: self.key.as_ref().map(InstalledCcmpTxKey::packet_numbers),
+        };
+        self.plane.intake(&mut self.arena, msdu, numbers, now)
     }
 
     fn taken(&mut self, tag: u8, tid: WmmUserPriority) {
@@ -302,13 +316,16 @@ cases! {
     another_tids_standby_makes_the_msdu_wait => other_tid,
     a_protected_link_numbers_each_frame_and_refuses_without_key_or_link => key_and_link,
     handover_and_stop_keep_the_sequence_numbers => round_trip,
+    the_stations_own_frames_share_the_sequence_spaces => shared_spaces,
+    numbers_of_the_other_qos_kind_are_refused => numbering,
+    withdrawing_unpublished_frames_keeps_the_link_and_the_arena_on_the_air => withdraw_unpublished,
     a_tid_without_agreement_goes_one_mpdu_at_a_time => single,
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
     an_ended_agreement_drains_its_arenas_as_single_mpdus_without_drops => agreement_end,
 }
 
 fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..4 {
         world.taken(tag, BE);
@@ -348,7 +365,7 @@ fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn partial_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..4 {
         world.taken(tag, BE);
@@ -393,8 +410,11 @@ fn partial_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut link = link(LinkProtection::Open, None);
-    link.retry.attempts = 2;
+    let mut link = link(LinkProtection::Open);
+    link.retry = link.retry.map(|retry| AggregateRetry {
+        attempts: 2,
+        ..retry
+    });
     let mut world = World::new(rates, link);
     world.agree(BE, 64);
     for tag in 0..3 {
@@ -424,7 +444,7 @@ fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn lifetime<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.taken(0, BE);
     world.micros += 50_000;
@@ -448,7 +468,7 @@ fn lifetime<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn past_window<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 2);
     world.taken(0, BE);
     world.taken(1, BE);
@@ -460,18 +480,13 @@ fn past_window<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.block_ack(all(2));
     world.settle();
     assert_eq!(world.plane.window(BE).unwrap().head.get(), 2);
-    assert_eq!(
-        world
-            .plane
-            .intake(&mut world.arena, waiting, Instant::from_micros(2)),
-        Intake::Taken(BE)
-    );
+    assert_eq!(world.intake(waiting), Intake::Taken(BE));
     let (_, frames) = world.publish();
     assert_eq!(sequence(&frames[0]), 2);
 }
 
 fn other_tid<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.agree(VIDEO, 64);
     world.taken(0, BE);
@@ -481,20 +496,19 @@ fn other_tid<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.taken(2, BE);
     let (plan, _) = world.publish();
     assert_eq!((plan.tid, plan.frames), (BE, 2));
-    let now = world.now();
-    assert_eq!(
-        world.plane.intake(&mut world.arena, waiting, now),
-        Intake::Taken(VIDEO)
-    );
+    assert_eq!(world.intake(waiting), Intake::Taken(VIDEO));
 }
 
 fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Ccmp, None));
+    let mut world = World::new(rates, link(LinkProtection::Ccmp));
     let Intake::Refused { reason, .. } = world.take(0, BE) else {
         panic!("a protected link without its key refuses data");
     };
     assert_eq!(reason, IntakeRefusal::NoKey);
-    assert_eq!(world.plane.set_key(Some(numbers())), None);
+    world.key = Some(InstalledCcmpTxKey::install(
+        TestKey,
+        CcmpPacketNumberStep::ONE,
+    ));
     world.arena.set_key(true);
     world.taken(1, BE);
     let (plan, frames) = world.publish();
@@ -507,20 +521,26 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     // A frame too long for its memory takes neither number.
     let mut long = msdu(2, BE);
     long.length = MODEL_MAX_MPDU;
-    let now = world.now();
-    let Intake::Refused { reason, .. } = world.plane.intake(&mut world.arena, long, now) else {
+    let Intake::Refused { reason, .. } = world.intake(long) else {
         panic!("an MPDU longer than its memory is refused");
     };
     assert_eq!(reason, IntakeRefusal::TooLong);
     world.taken(3, BE);
     let returned = &mut world.returned;
-    let link = world
-        .plane
-        .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
-        .unwrap()
-        .unwrap();
-    assert_eq!(link.key.unwrap().last(), CcmpPacketNumber::new(2).unwrap());
-    assert_eq!(link.sequences.peek(BE).get(), 2);
+    assert!(
+        world
+            .plane
+            .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
+            .unwrap()
+            .is_some()
+    );
+    // The numbers stay the station's, advanced past every frame taken.
+    let key = world.key.as_ref().unwrap();
+    assert_eq!(
+        key.packet_numbers().last(),
+        CcmpPacketNumber::new(2).unwrap()
+    );
+    assert_eq!(world.sequences[0].peek().get(), 2);
     let Intake::Refused { reason, .. } = world.take(4, BE) else {
         panic!("a stopped plane refuses data");
     };
@@ -528,7 +548,7 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..3 {
         world.taken(tag, BE);
@@ -540,8 +560,8 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         .unwrap()
         .unwrap();
     assert_eq!(world.returned_sequences(), [0, 1, 2]);
-    assert_eq!(link.sequences.peek(BE).get(), 3);
-    assert_eq!(link.sequences.peek(VIDEO).get(), 0);
+    assert_eq!(world.sequences[0].peek().get(), 3);
+    assert_eq!(world.sequences[5].peek().get(), 0);
     assert!(world.plane.handover(link).is_ok());
     assert!(matches!(
         world.plane.handover(link),
@@ -554,7 +574,7 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.taken(0, BE);
     assert!(matches!(world.take(1, BE), Intake::Wait(_)));
     let (plan, _) = world.publish();
@@ -595,7 +615,7 @@ fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn lone_frame<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.taken(0, BE);
     let (plan, _) = world.publish();
@@ -610,7 +630,7 @@ fn lone_frame<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 }
 
 fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open, None));
+    let mut world = World::new(rates, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..3 {
         world.taken(tag, BE);
@@ -665,4 +685,137 @@ fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         assert_eq!(world.returned_sequences(), [expected]);
     }
     assert_eq!(world.plane.publishable(), None);
+}
+
+fn shared_spaces<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    world.taken(0, BE);
+    // The station sends a frame of its own in TID 0's space between two
+    // MSDUs: the next MPDU follows it, and the standby keeps only
+    // consecutive numbers.
+    assert_eq!(world.sequences[0].take().get(), 1);
+    assert!(matches!(world.take(1, BE), Intake::Wait(_)));
+    let (plan, frames) = world.publish();
+    assert_eq!(plan.frames, 1);
+    assert_eq!(sequence(&frames[0]), 0);
+    world.arena.answer(ModelArenaAnswer::Ack);
+    world.settle();
+    world.taken(2, BE);
+    let (_, frames) = world.publish();
+    assert_eq!(sequence(&frames[0]), 2);
+}
+
+fn numbering<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    let mut counter = SequenceCounter::new(SequenceNumber::from_low_bits(0));
+    let numbers = LinkNumbers {
+        sequences: LinkMode::NonQos(&mut counter),
+        packet_numbers: None,
+    };
+    let now = world.now();
+    let Intake::Refused { reason, .. } =
+        world
+            .plane
+            .intake(&mut world.arena, msdu(0, BE), numbers, now)
+    else {
+        panic!("a QoS template refuses the station's non-QoS space");
+    };
+    assert_eq!(reason, IntakeRefusal::Numbering);
+    assert_eq!(counter.peek().get(), 0);
+}
+
+fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+    let mut world = World::new(rates, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    world.taken(0, BE);
+    world.taken(1, BE);
+    world.publish();
+    world.taken(2, BE);
+    assert!(world.plane.on_air() && world.plane.holds_frames());
+    let returned = &mut world.returned;
+    world
+        .plane
+        .withdraw_unpublished(&mut world.arena, |memory| returned.push(memory), &mut ())
+        .unwrap();
+    // The standby's frame goes back; the A-MPDU on the air settles later.
+    assert_eq!(world.returned_sequences(), [2]);
+    assert!(world.plane.is_connected() && world.plane.on_air());
+    world.block_ack(all(2));
+    assert_eq!(world.settle().delivered, 2);
+    assert!(!world.plane.on_air() && !world.plane.holds_frames());
+    world.taken(3, BE);
+    let (_, frames) = world.publish();
+    assert_eq!(sequence(&frames[0]), 3);
+}
+
+/// The single MPDUs' outcomes a selection was taught, by their ACK SNR.
+#[derive(Default)]
+struct Taught(Vec<Option<i8>>);
+
+impl RateSelection<RxMeta, i8, ModelBlockAckEvidence> for Taught {
+    fn packet_number_step(&self) -> CcmpPacketNumberStep {
+        CcmpPacketNumberStep::ONE
+    }
+    fn plan<R>(
+        &self,
+        _: FrameRates,
+        _: impl Fn(PhyRate) -> Option<R>,
+    ) -> Option<oer_protocols_ieee80211_contracts_port::RetryPlan<R>> {
+        None
+    }
+    fn associated(
+        &mut self,
+        _: &oer_protocols_ieee80211_core_upper_mac::rate_control::RatePeer,
+        _: &RxMeta,
+    ) {
+    }
+    fn disconnected(&mut self) {}
+    fn completed<D>(&mut self, _: Instant, frame: FrameRates, outcome: &SingleOutcome<i8, D>) {
+        assert_eq!(frame, FrameRates::Data);
+        self.0.push(match outcome {
+            TxOutcome::Ended(SingleEnd::Delivered {
+                response: SingleResponse::Ack(snr),
+                ..
+            }) => Some(*snr),
+            _ => None,
+        });
+    }
+    fn completed_aggregate<D>(
+        &mut self,
+        _: Instant,
+        _: BlockAckTally,
+        _: &AggregateOutcome<ModelBlockAckEvidence, D>,
+    ) {
+    }
+}
+
+#[test]
+fn a_single_lesson_reaches_the_selection_through_its_ack_evidence() {
+    let air = oer_protocols_ieee80211_contracts_port::Air {
+        transmissions: core::num::NonZeroU16::MIN,
+        rate: ht(),
+    };
+    let acked = |response| {
+        RateLesson::<ModelBlockAckEvidence, ModelAirDenied>::Single(TxOutcome::Ended(
+            SingleEnd::Delivered {
+                air,
+                response: SingleResponse::Ack(response),
+            },
+        ))
+    };
+    let ack = |response| match response {
+        ModelBlockAckEvidence::Measured(snr) => Some(snr),
+        ModelBlockAckEvidence::Unmeasured => None,
+    };
+    let mut rates = Taught::default();
+    let now = Instant::from_micros(1);
+    acked(ModelBlockAckEvidence::Measured(20)).teach(now, &mut rates, ack);
+    // Evidence the selection cannot read teaches nothing.
+    acked(ModelBlockAckEvidence::Unmeasured).teach(now, &mut rates, ack);
+    RateLesson::<ModelBlockAckEvidence, ModelAirDenied>::Single(TxOutcome::Ended(
+        SingleEnd::AckTimeout(air),
+    ))
+    .teach(now, &mut rates, ack);
+    assert_eq!(rates.0, [Some(20), None]);
 }

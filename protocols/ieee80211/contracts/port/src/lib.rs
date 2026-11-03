@@ -74,8 +74,8 @@ pub mod association;
 pub mod capabilities;
 mod layout;
 pub use layout::{
-    CheckedAggregate, CheckedSubframe, CheckedTxSource, FreshSource, FreshSubframe, LaidOut,
-    LayoutError, LayoutRefused, MpduKind, MpduLayout, MpduProtection, SubframeLayoutResult,
+    CheckedTxSource, FreshSource, LaidOut, LayoutError, LayoutRefused, MpduKind, MpduLayout,
+    MpduProtection,
 };
 pub mod control;
 pub mod extensions;
@@ -148,12 +148,8 @@ pub use owner::{
     SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use owner::{
-    AdmittedAggregate, AdmittedAggregateParts, AggregateAttempt, AggregatePushResult,
-    AggregateRefused, AggregateState, AirReservationPhase, AmpduPhase, AmpduRate,
-    BeaconTimingPhase, BeaconWindow, ClassSubframe, EmptyAggregate, ExtendError, ExtendRefused,
-    InterfaceAggregate, InterfaceAggregateAttempt, InterfaceAggregateSubmission,
-    InterfaceProtection, MonitorPhase, MpduStartSpacing, NonEmptyAggregate, NonEmptyState,
-    PhaseAggregate, PoolSubframe, SubframeSource, TbttPlan,
+    AirReservationPhase, AmpduPhase, AmpduRate, BeaconTimingPhase, BeaconWindow, MonitorPhase,
+    MpduStartSpacing, TbttPlan,
 };
 mod interface_commands;
 pub use interface_commands::{
@@ -161,15 +157,15 @@ pub use interface_commands::{
     SampledTsfPermission, TsfPermission,
 };
 pub use phase::{
-    AccessPointPhase, AdmittedAttempt, AdmittedTxParts, AggregateCompleted, ArbiterAuthority,
-    ArbiterPool, Attempt, AttemptKey, BufferMemoryUnavailable, CheckedPoolSource, ClassFrame,
-    ClassSizedFrame, GateClosed, GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise,
+    AccessPointPhase, AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt,
+    AttemptKey, BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame,
+    GateClosed, GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise,
     InterfaceAttempt, InterfaceKeys, InterfacePhase, InterfaceSubmission, KeyTypes, LowerMacEvent,
-    LowerMacPhase, LowerMacTerminal, PhaseAggregateOutcome, PhaseBlockAckSlot, PhaseSingleOutcome,
+    LowerMacPhase, LowerMacTerminal, PhaseArenaCompleted, PhaseBlockAckSlot, PhaseSingleOutcome,
     PhaseTypes, PoolMpdu, PoolPreparation, PoolSource, PreparationError, PreparationRefused,
     PreparedTx, RETRY_STAGES, Removed, RemovedKey, RetransmissionPlan, RetryPlan, RetryStage,
-    ReturnedMpdu, RoleKeys, SingleCompleted, StationPhase, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxCompleted, TxProtection, TxSource,
+    ReturnedMpdu, RoleKeys, SingleCompleted, StationDataArena, StationPhase, TxBufferClass,
+    TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
 };
 pub use rx::{
     AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,
@@ -185,8 +181,6 @@ pub use tx::{
 extern crate alloc;
 #[cfg(test)]
 extern crate std;
-
-pub use owner::CheckedPoolAggregate;
 
 #[allow(
     missing_docs,
@@ -219,4 +213,4 @@ pub mod backend;
 
 pub mod backend_aggregate;
 
-pub use phase::{NumberedKey, TxNumbering};
+pub use phase::NumberedKey;

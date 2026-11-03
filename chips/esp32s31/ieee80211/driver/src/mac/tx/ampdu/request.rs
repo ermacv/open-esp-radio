@@ -1,6 +1,6 @@
 //! Validated A-MPDU frame geometry and rate-policy requests.
 
-use crate::mac::tx::{HeEdcaTxopLimit, HeRate, HtAmpduDensity, HtRate};
+use crate::mac::tx::{HeEdcaTxopLimit, HeRate, HtAmpduDensity};
 
 /// Encoded MPDU bytes and the trailer bytes appended by hardware.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,36 +68,6 @@ impl AmpduFrameLayout {
     }
 }
 
-/// Complete policy required to append one retained HT MPDU.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct HtAmpduFrameRequest {
-    layout: AmpduFrameLayout,
-    empty_delimiters: u8,
-    rate: HtRate,
-}
-
-impl HtAmpduFrameRequest {
-    pub const fn new(layout: AmpduFrameLayout, empty_delimiters: u8, rate: HtRate) -> Self {
-        Self {
-            layout,
-            empty_delimiters,
-            rate,
-        }
-    }
-
-    pub const fn layout(self) -> AmpduFrameLayout {
-        self.layout
-    }
-
-    pub const fn empty_delimiters(self) -> u8 {
-        self.empty_delimiters
-    }
-
-    pub const fn rate(self) -> HtRate {
-        self.rate
-    }
-}
-
 /// Rate, delimiter-density and duration policy for one HE aggregate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeAmpduPolicy {
@@ -125,26 +95,5 @@ impl HeAmpduPolicy {
 
     pub const fn txop_limit(self) -> HeEdcaTxopLimit {
         self.txop_limit
-    }
-}
-
-/// Complete request required to append one retained HE MPDU.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct HeAmpduFrameRequest {
-    layout: AmpduFrameLayout,
-    policy: HeAmpduPolicy,
-}
-
-impl HeAmpduFrameRequest {
-    pub const fn new(layout: AmpduFrameLayout, policy: HeAmpduPolicy) -> Self {
-        Self { layout, policy }
-    }
-
-    pub const fn layout(self) -> AmpduFrameLayout {
-        self.layout
-    }
-
-    pub const fn policy(self) -> HeAmpduPolicy {
-        self.policy
     }
 }

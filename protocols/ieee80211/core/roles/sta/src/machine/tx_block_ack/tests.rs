@@ -287,25 +287,15 @@ fn a_stale_response_changes_nothing() {
 }
 
 #[test]
-fn a_dropped_member_owes_a_block_ack_request_at_the_new_head() {
-    let mut tx = operational();
-    let marks = |delivered, expired| crate::data::BlockAckMarks {
-        tid: oer_protocols_ieee80211_wire::qos::WmmUserPriority::UP0,
-        start: SequenceNumber::new(5).unwrap(),
-        delivered,
-        expired,
-    };
-    // 5 and 6 delivered: the window moves, no request.
-    tx.settle(marks(0b11, 0), [1; 6], [2; 6]);
-    assert_eq!(tx.operational(0).unwrap().starting_sequence.get(), 7);
+fn a_dropped_frame_owes_a_block_ack_request_at_the_planes_head() {
+    let mut tx = StaTxBlockAck::new(POLICY).unwrap();
+    tx.associate(true);
+    // Without an operational agreement the plane's head owes nothing.
+    tx.request(0, SequenceNumber::new(4).unwrap());
     assert_eq!(tx.poll(at(2), true), None);
-    // 7 dropped, 8 delivered: the head passes 7 and owes a request at 9.
-    let marks = crate::data::BlockAckMarks {
-        start: SequenceNumber::new(7).unwrap(),
-        ..marks(0b10, 0b01)
-    };
-    tx.settle(marks, [1; 6], [2; 6]);
+    let mut tx = operational();
     let start = SequenceNumber::new(9).unwrap();
+    tx.request(0, start);
     assert_eq!(tx.deadline(true), Some(Instant::EPOCH));
     assert_eq!(
         tx.poll(at(3), true),
@@ -313,7 +303,7 @@ fn a_dropped_member_owes_a_block_ack_request_at_the_new_head() {
     );
     tx.request_sent(0);
     assert_eq!(tx.poll(at(3), true), None);
-    // Unanswered, it is owed again at the head.
+    // Unanswered, it is owed again at the plane's last head.
     tx.request_unanswered(0);
     assert_eq!(
         tx.poll(at(4), true),

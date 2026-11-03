@@ -98,7 +98,8 @@ It takes facts and returns actions for the port owner to execute.
 [`contracts/port`](contracts/port/README.md) holds only the peripheral boundary: lifecycle, VIF
 configuration, the monitor tap, operation ownership, capabilities, the
 backend's service description and normalized statuses. One submission is one
-hardware attempt. The backend draws EDCA contention below the port (the S31
+hardware attempt; data goes through the station phase's two data arenas
+(`arena`). The backend draws EDCA contention below the port (the S31
 MAC's `edca::contention`); an attempt carries no backoff. The port depends on
 no core. [`core/upper-mac`](core/upper-mac/README.md) owns retry ladders, Retry bits,
 aggregate retry selection, the reading of a BlockAck, protection and the BSS
@@ -123,7 +124,7 @@ peer's packet numbers and replay frontier are `core/upper-mac`'s CCMP owners. Bo
 the arbiter's checked `WifiPlan` to exclusive standalone ESP-NOW ownership.
 
 The cores and the runtime keep no counters or diagnostics of their own work.
-An owner (the station, its data machine, the receive agreements, the
+An owner (the station, its data plane, the receive agreements, the
 ESP-NOW peer table) takes `&mut impl oer_portable_events::EventSink<E>` as a call
 parameter and reports what it dropped, refused or decided as a value of its
 own event type `E`; it never stores the sink. The station service holds the

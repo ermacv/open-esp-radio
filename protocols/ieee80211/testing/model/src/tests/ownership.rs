@@ -148,7 +148,7 @@ fn returned<'id, Id: SlotIdentity + 'id>(
                 .borrow_mut()
                 .push((air.sent().len(), PublicationEvent::GateClosed));
         }
-        LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(_))) => {
+        LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Arena(_))) => {
             panic!("single submission must return Single")
         }
         _ => {}
@@ -429,7 +429,7 @@ impl Harness for ModelHarness {
         )
         .await;
         let publication_events = conformance::observed_order(
-            air.sent().iter().map(|frame| frame.ticket),
+            air.sent().iter().filter_map(|frame| frame.ticket),
             markers.take(),
         )
         .collect();
@@ -458,256 +458,6 @@ fn common_backend_tx_ownership_suite() {
     }
 }
 
-struct AggregateContext {
-    ticket: u8,
-    buffers: Vec<u8>,
-    bodies: Vec<(u8, *const u8)>,
-    dropped: Rc<Cell<usize>>,
-}
-
-impl ModelContext for AggregateContext {
-    type OwnedStationConfigureContext<Id: SlotIdentity> = ();
-    type StationConfigureContext<'p, Id: SlotIdentity + 'p> = ();
-    type OwnedAccessPointConfigureContext<Id: SlotIdentity> = ();
-    type AccessPointConfigureContext<'p, Id: SlotIdentity + 'p> = ();
-    type Body = ModelBody;
-    type OwnedContext<Id: SlotIdentity> = Self;
-    type Context<'p, Id: SlotIdentity + 'p> = Self;
-}
-
-impl Drop for AggregateContext {
-    fn drop(&mut self) {
-        self.dropped.set(self.dropped.get() + 1);
-    }
-}
-
-struct AggregateOwners {
-    air: Rc<ModelAir>,
-    dropped: Rc<Cell<usize>>,
-    withdraw: bool,
-    initial_pn: u64,
-}
-
-impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, AggregateContext>>
-    for AggregateOwners
-{
-    type Output = ();
-    async fn run<'a, 'id>(
-        self,
-        owner: Owner<'a, 'id, Id, ModelBackend<Id, ModelCaps, AggregateContext>, Disabled>,
-        resources: ModelResources<'id, ModelBackend<Id, ModelCaps, AggregateContext>>,
-    ) -> Ended<Id, ModelBackend<Id, ModelCaps, AggregateContext>, ()>
-    where
-        ModelBackend<Id, ModelCaps, AggregateContext>: 'id,
-        Id: 'id,
-        'id: 'a,
-    {
-        let mut terminal_access = resources.terminal_access;
-        use oer_protocols_ieee80211_contracts_port::{
-            AggregateAttempt, AmpduPhase, MpduStartSpacing, Tid,
-        };
-        let Ok(mut owner) = owner.enable().await else {
-            panic!("the model enables")
-        };
-        let ModelResources {
-            mut tickets,
-            mut small,
-            gate,
-            station_pairwise: [slot, _],
-            ..
-        } = resources;
-        {
-            let mut phase = owner.phase();
-            let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
-                HtMcs::new(7).unwrap(),
-                oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                false,
-            )
-            .unwrap();
-            let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
-            let association = ModelKeys::<ModelBackend<Id, ModelCaps, AggregateContext>, Station>::begin_association(
-                resources.station_association,
-                oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
-            );
-            let key = installed_station_pairwise(
-                &mut phase,
-                &association,
-                slot,
-                IndividualAddress::new(PEER).unwrap(),
-                Ccmp128Key::new(&[7; 16]),
-            )
-            .await
-            .expect("the PTK installation terminal")
-            .into_core_key();
-            let mut station = phase.station();
-            key.set_last(self.initial_pn);
-            let rate = station.ampdu_rate(rate).ok().unwrap();
-            let aggregate = station.aggregate(
-                IndividualAddress::new(PEER).unwrap(),
-                Tid::new(6).unwrap(),
-                rate,
-                TxProtection::Ccmp(&key),
-            );
-            let ticket = tickets.remove(0);
-            let mut context = AggregateContext {
-                ticket: ticket.index(),
-                buffers: Vec::new(),
-                bodies: Vec::new(),
-                dropped: self.dropped.clone(),
-            };
-            let first = small.remove(0);
-            let body = ModelBody(alloc::vec![0; 4]);
-            context.buffers.push(first.slot.index());
-            context.bodies.push((0, body.0.as_ptr()));
-            let mut aggregate = push_subframe(
-                aggregate,
-                key.numbering(),
-                first,
-                subframe_frame(0),
-                Some(body),
-            );
-            for sequence in 1..3 {
-                let buffer = small.remove(0);
-                context.buffers.push(buffer.slot.index());
-                // A missing body does not renumber the following body's index.
-                let body = (sequence != 1).then(|| ModelBody(alloc::vec![sequence as u8; 4]));
-                if let Some(body) = &body {
-                    context.bodies.push((sequence as u8, body.0.as_ptr()));
-                }
-                aggregate = push_subframe(
-                    aggregate,
-                    key.numbering(),
-                    buffer,
-                    subframe_frame(sequence),
-                    body,
-                );
-            }
-            self.air.hold(WmmAccessCategory::Voice, self.withdraw);
-            station
-                .submit_ampdu(
-                    (AggregateAttempt {
-                        context,
-                        ticket,
-                        aggregate,
-                        protection: Protection::None,
-                        power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
-                    })
-                    .admit(),
-                )
-                .unwrap();
-            if self.withdraw {
-                phase.close_gate(gate);
-            }
-            let event = loop {
-                let Ok(Ok(event)) = phase.next_event().await else {
-                    panic!("the aggregate ends")
-                };
-                if matches!(
-                    &event,
-                    LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(_))
-                ) {
-                    break event;
-                }
-            };
-            let LowerMacEvent::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(
-                terminal,
-            ))) = event
-            else {
-                unreachable!()
-            };
-            let oer_protocols_ieee80211_contracts_port::TerminalParts {
-                context,
-                ticket,
-                payload,
-                outcome: completion,
-            } = terminal.into_parts(&mut terminal_access);
-            let subframes: Vec<_> = payload.into_iter().map(TxMpdu::into_parts).collect();
-            assert_eq!(ticket.index(), context.ticket);
-            assert_eq!(matches!(completion, TxOutcome::Withdrawn(_)), self.withdraw);
-            assert_eq!(subframes.len(), 3);
-            assert_eq!(key.last(), self.initial_pn + 3,);
-            for (index, (buffer, _)) in subframes.iter().enumerate() {
-                assert_eq!(
-                    buffer.packet_number(),
-                    (!self.withdraw).then_some(self.initial_pn + index as u64 + 1),
-                );
-            }
-            assert_eq!(
-                subframes.iter().filter(|(_, body)| body.is_some()).count(),
-                if self.withdraw { 2 } else { 0 }
-            );
-            for ((buffer, _), index) in subframes.iter().zip(&context.buffers) {
-                let slot = match buffer {
-                    ModelAnyBuffer::Small(buffer) if self.withdraw => buffer.slot.index(),
-                    ModelAnyBuffer::SmallSent(buffer) if !self.withdraw => {
-                        buffer.buffer.slot.index()
-                    }
-                    _ => panic!("only published subframes are numbered"),
-                };
-                assert_eq!(slot, *index);
-            }
-            for (index, pointer) in &context.bodies {
-                let (buffer, fresh_body) = &subframes[usize::from(*index)];
-                let body = if self.withdraw {
-                    fresh_body.as_ref().unwrap()
-                } else {
-                    let ModelAnyBuffer::SmallSent(mpdu) = buffer else {
-                        unreachable!()
-                    };
-                    mpdu.body().unwrap()
-                };
-                assert_eq!(body.0.as_ptr(), *pointer);
-                assert_eq!(body.0, [*index; 4]);
-                assert_eq!(&buffer.memory()[36..40], body.bytes());
-            }
-        }
-        let mut sink = |event| {
-            assert!(
-                !matches!(event, LowerMacTerminal::TxCompleted(_)),
-                "each attempt has one terminal"
-            );
-            core::ops::ControlFlow::Continue(())
-        };
-        let Ok(owner) = owner.disable(None, &mut sink).await else {
-            panic!("the model disables")
-        };
-        Ended::uninstall(owner, (), ())
-    }
-}
-
-#[test]
-fn aggregate_terminal_returns_its_context_and_each_subframes_resources_on_air_or_withdrawal() {
-    for (withdraw, initial_pn) in [
-        (false, 0),
-        (true, 0),
-        (
-            false,
-            oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX - 3,
-        ),
-    ] {
-        let (backend, air) = Fixture::<ModelCaps, AggregateContext>::new(
-            Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
-            [
-                IndividualAddress::new(STATION).unwrap(),
-                IndividualAddress::new(ACCESS_POINT).unwrap(),
-            ],
-            std::rc::Rc::new(oer_portable_time_virtual::VirtualClock::<8>::new()),
-        );
-        let dropped = Rc::new(Cell::new(0));
-        let _port_end = block_on(run_model(
-            backend,
-            AggregateOwners {
-                air,
-                dropped: dropped.clone(),
-                withdraw,
-                initial_pn,
-            },
-        ));
-        assert_eq!(dropped.get(), 1);
-    }
-}
-
 struct FaultContext(Rc<Cell<usize>>);
 impl ModelContext for FaultContext {
     type OwnedStationConfigureContext<Id: SlotIdentity> = ();
@@ -724,7 +474,6 @@ impl Drop for FaultContext {
     }
 }
 struct PublicationFault {
-    aggregate: bool,
     dropped: Rc<Cell<usize>>,
 }
 impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
@@ -747,7 +496,6 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
                 oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
             );
 
-        use oer_protocols_ieee80211_contracts_port::{AggregateAttempt, MpduStartSpacing};
         let mut owner = owner.enable().await.ok().unwrap();
         let ModelResources {
             mut tickets,
@@ -776,50 +524,7 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
             let first_index = first.slot.index();
             let body = ModelBody(alloc::vec![0x7a; 4]);
             let first_body = body.0.as_ptr();
-            if self.aggregate {
-                let ht = oer_protocols_ieee80211_wire::phy::HtRate::new(
-                    HtMcs::new(7).unwrap(),
-                    oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                    false,
-                )
-                .unwrap();
-                let rate = phase.rate(PhyRate::Ht(ht)).unwrap();
-                let mut station = phase.station();
-                let rate = station.ampdu_rate(rate).ok().unwrap();
-                let aggregate = station.aggregate(
-                    IndividualAddress::new(PEER).unwrap(),
-                    Tid::new(0).unwrap(),
-                    rate,
-                    TxProtection::Ccmp(&key),
-                );
-                let aggregate = push_subframe(
-                    aggregate,
-                    key.numbering(),
-                    first,
-                    subframe_frame(0),
-                    Some(body),
-                );
-                let aggregate = push_subframe(
-                    aggregate,
-                    key.numbering(),
-                    small.remove(0),
-                    subframe_frame(1),
-                    Some(ModelBody(alloc::vec![0x4b; 4])),
-                );
-                station.held.poison();
-                let submitted = station.submit_ampdu(
-                    (AggregateAttempt {
-                        context,
-                        ticket,
-                        aggregate,
-                        protection: Protection::None,
-                        power: SupportedPower::new(TxPower::Calibrated).unwrap(),
-                        min_mpdu_start_spacing: MpduStartSpacing::new(0).unwrap(),
-                    })
-                    .admit(),
-                );
-                assert!(submitted.is_err());
-            } else {
+            {
                 let source = TxSource::Fresh {
                     buffer: first,
                     frame: ClassFrame::new(data_frame(&phase, true)).ok().unwrap(),
@@ -859,41 +564,18 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
             assert!(phase.held.air.sent().is_empty());
             assert_eq!(
                 key.last(),
-                last + if self.aggregate { 2 } else { 1 },
+                last + 1,
                 "PN is reserved by the core before backend submission"
             );
             let quarantined = phase.held.quarantined.items.inspect();
             let commands = phase.held.commands.items.inspect();
-            let open = phase.held.open.borrow();
             assert!(quarantined.is_empty());
-            // A poisoned single stays owned in the command queue, a poisoned
-            // aggregate where it was held open.
-            let (single, aggregate) = match (commands.back(), open.iter().flatten().next()) {
-                (Some(super::super::Command::Submit(operation)), None) => (Some(operation), None),
-                (None, Some(operation)) => (None, Some(operation)),
-                _ => panic!("poisoned submission stays owned"),
+            // A poisoned single stays owned in the command queue.
+            let Some(super::super::Command::Submit(operation)) = commands.back() else {
+                panic!("poisoned submission stays owned");
             };
-            let mpdu = match (single, aggregate) {
-                (Some(operation), None) => {
-                    assert!(!self.aggregate);
-                    assert_eq!(operation.operation.ticket().index(), ticket_index);
-                    operation.operation.payload()
-                }
-                (None, Some(operation)) => {
-                    assert!(self.aggregate);
-                    assert_eq!(operation.operation.ticket().index(), ticket_index);
-                    let subframes = &operation.operation.payload().0;
-                    assert_eq!(subframes.len(), 2);
-                    assert_eq!(subframes[1].mpdu.body.as_ref().unwrap().0, [0x4b; 4]);
-                    assert!(
-                        subframes
-                            .iter()
-                            .all(|subframe| subframe.mpdu.published.is_none())
-                    );
-                    &subframes[0].mpdu
-                }
-                _ => unreachable!(),
-            };
+            assert_eq!(operation.operation.ticket().index(), ticket_index);
+            let mpdu = operation.operation.payload();
             assert!(mpdu.published.is_none());
             let ModelAnyBuffer::Small(buffer) = &mpdu.buffer else {
                 panic!("original allocation")
@@ -907,8 +589,8 @@ impl<Id: SlotIdentity> PortBody<Id, ModelBackend<Id, ModelCaps, FaultContext>>
 }
 
 #[test]
-fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
-    for aggregate in [false, true] {
+fn publication_fault_keeps_the_complete_single_until_teardown() {
+    {
         let dropped = Rc::new(Cell::new(0));
         let (backend, _) = Fixture::<ModelCaps, FaultContext>::new(
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
@@ -922,7 +604,6 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
             block_on(fixture::inspect_model(
                 backend,
                 PublicationFault {
-                    aggregate,
                     dropped: dropped.clone()
                 },
                 |report| {
@@ -944,7 +625,6 @@ fn publication_fault_keeps_the_complete_single_or_aggregate_until_teardown() {
     }
 }
 
-plain_context!(AggregateContext);
 plain_context!(FaultContext);
 
 impl<Id: SlotIdentity> oer_protocols_radio_port::ContextProjection<Id> for Context<Id> {

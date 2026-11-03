@@ -15,7 +15,6 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::{
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_radio_port::Slot;
 
-use crate::data::StaDataTokens;
 use crate::machine::StaTokens;
 
 /// A marker of the install `'id` and two types.
@@ -103,6 +102,14 @@ impl<'id, K: KeyTypes<'id>> StationPairwiseKey<'id, K> {
     /// retransmission keeps the number of its first transmission.
     pub fn number(&self) -> Option<NumberedKey<&K::PairwiseKey>> {
         self.key.number()
+    }
+
+    /// The key's transmit packet numbers, which the station's data draws
+    /// from as its own frames do.
+    pub fn packet_numbers(
+        &self,
+    ) -> &oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpTxPacketNumber {
+        self.key.packet_numbers()
     }
 
     /// The association owner and the port key, for the key's removal.
@@ -201,37 +208,4 @@ where
     type GroupKey = <Ty::StationKeys as KeyTypes<'id>>::GroupKey;
     type GroupPermission = <Ty::StationKeys as KeyTypes<'id>>::GroupPermission;
     type RxMeta = Ty::RxMeta;
-}
-
-/// The data machine's tokens on a port of the phase types `Ty`, its MPDUs
-/// in buffers of the class `L`.
-pub struct PortDataTokens<'id, Ty, L>(Marker<'id, Ty, L>);
-
-impl<'id, Ty, L> StaDataTokens for PortDataTokens<'id, Ty, L>
-where
-    Ty: PhaseTypes<'id, TxBody = core::convert::Infallible> + TxBufferPool<'id, L>,
-    L: TxBufferClass,
-{
-    type Class = L;
-    type EpochPath = Ty::EpochPath;
-    type Ticket = Slot<'id, Ty::TicketKind, Ty::TicketPath>;
-    type Buffer = <Ty as TxBufferPool<'id, L>>::Buffer;
-    type Sent = <Ty as TxBufferPool<'id, L>>::Sent;
-    type AckEvidence = Ty::AckEvidence;
-    type AirDenied = Ty::AirDenied;
-
-    fn renew(mpdu: Self::Sent) -> Self::Buffer {
-        let (memory, body) = <Ty as TxBufferPool<'id, L>>::renew(mpdu);
-        if let Some(body) = body {
-            match body {}
-        }
-        memory
-    }
-    type Memory = <Ty as TxBufferPool<'id, L>>::NetworkMemory;
-    fn install(buffer: &mut Self::Buffer, memory: Self::Memory) -> Result<(), Self::Memory> {
-        <Ty as TxBufferPool<'id, L>>::install(buffer, memory)
-    }
-    fn uninstall(buffer: &mut Self::Buffer) -> Option<Self::Memory> {
-        <Ty as TxBufferPool<'id, L>>::uninstall(buffer)
-    }
 }

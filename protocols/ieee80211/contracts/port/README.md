@@ -33,22 +33,21 @@ back; its operations are synchronous and never wait:
   `PhaseTypes` also owns the single body type and backend fault type for
   the phase and both of its interfaces; interface submission and the event
   stream report that same fault.
-  Before submission, `Attempt::admit` or `AggregateAttempt::admit` seals
-  context, ticket and every prepared MPDU into one closed `InFlight`.
-  The backend receives `InterfaceSubmission` or `InterfaceAggregateSubmission`,
-  with execution metadata beside the sealed owner. Queues, publication, withdrawal and quarantine
-  retain that whole owner. `TxCompleted::Single` returns its `Completed`;
-  `Aggregate` returns the complete ordered subframes. Each subframe owns its
-  fresh memory and optional body or its Sent value. There is no independent
-  body index array. `TransmitPool` mints tickets and one `TerminalAccess` for the consumer.
+  Before submission, `Attempt::admit` seals context, ticket and the
+  prepared MPDU into one closed `InFlight`. The backend receives
+  `InterfaceSubmission`, with execution metadata beside the sealed owner.
+  Queues, publication, withdrawal and quarantine retain that whole owner.
+  `TxCompleted::Single` returns its `Completed`; `TxCompleted::Arena`
+  returns a data arena's end (`PhaseArenaCompleted`), whose frames stay in
+  the arena until the station settles it through `StationPhase::data_arena`. `TransmitPool` mints tickets and one `TerminalAccess` for the consumer.
   Only consuming `Completed::into_parts` with that installation- and
   pool-specific permission releases owners. Completion alone grants no
   unpacking authority, and raw `InFlight` admission is private.
   Backend execution uses `ExecutionPayload`'s narrow projection; it may lend
   storage needed by the driver but may not expose a replaceable MPDU or
   owner extraction. The model projections keep those fields private, and
-  host/RV32 UI pairs reject swapping tickets, contexts or MPDUs, reconstructing
-  a terminal through fields, and returning a partial aggregate.
+  host/RV32 UI pairs reject swapping tickets, contexts or MPDUs and
+  reconstructing a terminal through fields.
   The common conformance suite checks actual returned
   identities and destructor counts before teardown as well as after it.
   Each hardware backend supplies its own fixture for that harness. Context moves unchanged;
@@ -66,8 +65,7 @@ back; its operations are synchronous and never wait:
   separate flag at encoding. The octets are the wire `MacHeader` codec's,
   which refuses short storage before writing. Storage
   shortage, CCMP shortage and body overlap are `LayoutError`; backend
-  `PreparationError` contains retransmission identity/kind, aggregate capacity
-  and Block Ack window refusals.
+  `PreparationError` contains retransmission identity/kind refusals.
   It retains the phase, install, role and key borrow. `ClassSizedFrame`
   carries a portable machine's size proof until the service adds phase-bound
   rates, without rechecking the class. `TxProtection::{Open, Ccmp(NumberedKey { key, packet_number })}` in
@@ -78,9 +76,7 @@ back; its operations are synchronous and never wait:
   `MpduLayout` constructor checks CCMP room and tail-body overlap once,
   before any header/body write or admission. The core reserves a PN before
   handoff; cancelled preparation may leave a gap, and a reserved PN is never
-  allocated to another MPDU. Fresh aggregate subframes carry `TxNumbering`
-  independently; a numbering/protection mismatch returns every owner before
-  writing memory.
+  allocated to another MPDU.
   `PhaseRate` retains the capabilities, generative installation brand and
   enabled phase loan through NoAck, legacy/A-MPDU rates, retry plans and
   prepared frames. Two installations of the same backend cannot exchange
@@ -105,33 +101,17 @@ back; its operations are synchronous and never wait:
   Rate, retry plan, RTS/CTS, power and the coexistence operation belong to the new attempt.
   Retiring the original installation makes preparation refuse
   `RetransmissionKey`, even if the slot and key material are reused.
-  An aggregate builder owns its receiver, TID, role, rate and one protection.
-  Its `PhaseAggregate::protection` derives the same typed layout value from
-  its retained key, and each subframe produces an `AckHeader`.
-  `CheckedAggregate::new` checks the class-specific `SubframeSource` with
-  its builder and owns both until `TxBufferPool::push_aggregate` consumes it.
-  The proof cannot be transferred to another builder. Fresh subframes have no protection argument, and
-  their receiver/TID come from the builder. A Sent subframe retains its
-  original installation and must match the builder. Refusal returns both
-  the unchanged source and the builder with all earlier subframes.
-  A builder using a compressed Block Ack window refuses `BlockAckWindow`
-  before publication when a subframe is outside the 64 sequence numbers
-  beginning at its first subframe, modulo 4096.
-  A successful push returns `NonEmptyAggregate`; only this state can be
-  submitted. `AggregateFull` remains a push refusal, and an empty aggregate
-  has no submit operation.
-  A backend may hold a submitted aggregate open while it is unpublished and
-  its access category's last submission: `AmpduPhase::open_ampdu` lends it
-  by its ticket's index, and `TxBufferPool::extend_aggregate` appends a
-  subframe under the same rules (layout through `CheckedSubframe::new`),
-  which then comes back with the aggregate's terminal. A refusal
-  (`ExtendError`) returns the subframe unchanged; `Closed` may come at any
-  time. A later submission of the category, and any other command, closes it.
-  `PhaseAggregate::into_parts` cancels either state without a ticket or TX
-  terminal. Cancellation iterates complete MPDUs and does not manufacture an
-  admitted aggregate from an empty builder. Sent subframes retain their
-  bodies; each fresh subframe returns its own body. `renew` returns memory
-  and body explicitly.
+  `renew` returns memory and body explicitly.
+- **Data arenas.** The station's data goes through two DMA arenas the
+  station phase lends for one synchronous step
+  (`StationPhase::data_arena`, a `TxArena` whose memory is
+  `PhaseTypes::DataMemory`, the network's own frame memory, and whose
+  evidence and fault are the phase types'). The caller writes each frame
+  once as an arena takes it and publishes one arena at a time as an A-MPDU
+  at an `AmpduRate` or as the single MPDU of its position 0; the backend
+  serves the hardware and returns the end as `TxCompleted::Arena`. A
+  backend publishes nothing while its gate is closed, a configuration is
+  pending or it stops: it refuses the publication as busy.
 - **Management plans.** `ManagementTxPlan` carries a legacy rate derived
   above the driver and a nonzero attempt budget; every attempt keeps the
   selected rate. `oer-protocols-ieee80211-core-upper-mac` `management` chooses the budget:
@@ -148,9 +128,9 @@ back; its operations are synchronous and never wait:
   The backend retries the head of its queue by the plan before the
   next attempt of that queue; the completion reports the transmissions made
   and the last rate, for the rate control above the port.
-  A single MPDU ends as `SingleOutcome` (`TxOutcome<SingleEnd>`), an
-  aggregate as `AggregateOutcome` (`TxOutcome<AggregateEnd>`), so neither
-  can carry the other's response. `Air` holds the exact nonzero MPDU count
+  A single MPDU ends as `SingleOutcome` (`TxOutcome<SingleEnd>`); a data
+  arena's A-MPDU teaches rate selection as `AggregateOutcome`
+  (`TxOutcome<AggregateEnd>`), so neither can carry the other's response. `Air` holds the exact nonzero MPDU count
   together with the last transmitted rate (`u16` covers all four
   255-transmission stages); a delivery and an ACK timeout always carry it,
   while a protection failure, contention exhaustion and lost air carry
@@ -182,12 +162,10 @@ back; its operations are synchronous and never wait:
 - **MSDU age.** Each VIF's EDCA table stores a typed `oer_portable_time::Duration`
   per AC (default 500 TU); `EdcaParameterSet::from_tu` converts MIB units
   at the record boundary. Admission samples backend `now()` at `submit`,
-  once per MSDU and per aggregate member. Every publication and retry
-  checks age, including re-formation of returned unpublished members.
-  Hardware-owned attempts finish independently of age. `Expired { msdus }`
-  returns all original owners; bit `i` identifies expired aggregate member
-  `i` (bit zero for a single). Live members retain their admission samples
-  for re-formation. Renewal for a new MSDU clears the old sample through
+  once per MPDU. Every publication and retry checks age. Hardware-owned
+  attempts finish independently of age. `Expired { msdus }` returns all
+  original owners, bit zero naming the MPDU. A data arena's frames age by
+  the caller's admission instants instead. Renewal for a new MSDU clears the old sample through
   `TxBufferMemory::renew_msdu`. Both buffer accessors return
   `BufferMemoryUnavailable` when the memory is not the body's (its hardware
   owns it, or its place holds none); `ReturnedMpdu::into_fresh` always
@@ -354,9 +332,9 @@ indices and completions (`tests/ui/arena_*.rs`).
 
 ## Optional features
 
-Extension traits of the phase: `AmpduPhase` (one attempt sends one A-MPDU,
-each subframe in a buffer of its own; every phase's station interface
-implements it, so a station service always aggregates), `BeaconTimingPhase` (an interface's
+Extension traits of the phase: `AmpduPhase` (the rates the backend
+aggregates at, which a data arena's A-MPDU takes; every phase's station
+interface implements it, so a station service always aggregates), `BeaconTimingPhase` (an interface's
 TSF, its samples and its TBTT plan with the wake lead and the beacon window
 the `BeaconWindow` it asks the air for as `Operation::BeaconWindow`) and `MonitorPhase`. Their values (`AmpduCapabilities` with its per-rate `AmpduLengthTable`,
 `TbttEvent`, `TsfSample`, `VifTsf`, `MonitorCapabilities`) are in
@@ -400,7 +378,7 @@ PN with the installed key ID.
 | --- | --- |
 | The retry plan of an MPDU and the rate control that chooses it | `oer-protocols-ieee80211-core-upper-mac` |
 | What a `BlockAckReport` acknowledges | `oer-protocols-ieee80211-core-upper-mac` `block_ack::acknowledges` |
-| Which A-MPDU subframes the next aggregate resends after a `BlockAckReport`, the BlockAckReq, aging | the station's data machine and transmit agreements (`oer-protocols-ieee80211-core-roles-sta`); `oer-protocols-ieee80211-core-upper-mac` `ampdu` holds the vendor's per-aggregate machine |
+| Which frames of a data arena go again after a `BlockAckReport`, the BlockAckReq, aging | the station's data plane and transmit agreements (`oer-protocols-ieee80211-core-roles-sta`); `oer-protocols-ieee80211-core-upper-mac` `ampdu` holds the vendor's per-aggregate machine |
 | RTS/CTS or CTS-to-self, the control-frame rate and the BSS basic rates | `oer-protocols-ieee80211-core-upper-mac` `protection` |
 | The retry counter a frame's class advances and the ladder step of its failures | `oer-protocols-ieee80211-core-upper-mac` `retry` |
 | The attempt budget of a management frame | `oer-protocols-ieee80211-core-upper-mac` `management` |

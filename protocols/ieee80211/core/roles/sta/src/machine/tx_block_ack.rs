@@ -78,6 +78,8 @@ pub struct StaTxBlockAck {
     /// Where each TID's owed BlockAckReq moves the recipient's window.
     request:
         [Option<oer_protocols_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
+    /// The last head the data plane named for each TID's BlockAckReq.
+    heads: [Option<oer_protocols_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
     /// The current association admits agreements: an HT access point of a QoS BSS.
     admitted: bool,
     /// The earliest instant the agreements' timing (a response deadline, an
@@ -143,6 +145,7 @@ impl StaTxBlockAck {
             traffic: [None; TX_BLOCK_ACK_MAX_TIDS],
             delba: 0,
             request: [None; TX_BLOCK_ACK_MAX_TIDS],
+            heads: [None; TX_BLOCK_ACK_MAX_TIDS],
             admitted: false,
             timing: None,
             pending: None,
@@ -157,6 +160,7 @@ impl StaTxBlockAck {
         self.traffic = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.delba = 0;
         self.request = [None; TX_BLOCK_ACK_MAX_TIDS];
+        self.heads = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.admitted = admitted;
         self.retime();
     }
@@ -180,33 +184,23 @@ impl StaTxBlockAck {
             .min()
     }
 
-    /// One terminal settled `marks` of a TID's sequence numbers: the
-    /// agreement's window moves over them, and when it passed a dropped one
-    /// the recipient owes a BlockAckReq to move its own. `receiver` and
-    /// `transmitter` name the agreement's peers.
-    pub(crate) fn settle(
+    /// The data plane moved `tid`'s window to `head` past a frame it
+    /// dropped: the recipient owes a BlockAckReq to move its own there, and
+    /// one that goes unanswered is owed again at that head.
+    pub(crate) fn request(
         &mut self,
-        marks: crate::data::BlockAckMarks,
-        receiver: [u8; 6],
-        transmitter: [u8; 6],
+        tid: u8,
+        head: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     ) {
-        let tid = marks.tid.value();
         if !self.admitted || self.originator.operational(tid).is_none() {
             return;
         }
-        let delivered = self
-            .originator
-            .on_delivered(tid, marks.start, marks.delivered, receiver, transmitter)
-            .is_some();
-        let expired = self
-            .originator
-            .on_expired(tid, marks.start, marks.expired, receiver, transmitter)
-            .is_some();
-        if (delivered || expired)
-            && let Some(agreement) = self.originator.operational(tid)
-            && let Some(request) = self.request.get_mut(usize::from(tid))
-        {
-            *request = Some(agreement.starting_sequence);
+        if let (Some(request), Some(last)) = (
+            self.request.get_mut(usize::from(tid)),
+            self.heads.get_mut(usize::from(tid)),
+        ) {
+            *request = Some(head);
+            *last = Some(head);
         }
     }
 
@@ -218,12 +212,12 @@ impl StaTxBlockAck {
     }
 
     /// The BlockAckReq of `tid` went unanswered: it is owed again at the
-    /// agreement's current head while the agreement lives.
+    /// last head the data plane named while the agreement lives.
     pub(crate) fn request_unanswered(&mut self, tid: u8) {
         let head = self
             .originator
             .operational(tid)
-            .map(|agreement| agreement.starting_sequence);
+            .and_then(|_| self.heads.get(usize::from(tid)).copied().flatten());
         if let Some(request) = self.request.get_mut(usize::from(tid))
             && request.is_none()
         {

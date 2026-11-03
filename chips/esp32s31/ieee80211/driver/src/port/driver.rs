@@ -5,9 +5,9 @@ use super::{
 };
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
-mod aggregate;
-pub(super) use aggregate::PendingAggregate;
-use aggregate::{Queued, Running, admitted_key};
+mod arena;
+pub(super) use arena::DataArenas;
+pub use arena::StationArena;
 mod core_views;
 #[cfg(oer_debug_control)]
 mod key_replacement;
@@ -40,6 +40,10 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
     fn key(&self) -> Option<RawKeyIdentity> {
         self.operation.payload().key
     }
+    /// When the body admitted its MPDU.
+    fn admission(&self) -> Option<Instant> {
+        self.operation.payload().buffer.admission
+    }
     fn air(&self) -> Option<Air> {
         Some(Air {
             transmissions: core::num::NonZeroU16::new(self.transmissions)?,
@@ -49,7 +53,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
 }
 pub(super) enum Command<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     Submit(Pending<'id, Id, D, B, O>),
-    SubmitAggregate(PendingAggregate<'id, Id, D, B, O>),
     Configure {
         permission: owned::OwnedConfigured<'id, Id, D, B>,
         config: CoreVif,
@@ -79,20 +82,11 @@ struct Completion<'id, Id: SlotIdentity, const B: usize> {
 }
 pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
     completed: heapless::Vec<Completion<'id, Id, B>, 4>,
-    /// The one aggregate a completion of the core returned.
-    aggregates: heapless::Vec<
-        (
-            FreeQueue<'id, CorePath<Id>>,
-            TxTicket<'id, CorePath<Id>>,
-            PublicationEnd,
-        ),
-        1,
-    >,
     removed: heapless::Vec<KeyRemoved<'id, CorePath<Id>>, 20>,
     tbtt: Option<TbttEvent>,
     /// The first callback the port's core contract forbids: a second
-    /// completion of a queue in one service, a second aggregate completion,
-    /// or more removals than installed keys. Its owners are retained here,
+    /// completion of a queue in one service or more removals than
+    /// installed keys. Its owners are retained here,
     /// never returned to a pool, and the service poisons.
     refused: Option<(Fault, Refused<'id, Id, B>)>,
 }
@@ -100,7 +94,6 @@ pub(super) struct Sink<'id, Id: SlotIdentity, const B: usize> {
 #[allow(dead_code, reason = "retained owners are never read, only kept")]
 enum Refused<'id, Id: SlotIdentity, const B: usize> {
     Completion(Completion<'id, Id, B>),
-    Aggregate(FreeQueue<'id, CorePath<Id>>, TxTicket<'id, CorePath<Id>>),
     Removal(KeyRemoved<'id, CorePath<Id>>),
 }
 impl<'id, Id: SlotIdentity, const B: usize> Sink<'id, Id, B> {
@@ -123,7 +116,6 @@ impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
     fn default() -> Self {
         Self {
             completed: heapless::Vec::new(),
-            aggregates: heapless::Vec::new(),
             removed: heapless::Vec::new(),
             tbtt: None,
             refused: None,
@@ -152,17 +144,6 @@ impl<'id, Id: SlotIdentity, const B: usize> LowerMacSink<'id, 'static, B, CorePa
             self.refuse(Fault::Capacity, Refused::Completion(completion));
         }
     }
-    fn ampdu_completed(
-        &mut self,
-        queue: FreeQueue<'id, CorePath<Id>>,
-        ticket: TxTicket<'id, CorePath<Id>>,
-        end: PublicationEnd,
-    ) {
-        // One aggregate completes per call of the core.
-        if let Err((queue, ticket, _)) = self.aggregates.push((queue, ticket, end)) {
-            self.refuse(Fault::Capacity, Refused::Aggregate(queue, ticket));
-        }
-    }
     fn key_removed(&mut self, removed: KeyRemoved<'id, CorePath<Id>>) {
         // One removal per installed hardware key.
         if let Err(removed) = self.removed.push(removed) {
@@ -179,16 +160,13 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     core: PortCoreOwner<'id, Id, D, B>,
     tickets: [Option<TxTicket<'id, CorePath<Id>>>; TX_TICKETS],
     free: [Option<FreeQueue<'id, CorePath<Id>>>; 4],
-    queues: [heapless::Deque<Queued<'id, Id, D, B, O>, TX_TICKETS>; 4],
-    running: [Option<Running<'id, Id, D, B, O>>; 4],
-    /// Each queue's open aggregate: its category's last submission, which
-    /// the station extends until the driver takes it into the queue, when
-    /// it would go next.
-    open: [Option<PendingAggregate<'id, Id, D, B, O>>; 4],
+    queues: [heapless::Deque<Pending<'id, Id, D, B, O>, TX_TICKETS>; 4],
+    running: [Option<Pending<'id, Id, D, B, O>>; 4],
     /// Each queue's ordinary descriptor, while no MPDU of it is published.
     descriptors: [Option<Pin<&'static mut TxSlot<B>>>; TX_DESCRIPTORS],
-    /// The aggregate chains no aggregate holds.
-    chains: [Option<AmpduChain<B>>; AMPDU_CHAINS],
+    /// The station's two data arenas over the A-MPDU chains, from
+    /// preparation until retirement returns their chains and tickets.
+    arena: Option<DataArenas<'id, Id, B>>,
     pending_command: Option<Command<'id, Id, D, B, O>>,
     configuring: Option<owned::OwnedConfigured<'id, Id, D, B>>,
     closing: Option<GateOpen<'id, Part<Id, 1>>>,
@@ -221,23 +199,22 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .descriptors
             .iter()
             .flatten()
-            .all(|slot| slot.state() == crate::mac::tx::TxDmaState::Free && !slot.attached())
-            && self
-                .chains
-                .iter()
-                .flatten()
-                .all(|chain| chain.is_fully_free());
-        if !idle
-            || self.descriptors.iter().any(Option::is_none)
-            || self.chains.iter().any(Option::is_none)
-        {
+            .all(|slot| slot.state() == crate::mac::tx::TxDmaState::Free && !slot.attached());
+        if !idle || self.descriptors.iter().any(Option::is_none) {
             return None;
         }
+        // Idle, empty arenas give their chains and tickets back; any other
+        // keeps them, and every descriptor with them.
+        let arena = self.arena.take()?;
+        let ([first, second], _tickets) = match arena.into_parts() {
+            Ok(parts) => parts,
+            Err(arena) => {
+                self.arena = Some(arena);
+                return None;
+            }
+        };
         let [Some(a), Some(b), Some(c), Some(d)] = self.descriptors.each_mut().map(Option::take)
         else {
-            return None;
-        };
-        let [Some(first), Some(second)] = self.chains.each_mut().map(Option::take) else {
             return None;
         };
         Some(TxDescriptors {
@@ -249,7 +226,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn retired(&self) -> bool {
         self.queues.iter().all(|q| q.is_empty())
             && self.running.iter().all(Option::is_none)
-            && self.open.iter().all(Option::is_none)
+            && self.arena.is_none()
     }
     pub(super) const fn vacant() -> Self {
         Self {
@@ -258,9 +235,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             free: [const { None }; 4],
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
-            open: [const { None }; 4],
             descriptors: [const { None }; TX_DESCRIPTORS],
-            chains: [const { None }; AMPDU_CHAINS],
+            arena: None,
             pending_command: None,
             configuring: None,
             closing: None,
@@ -272,6 +248,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             observations: None,
         }
     }
+    /// Take an installation's resources. The data arenas take the chains
+    /// and two of the core's tickets.
+    ///
+    /// # Errors
+    ///
+    /// A chain is not idle: the chains and tickets stay quarantined.
     #[inline(never)]
     pub(super) fn prepare(
         &mut self,
@@ -281,16 +263,31 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         descriptors: TxDescriptors<B>,
         observations: O,
         now: Instant,
-    ) {
+    ) -> Result<(), Fault> {
         // The one caller checked `retired` before taking any resource.
         self.core = core;
         self.tickets = tickets.map(Some);
         self.free = queues.map(Some);
         let TxDescriptors { single, chains } = descriptors;
         self.descriptors = single.map(Some);
-        self.chains = chains.map(Some);
         self.observations = Some(observations);
         self.clock_deadline = now.saturating_add(Duration::from_secs(60));
+        let mut taken = self.tickets.iter_mut().filter_map(Option::take);
+        let (Some(first), Some(second)) = (taken.next(), taken.next()) else {
+            core::mem::forget(chains);
+            return Err(Fault::Capacity);
+        };
+        match DataArenas::new(chains, [first, second]) {
+            Ok(arena) => {
+                self.arena = Some(arena);
+                Ok(())
+            }
+            Err(parts) => {
+                // A busy chain: its owners stay quarantined.
+                core::mem::forget(parts);
+                Err(Fault::Capacity)
+            }
+        }
     }
     pub(super) fn retire(&mut self) -> Option<Reusable<D, B, O>> {
         let transmitter = self.take_transmitter();
@@ -299,9 +296,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             queue.clear();
         }
         for owner in &mut self.running {
-            drop(owner.take());
-        }
-        for owner in &mut self.open {
             drop(owner.take());
         }
         let descriptors = self.take_descriptors();
@@ -346,12 +340,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if !core_views::configuring::<Id, D, B>(self.core.view()) {
             for pending in self.queues.iter().flat_map(|q| q.iter()) {
                 if let Some(at) = pending.admission() {
-                    let lifetime = held.edca.lifetime(vif(pending.role()), pending.category());
+                    let lifetime = held.edca.lifetime(vif(pending.role()), pending.category);
                     deadline = deadline.min(at.saturating_add(lifetime));
                 }
             }
         }
-        for at in self.running.iter().flatten().filter_map(Running::deadline) {
+        if let Some(at) = self.arena.as_ref().and_then(DataArenas::deadline) {
             deadline = deadline.min(at);
         }
         Ok(deadline)
@@ -398,20 +392,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             _ => None,
         }
     }
-    /// End a queued entry, which no publication holds, as withdrawn.
-    fn withdraw_queued(
-        &mut self,
-        held: &Held<'_, 'id, Id, D, B, O>,
-        queued: Queued<'id, Id, D, B, O>,
-        cause: WithdrawCause,
-    ) {
-        match queued {
-            Queued::Single(pending) => self.finish(held, pending, TxOutcome::Withdrawn(cause)),
-            Queued::Aggregate(pending) => {
-                self.finish_aggregate(held, pending, TxOutcome::Withdrawn(cause), false)
-            }
-        }
-    }
     #[inline(never)]
     fn withdraw(&mut self, held: &Held<'_, 'id, Id, D, B, O>) -> bool {
         let global = if !held.want_enabled.get() {
@@ -436,7 +416,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return true;
         }
         for index in 0..4 {
-            if self.running[index].is_some() {
+            // A published arena holds its queue as a published MPDU does.
+            if self.running[index].is_some() || self.free[index].is_none() {
                 continue;
             }
             // A selective barrier cannot return an owner past either a
@@ -447,24 +428,20 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 let Some(queued) = self.queues[index].pop_front() else {
                     break;
                 };
-                self.withdraw_queued(held, queued, cause);
+                self.finish(held, queued, TxOutcome::Withdrawn(cause));
             }
         }
         !self
             .queues
             .iter()
             .flat_map(|queue| queue.iter())
-            .map(|queued| (queued.role(), queued.key()))
-            .chain(
-                self.running
-                    .iter()
-                    .flatten()
-                    .map(|running| (running.role(), running.key())),
-            )
+            .chain(self.running.iter().flatten())
+            .map(|pending| (pending.role(), pending.key()))
             .any(|(role, key)| self.withdrawal(role, key).is_some())
+            && !self.arena_holds_removed_key()
     }
     #[inline(always)]
-    fn blocked(&self, pending: &Queued<'id, Id, D, B, O>) -> bool {
+    fn blocked(&self, pending: &Pending<'id, Id, D, B, O>) -> bool {
         self.withdrawal(pending.role(), pending.key()).is_some()
             || match &self.pending_command {
                 Some(Command::Remove { .. })
@@ -478,12 +455,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
     fn expired(
         held: &Held<'_, 'id, Id, D, B, O>,
-        pending: &Queued<'id, Id, D, B, O>,
+        pending: &Pending<'id, Id, D, B, O>,
         now: Instant,
     ) -> bool {
         pending.admission().is_some_and(|at| {
             now.saturating_duration_since(at)
-                >= held.edca.lifetime(vif(pending.role()), pending.category())
+                >= held.edca.lifetime(vif(pending.role()), pending.category)
         })
     }
     fn collect(
@@ -495,13 +472,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if let Some(fault) = sink.fault() {
             return Err(fault);
         }
-        if !sink.aggregates.is_empty() {
-            // Only an aggregate's own completion returns one.
-            return Err(Fault::Capacity);
-        }
         for completion in sink.completed.drain(..) {
             let index = queue(completion.queue.category());
-            let Some(Running::Single(mut pending)) = self.running[index].take() else {
+            let Some(mut pending) = self.running[index].take() else {
                 return Err(Fault::Capacity);
             };
             self.free[index] = Some(completion.queue);
@@ -597,10 +570,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             };
             if let Some(outcome) = outcome {
                 self.finish(held, pending, outcome);
-            } else if self.queues[index]
-                .push_front(Queued::Single(pending))
-                .is_err()
-            {
+            } else if self.queues[index].push_front(pending).is_err() {
                 return Err(Fault::Capacity);
             }
         }
@@ -616,10 +586,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.withdraw(held);
         Ok(())
     }
-    /// Offer one TX edge to the core's MPDUs and to the published
-    /// aggregates. Their timeout aborts force CCA one at a time: when one
-    /// side's settle ends, the other side's latched timeouts are offered
-    /// again, as the core does among its queues.
+    /// Offer one TX edge to the core's MPDUs and to the published arena.
+    /// Their timeout aborts force CCA one at a time: when one side's
+    /// settle ends, the other side's latched timeouts are offered again, as
+    /// the core does among its queues.
     fn service_tx(
         &mut self,
         held: &Held<'_, 'id, Id, D, B, O>,
@@ -627,8 +597,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         wake: WifiTxWake,
         stopping: bool,
     ) -> Result<(), Fault> {
-        if !self.aggregate_running(None) {
-            // No aggregate: the MPDUs' settles are the core's own.
+        if !self.arena_on_air() {
+            // No arena on the air: the MPDUs' settles are the core's own.
             let mut sink = Sink::default();
             core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink)?;
             return self.collect(held, &mut sink, stopping);
@@ -637,8 +607,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             driver
                 .core
                 .view()
-                .aggregates()
-                .is_some_and(|view| view.abort_settling())
+                .arena_core()
+                .is_some_and(|core| core.abort_settling())
         };
         let timeout = WifiTxWake::Interrupt {
             events: crate::mac::irq::EVENT_TX_TIMEOUT,
@@ -648,7 +618,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink)?;
         self.collect(held, &mut sink, stopping)?;
         let settled = before && !settling(self);
-        if self.service_aggregates(held, device, if settled { timeout } else { wake })? {
+        if self.service_arena(held, device, if settled { timeout } else { wake })? {
             let mut sink = Sink::default();
             core_views::service::<Id, D, B>(
                 self.core.view(),
@@ -684,7 +654,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         device: &mut D,
         rx_out: &Cell<usize>,
-        shared: &'static PortSharedStorage<B, D::Lent, D::Body>,
+        shared: &'static PortSharedStorage<B, D::Lent>,
         unit: D::Receive,
     ) -> Result<Option<owned::OwnedEvent<'id, Id, D, B>>, Fault> {
         if rx_out.get() >= RX_HELD {
@@ -831,13 +801,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if again || served_tx || short {
             cx.waker().wake_by_ref();
         }
-        // A configuration barrier waits for its role's published aggregates
-        // as the core waits for its MPDUs.
-        let configuring_aggregate = self
+        // A station configuration barrier waits for the station's published
+        // arena as the core waits for its MPDUs.
+        let configuring_arena = self
             .configuring
             .as_ref()
-            .is_some_and(|permission| self.aggregate_running(Some(permission.role())));
-        if self.configuring.is_some() && !configuring_aggregate {
+            .is_some_and(|permission| permission.role() == VifRole::Station)
+            && self.arena_on_air();
+        if self.configuring.is_some() && !configuring_arena {
             if core_views::configuring::<Id, D, B>(self.core.view()) {
                 let mut sink = Sink::default();
                 let done = core_views::advance_configuration::<Id, D, B>(
@@ -928,19 +899,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             match command {
                 Command::Submit(pending) => {
                     let index = queue(pending.category);
-                    if self.queues[index]
-                        .push_back(Queued::Single(pending))
-                        .is_err()
-                    {
-                        return Err(Fault::Capacity);
-                    }
-                }
-                Command::SubmitAggregate(pending) => {
-                    let index = queue(pending.category);
-                    if self.queues[index]
-                        .push_back(Queued::Aggregate(pending))
-                        .is_err()
-                    {
+                    if self.queues[index].push_back(pending).is_err() {
                         return Err(Fault::Capacity);
                     }
                 }
@@ -1031,12 +990,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             }
         }
-        self.take_idle_open(held, stopping)?;
         self.withdraw(held);
-        // A gate closes after the published aggregates end, as after the
-        // MPDUs the core holds.
+        // A gate closes after the published arena ends, as after the MPDUs
+        // the core holds.
         if self.closing.is_some()
-            && !self.aggregate_running(None)
+            && !self.arena_on_air()
             && !core_views::configuring::<Id, D, B>(self.core.view())
             && core_views::close::<Id, D, B>(self.core.view(), device.hardware()?)
         {
@@ -1049,7 +1007,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             held.terminal(owned::OwnedTerminal::GateClosed(gate));
         }
         for index in 0..4 {
-            if self.running[index].is_some() {
+            // A published MPDU or arena holds the queue.
+            if self.running[index].is_some() || self.free[index].is_none() {
                 continue;
             }
             // Expiry continues behind a gate or a command barrier.
@@ -1057,20 +1016,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 .front()
                 .is_some_and(|p| Self::expired(held, p, now))
             {
-                match self.queues[index].pop_front() {
-                    Some(Queued::Single(pending)) => {
-                        self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
-                    }
-                    Some(Queued::Aggregate(pending)) => {
-                        if let Err(pending) = self.expire_aggregate(held, pending, now) {
-                            // Its oldest admission aged and no subframe did:
-                            // the record lost its admission.
-                            drop(pending);
-                            return Err(Fault::Capacity);
-                        }
-                    }
-                    None => break,
-                }
+                let Some(pending) = self.queues[index].pop_front() else {
+                    break;
+                };
+                self.finish(held, pending, TxOutcome::Expired { msdus: 1 });
             }
             if stopping
                 || self.closed
@@ -1084,25 +1033,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             if held.publication_hold.get() & (1 << index) != 0 {
                 continue;
             }
-            // An aggregate waits at the head until a chain is free.
-            if matches!(
-                self.queues.get(index).and_then(|queue| queue.front()),
-                Some(Queued::Aggregate(_))
-            ) && !self.chain_free()
-            {
-                continue;
-            }
-            match self.queues[index].pop_front() {
-                Some(Queued::Single(pending)) => self.publish(held, device, index, pending)?,
-                Some(Queued::Aggregate(pending)) => {
-                    self.publish_aggregate(held, device, index, pending)?
-                }
-                None => {}
+            if let Some(pending) = self.queues[index].pop_front() {
+                self.publish(held, device, index, pending)?;
             }
         }
         if stopping
-            && !self.aggregate_running(None)
-            && self.open.iter().all(Option::is_none)
+            && !self.arena_on_air()
             && self.pending_command.is_none()
             && held.commands.empty()
             && !core_views::configuring::<Id, D, B>(self.core.view())
@@ -1221,7 +1157,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         let queue = self.free[index].take().ok_or(Fault::Capacity)?;
         // Durable backing owns the indivisible operation before publication.
-        self.running[index] = Some(Running::Single(pending));
+        self.running[index] = Some(pending);
         if let Err(refused) = core.submit_checked(device.hardware()?, queue, admission, values) {
             core::mem::forget(refused);
             return Err(Fault::Capacity);
@@ -1580,6 +1516,21 @@ impl<Id: SlotIdentity> GroupCommand<'_, Id> {
             _ => false,
         })
     }
+}
+
+/// The installed key `identity` names, `None` for an open attempt.
+fn admitted_key<'a, 'id, Id: SlotIdentity>(
+    keys: &'a [Option<(RawKeyIdentity, Installed<'id, Id>)>],
+    identity: Option<RawKeyIdentity>,
+) -> Result<Option<&'a Installed<'id, Id>>, Fault> {
+    let Some(identity) = identity else {
+        return Ok(None);
+    };
+    keys.iter()
+        .flatten()
+        .find(|(key, _)| *key == identity)
+        .map(|(_, key)| Some(key))
+        .ok_or(Fault::Capacity)
 }
 
 /// The port asked for the radio and the device has not started it yet.

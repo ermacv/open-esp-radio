@@ -543,7 +543,7 @@ type Family<Id> = Types<Id, TestDevice, 512, Draws>;
 type Res<'id, Id> = <Backend<Id> as PortBackend<Id>>::Resources<'id>;
 
 mod abandon;
-mod aggregate;
+mod arena;
 mod barriers;
 mod conformance;
 mod retune;

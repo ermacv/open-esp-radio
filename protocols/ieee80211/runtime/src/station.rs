@@ -3,10 +3,11 @@
 //!
 //! It polls every input source at each waiting point: the port's next event, the machines' next
 //! deadline and the application (a command, or an MSDU while the data
-//! machine takes one). After each input it takes every action of the
-//! arbiter ([`Arbiter`]), the station ([`Station`]) and its data machine
-//! ([`StaData`]) until none owes one; an answer of the arbiter goes back to
-//! the station in the same step. A retune leaves the phase: the port is
+//! plane takes one). After each input it takes every action of the
+//! arbiter ([`Arbiter`]) and the station ([`Station`]) until none owes one,
+//! and one pass of the station's data plane over the port's data arenas
+//! (`data_tx`); an answer of the arbiter goes back to the station in the
+//! same step. A retune leaves the phase: the port is
 //! disabled, tuned and enabled, and the arbiter hears how it went.
 //! Each step consumes at most one input per source and polls all sources even
 //! when RX is ready. Batches stop after eight steps and yield, so a continuous
@@ -21,7 +22,9 @@
 //! A full bank returns the next terminal to the port, which retains it and all
 //! remaining owners for poisoned teardown. `run` consumes its service and returns `ServiceCompleted`:
 //! the port's terminal state and separate `RetiredService` resource banks.
-//! On Stop, failure or poisoned disable, Station/Data finalize without issuing
+//! On Stop the data plane hands its link's unpublished frames back to the
+//! network and the arena on the air settles before the port disables. On
+//! Stop, failure or poisoned disable, Station finalizes without issuing
 //! Configure, key or transmit effects. Accepted requests return once before the
 //! lifecycle notice. Unconsumed requests remain in their application queue.
 //! `FailedInstallation` retains the Disabled stop proof and permits normal
@@ -48,30 +51,25 @@
 //! the `PortEnd` quarantine receipt is dropped. These transitions follow the
 //! portable stack's lifecycle contract.
 //!
-//! The tokens the machines hold are the port's: tickets and buffers of two
-//! classes, the small one for the station's frames and the large one for
-//! data. A transmission's `TxContext` stays with the service at its
-//! ticket's place while the ticket is in the port, which carries no context
-//! ([`TxContextStorage`]); the completion's ticket finds it, and it routes
-//! the ticket and resources to the original machine and link. Buffer classes are used
-//! only to recover their memory types; `StationTxBuffer` exhaustively
-//! represents both classes and both publication states at this boundary.
-//! Machines receive `ReturnedMpdu::Fresh` or `Sent` and decide when to renew.
-//! Cross-AC completion order has no bearing on ownership. Each machine
-//! returns stale-link resources without advancing its current protocol,
-//! and the service excludes those terminals from current-link rate control.
-//! A data operation's closed context supplies its frame, access category and
-//! checked `DataProtection`. Submission refuses a changed link or protection
-//! before preparation and returns the original context, ticket and buffer.
-//! Data admission is an owned permit per AC, including old-link work until
-//! its terminal, and preserves the station's Voice waiting bound.
-//! Preparation returns the original typed source on refusal; context and
-//! ticket have not left this service. Submission can refuse only poisoning.
-//! The application hears `ServiceOutput::TxRefused`; Station gets `Unsent`
-//! and Data gets `Refused`. Neither path fabricates a completion or updates
-//! rate statistics, and the service continues. A `Sent` return retains its
-//! external body until its machine retires the MPDU; service never renews
-//! a completion merely to route it. `StationPort::Types` fixes `TxBody` to
+//! The tokens the station holds are the port's: its tickets and the
+//! buffers of its class. A transmission's station context stays with the
+//! service at its ticket's place while the ticket is in the port, which
+//! carries no context ([`TxContextStorage`]); the completion's ticket finds
+//! it, and it routes the ticket and buffer to the station and its link.
+//! The station receives `ReturnedMpdu::Fresh` or `Sent` and decides when to
+//! renew. Cross-AC completion order has no bearing on ownership. The
+//! station returns stale-link resources without advancing its current
+//! protocol, and the service excludes those terminals from current-link
+//! rate control. Data goes through the station phase's two data arenas
+//! instead: the data plane writes each MSDU's MPDU into the network's own
+//! memory as an arena takes it, and the memory goes back to the network once
+//! the frame ends. Preparation returns the original typed source on
+//! refusal; context and ticket have not left this service. Submission can
+//! refuse only poisoning. The application hears `ServiceOutput::TxRefused`
+//! and Station gets `Unsent`. Neither path fabricates a completion or
+//! updates rate statistics, and the service continues. A `Sent` return
+//! retains its external body until the station retires the MPDU; service
+//! never renews a completion merely to route it. `StationPort::Types` fixes `TxBody` to
 //! `Infallible`, so a returned external body is uninhabited at this boundary.
 //! GTK actions move the unique mutation permission into the port. Their
 //! private pending token stays here until the matching FIFO slot terminal;
@@ -87,8 +85,8 @@
 //! `WakingSpscQueue::split` exclusively borrows its storage. Both endpoints retain
 //! that borrow, so no second pair can coexist. After the pair returns, queued
 //! values remain owned by the queue and reach the next receiver in order.
-//! Network frames are the data machine's checked [`EthernetFrame`]s; a
-//! received payload too long for one is refused, never clipped.
+//! Received network frames are checked [`EthernetFrame`]s; a received
+//! payload too long for one is refused, never clipped.
 
 mod commands;
 pub mod contract;
@@ -104,6 +102,7 @@ pub use network::{
 };
 pub use network_link::NetworkLink;
 pub use notifies::{AcrossHarts, Notifies, SameHart};
+mod data_tx;
 mod reconnect;
 use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
@@ -112,6 +111,7 @@ pub use control::{
     ControlRefused, Device, Events, Operation, OperationEnd, RunnerControl, State, Status,
     StatusReader, TxRefused, TxSupply, UnreadOperation,
 };
+use data_tx::DataTx;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
 use core::marker::PhantomData;
@@ -126,24 +126,19 @@ use oer_portable_memory::{
 };
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    ClassFrame, Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
-    LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseSingleOutcome,
-    PhaseTypes, PoolMpdu, PoolSource, Removed, RemovedKey, RetransmissionPlan, ReturnedMpdu,
-    RxBuffer, StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu,
-    TxProtection, TxSource,
+    Ieee80211Capabilities, InstalledGroup, InstalledPairwise, InterfacePhase, KeyTypes,
+    LowerMacBackend, LowerMacEvent, LowerMacPhase, LowerMacTerminal, PhaseArenaCompleted,
+    PhaseSingleOutcome, PhaseTypes, PoolMpdu, PoolSource, Removed, RemovedKey, RxBuffer,
+    StationPhase, SupportedChannel, TxBufferClass, TxBufferPool, TxCompleted, TxMpdu, TxProtection,
+    TxSource,
 };
 use oer_protocols_ieee80211_core_arbiter::{
     Arbiter, ArbiterAction, ArbiterEnd, ArbiterNotice, NoReservation, RetiredArbiter, RetuneRefused,
 };
-use oer_protocols_ieee80211_core_roles_sta::port::{
-    PortDataTokens, PortStaTokens, StationPairwiseKey,
-};
+use oer_protocols_ieee80211_core_roles_sta::port::{PortStaTokens, StationPairwiseKey};
 use oer_protocols_ieee80211_core_roles_sta::{
     data,
-    data::{
-        DataInput, DataProtection, DataReturn, DataTxContext, EthernetFrame,
-        MAX_ETHERNET_PAYLOAD_LEN, Msdu, MsduPlan, PlannedCopyError, StaData,
-    },
+    data::{EthernetFrame, MAX_ETHERNET_PAYLOAD_LEN, MsduPlan, PlannedCopyError},
     machine::{
         Peer, RxBlockAckReply, StaAction, StaCallbacks, StaInput, StaNotice, StaReceived,
         StaTokens, StaTraffic, StaTransmit, StaTxContext, Station,
@@ -181,8 +176,8 @@ pub trait StationPort: Sized {
             Context = (),
             EpochPath: oer_protocols_radio_port::PoolPath<Identity = Self::SlotId>,
             TicketPath: oer_protocols_radio_port::PoolPath<Identity = Self::SlotId>,
+            DataMemory = Self::TxMemory,
         > + TxBufferPool<'id, Self::Small>
-        + TxBufferPool<'id, Self::Large, NetworkMemory = Self::TxMemory>
     where
         Self: 'id,
         Self::Backend: 'id,
@@ -195,12 +190,11 @@ pub trait StationPort: Sized {
     /// The station's transmit contexts, one place per transmit ticket of
     /// the backend's pool ([`TxContextStorage`]).
     type TxContextStorage<T>: TxContextStorage<T>;
-    /// Buffer class for station management traffic.
+    /// Buffer class of the station's own frames.
     type Small: TxBufferClass;
-    /// Buffer class for connected data traffic.
-    type Large: TxBufferClass;
     /// The network's memory a data MSDU comes in, the same in every
-    /// install: a buffer of [`Self::Large`] holds it for the MSDU's MPDU.
+    /// install: a slot of the station phase's data arenas holds it for the
+    /// MSDU's MPDU.
     type TxMemory: Send + 'static;
 
     /// Lend only the public phase, retaining the body's loan and slot identity.
@@ -249,60 +243,43 @@ pub trait StationPort: Sized {
     /// Observe the start (`end` false) or end of a stretch of the service's
     /// work; by default nothing observes it.
     fn span(_span: ServiceSpan, _end: bool) {}
-    /// Recover either complete resource class, without an unknown-class branch.
+    /// Recover the station's class of a returned buffer, fresh or
+    /// published.
+    ///
+    /// # Errors
+    ///
+    /// The buffer, unchanged, when it is of another class.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a foreign buffer comes back by value"
+    )]
     fn tx_buffer<'id>(
         buffer: <Self::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer,
-    ) -> StationTxBuffer<'id, Self>
+    ) -> Result<StationTxBuffer<'id, Self>, <Self::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer>
+    where
+        Self: 'id,
+        Self::Backend: 'id,
+        Self::SlotId: 'id;
+    /// What a data arena's ACK evidence tells the rate selection of a single
+    /// MPDU's response; `None` when it carries nothing the selection reads.
+    fn arena_ack<'id>(response: PortBlockAck<'id, Self>) -> Option<PortAck<'id, Self>>
     where
         Self: 'id,
         Self::Backend: 'id,
         Self::SlotId: 'id;
 }
 
-/// The only TX memory a station service's port returns. This describes
-/// resources, not operation identity: only `TxContext` selects the operation.
-pub enum StationTxBuffer<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
-    /// The station's fresh allocation or its published MPDU.
-    Small(PoolMpdu<'id, B::Types<'id>, B::Small>),
-    /// Data's fresh allocation or its published MPDU.
-    Large(PoolMpdu<'id, B::Types<'id>, B::Large>),
-}
+/// The only TX memory a station service's port returns: the station's
+/// fresh allocation or its published MPDU.
+pub type StationTxBuffer<'id, B> =
+    PoolMpdu<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Small>;
 
-/// The service's context of one transmission. Each variant owns the
-/// original machine operation. It stays with the service, at its ticket's
-/// place, while the ticket is in the port ([`TxContextStorage`]).
-#[derive(Debug)]
-pub enum TxContext<
-    'id,
-    K,
-    C,
-    Path: oer_protocols_radio_port::PoolPath = oer_protocols_radio_port::Root<
-        oer_protocols_radio_port::LocalId<'id>,
-    >,
-> {
-    /// A station protocol operation, including its connection epoch and purpose.
-    Station(StaTxContext<'id, Path>),
-    /// An MSDU operation, including its original link, TID and queue order.
-    Data(DataTxContext<'id, K, C, oer_protocols_ieee80211_core_roles_sta::data::AcPermit, Path>),
-    /// An aggregate of a TID's MSDUs, each member's description in order.
-    DataAggregate(
-        oer_protocols_ieee80211_core_roles_sta::data::DataAggregateContext<
-            'id,
-            K,
-            C,
-            oer_protocols_ieee80211_core_roles_sta::data::AcPermit,
-            Path,
-        >,
-    ),
-}
-
-/// The context of one of the service's transmissions on the port `B`.
-pub type StationTxContext<'id, B> = TxContext<
-    'id,
-    <B as StationPort>::Caps,
-    <B as StationPort>::Large,
-    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
->;
+/// The context of one of the service's transmissions on the port `B`: the
+/// station's operation, with its connection epoch and purpose. It stays
+/// with the service, at its ticket's place, while the ticket is in the port
+/// ([`TxContextStorage`]).
+pub type StationTxContext<'id, B> =
+    StaTxContext<'id, <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath>;
 
 /// A stretch of the service's own work, which it reports to its port at
 /// both ends ([`StationPort::span`]).
@@ -323,29 +300,19 @@ pub enum ServiceSpan {
     Queue,
     /// A transmission's terminal.
     Terminal,
-    /// The network stack's MSDU into the data machine.
+    /// The network stack's MSDUs into the data plane, and the publication
+    /// after them.
     Transmit,
     /// A received buffer's return to the port.
     Recycle,
-    /// One pass of the data machine's owed attempts.
+    /// One pass of the data plane: a completion's settlement, the link's
+    /// handover, the waiting MSDU and the next publication.
     Attempt,
-    /// The open aggregates' growth by owed MPDUs.
-    Extend,
-    /// One MPDU's join to an open aggregate, its port call included.
-    Subframe,
-    /// The port's part of one MPDU's join to an open aggregate.
-    PortExtend,
-    /// The window and rate of the next aggregate.
-    Window,
-    /// A new aggregate's build and submission.
-    Submit,
-    /// An open aggregate's port builder.
-    Open,
 }
 
 impl ServiceSpan {
     /// Every span, each at the position of its number.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 10] = [
         Self::Step,
         Self::Pending,
         Self::Sources,
@@ -356,12 +323,6 @@ impl ServiceSpan {
         Self::Transmit,
         Self::Recycle,
         Self::Attempt,
-        Self::Extend,
-        Self::Subframe,
-        Self::PortExtend,
-        Self::Window,
-        Self::Submit,
-        Self::Open,
     ];
 
     /// The span numbered `number`.
@@ -385,11 +346,10 @@ const MAX_WAITING_EVENT_STEPS: u8 = 8;
 /// step.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Taken {
-    /// A data frame delivered at once, or an MSDU the station only recorded
-    /// as traffic, and nothing else: neither the station nor its receive
-    /// reordering owes anything it did not owe before, and no deadline came
-    /// earlier. The MSDU waits in the data machine, whose attempts pass
-    /// alone takes it.
+    /// A data frame delivered at once, or MSDUs the data plane took that
+    /// the station only recorded as traffic, and nothing else: neither the
+    /// station nor its receive reordering owes anything it did not owe
+    /// before, and no deadline came earlier.
     Direct,
     /// Anything else: the next step may owe an action.
     Input,
@@ -405,32 +365,6 @@ impl Taken {
             }
             _ => Self::Input,
         }
-    }
-}
-
-/// What a pass over the data machine's attempts did.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
-enum Attempted {
-    /// No attempt went.
-    Nothing,
-    /// Attempts went to the port and nothing else changed: their tickets
-    /// and permissions are the data machine's own, so the station, its
-    /// arbiter and its receive reordering owe nothing they did not owe.
-    Submitted,
-    /// An attempt came back refused: its follow-up reached the station or
-    /// the application, so the whole step runs again.
-    Followed,
-}
-
-impl Attempted {
-    /// What the pass did after one more attempt went, `followed` when it
-    /// came back with more than its submission.
-    fn after(self, followed: bool) -> Self {
-        self.max(if followed {
-            Self::Followed
-        } else {
-            Self::Submitted
-        })
     }
 }
 
@@ -479,20 +413,12 @@ type EventServed<'id, B> = Result<
     StepFailure<'id, B>,
 >;
 
-/// A data MPDU's operation on the port `B`.
-type DataContext<'id, B> = DataTxContext<
-    'id,
-    <B as StationPort>::Caps,
-    <B as StationPort>::Large,
-    oer_protocols_ieee80211_core_roles_sta::data::AcPermit,
-    <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::EpochPath,
->;
-
 /// The metadata the port `B` gives a received frame.
 pub type PortRxMeta<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::RxMeta;
 /// The ACK evidence of the port `B`.
 pub type PortAck<'id, B> = <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::AckEvidence;
-/// The BlockAck evidence of the port `B`'s aggregates.
+/// The evidence of the ACKs and BlockAcks that answer the port `B`'s data
+/// arenas.
 pub type PortBlockAck<'id, B> =
     <<B as StationPort>::Types<'id> as PhaseTypes<'id>>::BlockAckEvidence;
 
@@ -525,18 +451,6 @@ type Uninstalled<'id, B, C, S, const GROUPS: usize, O, Out> = (
     Ended<<B as StationPort>::SlotId, <B as StationPort>::Backend, Out>,
     RetiredService<'id, B, C, S, GROUPS, O>,
 );
-
-/// The most data buffers a station service's data machine holds: three
-/// aggregates' worth of MPDUs, one on the air, one growing and one queued.
-pub const DATA_BUFFERS: usize = 3 * oer_protocols_ieee80211_core_roles_sta::data::MAX_AGGREGATE;
-
-/// The data machine of the service on the port `B`.
-pub type PortData<'id, B> = StaData<
-    'id,
-    PortDataTokens<'id, <B as StationPort>::Types<'id>, <B as StationPort>::Large>,
-    <B as StationPort>::Caps,
-    DATA_BUFFERS,
->;
 
 /// The arbiter of the service on the port `B`.
 pub type PortArbiter<'id, B> = Arbiter<
@@ -581,8 +495,7 @@ mod custody;
 mod tx_contexts;
 use custody::{ContractFault, StepFailure};
 pub use custody::{
-    QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedAggregate,
-    UnroutedTx,
+    QuarantinedTerminals, RejectedTerminal, TerminalCustody, TerminalStorage, UnroutedTx,
 };
 pub use tx_contexts::TxContextStorage;
 
@@ -608,11 +521,10 @@ pub enum ServiceOutput<K> {
     MsduRefused {
         reason: contract::MsduRefusal,
     },
-    /// An operation refused before admission. Its resources return and the
-    /// service continues; this is not a TX completion or radio statistic.
+    /// A station frame refused before admission. Its resources return and
+    /// the service continues; this is not a TX completion or radio
+    /// statistic.
     TxRefused {
-        /// The machine that originated the operation.
-        operation: TxOperation,
         /// The preparation failure.
         reason: contract::TransmitRefusal,
     },
@@ -624,15 +536,6 @@ pub enum ServiceOutput<K> {
     CommandCompleted(CommandTerminal),
     /// The arbiter's command to the access point beside the station.
     AccessPoint(contract::AccessPointCommand<K>),
-}
-
-/// The origin of a preparation refusal reported to the application.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TxOperation {
-    /// A station protocol frame.
-    Station,
-    /// A connected-link MSDU.
-    Data,
 }
 
 /// How a transmission returned: its port terminal's outcome `O`, or the
@@ -650,9 +553,11 @@ pub type PortReturnedTx<'id, B> =
 /// A backend returned owners that cannot belong to the submitted operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendContractViolation {
-    /// An aggregate's terminal returned another number of subframes than
-    /// its members, a station's buffer among them, or no aggregate context.
-    AggregateMembers,
+    /// A data arena's completion named an arena the data plane did not
+    /// publish, or another number of frames than it published.
+    ArenaCompletion,
+    /// The station phase did not lend the rights to its two data arenas.
+    ArenaClaim,
     UnexpectedTerminal(PendingTerminal),
     TerminalAfterEventEnd,
     UnexpectedAccessPointTerminal,
@@ -660,7 +565,9 @@ pub enum BackendContractViolation {
     GroupTerminalWithoutRequest,
     GroupSlotMismatch,
     GroupTerminalKindMismatch,
-    TxContextBufferMismatch,
+    /// A station frame's terminal returned a buffer of another class than
+    /// the station's.
+    TxBufferClass,
     StationKeyBank(contract::KeyContractViolation),
     /// The pairwise installation terminal returned a key of another
     /// installation; the outstanding request stays retained.
@@ -716,8 +623,9 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
 /// frame is written in, and the user priority its marking requests.
 #[derive(Debug)]
 pub struct Outgoing<M> {
-    /// The network's memory holding the frame, at the data machine's
-    /// [`MSDU_ETHERNET_OFFSET`](data::MSDU_ETHERNET_OFFSET) of a buffer's octets.
+    /// The network's memory holding the frame, at the data plane's
+    /// [`MSDU_ETHERNET_OFFSET`](data::MSDU_ETHERNET_OFFSET) of an arena
+    /// slot's frame region.
     pub memory: M,
     /// The length of the Ethernet frame, header and payload.
     pub length: u16,
@@ -802,7 +710,7 @@ pub struct ServiceIo<
     /// remove a command; a simultaneous port fault leaves it in this queue.
     pub commands: WakingSpscReceiver<'c, ServiceCommand<K>, COMMAND_DEPTH>,
     /// The MSDUs the network stack sends, each in the network's memory,
-    /// where the station writes its MPDU header in place.
+    /// where the data plane writes its MPDU header in place.
     pub transmit: SlotReceiver<'c, Option<Outgoing<P>>, TX_DEPTH, N::Station, N::Network>,
     /// The network's memory, back once its MSDU ended (or was refused), for
     /// the network's next frame.
@@ -1123,7 +1031,7 @@ impl<
         };
         let (station, deferred_eapol, notice) = retired.station.restart(places).into_parts();
         let RetiredService {
-            data,
+            _data: data,
             events,
             rates,
             _pending: pending,
@@ -1140,7 +1048,7 @@ impl<
                 arbiter,
                 state: ServiceState {
                     station,
-                    data: data.restart(),
+                    data,
                     events,
                     rates,
                     pending,
@@ -1173,13 +1081,10 @@ pub struct RetiredService<
     O: StationEvents = (),
 > {
     pub station: PortRetiredStation<'id, B, C, GROUPS>,
-    pub data: oer_protocols_ieee80211_core_roles_sta::data::RetiredData<
-        'id,
-        PortDataTokens<'id, B::Types<'id>, B::Large>,
-        B::Caps,
-        DATA_BUFFERS,
-    >,
     pub rates: S,
+    /// The data plane and the network memory it still holds, which a
+    /// restart carries on.
+    _data: DataTx<B::TxMemory>,
     /// The composition's event sink, which a restart carries on.
     events: O,
     _places: oer_protocols_ieee80211_core_arbiter::StationPlaceReturns<
@@ -1229,8 +1134,8 @@ struct ServiceState<
 > {
     /// The station.
     station: PortStation<'id, B, C, GROUPS>,
-    /// Its data machine.
-    data: PortData<'id, B>,
+    /// Its data transmission over the port's data arenas.
+    data: DataTx<B::TxMemory>,
     /// The rates of the station's frames and data.
     rates: S,
     /// The composition's sink, lent to each call of the station, its data
@@ -1250,13 +1155,9 @@ struct PendingActions<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id> {
     admissions: Admissions,
     /// Each transmission's context while its ticket is in the port.
     tx_contexts: B::TxContextStorage<StationTxContext<'id, B>>,
-    /// Each access category's last data aggregate, by its ticket's index,
-    /// while the port may hold it open for more members.
-    open: [Option<u8>; 4],
-    /// Each TID's aggregate window: its rate and limits, computed once and
-    /// kept until the next terminal or received frame, which may change
-    /// the rate selection, the agreement or the link.
-    windows: [Option<data::AggregateWindow>; 8],
+    /// The data arena's completion the port returned, until the next step
+    /// settles it with the phase.
+    arena: Option<PhaseArenaCompleted<'id, B::Types<'id>>>,
     /// The network drain before the port retired, when it failed.
     network: Option<NetworkDrainFailure>,
     /// A retune whose disable/enable failed remains owned until retirement.
@@ -1325,7 +1226,6 @@ impl<
     /// the rates `rates` selects.
     pub fn new(
         station: ConstructedStation<'id, B, C, GROUPS>,
-        data: PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
         terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
@@ -1338,7 +1238,6 @@ impl<
     ) -> Self {
         // The port's values, checked as the type is built.
         const {
-            let _power = DataContext::<'id, B>::POWER;
             if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
                 < <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
             {
@@ -1350,7 +1249,7 @@ impl<
             arbiter,
             state: ServiceState {
                 station,
-                data,
+                data: DataTx::new(),
                 rates,
                 terminal_access,
                 events,
@@ -1359,8 +1258,7 @@ impl<
                     commands: CommandCredits::new(credits),
                     admissions: Admissions::default(),
                     tx_contexts: TxContextStorage::empty(),
-                    open: [None; 4],
-                    windows: [None; 8],
+                    arena: None,
                     network: None,
                     retune: None,
                     group: None,
@@ -1386,9 +1284,6 @@ impl<
                 <B::Types<'id> as PhaseTypes<'id>>::StationCommandPath,
             >,
         ),
-        data: impl for<'a> FnOnce(
-            &'a mut core::mem::MaybeUninit<PortData<'id, B>>,
-        ) -> &'a mut PortData<'id, B>,
         arbiter: PortArbiter<'id, B>,
         rates: S,
         terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
@@ -1400,7 +1295,6 @@ impl<
         events: O,
     ) -> oer_portable_memory::Placed<'s, Self> {
         const {
-            let _power = DataContext::<'id, B>::POWER;
             if B::TerminalStorage::<LowerMacTerminal<'id, B::Types<'id>>>::CAPACITY
                 < <B::Types<'id> as PhaseTypes<'id>>::TERMINAL_CAPACITY
             {
@@ -1413,11 +1307,11 @@ impl<
                 arbiter: arbiter,
                 state => |place: &mut core::mem::MaybeUninit<ServiceState<'id, B, C, S, GROUPS, O>>| oer_portable_memory::init_in_place!(place, ServiceState {
                     station => |place| { let (station, granted) = station(place); credits.set(CommandCredits::new(granted)); station },
-                    data => data,
+                    data: DataTx::new(),
                     rates: rates,
                     terminal_access: terminal_access,
                     events: events,
-                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), open: [None; 4], windows: [None; 8], network: None, retune: None, group: None, pairwise: None },
+                    pending: PendingActions { receive, commands: credits.into_inner(), admissions: Admissions::default(), tx_contexts: TxContextStorage::empty(), arena: None, network: None, retune: None, group: None, pairwise: None },
                 }),
             })
         })
@@ -1492,8 +1386,8 @@ impl<
                     let (station, places) = Station::finish_placed(station, &mut station_storage, reason);
                     let mut retired = oer_portable_memory::Placed::init(place, |place| oer_portable_memory::init_in_place!(place, RetiredService {
                         station => |place| station.move_to(place).into_mut(),
-                        data => |place| StaData::finish_placed(data, place, &mut *events).into_mut(),
                         rates: { rates.disconnected(); rates.read() },
+                        _data: data.read(),
                         events: events.read(),
                         _places: places,
                         _arbiter: arbiter,
@@ -1568,13 +1462,12 @@ impl<
             station,
             data,
             mut rates,
-            mut events,
+            events,
             mut pending,
             terminal_access,
         } = state;
         let network = pending.network;
         let (mut station, mut places) = station.finish(reason);
-        let data = data.finish(&mut events);
         rates.disconnected();
         while let Some(notice) = arbiter.poll_notice() {
             match notice {
@@ -1602,7 +1495,7 @@ impl<
             network,
             retired: RetiredService {
                 station,
-                data,
+                _data: data,
                 rates,
                 events,
                 _arbiter: arbiter,
@@ -1979,8 +1872,6 @@ impl<
         let mut settled: Option<Option<Instant>> = None;
         // The steps skipped in a row.
         let mut skipped = 0_u8;
-        // An MSDU taken since the data machine's attempts last passed.
-        let mut data_taken = false;
         loop {
             // One clock read serves the turn's step and pending receives.
             let turn = timer.now();
@@ -1990,34 +1881,10 @@ impl<
             let skip = skips_step(settled, skipped, turn);
             let stepped = if skip {
                 skipped = skipped.saturating_add(1);
-                // A taken MSDU changed the data machine alone: its attempts
-                // pass is the whole step, unless the MSDUs left the last
-                // pass's wait standing (they join the growing aggregate).
-                // An attempt that came back refused may change what the
-                // station owes, so the whole step follows at once.
-                if core::mem::take(&mut data_taken)
-                    && (!self.data.attempts_wait() || self.pending.open.iter().any(Option::is_some))
-                {
-                    B::span(ServiceSpan::Step, false);
-                    B::span(ServiceSpan::Attempt, false);
-                    let attempted = self.attempt_data(turn, phase, io);
-                    B::span(ServiceSpan::Attempt, true);
-                    B::span(ServiceSpan::Step, true);
-                    match attempted {
-                        Ok(Attempted::Nothing | Attempted::Submitted) => Next::Wait,
-                        Ok(Attempted::Followed) => {
-                            settled = None;
-                            continue;
-                        }
-                        Err(fault) => Next::Failed(fault),
-                    }
-                } else {
-                    Next::Wait
-                }
+                Next::Wait
             } else {
                 settled = None;
                 skipped = 0;
-                data_taken = false;
                 B::span(ServiceSpan::Step, false);
                 let stepped = self.step(arbiter, turn, phase, io);
                 B::span(ServiceSpan::Step, true);
@@ -2097,13 +1964,13 @@ impl<
                 // when the network makes room.
                 let freed = self.return_freed(&mut io.returned);
                 report(&mut self.events, || {
-                    let held = self.data.held_memory();
+                    let (owed, members, freed) = self.data.held();
                     let count = |count: usize| u8::try_from(count).unwrap_or(u8::MAX);
                     ServiceEvent::TxMemory(TxMemoryHeld {
                         incoming: count(io.transmit.len()),
-                        owed: count(held.owed),
-                        members: count(held.members),
-                        freed: count(held.freed),
+                        owed: count(owed),
+                        members: count(members),
+                        freed: count(freed),
                         returning: count(TX_DEPTH.saturating_sub(io.returned.free_capacity())),
                     })
                 });
@@ -2244,16 +2111,29 @@ impl<
                         self.pending
                             .receive
                             .clear(&mut PhaseBlockAcks::new(phase), &mut self.events);
+                        // The data plane's frames go back to the network and
+                        // the arena on the air settles before the port
+                        // disables.
+                        if let Err(served) = self.finish_data(arbiter, phase, io, timer).await {
+                            return served;
+                        }
                         return Served::Stop;
                     }
                 }
             }
             let transmit = if transmit && self.data.accepts() && self.station.link().is_some() {
                 B::span(ServiceSpan::Transmit, false);
-                let taken = self.send(now, io);
+                let taken = self.send_queued(now, phase, io);
                 B::span(ServiceSpan::Transmit, true);
-                data_taken = true;
-                Some(taken)
+                match taken {
+                    Ok(taken) => Some(taken),
+                    Err(StepFailure::Port(
+                        fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)),
+                    )) => {
+                        return self.drain_port_error(arbiter, phase, timer, fault).await;
+                    }
+                    Err(fault) => return Served::Failed(fault),
+                }
             } else {
                 None
             };
@@ -2292,7 +2172,14 @@ impl<
             for _ in 0..MAX_INPUT_STEPS_PER_BATCH {
                 match phase.next_event().await.map(|event| event.map(B::event)) {
                     Ok(Ok(LowerMacEvent::Terminal(terminal))) => {
-                        if let Err(violation) = self.terminal(arbiter, timer.now(), terminal) {
+                        let now = timer.now();
+                        if let Err(violation) = self.terminal(arbiter, now, terminal) {
+                            return Served::Failed(violation.into());
+                        }
+                        // A data arena's frames go back to the network as
+                        // its completion settles; a fault leaves them to the
+                        // port's quarantine.
+                        if let Err(StepFailure::Contract(violation)) = self.settle(now, phase) {
                             return Served::Failed(violation.into());
                         }
                     }
@@ -2313,15 +2200,22 @@ impl<
         }
     }
 
-    /// Hand every MSDU the network stack queued to the data machine on the
-    /// station's link, while it has a buffer for one: the next aggregate
-    /// takes what waited, not one MSDU per turn of the service.
+    /// Hand every MSDU the network stack queued to the data plane on the
+    /// station's link until its standby cannot take one, and publish: the
+    /// next arena takes what waited, not one MSDU per turn of the service.
     /// Their admission is `now`: their age starts when the service takes them.
     // Keep source-specific temporaries out of the service poll frame.
     #[inline(never)]
-    fn send<const TX_DEPTH: usize, const RX_DEPTH: usize, const COMMAND_DEPTH: usize>(
+    fn send_queued<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
         &mut self,
         now: Instant,
+        phase: &mut P,
         io: &mut ServiceIo<
             '_,
             B::Caps,
@@ -2334,72 +2228,88 @@ impl<
             COMMAND_DEPTH,
             impl Notifies,
         >,
-    ) -> Taken {
-        // The TIDs of the MSDUs taken, each once.
-        let mut tids = [None; 8];
-        {
-            let Some(mut link) = self.station.link() else {
-                return Taken::Direct;
-            };
-            let ServiceIo {
-                transmit, output, ..
-            } = io;
-            let data = &mut self.data;
-            let events = &mut self.events;
-            // The queue holds at most `TX_DEPTH`: one pass takes them all,
-            // each while the data machine has a buffer.
-            for _ in 0..TX_DEPTH {
-                if !data.accepts() {
-                    break;
-                }
-                let Ok(Some(Outgoing {
-                    memory,
-                    length,
-                    priority,
-                })) = transmit.try_receive_with(Option::take)
-                else {
-                    break;
-                };
-                // The frame stays where the network wrote it: the data
-                // machine writes the MPDU header in front of its payload.
-                // A refused MSDU's memory goes back with the freed memory.
-                match data.input(
-                    DataInput {
-                        msdu: Msdu {
-                            memory,
-                            length: usize::from(length),
-                            priority,
-                            admitted: now,
-                        },
-                        link: &mut link,
-                    },
-                    events,
-                ) {
-                    Ok(tid) => {
-                        if let Some(seen) = tids.get_mut(usize::from(tid.value())) {
-                            *seen = Some(tid);
-                        }
-                    }
-                    // The available-pool observation is dynamic and the
-                    // public data input can refuse it.
-                    Err(reason) => output.emit(ServiceOutput::MsduRefused {
-                        reason: reason.into(),
-                    }),
-                }
-            }
-        }
-        // Each TID's transmit agreement hears its data once. MSDUs refused
-        // or not taken changed nothing.
-        let mut taken = Taken::Direct;
-        for tid in tids.into_iter().flatten() {
-            if let StaTraffic::Input = self.station.tx_block_ack_traffic(tid, now) {
-                taken = Taken::Input;
-            }
-        }
-        taken
+    ) -> Result<Taken, StepFailure<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        let ServiceIo {
+            transmit, output, ..
+        } = io;
+        // The queue holds at most `TX_DEPTH`: one pass takes them all while
+        // the standby takes them.
+        let mut incoming =
+            core::iter::from_fn(|| transmit.try_receive_with(Option::take).ok().flatten())
+                .take(TX_DEPTH);
+        self.send(now, phase, &mut incoming, &mut **output)
     }
 
-    /// Give the network the memory ended MPDUs held, while its queue has
+    /// Stop the data plane for the service's stop: its link's unpublished
+    /// frames go back to the network, and the service serves the port's
+    /// events until the arena on the air has completed and settled, by the
+    /// stop's deadline.
+    async fn finish_data<
+        'p,
+        P,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        const COMMAND_DEPTH: usize,
+    >(
+        &mut self,
+        arbiter: &mut PortArbiter<'id, B>,
+        phase: &mut P,
+        io: &mut ServiceIo<
+            '_,
+            B::Caps,
+            impl ServiceOutputSink<B::Caps>,
+            B::LentRx,
+            impl NetworkStop,
+            B::TxMemory,
+            TX_DEPTH,
+            RX_DEPTH,
+            COMMAND_DEPTH,
+            impl Notifies,
+        >,
+        timer: &impl Timer,
+    ) -> Result<(), Served<'id, B>>
+    where
+        'id: 'p,
+        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
+    {
+        if let Err(fault) = self.stop_data(phase) {
+            return Err(Served::Failed(fault));
+        }
+        let deadline = io
+            .control
+            .stop_deadline()
+            .unwrap_or_else(|| timer.now().saturating_add(io.stop.drain));
+        while self.data.on_air() {
+            let event = {
+                let next = phase.next_event();
+                let alarm = timer.wait_until(deadline);
+                match embassy_futures::select::select(next, alarm).await {
+                    embassy_futures::select::Either::First(event) => event,
+                    embassy_futures::select::Either::Second(()) => {
+                        return Err(Served::Failed(ServiceFault::StopDeadline.into()));
+                    }
+                }
+            };
+            let now = timer.now();
+            self.serve_event(arbiter, now, event, phase, io)?;
+            // The stopped plane only settles: it takes no link and no MSDU.
+            match self.settle(now, phase) {
+                Ok(_) => {}
+                Err(StepFailure::Port(
+                    fault @ (ServiceFault::Backend(_) | ServiceFault::Submission(_)),
+                )) => return Err(self.drain_port_error(arbiter, phase, timer, fault).await),
+                Err(fault) => return Err(Served::Failed(fault)),
+            }
+        }
+        self.return_freed(&mut io.returned);
+        Ok(())
+    }
+
+    /// Give the network the memory of ended frames, while its queue has
     /// room; whether memory still waits for room.
     #[inline(never)]
     fn return_freed<const TX_DEPTH: usize>(
@@ -2489,6 +2399,7 @@ impl<
                     &self.rates,
                     &mut self.events,
                     &mut self.pending,
+                    &mut self.data,
                     action,
                 )
                 .map_err(StepFailure::from)
@@ -2517,6 +2428,7 @@ impl<
                             &self.rates,
                             &mut self.events,
                             &mut self.pending,
+                            &mut self.data,
                             action,
                         )
                         .map_err(StepFailure::from)
@@ -2539,341 +2451,19 @@ impl<
                     }
                 }
             }
-            // Attempts that only went change nothing the step's other
-            // parts take; a refused one runs them again.
+            // A pass of the data plane that owes the station an action, a
+            // BlockAckReq or a negotiation, runs the step again.
             B::span(ServiceSpan::Attempt, false);
-            let attempted = self.attempt_data(now, phase, io);
+            let passed = self.data_turn(now, phase, &mut *io.output);
             B::span(ServiceSpan::Attempt, true);
-            match attempted {
-                Ok(attempted) => progress |= attempted == Attempted::Followed,
+            match passed {
+                Ok(owed) => progress |= owed,
                 Err(fault) => return Next::Failed(fault),
             }
             if !progress {
                 return Next::Wait;
             }
         }
-    }
-
-    /// Owed MPDUs join the open data aggregates whose last members they
-    /// follow, with no ticket ([`AmpduPhase::open_ampdu`]); an aggregate
-    /// the port closed, or that refused a member, takes no more.
-    ///
-    /// [`AmpduPhase::open_ampdu`]: oer_protocols_ieee80211_contracts_port::AmpduPhase::open_ampdu
-    // Keep source-specific temporaries out of the service poll frame.
-    #[inline(never)]
-    fn extend_open<'p, P>(&mut self, phase: &mut P)
-    where
-        'id: 'p,
-        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    {
-        use oer_protocols_ieee80211_contracts_port::{AmpduPhase, TxNumbering};
-        for category in data::WmmAccessCategory::ALL {
-            let Some(index) = *category.select(&self.pending.open) else {
-                continue;
-            };
-            let open = 'open: {
-                let Some(Some(TxContext::DataAggregate(context))) =
-                    self.pending.tx_contexts.place(index)
-                else {
-                    break 'open false;
-                };
-                if context.access_category() != category {
-                    break 'open false;
-                }
-                // The window is asked only when an owed MPDU follows; without
-                // one nothing joins, and the aggregate stays as open as the
-                // port holds it.
-                let mut asked = None;
-                let tid = context.tid();
-                let Some(mut member) = self.data.extend_aggregate(
-                    context,
-                    || {
-                        asked = cached_window::<B, P, S, C, GROUPS>(
-                            &mut self.pending.windows,
-                            &self.station,
-                            &self.rates,
-                            phase,
-                            tid,
-                        );
-                        asked
-                    },
-                    &mut self.events,
-                ) else {
-                    break 'open true;
-                };
-                let (Some(window), Some(link)) = (asked, self.station.link()) else {
-                    self.data.unbuilt(context, member, &mut self.events);
-                    break 'open true;
-                };
-                let protection = match context.protection(&link) {
-                    Ok(protection) => protection,
-                    Err(_) => {
-                        self.data.unbuilt(context, member, &mut self.events);
-                        break 'open false;
-                    }
-                };
-                B::span(ServiceSpan::Open, false);
-                let mut station = phase.station();
-                let Some(mut aggregate) = station.open_ampdu(index) else {
-                    B::span(ServiceSpan::Open, true);
-                    self.data.unbuilt(context, member, &mut self.events);
-                    break 'open false;
-                };
-                B::span(ServiceSpan::Open, true);
-                loop {
-                    B::span(ServiceSpan::Subframe, false);
-                    let Some(mpdu) = self.data.aggregate_mpdu(context, member) else {
-                        self.data.unbuilt(context, member, &mut self.events);
-                        break 'open false;
-                    };
-                    let number = || match protection {
-                        DataProtection::Open => Some(TxNumbering::Open),
-                        DataProtection::Ccmp(key) => key
-                            .number()
-                            .map(|numbered| TxNumbering::Ccmp(numbered.packet_number)),
-                    };
-                    let source = member_source::<B>(
-                        mpdu,
-                        self.data.aggregate_frame(context, member),
-                        number,
-                    );
-                    let refused = match source {
-                        Err((mpdu, _)) => mpdu,
-                        Ok(source) => {
-                            B::span(ServiceSpan::PortExtend, false);
-                            let extended =
-                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::extend_aggregate(
-                                    &mut aggregate,
-                                    source,
-                                );
-                            B::span(ServiceSpan::PortExtend, true);
-                            match extended {
-                                Ok(()) => match self.data.extend_aggregate(
-                                    context,
-                                    || Some(window),
-                                    &mut self.events,
-                                ) {
-                                    Some(next) => {
-                                        B::span(ServiceSpan::Subframe, true);
-                                        member = next;
-                                        continue;
-                                    }
-                                    None => {
-                                        B::span(ServiceSpan::Subframe, true);
-                                        break 'open true;
-                                    }
-                                },
-                                Err(refused) => member_back::<B>(refused.subframe),
-                            }
-                        }
-                    };
-                    // The member and every later MPDU go back to Data, in
-                    // order, for a later attempt.
-                    self.data
-                        .aggregate_mpdu_returned(context, member, refused, &mut self.events);
-                    self.data.unbuilt(context, member, &mut self.events);
-                    break 'open false;
-                }
-            };
-            if !open {
-                *category.select_mut(&mut self.pending.open) = None;
-            }
-        }
-    }
-
-    /// Submit every data attempt owed at `now`.
-    // Keep source-specific temporaries out of the service poll frame.
-    #[inline(never)]
-    fn attempt_data<
-        'p,
-        P,
-        const TX_DEPTH: usize,
-        const RX_DEPTH: usize,
-        const COMMAND_DEPTH: usize,
-    >(
-        &mut self,
-        now: Instant,
-        phase: &mut P,
-        io: &mut ServiceIo<
-            '_,
-            B::Caps,
-            impl ServiceOutputSink<B::Caps>,
-            B::LentRx,
-            impl NetworkStop,
-            B::TxMemory,
-            TX_DEPTH,
-            RX_DEPTH,
-            COMMAND_DEPTH,
-            impl Notifies,
-        >,
-    ) -> Result<Attempted, StepFailure<'id, B>>
-    where
-        'id: 'p,
-        P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    {
-        let mut attempted = Attempted::Nothing;
-        // Data goes only while the link is up: otherwise its MPDUs wait
-        // in the machine, none lost. At most the backend's queue depth
-        // of data attempts of a category waits at the port, so a
-        // station frame, submitted at once, waits for at most that
-        // depth and the one on the air; the limit is the service's, for
-        // every data source it runs.
-        // The open aggregates grow once a pass: one the loop below opens
-        // takes every owed MPDU it holds at once.
-        B::span(ServiceSpan::Extend, false);
-        self.extend_open(phase);
-        B::span(ServiceSpan::Extend, true);
-        'data: loop {
-            // Without an owed MPDU and a free ticket Data has no
-            // attempt: the turn asks for neither window nor link.
-            let Some(window_tid) = self.data.attempt_tid() else {
-                break 'data;
-            };
-            // The window of the TID the next attempt takes.
-            let window = cached_window::<B, P, S, C, GROUPS>(
-                &mut self.pending.windows,
-                &self.station,
-                &self.rates,
-                phase,
-                window_tid,
-            );
-            let spacing = self
-                .station
-                .tx_aggregate_limits()
-                .map_or(0, |(spacing, _)| spacing);
-            // This scope owns the short LinkView borrow. Only an owned
-            // follow-up leaves it; handling it may then borrow all of self.
-            let submitted = 'submitted: {
-                let Some(link) = self.station.link() else {
-                    break 'data;
-                };
-                let Some(attempt) = self
-                    .data
-                    .poll_attempt(|tid| window.filter(|_| tid == window_tid), &mut self.events)
-                else {
-                    break 'data;
-                };
-                let transmit = match attempt {
-                    data::DataAttempt::Single(transmit) => transmit,
-                    data::DataAttempt::Aggregate(aggregate) => {
-                        // The port holds it open as its category's last
-                        // submission until it says otherwise.
-                        *aggregate
-                            .context
-                            .access_category()
-                            .select_mut(&mut self.pending.open) = Some(aggregate.ticket.index());
-                        B::span(ServiceSpan::Submit, false);
-                        let submitted = submit_aggregate::<B, P, S, O, GROUPS>(
-                            now,
-                            phase,
-                            &link,
-                            &self.rates,
-                            AggregateBanks {
-                                data: &mut self.data,
-                                pending: &mut self.pending,
-                                events: &mut self.events,
-                            },
-                            spacing,
-                            aggregate,
-                        );
-                        B::span(ServiceSpan::Submit, true);
-                        break 'submitted submitted;
-                    }
-                };
-                let data::DataTransmitParts {
-                    context,
-                    ticket,
-                    buffer,
-                } = transmit.into_parts();
-                let access_category = context.access_category();
-                // A later submission of the category closes its aggregate.
-                *access_category.select_mut(&mut self.pending.open) = None;
-                let plan = context.protection(&link).and_then(|protection| {
-                    self.rates
-                        .plan(FrameRates::Data, |rate| phase.rate(rate))
-                        .map(|plan| (protection, plan))
-                        .ok_or(TxRefusal::NoRate)
-                });
-                let prepared = match (buffer, plan) {
-                    (ReturnedMpdu::Fresh(buffer), Ok((protection, plan))) => {
-                        let protection = match protection {
-                            DataProtection::Open => Some(TxProtection::Open),
-                            DataProtection::Ccmp(key) => key.number().map(TxProtection::Ccmp),
-                        };
-                        match protection {
-                            Some(protection) => prepare_source::<B, B::Large>(TxSource::Fresh {
-                                buffer,
-                                frame: ClassFrame::individual(*context.frame(), plan),
-                                body: None,
-                                protection,
-                            }),
-                            None => Err((
-                                TxRefusal::PacketNumberExhausted,
-                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer),
-                            )),
-                        }
-                    }
-                    (ReturnedMpdu::Sent(mpdu), Ok((_protection, plan))) => {
-                        prepare_source::<B, B::Large>(TxSource::Retransmission {
-                            mpdu,
-                            plan: RetransmissionPlan::Individual(plan),
-                        })
-                    }
-                    (buffer, Err(reason)) => {
-                        let buffer = match buffer {
-                            ReturnedMpdu::Fresh(buffer) => {
-                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase(buffer)
-                            }
-                            ReturnedMpdu::Sent(mpdu) => {
-                                <B::Types<'id> as TxBufferPool<'id, B::Large>>::erase_sent(mpdu)
-                            }
-                        };
-                        Err((reason, buffer))
-                    }
-                };
-                match prepared {
-                    Err((reason, buffer)) => Ok(Follow::Refused {
-                        context: TxContext::Data(context),
-                        ticket,
-                        buffer,
-                        reason,
-                    }),
-                    Ok(source) => {
-                        let index = ticket.index();
-                        self.pending
-                            .admissions
-                            .insert(PendingTerminal::Transmit(index));
-                        let unplaced = tx_contexts::keep(
-                            &mut self.pending.tx_contexts,
-                            index,
-                            TxContext::Data(context),
-                        )
-                        .err();
-                        let result = phase.station().submit(
-                            (oer_protocols_ieee80211_contracts_port::Attempt {
-                                context: (),
-                                ticket,
-                                source,
-                                access_category,
-                                protection: DataContext::<'id, B>::PROTECTION,
-                                power: DataContext::<'id, B>::POWER,
-                                coex_operation: DataContext::<'id, B>::COEX_OPERATION,
-                            })
-                            .admit(),
-                        );
-                        submitted::<B, GROUPS>(
-                            index,
-                            unplaced,
-                            result.map_err(|poisoned| poisoned.cause),
-                        )
-                    }
-                }
-            };
-            let follow = submitted?;
-            attempted = attempted.after(!matches!(follow, Follow::Nothing));
-            self.follow(now, follow, io)?;
-        }
-        Ok(attempted)
     }
 
     /// What follows a station's action, once it no longer borrows the
@@ -2914,16 +2504,6 @@ impl<
                 io.output.emit(ServiceOutput::Notice(notice.into()));
                 if let StaNotice::Disconnected(_) = notice {
                     self.rates.disconnected();
-                    self.data.leave(&mut self.events);
-                }
-            }
-            Follow::DataRefused(reason, marks) => {
-                io.output.emit(ServiceOutput::TxRefused {
-                    operation: TxOperation::Data,
-                    reason: reason.into(),
-                });
-                if let Some(marks) = marks {
-                    self.station.tx_block_ack_settled(marks);
                 }
             }
             Follow::Refused {
@@ -2932,12 +2512,7 @@ impl<
                 buffer,
                 reason,
             } => {
-                let operation = match &context {
-                    TxContext::Station(_) => TxOperation::Station,
-                    TxContext::Data(_) | TxContext::DataAggregate(_) => TxOperation::Data,
-                };
                 io.output.emit(ServiceOutput::TxRefused {
-                    operation,
                     reason: reason.into(),
                 });
                 self.returned(now, context, ticket, buffer, ReturnedTx::Refused(reason))?;
@@ -3059,7 +2634,7 @@ impl<
                     Ok(taken)
                 }
                 Ok((None, taken)) => Ok(taken),
-                Err(fault) => Err(Served::Failed(fault.into())),
+                Err(fault) => Err(Served::Failed(fault)),
             },
             Ok(Err(EventsLost)) => {
                 report(&mut self.events, || ServiceEvent::PortEventsLost);
@@ -3163,7 +2738,6 @@ impl<
     {
         match event {
             LowerMacEvent::Received { frame, meta } => {
-                self.pending.windows = [None; 8];
                 B::span(ServiceSpan::Received, false);
                 let received = self.received(now, frame, meta, phase, io);
                 B::span(ServiceSpan::Received, true);
@@ -3171,7 +2745,6 @@ impl<
             }
             LowerMacEvent::Tbtt(_) => Ok((None, Taken::Input)),
             LowerMacEvent::Terminal(terminal) => {
-                self.pending.windows = [None; 8];
                 B::span(ServiceSpan::Terminal, false);
                 let accepted = self.terminal(arbiter, now, terminal);
                 B::span(ServiceSpan::Terminal, true);
@@ -3527,7 +3100,7 @@ impl<
                         terminal: RejectedTerminal::Transmit(UnroutedTx {
                             context: None,
                             ticket,
-                            buffer: B::tx_buffer(buffer),
+                            buffer,
                             outcome: ReturnedTx::Completed(outcome),
                         }),
                     });
@@ -3537,8 +3110,18 @@ impl<
                 }
                 self.returned(now, context, ticket, buffer, ReturnedTx::Completed(outcome))?;
             }
-            LowerMacTerminal::TxCompleted(TxCompleted::Aggregate(terminal)) => {
-                self.aggregate_terminal(now, terminal)?;
+            LowerMacTerminal::TxCompleted(TxCompleted::Arena(done)) => {
+                // One arena is out at a time: its completion waits for the
+                // next step, which settles it with the phase.
+                if self.pending.arena.is_some()
+                    || !self.pending.admissions.remove(PendingTerminal::Arena)
+                {
+                    return Err(ContractFault::sealed(
+                        BackendContractViolation::UnexpectedTerminal(PendingTerminal::Arena),
+                        LowerMacTerminal::TxCompleted(TxCompleted::Arena(done)),
+                    ));
+                }
+                self.pending.arena = Some(done);
             }
             LowerMacTerminal::GateClosed(closed) => arbiter.gate_closed(closed),
             LowerMacTerminal::Configured(
@@ -3731,136 +3314,12 @@ impl<
         Ok(())
     }
 
-    /// An aggregate's terminal: every subframe of the data class, as many
-    /// as its members, back to Data; what it settled to the TID's agreement
-    /// and its sample to the rate selection. Anything else is a contract
-    /// violation that retains every owner returned.
-    fn aggregate_terminal(
-        &mut self,
-        now: Instant,
-        terminal: oer_protocols_ieee80211_contracts_port::AggregateCompleted<'id, B::Types<'id>>,
-    ) -> Result<(), ContractFault<'id, B>> {
-        let oer_protocols_ieee80211_contracts_port::TerminalParts {
-            context: (),
-            ticket,
-            payload,
-            outcome,
-        } = terminal.into_parts(&mut self.terminal_access);
-        let index = ticket.index();
-        for open in &mut self.pending.open {
-            if *open == Some(index) {
-                *open = None;
-            }
-        }
-        let admitted = self
-            .pending
-            .admissions
-            .remove(PendingTerminal::Transmit(index));
-        let context = if admitted {
-            tx_contexts::take(&mut self.pending.tx_contexts, index)
-        } else {
-            None
-        };
-        let mut rest = payload.into_iter();
-        let mut stray = None;
-        let context = match context {
-            Some(TxContext::DataAggregate(context)) => {
-                // Each member's memory goes straight back to its place in
-                // Data's bank, in subframe order: no copy of the aggregate.
-                let mut returned = 0_usize;
-                while stray.is_none() {
-                    let Some(mpdu) = rest.next() else {
-                        break;
-                    };
-                    let (buffer, body) =
-                        oer_protocols_ieee80211_contracts_port::TxMpdu::into_parts(mpdu);
-                    if let Some(body) = body {
-                        match body {}
-                    }
-                    match B::tx_buffer(buffer) {
-                        StationTxBuffer::Large(mpdu) if returned < context.len() => {
-                            self.data.aggregate_mpdu_returned(
-                                &context,
-                                returned,
-                                mpdu,
-                                &mut self.events,
-                            );
-                            returned = returned.saturating_add(1);
-                        }
-                        other => stray = Some(other),
-                    }
-                }
-                if stray.is_none() && returned == context.len() {
-                    Ok(context)
-                } else {
-                    Err(Some(TxContext::DataAggregate(context)))
-                }
-            }
-            // Every subframe stays in the payload it came in.
-            context => Err(context),
-        };
-        let context = match context {
-            Ok(context) => context,
-            Err(context) => {
-                let reason = match (&context, admitted) {
-                    (_, false) => BackendContractViolation::UnexpectedTerminal(
-                        PendingTerminal::Transmit(index),
-                    ),
-                    (None, true) => BackendContractViolation::TxContextPlace(index),
-                    (Some(_), true) => BackendContractViolation::AggregateMembers,
-                };
-                return Err(ContractFault {
-                    reason,
-                    terminal: RejectedTerminal::Aggregate(UnroutedAggregate {
-                        context,
-                        ticket,
-                        stray,
-                        rest,
-                        outcome,
-                    }),
-                });
-            }
-        };
-        let current = self.data.aggregate_is_current(&context);
-        let attempted = u16::try_from(context.len())
-            .ok()
-            .and_then(core::num::NonZeroU16::new);
-        let marks = self.data.aggregate_returned(
-            oer_protocols_ieee80211_core_roles_sta::data::DataAggregateReturn::TxDone {
-                context,
-                ticket,
-                completion: outcome,
-            },
-            now,
-            self.station.tx_aggregate_retry(),
-            &mut self.events,
-        );
-        let acknowledged = marks.map_or(0, |marks| {
-            u16::try_from(marks.delivered.count_ones()).unwrap_or(u16::MAX)
-        });
-        if let Some(tally) = attempted.and_then(|attempted| {
-            oer_protocols_ieee80211_core_upper_mac::rate_control::BlockAckTally::new(
-                attempted,
-                acknowledged,
-            )
-            .ok()
-        }) {
-            self.rates.learn_aggregate(now, current, tally, &outcome);
-        }
-        if let Some(marks) = marks {
-            self.station.tx_block_ack_settled(marks);
-        }
-        Ok(())
-    }
-
-    /// The context identifies the operation. Class is checked exactly once
-    /// against that identity; a mismatch violates the backend contract and
-    /// takes the same fail-stop path as Poisoned. A shared AC queue erases
-    /// classes, so this identity obligation cannot be proved by this API.
+    /// A station frame's return: its rate sample, when its terminal came, and
+    /// the station's input.
     fn returned(
         &mut self,
         now: Instant,
-        context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
+        context: StationTxContext<'id, B>,
         ticket: Slot<
             'id,
             <B::Types<'id> as PhaseTypes<'id>>::TicketKind,
@@ -3869,86 +3328,54 @@ impl<
         buffer: <B::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer,
         end: PortReturnedTx<'id, B>,
     ) -> Result<(), ContractFault<'id, B>> {
-        match (context, B::tx_buffer(buffer)) {
-            (TxContext::Station(context), StationTxBuffer::Small(buffer)) => {
-                if let ReturnedTx::Completed(completion) = &end {
-                    let current = self.station.is_current(&context);
-                    self.rates
-                        .learn(now, context.frame_rates(), current, completion);
-                }
-                let input = match end {
-                    ReturnedTx::Completed(completion) => StaInput::TxDone {
-                        context,
+        let buffer = match B::tx_buffer(buffer) {
+            Ok(buffer) => buffer,
+            Err(buffer) => {
+                return Err(ContractFault {
+                    reason: BackendContractViolation::TxBufferClass,
+                    terminal: RejectedTerminal::Transmit(UnroutedTx {
+                        context: Some(context),
                         ticket,
                         buffer,
-                        completion,
-                    },
-                    ReturnedTx::Refused(reason) => StaInput::Unsent {
-                        context,
-                        ticket,
-                        buffer,
-                        reason,
-                    },
-                };
-                self.station.input(now, input, &mut self.events);
-                Ok(())
+                        outcome: end,
+                    }),
+                });
             }
-            (TxContext::Data(context), StationTxBuffer::Large(buffer)) => {
-                if let ReturnedTx::Completed(completion) = &end {
-                    let current = self.data.is_current(&context);
-                    self.rates.learn(now, FrameRates::Data, current, completion);
-                }
-                let input = match end {
-                    ReturnedTx::Completed(completion) => DataReturn::TxDone {
-                        context,
-                        ticket,
-                        buffer,
-                        completion,
-                    },
-                    ReturnedTx::Refused(reason) => DataReturn::Refused {
-                        context,
-                        ticket,
-                        buffer,
-                        reason,
-                    },
-                };
-                if let Some(marks) = self.data.returned(input, &mut self.events) {
-                    self.station.tx_block_ack_settled(marks);
-                }
-                Ok(())
-            }
-            (context @ TxContext::Station(_), buffer @ StationTxBuffer::Large(_))
-            | (context @ TxContext::Data(_), buffer @ StationTxBuffer::Small(_))
-            | (context @ TxContext::DataAggregate(_), buffer) => Err(ContractFault {
-                reason: BackendContractViolation::TxContextBufferMismatch,
-                terminal: RejectedTerminal::Transmit(UnroutedTx {
-                    context: Some(context),
-                    ticket,
-                    buffer,
-                    outcome: end,
-                }),
-            }),
+        };
+        if let ReturnedTx::Completed(completion) = &end {
+            let current = self.station.is_current(&context);
+            self.rates
+                .learn(now, context.frame_rates(), current, completion);
         }
+        let input = match end {
+            ReturnedTx::Completed(completion) => StaInput::TxDone {
+                context,
+                ticket,
+                buffer,
+                completion,
+            },
+            ReturnedTx::Refused(reason) => StaInput::Unsent {
+                context,
+                ticket,
+                buffer,
+                reason,
+            },
+        };
+        self.station.input(now, input, &mut self.events);
+        Ok(())
     }
 }
 
 /// What follows a station's action.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a station input owns its key-unwrap response by value; the service has no allocator"
-)]
 enum Follow<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS: usize> {
     Nothing,
     /// An arbiter's answer or a key, back to the station.
     Input(StaInput<'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>),
     /// The station associated: the rates start from its peer.
     Associated(Peer<PortRxMeta<'id, B>>),
-    /// A data aggregate did not go; its members ended, which its TID's
-    /// agreement hears.
-    DataRefused(TxRefusal, Option<data::BlockAckMarks>),
     /// A frame of the station did not go.
     Refused {
-        context: TxContext<'id, B::Caps, B::Large, <B::Types<'id> as PhaseTypes<'id>>::EpochPath>,
+        context: StationTxContext<'id, B>,
         ticket: <PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS> as StaTokens>::Ticket,
         buffer: <B::Types<'id> as PhaseTypes<'id>>::AnyTxBuffer,
         reason: TxRefusal,
@@ -3978,381 +3405,6 @@ fn submitted<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, const GROUPS:
         (Some(context), _) => Ok(Follow::Unplaced { index, context }),
         (None, Ok(())) => Ok(Follow::Nothing),
         (None, Err(cause)) => Err(ServiceFault::Submission(cause)),
-    }
-}
-
-/// What the aggregate submission borrows of the service beside the link.
-struct AggregateBanks<'s, 'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id, O> {
-    data: &'s mut PortData<'id, B>,
-    pending: &'s mut PendingActions<'id, B>,
-    events: &'s mut O,
-}
-
-/// Where `tid` may aggregate now: its operational agreement's window,
-/// within the access point's and the port's limits and the PPDU time limit
-/// at the aggregate rate, while the aggregate rate selection has a rate the
-/// port aggregates at. The data machine asks only when an MPDU of `tid` is
-/// owed.
-/// The window of `tid`'s next aggregate: its rate and limits as `windows`
-/// keeps them, else computed and kept there; its head and size from the
-/// agreement as it stands now.
-fn cached_window<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
-    windows: &mut [Option<data::AggregateWindow>; 8],
-    station: &PortStation<'id, B, C, GROUPS>,
-    rates: &S,
-    phase: &mut P,
-    tid: data::WmmUserPriority,
-) -> Option<data::AggregateWindow>
-where
-    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
-    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
-    C: StaCallbacks,
-{
-    let agreement = station.tx_block_ack(tid)?;
-    kept_window(
-        windows.get_mut(usize::from(tid.value()))?,
-        &agreement,
-        || aggregate_window::<B, P, S, C, GROUPS>(station, rates, phase, tid),
-    )
-}
-
-/// The window `kept` holds, at `agreement`'s head and size as they stand
-/// now, else the one `compute` gives, kept from then on.
-fn kept_window(
-    kept: &mut Option<data::AggregateWindow>,
-    agreement: &oer_protocols_ieee80211_core_upper_mac::block_ack::OperationalTxBlockAck,
-    compute: impl FnOnce() -> Option<data::AggregateWindow>,
-) -> Option<data::AggregateWindow> {
-    if let Some(window) = *kept {
-        return Some(data::AggregateWindow {
-            start: agreement.starting_sequence,
-            size: agreement.window,
-            ..window
-        });
-    }
-    *kept = compute();
-    *kept
-}
-
-fn aggregate_window<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
-    station: &PortStation<'id, B, C, GROUPS>,
-    rates: &S,
-    phase: &mut P,
-    tid: data::WmmUserPriority,
-) -> Option<data::AggregateWindow>
-where
-    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
-    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
-    C: StaCallbacks,
-{
-    B::span(ServiceSpan::Window, false);
-    let window = aggregate_window_of::<B, P, S, C, GROUPS>(station, rates, phase, tid);
-    B::span(ServiceSpan::Window, true);
-    window
-}
-
-fn aggregate_window_of<'p, 'id: 'p, B, P, S, C, const GROUPS: usize>(
-    station: &PortStation<'id, B, C, GROUPS>,
-    rates: &S,
-    phase: &mut P,
-    tid: data::WmmUserPriority,
-) -> Option<data::AggregateWindow>
-where
-    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
-    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
-    C: StaCallbacks,
-{
-    use oer_protocols_ieee80211_contracts_port::AmpduPhase;
-    // Only an operational agreement asks for the aggregate rate.
-    station.tx_block_ack(tid)?;
-    let rate = rates
-        .plan(FrameRates::Aggregate, |rate| phase.rate(rate))
-        .map(|plan| plan.into_first().rate)?;
-    let rate = phase.station().ampdu_rate(rate).ok()?;
-    // The port's length at the aggregate's rate: the assembler takes no
-    // more frames than it holds.
-    let capabilities = phase.station().ampdu_capabilities();
-    let rate = rate.rate().get();
-    let max_length = capabilities.max_length.at(rate).ok()?;
-    station.tx_aggregate_window(
-        tid,
-        usize::from(capabilities.max_subframes),
-        max_length.get(),
-        rate,
-    )
-}
-
-/// Build one data aggregate through the station interface's builder and
-/// submit it. Members the builder refuses after the first go back to Data
-/// unchanged; a refusal of the first, or of the aggregate's link, rate or
-/// numbering, returns every member without a radio terminal.
-#[allow(
-    clippy::too_many_lines,
-    reason = "one builder's typestate from its empty state to its submission"
-)]
-fn submit_aggregate<'p, 'id: 'p, B, P, S, O, const GROUPS: usize>(
-    now: Instant,
-    phase: &mut P,
-    link: &oer_protocols_ieee80211_core_roles_sta::machine::LinkView<
-        '_,
-        'id,
-        PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>,
-    >,
-    rates: &S,
-    banks: AggregateBanks<'_, 'id, B, O>,
-    spacing: u8,
-    aggregate: data::DataAggregate<'id, PortDataTokens<'id, B::Types<'id>, B::Large>, B::Caps>,
-) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
-where
-    B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
-    P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
-    S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
-    O: EventSink<oer_protocols_ieee80211_core_roles_sta::events::StaEvent>,
-{
-    use oer_protocols_ieee80211_contracts_port::{
-        AggregateAttempt, AggregateRefused, AmpduPhase, CheckedAggregate, LayoutRefused,
-        MpduStartSpacing, Tid, TxNumbering,
-    };
-    let AggregateBanks {
-        data,
-        pending,
-        events,
-    } = banks;
-    let data::DataAggregate {
-        mut context,
-        ticket,
-    } = aggregate;
-    // Every member back to Data, the ticket and permission with them; each
-    // member's memory waits in Data's bank.
-    macro_rules! refuse {
-        ($context:expr, $reason:expr) => {{
-            let marks = data.aggregate_returned(
-                data::DataAggregateReturn::<'id, _, _, (), ()>::Refused {
-                    context: $context,
-                    ticket,
-                },
-                now,
-                None,
-                &mut *events,
-            );
-            return Ok(Follow::DataRefused($reason, marks));
-        }};
-    }
-    let protection = match context.protection(link) {
-        Ok(protection) => protection,
-        Err(reason) => refuse!(context, reason),
-    };
-    let Some(rate) = rates
-        .plan(FrameRates::Aggregate, |rate| phase.rate(rate))
-        .map(|plan| plan.into_first().rate)
-    else {
-        refuse!(context, TxRefusal::NoRate);
-    };
-    let Ok(rate) = phase.station().ampdu_rate(rate) else {
-        refuse!(context, TxRefusal::NoRate);
-    };
-    let (Some(receiver), Some(tid), Some(spacing)) = (
-        link.recipient(),
-        Tid::new(context.tid().value()),
-        MpduStartSpacing::new(spacing),
-    ) else {
-        refuse!(context, TxRefusal::LinkChanged);
-    };
-    let builder_protection = match protection {
-        DataProtection::Open => Some(TxProtection::Open),
-        DataProtection::Ccmp(key) => key
-            .number()
-            .map(|numbered| TxProtection::Ccmp(numbered.key)),
-    };
-    let Some(builder_protection) = builder_protection else {
-        refuse!(context, TxRefusal::PacketNumberExhausted);
-    };
-    // A fresh member draws the next packet number of the link's key.
-    let number = || match protection {
-        DataProtection::Open => Some(TxNumbering::Open),
-        DataProtection::Ccmp(key) => key
-            .number()
-            .map(|numbered| TxNumbering::Ccmp(numbered.packet_number)),
-    };
-    let source = |mpdu, frame| member_source::<B>(mpdu, frame, number);
-    let back = member_back::<B>;
-    let empty = phase
-        .station()
-        .aggregate(receiver, tid, rate, builder_protection);
-    // The first member: its refusal, or the builder's, refuses them all.
-    let first = match data.aggregate_mpdu(&context, 0) {
-        None => Err(TxRefusal::LinkChanged),
-        Some(mpdu) => match source(mpdu, data.aggregate_frame(&context, 0)) {
-            Ok(source) => Ok(source),
-            Err((mpdu, reason)) => {
-                data.aggregate_mpdu_returned(&context, 0, mpdu, &mut *events);
-                Err(reason)
-            }
-        },
-    };
-    let pushed = match first {
-        Ok(source) => match CheckedAggregate::new(empty, source) {
-            Ok(checked) => <B::Types<'id> as TxBufferPool<'id, B::Large>>::push_aggregate(checked)
-                .map_err(
-                    |AggregateRefused {
-                         reason,
-                         aggregate,
-                         subframe,
-                     }| {
-                        (aggregate, back(subframe), TxRefusal::Preparation(reason))
-                    },
-                ),
-            Err(LayoutRefused {
-                reason,
-                operation: (empty, subframe),
-            }) => Err((empty, back(subframe), TxRefusal::Layout(reason))),
-        },
-        Err(reason) => {
-            // The empty builder holds no subframe: cancelling it releases none.
-            let _cancelled =
-                oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
-            refuse!(context, reason);
-        }
-    };
-    let mut builder = match pushed {
-        Ok(builder) => builder,
-        Err((empty, mpdu, reason)) => {
-            let _cancelled =
-                oer_protocols_ieee80211_contracts_port::PhaseAggregate::into_parts(empty);
-            data.aggregate_mpdu_returned(&context, 0, mpdu, &mut *events);
-            refuse!(context, reason);
-        }
-    };
-    let mut index = 1_usize;
-    while index < context.len() {
-        let Some(mpdu) = data.aggregate_mpdu(&context, index) else {
-            // The rest goes back to Data, in order, for a later attempt.
-            data.unbuilt(&mut context, index, &mut *events);
-            break;
-        };
-        let refused = match source(mpdu, data.aggregate_frame(&context, index)) {
-            Err((mpdu, _)) => Some(mpdu),
-            Ok(source) => match CheckedAggregate::new(builder, source) {
-                Ok(checked) => {
-                    match <B::Types<'id> as TxBufferPool<'id, B::Large>>::push_aggregate(checked) {
-                        Ok(next) => {
-                            builder = next;
-                            None
-                        }
-                        Err(AggregateRefused {
-                            aggregate,
-                            subframe,
-                            ..
-                        }) => {
-                            builder = aggregate;
-                            Some(back(subframe))
-                        }
-                    }
-                }
-                Err(LayoutRefused {
-                    operation: (aggregate, subframe),
-                    ..
-                }) => {
-                    builder = aggregate;
-                    Some(back(subframe))
-                }
-            },
-        };
-        if let Some(mpdu) = refused {
-            // The rest goes back to Data, in order, for a later attempt.
-            data.aggregate_mpdu_returned(&context, index, mpdu, &mut *events);
-            data.unbuilt(&mut context, index, &mut *events);
-            break;
-        }
-        index = index.saturating_add(1);
-    }
-    let index = ticket.index();
-    pending.admissions.insert(PendingTerminal::Transmit(index));
-    let unplaced = tx_contexts::keep(
-        &mut pending.tx_contexts,
-        index,
-        TxContext::DataAggregate(context),
-    )
-    .err();
-    let result = phase
-        .station()
-        .submit_ampdu(
-            AggregateAttempt {
-                context: (),
-                ticket,
-                aggregate: builder,
-                protection: DataContext::<'id, B>::PROTECTION,
-                power: DataContext::<'id, B>::POWER,
-                min_mpdu_start_spacing: spacing,
-            }
-            .admit(),
-        )
-        .map_err(|poisoned| poisoned.cause);
-    submitted::<B, GROUPS>(index, unplaced, result)
-}
-
-/// A data aggregate member's subframe source: a returned MPDU as it went,
-/// a fresh one with its class-checked description and the packet number
-/// `number` draws. `Err` returns it unchanged, with the reason.
-#[allow(clippy::type_complexity, reason = "the port's own owners")]
-fn member_source<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
-    mpdu: PoolMpdu<'id, B::Types<'id>, B::Large>,
-    frame: Option<
-        oer_protocols_ieee80211_contracts_port::ClassSizedFrame<
-            B::Large,
-            oer_protocols_ieee80211_contracts_port::AckHeader,
-            B::Caps,
-        >,
-    >,
-    number: impl FnOnce() -> Option<oer_protocols_ieee80211_contracts_port::TxNumbering>,
-) -> Result<
-    oer_protocols_ieee80211_contracts_port::PoolSubframe<'id, B::Types<'id>, B::Large, B::Caps>,
-    (PoolMpdu<'id, B::Types<'id>, B::Large>, TxRefusal),
-> {
-    use oer_protocols_ieee80211_contracts_port::{ClassSubframe, SubframeSource};
-    match mpdu {
-        ReturnedMpdu::Sent(sent) => Ok(SubframeSource::Sent(sent)),
-        ReturnedMpdu::Fresh(buffer) => {
-            let numbering = number();
-            let frame = frame.and_then(|frame| ClassSubframe::new(*frame.frame()).ok());
-            match (numbering, frame) {
-                (Some(numbering), Some(frame)) => Ok(SubframeSource::Fresh {
-                    numbering,
-                    buffer,
-                    frame,
-                    body: None,
-                }),
-                (None, _) => Err((
-                    ReturnedMpdu::Fresh(buffer),
-                    TxRefusal::PacketNumberExhausted,
-                )),
-                (Some(_), None) => Err((
-                    ReturnedMpdu::Fresh(buffer),
-                    TxRefusal::Preparation(
-                        oer_protocols_ieee80211_contracts_port::PreparationError::AggregateFull,
-                    ),
-                )),
-            }
-        }
-    }
-}
-
-/// A refused member's MPDU, as it came.
-fn member_back<'id, B: StationPort<SlotId: 'id, Backend: 'id> + 'id>(
-    subframe: oer_protocols_ieee80211_contracts_port::PoolSubframe<
-        'id,
-        B::Types<'id>,
-        B::Large,
-        B::Caps,
-    >,
-) -> PoolMpdu<'id, B::Types<'id>, B::Large> {
-    use oer_protocols_ieee80211_contracts_port::SubframeSource;
-    match subframe {
-        SubframeSource::Fresh { buffer, .. } => ReturnedMpdu::Fresh(buffer),
-        SubframeSource::Sent(sent) => ReturnedMpdu::Sent(sent),
     }
 }
 
@@ -4441,7 +3493,7 @@ where
         Ok(frame) => frame,
         Err(reason) => {
             return Ok(Follow::Refused {
-                context: TxContext::Station(context),
+                context,
                 ticket,
                 buffer: <B::Types<'id> as TxBufferPool<'id, B::Small>>::erase(buffer),
                 reason,
@@ -4454,7 +3506,7 @@ where
             Some(numbered) => TxProtection::Ccmp(numbered),
             None => {
                 return Ok(Follow::Refused {
-                    context: TxContext::Station(context),
+                    context,
                     ticket,
                     buffer: <B::Types<'id> as TxBufferPool<'id, B::Small>>::erase(buffer),
                     reason: TxRefusal::PacketNumberExhausted,
@@ -4471,7 +3523,7 @@ where
         Ok(source) => source,
         Err((reason, buffer)) => {
             return Ok(Follow::Refused {
-                context: TxContext::Station(context),
+                context,
                 ticket,
                 buffer,
                 reason,
@@ -4481,8 +3533,7 @@ where
     let mut station = phase.station();
     let index = ticket.index();
     pending.admissions.insert(PendingTerminal::Transmit(index));
-    let unplaced =
-        tx_contexts::keep(&mut pending.tx_contexts, index, TxContext::Station(context)).err();
+    let unplaced = tx_contexts::keep(&mut pending.tx_contexts, index, context).err();
     let result = station.submit(
         (oer_protocols_ieee80211_contracts_port::Attempt {
             context: (),
@@ -4510,6 +3561,7 @@ fn station_action<
     B,
     P,
     S,
+    O,
     const TX_DEPTH: usize,
     const RX_DEPTH: usize,
     const COMMAND_DEPTH: usize,
@@ -4531,14 +3583,16 @@ fn station_action<
     >,
     arbiter: &mut PortArbiter<'id, B>,
     rates: &S,
-    events: &mut impl EventSink<oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent>,
+    events: &mut O,
     pending_actions: &mut PendingActions<'id, B>,
+    data: &mut DataTx<B::TxMemory>,
     action: StaAction<'_, 'id, PortStaTokens<'id, B::Types<'id>, B::Small, GROUPS>, B::Caps>,
 ) -> Result<Follow<'id, B, GROUPS>, ServiceFault<B>>
 where
     B: StationPort<SlotId: 'id, Backend: 'id> + 'id,
     P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     S: RateSelection<PortRxMeta<'id, B>, PortAck<'id, B>, PortBlockAck<'id, B>>,
+    O: StationEvents,
 {
     let input = match action {
         StaAction::BlockAck(request) => {
@@ -4597,6 +3651,8 @@ where
             peer,
             key,
         } => {
+            // Frames written under the old key carry its packet numbers.
+            data_tx::withdraw_unpublished::<B, P>(data, phase, events)?;
             let key = StationPairwiseKey::request(
                 &mut phase.station(),
                 association,
@@ -4635,6 +3691,7 @@ where
             return Ok(Follow::Nothing);
         }
         StaAction::RemovePairwiseKey(key) => {
+            data_tx::withdraw_unpublished::<B, P>(data, phase, events)?;
             pending_actions
                 .admissions
                 .insert(PendingTerminal::Control(ControlTerminal::PairwiseRemoval));

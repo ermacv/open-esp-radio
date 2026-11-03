@@ -18,14 +18,15 @@ fn rejected_publication_costs_nothing_and_abort_keeps_submitted_work() {
         crate::mac::tx::HtGuardInterval::Long800Ns,
         crate::mac::tx::HtChannelWidth::Mhz20,
     );
-    owner
-        .commit_ht(
-            cookie,
-            pool.claim_radio(index).expect("ready placed slot"),
-            ht_frame_request(0, 32, 8, 0, rate),
-        )
-        .unwrap();
-    let aggregate = owner.prepared_aggregate(cookie).unwrap();
+    commit(
+        &mut owner,
+        cookie,
+        pool.claim_radio(index).expect("ready placed slot"),
+        32,
+        8,
+    )
+    .unwrap();
+    let aggregate = prepared(&mut owner, cookie).unwrap();
     let mut config = HtAmpduTxConfig::new(rate, aggregate.bytes, aggregate.subframes).unwrap();
     config.control = crate::mac::tx::TxControlFrame {
         protection: crate::mac::tx::protection::TxProtection::RtsCts {

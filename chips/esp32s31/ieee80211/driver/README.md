@@ -72,10 +72,11 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   reset. Recovery starts a new association.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
-- **HE service.** The lower-MAC port accepts caller-selected HE SU attempts.
-  It exposes no `AmpduPhase`, Trigger-response or beamformee service. The
-  chip MAC and HAL contain HE aggregate and Trigger queue primitives; their
-  presence does not advertise those services through the port.
+- **HE service.** The lower-MAC port accepts caller-selected HE SU attempts,
+  and the station's data arenas publish HE SU A-MPDUs. It exposes no
+  Trigger-response or beamformee service. The chip MAC and HAL contain
+  Trigger queue primitives; their presence does not advertise those
+  services through the port.
 - **Host conformance.** The shared suites run against this backend over the
   host device model (`lower_mac/tests/port/conformance`): single-MPDU
   outcomes, publication barriers, interface commands, single-MPDU admission
@@ -89,11 +90,10 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   key writes, decrypts air frames at capture against its key table and
   drains captured hardware, DMA and interrupt frames through the RX cut.
   A publication is identified by its program's PSDU length: every host DMA
-  allocation has the same model descriptor address. The aggregate outcome
-  cases run with the model answering each aggregate's BlockAck. Not run: air
-  denial (no device model), the age suite's re-formation and BA-window
-  cases (they need the Block Ack originator above the port), and
-  InstallBeside and SelectRetained (one station GTK slot).
+  allocation has the same model descriptor address. Every shared arena case
+  runs against the S31 arenas, the model answering each A-MPDU's BlockAck.
+  Not run: air denial (no device model), and InstallBeside and
+  SelectRetained (one station GTK slot).
 - **Publication observations.** `Esp32s31Backend`'s last parameter `O` is
   the driver task's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
@@ -282,62 +282,62 @@ station's own task takes received units; the P3 handlers own only their interrup
 The task-side `RadioDevice` retains the cooperative registers, PHY actor
 transaction and RX ring. No ISR accesses its task-only `RefCell` state.
 
-Eight shared TX tickets feed four hardware queues; an MPDU and an aggregate
-each take one. Every MPDU and subframe is written into one buffer of the
-transmit pool (`TX_BUFFERS`, 67: two complete 32-subframe aggregates and
-three more) placed in the DMA window. Descriptors are separate publication
-metadata: an MPDU's buffer is attached to its queue's ordinary descriptor
-for the publication, and an aggregate's buffers are retained by one of two
-descriptor chains (`AMPDU_CHAINS`), one in the air while the next is
-published; an aggregate whose head finds no free chain waits in its access
-category's FIFO. Each queue executes an MPDU's supplied retry plan; an
-aggregate is one attempt, and the planner above the port resends what its
-BlockAck report misses. A submitted aggregate stays open as its access
-category's last submission (`Driver::open`, one per queue) while it would
-not go next: the station appends subframes to it in place
-(`AmpduPhase::open_ampdu`, `TxBufferPool::extend_aggregate`, under the
-builder's rules), with no ticket and no command. The front sends it to the
-driver before any later command (a submission of its category, or any
-other), and the driver takes it into its queue once every command before
-it is in and nothing of its category is published or queued, so it goes in
-the same turn that ends the one before it. Station and driver share the
-station's executor; the front borrows the driver's state only within one
-synchronous step. While an aggregate is built, queued or published,
-its subframes' records wait in the installation's subframe table at their
-buffers' places; only the places travel through the port's queues. The
-builder refuses, at push, every subframe the window, the subframe count or
-the length (at the widest MPDU start spacing, under the TXOP limit the station last
-published) cannot hold, so the driver's planning never refuses a submitted aggregate.
-Timeout aborts of MPDUs and aggregates force CCA one at a time. Gate,
-configuration, key and disable barriers wait for published aggregates as
-for MPDUs and return the original operation owners through terminals.
-Uninstall returns stopped owners for a fresh installation; uncertainty keeps
-the DMA allocations quarantined. RX buffers require explicit recycling.
-GTK changes freeze ingress and drain preceding RX before returning their
-permission. An erased key cannot authorize a returned MPDU's retransmission.
+Eight shared TX tickets feed four hardware queues; an MPDU takes one, and
+the station's two data arenas hold one each. Every MPDU is written into one
+buffer of the transmit pool (`TX_BUFFERS`) placed in the DMA window; the
+network's data frames come in memory of the same pool, which the arenas
+hold. Descriptors are separate publication metadata: an MPDU's buffer is
+attached to its queue's ordinary descriptor for the publication, and each
+data arena retains its frames in one of the two descriptor chains
+(`AMPDU_CHAINS`). Each queue executes an MPDU's supplied retry plan.
+Timeout aborts of MPDUs and of the arena on the air force CCA one at a
+time. Gate, configuration, key and disable barriers wait for published
+MPDUs and arenas and return the original operation owners through
+terminals. Uninstall returns stopped owners for a fresh installation;
+uncertainty keeps the DMA allocations quarantined. RX buffers require
+explicit recycling. GTK changes freeze ingress and drain preceding RX
+before returning their permission. An erased key cannot authorize a
+returned MPDU's retransmission.
 
-`lower_mac::arena` implements the port's `TxArena` over the same two
-chains (`Esp32s31TxArena`, built from the chains and two tickets;
-`ArenaPort` lends it the core, hardware, free queues, pairwise key, sink and
-contention observer for one step); the composition does not use it yet.
-Intake moves the network's buffer into the chain's next retention slot,
-hands the writer the region after the eight-byte prefix and binds the
-descriptor word once, its MIC room from the MPDU's Protected bit; every
-publication, a retry included, relinks the bound words. Publication refuses
-a Protected bit the encryption contradicts and an A-MPDU past its rate's
-octet ceiling or the chain's slots, admits the pairwise key for an
-encrypted arena and programs an HT/HE A-MPDU of every frame or position 0
-alone as a legacy, HT or HE single MPDU. Completion maps a valid BlockAck,
-an ACK, an ACK or CTS timeout, a collision detach and a timeout abort onto
-`AttemptEnd`; a collision or abort detach keeps every buffer. Retention
-returns the frames not kept in position order, compacts the kept ones with
-their bound words and sets the Retry bit only on kept frames the
-publication sent. The key right stays with the arena until no frame it
-encrypted is published or retained. Its one deadline is the publication
-watchdog.
+`lower_mac::arena` implements the port's `TxArena` over the two chains
+(`Esp32s31TxArena`, built from the chains and two tickets; `ArenaPort` lends
+it the core, hardware, free queues, pairwise key, sink and contention
+observer for one step). Intake moves the network's buffer into the chain's
+next retention slot, hands the writer the region after the eight-byte
+prefix and binds the descriptor word once, its MIC room from the MPDU's
+Protected bit; every publication, a retry included, relinks the bound
+words. Publication refuses a Protected bit the encryption contradicts and
+an A-MPDU past its rate's octet ceiling or the chain's slots, admits the
+pairwise key for an encrypted arena and programs an HT/HE A-MPDU of every
+frame or position 0 alone as a legacy, HT or HE single MPDU. Completion maps
+a valid BlockAck, an ACK, an ACK or CTS timeout, a collision detach and a
+timeout abort onto `AttemptEnd`; a collision or abort detach keeps every
+buffer. Retention returns the frames not kept in position order, compacts
+the kept ones with their bound words and sets the Retry bit only on kept
+frames the publication sent. The key right stays with the arena until no
+frame it encrypted is published or retained. Its one deadline is the
+publication watchdog.
 
-The port exposes ordinary MPDUs, aggregates (`AmpduPhase` of both
-interfaces) and RX BlockAck agreements. It does not expose the optional
+The driver builds the arenas at preparation and takes their chains and
+tickets back at retirement, only while both are idle and empty and hold no
+key right; otherwise the stopped port refuses reinstallation, as it does
+for a busy descriptor. The station reaches them through
+`StationPhase::data_arena` (`port::StationArena`), which borrows the
+driver's state for one synchronous step: it fills, publishes, withdraws
+and settles them, and refuses a publication as busy while the gate is
+closed or closing, a configuration or a barrier command is pending, or the
+port stops. A publication wakes the driver, which serves the arena on the
+air in its turn, on a transmit edge and at the arena's deadline; the
+arena's end goes to the station as `TxCompleted::Arena`, and the station's
+settlement returns its frames' memory. The arena on the air holds its
+access category's queue: an MPDU of that category waits for the arena's
+end. Disable serves a published arena to its end (its watchdog's timeout
+abort when the hardware gives no completion) and hands that end to the
+disable sink. A station pairwise key removal waits while an arena holds a
+key right.
+
+The port exposes ordinary MPDUs, the station's data arenas (with the
+A-MPDU rates of `AmpduPhase`) and RX BlockAck agreements. It does not expose the optional
 beacon-timing, monitor or air-reservation phases.
 Its publication watchdog is 250 ms; command and retirement bounds
 are 400 ms, including the publication and the finite RX stop.
