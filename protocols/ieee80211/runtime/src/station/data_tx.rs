@@ -116,18 +116,21 @@ impl<
         'id: 'p,
         P: LowerMacPhase<'p, 'id, Caps = B::Caps, Types = B::Types<'id>>,
     {
-        let plane = match self.data.plane.take() {
-            Some(plane) => plane,
-            None => {
-                let mut station = phase.station();
-                let mut arena = station.data_arena();
-                let rights = TxArena::arenas(&mut arena)
-                    .ok_or(ServiceFault::Contract(BackendContractViolation::ArenaClaim))?;
-                DataPlane::new(rights)
-                    .map_err(|_| ServiceFault::Contract(BackendContractViolation::ArenaClaim))?
-            }
-        };
-        Ok(self.data.plane.insert(plane))
+        // The plane stays in place: moving it out and back would copy its
+        // books on every call.
+        if self.data.plane.is_none() {
+            let mut station = phase.station();
+            let mut arena = station.data_arena();
+            let rights = TxArena::arenas(&mut arena)
+                .ok_or(ServiceFault::Contract(BackendContractViolation::ArenaClaim))?;
+            let plane = DataPlane::new(rights)
+                .map_err(|_| ServiceFault::Contract(BackendContractViolation::ArenaClaim))?;
+            return Ok(self.data.plane.insert(plane));
+        }
+        self.data
+            .plane
+            .as_mut()
+            .ok_or(ServiceFault::Contract(BackendContractViolation::ArenaClaim))
     }
 
     /// One pass of the data at `now`: the completed arena settled, the
