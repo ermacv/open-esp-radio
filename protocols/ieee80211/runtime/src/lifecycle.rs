@@ -597,9 +597,12 @@ where
         }
         // Register for what this wake left waiting.
         let mut again = false;
+        // Messages left behind a full queue wait for its room, not for
+        // another poll.
         if core::pin::pin!(actor.from_actor.ready())
             .poll(cx)
             .is_ready()
+            && !self.inner.blocked
         {
             again = true;
         }
