@@ -38,7 +38,7 @@ use oer_protocols_ieee80211_wire::{sequence::SequenceNumber, station::StaProtect
 
 use crate::epoch::LinkEpoch;
 use crate::machine::{LinkMode, LinkProtection, LinkView, StaTokens};
-use crate::pool::{Fifo, Pool};
+use crate::pool::{Fifo, Pool, Slab};
 use oer_protocols_radio_port::{PoolPath, Root};
 
 /// The tokens of the data machine: the port's tickets and the buffers of
@@ -464,12 +464,17 @@ impl<'id, K, C, A, Path: PoolPath> DataTxContext<'id, K, C, A, Path> {
     }
 }
 
-/// An encoded MPDU waiting for its attempt: its operation and its buffer,
-/// without a ticket or an admission permission.
-struct OwedMpdu<'id, D: StaDataTokens, K> {
+/// An encoded MPDU the machine holds, at one place of its bank from its
+/// input until it ends or goes alone to the port: its operation, without a
+/// ticket or an admission permission, and its memory while that is not at
+/// the port.
+struct HeldMpdu<'id, D: StaDataTokens, K> {
     context: DataTxContext<'id, K, D::Class, (), D::EpochPath>,
-    buffer: ReturnedMpdu<D::Buffer, D::Sent>,
+    memory: Option<ReturnedMpdu<D::Buffer, D::Sent>>,
 }
+
+/// The MPDUs a data machine holds, by place.
+type MpduBank<'id, D, K, const CAP: usize> = Slab<HeldMpdu<'id, D, K>, CAP>;
 
 /// Where the network memory a data machine holds waits, by MPDU: owed and
 /// not yet at the port, a member of an aggregate out at the port, or freed
@@ -481,9 +486,12 @@ pub struct HeldMemory {
     pub freed: usize,
 }
 
-/// The connected station's data machine. `CAP` sizes its buffer pool and
-/// its one queue of owed MPDUs, every TID's in their order: each owed MPDU
-/// holds a buffer, so every buffer fits the queue (checked at build).
+/// The connected station's data machine. `CAP` sizes its buffer pool, its
+/// bank of MPDUs and its one queue of owed MPDUs, every TID's in their
+/// order: each MPDU holds a buffer, so every buffer fits the bank and the
+/// queue (checked at build). An MPDU stays at its place in the bank from
+/// its input until it ends; the queue and an aggregate's context name it by
+/// that place.
 /// Tickets, at most eight, belong to attempts: an owed MPDU takes one only
 /// when it goes to the port.
 ///
@@ -520,11 +528,11 @@ pub struct HeldMemory {
 pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
     buffers: Pool<D::Buffer, CAP>,
-    /// The MPDUs owed, in their order, whatever their TID (a non-QoS
-    /// link's take the first).
-    owed: Fifo<OwedMpdu<'id, D, K>, CAP>,
-    /// The members of the aggregates out at the port.
-    members: aggregate::MemberBank<K, D::Class, ReturnedMpdu<D::Buffer, D::Sent>, CAP>,
+    /// Every MPDU held: owed, or a member of an aggregate out at the port.
+    mpdus: MpduBank<'id, D, K, CAP>,
+    /// The places of the MPDUs owed, in their order, whatever their TID (a
+    /// non-QoS link's take the first).
+    owed: Fifo<u8, CAP>,
     admission: Admissions,
     /// The order of the next MSDU.
     next_order: u32,
@@ -543,9 +551,9 @@ pub struct StaData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
 pub struct RetiredData<'id, D: StaDataTokens, K, const CAP: usize = 8> {
     tickets: Pool<D::Ticket>,
     buffers: Pool<D::Buffer, CAP>,
-    owed: Fifo<OwedMpdu<'id, D, K>, CAP>,
     /// Members of aggregates still out keep their places across a restart.
-    members: aggregate::MemberBank<K, D::Class, ReturnedMpdu<D::Buffer, D::Sent>, CAP>,
+    mpdus: MpduBank<'id, D, K, CAP>,
+    owed: Fifo<u8, CAP>,
     admission: Admissions,
     next_order: u32,
     freed: Fifo<D::Memory, CAP>,
@@ -578,8 +586,8 @@ impl<
         let Self {
             tickets,
             buffers,
+            mpdus,
             owed,
-            members,
             admission,
             next_order,
             freed,
@@ -587,8 +595,8 @@ impl<
         StaData {
             tickets,
             buffers,
+            mpdus,
             owed,
-            members,
             admission,
             next_order,
             link: None,
@@ -614,13 +622,13 @@ impl<
         events: &mut impl EventSink<StaEvent>,
     ) -> oer_portable_memory::Placed<'b, RetiredData<'id, D, K, CAP>> {
         machine.leave(events);
-        let (tickets, buffers, owed, members, admission, next_order, link, waits, freed) = oer_portable_memory::unpack_placed!(
+        let (tickets, buffers, mpdus, owed, admission, next_order, link, waits, freed) = oer_portable_memory::unpack_placed!(
             machine,
             Self {
                 tickets,
                 buffers,
+                mpdus,
                 owed,
-                members,
                 admission,
                 next_order,
                 link,
@@ -633,8 +641,8 @@ impl<
             oer_portable_memory::init_in_place!(place, RetiredData {
                 tickets: tickets.read(),
                 buffers: buffers.read(),
+                mpdus => |place| mpdus.move_to(place).into_mut(),
                 owed => |place| owed.move_to(place).into_mut(),
-                members => |place| members.move_to(place).into_mut(),
                 admission: admission.read(),
                 next_order: next_order.read(),
                 freed => |place| freed.move_to(place).into_mut(),
@@ -649,8 +657,8 @@ impl<
         let Self {
             tickets,
             buffers,
+            mpdus,
             owed,
-            members,
             admission,
             next_order,
             link: _,
@@ -660,8 +668,8 @@ impl<
         RetiredData {
             tickets,
             buffers,
+            mpdus,
             owed,
-            members,
             admission,
             next_order,
             freed,
@@ -684,8 +692,8 @@ impl<
         Self {
             tickets: Pool::new(tickets),
             buffers: Pool::new(buffers),
+            mpdus: Slab::new(),
             owed: Fifo::new(),
-            members: aggregate::MemberBank::new(),
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
@@ -710,8 +718,8 @@ impl<
         oer_portable_memory::init_in_place!(storage, Self {
             tickets: Pool::new(tickets),
             buffers: Pool::new(buffers),
+            mpdus => |place| Slab::init_in_place(place),
             owed => |place| Fifo::init_in_place(place),
-            members => |place| aggregate::MemberBank::init_in_place(place),
             admission: Admissions::new(depth, TICKETS),
             next_order: 0,
             link: None,
@@ -725,17 +733,63 @@ impl<
     /// their tokens with their terminals and never go again.
     pub fn leave(&mut self, events: &mut impl EventSink<StaEvent>) {
         self.waits = false;
-        while let Some(owed) = self.owed.pop() {
+        while let Some(place) = self.owed.pop() {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
-            self.retire(owed.buffer, events);
+            self.end(place, events);
         }
         self.link = None;
     }
 
-    /// An MPDU a full queue did not take: its buffer comes back, counted.
-    fn overflowed(&mut self, owed: OwedMpdu<'id, D, K>, events: &mut impl EventSink<StaEvent>) {
+    /// An MPDU a full queue or bank did not take: its buffer comes back,
+    /// counted.
+    fn overflowed(
+        &mut self,
+        buffer: Option<ReturnedMpdu<D::Buffer, D::Sent>>,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
         report(events, || StaEvent::DataLost(DataLoss::Overflow));
-        self.retire(owed.buffer, events);
+        if let Some(buffer) = buffer {
+            self.retire(buffer, events);
+        }
+    }
+
+    /// The MPDU at `place` ended: it leaves the bank and its buffer, when
+    /// not at the port, comes back.
+    fn end(&mut self, place: u8, events: &mut impl EventSink<StaEvent>) {
+        match self.mpdus.take(place).map(|held| held.memory) {
+            Some(Some(buffer)) => self.retire(buffer, events),
+            // The memory is at the port or the place lost its MPDU.
+            Some(None) | None => report(events, || StaEvent::TokenLost),
+        }
+    }
+
+    /// Keep a fresh MSDU's `held` at a place of the bank and owe it last,
+    /// or give its buffer back counted.
+    fn owe(&mut self, held: HeldMpdu<'id, D, K>, events: &mut impl EventSink<StaEvent>) {
+        let queued = match self.mpdus.store(held) {
+            Ok(place) => self.owed.push(place),
+            Err(held) => return self.overflowed(held.memory, events),
+        };
+        if let Err(place) = queued {
+            let buffer = self.mpdus.take(place).and_then(|held| held.memory);
+            self.overflowed(buffer, events);
+        }
+    }
+
+    /// Owe the MPDU at `place` again, by its original order, before newer
+    /// MSDUs.
+    fn owe_again(&mut self, place: u8, events: &mut impl EventSink<StaEvent>) {
+        let next_order = self.next_order;
+        let mpdus = &self.mpdus;
+        let order = |place: &u8| {
+            mpdus
+                .get(*place)
+                .map_or(u32::MAX, |held| held.context.order.wrapping_sub(next_order))
+        };
+        if let Err(place) = self.owed.insert_by(place, |a, b| order(a) < order(b)) {
+            let buffer = self.mpdus.take(place).and_then(|held| held.memory);
+            self.overflowed(buffer, events);
+        }
     }
 
     /// Whether the machine takes one more MSDU now: a buffer is free.
@@ -929,13 +983,14 @@ impl<
             sequence: sequence_number,
             attempts: 0,
         };
-        let owed = OwedMpdu {
+        let held = HeldMpdu {
             context,
-            buffer: ReturnedMpdu::Fresh(buffer),
+            memory: Some(ReturnedMpdu::Fresh(buffer)),
         };
-        if let Err(owed) = self.owed.push(owed) {
+        let owed = self.owed.len();
+        self.owe(held, events);
+        if self.owed.len() == owed {
             self.waits = false;
-            self.overflowed(owed, events);
         }
         Ok(slot)
     }
@@ -992,7 +1047,7 @@ impl<
     pub fn held_memory(&self) -> HeldMemory {
         HeldMemory {
             owed: self.owed.len(),
-            members: self.members.occupied(),
+            members: self.mpdus.occupied().saturating_sub(self.owed.len()),
             freed: self.freed.len(),
         }
     }
@@ -1027,6 +1082,32 @@ impl<
         self.waits
     }
 
+    /// The owed MPDUs, in their order.
+    fn owed(&self) -> impl Iterator<Item = &DataTxContext<'id, K, D::Class, (), D::EpochPath>> {
+        self.owed
+            .iter()
+            .filter_map(|place| self.mpdus.get(*place))
+            .map(|held| &held.context)
+    }
+
+    /// The first owed MPDU of `tid`.
+    fn first_owed(
+        &self,
+        tid: WmmUserPriority,
+    ) -> Option<&DataTxContext<'id, K, D::Class, (), D::EpochPath>> {
+        self.owed().find(|owed| owed.tid == tid)
+    }
+
+    /// The place of the first owed MPDU of `tid`, which is no longer owed.
+    fn take_owed(&mut self, tid: WmmUserPriority) -> Option<u8> {
+        let mpdus = &self.mpdus;
+        self.owed.remove_first(|place| {
+            mpdus
+                .get(*place)
+                .is_some_and(|held| held.context.tid == tid)
+        })
+    }
+
     /// The TID of the earliest owed MSDU of an admitted category, whatever
     /// its TID, while a ticket is free.
     fn next_tid(&self) -> Option<WmmUserPriority> {
@@ -1035,10 +1116,9 @@ impl<
         }
         // The queue keeps the MSDUs' order: the first of an admitted
         // category is the earliest.
-        self.owed
-            .iter()
-            .find(|owed| self.admission.available(owed.context.access_category) != 0)
-            .map(|owed| owed.context.tid)
+        self.owed()
+            .find(|owed| self.admission.available(owed.access_category) != 0)
+            .map(|owed| owed.tid)
     }
 
     /// The next action whose category owns a free admission permission,
@@ -1051,26 +1131,27 @@ impl<
         // A queue can be empty or an AC can have no free permit: both are
         // normal polling states. Reserve and pop under the same exclusive
         // borrow; no actor can change either between these operations.
-        let category = self
-            .owed
-            .first(|owed| owed.context.tid == tid)?
-            .context
-            .access_category;
+        let category = self.first_owed(tid)?.access_category;
         let ticket = self.tickets.take()?;
         let Some(permit) = self.admission.take(category) else {
             self.tickets.put(ticket, &mut ());
             return None;
         };
-        let Some(owed) = self.owed.remove_first(|owed| owed.context.tid == tid) else {
+        // A single MPDU leaves the bank: its context carries it.
+        let Some(HeldMpdu {
+            context,
+            memory: Some(buffer),
+        }) = self.take_owed(tid).and_then(|place| self.mpdus.take(place))
+        else {
             self.admission.put(category, permit);
             self.tickets.put(ticket, &mut ());
             return None;
         };
-        let (context, ()) = owed.context.admission(permit);
+        let (context, ()) = context.admission(permit);
         Some(DataTransmit {
             context,
             ticket,
-            buffer: owed.buffer,
+            buffer,
         })
     }
 }
