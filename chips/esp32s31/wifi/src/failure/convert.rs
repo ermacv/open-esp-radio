@@ -704,6 +704,24 @@ pub(crate) fn retirement(
     }
 }
 
+/// The port's end of the station's body loan, with the installation's first
+/// fault.
+pub(crate) fn abandoned(
+    cause: oer_protocols_radio_port::SlotInitError,
+    fault: Option<oer_chips_esp32s31_ieee80211_driver::port::Fault>,
+) -> Abandoned {
+    use oer_protocols_radio_port::SlotInitError as Source;
+    Abandoned {
+        cause: match cause {
+            Source::QueuesUnprepared => AbandonCause::QueuesUnprepared,
+            Source::MissingResource(resource) => AbandonCause::MissingResource(resource),
+            Source::BodyAlreadyIssued => AbandonCause::BodyAlreadyIssued,
+            Source::Lifecycle(cause) => AbandonCause::Lifecycle(retirement_cause(cause)),
+        },
+        fault: fault.map(backend_fault),
+    }
+}
+
 pub(crate) fn retirement_cause(cause: oer_protocols_radio_port::LifecycleError) -> RetirementCause {
     use oer_protocols_radio_port::{LifecycleError as Source, SlotStorageState as Storage};
     match cause {

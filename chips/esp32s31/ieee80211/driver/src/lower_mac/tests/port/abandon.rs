@@ -325,3 +325,89 @@ fn cancelled_clock_latch_is_unavailable_until_p2_answers_and_never_reuses_the_st
         assert_eq!(observed.borrow().abandon_contexts, [2]);
     }));
 }
+
+/// Enables, then waits on its events for good: the port's own failure
+/// ends its loan.
+struct AwaitEvents {
+    enabled: Rc<Cell<bool>>,
+}
+impl<Id: radio::SlotIdentity> PortBody<Id, Backend<Id>> for AwaitEvents {
+    type Output = ();
+    async fn run<'p, 'id>(
+        self,
+        owner: radio::Owner<'p, 'id, Id, Backend<Id>, radio::Disabled>,
+        _: Res<'id, Id>,
+    ) -> radio::Ended<Id, Backend<Id>, ()>
+    where
+        Backend<Id>: 'id,
+        Id: 'id,
+        'id: 'p,
+    {
+        let Ok(mut owner) = owner.enable().await else {
+            panic!("model enable")
+        };
+        self.enabled.set(true);
+        let mut phase = owner.phase();
+        loop {
+            if phase.next_event().await.is_err() {
+                match core::future::pending::<core::convert::Infallible>().await {}
+            }
+        }
+    }
+}
+
+#[test]
+fn a_body_the_driver_abandons_reads_the_fault_that_poisoned_the_port() {
+    let (parts, observed, _) = fixture();
+    let enabled = Rc::new(Cell::new(false));
+    block_on(radio::with_local_slot(async |claim| {
+        let mut slot = claim.place();
+        let Ok(backend) = Backend::new(parts) else {
+            panic!("backend")
+        };
+        let Ok((mut front, registration)) = slot.register(backend) else {
+            panic!("installation")
+        };
+        let first = front.ports().first_fault();
+        let mut p2 = Box::pin(crate::port::Registration::new(registration).run());
+        let mut p1 = Box::pin(radio::run_port(
+            front,
+            AwaitEvents {
+                enabled: enabled.clone(),
+            },
+        ));
+        for _ in 0..20 {
+            assert!(poll_p1(p1.as_mut(), &observed).is_pending());
+            if enabled.get() {
+                break;
+            }
+            assert!(poll_p2(p2.as_mut(), &observed).is_pending());
+        }
+        assert!(enabled.get());
+        assert_eq!(first.get(), None);
+        observed.borrow_mut().fail_poll = Some(Fault::Clock);
+        let mut end = None;
+        for _ in 0..20 {
+            let _ = poll_p2(p2.as_mut(), &observed);
+            if let Poll::Ready(ended) = poll_p1(p1.as_mut(), &observed) {
+                end = Some(ended);
+                break;
+            }
+        }
+        let Some(radio::PortEnd::Abandoned { cause, .. }) = end else {
+            panic!("the driver's failure abandons the body");
+        };
+        assert_eq!(
+            cause,
+            radio::SlotInitError::Lifecycle(radio::LifecycleError::StopUnconfirmed)
+        );
+        assert_eq!(
+            first.get(),
+            Some(Fault::Clock),
+            "the record names the fault"
+        );
+        drop(p1);
+        observed.borrow_mut().context = 2;
+        drop(p2);
+    }));
+}

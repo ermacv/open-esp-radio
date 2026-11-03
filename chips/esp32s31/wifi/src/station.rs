@@ -610,40 +610,47 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
         .unwrap_or_else(|error| W::fail(InitializationError::Request(error)));
     runner.frontend = poster;
     let exit = match front {
-        Ok(front) => match rp::run_port(front, Body { runner, profile }).await {
-            rp::PortEnd::Uninstalled {
-                joined,
-                output,
-                deadline,
-            } => {
-                // The exit is published only after the radio release ended,
-                // or once the stop's deadline passed first.
-                let mut pending = retire.post(joined);
-                let released = release_answer::<W>(&mut pending, deadline).await;
-                released_exit(output, released)
-            }
-            rp::PortEnd::FailStopped { outcome, output } => {
-                // A body that ended for uninstall reports the fail-stop; a
-                // body that requested one already reports its own cause.
-                let retirement = |failure| {
-                    StationExit::RetirementFailed(crate::failure::convert::retirement(
-                        failure,
-                        outcome.cause(),
-                        matches!(outcome.outcome(), rp::Abandon::Stopped(_)),
+        Ok(mut front) => {
+            let first_fault = front.ports().first_fault();
+            match rp::run_port(front, Body { runner, profile }).await {
+                rp::PortEnd::Uninstalled {
+                    joined,
+                    output,
+                    deadline,
+                } => {
+                    // The exit is published only after the radio release ended,
+                    // or once the stop's deadline passed first.
+                    let mut pending = retire.post(joined);
+                    let released = release_answer::<W>(&mut pending, deadline).await;
+                    released_exit(output, released)
+                }
+                rp::PortEnd::FailStopped { outcome, output } => {
+                    // A body that ended for uninstall reports the fail-stop; a
+                    // body that requested one already reports its own cause.
+                    let retirement = |failure| {
+                        StationExit::RetirementFailed(crate::failure::convert::retirement(
+                            failure,
+                            outcome.cause(),
+                            matches!(outcome.outcome(), rp::Abandon::Stopped(_)),
+                        ))
+                    };
+                    match output {
+                        StationExit::Stopped => retirement(None),
+                        StationExit::Failed(failed) => retirement(Some(failed)),
+                        StationExit::Poisoned(_)
+                        | StationExit::Quarantined(_)
+                        | StationExit::RetirementFailed(_)
+                        | StationExit::ReleaseFailed(_)
+                        | StationExit::Unavailable(_) => output,
+                    }
+                }
+                rp::PortEnd::Abandoned { cause, .. } => {
+                    StationExit::Unavailable(UnavailableCause::Abandoned(
+                        crate::failure::convert::abandoned(cause, first_fault.get()),
                     ))
-                };
-                match output {
-                    StationExit::Stopped => retirement(None),
-                    StationExit::Failed(failed) => retirement(Some(failed)),
-                    StationExit::Poisoned(_)
-                    | StationExit::Quarantined(_)
-                    | StationExit::RetirementFailed(_)
-                    | StationExit::ReleaseFailed(_)
-                    | StationExit::Unavailable(_) => output,
                 }
             }
-            rp::PortEnd::Abandoned { .. } => StationExit::Unavailable(UnavailableCause::Abandoned),
-        },
+        }
         Err(error) => {
             runner
                 .connection

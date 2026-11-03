@@ -44,62 +44,13 @@ impl Failure {
     }
 }
 
-/// The variant path as text: the names joined by `/`, then each number as
-/// ` 0x` and eight hex digits, then ` +` when the path kept less than its
-/// value had. Text past the payload is cut, and its last two bytes become
-/// ` +`.
+/// The variant path as text ([`crate::diagnostic_text`]), at most the
+/// record's payload.
 #[cfg(any(test, target_arch = "riscv32"))]
 fn text(path: &DiagPath) -> ([u8; oer_portable_diagnostics::fault::PAYLOAD_BYTES], usize) {
     let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
-    let mut length = 0usize;
-    let mut cut = false;
-    let mut put = |bytes: &[u8]| {
-        for byte in bytes {
-            match text.get_mut(length) {
-                Some(slot) => {
-                    *slot = *byte;
-                    length = length.saturating_add(1);
-                }
-                None => cut = true,
-            }
-        }
-    };
-    for (index, name) in path.names().iter().enumerate() {
-        if index != 0 {
-            put(b"/");
-        }
-        put(name.as_bytes());
-    }
-    for word in path.words() {
-        put(b" 0x");
-        put(&hex(*word));
-    }
-    if path.overflowed() {
-        put(b" +");
-    }
-    if cut {
-        let end = text.iter_mut().take(length).rev().take(2).rev();
-        for (slot, byte) in end.zip(b" +") {
-            *slot = *byte;
-        }
-    }
+    let length = crate::diagnostic_text::write(b"", path, &mut text);
     (text, length)
-}
-
-/// `word` as eight lowercase hex digits.
-#[cfg(any(test, target_arch = "riscv32"))]
-fn hex(mut word: u32) -> [u8; 8] {
-    let mut digits = [b'0'; 8];
-    for digit in digits.iter_mut().rev() {
-        let nibble = (word & 0xf) as u8;
-        *digit = if nibble < 10 {
-            b'0'.wrapping_add(nibble)
-        } else {
-            b'a'.wrapping_add(nibble.wrapping_sub(10))
-        };
-        word >>= 4;
-    }
-    digits
 }
 
 /// The class's registry spelling.

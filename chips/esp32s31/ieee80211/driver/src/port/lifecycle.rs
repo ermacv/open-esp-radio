@@ -38,6 +38,12 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Queues<Id,
         }
     }
 }
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> RawFrontend<'_, Id, D, B, O> {
+    /// The installation's first fault, readable after its frontend ended.
+    pub fn first_fault(&self) -> FirstFault {
+        FirstFault(&self.storage.poisoned)
+    }
+}
 pub struct RawFrontend<'s, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     resources: &'s mut Option<Resources<'static, Id, D, B, O>>,
     storage: &'static PortSharedStorage<B, D::Lent>,

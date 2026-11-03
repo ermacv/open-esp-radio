@@ -489,6 +489,19 @@ impl<const B: usize, P: LentNotifies> PortSharedStorage<B, P> {
     }
 }
 
+/// The first fault an installation's port recorded: what poisoned it before
+/// its driver or body ended. A copied observation that grants nothing; the
+/// quarantine keeps every owner.
+#[derive(Clone, Copy)]
+pub struct FirstFault(&'static oer_portable_memory::OnceValue<Fault>);
+
+impl FirstFault {
+    /// The recorded fault, `None` while the port recorded none.
+    pub fn get(&self) -> Option<Fault> {
+        self.0.get()
+    }
+}
+
 /// The bytes of one event-queue message, and of a received frame's own
 /// fields, which every received frame moves through that queue.
 #[cfg(test)]

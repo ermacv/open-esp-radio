@@ -553,7 +553,8 @@ pub enum StationExit {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UnavailableCause {
-    Abandoned,
+    /// The port ended the station's body loan before the station returned.
+    Abandoned(crate::failure::Abandoned),
     Initialization(InitializationError),
 }
 /// The station's network end over `W`'s transmit memory and its packets.

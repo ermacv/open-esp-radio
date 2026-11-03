@@ -298,8 +298,11 @@ pub(crate) async fn serve_station(start: StationStart) {
         wifi::StationExit::Unavailable(wifi::UnavailableCause::Initialization(error)) => {
             failure(error)
         }
-        wifi::StationExit::Unavailable(wifi::UnavailableCause::Abandoned) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-abandoned"; 32))
+        wifi::StationExit::Unavailable(wifi::UnavailableCause::Abandoned(abandoned)) => {
+            super::fail_path(
+                oer_portable_diagnostics::name!("wifi-abandoned"; 32),
+                &oer_portable_diagnostics::DiagPath::of(&abandoned),
+            )
         }
         wifi::StationExit::Failed(_) => {
             super::fail(oer_portable_diagnostics::name!("wifi-failed"; 32))

@@ -455,6 +455,25 @@ pub enum PlatformClock {
     ModemCoexistence,
     ModemLowPowerTimer,
 }
+/// The port ended the station's body loan from its own side before the
+/// station returned: why the loan ended, and the first fault the
+/// installation recorded, which ended it, when one did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Abandoned {
+    pub cause: AbandonCause,
+    pub fault: Option<BackendFault>,
+}
+/// Why the port ended the station's body loan.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AbandonCause {
+    QueuesUnprepared,
+    /// The named initial resource was absent.
+    MissingResource(&'static str),
+    BodyAlreadyIssued,
+    /// The installation's lifecycle failed: its driver, its registration
+    /// or a cancellation.
+    Lifecycle(RetirementCause),
+}
 /// A station that ended for uninstall whose installation fail-stopped
 /// instead of retiring: the slot stays quarantined and the radio is not
 /// released.
@@ -528,5 +547,6 @@ pub enum ReleaseCause {
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;
+mod path;
 #[cfg(test)]
 mod tests;

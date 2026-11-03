@@ -418,6 +418,8 @@ invalid-hart = "SOURCE: chips/esp32s31/platform/chip.toml [interrupts], SOC_CPU_
 "chips/esp32s31/app/src/lib.rs:crate::start:terminal-entry:start:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot"] }
 "chips/esp32s31/app/src/lib.rs:crate::fail:terminal-entry:fail:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
 "chips/esp32s31/app/src/lib.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "chips/esp32s31/app", classes = ["configuration-boot", "software-invariant", "unexpected-hardware", "exhaustion", "cancellation"] }
+"chips/esp32s31/app/src/lib.rs:crate::fail_path:terminal-entry:fail_path:1" = { owner = "chips/esp32s31/app", classes = ["cancellation", "software-invariant", "unexpected-hardware", "exhaustion"] }
+"chips/esp32s31/app/src/lib.rs:crate::fail_path:terminal-reference:boot_failure:1" = { owner = "chips/esp32s31/app", classes = ["cancellation", "software-invariant", "unexpected-hardware", "exhaustion"] }
 "chips/esp32s31/app/src/lib.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "chips/esp32s31/app/src/lib.rs:crate:terminal-reference:reset:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 # chips/esp32s31/app/src/hart1.rs
