@@ -2567,6 +2567,7 @@ dependencies = [
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-security-rsn",
  "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-testing-model",
  "oer-protocols-ieee80211-wire",
  "oer-protocols-network-port",
  "oer-protocols-radio-port",

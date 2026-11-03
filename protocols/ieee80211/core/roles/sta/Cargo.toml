@@ -37,6 +37,8 @@ oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }
 oer-protocols-radio-regulatory = { path = "../../../../radio/regulatory", features = ["test-support"] }
 oer-protocols-ieee80211-wire = { path = "../../../wire", features = ["test-support"] }
 oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
+oer-protocols-ieee80211-testing-model = { path = "../../../testing/model", features = ["test-support"] }
+oer-protocols-radio-port = { path = "../../../../radio/port", features = ["test-support"] }
 
 [lints]
 workspace = true

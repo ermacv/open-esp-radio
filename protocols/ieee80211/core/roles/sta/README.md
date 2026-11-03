@@ -209,6 +209,29 @@ Module map:
   the
   network boundary's checked `EthernetFrame` and `TxMsdu`, and a data
   attempt's protection exchange, power and coexistence class;
+- `data::plane`: the station's data transmission over the port's two DMA
+  arenas (`TxArena`). `DataPlane::handover` takes one link's `DataLink`
+  (header template, sequence counters, the pairwise key's
+  `PacketNumbers`, `AcAdmission`, retry policy, HT limits and each TID's
+  `TxWindow`) and `DataPlane::stop` returns it with every number advanced,
+  after returning the frames of unpublished arenas. `DataPlane::intake`
+  writes an MSDU once, as the standby arena takes it: the next sequence
+  number of its TID and packet number of the key, the header from the
+  template and the CCMP header. The standby belongs to one TID, holds
+  consecutive sequence numbers inside its window, within the TID's
+  `PpduLimit` (computed when the aggregate rate or the agreement changes)
+  and the arena's slots; a TID without agreement takes one frame. An MSDU
+  the standby cannot take waits in the network's queue (`Intake::Wait`).
+  `DataPlane::publication` puts one arena on the air at a time, one rate
+  plan each: an arena holding frames to retry first, then the standby, one
+  frame as a single MPDU, more as an A-MPDU. `DataPlane::completed` decodes
+  the BlockAck in one pass over the arena's frames: acknowledged frames are
+  delivered, missing ones retried in the same arena with the same numbers
+  until their MSDU's lifetime or the policy's attempts run out, then
+  dropped; a drop under an agreement moves its window and owes a
+  BlockAckReq (`Settled::bar`), and the end's `RateLesson` teaches the rate
+  selection. An agreement that ends returns the frames of an unpublished
+  A-MPDU of more than one frame;
 - `port`: the station's and data machine's tokens on a lower-MAC port
   (`PortStaTokens`, `PortDataTokens`) and the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its

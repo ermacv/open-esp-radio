@@ -26,6 +26,10 @@
 //! lends the BSS, the pairwise key (an action carries no key: the service
 //! names the lent one when it submits, and only the station removes it),
 //! the replay check and, on a non-QoS BSS, the station's sequence space.
+//!
+//! [`plane`] is the station's data transmission over the port's two DMA
+//! arenas: it owns a handed-over link's numbering, Block Ack windows and
+//! retry policy, and writes each MPDU once as an arena takes it.
 
 use crate::events::{DataLoss, StaEvent};
 use oer_portable_events::{EventSink, report};
@@ -1274,6 +1278,7 @@ pub use aggregate::{
     DataAggregateInfo, DataAggregateReturn, DataAttempt, MAX_AGGREGATE, PpduLimit,
 };
 mod ethernet;
+pub mod plane;
 pub use ethernet::{
     EthernetFrame, FrameTooLong, MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan, PlannedCopyError,
 };

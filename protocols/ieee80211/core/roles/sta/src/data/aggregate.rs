@@ -120,7 +120,7 @@ fn longest_within(max: u32, fits: impl Fn(u32) -> bool) -> u32 {
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.7.1 (A-MPDU format: four-octet delimiter
 /// and padding to a multiple of four octets).
-fn subframe_octets(mpdu: usize, protection: DataProtection<()>) -> Option<u32> {
+pub(super) fn subframe_octets(mpdu: usize, protection: DataProtection<()>) -> Option<u32> {
     const DELIMITER: usize = 4;
     const FCS: usize = 4;
     let mic = match protection {
